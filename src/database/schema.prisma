@@ -1,0 +1,176 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum BusinessRole {
+  OWNER
+  STAFF
+}
+
+// ─── Models ──────────────────────────────────────────────────────────────────
+
+model User {
+  id                       String         @id @default(uuid())
+  firstName                String?        @db.VarChar(100)
+  lastName                 String?        @db.VarChar(100)
+  phone                    String?        @unique @db.VarChar(30)
+  email                    String?        @unique @db.VarChar(254)
+  passwordHash             String?
+  phoneVerifiedAt          DateTime?
+  emailVerifiedAt          DateTime?
+  isMarketingEmailsEnabled Boolean        @default(false)
+  createdAt                DateTime       @default(now())
+  updatedAt                DateTime       @updatedAt
+  refreshTokens            RefreshToken[]
+  memberships              Membership[]
+  clients                  Client[]
+  staffProfiles            Staff[]
+  files                    File[]
+}
+
+model RefreshToken {
+  id         String   @id @default(uuid())
+  token      String   @unique @db.VarChar(512)
+  userAgent  String?  @db.VarChar(512)
+  expiryDate DateTime
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Business {
+  id          String       @id @default(uuid())
+  name        String       @db.VarChar(255)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  memberships       Membership[]
+  clients           Client[]
+  serviceCategories ServiceCategory[]
+  services          Service[]
+  staff             Staff[]
+}
+
+model Membership {
+  id         String       @id @default(uuid())
+  userId     String
+  businessId String
+  role       BusinessRole
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  business   Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, businessId])
+  @@index([businessId])
+}
+
+model Client {
+  id         String   @id @default(uuid())
+  businessId String
+  userId     String?
+
+  firstName  String   @db.VarChar(100)
+  lastName   String   @db.VarChar(100)
+  phone      String   @db.VarChar(30)
+  email      String?  @db.VarChar(254)
+  notes      String?  @db.VarChar(2000)
+
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([businessId, phone])
+  @@index([businessId])
+  @@index([userId])
+}
+
+model ServiceCategory {
+  id         String   @id @default(uuid())
+  businessId String
+  name       String   @db.VarChar(255)
+  sortOrder  Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  business   Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  services   Service[]
+
+  @@unique([businessId, name])
+  @@index([businessId])
+}
+
+model Service {
+  id              String   @id @default(uuid())
+  businessId      String
+  categoryId      String?
+  title           String   @db.VarChar(150)
+  description     String?  @db.VarChar(2000)
+  price           Decimal  @db.Decimal(10, 2)
+  durationMinutes Int
+  bufferMinutes   Int      @default(0)
+  isActive        Boolean  @default(true)
+  sortOrder       Int      @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  business      Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  category      ServiceCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  staffServices StaffService[]
+
+  @@index([businessId])
+  @@index([categoryId])
+}
+
+model Staff {
+  id           String   @id @default(uuid())
+  businessId   String
+  userId       String?
+  avatarFileId String?
+  name         String   @db.VarChar(250)
+  roleTitle    String?  @db.VarChar(250)
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  business      Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user          User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  avatarFile    File?          @relation(fields: [avatarFileId], references: [id], onDelete: SetNull)
+  staffServices StaffService[]
+
+  @@index([businessId])
+}
+
+model File {
+  id            String   @id @default(uuid())
+  userId        String
+  url           String   @db.VarChar(1000)
+  storageKey    String   @db.VarChar(500)
+  fileName      String   @db.VarChar(255)
+  mimeType      String   @db.VarChar(100)
+  fileSizeBytes Int
+  createdAt     DateTime @default(now())
+
+  user         User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  staffAvatars Staff[]
+
+  @@index([userId])
+}
+
+model StaffService {
+  staffId   String
+  serviceId String
+
+  staff   Staff   @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@id([staffId, serviceId])
+  @@index([staffId])
+  @@index([serviceId])
+}
