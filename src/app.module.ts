@@ -9,6 +9,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { DatabaseModule } from './database/database.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { MailingModule } from './modules/mailing/mailing.module.js';
+import { TimeModule } from './modules/time/time.module.js';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { MailingModule } from './modules/mailing/mailing.module.js';
     ScheduleModule.forRoot(),
     EventEmitterModule.forRoot({ wildcard: true }),
     DatabaseModule,
+    TimeModule,
     MailingModule,
     AuthModule,
   ],
