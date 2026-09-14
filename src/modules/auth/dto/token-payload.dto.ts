@@ -1,4 +1,4 @@
-import { BusinessRole } from '@prisma/client';
+import { BusinessRole, UserRole } from '@prisma/client';
 
 export class MembershipPayloadDto {
   businessId: string;
@@ -7,5 +7,6 @@ export class MembershipPayloadDto {
 
 export class TokenPayloadDto {
   sub: string;
+  role: UserRole;
   memberships: MembershipPayloadDto[];
 }

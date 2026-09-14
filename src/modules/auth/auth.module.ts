@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Global, Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { HttpModule } from '@nestjs/axios';
@@ -13,7 +13,10 @@ import { JwtResetPasswordStrategy } from './strategy/jwt-reset-password.strategy
 import { GoogleOAuthStrategy } from './strategy/google.strategy.js';
 import { VkOAuthStrategy } from './strategy/vk.strategy.js';
 import { YandexOAuthStrategy } from './strategy/yandex.strategy.js';
+import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
+import { UserFromTokenPipe } from './pipes/user-from-token.pipe.js';
 
+@Global()
 @Module({
   imports: [
     UserModule,
@@ -31,7 +34,19 @@ import { YandexOAuthStrategy } from './strategy/yandex.strategy.js';
     GoogleOAuthStrategy,
     VkOAuthStrategy,
     YandexOAuthStrategy,
+    UserFromTokenPipe,
   ],
-  exports: [AuthService],
+  exports: [
+    PassportModule,
+    AuthService,
+    UserFromTokenPipe,
+    // JwtRefreshStrategy,
+    // JwtAccessStrategy,
+    // JwtEmailStrategy,
+    // JwtResetPasswordStrategy,
+    // GoogleOAuthStrategy,
+    // VkOAuthStrategy,
+    // YandexOAuthStrategy,
+  ],
 })
 export class AuthModule {}

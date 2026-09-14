@@ -10,6 +10,7 @@ import { DatabaseModule } from './database/database.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { MailingModule } from './modules/mailing/mailing.module.js';
 import { TimeModule } from './modules/time/time.module.js';
+import { BusinessModule } from './modules/business/business.module.js';
 
 @Module({
   imports: [
@@ -28,6 +29,7 @@ import { TimeModule } from './modules/time/time.module.js';
     TimeModule,
     MailingModule,
     AuthModule,
+    BusinessModule,
   ],
   controllers: [AppController],
   providers: [AppService],

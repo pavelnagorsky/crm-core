@@ -137,7 +137,7 @@ export class AuthService {
       where: { userId: user.id },
       select: { businessId: true, role: true },
     });
-    return this.sign({ sub: user.id, memberships }, cfg.accessTokenSecret, cfg.accessTokenExpiration);
+    return this.sign({ sub: user.id, role: user.role, memberships }, cfg.accessTokenSecret, cfg.accessTokenExpiration);
   }
 
   private generateRefreshToken(user: User): Promise<string> {

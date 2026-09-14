@@ -12,13 +12,18 @@ export abstract class PaginationResponseDto {
   @ApiProperty({ type: Number })
   totalPages: number;
 
+  @ApiProperty({ type: Boolean })
+  isExport: boolean;
+
   protected constructor(
     requestedPage: number,
     pageSize: number,
     totalItems: number,
+    isExport: boolean = false,
   ) {
     this.page = requestedPage;
     this.totalItems = totalItems;
-    this.totalPages = Math.ceil(totalItems / pageSize);
+    this.totalPages = isExport ? 1 : Math.ceil(totalItems / pageSize);
+    this.isExport = isExport;
   }
 }

@@ -8,6 +8,11 @@ datasource db {
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
+enum UserRole {
+  USER
+  ADMIN
+}
+
 enum BusinessRole {
   OWNER
   STAFF
@@ -33,6 +38,7 @@ enum CalendarEventRepeatType {
 
 model User {
   id                       String         @id @default(uuid())
+  role                     UserRole       @default(USER)
   firstName                String?        @db.VarChar(100)
   lastName                 String?        @db.VarChar(100)
   phone                    String?        @unique @db.VarChar(30)
@@ -62,12 +68,14 @@ model RefreshToken {
 model Business {
   id                            String              @id @default(uuid())
   name                          String              @db.VarChar(255)
+  logoFileId                    String?
   advanceBookingWindowDays      Int                 @default(15)
   slotIntervalMinutes           Int                 @default(30)
   minimumBookingNoticeMinutes   Int                 @default(0)
   timezone                      String              @default("UTC") @db.VarChar(64)
   createdAt                     DateTime            @default(now())
   updatedAt                     DateTime            @updatedAt
+  logoFile                      File?               @relation(fields: [logoFileId], references: [id], onDelete: SetNull)
   memberships                   Membership[]
   clients                       Client[]
   serviceCategories             ServiceCategory[]
@@ -183,8 +191,9 @@ model File {
   fileSizeBytes Int
   createdAt     DateTime @default(now())
 
-  user         User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  staffAvatars Staff[]
+  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  staffAvatars   Staff[]
+  businessLogos  Business[]
 
   @@index([userId])
 }
