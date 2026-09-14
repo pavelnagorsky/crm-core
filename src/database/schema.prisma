@@ -13,6 +13,13 @@ enum BusinessRole {
   STAFF
 }
 
+enum StaffInvitationStatus {
+  PENDING
+  ACCEPTED
+  EXPIRED
+  REVOKED
+}
+
 // ─── Models ──────────────────────────────────────────────────────────────────
 
 model User {
@@ -53,6 +60,7 @@ model Business {
   serviceCategories ServiceCategory[]
   services          Service[]
   staff             Staff[]
+  staffInvitations  StaffInvitation[]
 }
 
 model Membership {
@@ -139,10 +147,11 @@ model Staff {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  business      Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  user          User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
-  avatarFile    File?          @relation(fields: [avatarFileId], references: [id], onDelete: SetNull)
+  business      Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user          User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
+  avatarFile    File?             @relation(fields: [avatarFileId], references: [id], onDelete: SetNull)
   staffServices StaffService[]
+  invitations   StaffInvitation[]
 
   @@index([businessId])
 }
@@ -161,6 +170,26 @@ model File {
   staffAvatars Staff[]
 
   @@index([userId])
+}
+
+model StaffInvitation {
+  id         String                @id @default(uuid())
+  staffId    String
+  businessId String
+  tokenHash  String                @unique @db.VarChar(255)
+  status     StaffInvitationStatus @default(PENDING)
+  expiresAt  DateTime
+  acceptedAt DateTime?
+  createdAt  DateTime              @default(now())
+  updatedAt  DateTime              @updatedAt
+
+  staff    Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+
+  @@index([staffId])
+  @@index([businessId])
+  @@index([status])
+  @@index([expiresAt])
 }
 
 model StaffService {

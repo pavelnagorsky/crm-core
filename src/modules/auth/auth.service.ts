@@ -127,27 +127,31 @@ export class AuthService {
     });
   }
 
-  private sign(userId: string, secret: string, expiresIn: string): Promise<string> {
-    return this.jwtService.signAsync({ sub: userId }, { secret, expiresIn: expiresIn as any });
+  private sign(payload: Record<string, unknown>, secret: string, expiresIn: string): Promise<string> {
+    return this.jwtService.signAsync(payload, { secret, expiresIn: expiresIn as any });
   }
 
-  private generateAccessToken(user: User): Promise<string> {
+  private async generateAccessToken(user: User): Promise<string> {
     const cfg = this.config.get<IJwtConfig>('jwt')!;
-    return this.sign(user.id, cfg.accessTokenSecret, cfg.accessTokenExpiration);
+    const memberships = await this.db.membership.findMany({
+      where: { userId: user.id },
+      select: { businessId: true, role: true },
+    });
+    return this.sign({ sub: user.id, memberships }, cfg.accessTokenSecret, cfg.accessTokenExpiration);
   }
 
   private generateRefreshToken(user: User): Promise<string> {
     const cfg = this.config.get<IJwtConfig>('jwt')!;
-    return this.sign(user.id, cfg.refreshTokenSecret, cfg.refreshTokenExpiration);
+    return this.sign({ sub: user.id }, cfg.refreshTokenSecret, cfg.refreshTokenExpiration);
   }
 
   private generateEmailToken(user: User): Promise<string> {
     const cfg = this.config.get<IJwtConfig>('jwt')!;
-    return this.sign(user.id, cfg.emailTokenSecret, cfg.emailTokenExpiration);
+    return this.sign({ sub: user.id }, cfg.emailTokenSecret, cfg.emailTokenExpiration);
   }
 
   private generateResetPasswordToken(user: User): Promise<string> {
     const cfg = this.config.get<IJwtConfig>('jwt')!;
-    return this.sign(user.id, cfg.resetPasswordTokenSecret, cfg.resetPasswordTokenExpiration);
+    return this.sign({ sub: user.id }, cfg.resetPasswordTokenSecret, cfg.resetPasswordTokenExpiration);
   }
 }
