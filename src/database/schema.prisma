@@ -20,6 +20,15 @@ enum StaffInvitationStatus {
   REVOKED
 }
 
+enum CalendarEventType {
+  BLOCK
+}
+
+enum CalendarEventRepeatType {
+  NONE
+  WEEKLY
+}
+
 // ─── Models ──────────────────────────────────────────────────────────────────
 
 model User {
@@ -51,16 +60,20 @@ model RefreshToken {
 }
 
 model Business {
-  id          String       @id @default(uuid())
-  name        String       @db.VarChar(255)
-  createdAt   DateTime     @default(now())
-  updatedAt   DateTime     @updatedAt
-  memberships       Membership[]
-  clients           Client[]
-  serviceCategories ServiceCategory[]
-  services          Service[]
-  staff             Staff[]
-  staffInvitations  StaffInvitation[]
+  id                            String              @id @default(uuid())
+  name                          String              @db.VarChar(255)
+  advanceBookingWindowDays      Int                 @default(15)
+  slotIntervalMinutes           Int                 @default(30)
+  minimumBookingNoticeMinutes   Int                 @default(0)
+  timezone                      String              @default("UTC") @db.VarChar(64)
+  createdAt                     DateTime            @default(now())
+  updatedAt                     DateTime            @updatedAt
+  memberships                   Membership[]
+  clients                       Client[]
+  serviceCategories             ServiceCategory[]
+  services                      Service[]
+  staff                         Staff[]
+  staffInvitations              StaffInvitation[]
 }
 
 model Membership {
@@ -83,11 +96,13 @@ model Client {
   businessId String
   userId     String?
 
-  firstName  String   @db.VarChar(100)
-  lastName   String   @db.VarChar(100)
-  phone      String   @db.VarChar(30)
-  email      String?  @db.VarChar(254)
-  notes      String?  @db.VarChar(2000)
+  firstName  String    @db.VarChar(100)
+  lastName   String    @db.VarChar(100)
+  phone      String    @db.VarChar(30)
+  email      String?   @db.VarChar(254)
+  birthDate  DateTime? @db.Date
+  gender     String?   @db.VarChar(20)
+  notes      String?   @db.VarChar(1000)
 
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
@@ -152,6 +167,8 @@ model Staff {
   avatarFile    File?             @relation(fields: [avatarFileId], references: [id], onDelete: SetNull)
   staffServices StaffService[]
   invitations   StaffInvitation[]
+  shifts        StaffShift[]
+  calendarEvents StaffCalendarEvent[]
 
   @@index([businessId])
 }
@@ -202,4 +219,54 @@ model StaffService {
   @@id([staffId, serviceId])
   @@index([staffId])
   @@index([serviceId])
+}
+
+model StaffShift {
+  id        String   @id @default(uuid())
+  staffId   String
+  date      DateTime @db.Date
+  startTime DateTime @db.Time
+  endTime   DateTime @db.Time
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  staff     Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@unique([staffId, date])
+  @@index([staffId])
+  @@index([date])
+}
+
+model StaffCalendarEvent {
+  id            String                  @id @default(uuid())
+  staffId       String
+  type          CalendarEventType       @default(BLOCK)
+  reason        String?                 @db.VarChar(100)
+  title         String?                 @db.VarChar(255)
+  notes         String?                 @db.VarChar(1000)
+  repeatType    CalendarEventRepeatType @default(NONE)
+  startDateTime DateTime
+  endDateTime   DateTime
+  daysMask      String?                 @db.VarChar(7)
+  repeatUntil   DateTime?               @db.Date
+  createdAt     DateTime                @default(now())
+  updatedAt     DateTime                @updatedAt
+
+  staff                Staff                                   @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  cancelledOccurrences StaffCalendarEventCancelledOccurrence[]
+
+  @@index([staffId])
+  @@index([staffId, repeatType])
+}
+
+model StaffCalendarEventCancelledOccurrence {
+  id             String             @id @default(uuid())
+  eventId        String
+  occurrenceDate DateTime           @db.Date
+  createdAt      DateTime           @default(now())
+
+  event          StaffCalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, occurrenceDate])
+  @@index([eventId])
 }
