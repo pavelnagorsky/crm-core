@@ -37,7 +37,7 @@ export class AuthService {
 
   async register(dto: RegisterDto): Promise<void> {
     const existing = await this.userService.findByEmail(dto.email);
-    if (existing) throw new AppException(ErrorCode.EMAIL_ALREADY_IN_USE, 'Email already in use', HttpStatus.CONFLICT);
+    if (existing) throw new AppException(ErrorCode.EMAIL_ALREADY_IN_USE, HttpStatus.CONFLICT);
 
     const passwordHash = await hash(dto.password, SALT_ROUNDS);
     const user = await this.userService.create({ email: dto.email, passwordHash, firstName: dto.firstName, lastName: dto.lastName });
@@ -66,7 +66,7 @@ export class AuthService {
   async refresh(userId: string, refreshToken: string, userAgent: string | null): Promise<ITokens> {
     const stored = await this.db.refreshToken.findUnique({ where: { token: refreshToken } });
     if (!stored || stored.userId !== userId || stored.expiryDate < new Date()) {
-      throw new AppException(ErrorCode.UNAUTHORIZED, 'Invalid refresh token', HttpStatus.UNAUTHORIZED);
+      throw new AppException(ErrorCode.UNAUTHORIZED, HttpStatus.UNAUTHORIZED);
     }
 
     await this.db.refreshToken.delete({ where: { token: refreshToken } });

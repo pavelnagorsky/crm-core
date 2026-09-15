@@ -17,6 +17,17 @@ export class StaffService {
     private readonly businessService: BusinessService,
   ) {}
 
+  listPublic(businessId: string, serviceId?: string): Promise<Staff[]> {
+    return this.db.staff.findMany({
+      where: {
+        businessId,
+        isActive: true,
+        ...(serviceId && { staffServices: { some: { serviceId } } }),
+      },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   async create(businessId: string, payload: TokenPayloadDto, dto: CreateStaffDto): Promise<Staff> {
     await this.businessService.assertOwner(businessId, payload);
 

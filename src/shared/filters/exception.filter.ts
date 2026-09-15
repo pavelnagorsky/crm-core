@@ -10,11 +10,11 @@ import { BaseResponseDto } from '../dto/base-response.dto.js';
 import { AppException } from '../exceptions/app.exception.js';
 import { ErrorCode } from '../validation/error-codes.enum.js';
 
-const HTTP_CODE_MAP: Record<number, ErrorCode> = {
-  [HttpStatus.BAD_REQUEST]: ErrorCode.BAD_REQUEST,
-  [HttpStatus.UNAUTHORIZED]: ErrorCode.UNAUTHORIZED,
-  [HttpStatus.FORBIDDEN]: ErrorCode.FORBIDDEN,
-  [HttpStatus.NOT_FOUND]: ErrorCode.NOT_FOUND,
+const HTTP_CODE_MAP: Record<number, string> = {
+  [HttpStatus.BAD_REQUEST]: ErrorCode.BAD_REQUEST.code,
+  [HttpStatus.UNAUTHORIZED]: ErrorCode.UNAUTHORIZED.code,
+  [HttpStatus.FORBIDDEN]: ErrorCode.FORBIDDEN.code,
+  [HttpStatus.NOT_FOUND]: ErrorCode.NOT_FOUND.code,
 };
 
 @Catch()
@@ -43,6 +43,6 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     this.logger.error(exception);
     res
       .status(HttpStatus.INTERNAL_SERVER_ERROR)
-      .json(BaseResponseDto.failure(ErrorCode.INTERNAL_ERROR, 'Internal server error'));
+      .json(BaseResponseDto.failure(ErrorCode.INTERNAL_ERROR.code, ErrorCode.INTERNAL_ERROR.message));
   }
 }

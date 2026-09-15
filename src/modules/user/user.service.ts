@@ -11,11 +11,7 @@ export class UserService {
   async findById(id: string): Promise<User> {
     const user = await this.db.user.findUnique({ where: { id } });
     if (!user)
-      throw new AppException(
-        ErrorCode.USER_NOT_FOUND,
-        'User not found',
-        HttpStatus.NOT_FOUND,
-      );
+      throw new AppException(ErrorCode.USER_NOT_FOUND, HttpStatus.NOT_FOUND);
     return user;
   }
 

@@ -7,6 +7,7 @@ import {
   HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Put,
   Query,
@@ -14,6 +15,7 @@ import {
 import {
   ApiCreatedResponse,
   ApiForbiddenResponse,
+  ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -22,8 +24,10 @@ import {
 import { ServicesService } from './services.service.js';
 import { CreateServiceCategoryDto } from './dto/create-service-category.dto.js';
 import { ServiceCategoryResponseDto } from './dto/service-category-response.dto.js';
+import { PublicServiceCategoryDto } from './dto/public-service-category.dto.js';
 import { CreateServiceDto } from './dto/create-service.dto.js';
 import { UpdateServiceDto } from './dto/update-service.dto.js';
+import { UpdateServiceStatusDto } from './dto/update-service-status.dto.js';
 import { ServiceResponseDto } from './dto/service-response.dto.js';
 import { ServiceSearchRequestDto } from './dto/service-search-request.dto.js';
 import { ServiceSearchResponseDto } from './dto/service-search-response.dto.js';
@@ -37,6 +41,18 @@ import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
 @Controller('businesses/:businessId')
 export class ServicesController {
   constructor(private readonly servicesService: ServicesService) {}
+
+  // ─── Public ──────────────────────────────────────────────────────────────────
+
+  @ApiOperation({ summary: 'List active services grouped by category (public)' })
+  @ApiOkResponse({ type: ApiResponseArray(PublicServiceCategoryDto) })
+  @Get('public/services')
+  async listPublicServices(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+  ): Promise<BaseResponseDto<PublicServiceCategoryDto[]>> {
+    const categories = await this.servicesService.listGroupedByCategory(businessId);
+    return BaseResponseDto.success(categories);
+  }
 
   // ─── Service Categories ──────────────────────────────────────────────────────
 
@@ -66,19 +82,17 @@ export class ServicesController {
   }
 
   @ApiOperation({ summary: 'Delete a service category' })
-  @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
+  @ApiNoContentResponse()
   @ApiForbiddenResponse({ description: 'Not the owner' })
   @ApiNotFoundResponse({ description: 'Service category not found' })
   @Auth()
-  @HttpCode(HttpStatus.OK)
   @Delete('service-categories/:categoryId')
   async deleteCategory(
     @Param('businessId', ParseUUIDPipe) businessId: string,
     @Param('categoryId', ParseUUIDPipe) categoryId: string,
     @TokenPayload() payload: TokenPayloadDto,
-  ): Promise<BaseResponseDto<{ id: string }>> {
+  ): Promise<void> {
     await this.servicesService.deleteCategory(categoryId, payload);
-    return BaseResponseDto.success({ id: categoryId });
   }
 
   // ─── Services ────────────────────────────────────────────────────────────────
@@ -146,19 +160,33 @@ export class ServicesController {
     return BaseResponseDto.success(ServiceResponseDto.fromEntity(service));
   }
 
-  @ApiOperation({ summary: 'Delete a service' })
-  @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
+  @ApiOperation({ summary: 'Update service active status' })
+  @ApiNoContentResponse()
   @ApiForbiddenResponse({ description: 'Not the owner' })
   @ApiNotFoundResponse({ description: 'Service not found' })
   @Auth()
-  @HttpCode(HttpStatus.OK)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Patch('services/:id/status')
+  async updateStatus(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @TokenPayload() payload: TokenPayloadDto,
+    @Body() dto: UpdateServiceStatusDto,
+  ): Promise<void> {
+    await this.servicesService.setActive(id, payload, dto.isActive);
+  }
+
+  @ApiOperation({ summary: 'Delete a service' })
+  @ApiNoContentResponse()
+  @ApiForbiddenResponse({ description: 'Not the owner' })
+  @ApiNotFoundResponse({ description: 'Service not found' })
+  @Auth()
   @Delete('services/:id')
   async delete(
     @Param('businessId', ParseUUIDPipe) businessId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @TokenPayload() payload: TokenPayloadDto,
-  ): Promise<BaseResponseDto<{ id: string }>> {
+  ): Promise<void> {
     await this.servicesService.delete(id, payload);
-    return BaseResponseDto.success({ id });
   }
 }

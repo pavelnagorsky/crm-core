@@ -1,5 +1,6 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, Service, ServiceCategory } from '@prisma/client';
+import { PublicServiceCategoryDto } from './dto/public-service-category.dto.js';
 import { DatabaseService } from '../../database/database.service.js';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
@@ -9,6 +10,9 @@ import { CreateServiceDto } from './dto/create-service.dto.js';
 import { UpdateServiceDto } from './dto/update-service.dto.js';
 import { ServiceSearchRequestDto } from './dto/service-search-request.dto.js';
 import { ServiceSearchOrderBy } from './enums/service-search-order-by.enum.js';
+import { AppException } from '../../shared/exceptions/app.exception.js';
+import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
+import { PrismaErrorCode } from '../../shared/database/prisma-error-codes.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 
 @Injectable()
@@ -32,7 +36,8 @@ export class ServicesService {
         },
       });
     } catch (e: any) {
-      if (e?.code === 'P2002') throw new ConflictException('Category name already exists in this business');
+      if (e?.code === PrismaErrorCode.UNIQUE_CONSTRAINT_VIOLATION)
+        throw new AppException(ErrorCode.CATEGORY_NAME_EXISTS, HttpStatus.CONFLICT);
       throw e;
     }
   }
@@ -42,6 +47,34 @@ export class ServicesService {
       where: { businessId },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
+  }
+
+  async listGroupedByCategory(businessId: string): Promise<PublicServiceCategoryDto[]> {
+    const activeServicesOrder: Prisma.ServiceOrderByWithRelationInput[] = [
+      { sortOrder: 'asc' },
+      { title: 'asc' },
+    ];
+
+    const [categories, uncategorized] = await this.db.$transaction([
+      this.db.serviceCategory.findMany({
+        where: { businessId },
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+        include: {
+          services: {
+            where: { isActive: true },
+            orderBy: activeServicesOrder,
+          },
+        },
+      }),
+      this.db.service.findMany({
+        where: { businessId, categoryId: null, isActive: true },
+        orderBy: activeServicesOrder,
+      }),
+    ]);
+
+    const result = categories.map(PublicServiceCategoryDto.fromEntity);
+    if (uncategorized.length) result.push(PublicServiceCategoryDto.uncategorized(uncategorized));
+    return result;
   }
 
   async deleteCategory(categoryId: string, payload: TokenPayloadDto): Promise<void> {
@@ -86,7 +119,6 @@ export class ServicesService {
         price: dto.price,
         durationMinutes: dto.durationMinutes,
         bufferMinutes: dto.bufferMinutes,
-        isActive: dto.isActive,
         sortOrder: dto.sortOrder,
       },
     });
@@ -123,6 +155,16 @@ export class ServicesService {
     ]);
 
     return { items, totalItems };
+  }
+
+  async setActive(serviceId: string, payload: TokenPayloadDto, isActive: boolean): Promise<Service> {
+    const service = await this.findById(serviceId);
+    await this.businessService.assertOwner(service.businessId, payload);
+
+    return this.db.service.update({
+      where: { id: serviceId },
+      data: { isActive },
+    });
   }
 
   async delete(serviceId: string, payload: TokenPayloadDto): Promise<void> {

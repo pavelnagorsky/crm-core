@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
+import { IsInt, IsNumber, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
 
 export class UpdateServiceDto {
   @ApiProperty({ type: String, maxLength: 150, required: false })
@@ -38,11 +38,6 @@ export class UpdateServiceDto {
   @IsInt()
   @Min(0)
   bufferMinutes?: number;
-
-  @ApiProperty({ type: Boolean, required: false })
-  @IsOptional()
-  @IsBoolean()
-  isActive?: boolean;
 
   @ApiProperty({ type: Number, required: false })
   @IsOptional()

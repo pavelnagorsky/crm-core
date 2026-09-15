@@ -1,18 +1,17 @@
 import { HttpException, HttpStatus } from '@nestjs/common';
-import { ErrorCode } from '../validation/error-codes.enum.js';
+import { ErrorCodeEntry } from '../validation/error-codes.enum.js';
 
 export class AppException extends HttpException {
-  readonly errorCode: ErrorCode;
+  readonly errorCode: string;
   readonly payload: unknown;
 
   constructor(
-    errorCode: ErrorCode,
-    message: string,
+    entry: ErrorCodeEntry,
     status: HttpStatus = HttpStatus.BAD_REQUEST,
     payload: unknown = null,
   ) {
-    super(message, status);
-    this.errorCode = errorCode;
+    super(entry.message, status);
+    this.errorCode = entry.code;
     this.payload = payload;
   }
 }

@@ -3,8 +3,6 @@ import {
   Controller,
   Delete,
   Get,
-  HttpCode,
-  HttpStatus,
   Param,
   ParseUUIDPipe,
   Post,
@@ -14,27 +12,42 @@ import {
 import {
   ApiCreatedResponse,
   ApiForbiddenResponse,
+  ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
 import { StaffService } from './staff.service.js';
 import { CreateStaffDto } from './dto/create-staff.dto.js';
 import { UpdateStaffDto } from './dto/update-staff.dto.js';
 import { StaffResponseDto } from './dto/staff-response.dto.js';
+import { PublicStaffDto } from './dto/public-staff.dto.js';
 import { StaffSearchRequestDto } from './dto/staff-search-request.dto.js';
 import { StaffSearchResponseDto } from './dto/staff-search-response.dto.js';
 import { Auth } from '../auth/decorators/auth.decorator.js';
 import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
-import { ApiResponse, BaseResponseDto } from '../../shared/dto/base-response.dto.js';
+import { ApiResponse, ApiResponseArray, BaseResponseDto } from '../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
 
 @ApiTags('Staff')
 @Controller('businesses/:businessId/staff')
 export class StaffController {
   constructor(private readonly staffService: StaffService) {}
+
+  @ApiOperation({ summary: 'List active staff members (public)' })
+  @ApiOkResponse({ type: ApiResponseArray(PublicStaffDto) })
+  @ApiQuery({ name: 'serviceId', required: false, type: String, description: 'Filter by service ID' })
+  @Get('public/staff')
+  async listPublic(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Query('serviceId', new ParseUUIDPipe({ optional: true })) serviceId?: string,
+  ): Promise<BaseResponseDto<PublicStaffDto[]>> {
+    const staff = await this.staffService.listPublic(businessId, serviceId);
+    return BaseResponseDto.success(staff.map(PublicStaffDto.fromEntity));
+  }
 
   @ApiOperation({ summary: 'Create a staff member' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
@@ -102,18 +115,16 @@ export class StaffController {
   }
 
   @ApiOperation({ summary: 'Delete a staff member' })
-  @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
+  @ApiNoContentResponse()
   @ApiForbiddenResponse({ description: 'Not the owner' })
   @ApiNotFoundResponse({ description: 'Staff member not found' })
   @Auth()
-  @HttpCode(HttpStatus.OK)
   @Delete(':id')
   async delete(
     @Param('businessId', ParseUUIDPipe) businessId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @TokenPayload() payload: TokenPayloadDto,
-  ): Promise<BaseResponseDto<{ id: string }>> {
+  ): Promise<void> {
     await this.staffService.delete(id, payload);
-    return BaseResponseDto.success({ id });
   }
 }

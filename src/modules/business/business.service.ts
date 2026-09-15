@@ -3,6 +3,7 @@ import { Business, BusinessRole, Prisma, UserRole } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
+import { UserService } from '../user/user.service.js';
 import { CreateBusinessDto } from './dto/create-business.dto.js';
 import { UpdateBusinessDto } from './dto/update-business.dto.js';
 import { BusinessSearchRequestDto } from './dto/business-search-request.dto.js';
@@ -11,9 +12,15 @@ import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 
 @Injectable()
 export class BusinessService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly userService: UserService,
+  ) {}
 
-  create(userId: string, dto: CreateBusinessDto): Promise<Business> {
+  async create(userId: string, dto: CreateBusinessDto): Promise<Business> {
+    const user = await this.userService.findById(userId);
+    const staffName = [user.firstName, user.lastName].filter(Boolean).join(' ');
+
     return this.db.business.create({
       data: {
         name: dto.name,
@@ -24,6 +31,9 @@ export class BusinessService {
         timezone: dto.timezone,
         memberships: {
           create: { userId, role: BusinessRole.OWNER },
+        },
+        staff: {
+          create: { userId, name: staffName },
         },
       },
     });

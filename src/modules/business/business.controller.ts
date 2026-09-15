@@ -3,8 +3,6 @@ import {
   Controller,
   Delete,
   Get,
-  HttpCode,
-  HttpStatus,
   Param,
   ParseUUIDPipe,
   Post,
@@ -14,6 +12,7 @@ import {
 import {
   ApiCreatedResponse,
   ApiForbiddenResponse,
+  ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -83,17 +82,15 @@ export class BusinessController {
   }
 
   @ApiOperation({ summary: 'Delete business' })
-  @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
+  @ApiNoContentResponse()
   @ApiForbiddenResponse({ description: 'Not the owner' })
   @Auth()
-  @HttpCode(HttpStatus.OK)
   @Delete(':id')
   async delete(
     @Param('id', ParseUUIDPipe) id: string,
     @TokenPayload() payload: TokenPayloadDto,
-  ): Promise<BaseResponseDto<{ id: string }>> {
+  ): Promise<void> {
     await this.businessService.delete(id, payload);
-    return BaseResponseDto.success({ id });
   }
 
   @ApiOperation({ summary: 'Get business by ID' })
