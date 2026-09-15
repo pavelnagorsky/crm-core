@@ -1,13 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { PaginationResponseDto } from '../../../shared/dto/pagination-response.dto.js';
-import { BusinessResponseDto } from './business-response.dto.js';
+import { BusinessSearchItemDto } from './business-search-item.dto.js';
 
 export class BusinessSearchResponseDto extends PaginationResponseDto {
-  @ApiProperty({ type: () => BusinessResponseDto, isArray: true })
-  items: BusinessResponseDto[];
+  @ApiProperty({ type: () => BusinessSearchItemDto, isArray: true })
+  items: BusinessSearchItemDto[];
 
   constructor(
-    items: BusinessResponseDto[],
+    items: BusinessSearchItemDto[],
     page: number,
     pageSize: number,
     totalItems: number,

@@ -1,14 +1,20 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { Business, BusinessRole, Prisma, UserRole } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
-import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 import { UserService } from '../user/user.service.js';
 import { CreateBusinessDto } from './dto/create-business.dto.js';
 import { UpdateBusinessDto } from './dto/update-business.dto.js';
 import { BusinessSearchRequestDto } from './dto/business-search-request.dto.js';
+import { BusinessSearchItemDto } from './dto/business-search-item.dto.js';
 import { BusinessSearchOrderBy } from './enums/search-order-by.enum.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
+import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
+
+type BusinessWithCounts = Business & {
+  memberships: { role: BusinessRole }[];
+  _count: { staff: number; services: number; clients: number };
+};
 
 @Injectable()
 export class BusinessService {
@@ -39,9 +45,7 @@ export class BusinessService {
     });
   }
 
-  async update(businessId: string, payload: TokenPayloadDto, dto: UpdateBusinessDto): Promise<Business> {
-    await this.assertOwner(businessId, payload);
-
+  async update(businessId: string, dto: UpdateBusinessDto): Promise<Business> {
     return this.db.business.update({
       where: { id: businessId },
       data: {
@@ -57,16 +61,18 @@ export class BusinessService {
 
   async findById(businessId: string): Promise<Business> {
     const business = await this.db.business.findUnique({ where: { id: businessId } });
-
     if (!business) throw new NotFoundException('Business not found');
-
     return business;
   }
 
-  async search(payload: TokenPayloadDto, dto: BusinessSearchRequestDto): Promise<PaginatedResult<Business>> {
+  async search(
+    payload: TokenPayloadDto,
+    dto: BusinessSearchRequestDto,
+  ): Promise<PaginatedResult<BusinessSearchItemDto>> {
+    const isAdmin = payload.role === UserRole.ADMIN;
     const where: Prisma.BusinessWhereInput = {};
 
-    if (payload.role !== UserRole.ADMIN) {
+    if (!isAdmin) {
       where.memberships = { some: { userId: payload.sub } };
     }
 
@@ -81,33 +87,41 @@ export class BusinessService {
       [dto.orderBy ?? BusinessSearchOrderBy.CREATED_AT]: dto.orderDirection ?? OrderDirection.DESC,
     };
 
-    const findArgs: Prisma.BusinessFindManyArgs = { where, orderBy };
+    const findArgs: Prisma.BusinessFindManyArgs = {
+      where,
+      orderBy,
+      include: {
+        memberships: { where: { userId: payload.sub }, select: { role: true } },
+        _count: { select: { staff: true, services: true, clients: true } },
+      },
+    };
+
     if (!dto.isExport) {
       findArgs.skip = (dto.page - 1) * dto.pageSize;
       findArgs.take = dto.pageSize;
     }
 
-    const [items, totalItems] = await this.db.$transaction([
+    const [rows, totalItems] = await this.db.$transaction([
       this.db.business.findMany(findArgs),
       this.db.business.count({ where }),
     ]);
 
+    const items: BusinessSearchItemDto[] = (rows as BusinessWithCounts[]).map((b) => ({
+      id: b.id,
+      name: b.name,
+      logoFileId: b.logoFileId,
+      timezone: b.timezone,
+      myRole: b.memberships[0]?.role ?? null,
+      staffCount: b._count.staff,
+      servicesCount: b._count.services,
+      clientsCount: b._count.clients,
+      createdAt: b.createdAt,
+    }));
+
     return { items, totalItems };
   }
 
-  async delete(businessId: string, payload: TokenPayloadDto): Promise<void> {
-    await this.assertOwner(businessId, payload);
+  async delete(businessId: string): Promise<void> {
     await this.db.business.delete({ where: { id: businessId } });
-  }
-
-  async assertOwner(businessId: string, payload: TokenPayloadDto): Promise<void> {
-    if (payload.role === UserRole.ADMIN) return;
-
-    const membership = await this.db.membership.findUnique({
-      where: { userId_businessId: { userId: payload.sub, businessId } },
-    });
-
-    if (!membership || membership.role !== BusinessRole.OWNER)
-      throw new ForbiddenException('Access denied');
   }
 }

@@ -1,9 +1,7 @@
-import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, Staff, StaffShift, UserRole } from '@prisma/client';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { Prisma, Staff, StaffShift } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
-import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
-import { BusinessService } from '../business/business.service.js';
 import { CreateStaffDto } from './dto/create-staff.dto.js';
 import { UpdateStaffDto } from './dto/update-staff.dto.js';
 import { StaffSearchRequestDto } from './dto/staff-search-request.dto.js';
@@ -14,10 +12,7 @@ import { ReplaceShiftsRequestDto } from './dto/replace-shifts-request.dto.js';
 
 @Injectable()
 export class StaffService {
-  constructor(
-    private readonly db: DatabaseService,
-    private readonly businessService: BusinessService,
-  ) {}
+  constructor(private readonly db: DatabaseService) {}
 
   listPublic(businessId: string, serviceId?: string): Promise<Staff[]> {
     return this.db.staff.findMany({
@@ -30,9 +25,7 @@ export class StaffService {
     });
   }
 
-  async create(businessId: string, payload: TokenPayloadDto, dto: CreateStaffDto): Promise<Staff> {
-    await this.businessService.assertOwner(businessId, payload);
-
+  async create(businessId: string, dto: CreateStaffDto): Promise<Staff> {
     return this.db.staff.create({
       data: {
         businessId,
@@ -47,9 +40,8 @@ export class StaffService {
     });
   }
 
-  async update(staffId: string, payload: TokenPayloadDto, dto: UpdateStaffDto): Promise<Staff> {
-    const staff = await this.findById(staffId);
-    await this.businessService.assertOwner(staff.businessId, payload);
+  async update(staffId: string, dto: UpdateStaffDto): Promise<Staff> {
+    await this.findById(staffId);
 
     return this.db.staff.update({
       where: { id: staffId },
@@ -74,9 +66,7 @@ export class StaffService {
     return staff;
   }
 
-  async search(businessId: string, payload: TokenPayloadDto, dto: StaffSearchRequestDto): Promise<PaginatedResult<Staff>> {
-    await this.assertMember(businessId, payload);
-
+  async search(businessId: string, dto: StaffSearchRequestDto): Promise<PaginatedResult<Staff>> {
     const where: Prisma.StaffWhereInput = { businessId };
 
     if (dto.search) where.name = { contains: dto.search, mode: 'insensitive' };
@@ -100,9 +90,8 @@ export class StaffService {
     return { items, totalItems };
   }
 
-  async delete(staffId: string, payload: TokenPayloadDto): Promise<void> {
-    const staff = await this.findById(staffId);
-    await this.businessService.assertOwner(staff.businessId, payload);
+  async delete(staffId: string): Promise<void> {
+    await this.findById(staffId);
     await this.db.staff.delete({ where: { id: staffId } });
   }
 
@@ -141,16 +130,6 @@ export class StaffService {
         orderBy: { date: 'asc' },
       });
     });
-  }
-
-  private async assertMember(businessId: string, payload: TokenPayloadDto): Promise<void> {
-    if (payload.role === UserRole.ADMIN) return;
-
-    const membership = await this.db.membership.findUnique({
-      where: { userId_businessId: { userId: payload.sub, businessId } },
-    });
-
-    if (!membership) throw new ForbiddenException('Access denied');
   }
 }
 

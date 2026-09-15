@@ -3,8 +3,6 @@ import { Prisma, Service, ServiceCategory } from '@prisma/client';
 import { PublicServiceCategoryDto } from './dto/public-service-category.dto.js';
 import { DatabaseService } from '../../database/database.service.js';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
-import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
-import { BusinessService } from '../business/business.service.js';
 import { CreateServiceCategoryDto } from './dto/create-service-category.dto.js';
 import { CreateServiceDto } from './dto/create-service.dto.js';
 import { UpdateServiceDto } from './dto/update-service.dto.js';
@@ -17,16 +15,11 @@ import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 
 @Injectable()
 export class ServicesService {
-  constructor(
-    private readonly db: DatabaseService,
-    private readonly businessService: BusinessService,
-  ) {}
+  constructor(private readonly db: DatabaseService) {}
 
   // ─── Service Categories ──────────────────────────────────────────────────────
 
-  async createCategory(businessId: string, payload: TokenPayloadDto, dto: CreateServiceCategoryDto): Promise<ServiceCategory> {
-    await this.businessService.assertOwner(businessId, payload);
-
+  async createCategory(businessId: string, dto: CreateServiceCategoryDto): Promise<ServiceCategory> {
     try {
       return await this.db.serviceCategory.create({
         data: {
@@ -77,20 +70,15 @@ export class ServicesService {
     return result;
   }
 
-  async deleteCategory(categoryId: string, payload: TokenPayloadDto): Promise<void> {
+  async deleteCategory(categoryId: string): Promise<void> {
     const category = await this.db.serviceCategory.findUnique({ where: { id: categoryId } });
-
     if (!category) throw new NotFoundException('Service category not found');
-
-    await this.businessService.assertOwner(category.businessId, payload);
     await this.db.serviceCategory.delete({ where: { id: categoryId } });
   }
 
   // ─── Services ────────────────────────────────────────────────────────────────
 
-  async create(businessId: string, payload: TokenPayloadDto, dto: CreateServiceDto): Promise<Service> {
-    await this.businessService.assertOwner(businessId, payload);
-
+  async create(businessId: string, dto: CreateServiceDto): Promise<Service> {
     return this.db.service.create({
       data: {
         businessId,
@@ -106,9 +94,8 @@ export class ServicesService {
     });
   }
 
-  async update(serviceId: string, payload: TokenPayloadDto, dto: UpdateServiceDto): Promise<Service> {
-    const service = await this.findById(serviceId);
-    await this.businessService.assertOwner(service.businessId, payload);
+  async update(serviceId: string, dto: UpdateServiceDto): Promise<Service> {
+    await this.findById(serviceId);
 
     return this.db.service.update({
       where: { id: serviceId },
@@ -126,9 +113,7 @@ export class ServicesService {
 
   async findById(serviceId: string): Promise<Service> {
     const service = await this.db.service.findUnique({ where: { id: serviceId } });
-
     if (!service) throw new NotFoundException('Service not found');
-
     return service;
   }
 
@@ -157,19 +142,13 @@ export class ServicesService {
     return { items, totalItems };
   }
 
-  async setActive(serviceId: string, payload: TokenPayloadDto, isActive: boolean): Promise<Service> {
-    const service = await this.findById(serviceId);
-    await this.businessService.assertOwner(service.businessId, payload);
-
-    return this.db.service.update({
-      where: { id: serviceId },
-      data: { isActive },
-    });
+  async setActive(serviceId: string, isActive: boolean): Promise<Service> {
+    await this.findById(serviceId);
+    return this.db.service.update({ where: { id: serviceId }, data: { isActive } });
   }
 
-  async delete(serviceId: string, payload: TokenPayloadDto): Promise<void> {
-    const service = await this.findById(serviceId);
-    await this.businessService.assertOwner(service.businessId, payload);
+  async delete(serviceId: string): Promise<void> {
+    await this.findById(serviceId);
     await this.db.service.delete({ where: { id: serviceId } });
   }
 }

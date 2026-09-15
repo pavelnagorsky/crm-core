@@ -14,13 +14,13 @@ import {
 } from '@nestjs/common';
 import {
   ApiCreatedResponse,
-  ApiForbiddenResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { BusinessRole } from '@prisma/client';
 import { ServicesService } from './services.service.js';
 import { CreateServiceCategoryDto } from './dto/create-service-category.dto.js';
 import { ServiceCategoryResponseDto } from './dto/service-category-response.dto.js';
@@ -31,9 +31,7 @@ import { UpdateServiceStatusDto } from './dto/update-service-status.dto.js';
 import { ServiceResponseDto } from './dto/service-response.dto.js';
 import { ServiceSearchRequestDto } from './dto/service-search-request.dto.js';
 import { ServiceSearchResponseDto } from './dto/service-search-response.dto.js';
-import { Auth } from '../auth/decorators/auth.decorator.js';
-import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
-import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
+import { RBAC } from '../business/decorators/rbac.decorator.js';
 import { ApiResponse, ApiResponseArray, BaseResponseDto } from '../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
 
@@ -58,21 +56,19 @@ export class ServicesController {
 
   @ApiOperation({ summary: 'Create a service category' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
-  @ApiForbiddenResponse({ description: 'Not the owner' })
-  @Auth()
+  @RBAC(BusinessRole.OWNER)
   @Post('service-categories')
   async createCategory(
     @Param('businessId', ParseUUIDPipe) businessId: string,
-    @TokenPayload() payload: TokenPayloadDto,
     @Body() dto: CreateServiceCategoryDto,
   ): Promise<BaseResponseDto<{ id: string }>> {
-    const category = await this.servicesService.createCategory(businessId, payload, dto);
+    const category = await this.servicesService.createCategory(businessId, dto);
     return BaseResponseDto.success({ id: category.id });
   }
 
   @ApiOperation({ summary: 'List service categories for a business' })
   @ApiOkResponse({ type: ApiResponseArray(ServiceCategoryResponseDto) })
-  @Auth()
+  @RBAC(BusinessRole.OWNER, BusinessRole.STAFF)
   @Get('service-categories')
   async listCategories(
     @Param('businessId', ParseUUIDPipe) businessId: string,
@@ -83,54 +79,47 @@ export class ServicesController {
 
   @ApiOperation({ summary: 'Delete a service category' })
   @ApiNoContentResponse()
-  @ApiForbiddenResponse({ description: 'Not the owner' })
   @ApiNotFoundResponse({ description: 'Service category not found' })
-  @Auth()
+  @RBAC(BusinessRole.OWNER)
   @Delete('service-categories/:categoryId')
+  @HttpCode(HttpStatus.NO_CONTENT)
   async deleteCategory(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
     @Param('categoryId', ParseUUIDPipe) categoryId: string,
-    @TokenPayload() payload: TokenPayloadDto,
   ): Promise<void> {
-    await this.servicesService.deleteCategory(categoryId, payload);
+    await this.servicesService.deleteCategory(categoryId);
   }
 
   // ─── Services ────────────────────────────────────────────────────────────────
 
   @ApiOperation({ summary: 'Create a service' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
-  @ApiForbiddenResponse({ description: 'Not the owner' })
-  @Auth()
+  @RBAC(BusinessRole.OWNER)
   @Post('services')
   async create(
     @Param('businessId', ParseUUIDPipe) businessId: string,
-    @TokenPayload() payload: TokenPayloadDto,
     @Body() dto: CreateServiceDto,
   ): Promise<BaseResponseDto<{ id: string }>> {
-    const service = await this.servicesService.create(businessId, payload, dto);
+    const service = await this.servicesService.create(businessId, dto);
     return BaseResponseDto.success({ id: service.id });
   }
 
   @ApiOperation({ summary: 'Update a service' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
-  @ApiForbiddenResponse({ description: 'Not the owner' })
   @ApiNotFoundResponse({ description: 'Service not found' })
-  @Auth()
+  @RBAC(BusinessRole.OWNER)
   @Put('services/:id')
   async update(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
     @Param('id', ParseUUIDPipe) id: string,
-    @TokenPayload() payload: TokenPayloadDto,
     @Body() dto: UpdateServiceDto,
   ): Promise<BaseResponseDto<{ id: string }>> {
-    const service = await this.servicesService.update(id, payload, dto);
+    const service = await this.servicesService.update(id, dto);
     return BaseResponseDto.success({ id: service.id });
   }
 
   @ApiOperation({ summary: 'Search services' })
   @ApiOkResponse({ type: ApiResponse(ServiceSearchResponseDto) })
-  @Auth()
-  @Get('services/search')
+  @RBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @Get('services')
   async search(
     @Param('businessId', ParseUUIDPipe) businessId: string,
     @Query() dto: ServiceSearchRequestDto,
@@ -150,10 +139,9 @@ export class ServicesController {
   @ApiOperation({ summary: 'Get service by ID' })
   @ApiOkResponse({ type: ApiResponse(ServiceResponseDto) })
   @ApiNotFoundResponse({ description: 'Service not found' })
-  @Auth()
+  @RBAC(BusinessRole.OWNER, BusinessRole.STAFF)
   @Get('services/:id')
   async findById(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<BaseResponseDto<ServiceResponseDto>> {
     const service = await this.servicesService.findById(id);
@@ -162,31 +150,26 @@ export class ServicesController {
 
   @ApiOperation({ summary: 'Update service active status' })
   @ApiNoContentResponse()
-  @ApiForbiddenResponse({ description: 'Not the owner' })
   @ApiNotFoundResponse({ description: 'Service not found' })
-  @Auth()
+  @RBAC(BusinessRole.OWNER)
   @HttpCode(HttpStatus.NO_CONTENT)
   @Patch('services/:id/status')
   async updateStatus(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
     @Param('id', ParseUUIDPipe) id: string,
-    @TokenPayload() payload: TokenPayloadDto,
     @Body() dto: UpdateServiceStatusDto,
   ): Promise<void> {
-    await this.servicesService.setActive(id, payload, dto.isActive);
+    await this.servicesService.setActive(id, dto.isActive);
   }
 
   @ApiOperation({ summary: 'Delete a service' })
   @ApiNoContentResponse()
-  @ApiForbiddenResponse({ description: 'Not the owner' })
   @ApiNotFoundResponse({ description: 'Service not found' })
-  @Auth()
+  @RBAC(BusinessRole.OWNER)
   @Delete('services/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
   async delete(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
     @Param('id', ParseUUIDPipe) id: string,
-    @TokenPayload() payload: TokenPayloadDto,
   ): Promise<void> {
-    await this.servicesService.delete(id, payload);
+    await this.servicesService.delete(id);
   }
 }
