@@ -29,11 +29,29 @@ import { DeleteCalendarEventDto } from './dto/delete-calendar-event.dto.js';
 import { CalendarEventResponseDto } from './dto/calendar-event-response.dto.js';
 import { GetCalendarRequestDto } from './dto/get-calendar-request.dto.js';
 import { GetCalendarResponseDto } from './dto/get-calendar-response.dto.js';
+import { AvailableSlotsRequestDto } from './dto/available-slots-request.dto.js';
+import { AvailableSlotsDayDto } from './dto/available-slots-day.dto.js';
 
 @ApiTags('Calendar')
 @Controller('businesses/:businessId/calendar')
 export class CalendarController {
   constructor(private readonly calendarService: CalendarService) {}
+
+  // ─── Public ──────────────────────────────────────────────────────────────────
+
+  @ApiOperation({ summary: 'Get available booking slots for a service within the business advance-booking window (public).' })
+  @ApiOkResponse({ type: ApiResponseArray(AvailableSlotsDayDto) })
+  @ApiNotFoundResponse({ description: 'Business or service not found' })
+  @Get('public/available-slots')
+  async getAvailableSlots(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Query() dto: AvailableSlotsRequestDto,
+  ): Promise<BaseResponseDto<AvailableSlotsDayDto[]>> {
+    const days = await this.calendarService.getAvailableSlots(businessId, dto);
+    return BaseResponseDto.success(days);
+  }
+
+  // ─── Owner ───────────────────────────────────────────────────────────────────
 
   @ApiOperation({ summary: 'Get calendar view for a date range. Expands recurring events, computes closed-time blocks and view bounds in business timezone.' })
   @ApiOkResponse({ type: ApiResponse(GetCalendarResponseDto) })

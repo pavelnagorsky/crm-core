@@ -1,35 +1,26 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import {
-  CalendarEvent,
-  CalendarEventRepeatType,
-  StaffShift,
-} from '@prisma/client';
-import { eachDayOfInterval, format, getDay, parseISO } from 'date-fns';
+import { CalendarEvent, CalendarEventRepeatType } from '@prisma/client';
+import { eachDayOfInterval, format } from 'date-fns';
 import { DatabaseService } from '../../database/database.service.js';
 import { TimeService } from '../time/time.service.js';
+import { CalendarComputeService } from './calendar-compute.service.js';
 import { CreateCalendarEventDto } from './dto/create-calendar-event.dto.js';
 import { UpdateCalendarEventDto } from './dto/update-calendar-event.dto.js';
 import { DeleteCalendarEventDto } from './dto/delete-calendar-event.dto.js';
 import { GetCalendarRequestDto } from './dto/get-calendar-request.dto.js';
 import { GetCalendarResponseDto } from './dto/get-calendar-response.dto.js';
-import { CalendarEventItemDto } from './dto/calendar-event-item.dto.js';
-import { ClosedTimeItemDto } from './dto/closed-time-item.dto.js';
-
-type CalendarEventWithCancellations = CalendarEvent & {
-  cancelledOccurrences: { occurrenceDate: Date }[];
-};
+import { AvailableSlotsRequestDto } from './dto/available-slots-request.dto.js';
+import { AvailableSlotsDayDto } from './dto/available-slots-day.dto.js';
 
 @Injectable()
 export class CalendarService {
   constructor(
     private readonly db: DatabaseService,
     private readonly time: TimeService,
+    private readonly compute: CalendarComputeService,
   ) {}
 
-  async create(
-    businessId: string,
-    dto: CreateCalendarEventDto,
-  ): Promise<CalendarEvent[]> {
+  async create(businessId: string, dto: CreateCalendarEventDto): Promise<CalendarEvent[]> {
     const staffIds = dto.staffIds?.length ? dto.staffIds : [null];
 
     return this.db.$transaction(
@@ -53,14 +44,10 @@ export class CalendarService {
     );
   }
 
-  async update(
-    eventId: string,
-    dto: UpdateCalendarEventDto,
-  ): Promise<CalendarEvent> {
+  async update(eventId: string, dto: UpdateCalendarEventDto): Promise<CalendarEvent> {
     const event = await this.findById(eventId);
 
     if (dto.thisOnly) {
-      // Cancel the original occurrence and create a standalone replacement
       const occurrenceDate = new Date(dto.occurrenceDate!);
 
       return this.db.$transaction(async (tx) => {
@@ -122,23 +109,19 @@ export class CalendarService {
   }
 
   async findById(eventId: string): Promise<CalendarEvent> {
-    const event = await this.db.calendarEvent.findUnique({
-      where: { id: eventId },
-    });
+    const event = await this.db.calendarEvent.findUnique({ where: { id: eventId } });
     if (!event) throw new NotFoundException('Calendar event not found');
     return event;
   }
 
-  async getCalendar(
-    businessId: string,
-    dto: GetCalendarRequestDto,
-  ): Promise<GetCalendarResponseDto> {
+  async getCalendar(businessId: string, dto: GetCalendarRequestDto): Promise<GetCalendarResponseDto> {
     const business = await this.db.business.findUnique({
       where: { id: businessId },
+      select: { timezone: true },
     });
     if (!business) throw new NotFoundException('Business not found');
 
-    const timezone = business.timezone;
+    const { timezone } = business;
     const rangeStart = new Date(dto.from);
     const rangeEnd = new Date(dto.to);
 
@@ -146,44 +129,29 @@ export class CalendarService {
       (d) => format(d, 'yyyy-MM-dd'),
     );
 
-    // Load shifts — for requested staff members (or all staff if no filter)
-    const shifts = await this.db.staffShift.findMany({
-      where: {
-        staff: { businessId },
-        date: { gte: rangeStart, lte: rangeEnd },
-        ...(dto.staffIds?.length ? { staffId: { in: dto.staffIds } } : {}),
-      },
-      orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
-    });
+    const [shifts, events] = await Promise.all([
+      this.db.staffShift.findMany({
+        where: {
+          staff: { businessId },
+          date: { gte: rangeStart, lte: rangeEnd },
+          ...(dto.staffIds?.length ? { staffId: { in: dto.staffIds } } : {}),
+        },
+        orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
+      }),
+      this.db.calendarEvent.findMany({
+        where: {
+          businessId,
+          ...(dto.staffIds?.length
+            ? { OR: [{ staffId: null }, { staffId: { in: dto.staffIds } }] }
+            : {}),
+        },
+        include: { cancelledOccurrences: { select: { occurrenceDate: true } } },
+      }),
+    ]);
 
-    // Load calendar events — staff filter + always include business-level (staffId=null)
-    const staffFilter = dto.staffIds?.length
-      ? { OR: [{ staffId: null }, { staffId: { in: dto.staffIds } }] }
-      : {};
-
-    const events = await this.db.calendarEvent.findMany({
-      where: {
-        businessId,
-        ...staffFilter,
-      },
-      include: { cancelledOccurrences: { select: { occurrenceDate: true } } },
-    });
-
-    // Expand recurring events into occurrences within the date range
-    const eventItems = this.expandEvents(events, dates, timezone);
-
-    // Group shifts by YYYY-MM-DD (shifts use @db.Date — UTC midnight — and @db.Time — naive UTC HH:mm)
-    const shiftsByDate = new Map<string, StaffShift[]>();
-    for (const shift of shifts) {
-      const dateKey = format(shift.date, 'yyyy-MM-dd');
-      if (!shiftsByDate.has(dateKey)) shiftsByDate.set(dateKey, []);
-      shiftsByDate.get(dateKey)!.push(shift);
-    }
-
-    const { minTime, maxTime, closedTime } = this.computeViewAndClosedTime(
-      dates,
-      shiftsByDate,
-    );
+    const shiftsByDate = this.compute.groupShiftsByDate(shifts);
+    const eventItems = this.compute.expandEvents(events, dates, timezone);
+    const { minTime, maxTime, closedTime } = this.compute.computeViewAndClosedTime(dates, shiftsByDate);
 
     return {
       range: { from: dto.from, to: dto.to },
@@ -194,185 +162,135 @@ export class CalendarService {
     };
   }
 
-  private expandEvents(
-    events: CalendarEventWithCancellations[],
-    dates: string[],
-    timezone: string,
-  ): CalendarEventItemDto[] {
-    const result: CalendarEventItemDto[] = [];
+  async getAvailableSlots(businessId: string, dto: AvailableSlotsRequestDto): Promise<AvailableSlotsDayDto[]> {
+    const [business, service, candidateStaff] = await Promise.all([
+      this.db.business.findUnique({
+        where: { id: businessId },
+        select: {
+          timezone: true,
+          advanceBookingWindowDays: true,
+          slotIntervalMinutes: true,
+          minimumBookingNoticeMinutes: true,
+        },
+      }),
+      this.db.service.findFirst({
+        where: { id: dto.serviceId, businessId, isActive: true },
+        select: { durationMinutes: true, bufferMinutes: true },
+      }),
+      this.resolveStaff(businessId, dto.serviceId, dto.staffId),
+    ]);
 
-    for (const event of events) {
-      const cancelledSet = new Set(
-        event.cancelledOccurrences.map((o) =>
-          format(o.occurrenceDate, 'yyyy-MM-dd'),
-        ),
-      );
+    if (!business) throw new NotFoundException('Business not found');
+    if (!service) throw new NotFoundException('Service not found');
+    if (candidateStaff.length === 0) return [];
 
-      if (event.repeatType === CalendarEventRepeatType.NONE) {
-        const startParts = this.time.toZonedParts(
-          event.startDateTime,
-          timezone,
-        );
-        const endParts = this.time.toZonedParts(event.endDateTime, timezone);
-        const date = format(
-          new Date(startParts.year, startParts.month - 1, startParts.day),
-          'yyyy-MM-dd',
-        );
+    const slotDuration = service.durationMinutes + service.bufferMinutes;
+    const now = new Date();
+    const nowParts = this.time.toZonedParts(now, business.timezone);
+    const nowMinutes = nowParts.hour * 60 + nowParts.minute;
+    const todayStr = format(new Date(nowParts.year, nowParts.month - 1, nowParts.day), 'yyyy-MM-dd');
 
-        if (!cancelledSet.has(date)) {
-          result.push({
-            id: event.id,
-            staffId: event.staffId,
-            type: event.type,
-            reason: event.reason,
-            title: event.title,
-            notes: event.notes,
-            repeatType: event.repeatType,
-            date,
-            startTime: this.time.minutesToHHmm(
-              startParts.hour * 60 + startParts.minute,
-            ),
-            endTime: this.time.minutesToHHmm(
-              endParts.hour * 60 + endParts.minute,
-            ),
-          });
-        }
-      } else {
-        // Weekly recurring — check daysMask and repeatUntil
-        const repeatUntilStr = event.repeatUntil
-          ? format(event.repeatUntil, 'yyyy-MM-dd')
-          : null;
+    const rangeStart = new Date(todayStr);
+    const rangeEndDate = new Date(todayStr);
+    rangeEndDate.setDate(rangeEndDate.getDate() + business.advanceBookingWindowDays - 1);
 
-        const startParts = this.time.toZonedParts(
-          event.startDateTime,
-          timezone,
-        );
-        const endParts = this.time.toZonedParts(event.endDateTime, timezone);
-        const eventStartStr = format(
-          new Date(startParts.year, startParts.month - 1, startParts.day),
-          'yyyy-MM-dd',
-        );
-        const startHHmm = this.time.minutesToHHmm(
-          startParts.hour * 60 + startParts.minute,
-        );
-        const endHHmm = this.time.minutesToHHmm(
-          endParts.hour * 60 + endParts.minute,
-        );
+    const dates = eachDayOfInterval({ start: rangeStart, end: rangeEndDate }).map(
+      (d) => format(d, 'yyyy-MM-dd'),
+    );
 
-        for (const date of dates) {
-          if (repeatUntilStr && date > repeatUntilStr) continue;
-          if (date < eventStartStr) continue;
-          if (cancelledSet.has(date)) continue;
+    const staffIds = candidateStaff.map((s) => s.id);
 
-          // getDay returns 0=Sun..6=Sat; convert to 0=Mon..6=Sun to match daysMask
-          const jsDay = getDay(parseISO(date));
-          const dayOfWeek = jsDay === 0 ? 6 : jsDay - 1;
-          if (event.daysMask && event.daysMask[dayOfWeek] !== '1') continue;
+    const [shifts, blockEvents] = await Promise.all([
+      this.db.staffShift.findMany({
+        where: {
+          staffId: { in: staffIds },
+          date: { gte: rangeStart, lte: rangeEndDate },
+        },
+      }),
+      this.db.calendarEvent.findMany({
+        where: {
+          businessId,
+          AND: [
+            { OR: [{ staffId: null }, { staffId: { in: staffIds } }] },
+            {
+              OR: [
+                { repeatType: CalendarEventRepeatType.NONE, startDateTime: { lte: rangeEndDate }, endDateTime: { gte: rangeStart } },
+                { repeatType: { not: CalendarEventRepeatType.NONE }, OR: [{ repeatUntil: null }, { repeatUntil: { gte: rangeStart } }] },
+              ],
+            },
+          ],
+        },
+        include: { cancelledOccurrences: { select: { occurrenceDate: true } } },
+      }),
+    ]);
 
-          result.push({
-            id: event.id,
-            staffId: event.staffId,
-            type: event.type,
-            reason: event.reason,
-            title: event.title,
-            notes: event.notes,
-            repeatType: event.repeatType,
-            date,
-            startTime: startHHmm,
-            endTime: endHHmm,
-          });
+    // staffId → date → shift
+    const shiftsByStaffDate = new Map<string, Map<string, (typeof shifts)[0]>>();
+    for (const shift of shifts) {
+      const dateKey = format(shift.date, 'yyyy-MM-dd');
+      if (!shiftsByStaffDate.has(shift.staffId)) shiftsByStaffDate.set(shift.staffId, new Map());
+      shiftsByStaffDate.get(shift.staffId)!.set(dateKey, shift);
+    }
+
+    const blockedByStaffDate = this.compute.expandBlockEvents(blockEvents, dates, staffIds, business.timezone);
+
+    const result: AvailableSlotsDayDto[] = [];
+
+    for (const date of dates) {
+      const earliestMinute = date === todayStr ? nowMinutes + business.minimumBookingNoticeMinutes : 0;
+      const slotStartSet = new Set<number>();
+
+      for (const staff of candidateStaff) {
+        const shift = shiftsByStaffDate.get(staff.id)?.get(date);
+        if (!shift) continue;
+
+        const shiftStart = this.time.timeToMinutes(shift.startTime);
+        const shiftEnd = this.time.timeToMinutes(shift.endTime);
+        const blocked = blockedByStaffDate.get(staff.id)?.get(date) ?? [];
+        const freeIntervals = this.compute.subtractIntervals({ start: shiftStart, end: shiftEnd }, blocked);
+
+        for (const free of freeIntervals) {
+          const firstInFree = this.compute.alignSlotStart(
+            Math.max(free.start, earliestMinute),
+            business.slotIntervalMinutes,
+          );
+          let slotStart = firstInFree;
+          while (slotStart + slotDuration <= free.end) {
+            slotStartSet.add(slotStart);
+            slotStart += business.slotIntervalMinutes;
+          }
         }
       }
+
+      if (slotStartSet.size === 0) continue;
+
+      result.push({
+        date,
+        slots: [...slotStartSet]
+          .sort((a, b) => a - b)
+          .map((start) => ({ time: this.time.minutesToHHmm(start) })),
+      });
     }
 
     return result;
   }
 
-  private computeViewAndClosedTime(
-    dates: string[],
-    shiftsByDate: Map<string, StaffShift[]>,
-  ): { minTime: string; maxTime: string; closedTime: ClosedTimeItemDto[] } {
-    let minMinutes = Infinity;
-    let maxMinutes = -Infinity;
-    for (const dayShifts of shiftsByDate.values()) {
-      for (const s of dayShifts) {
-        const start = this.time.timeToMinutes(s.startTime);
-        const end = this.time.timeToMinutes(s.endTime);
-        if (start < minMinutes) minMinutes = start;
-        if (end > maxMinutes) maxMinutes = end;
-      }
-    }
-    const viewMin = minMinutes === Infinity ? 0 : minMinutes;
-    const viewMax = maxMinutes === -Infinity ? 24 * 60 : maxMinutes;
-
-    const closedTime: ClosedTimeItemDto[] = [];
-    for (const date of dates) {
-      const dayShifts = shiftsByDate.get(date) ?? [];
-      const openIntervals = dayShifts.map((s) => ({
-        start: this.time.timeToMinutes(s.startTime),
-        end: this.time.timeToMinutes(s.endTime),
-      }));
-      const closed = this.subtractIntervals(
-        { start: viewMin, end: viewMax },
-        openIntervals,
-      );
-      for (const block of closed) {
-        closedTime.push({
-          date,
-          startTime: this.time.minutesToHHmm(block.start),
-          endTime: this.time.minutesToHHmm(block.end),
-        });
-      }
+  private async resolveStaff(
+    businessId: string,
+    serviceId: string,
+    staffId?: string,
+  ): Promise<{ id: string }[]> {
+    if (staffId) {
+      const staff = await this.db.staff.findFirst({
+        where: { id: staffId, businessId, isActive: true, staffServices: { some: { serviceId } } },
+        select: { id: true },
+      });
+      return staff ? [staff] : [];
     }
 
-    return {
-      minTime:
-        minMinutes === Infinity ? '00:00' : this.time.minutesToHHmm(minMinutes),
-      maxTime:
-        maxMinutes === -Infinity
-          ? '24:00'
-          : this.time.minutesToHHmm(maxMinutes),
-      closedTime,
-    };
-  }
-
-  private subtractIntervals(
-    view: { start: number; end: number },
-    openIntervals: { start: number; end: number }[],
-  ): { start: number; end: number }[] {
-    if (openIntervals.length === 0) return [view];
-
-    const sorted = [...openIntervals]
-      .filter((i) => i.start < i.end)
-      .sort((a, b) => a.start - b.start);
-
-    const merged: { start: number; end: number }[] = [];
-    for (const interval of sorted) {
-      const clamped = {
-        start: Math.max(interval.start, view.start),
-        end: Math.min(interval.end, view.end),
-      };
-      if (clamped.start >= clamped.end) continue;
-      if (
-        merged.length === 0 ||
-        clamped.start > merged[merged.length - 1].end
-      ) {
-        merged.push(clamped);
-      } else {
-        merged[merged.length - 1].end = Math.max(
-          merged[merged.length - 1].end,
-          clamped.end,
-        );
-      }
-    }
-
-    const closed: { start: number; end: number }[] = [];
-    let cursor = view.start;
-    for (const open of merged) {
-      if (open.start > cursor) closed.push({ start: cursor, end: open.start });
-      cursor = Math.max(cursor, open.end);
-    }
-    if (cursor < view.end) closed.push({ start: cursor, end: view.end });
-    return closed;
+    return this.db.staff.findMany({
+      where: { businessId, isActive: true, staffServices: { some: { serviceId } } },
+      select: { id: true },
+    });
   }
 }

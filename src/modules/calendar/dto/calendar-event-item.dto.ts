@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { CalendarEventType, CalendarEventRepeatType } from '@prisma/client';
+import { CalendarEvent, CalendarEventType, CalendarEventRepeatType } from '@prisma/client';
 
 export class CalendarEventItemDto {
   @ApiProperty({ type: String })
@@ -31,4 +31,24 @@ export class CalendarEventItemDto {
 
   @ApiProperty({ type: String, description: 'HH:mm in business timezone' })
   endTime: string;
+
+  static fromEntity(
+    event: CalendarEvent,
+    date: string,
+    startTime: string,
+    endTime: string,
+  ): CalendarEventItemDto {
+    const dto = new CalendarEventItemDto();
+    dto.id = event.id;
+    dto.staffId = event.staffId;
+    dto.type = event.type;
+    dto.reason = event.reason;
+    dto.title = event.title;
+    dto.notes = event.notes;
+    dto.repeatType = event.repeatType;
+    dto.date = date;
+    dto.startTime = startTime;
+    dto.endTime = endTime;
+    return dto;
+  }
 }
