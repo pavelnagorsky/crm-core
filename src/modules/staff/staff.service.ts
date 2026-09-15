@@ -90,6 +90,19 @@ export class StaffService {
     return { items, totalItems };
   }
 
+  resolveStaffForService(businessId: string, serviceId: string, staffId?: string): Promise<{ id: string }[]> {
+    if (staffId) {
+      return this.db.staff.findMany({
+        where: { id: staffId, businessId, isActive: true, staffServices: { some: { serviceId } } },
+        select: { id: true },
+      });
+    }
+    return this.db.staff.findMany({
+      where: { businessId, isActive: true, staffServices: { some: { serviceId } } },
+      select: { id: true },
+    });
+  }
+
   async delete(staffId: string): Promise<void> {
     await this.findById(staffId);
     await this.db.staff.delete({ where: { id: staffId } });

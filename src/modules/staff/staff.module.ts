@@ -7,5 +7,6 @@ import { BusinessModule } from '../business/business.module.js';
   imports: [BusinessModule],
   controllers: [StaffController],
   providers: [StaffService],
+  exports: [StaffService],
 })
 export class StaffModule {}

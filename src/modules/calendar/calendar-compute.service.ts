@@ -16,6 +16,7 @@ export class CalendarComputeService {
 
   // ─── Event expansion ──────────────────────────────────────────────────────────
 
+  /** Expands a list of calendar events into flat DTO items for the given date range. */
   expandEvents(
     events: CalendarEventWithCancellations[],
     dates: string[],
@@ -49,6 +50,11 @@ export class CalendarComputeService {
 
   // ─── Block event expansion ────────────────────────────────────────────────────
 
+  /**
+   * Builds a staffId → date → blocked intervals index from calendar block events.
+   * Events with no staffId are applied to all candidate staff.
+   * Midnight-spanning events are split: [blockStart, 24:00) on the start date and [00:00, blockEnd) on the next.
+   */
   expandBlockEvents(
     events: CalendarEventWithCancellations[],
     dates: string[],
@@ -95,6 +101,7 @@ export class CalendarComputeService {
 
   // ─── Occurrence resolution ────────────────────────────────────────────────────
 
+  /** Returns the subset of dates on which the event actually occurs (cancelled occurrences excluded). */
   getOccurrenceDates(
     event: CalendarEventWithCancellations,
     dates: string[],
@@ -141,6 +148,7 @@ export class CalendarComputeService {
 
   // ─── Event time resolution ────────────────────────────────────────────────────
 
+  /** Converts event UTC datetimes to local date and HH:mm times in the given timezone. */
   resolveEventTimes(event: CalendarEvent, timezone: string): EventTimes {
     const startParts = this.time.toZonedParts(event.startDateTime, timezone);
     const endParts = this.time.toZonedParts(event.endDateTime, timezone);
@@ -151,6 +159,7 @@ export class CalendarComputeService {
     };
   }
 
+  /** Returns a set of cancelled occurrence dates (yyyy-MM-dd) for fast lookup. */
   buildCancelledSet(event: CalendarEventWithCancellations): Set<string> {
     return new Set(
       event.cancelledOccurrences.map((o) => format(o.occurrenceDate, 'yyyy-MM-dd')),
@@ -159,6 +168,10 @@ export class CalendarComputeService {
 
   // ─── Calendar view ────────────────────────────────────────────────────────────
 
+  /**
+   * Computes the calendar view bounds (earliest shift start / latest shift end across all days)
+   * and the closed-time blocks (gaps within those bounds where no staff is working).
+   */
   computeViewAndClosedTime(
     dates: string[],
     shiftsByDate: Map<string, StaffShift[]>,
@@ -220,6 +233,11 @@ export class CalendarComputeService {
 
   // ─── Interval arithmetic ──────────────────────────────────────────────────────
 
+  /**
+   * Returns the gaps inside `view` that are not covered by any of `openIntervals`.
+   * Pass shift intervals as `openIntervals` to get the blocked (closed) portions of a day,
+   * or pass blocked intervals to get the free (bookable) portions.
+   */
   subtractIntervals(view: Interval, openIntervals: Interval[]): Interval[] {
     if (openIntervals.length === 0) return [view];
 
@@ -251,10 +269,12 @@ export class CalendarComputeService {
     return closed;
   }
 
+  /** Rounds `from` up to the nearest multiple of `intervalMinutes` (the slot grid). */
   alignSlotStart(from: number, intervalMinutes: number): number {
     return Math.ceil(from / intervalMinutes) * intervalMinutes;
   }
 
+  /** Groups shifts by date string (yyyy-MM-dd) → array of shifts. Used for calendar view. */
   groupShiftsByDate(shifts: StaffShift[]): Map<string, StaffShift[]> {
     const map = new Map<string, StaffShift[]>();
     for (const shift of shifts) {
@@ -263,5 +283,53 @@ export class CalendarComputeService {
       map.get(key)!.push(shift);
     }
     return map;
+  }
+
+  /** Indexes shifts as staffId → date string → shift for O(1) lookup during slot generation. */
+  groupShiftsByStaffDate(shifts: StaffShift[]): Map<string, Map<string, StaffShift>> {
+    const map = new Map<string, Map<string, StaffShift>>();
+    for (const shift of shifts) {
+      const dateKey = format(shift.date, 'yyyy-MM-dd');
+      if (!map.has(shift.staffId)) map.set(shift.staffId, new Map());
+      map.get(shift.staffId)!.set(dateKey, shift);
+    }
+    return map;
+  }
+
+  /**
+   * Returns sorted unique slot start minutes for a single date across all candidate staff.
+   * For each staff member: subtracts blocked intervals from their shift, then fills the
+   * remaining free intervals with slots spaced `slotInterval` minutes apart.
+   * Slots before `earliestMinute` are skipped (minimum booking notice enforcement).
+   */
+  collectSlotsForDate(
+    date: string,
+    candidateStaff: { id: string }[],
+    shiftsByStaffDate: Map<string, Map<string, StaffShift>>,
+    blockedByStaffDate: Map<string, Map<string, Interval[]>>,
+    earliestMinute: number,
+    slotDuration: number,
+    slotInterval: number,
+  ): number[] {
+    const slotStartSet = new Set<number>();
+
+    for (const staff of candidateStaff) {
+      const shift = shiftsByStaffDate.get(staff.id)?.get(date);
+      if (!shift) continue;
+
+      const shiftStart = this.time.timeToMinutes(shift.startTime);
+      const shiftEnd = this.time.timeToMinutes(shift.endTime);
+      const blocked = blockedByStaffDate.get(staff.id)?.get(date) ?? [];
+
+      for (const free of this.subtractIntervals({ start: shiftStart, end: shiftEnd }, blocked)) {
+        let slotStart = this.alignSlotStart(Math.max(free.start, earliestMinute), slotInterval);
+        while (slotStart + slotDuration <= free.end) {
+          slotStartSet.add(slotStart);
+          slotStart += slotInterval;
+        }
+      }
+    }
+
+    return [...slotStartSet].sort((a, b) => a - b);
   }
 }
