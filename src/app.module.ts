@@ -11,6 +11,8 @@ import { AuthModule } from './modules/auth/auth.module.js';
 import { MailingModule } from './modules/mailing/mailing.module.js';
 import { TimeModule } from './modules/time/time.module.js';
 import { BusinessModule } from './modules/business/business.module.js';
+import { StaffModule } from './modules/staff/staff.module.js';
+import { ServicesModule } from './modules/services/services.module.js';
 
 @Module({
   imports: [
@@ -30,6 +32,8 @@ import { BusinessModule } from './modules/business/business.module.js';
     MailingModule,
     AuthModule,
     BusinessModule,
+    StaffModule,
+    ServicesModule,
   ],
   controllers: [AppController],
   providers: [AppService],
