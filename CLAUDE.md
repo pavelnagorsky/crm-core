@@ -26,6 +26,11 @@
 - **Never create custom exception subclasses** (`class FooException extends AppException`). `AppException` + `ErrorCode` entry is the full pattern.
 - **Never pass a message string to `AppException`** — the message lives in the `ErrorCode` entry.
 
+## Regular expressions
+
+- Never define regex patterns inline in DTOs or decorators.
+- Add them to `src/shared/regular-expressions.ts` and import from there.
+
 ## Prisma error codes
 
 - Never use raw Prisma error strings. Use `PrismaErrorCode` from `src/shared/database/prisma-error-codes.ts`:

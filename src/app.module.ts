@@ -13,6 +13,7 @@ import { TimeModule } from './modules/time/time.module.js';
 import { BusinessModule } from './modules/business/business.module.js';
 import { StaffModule } from './modules/staff/staff.module.js';
 import { ServicesModule } from './modules/services/services.module.js';
+import { CalendarModule } from './modules/calendar/calendar.module.js';
 
 @Module({
   imports: [
@@ -34,6 +35,7 @@ import { ServicesModule } from './modules/services/services.module.js';
     BusinessModule,
     StaffModule,
     ServicesModule,
+    CalendarModule,
   ],
   controllers: [AppController],
   providers: [AppService],

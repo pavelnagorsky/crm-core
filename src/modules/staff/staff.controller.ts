@@ -26,16 +26,24 @@ import { StaffResponseDto } from './dto/staff-response.dto.js';
 import { PublicStaffDto } from './dto/public-staff.dto.js';
 import { StaffSearchRequestDto } from './dto/staff-search-request.dto.js';
 import { StaffSearchResponseDto } from './dto/staff-search-response.dto.js';
+import { GetShiftsRequestDto } from './dto/get-shifts-request.dto.js';
+import { ReplaceShiftsRequestDto } from './dto/replace-shifts-request.dto.js';
+import { ShiftsResponseDto } from './dto/shifts-response.dto.js';
+import { ShiftItemDto } from './dto/shift-item.dto.js';
 import { Auth } from '../auth/decorators/auth.decorator.js';
 import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 import { ApiResponse, ApiResponseArray, BaseResponseDto } from '../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
+import { BusinessService } from '../business/business.service.js';
 
 @ApiTags('Staff')
 @Controller('businesses/:businessId/staff')
 export class StaffController {
-  constructor(private readonly staffService: StaffService) {}
+  constructor(
+    private readonly staffService: StaffService,
+    private readonly businessService: BusinessService,
+  ) {}
 
   @ApiOperation({ summary: 'List active staff members (public)' })
   @ApiOkResponse({ type: ApiResponseArray(PublicStaffDto) })
@@ -126,5 +134,45 @@ export class StaffController {
     @TokenPayload() payload: TokenPayloadDto,
   ): Promise<void> {
     await this.staffService.delete(id, payload);
+  }
+
+  @ApiOperation({ summary: 'Get shifts for a staff member within a date range' })
+  @ApiOkResponse({ type: ApiResponse(ShiftsResponseDto) })
+  @ApiForbiddenResponse({ description: 'Not the owner' })
+  @ApiNotFoundResponse({ description: 'Staff member not found' })
+  @Auth()
+  @Get(':staffId/shifts')
+  async getShifts(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('staffId', ParseUUIDPipe) staffId: string,
+    @TokenPayload() payload: TokenPayloadDto,
+    @Query() dto: GetShiftsRequestDto,
+  ): Promise<BaseResponseDto<ShiftsResponseDto>> {
+    await this.businessService.assertOwner(businessId, payload);
+    await this.staffService.findById(staffId);
+    const shifts = await this.staffService.getShifts(staffId, dto);
+    return BaseResponseDto.success(
+      new ShiftsResponseDto(dto.from, dto.to, shifts.map(ShiftItemDto.fromEntity)),
+    );
+  }
+
+  @ApiOperation({ summary: 'Replace shifts for a staff member within a date range' })
+  @ApiOkResponse({ type: ApiResponse(ShiftsResponseDto) })
+  @ApiForbiddenResponse({ description: 'Not the owner' })
+  @ApiNotFoundResponse({ description: 'Staff member not found' })
+  @Auth()
+  @Put(':staffId/shifts')
+  async replaceShifts(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('staffId', ParseUUIDPipe) staffId: string,
+    @TokenPayload() payload: TokenPayloadDto,
+    @Body() dto: ReplaceShiftsRequestDto,
+  ): Promise<BaseResponseDto<ShiftsResponseDto>> {
+    await this.businessService.assertOwner(businessId, payload);
+    await this.staffService.findById(staffId);
+    const shifts = await this.staffService.replaceShifts(staffId, dto);
+    return BaseResponseDto.success(
+      new ShiftsResponseDto(dto.from, dto.to, shifts.map(ShiftItemDto.fromEntity)),
+    );
   }
 }

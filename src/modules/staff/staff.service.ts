@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, Staff, UserRole } from '@prisma/client';
+import { Prisma, Staff, StaffShift, UserRole } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
@@ -9,6 +9,8 @@ import { UpdateStaffDto } from './dto/update-staff.dto.js';
 import { StaffSearchRequestDto } from './dto/staff-search-request.dto.js';
 import { StaffSearchOrderBy } from './enums/staff-search-order-by.enum.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
+import { GetShiftsRequestDto } from './dto/get-shifts-request.dto.js';
+import { ReplaceShiftsRequestDto } from './dto/replace-shifts-request.dto.js';
 
 @Injectable()
 export class StaffService {
@@ -68,9 +70,7 @@ export class StaffService {
 
   async findById(staffId: string): Promise<Staff> {
     const staff = await this.db.staff.findUnique({ where: { id: staffId } });
-
     if (!staff) throw new NotFoundException('Staff member not found');
-
     return staff;
   }
 
@@ -106,6 +106,43 @@ export class StaffService {
     await this.db.staff.delete({ where: { id: staffId } });
   }
 
+  getShifts(staffId: string, dto: GetShiftsRequestDto): Promise<StaffShift[]> {
+    return this.db.staffShift.findMany({
+      where: {
+        staffId,
+        date: { gte: new Date(dto.from), lte: new Date(dto.to) },
+      },
+      orderBy: { date: 'asc' },
+    });
+  }
+
+  async replaceShifts(staffId: string, dto: ReplaceShiftsRequestDto): Promise<StaffShift[]> {
+    const from = new Date(dto.from);
+    const to = new Date(dto.to);
+
+    return this.db.$transaction(async (tx) => {
+      await tx.staffShift.deleteMany({
+        where: { staffId, date: { gte: from, lte: to } },
+      });
+
+      if (dto.shifts.length === 0) return [];
+
+      await tx.staffShift.createMany({
+        data: dto.shifts.map((s) => ({
+          staffId,
+          date: new Date(s.date),
+          startTime: parseTime(s.startTime),
+          endTime: parseTime(s.endTime),
+        })),
+      });
+
+      return tx.staffShift.findMany({
+        where: { staffId, date: { gte: from, lte: to } },
+        orderBy: { date: 'asc' },
+      });
+    });
+  }
+
   private async assertMember(businessId: string, payload: TokenPayloadDto): Promise<void> {
     if (payload.role === UserRole.ADMIN) return;
 
@@ -115,4 +152,11 @@ export class StaffService {
 
     if (!membership) throw new ForbiddenException('Access denied');
   }
+}
+
+function parseTime(hhmm: string): Date {
+  const [h, m] = hhmm.split(':').map(Number);
+  const d = new Date(0);
+  d.setUTCHours(h, m, 0, 0);
+  return d;
 }

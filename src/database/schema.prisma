@@ -82,6 +82,7 @@ model Business {
   services                      Service[]
   staff                         Staff[]
   staffInvitations              StaffInvitation[]
+  calendarEvents                CalendarEvent[]
 }
 
 model Membership {
@@ -176,7 +177,7 @@ model Staff {
   staffServices StaffService[]
   invitations   StaffInvitation[]
   shifts        StaffShift[]
-  calendarEvents StaffCalendarEvent[]
+  calendarEvents CalendarEvent[]
 
   @@index([businessId])
 }
@@ -246,9 +247,10 @@ model StaffShift {
   @@index([date])
 }
 
-model StaffCalendarEvent {
+model CalendarEvent {
   id            String                  @id @default(uuid())
-  staffId       String
+  businessId    String
+  staffId       String?
   type          CalendarEventType       @default(BLOCK)
   reason        String?                 @db.VarChar(100)
   title         String?                 @db.VarChar(255)
@@ -261,20 +263,22 @@ model StaffCalendarEvent {
   createdAt     DateTime                @default(now())
   updatedAt     DateTime                @updatedAt
 
-  staff                Staff                                   @relation(fields: [staffId], references: [id], onDelete: Cascade)
-  cancelledOccurrences StaffCalendarEventCancelledOccurrence[]
+  business             Business                         @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  staff                Staff?                           @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  cancelledOccurrences CalendarEventCancelledOccurrence[]
 
-  @@index([staffId])
-  @@index([staffId, repeatType])
+  @@index([businessId])
+  @@index([businessId, staffId])
+  @@index([businessId, repeatType])
 }
 
-model StaffCalendarEventCancelledOccurrence {
-  id             String             @id @default(uuid())
+model CalendarEventCancelledOccurrence {
+  id             String        @id @default(uuid())
   eventId        String
-  occurrenceDate DateTime           @db.Date
-  createdAt      DateTime           @default(now())
+  occurrenceDate DateTime      @db.Date
+  createdAt      DateTime      @default(now())
 
-  event          StaffCalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event          CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@unique([eventId, occurrenceDate])
   @@index([eventId])
