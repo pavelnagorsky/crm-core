@@ -23,4 +23,7 @@ export const ErrorCode = {
 
   // services
   CATEGORY_NAME_EXISTS: { code: 'CATEGORY_NAME_EXISTS', message: 'Category name already exists in this business' },
+
+  // clients
+  CLIENT_PHONE_EXISTS: { code: 'CLIENT_PHONE_EXISTS', message: 'A client with this phone number already exists in this business' },
 } as const satisfies Record<string, ErrorCodeEntry>;

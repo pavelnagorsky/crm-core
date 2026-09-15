@@ -14,6 +14,7 @@ import { BusinessModule } from './modules/business/business.module.js';
 import { StaffModule } from './modules/staff/staff.module.js';
 import { ServicesModule } from './modules/services/services.module.js';
 import { CalendarModule } from './modules/calendar/calendar.module.js';
+import { ClientsModule } from './modules/clients/clients.module.js';
 
 @Module({
   imports: [
@@ -36,6 +37,7 @@ import { CalendarModule } from './modules/calendar/calendar.module.js';
     StaffModule,
     ServicesModule,
     CalendarModule,
+    ClientsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
