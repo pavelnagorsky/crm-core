@@ -34,6 +34,25 @@ enum CalendarEventRepeatType {
   WEEKLY
 }
 
+enum BookingVisibility {
+  PUBLIC
+  PRIVATE
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+enum BookingSource {
+  PUBLIC_PAGE
+  WIDGET
+  MANUAL
+}
+
 // ─── Models ──────────────────────────────────────────────────────────────────
 
 model User {
@@ -73,6 +92,8 @@ model Business {
   slotIntervalMinutes           Int                 @default(30)
   minimumBookingNoticeMinutes   Int                 @default(0)
   timezone                      String              @default("UTC") @db.VarChar(64)
+  bookingVisibility             BookingVisibility   @default(PUBLIC)
+  isBookingConfirmationRequired Boolean             @default(false)
   createdAt                     DateTime            @default(now())
   updatedAt                     DateTime            @updatedAt
   logoFile                      File?               @relation(fields: [logoFileId], references: [id], onDelete: SetNull)
@@ -83,6 +104,7 @@ model Business {
   staff                         Staff[]
   staffInvitations              StaffInvitation[]
   calendarEvents                CalendarEvent[]
+  bookings                      Booking[]
 }
 
 model Membership {
@@ -118,6 +140,7 @@ model Client {
 
   business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
   user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  bookings   Booking[]
 
   @@unique([businessId, phone])
   @@index([businessId])
@@ -155,6 +178,7 @@ model Service {
   business      Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
   category      ServiceCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   staffServices StaffService[]
+  bookings      Booking[]
 
   @@index([businessId])
   @@index([categoryId])
@@ -178,6 +202,7 @@ model Staff {
   invitations   StaffInvitation[]
   shifts        StaffShift[]
   calendarEvents CalendarEvent[]
+  bookings      Booking[]
 
   @@index([businessId])
 }
@@ -243,8 +268,7 @@ model StaffShift {
   staff     Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
 
   @@unique([staffId, date])
-  @@index([staffId])
-  @@index([date])
+  @@index([staffId, date])
 }
 
 model CalendarEvent {
@@ -269,7 +293,7 @@ model CalendarEvent {
 
   @@index([businessId])
   @@index([businessId, staffId])
-  @@index([businessId, repeatType])
+  @@index([businessId, repeatType, startDateTime])
 }
 
 model CalendarEventCancelledOccurrence {
@@ -282,4 +306,45 @@ model CalendarEventCancelledOccurrence {
 
   @@unique([eventId, occurrenceDate])
   @@index([eventId])
+}
+
+model Booking {
+  id         String @id @default(uuid())
+
+  businessId String
+  staffId    String
+  serviceId  String
+  clientId   String
+
+  startAt    DateTime
+  endAt      DateTime
+
+  status     BookingStatus @default(CONFIRMED)
+  source     BookingSource
+
+  clientFirstName String  @db.VarChar(100)
+  clientLastName  String  @db.VarChar(100)
+  clientPhone     String  @db.VarChar(30)
+  clientEmail     String? @db.VarChar(254)
+
+  serviceTitle    String  @db.VarChar(150)
+  serviceDuration Int
+  servicePrice    Decimal @db.Decimal(10, 2)
+
+  staffName String @db.VarChar(250)
+
+  notes String? @db.VarChar(1000)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  staff    Staff    @relation(fields: [staffId],    references: [id], onDelete: Restrict)
+  service  Service  @relation(fields: [serviceId],  references: [id], onDelete: Restrict)
+  client   Client   @relation(fields: [clientId],   references: [id], onDelete: Restrict)
+
+  @@index([businessId, startAt])
+  @@index([staffId, startAt])
+  @@index([clientId, startAt])
+  @@index([status])
 }

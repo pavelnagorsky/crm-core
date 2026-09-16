@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Business } from '@prisma/client';
+import { BookingVisibility } from '../enums/booking-visibility.enum.js';
 
 export class BusinessResponseDto {
   @ApiProperty({ type: String })
@@ -23,6 +24,12 @@ export class BusinessResponseDto {
   @ApiProperty({ type: String })
   timezone: string;
 
+  @ApiProperty({ enum: BookingVisibility })
+  bookingVisibility: BookingVisibility;
+
+  @ApiProperty({ type: Boolean })
+  isBookingConfirmationRequired: boolean;
+
   @ApiProperty({ type: Date })
   createdAt: Date;
 
@@ -38,6 +45,8 @@ export class BusinessResponseDto {
     dto.slotIntervalMinutes = business.slotIntervalMinutes;
     dto.minimumBookingNoticeMinutes = business.minimumBookingNoticeMinutes;
     dto.timezone = business.timezone;
+    dto.bookingVisibility = business.bookingVisibility as BookingVisibility;
+    dto.isBookingConfirmationRequired = business.isBookingConfirmationRequired;
     dto.createdAt = business.createdAt;
     dto.updatedAt = business.updatedAt;
     return dto;

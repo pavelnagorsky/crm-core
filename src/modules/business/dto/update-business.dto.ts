@@ -1,5 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
+  IsBoolean,
+  IsEnum,
   IsInt,
   IsOptional,
   IsString,
@@ -8,6 +10,7 @@ import {
   Min,
 } from 'class-validator';
 import { IsIanaTimezone } from '../../time/decorators/is-iana-timezone.validator.js';
+import { BookingVisibility } from '../enums/booking-visibility.enum.js';
 
 export class UpdateBusinessDto {
   @ApiProperty({ type: String, maxLength: 255, required: false })
@@ -44,4 +47,14 @@ export class UpdateBusinessDto {
   @IsString()
   @IsIanaTimezone()
   timezone?: string;
+
+  @ApiProperty({ enum: BookingVisibility, required: false })
+  @IsOptional()
+  @IsEnum(BookingVisibility)
+  bookingVisibility?: BookingVisibility;
+
+  @ApiProperty({ type: Boolean, required: false })
+  @IsOptional()
+  @IsBoolean()
+  isBookingConfirmationRequired?: boolean;
 }

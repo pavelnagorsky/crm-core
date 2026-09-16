@@ -26,4 +26,7 @@ export const ErrorCode = {
 
   // clients
   CLIENT_PHONE_EXISTS: { code: 'CLIENT_PHONE_EXISTS', message: 'A client with this phone number already exists in this business' },
+
+  // bookings
+  BOOKING_STAFF_UNAVAILABLE: { code: 'BOOKING_STAFF_UNAVAILABLE', message: 'The selected staff is not available at the requested time' },
 } as const satisfies Record<string, ErrorCodeEntry>;
