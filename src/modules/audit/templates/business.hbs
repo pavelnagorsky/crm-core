@@ -1,0 +1,8 @@
+{{#if (eq eventType "BUSINESS_UPDATED")}}
+<p><strong>{{actorName}}</strong> <span class="audit-role">({{roleName actorRole}})</span> изменил настройки компании:</p>
+<ul>
+  {{#each payload.changes}}
+  <li>{{this.labelRu}}: <s>{{this.from}}</s> → {{this.to}}</li>
+  {{/each}}
+</ul>
+{{/if}}

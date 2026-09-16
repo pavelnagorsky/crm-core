@@ -9,6 +9,8 @@ export class MembershipPayloadDto {
 export class TokenPayloadDto {
   sub: string;
   role: UserRole;
+  firstName?: string;
+  lastName?: string;
   memberships: MembershipPayloadDto[];
 }
 

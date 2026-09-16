@@ -35,6 +35,9 @@ import { ShiftItemDto } from './dto/shift-item.dto.js';
 import { RBAC } from '../business/decorators/rbac.decorator.js';
 import { ApiResponse, ApiResponseArray, BaseResponseDto } from '../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
+import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
+import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
+import { auditActorFromToken } from '../audit/interfaces/audit-actor-from-token.js';
 
 @ApiTags('Staff')
 @Controller('businesses/:businessId/staff')
@@ -60,8 +63,9 @@ export class StaffController {
   async create(
     @Param('businessId', ParseUUIDPipe) businessId: string,
     @Body() dto: CreateStaffDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<{ id: string }>> {
-    const staff = await this.staffService.create(businessId, dto);
+    const staff = await this.staffService.create(businessId, dto, auditActorFromToken(tokenPayload, businessId));
     return BaseResponseDto.success({ id: staff.id });
   }
 
@@ -71,10 +75,12 @@ export class StaffController {
   @RBAC(BusinessRole.OWNER)
   @Put(':id')
   async update(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateStaffDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<{ id: string }>> {
-    const staff = await this.staffService.update(id, dto);
+    const staff = await this.staffService.update(businessId, id, dto, auditActorFromToken(tokenPayload, businessId));
     return BaseResponseDto.success({ id: staff.id });
   }
 
@@ -117,9 +123,11 @@ export class StaffController {
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
     @Param('id', ParseUUIDPipe) id: string,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<void> {
-    await this.staffService.delete(id);
+    await this.staffService.delete(businessId, id, auditActorFromToken(tokenPayload, businessId));
   }
 
   @ApiOperation({ summary: 'Get shifts for a staff member within a date range' })

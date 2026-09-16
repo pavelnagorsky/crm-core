@@ -33,6 +33,9 @@ import { BookingSearchResponseDto } from './dto/booking-search-response.dto.js';
 import { RBAC } from '../business/decorators/rbac.decorator.js';
 import { ApiResponse, BaseResponseDto } from '../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
+import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
+import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
+import { auditActorFromToken } from '../audit/interfaces/audit-actor-from-token.js';
 
 @ApiTags('Bookings')
 @Controller()
@@ -68,8 +71,9 @@ export class BookingsController {
   async createManual(
     @Param('businessId', ParseUUIDPipe) businessId: string,
     @Body() dto: ManualCreateBookingDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    const booking = await this.bookingCreateService.createManualBooking(businessId, dto);
+    const booking = await this.bookingCreateService.createManualBooking(businessId, dto, auditActorFromToken(tokenPayload, businessId));
     return BaseResponseDto.success({ id: booking.id });
   }
 
@@ -82,8 +86,9 @@ export class BookingsController {
     @Param('businessId', ParseUUIDPipe) businessId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateBookingStatusDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    const booking = await this.bookingsService.updateStatus(id, businessId, dto);
+    const booking = await this.bookingsService.updateStatus(id, businessId, dto, auditActorFromToken(tokenPayload, businessId));
     return BaseResponseDto.success({ id: booking.id });
   }
 
@@ -124,8 +129,9 @@ export class BookingsController {
     @Param('businessId', ParseUUIDPipe) businessId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CancelBookingDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    const booking = await this.bookingsService.cancel(id, businessId, CancelledBy.STAFF, dto);
+    const booking = await this.bookingsService.cancel(id, businessId, CancelledBy.STAFF, dto, auditActorFromToken(tokenPayload, businessId));
     return BaseResponseDto.success({ id: booking.id });
   }
 
@@ -138,7 +144,8 @@ export class BookingsController {
   async delete(
     @Param('businessId', ParseUUIDPipe) businessId: string,
     @Param('id', ParseUUIDPipe) id: string,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<void> {
-    await this.bookingsService.delete(id, businessId);
+    await this.bookingsService.delete(id, businessId, auditActorFromToken(tokenPayload, businessId));
   }
 }

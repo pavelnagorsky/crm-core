@@ -58,6 +58,39 @@ enum BookingSource {
   MANUAL
 }
 
+enum AuditEntity {
+  BOOKING
+  CLIENT
+  STAFF
+  SERVICE
+  BUSINESS
+}
+
+enum AuditEvent {
+  BOOKING_CREATED
+  BOOKING_UPDATED
+  BOOKING_CANCELLED
+  BOOKING_STATUS_CHANGED
+  BOOKING_DELETED
+  CLIENT_CREATED
+  CLIENT_UPDATED
+  CLIENT_DELETED
+  STAFF_CREATED
+  STAFF_UPDATED
+  STAFF_DELETED
+  SERVICE_CREATED
+  SERVICE_UPDATED
+  SERVICE_DELETED
+  BUSINESS_UPDATED
+}
+
+enum AuditActorRole {
+  CLIENT
+  STAFF
+  OWNER
+  SYSTEM
+}
+
 // ─── Models ──────────────────────────────────────────────────────────────────
 
 model User {
@@ -366,4 +399,20 @@ model Booking {
   @@index([staffId, deletedAt, startAt])
   @@index([clientId, deletedAt, startAt])
   @@index([status])
+}
+
+model AuditLog {
+  id         String         @id @default(uuid())
+  businessId String
+  entityType AuditEntity
+  entityId   String
+  eventType  AuditEvent
+  actorId    String?
+  actorName  String         @db.VarChar(300)
+  actorRole  AuditActorRole
+  payload    Json
+  createdAt  DateTime       @default(now())
+
+  @@index([businessId, entityType, entityId])
+  @@index([businessId, entityType, entityId, createdAt])
 }

@@ -16,6 +16,7 @@ import { ServicesModule } from './modules/services/services.module.js';
 import { CalendarModule } from './modules/calendar/calendar.module.js';
 import { ClientsModule } from './modules/clients/clients.module.js';
 import { BookingsModule } from './modules/bookings/bookings.module.js';
+import { AuditModule } from './modules/audit/audit.module.js';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { BookingsModule } from './modules/bookings/bookings.module.js';
     CalendarModule,
     ClientsModule,
     BookingsModule,
+    AuditModule,
   ],
   controllers: [AppController],
   providers: [AppService],

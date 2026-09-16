@@ -1,5 +1,6 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, Service, ServiceCategory } from '@prisma/client';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PublicServiceCategoryDto } from './dto/public-service-category.dto.js';
 import { DatabaseService } from '../../database/database.service.js';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
@@ -12,10 +13,19 @@ import { AppException } from '../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { PrismaErrorCode } from '../../shared/database/prisma-error-codes.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
+import { AUDIT_EVENT } from '../audit/audit.constants.js';
+import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
+import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js';
+import { AuditEntity } from '../audit/enums/audit-entity.enum.js';
+import { AuditEvent } from '../audit/enums/audit-event.enum.js';
+import { diffFields, FieldDescriptor } from '../audit/utils/diff-fields.js';
 
 @Injectable()
 export class ServicesService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   // ─── Service Categories ──────────────────────────────────────────────────────
 
@@ -78,8 +88,8 @@ export class ServicesService {
 
   // ─── Services ────────────────────────────────────────────────────────────────
 
-  async create(businessId: string, dto: CreateServiceDto): Promise<Service> {
-    return this.db.service.create({
+  async create(businessId: string, dto: CreateServiceDto, actor: AuditActor): Promise<Service> {
+    const service = await this.db.service.create({
       data: {
         businessId,
         categoryId: dto.categoryId ?? null,
@@ -93,12 +103,21 @@ export class ServicesService {
         sortOrder: dto.sortOrder ?? 0,
       },
     });
+    const event: AuditLogEvent = {
+      businessId,
+      entityType: AuditEntity.SERVICE,
+      entityId: service.id,
+      eventType: AuditEvent.SERVICE_CREATED,
+      actor,
+      payload: { title: service.title, price: service.price.toString(), durationMinutes: service.durationMinutes },
+    };
+    this.eventEmitter.emit(AUDIT_EVENT, event);
+    return service;
   }
 
-  async update(serviceId: string, dto: UpdateServiceDto): Promise<Service> {
-    await this.findById(serviceId);
-
-    return this.db.service.update({
+  async update(businessId: string, serviceId: string, dto: UpdateServiceDto, actor: AuditActor): Promise<Service> {
+    const old = await this.findInBusiness(businessId, serviceId);
+    const service = await this.db.service.update({
       where: { id: serviceId },
       data: {
         categoryId: dto.categoryId,
@@ -111,10 +130,29 @@ export class ServicesService {
         sortOrder: dto.sortOrder,
       },
     });
+    const changes = diffFields(old, service, ServicesService.SERVICE_FIELDS);
+    if (changes.length > 0) {
+      const event: AuditLogEvent = {
+        businessId,
+        entityType: AuditEntity.SERVICE,
+        entityId: serviceId,
+        eventType: AuditEvent.SERVICE_UPDATED,
+        actor,
+        payload: { changes },
+      };
+      this.eventEmitter.emit(AUDIT_EVENT, event);
+    }
+    return service;
   }
 
   async findById(serviceId: string): Promise<Service> {
     const service = await this.db.service.findUnique({ where: { id: serviceId } });
+    if (!service) throw new NotFoundException('Service not found');
+    return service;
+  }
+
+  private async findInBusiness(businessId: string, serviceId: string): Promise<Service> {
+    const service = await this.db.service.findFirst({ where: { id: serviceId, businessId } });
     if (!service) throw new NotFoundException('Service not found');
     return service;
   }
@@ -149,8 +187,26 @@ export class ServicesService {
     return this.db.service.update({ where: { id: serviceId }, data: { isActive } });
   }
 
-  async delete(serviceId: string): Promise<void> {
-    await this.findById(serviceId);
+  async delete(businessId: string, serviceId: string, actor: AuditActor): Promise<void> {
+    const service = await this.findInBusiness(businessId, serviceId);
     await this.db.service.delete({ where: { id: serviceId } });
+    const event: AuditLogEvent = {
+      businessId,
+      entityType: AuditEntity.SERVICE,
+      entityId: serviceId,
+      eventType: AuditEvent.SERVICE_DELETED,
+      actor,
+      payload: { title: service.title },
+    };
+    this.eventEmitter.emit(AUDIT_EVENT, event);
   }
+
+  private static readonly SERVICE_FIELDS: FieldDescriptor<Service>[] = [
+    { key: 'title', labelRu: 'Название' },
+    { key: 'price', labelRu: 'Цена', format: (v) => String(v ?? '—') },
+    { key: 'durationMinutes', labelRu: 'Длительность (мин)' },
+    { key: 'bufferMinutes', labelRu: 'Буфер (мин)' },
+    { key: 'description', labelRu: 'Описание' },
+    { key: 'isActive', labelRu: 'Активна' },
+  ];
 }

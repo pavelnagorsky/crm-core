@@ -34,6 +34,9 @@ import { ServiceSearchResponseDto } from './dto/service-search-response.dto.js';
 import { RBAC } from '../business/decorators/rbac.decorator.js';
 import { ApiResponse, ApiResponseArray, BaseResponseDto } from '../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
+import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
+import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
+import { auditActorFromToken } from '../audit/interfaces/audit-actor-from-token.js';
 
 @ApiTags('Services')
 @Controller('businesses/:businessId')
@@ -98,8 +101,9 @@ export class ServicesController {
   async create(
     @Param('businessId', ParseUUIDPipe) businessId: string,
     @Body() dto: CreateServiceDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<{ id: string }>> {
-    const service = await this.servicesService.create(businessId, dto);
+    const service = await this.servicesService.create(businessId, dto, auditActorFromToken(tokenPayload, businessId));
     return BaseResponseDto.success({ id: service.id });
   }
 
@@ -109,10 +113,12 @@ export class ServicesController {
   @RBAC(BusinessRole.OWNER)
   @Put('services/:id')
   async update(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateServiceDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<{ id: string }>> {
-    const service = await this.servicesService.update(id, dto);
+    const service = await this.servicesService.update(businessId, id, dto, auditActorFromToken(tokenPayload, businessId));
     return BaseResponseDto.success({ id: service.id });
   }
 
@@ -168,8 +174,10 @@ export class ServicesController {
   @Delete('services/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
     @Param('id', ParseUUIDPipe) id: string,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<void> {
-    await this.servicesService.delete(id);
+    await this.servicesService.delete(businessId, id, auditActorFromToken(tokenPayload, businessId));
   }
 }

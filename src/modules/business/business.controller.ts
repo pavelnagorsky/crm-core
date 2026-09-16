@@ -37,6 +37,7 @@ import {
   BaseResponseDto,
 } from '../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
+import { auditActorFromToken } from '../audit/interfaces/audit-actor-from-token.js';
 
 @ApiTags('Businesses')
 @Controller('businesses')
@@ -63,8 +64,9 @@ export class BusinessController {
   async update(
     @Param('businessId', ParseUUIDPipe) businessId: string,
     @Body() dto: UpdateBusinessDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<{ id: string }>> {
-    const business = await this.businessService.update(businessId, dto);
+    const business = await this.businessService.update(businessId, dto, auditActorFromToken(tokenPayload, businessId));
     return BaseResponseDto.success({ id: business.id });
   }
 

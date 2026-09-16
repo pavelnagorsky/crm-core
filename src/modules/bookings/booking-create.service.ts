@@ -6,6 +6,7 @@ import {
   CalendarEventType,
 } from '@prisma/client';
 import { format } from 'date-fns';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
@@ -17,6 +18,12 @@ import { CreateBookingDto } from './dto/create-booking.dto.js';
 import { ManualCreateBookingDto } from './dto/manual-create-booking.dto.js';
 import { BookingSource } from './enums/booking-source.enum.js';
 import { BookingStatus } from './enums/booking-status.enum.js';
+import { AUDIT_EVENT } from '../audit/audit.constants.js';
+import { AuditEntity } from '../audit/enums/audit-entity.enum.js';
+import { AuditEvent } from '../audit/enums/audit-event.enum.js';
+import { AuditActorRole } from '../audit/enums/audit-actor-role.enum.js';
+import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
+import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js';
 
 @Injectable()
 export class BookingCreateService {
@@ -26,20 +33,31 @@ export class BookingCreateService {
     private readonly calendarService: CalendarService,
     private readonly clientsService: ClientsService,
     private readonly staffService: StaffService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
-  createPublicBooking(
+  async createPublicBooking(
     businessId: string,
     dto: CreateBookingDto,
   ): Promise<Booking> {
-    return this.create(businessId, BookingSource.PUBLIC_PAGE, dto);
+    const booking = await this.create(businessId, BookingSource.PUBLIC_PAGE, dto);
+    // Public bookings have no authenticated user — the client is the actor
+    const actor: AuditActor = {
+      name: `${booking.clientFirstName} ${booking.clientLastName}`,
+      role: AuditActorRole.CLIENT,
+    };
+    this.emitBookingCreated(booking, actor);
+    return booking;
   }
 
-  createManualBooking(
+  async createManualBooking(
     businessId: string,
     dto: ManualCreateBookingDto,
+    actor: AuditActor,
   ): Promise<Booking> {
-    return this.create(businessId, BookingSource.MANUAL, dto, dto.customPrice);
+    const booking = await this.create(businessId, BookingSource.MANUAL, dto, dto.customPrice);
+    this.emitBookingCreated(booking, actor);
+    return booking;
   }
 
   // ── Core ───────────────────────────────────────────────────────────────────────
@@ -178,6 +196,26 @@ export class BookingCreateService {
         },
       });
     });
+  }
+
+  // ── Audit ───────────────────────────────────────────────────────────────────────
+
+  private emitBookingCreated(booking: Booking, actor: AuditActor): void {
+    const event: AuditLogEvent = {
+      businessId: booking.businessId,
+      entityType: AuditEntity.BOOKING,
+      entityId: booking.id,
+      eventType: AuditEvent.BOOKING_CREATED,
+      actor,
+      payload: {
+        serviceName: booking.serviceTitle,
+        staffName: booking.staffName,
+        startTime: booking.startAt.toISOString(),
+        endTime: booking.endAt.toISOString(),
+        price: (booking.customPrice ?? booking.servicePrice).toString(),
+      },
+    };
+    this.eventEmitter.emit(AUDIT_EVENT, event);
   }
 
   // ── Staff resolution ────────────────────────────────────────────────────────────

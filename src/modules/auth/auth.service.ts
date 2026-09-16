@@ -137,7 +137,8 @@ export class AuthService {
       where: { userId: user.id },
       select: { businessId: true, role: true },
     });
-    return this.sign({ sub: user.id, role: user.role, memberships }, cfg.accessTokenSecret, cfg.accessTokenExpiration);
+    // firstName/lastName are embedded for audit display; can be stale until the user re-logs in — accepted trade-off.
+    return this.sign({ sub: user.id, role: user.role, firstName: user.firstName, lastName: user.lastName, memberships }, cfg.accessTokenSecret, cfg.accessTokenExpiration);
   }
 
   private generateRefreshToken(user: User): Promise<string> {

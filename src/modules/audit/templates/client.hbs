@@ -1,0 +1,16 @@
+{{#if (eq eventType "CLIENT_CREATED")}}
+<p><strong>{{actorName}}</strong> <span class="audit-role">({{roleName actorRole}})</span> добавил клиента: {{payload.fullName}}, {{payload.phone}}</p>
+{{/if}}
+
+{{#if (eq eventType "CLIENT_UPDATED")}}
+<p><strong>{{actorName}}</strong> <span class="audit-role">({{roleName actorRole}})</span> изменил данные клиента:</p>
+<ul>
+  {{#each payload.changes}}
+  <li>{{this.labelRu}}: <s>{{this.from}}</s> → {{this.to}}</li>
+  {{/each}}
+</ul>
+{{/if}}
+
+{{#if (eq eventType "CLIENT_DELETED")}}
+<p><strong>{{actorName}}</strong> <span class="audit-role">({{roleName actorRole}})</span> удалил клиента: {{payload.fullName}}</p>
+{{/if}}

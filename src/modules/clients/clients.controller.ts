@@ -30,6 +30,9 @@ import { ClientSearchResponseDto } from './dto/client-search-response.dto.js';
 import { RBAC } from '../business/decorators/rbac.decorator.js';
 import { ApiResponse, BaseResponseDto } from '../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
+import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
+import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
+import { auditActorFromToken } from '../audit/interfaces/audit-actor-from-token.js';
 
 @ApiTags('Clients')
 @Controller('businesses/:businessId/clients')
@@ -44,8 +47,9 @@ export class ClientsController {
   async create(
     @Param('businessId', ParseUUIDPipe) businessId: string,
     @Body() dto: CreateClientDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    const client = await this.clientsService.create(businessId, dto);
+    const client = await this.clientsService.create(businessId, dto, auditActorFromToken(tokenPayload, businessId));
     return BaseResponseDto.success({ id: client.id });
   }
 
@@ -56,10 +60,12 @@ export class ClientsController {
   @RBAC(BusinessRole.OWNER)
   @Put(':id')
   async update(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateClientDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    const client = await this.clientsService.update(id, dto);
+    const client = await this.clientsService.update(businessId, id, dto, auditActorFromToken(tokenPayload, businessId));
     return BaseResponseDto.success({ id: client.id });
   }
 
@@ -69,8 +75,12 @@ export class ClientsController {
   @RBAC(BusinessRole.OWNER)
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async delete(@Param('id', ParseUUIDPipe) id: string): Promise<void> {
-    await this.clientsService.delete(id);
+  async delete(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
+  ): Promise<void> {
+    await this.clientsService.delete(businessId, id, auditActorFromToken(tokenPayload, businessId));
   }
 
   @ApiOperation({ summary: 'Get client by ID' })

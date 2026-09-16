@@ -47,6 +47,7 @@
     "cookie-parser": "^1.4.7",
     "date-fns": "^4.4.0",
     "google-auth-library": "^11.0.2",
+    "handlebars": "^4.7.9",
     "passport": "^0.7.0",
     "passport-custom": "^1.2.1",
     "passport-jwt": "^4.0.1",

@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, Staff, StaffShift } from '@prisma/client';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
 import { CreateStaffDto } from './dto/create-staff.dto.js';
@@ -9,10 +10,20 @@ import { StaffSearchOrderBy } from './enums/staff-search-order-by.enum.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { GetShiftsRequestDto } from './dto/get-shifts-request.dto.js';
 import { ReplaceShiftsRequestDto } from './dto/replace-shifts-request.dto.js';
+import { AUDIT_EVENT } from '../audit/audit.constants.js';
+import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
+import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js';
+import { AuditEntity } from '../audit/enums/audit-entity.enum.js';
+import { AuditEvent } from '../audit/enums/audit-event.enum.js';
+import { diffFields } from '../audit/utils/diff-fields.js';
+import { STAFF_AUDIT_FIELDS } from '../audit/fields/staff.fields.js';
 
 @Injectable()
 export class StaffService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   listPublic(businessId: string, serviceId?: string): Promise<Staff[]> {
     return this.db.staff.findMany({
@@ -25,8 +36,8 @@ export class StaffService {
     });
   }
 
-  async create(businessId: string, dto: CreateStaffDto): Promise<Staff> {
-    return this.db.staff.create({
+  async create(businessId: string, dto: CreateStaffDto, actor: AuditActor): Promise<Staff> {
+    const staff = await this.db.staff.create({
       data: {
         businessId,
         name: dto.name,
@@ -38,12 +49,21 @@ export class StaffService {
           : undefined,
       },
     });
+    const event: AuditLogEvent = {
+      businessId,
+      entityType: AuditEntity.STAFF,
+      entityId: staff.id,
+      eventType: AuditEvent.STAFF_CREATED,
+      actor,
+      payload: { name: staff.name },
+    };
+    this.eventEmitter.emit(AUDIT_EVENT, event);
+    return staff;
   }
 
-  async update(staffId: string, dto: UpdateStaffDto): Promise<Staff> {
-    await this.findById(staffId);
-
-    return this.db.staff.update({
+  async update(businessId: string, staffId: string, dto: UpdateStaffDto, actor: AuditActor): Promise<Staff> {
+    const old = await this.findInBusiness(businessId, staffId);
+    const staff = await this.db.staff.update({
       where: { id: staffId },
       data: {
         name: dto.name,
@@ -58,10 +78,29 @@ export class StaffService {
         }),
       },
     });
+    const changes = diffFields(old, staff, StaffService.STAFF_FIELDS);
+    if (changes.length > 0) {
+      const event: AuditLogEvent = {
+        businessId,
+        entityType: AuditEntity.STAFF,
+        entityId: staffId,
+        eventType: AuditEvent.STAFF_UPDATED,
+        actor,
+        payload: { changes },
+      };
+      this.eventEmitter.emit(AUDIT_EVENT, event);
+    }
+    return staff;
   }
 
   async findById(staffId: string): Promise<Staff> {
     const staff = await this.db.staff.findUnique({ where: { id: staffId } });
+    if (!staff) throw new NotFoundException('Staff member not found');
+    return staff;
+  }
+
+  private async findInBusiness(businessId: string, staffId: string): Promise<Staff> {
+    const staff = await this.db.staff.findFirst({ where: { id: staffId, businessId } });
     if (!staff) throw new NotFoundException('Staff member not found');
     return staff;
   }
@@ -103,9 +142,18 @@ export class StaffService {
     });
   }
 
-  async delete(staffId: string): Promise<void> {
-    await this.findById(staffId);
+  async delete(businessId: string, staffId: string, actor: AuditActor): Promise<void> {
+    const staff = await this.findInBusiness(businessId, staffId);
     await this.db.staff.delete({ where: { id: staffId } });
+    const event: AuditLogEvent = {
+      businessId,
+      entityType: AuditEntity.STAFF,
+      entityId: staffId,
+      eventType: AuditEvent.STAFF_DELETED,
+      actor,
+      payload: { name: staff.name },
+    };
+    this.eventEmitter.emit(AUDIT_EVENT, event);
   }
 
   getShifts(staffId: string, dto: GetShiftsRequestDto): Promise<StaffShift[]> {
@@ -117,6 +165,12 @@ export class StaffService {
       orderBy: { date: 'asc' },
     });
   }
+
+  private static readonly STAFF_FIELDS: FieldDescriptor<Staff>[] = [
+    { key: 'name', labelRu: 'Имя' },
+    { key: 'roleTitle', labelRu: 'Должность' },
+    { key: 'isActive', labelRu: 'Активен' },
+  ];
 
   async replaceShifts(staffId: string, dto: ReplaceShiftsRequestDto): Promise<StaffShift[]> {
     const from = new Date(dto.from);

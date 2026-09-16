@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Business, BusinessRole, Prisma, UserRole } from '@prisma/client';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 import { UserService } from '../user/user.service.js';
@@ -10,6 +11,12 @@ import { BusinessSearchItemDto } from './dto/business-search-item.dto.js';
 import { BusinessSearchOrderBy } from './enums/search-order-by.enum.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
+import { AUDIT_EVENT } from '../audit/audit.constants.js';
+import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
+import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js';
+import { AuditEntity } from '../audit/enums/audit-entity.enum.js';
+import { AuditEvent } from '../audit/enums/audit-event.enum.js';
+import { diffFields, FieldDescriptor } from '../audit/utils/diff-fields.js';
 
 type BusinessWithCounts = Business & {
   memberships: { role: BusinessRole }[];
@@ -21,6 +28,7 @@ export class BusinessService {
   constructor(
     private readonly db: DatabaseService,
     private readonly userService: UserService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async create(userId: string, dto: CreateBusinessDto): Promise<Business> {
@@ -46,8 +54,9 @@ export class BusinessService {
     });
   }
 
-  async update(businessId: string, dto: UpdateBusinessDto): Promise<Business> {
-    return this.db.business.update({
+  async update(businessId: string, dto: UpdateBusinessDto, actor: AuditActor): Promise<Business> {
+    const old = await this.findById(businessId);
+    const business = await this.db.business.update({
       where: { id: businessId },
       data: {
         name: dto.name,
@@ -61,7 +70,31 @@ export class BusinessService {
         isBookingConfirmationRequired: dto.isBookingConfirmationRequired,
       },
     });
+    const changes = diffFields(old, business, BusinessService.BUSINESS_FIELDS);
+    if (changes.length > 0) {
+      const event: AuditLogEvent = {
+        businessId,
+        entityType: AuditEntity.BUSINESS,
+        entityId: businessId,
+        eventType: AuditEvent.BUSINESS_UPDATED,
+        actor,
+        payload: { changes },
+      };
+      this.eventEmitter.emit(AUDIT_EVENT, event);
+    }
+    return business;
   }
+
+  private static readonly BUSINESS_FIELDS: FieldDescriptor<Business>[] = [
+    { key: 'name', labelRu: 'Название' },
+    { key: 'timezone', labelRu: 'Часовой пояс' },
+    { key: 'currency', labelRu: 'Валюта' },
+    { key: 'bookingVisibility', labelRu: 'Видимость записей' },
+    { key: 'advanceBookingWindowDays', labelRu: 'Окно бронирования (дней)' },
+    { key: 'slotIntervalMinutes', labelRu: 'Интервал слотов (мин)' },
+    { key: 'minimumBookingNoticeMinutes', labelRu: 'Мин. время до записи (мин)' },
+    { key: 'isBookingConfirmationRequired', labelRu: 'Требуется подтверждение' },
+  ];
 
   async findById(businessId: string): Promise<Business> {
     const business = await this.db.business.findUnique({ where: { id: businessId } });
