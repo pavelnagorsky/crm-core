@@ -10,6 +10,7 @@ export interface AuditLogEvent {
   entityId: string;
   eventType: AuditEvent;
   actionType: AuditActionType;
+  occurredAt: Date;
   actor: AuditActor;
   payload: AuditPayload;
 }

@@ -56,6 +56,7 @@ export class StaffService {
       entityId: staff.id,
       eventType: AuditEvent.STAFF_CREATED,
       actionType: AuditActionType.CREATE,
+      occurredAt: new Date(),
       actor,
       payload: { name: staff.name },
     };
@@ -88,6 +89,7 @@ export class StaffService {
         entityId: staffId,
         eventType: AuditEvent.STAFF_UPDATED,
         actionType: AuditActionType.MODIFY,
+      occurredAt: new Date(),
         actor,
         payload: { changes },
       };
@@ -154,6 +156,7 @@ export class StaffService {
       entityId: staffId,
       eventType: AuditEvent.STAFF_DELETED,
       actionType: AuditActionType.DELETE,
+      occurredAt: new Date(),
       actor,
       payload: { name: staff.name },
     };

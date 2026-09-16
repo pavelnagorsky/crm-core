@@ -111,6 +111,7 @@ export class ServicesService {
       entityId: service.id,
       eventType: AuditEvent.SERVICE_CREATED,
       actionType: AuditActionType.CREATE,
+      occurredAt: new Date(),
       actor,
       payload: { title: service.title, price: service.price.toString(), durationMinutes: service.durationMinutes },
     };
@@ -141,8 +142,9 @@ export class ServicesService {
         entityId: serviceId,
         eventType: AuditEvent.SERVICE_UPDATED,
         actionType: AuditActionType.MODIFY,
-        actor,
-        payload: { changes },
+      occurredAt: new Date(),
+      actor,
+      payload: { changes },
       };
       this.eventEmitter.emit(AUDIT_EVENT, event);
     }
@@ -200,6 +202,7 @@ export class ServicesService {
       entityId: serviceId,
       eventType: AuditEvent.SERVICE_DELETED,
       actionType: AuditActionType.DELETE,
+      occurredAt: new Date(),
       actor,
       payload: { title: service.title },
     };

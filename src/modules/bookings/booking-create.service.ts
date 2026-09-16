@@ -208,6 +208,7 @@ export class BookingCreateService {
       entityId: booking.id,
       eventType: AuditEvent.BOOKING_CREATED,
       actionType: AuditActionType.CREATE,
+      occurredAt: new Date(),
       actor,
       payload: {
         serviceName: booking.serviceTitle,

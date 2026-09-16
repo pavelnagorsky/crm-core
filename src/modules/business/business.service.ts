@@ -80,8 +80,9 @@ export class BusinessService {
         entityId: businessId,
         eventType: AuditEvent.BUSINESS_UPDATED,
         actionType: AuditActionType.MODIFY,
-        actor,
-        payload: { changes },
+      occurredAt: new Date(),
+      actor,
+      payload: { changes },
       };
       this.eventEmitter.emit(AUDIT_EVENT, event);
     }

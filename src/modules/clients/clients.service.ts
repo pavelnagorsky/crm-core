@@ -43,6 +43,7 @@ export class ClientsService {
       entityId: client.id,
       eventType: AuditEvent.CLIENT_CREATED,
       actionType: AuditActionType.CREATE,
+      occurredAt: new Date(),
       actor,
       payload: { fullName: `${client.firstName} ${client.lastName}`, phone: client.phone },
     };
@@ -69,6 +70,7 @@ export class ClientsService {
         entityId: clientId,
         eventType: AuditEvent.CLIENT_UPDATED,
         actionType: AuditActionType.MODIFY,
+      occurredAt: new Date(),
         actor,
         payload: { changes },
       };
@@ -86,6 +88,7 @@ export class ClientsService {
       entityId: clientId,
       eventType: AuditEvent.CLIENT_DELETED,
       actionType: AuditActionType.DELETE,
+      occurredAt: new Date(),
       actor,
       payload: { fullName: `${client.firstName} ${client.lastName}` },
     };

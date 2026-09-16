@@ -27,6 +27,7 @@ export class AuditService {
           entityId: event.entityId,
           eventType: event.eventType,
           actionType: event.actionType,
+          occurredAt: event.occurredAt,
           actorId: event.actor.id ?? null,
           actorName: event.actor.name,
           actorRole: event.actor.role,

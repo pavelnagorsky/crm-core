@@ -34,6 +34,7 @@ export class BookingsService {
       entityId: bookingId,
       eventType: AuditEvent.BOOKING_STATUS_CHANGED,
       actionType: AuditActionType.MODIFY,
+      occurredAt: new Date(),
       actor,
       payload: { from: old.status, to: dto.status },
     };
@@ -99,6 +100,7 @@ export class BookingsService {
       entityId: bookingId,
       eventType: AuditEvent.BOOKING_CANCELLED,
       actionType: AuditActionType.MODIFY,
+      occurredAt: new Date(),
       actor,
       payload: { cancelledBy, reason: dto.reason },
     };
@@ -120,6 +122,7 @@ export class BookingsService {
       entityId: bookingId,
       eventType: AuditEvent.BOOKING_DELETED,
       actionType: AuditActionType.DELETE,
+      occurredAt: new Date(),
       actor,
       payload: {},
     };

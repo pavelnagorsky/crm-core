@@ -416,6 +416,7 @@ model AuditLog {
   entityId   String
   eventType  AuditEvent
   actionType AuditActionType
+  occurredAt DateTime
   actorId    String?
   actorName  String          @db.VarChar(300)
   actorRole  AuditActorRole
