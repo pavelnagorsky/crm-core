@@ -49,6 +49,20 @@ export class ClientsService {
     return client;
   }
 
+  resolveForBooking(
+    businessId: string,
+    phone: string,
+    firstName: string,
+    lastName: string,
+    email?: string,
+  ): Promise<Client> {
+    return this.db.client.upsert({
+      where: { businessId_phone: { businessId, phone } },
+      update: {},
+      create: { businessId, firstName, lastName, phone, email: email ?? null },
+    });
+  }
+
   async search(businessId: string, dto: ClientSearchRequestDto): Promise<PaginatedResult<Client>> {
     const where: Prisma.ClientWhereInput = { businessId };
 

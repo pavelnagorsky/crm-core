@@ -15,6 +15,9 @@ export class BusinessPublicResponseDto {
   @ApiProperty({ type: String })
   timezone: string;
 
+  @ApiProperty({ type: String })
+  currency: string;
+
   @ApiProperty({ enum: BookingVisibility })
   bookingVisibility: BookingVisibility;
 
@@ -24,6 +27,7 @@ export class BusinessPublicResponseDto {
     dto.name = business.name;
     dto.logoFileId = business.logoFileId;
     dto.timezone = business.timezone;
+    dto.currency = business.currency;
     dto.bookingVisibility = business.bookingVisibility as BookingVisibility;
     return dto;
   }

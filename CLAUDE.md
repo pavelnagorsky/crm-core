@@ -39,6 +39,25 @@
   ```
 - Add new codes to `PrismaErrorCode` as needed.
 
+## Architecture: layers and domain ownership
+
+Each module owns its domain. Data access for a given entity lives only in the service that owns it:
+- `StaffService` — owns `staff`, `staffShift`, `staffService` tables.
+- `CalendarService` — owns `calendarEvent`, `calendarEventCancelledOccurrence` tables.
+- `ClientsService` — owns `client` table.
+- `BookingCreateService` — owns `business`, `service`, `booking` tables. All other data comes through injected services.
+
+**Never query another domain's tables directly.** If `BookingCreateService` needs shift or calendar event data, it calls `CalendarService` or `StaffService` — never touches those tables itself.
+
+**`CalendarComputeService` is a private computation helper for `CalendarModule` only.** No other module imports or injects it. Slot/availability logic is exposed through `CalendarService` as the public API.
+
+**Computation services** (e.g. `CalendarComputeService`) handle pure logic — no DB access, no cross-module calls. They are private to their module and never exported.
+
+**Service method contracts:**
+- Expose named domain operations with clear intent (e.g. `isSlotFree`, `resolveForBooking`). Do not expose raw query helpers or internal methods.
+- Cross-domain data needs are satisfied by calling the owning service, not by importing that service's DB model or querying its tables.
+- Exception: a transactional re-check that must run inside an open `$transaction` may pass already-fetched entities to a pure computation method. Mark the call site with a comment explaining the reason.
+
 ## Services / Controllers
 
 - Services return Prisma models, not DTOs. DTO mapping happens in the controller.

@@ -7,5 +7,6 @@ import { BusinessModule } from '../business/business.module.js';
   imports: [BusinessModule],
   controllers: [ClientsController],
   providers: [ClientsService],
+  exports: [ClientsService],
 })
 export class ClientsModule {}

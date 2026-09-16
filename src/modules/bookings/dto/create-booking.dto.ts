@@ -1,33 +1,40 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsDateString, IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
-import { BookingSource } from '../enums/booking-source.enum.js';
-import { BookingStatus } from '../enums/booking-status.enum.js';
+import { IsEmail, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { IsPhone } from '../../../shared/decorators/is-phone.decorator.js';
+import { IsLocalDateTime } from '../../time/decorators/is-local-date-time.validator.js';
 
 export class CreateBookingDto {
   @ApiProperty({ type: String, format: 'uuid' })
   @IsUUID()
-  staffId: string;
-
-  @ApiProperty({ type: String, format: 'uuid' })
-  @IsUUID()
   serviceId: string;
 
-  @ApiProperty({ type: String, format: 'uuid' })
+  @ApiProperty({ type: String, format: 'uuid', required: false, nullable: true })
+  @IsOptional()
   @IsUUID()
-  clientId: string;
+  staffId?: string;
 
-  @ApiProperty({ type: String, format: 'date-time' })
-  @IsDateString()
+  @ApiProperty({ type: String, example: '2026-09-20T10:00:00', description: 'Local datetime in business timezone, no offset' })
+  @IsLocalDateTime()
   startAt: string;
 
-  @ApiProperty({ enum: BookingSource })
-  @IsEnum(BookingSource)
-  source: BookingSource;
+  @ApiProperty({ type: String, maxLength: 100 })
+  @IsString()
+  @MaxLength(100)
+  firstName: string;
 
-  @ApiProperty({ enum: BookingStatus, default: BookingStatus.CONFIRMED, required: false })
+  @ApiProperty({ type: String, maxLength: 100 })
+  @IsString()
+  @MaxLength(100)
+  lastName: string;
+
+  @IsPhone()
+  phone: string;
+
+  @ApiProperty({ type: String, required: false, nullable: true })
   @IsOptional()
-  @IsEnum(BookingStatus)
-  status?: BookingStatus;
+  @IsEmail()
+  @MaxLength(254)
+  email?: string;
 
   @ApiProperty({ type: String, maxLength: 1000, required: false, nullable: true })
   @IsOptional()

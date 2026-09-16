@@ -9,5 +9,6 @@ import { StaffModule } from '../staff/staff.module.js';
   imports: [BusinessModule, StaffModule],
   controllers: [CalendarController],
   providers: [CalendarService, CalendarComputeService],
+  exports: [CalendarService],
 })
 export class CalendarModule {}

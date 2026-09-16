@@ -10,6 +10,7 @@ import { UpdateCalendarEventDto } from './dto/update-calendar-event.dto.js';
 import { DeleteCalendarEventDto } from './dto/delete-calendar-event.dto.js';
 import { GetCalendarRequestDto } from './dto/get-calendar-request.dto.js';
 import { GetCalendarResponseDto } from './dto/get-calendar-response.dto.js';
+import { CalendarEventWithCancellations } from './interfaces/calendar-types.interface.js';
 import { AvailableSlotsRequestDto } from './dto/available-slots-request.dto.js';
 import { AvailableSlotsDayDto } from './dto/available-slots-day.dto.js';
 
@@ -210,6 +211,70 @@ export class CalendarService {
           ]
         : [];
     });
+  }
+
+  /**
+   * Returns the subset of `candidates` who have a shift covering [startAt, endAt)
+   * and no blocking calendar events on that slot.
+   */
+  async filterAvailableStaff(
+    businessId: string,
+    candidates: { id: string }[],
+    dateStr: string,
+    startAt: Date,
+    endAt: Date,
+    timezone: string,
+  ): Promise<{ id: string }[]> {
+    const staffIds = candidates.map((c) => c.id);
+    const date = new Date(dateStr);
+
+    const [shifts, blockEvents] = await Promise.all([
+      this.db.staffShift.findMany({ where: { staffId: { in: staffIds }, date } }),
+      this.db.calendarEvent.findMany({
+        where: {
+          businessId,
+          OR: [{ staffId: null }, { staffId: { in: staffIds } }],
+          repeatType: CalendarEventRepeatType.NONE,
+          startDateTime: { lte: endAt },
+          endDateTime: { gte: startAt },
+        },
+        include: { cancelledOccurrences: { select: { occurrenceDate: true } } },
+      }),
+    ]);
+
+    const shiftsByStaff = new Map(shifts.map((s) => [s.staffId, s]));
+    return candidates.filter((c) =>
+      this.isSlotFree(c.id, dateStr, startAt, endAt, shiftsByStaff.get(c.id) ?? null, blockEvents, timezone),
+    );
+  }
+
+  /**
+   * Returns true if the [startAt, endAt) slot fits within the staff shift and has
+   * no overlapping block calendar events on that date.
+   * Accepts already-fetched data so it can be called inside a $transaction re-check.
+   */
+  isSlotFree(
+    staffId: string,
+    dateStr: string,
+    startAt: Date,
+    endAt: Date,
+    shift: { startTime: Date; endTime: Date } | null,
+    blockEvents: CalendarEventWithCancellations[],
+    timezone: string,
+  ): boolean {
+    if (!shift) return false;
+
+    const slotStart = this.time.dateToMinutes(startAt, timezone);
+    const slotEnd = this.time.dateToMinutes(endAt, timezone);
+
+    if (slotStart < this.time.timeToMinutes(shift.startTime) || slotEnd > this.time.timeToMinutes(shift.endTime)) {
+      return false;
+    }
+
+    const blocked = this.compute.expandBlockEvents(blockEvents, [dateStr], [staffId], timezone)
+      .get(staffId)?.get(dateStr) ?? [];
+
+    return !blocked.some((b) => slotStart < b.end && slotEnd > b.start);
   }
 
   private resolveBookingWindow(business: {

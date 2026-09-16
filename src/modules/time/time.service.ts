@@ -43,6 +43,39 @@ export class TimeService {
     };
   }
 
+  /**
+   * Converts a local wall-clock datetime string (YYYY-MM-DDTHH:mm:ss, no offset)
+   * interpreted in the given IANA timezone to a UTC Date.
+   *
+   * Strategy: parse the components, build a UTC candidate assuming zero offset,
+   * measure the actual TZ offset at that instant via toZonedParts, then correct.
+   * One correction pass is sufficient for all standard (non-historical-edge) timezones.
+   */
+  localToUtc(localDateStr: string, timezone: string): Date {
+    const [datePart, timePart] = localDateStr.split('T');
+    const [year, month, day] = datePart.split('-').map(Number);
+    const [hour, minute, second] = timePart.split(':').map(Number);
+
+    // Initial UTC guess: treat the local time as if it were UTC
+    const utcGuess = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+
+    // Find what wall-clock time that UTC instant maps to in the target timezone
+    const zonedParts = this.toZonedParts(utcGuess, timezone);
+
+    // Compute the offset in minutes: local - zoned = correction needed
+    const guessMinutes = hour * 60 + minute;
+    const zonedMinutes = zonedParts.hour * 60 + zonedParts.minute;
+    const offsetMinutes = guessMinutes - zonedMinutes;
+
+    return new Date(utcGuess.getTime() + offsetMinutes * 60_000);
+  }
+
+  /** Converts a UTC Date to minutes-of-day (0–1439) in the given IANA timezone. */
+  dateToMinutes(dt: Date, timezone: string): number {
+    const parts = this.toZonedParts(dt, timezone);
+    return parts.hour * 60 + parts.minute;
+  }
+
   /** Reads the naive UTC HH:mm from a @db.Time Date (stored as epoch-zero UTC offset). */
   timeToMinutes(dt: Date): number {
     return dt.getUTCHours() * 60 + dt.getUTCMinutes();

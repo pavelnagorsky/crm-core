@@ -52,8 +52,14 @@ export class BookingResponseDto {
   @ApiProperty({ type: Number })
   servicePrice: number;
 
+  @ApiProperty({ type: Number, nullable: true })
+  customPrice: number | null;
+
   @ApiProperty({ type: String })
   staffName: string;
+
+  @ApiProperty({ type: String, nullable: true })
+  calendarEventId: string | null;
 
   @ApiProperty({ type: String, nullable: true })
   notes: string | null;
@@ -82,7 +88,9 @@ export class BookingResponseDto {
     dto.serviceTitle = booking.serviceTitle;
     dto.serviceDuration = booking.serviceDuration;
     dto.servicePrice = Number(booking.servicePrice);
+    dto.customPrice = booking.customPrice !== null ? Number(booking.customPrice) : null;
     dto.staffName = booking.staffName;
+    dto.calendarEventId = booking.calendarEventId;
     dto.notes = booking.notes;
     dto.createdAt = booking.createdAt;
     dto.updatedAt = booking.updatedAt;

@@ -47,6 +47,12 @@ export class CreateBusinessDto {
   @IsIanaTimezone()
   timezone?: string;
 
+  @ApiProperty({ type: String, default: 'USD', required: false, description: 'ISO 4217 currency code' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(3)
+  currency?: string;
+
   @ApiProperty({ enum: BookingVisibility, default: BookingVisibility.PUBLIC, required: false })
   @IsOptional()
   @IsEnum(BookingVisibility)

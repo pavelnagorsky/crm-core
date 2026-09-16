@@ -5,6 +5,9 @@ export class PublicServiceItemDto {
   @ApiProperty({ type: String })
   id: string;
 
+  @ApiProperty({ type: String, nullable: true })
+  imageFileId: string | null;
+
   @ApiProperty({ type: String })
   title: string;
 
@@ -20,6 +23,7 @@ export class PublicServiceItemDto {
   static fromEntity(service: Service): PublicServiceItemDto {
     const dto = new PublicServiceItemDto();
     dto.id = service.id;
+    dto.imageFileId = service.imageFileId;
     dto.title = service.title;
     dto.description = service.description;
     dto.price = Number(service.price);

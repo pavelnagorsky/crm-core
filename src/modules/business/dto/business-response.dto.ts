@@ -24,6 +24,9 @@ export class BusinessResponseDto {
   @ApiProperty({ type: String })
   timezone: string;
 
+  @ApiProperty({ type: String })
+  currency: string;
+
   @ApiProperty({ enum: BookingVisibility })
   bookingVisibility: BookingVisibility;
 
@@ -45,6 +48,7 @@ export class BusinessResponseDto {
     dto.slotIntervalMinutes = business.slotIntervalMinutes;
     dto.minimumBookingNoticeMinutes = business.minimumBookingNoticeMinutes;
     dto.timezone = business.timezone;
+    dto.currency = business.currency;
     dto.bookingVisibility = business.bookingVisibility as BookingVisibility;
     dto.isBookingConfirmationRequired = business.isBookingConfirmationRequired;
     dto.createdAt = business.createdAt;

@@ -83,6 +83,7 @@ export class ServicesService {
       data: {
         businessId,
         categoryId: dto.categoryId ?? null,
+        imageFileId: dto.imageFileId ?? null,
         title: dto.title,
         description: dto.description ?? null,
         price: dto.price,
@@ -101,6 +102,7 @@ export class ServicesService {
       where: { id: serviceId },
       data: {
         categoryId: dto.categoryId,
+        imageFileId: dto.imageFileId,
         title: dto.title,
         description: dto.description,
         price: dto.price,

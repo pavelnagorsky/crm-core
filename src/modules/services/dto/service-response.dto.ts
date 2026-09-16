@@ -11,6 +11,9 @@ export class ServiceResponseDto {
   @ApiProperty({ type: String, nullable: true })
   categoryId: string | null;
 
+  @ApiProperty({ type: String, nullable: true })
+  imageFileId: string | null;
+
   @ApiProperty({ type: String })
   title: string;
 
@@ -43,6 +46,7 @@ export class ServiceResponseDto {
     dto.id = service.id;
     dto.businessId = service.businessId;
     dto.categoryId = service.categoryId;
+    dto.imageFileId = service.imageFileId;
     dto.title = service.title;
     dto.description = service.description;
     dto.price = Number(service.price);

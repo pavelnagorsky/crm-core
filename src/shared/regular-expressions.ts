@@ -6,6 +6,10 @@ const regularExpressions = {
   // E.164: + followed by 7–15 digits
   phone: /^\+\d{7,15}$/,
   time: /^([01]\d|2[0-3]):[0-5]\d$/,
+  // Local datetime without any timezone offset or Z — e.g. 2026-09-20T10:00:00
+  localDateTime: /^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d:[0-5]\d$/,
+  // Positive decimal number — e.g. 49, 49.1, 49.99, 49.3223
+  positiveDecimal: /^\d+(\.\d+)?$/,
 };
 
 export default regularExpressions;

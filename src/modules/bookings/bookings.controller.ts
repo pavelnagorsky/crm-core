@@ -12,6 +12,7 @@ import {
   Query,
 } from '@nestjs/common';
 import {
+  ApiConflictResponse,
   ApiCreatedResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
@@ -19,9 +20,12 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { BusinessRole } from '@prisma/client';
+import { BusinessRole, CancelledBy } from '@prisma/client';
 import { BookingsService } from './bookings.service.js';
+import { BookingCreateService } from './booking-create.service.js';
 import { CreateBookingDto } from './dto/create-booking.dto.js';
+import { ManualCreateBookingDto } from './dto/manual-create-booking.dto.js';
+import { CancelBookingDto } from './dto/cancel-booking.dto.js';
 import { UpdateBookingStatusDto } from './dto/update-booking-status.dto.js';
 import { BookingResponseDto } from './dto/booking-response.dto.js';
 import { BookingSearchRequestDto } from './dto/booking-search-request.dto.js';
@@ -31,20 +35,41 @@ import { ApiResponse, BaseResponseDto } from '../../shared/dto/base-response.dto
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
 
 @ApiTags('Bookings')
-@Controller('businesses/:businessId/bookings')
+@Controller()
 export class BookingsController {
-  constructor(private readonly bookingsService: BookingsService) {}
+  constructor(
+    private readonly bookingsService: BookingsService,
+    private readonly bookingCreateService: BookingCreateService,
+  ) {}
 
-  @ApiOperation({ summary: 'Create a booking' })
+  // ─── Public ──────────────────────────────────────────────────────────────────
+
+  @ApiOperation({ summary: 'Book an appointment (public / client-facing)' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
-  @ApiNotFoundResponse({ description: 'Client, staff, or service not found' })
-  @RBAC(BusinessRole.OWNER, BusinessRole.STAFF)
-  @Post()
-  async create(
+  @ApiNotFoundResponse({ description: 'Business, service, or staff not found' })
+  @ApiConflictResponse({ description: 'Slot is no longer available' })
+  @Post('public/businesses/:businessId/bookings')
+  async createPublic(
     @Param('businessId', ParseUUIDPipe) businessId: string,
     @Body() dto: CreateBookingDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    const booking = await this.bookingsService.create(businessId, dto);
+    const booking = await this.bookingCreateService.createPublicBooking(businessId, dto);
+    return BaseResponseDto.success({ id: booking.id });
+  }
+
+  // ─── Owner / Staff ────────────────────────────────────────────────────────────
+
+  @ApiOperation({ summary: 'Create a booking manually (owner / staff)' })
+  @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
+  @ApiNotFoundResponse({ description: 'Business, service, or staff not found' })
+  @ApiConflictResponse({ description: 'Slot is no longer available' })
+  @RBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @Post('businesses/:businessId/bookings/manual')
+  async createManual(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Body() dto: ManualCreateBookingDto,
+  ): Promise<BaseResponseDto<IdResponseDto>> {
+    const booking = await this.bookingCreateService.createManualBooking(businessId, dto);
     return BaseResponseDto.success({ id: booking.id });
   }
 
@@ -52,7 +77,7 @@ export class BookingsController {
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking not found' })
   @RBAC(BusinessRole.OWNER, BusinessRole.STAFF)
-  @Patch(':id/status')
+  @Patch('businesses/:businessId/bookings/:id/status')
   async updateStatus(
     @Param('businessId', ParseUUIDPipe) businessId: string,
     @Param('id', ParseUUIDPipe) id: string,
@@ -66,18 +91,19 @@ export class BookingsController {
   @ApiOkResponse({ type: ApiResponse(BookingResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking not found' })
   @RBAC(BusinessRole.OWNER, BusinessRole.STAFF)
-  @Get(':id')
+  @Get('businesses/:businessId/bookings/:id')
   async findById(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<BaseResponseDto<BookingResponseDto>> {
-    const booking = await this.bookingsService.findById(id);
+    const booking = await this.bookingsService.findById(id, businessId);
     return BaseResponseDto.success(BookingResponseDto.fromEntity(booking));
   }
 
   @ApiOperation({ summary: 'Search bookings' })
   @ApiOkResponse({ type: ApiResponse(BookingSearchResponseDto) })
   @RBAC(BusinessRole.OWNER, BusinessRole.STAFF)
-  @Get()
+  @Get('businesses/:businessId/bookings')
   async search(
     @Param('businessId', ParseUUIDPipe) businessId: string,
     @Query() dto: BookingSearchRequestDto,
@@ -88,11 +114,26 @@ export class BookingsController {
     );
   }
 
+  @ApiOperation({ summary: 'Cancel a booking' })
+  @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
+  @ApiNotFoundResponse({ description: 'Booking not found' })
+  @ApiConflictResponse({ description: 'Booking is already cancelled' })
+  @RBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @Post('businesses/:businessId/bookings/:id/cancel')
+  async cancel(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CancelBookingDto,
+  ): Promise<BaseResponseDto<IdResponseDto>> {
+    const booking = await this.bookingsService.cancel(id, businessId, CancelledBy.STAFF, dto);
+    return BaseResponseDto.success({ id: booking.id });
+  }
+
   @ApiOperation({ summary: 'Delete a booking' })
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Booking not found' })
   @RBAC(BusinessRole.OWNER)
-  @Delete(':id')
+  @Delete('businesses/:businessId/bookings/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(
     @Param('businessId', ParseUUIDPipe) businessId: string,

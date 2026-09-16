@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
-import { IsBoolean, IsInt, IsNumber, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsInt, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
+import { IsPrice } from '../../../shared/decorators/is-price.decorator.js';
 
 export class CreateServiceDto {
   @ApiProperty({ type: String, maxLength: 150 })
@@ -19,11 +19,13 @@ export class CreateServiceDto {
   @IsUUID()
   categoryId?: string;
 
-  @ApiProperty({ type: Number, description: 'Price (decimal)' })
-  @IsNumber({ maxDecimalPlaces: 2 })
-  @Min(0)
-  @Type(() => Number)
-  price: number;
+  @ApiProperty({ type: String, required: false, nullable: true })
+  @IsOptional()
+  @IsUUID()
+  imageFileId?: string;
+
+  @IsPrice()
+  price: string;
 
   @ApiProperty({ type: Number, description: 'Duration in minutes' })
   @IsInt()
