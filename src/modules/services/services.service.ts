@@ -18,7 +18,9 @@ import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js';
 import { AuditEntity } from '../audit/enums/audit-entity.enum.js';
 import { AuditEvent } from '../audit/enums/audit-event.enum.js';
-import { diffFields, FieldDescriptor } from '../audit/utils/diff-fields.js';
+import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
+import { diffFields } from '../audit/utils/diff-fields.js';
+import { SERVICE_AUDIT_FIELDS } from '../audit/fields/service.fields.js';
 
 @Injectable()
 export class ServicesService {
@@ -108,6 +110,7 @@ export class ServicesService {
       entityType: AuditEntity.SERVICE,
       entityId: service.id,
       eventType: AuditEvent.SERVICE_CREATED,
+      actionType: AuditActionType.CREATE,
       actor,
       payload: { title: service.title, price: service.price.toString(), durationMinutes: service.durationMinutes },
     };
@@ -130,13 +133,14 @@ export class ServicesService {
         sortOrder: dto.sortOrder,
       },
     });
-    const changes = diffFields(old, service, ServicesService.SERVICE_FIELDS);
+    const changes = diffFields(old, service, SERVICE_AUDIT_FIELDS);
     if (changes.length > 0) {
       const event: AuditLogEvent = {
         businessId,
         entityType: AuditEntity.SERVICE,
         entityId: serviceId,
         eventType: AuditEvent.SERVICE_UPDATED,
+        actionType: AuditActionType.MODIFY,
         actor,
         payload: { changes },
       };
@@ -195,18 +199,11 @@ export class ServicesService {
       entityType: AuditEntity.SERVICE,
       entityId: serviceId,
       eventType: AuditEvent.SERVICE_DELETED,
+      actionType: AuditActionType.DELETE,
       actor,
       payload: { title: service.title },
     };
     this.eventEmitter.emit(AUDIT_EVENT, event);
   }
 
-  private static readonly SERVICE_FIELDS: FieldDescriptor<Service>[] = [
-    { key: 'title', labelRu: 'Название' },
-    { key: 'price', labelRu: 'Цена', format: (v) => String(v ?? '—') },
-    { key: 'durationMinutes', labelRu: 'Длительность (мин)' },
-    { key: 'bufferMinutes', labelRu: 'Буфер (мин)' },
-    { key: 'description', labelRu: 'Описание' },
-    { key: 'isActive', labelRu: 'Активна' },
-  ];
 }

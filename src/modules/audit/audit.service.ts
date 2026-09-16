@@ -26,6 +26,7 @@ export class AuditService {
           entityType: event.entityType,
           entityId: event.entityId,
           eventType: event.eventType,
+          actionType: event.actionType,
           actorId: event.actor.id ?? null,
           actorName: event.actor.name,
           actorRole: event.actor.role,
@@ -33,7 +34,7 @@ export class AuditService {
         },
       });
     } catch (err) {
-      this.logger.error('Failed to persist audit log', err);
+      this.logger.error('Failed to persist audit log', err instanceof Error ? err.stack : String(err));
     }
   }
 
@@ -57,7 +58,7 @@ export class AuditService {
       this.db.auditLog.count({ where }),
     ]);
 
-    const items = logs.map((log) => AuditLogItemDto.fromEntity(log, this.renderer.render(log)));
+    const items = logs.map((log) => AuditLogItemDto.fromEntity(log, this.renderer.render(log, dto.lang)));
 
     return { items, totalItems };
   }

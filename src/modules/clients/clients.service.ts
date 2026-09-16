@@ -16,6 +16,7 @@ import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js';
 import { AuditEntity } from '../audit/enums/audit-entity.enum.js';
 import { AuditEvent } from '../audit/enums/audit-event.enum.js';
+import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
 import { diffFields } from '../audit/utils/diff-fields.js';
 import { CLIENT_AUDIT_FIELDS } from '../audit/fields/client.fields.js';
 
@@ -41,6 +42,7 @@ export class ClientsService {
       entityType: AuditEntity.CLIENT,
       entityId: client.id,
       eventType: AuditEvent.CLIENT_CREATED,
+      actionType: AuditActionType.CREATE,
       actor,
       payload: { fullName: `${client.firstName} ${client.lastName}`, phone: client.phone },
     };
@@ -66,6 +68,7 @@ export class ClientsService {
         entityType: AuditEntity.CLIENT,
         entityId: clientId,
         eventType: AuditEvent.CLIENT_UPDATED,
+        actionType: AuditActionType.MODIFY,
         actor,
         payload: { changes },
       };
@@ -82,6 +85,7 @@ export class ClientsService {
       entityType: AuditEntity.CLIENT,
       entityId: clientId,
       eventType: AuditEvent.CLIENT_DELETED,
+      actionType: AuditActionType.DELETE,
       actor,
       payload: { fullName: `${client.firstName} ${client.lastName}` },
     };

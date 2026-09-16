@@ -1,6 +1,5 @@
 export interface AuditFieldChange {
   field: string;
-  labelRu: string;
   from: string;
   to: string;
 }
@@ -13,10 +12,6 @@ export interface BookingCreatedPayload {
   startTime: string;
   endTime: string;
   price: string;
-}
-
-export interface BookingUpdatedPayload {
-  changes: AuditFieldChange[];
 }
 
 export interface BookingCancelledPayload {
@@ -86,7 +81,6 @@ export interface BusinessUpdatedPayload {
 
 export type AuditPayload =
   | BookingCreatedPayload
-  | BookingUpdatedPayload
   | BookingCancelledPayload
   | BookingStatusChangedPayload
   | BookingDeletedPayload

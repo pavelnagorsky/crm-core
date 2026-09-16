@@ -15,6 +15,7 @@ import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js';
 import { AuditEntity } from '../audit/enums/audit-entity.enum.js';
 import { AuditEvent } from '../audit/enums/audit-event.enum.js';
+import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
 import { diffFields } from '../audit/utils/diff-fields.js';
 import { STAFF_AUDIT_FIELDS } from '../audit/fields/staff.fields.js';
 
@@ -54,6 +55,7 @@ export class StaffService {
       entityType: AuditEntity.STAFF,
       entityId: staff.id,
       eventType: AuditEvent.STAFF_CREATED,
+      actionType: AuditActionType.CREATE,
       actor,
       payload: { name: staff.name },
     };
@@ -78,13 +80,14 @@ export class StaffService {
         }),
       },
     });
-    const changes = diffFields(old, staff, StaffService.STAFF_FIELDS);
+    const changes = diffFields(old, staff, STAFF_AUDIT_FIELDS);
     if (changes.length > 0) {
       const event: AuditLogEvent = {
         businessId,
         entityType: AuditEntity.STAFF,
         entityId: staffId,
         eventType: AuditEvent.STAFF_UPDATED,
+        actionType: AuditActionType.MODIFY,
         actor,
         payload: { changes },
       };
@@ -150,6 +153,7 @@ export class StaffService {
       entityType: AuditEntity.STAFF,
       entityId: staffId,
       eventType: AuditEvent.STAFF_DELETED,
+      actionType: AuditActionType.DELETE,
       actor,
       payload: { name: staff.name },
     };
@@ -165,12 +169,6 @@ export class StaffService {
       orderBy: { date: 'asc' },
     });
   }
-
-  private static readonly STAFF_FIELDS: FieldDescriptor<Staff>[] = [
-    { key: 'name', labelRu: 'Имя' },
-    { key: 'roleTitle', labelRu: 'Должность' },
-    { key: 'isActive', labelRu: 'Активен' },
-  ];
 
   async replaceShifts(staffId: string, dto: ReplaceShiftsRequestDto): Promise<StaffShift[]> {
     const from = new Date(dto.from);

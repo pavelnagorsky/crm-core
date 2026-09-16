@@ -2,5 +2,7 @@ export enum AuditActorRole {
   CLIENT = 'CLIENT',
   STAFF = 'STAFF',
   OWNER = 'OWNER',
+  SUPPORT = 'SUPPORT',
   SYSTEM = 'SYSTEM',
+  INTEGRATION = 'INTEGRATION',
 }

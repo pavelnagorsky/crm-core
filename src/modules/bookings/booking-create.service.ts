@@ -21,6 +21,7 @@ import { BookingStatus } from './enums/booking-status.enum.js';
 import { AUDIT_EVENT } from '../audit/audit.constants.js';
 import { AuditEntity } from '../audit/enums/audit-entity.enum.js';
 import { AuditEvent } from '../audit/enums/audit-event.enum.js';
+import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
 import { AuditActorRole } from '../audit/enums/audit-actor-role.enum.js';
 import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js';
@@ -206,6 +207,7 @@ export class BookingCreateService {
       entityType: AuditEntity.BOOKING,
       entityId: booking.id,
       eventType: AuditEvent.BOOKING_CREATED,
+      actionType: AuditActionType.CREATE,
       actor,
       payload: {
         serviceName: booking.serviceTitle,

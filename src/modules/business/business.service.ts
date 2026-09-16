@@ -16,7 +16,9 @@ import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js';
 import { AuditEntity } from '../audit/enums/audit-entity.enum.js';
 import { AuditEvent } from '../audit/enums/audit-event.enum.js';
-import { diffFields, FieldDescriptor } from '../audit/utils/diff-fields.js';
+import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
+import { diffFields } from '../audit/utils/diff-fields.js';
+import { BUSINESS_AUDIT_FIELDS } from '../audit/fields/business.fields.js';
 
 type BusinessWithCounts = Business & {
   memberships: { role: BusinessRole }[];
@@ -70,13 +72,14 @@ export class BusinessService {
         isBookingConfirmationRequired: dto.isBookingConfirmationRequired,
       },
     });
-    const changes = diffFields(old, business, BusinessService.BUSINESS_FIELDS);
+    const changes = diffFields(old, business, BUSINESS_AUDIT_FIELDS);
     if (changes.length > 0) {
       const event: AuditLogEvent = {
         businessId,
         entityType: AuditEntity.BUSINESS,
         entityId: businessId,
         eventType: AuditEvent.BUSINESS_UPDATED,
+        actionType: AuditActionType.MODIFY,
         actor,
         payload: { changes },
       };
@@ -84,17 +87,6 @@ export class BusinessService {
     }
     return business;
   }
-
-  private static readonly BUSINESS_FIELDS: FieldDescriptor<Business>[] = [
-    { key: 'name', labelRu: 'Название' },
-    { key: 'timezone', labelRu: 'Часовой пояс' },
-    { key: 'currency', labelRu: 'Валюта' },
-    { key: 'bookingVisibility', labelRu: 'Видимость записей' },
-    { key: 'advanceBookingWindowDays', labelRu: 'Окно бронирования (дней)' },
-    { key: 'slotIntervalMinutes', labelRu: 'Интервал слотов (мин)' },
-    { key: 'minimumBookingNoticeMinutes', labelRu: 'Мин. время до записи (мин)' },
-    { key: 'isBookingConfirmationRequired', labelRu: 'Требуется подтверждение' },
-  ];
 
   async findById(businessId: string): Promise<Business> {
     const business = await this.db.business.findUnique({ where: { id: businessId } });

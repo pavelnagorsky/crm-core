@@ -68,7 +68,6 @@ enum AuditEntity {
 
 enum AuditEvent {
   BOOKING_CREATED
-  BOOKING_UPDATED
   BOOKING_CANCELLED
   BOOKING_STATUS_CHANGED
   BOOKING_DELETED
@@ -88,7 +87,16 @@ enum AuditActorRole {
   CLIENT
   STAFF
   OWNER
+  SUPPORT
   SYSTEM
+  INTEGRATION
+}
+
+enum AuditActionType {
+  CREATE
+  MODIFY
+  DELETE
+  ACTION
 }
 
 // ─── Models ──────────────────────────────────────────────────────────────────
@@ -402,16 +410,17 @@ model Booking {
 }
 
 model AuditLog {
-  id         String         @id @default(uuid())
+  id         String          @id @default(uuid())
   businessId String
   entityType AuditEntity
   entityId   String
   eventType  AuditEvent
+  actionType AuditActionType
   actorId    String?
-  actorName  String         @db.VarChar(300)
+  actorName  String          @db.VarChar(300)
   actorRole  AuditActorRole
   payload    Json
-  createdAt  DateTime       @default(now())
+  createdAt  DateTime        @default(now())
 
   @@index([businessId, entityType, entityId])
   @@index([businessId, entityType, entityId, createdAt])

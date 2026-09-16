@@ -16,6 +16,7 @@ import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js';
 import { AuditEntity } from '../audit/enums/audit-entity.enum.js';
 import { AuditEvent } from '../audit/enums/audit-event.enum.js';
+import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
 
 @Injectable()
 export class BookingsService {
@@ -32,6 +33,7 @@ export class BookingsService {
       entityType: AuditEntity.BOOKING,
       entityId: bookingId,
       eventType: AuditEvent.BOOKING_STATUS_CHANGED,
+      actionType: AuditActionType.MODIFY,
       actor,
       payload: { from: old.status, to: dto.status },
     };
@@ -96,6 +98,7 @@ export class BookingsService {
       entityType: AuditEntity.BOOKING,
       entityId: bookingId,
       eventType: AuditEvent.BOOKING_CANCELLED,
+      actionType: AuditActionType.MODIFY,
       actor,
       payload: { cancelledBy, reason: dto.reason },
     };
@@ -116,6 +119,7 @@ export class BookingsService {
       entityType: AuditEntity.BOOKING,
       entityId: bookingId,
       eventType: AuditEvent.BOOKING_DELETED,
+      actionType: AuditActionType.DELETE,
       actor,
       payload: {},
     };

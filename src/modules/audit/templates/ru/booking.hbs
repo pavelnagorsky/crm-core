@@ -1,0 +1,15 @@
+{{#if (eq eventType "BOOKING_CREATED")}}
+<p><strong>{{actorName}}</strong> <span class="audit-role">({{t "actorRole" actorRole}})</span> создал бронирование: {{payload.serviceName}} с {{payload.staffName}}, {{formatDateTime payload.startTime}} — {{formatDateTime payload.endTime}}, {{payload.price}}</p>
+{{/if}}
+
+{{#if (eq eventType "BOOKING_CANCELLED")}}
+<p><strong>{{actorName}}</strong> <span class="audit-role">({{t "actorRole" actorRole}})</span> отменил бронирование{{#if payload.reason}}: {{payload.reason}}{{/if}}</p>
+{{/if}}
+
+{{#if (eq eventType "BOOKING_STATUS_CHANGED")}}
+<p><strong>{{actorName}}</strong> <span class="audit-role">({{t "actorRole" actorRole}})</span> изменил статус бронирования: <s>{{t "bookingStatus" payload.from}}</s> → {{t "bookingStatus" payload.to}}</p>
+{{/if}}
+
+{{#if (eq eventType "BOOKING_DELETED")}}
+<p><strong>{{actorName}}</strong> <span class="audit-role">({{t "actorRole" actorRole}})</span> удалил бронирование</p>
+{{/if}}

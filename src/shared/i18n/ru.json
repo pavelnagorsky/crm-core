@@ -1,0 +1,61 @@
+{
+  "actorRole": {
+    "CLIENT": "клиент",
+    "STAFF": "менеджер",
+    "OWNER": "владелец",
+    "SUPPORT": "техподдержка",
+    "SYSTEM": "система",
+    "INTEGRATION": "интеграция"
+  },
+  "bookingStatus": {
+    "PENDING": "Ожидает подтверждения",
+    "CONFIRMED": "Подтверждено",
+    "CANCELLED": "Отменено",
+    "COMPLETED": "Завершено",
+    "NO_SHOW": "Не явился"
+  },
+  "cancelledBy": {
+    "BUSINESS": "бизнес",
+    "CLIENT": "клиент"
+  },
+  "fields": {
+    "BOOKING": {
+      "startAt": "Начало",
+      "endAt": "Конец",
+      "price": "Цена",
+      "notes": "Заметки"
+    },
+    "CLIENT": {
+      "firstName": "Имя",
+      "lastName": "Фамилия",
+      "phone": "Телефон",
+      "email": "Email",
+      "birthDate": "Дата рождения",
+      "gender": "Пол",
+      "notes": "Заметки"
+    },
+    "STAFF": {
+      "name": "Имя",
+      "roleTitle": "Должность",
+      "isActive": "Активен"
+    },
+    "SERVICE": {
+      "title": "Название",
+      "price": "Цена",
+      "durationMinutes": "Длительность (мин)",
+      "bufferMinutes": "Буфер (мин)",
+      "description": "Описание",
+      "isActive": "Активна"
+    },
+    "BUSINESS": {
+      "name": "Название",
+      "timezone": "Часовой пояс",
+      "currency": "Валюта",
+      "bookingVisibility": "Видимость записей",
+      "advanceBookingWindowDays": "Окно бронирования (дней)",
+      "slotIntervalMinutes": "Интервал слотов (мин)",
+      "minimumBookingNoticeMinutes": "Мин. время до записи (мин)",
+      "isBookingConfirmationRequired": "Требуется подтверждение"
+    }
+  }
+}

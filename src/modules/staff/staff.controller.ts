@@ -37,7 +37,7 @@ import { ApiResponse, ApiResponseArray, BaseResponseDto } from '../../shared/dto
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
 import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
-import { auditActorFromToken } from '../audit/interfaces/audit-actor-from-token.js';
+import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
 
 @ApiTags('Staff')
 @Controller('businesses/:businessId/staff')

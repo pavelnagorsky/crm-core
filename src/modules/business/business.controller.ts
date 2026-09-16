@@ -37,7 +37,7 @@ import {
   BaseResponseDto,
 } from '../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
-import { auditActorFromToken } from '../audit/interfaces/audit-actor-from-token.js';
+import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
 
 @ApiTags('Businesses')
 @Controller('businesses')

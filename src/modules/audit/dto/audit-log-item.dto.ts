@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { AuditLog } from '@prisma/client';
-import { AuditEntity } from '../enums/audit-entity.enum.js';
 import { AuditEvent } from '../enums/audit-event.enum.js';
+import { AuditActionType } from '../enums/audit-action-type.enum.js';
 import { AuditActorRole } from '../enums/audit-actor-role.enum.js';
 
 export class AuditLogItemDto {
@@ -10,6 +10,9 @@ export class AuditLogItemDto {
 
   @ApiProperty({ enum: AuditEvent })
   eventType: AuditEvent;
+
+  @ApiProperty({ enum: AuditActionType })
+  actionType: AuditActionType;
 
   @ApiProperty()
   actorName: string;
@@ -27,6 +30,7 @@ export class AuditLogItemDto {
     const dto = new AuditLogItemDto();
     dto.id = log.id;
     dto.eventType = log.eventType as AuditEvent;
+    dto.actionType = log.actionType as AuditActionType;
     dto.actorName = log.actorName;
     dto.actorRole = log.actorRole as AuditActorRole;
     dto.html = html;

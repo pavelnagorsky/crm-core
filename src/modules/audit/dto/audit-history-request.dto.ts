@@ -1,5 +1,5 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsUUID } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsEnum, IsOptional, IsString, IsUUID } from 'class-validator';
 import { PaginationRequestDto } from '../../../shared/dto/pagination-request.dto.js';
 import { AuditEntity } from '../enums/audit-entity.enum.js';
 
@@ -11,4 +11,9 @@ export class AuditHistoryRequestDto extends PaginationRequestDto {
   @ApiProperty({ enum: AuditEntity })
   @IsEnum(AuditEntity)
   entityType: AuditEntity;
+
+  @ApiPropertyOptional({ description: 'Locale for rendered HTML (e.g. "ru")', default: 'ru' })
+  @IsOptional()
+  @IsString()
+  lang?: string = 'ru';
 }
