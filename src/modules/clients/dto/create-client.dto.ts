@@ -1,8 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsDateString, IsEmail, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsDateString, IsEmail, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 import { IsPhone } from '../../../shared/decorators/is-phone.decorator.js';
 
 export class CreateClientDto {
+  @ApiProperty({ type: String, format: 'uuid' })
+  @IsUUID()
+  businessId: string;
+
   @ApiProperty({ type: String, maxLength: 100 })
   @IsString()
   @MaxLength(100)

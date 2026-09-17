@@ -27,29 +27,29 @@ import { UpdateClientDto } from './dto/update-client.dto.js';
 import { ClientResponseDto } from './dto/client-response.dto.js';
 import { ClientSearchRequestDto } from './dto/client-search-request.dto.js';
 import { ClientSearchResponseDto } from './dto/client-search-response.dto.js';
-import { RBAC } from '../business/decorators/rbac.decorator.js';
+import { Auth } from '../auth/decorators/auth.decorator.js';
 import { ApiResponse, BaseResponseDto } from '../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
 import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
-import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
+import { TokenPayloadDto, assertBusinessRole } from '../auth/dto/token-payload.dto.js';
 import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
 
 @ApiTags('Clients')
-@Controller('businesses/:businessId/clients')
+@Controller('clients')
 export class ClientsController {
   constructor(private readonly clientsService: ClientsService) {}
 
   @ApiOperation({ summary: 'Create a client' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
   @ApiConflictResponse({ description: 'Phone number already in use' })
-  @RBAC(BusinessRole.OWNER)
+  @Auth()
   @Post()
   async create(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
     @Body() dto: CreateClientDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    const client = await this.clientsService.create(businessId, dto, auditActorFromToken(tokenPayload, businessId));
+    assertBusinessRole(tokenPayload, dto.businessId, BusinessRole.OWNER);
+    const client = await this.clientsService.create(dto.businessId, dto, auditActorFromToken(tokenPayload, dto.businessId));
     return BaseResponseDto.success({ id: client.id });
   }
 
@@ -57,53 +57,58 @@ export class ClientsController {
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Client not found' })
   @ApiConflictResponse({ description: 'Phone number already in use' })
-  @RBAC(BusinessRole.OWNER)
+  @Auth()
   @Put(':id')
   async update(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateClientDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    const client = await this.clientsService.update(businessId, id, dto, auditActorFromToken(tokenPayload, businessId));
-    return BaseResponseDto.success({ id: client.id });
+    const client = await this.clientsService.findById(id);
+    assertBusinessRole(tokenPayload, client.businessId, BusinessRole.OWNER);
+    const updated = await this.clientsService.update(client.businessId, id, dto, auditActorFromToken(tokenPayload, client.businessId));
+    return BaseResponseDto.success({ id: updated.id });
   }
 
   @ApiOperation({ summary: 'Delete a client' })
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Client not found' })
-  @RBAC(BusinessRole.OWNER)
+  @Auth()
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<void> {
-    await this.clientsService.delete(businessId, id, auditActorFromToken(tokenPayload, businessId));
+    const client = await this.clientsService.findById(id);
+    assertBusinessRole(tokenPayload, client.businessId, BusinessRole.OWNER);
+    await this.clientsService.delete(client.businessId, id, auditActorFromToken(tokenPayload, client.businessId));
   }
 
   @ApiOperation({ summary: 'Get client by ID' })
   @ApiOkResponse({ type: ApiResponse(ClientResponseDto) })
   @ApiNotFoundResponse({ description: 'Client not found' })
-  @RBAC(BusinessRole.OWNER)
+  @Auth()
   @Get(':id')
   async findById(
     @Param('id', ParseUUIDPipe) id: string,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<ClientResponseDto>> {
     const client = await this.clientsService.findById(id);
+    assertBusinessRole(tokenPayload, client.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
     return BaseResponseDto.success(ClientResponseDto.fromEntity(client));
   }
 
   @ApiOperation({ summary: 'Search clients' })
   @ApiOkResponse({ type: ApiResponse(ClientSearchResponseDto) })
-  @RBAC(BusinessRole.OWNER)
-  @Get('search')
+  @Auth()
+  @Get()
   async search(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
     @Query() dto: ClientSearchRequestDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<ClientSearchResponseDto>> {
-    const { items, totalItems } = await this.clientsService.search(businessId, dto);
+    assertBusinessRole(tokenPayload, dto.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
+    const { items, totalItems } = await this.clientsService.search(dto.businessId, dto);
     return BaseResponseDto.success(
       new ClientSearchResponseDto(items.map(ClientResponseDto.fromEntity), dto.page, dto.pageSize, totalItems, dto.isExport),
     );

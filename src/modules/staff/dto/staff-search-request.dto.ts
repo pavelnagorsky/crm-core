@@ -1,10 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsBoolean, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import { IsBoolean, IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 import { Type } from 'class-transformer';
 import { PaginationRequestDto } from '../../../shared/dto/pagination-request.dto.js';
 import { StaffSearchOrderBy } from '../enums/staff-search-order-by.enum.js';
 
 export class StaffSearchRequestDto extends PaginationRequestDto<StaffSearchOrderBy> {
+  @ApiProperty({ type: String, format: 'uuid' })
+  @IsUUID()
+  businessId: string;
+
   @ApiProperty({ type: String, required: false })
   @IsOptional()
   @IsString()

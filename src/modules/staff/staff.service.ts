@@ -1,10 +1,15 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, Staff, StaffShift } from '@prisma/client';
+import { createHash, randomBytes } from 'crypto';
+import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import { BusinessRole, Prisma, Staff, StaffInvitation, StaffInvitationStatus, StaffShift } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
+import { AppException } from '../../shared/exceptions/app.exception.js';
+import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
+import { PrismaErrorCode } from '../../shared/database/prisma-error-codes.js';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
 import { CreateStaffDto } from './dto/create-staff.dto.js';
 import { UpdateStaffDto } from './dto/update-staff.dto.js';
+import { CreateInvitationDto } from './dto/create-invitation.dto.js';
 import { StaffSearchRequestDto } from './dto/staff-search-request.dto.js';
 import { StaffSearchOrderBy } from './enums/staff-search-order-by.enum.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
@@ -196,6 +201,75 @@ export class StaffService {
       return tx.staffShift.findMany({
         where: { staffId, date: { gte: from, lte: to } },
         orderBy: { date: 'asc' },
+      });
+    });
+  }
+
+  async createInvitation(staffId: string, dto: CreateInvitationDto): Promise<{ token: string }> {
+    const staff = await this.findById(staffId);
+
+    if (staff.userId) {
+      throw new AppException(ErrorCode.STAFF_ALREADY_LINKED, HttpStatus.CONFLICT);
+    }
+
+    const token = randomBytes(32).toString('hex');
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+
+    // revoke any existing pending invitations for this staff member
+    await this.db.staffInvitation.updateMany({
+      where: { staffId, status: StaffInvitationStatus.PENDING },
+      data: { status: StaffInvitationStatus.REVOKED },
+    });
+
+    await this.db.staffInvitation.create({
+      data: {
+        staffId,
+        businessId: staff.businessId,
+        tokenHash,
+        expiresAt: new Date(dto.expiresAt),
+      },
+    });
+
+    return { token };
+  }
+
+  async acceptInvitation(userId: string, token: string): Promise<StaffInvitation> {
+    const tokenHash = createHash('sha256').update(token).digest('hex');
+
+    const invitation = await this.db.staffInvitation.findUnique({ where: { tokenHash } });
+
+    if (!invitation || invitation.status !== StaffInvitationStatus.PENDING) {
+      throw new AppException(ErrorCode.STAFF_INVITATION_NOT_FOUND, HttpStatus.NOT_FOUND);
+    }
+
+    if (invitation.expiresAt < new Date()) {
+      await this.db.staffInvitation.update({
+        where: { id: invitation.id },
+        data: { status: StaffInvitationStatus.EXPIRED },
+      });
+      throw new AppException(ErrorCode.STAFF_INVITATION_EXPIRED, HttpStatus.GONE);
+    }
+
+    return this.db.$transaction(async (tx) => {
+      try {
+        await tx.membership.create({
+          data: { userId, businessId: invitation.businessId, role: BusinessRole.STAFF },
+        });
+      } catch (e: any) {
+        if (e?.code === PrismaErrorCode.UNIQUE_CONSTRAINT_VIOLATION) {
+          throw new AppException(ErrorCode.STAFF_USER_ALREADY_MEMBER, HttpStatus.CONFLICT);
+        }
+        throw e;
+      }
+
+      await tx.staff.update({
+        where: { id: invitation.staffId },
+        data: { userId },
+      });
+
+      return tx.staffInvitation.update({
+        where: { id: invitation.id },
+        data: { status: StaffInvitationStatus.ACCEPTED, acceptedAt: new Date() },
       });
     });
   }

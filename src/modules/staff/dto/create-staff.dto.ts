@@ -2,6 +2,10 @@ import { ApiProperty } from '@nestjs/swagger';
 import { IsArray, IsBoolean, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 
 export class CreateStaffDto {
+  @ApiProperty({ type: String, format: 'uuid' })
+  @IsUUID()
+  businessId: string;
+
   @ApiProperty({ type: String, maxLength: 250 })
   @IsString()
   @MaxLength(250)

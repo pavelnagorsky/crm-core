@@ -27,6 +27,12 @@ export const ErrorCode = {
   // clients
   CLIENT_PHONE_EXISTS: { code: 'CLIENT_PHONE_EXISTS', message: 'A client with this phone number already exists in this business' },
 
+  // staff invitations
+  STAFF_INVITATION_NOT_FOUND:  { code: 'STAFF_INVITATION_NOT_FOUND',  message: 'Invitation not found or already used' },
+  STAFF_INVITATION_EXPIRED:    { code: 'STAFF_INVITATION_EXPIRED',    message: 'Invitation has expired' },
+  STAFF_ALREADY_LINKED:        { code: 'STAFF_ALREADY_LINKED',        message: 'This staff member is already linked to a user account' },
+  STAFF_USER_ALREADY_MEMBER:   { code: 'STAFF_USER_ALREADY_MEMBER',   message: 'You are already a member of this business' },
+
   // bookings
   BOOKING_ALREADY_CANCELLED: { code: 'BOOKING_ALREADY_CANCELLED', message: 'Booking is already cancelled' },
   BOOKING_BUSINESS_NOT_FOUND:  { code: 'BOOKING_BUSINESS_NOT_FOUND',  message: 'Business not found' },
