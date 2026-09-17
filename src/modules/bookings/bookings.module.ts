@@ -9,10 +9,8 @@ import { BusinessModule } from '../business/business.module.js';
 import { CalendarModule } from '../calendar/calendar.module.js';
 import { ClientsModule } from '../clients/clients.module.js';
 import { StaffModule } from '../staff/staff.module.js';
-import { TimeModule } from '../time/time.module.js';
-
 @Module({
-  imports: [PassportModule, BusinessModule, CalendarModule, ClientsModule, StaffModule, TimeModule],
+  imports: [PassportModule, BusinessModule, CalendarModule, ClientsModule, StaffModule],
   controllers: [BookingsController],
   providers: [BookingsService, BookingCreateService, BookingClientService, JwtBookingClientStrategy],
 })

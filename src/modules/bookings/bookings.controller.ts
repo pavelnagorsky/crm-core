@@ -39,7 +39,6 @@ import { ClientLinkResponseDto } from './dto/client-link-response.dto.js';
 import { BookingClientTokenPayloadDto } from './dto/booking-client-token-payload.dto.js';
 import { JwtBookingClientGuard } from './guards/jwt-booking-client.guard.js';
 import { BookingClientToken } from './decorators/booking-client-token.decorator.js';
-import { RBAC } from '../business/decorators/rbac.decorator.js';
 import { Auth } from '../auth/decorators/auth.decorator.js';
 import { ApiResponse, BaseResponseDto } from '../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
@@ -75,7 +74,7 @@ export class BookingsController {
   @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
   @ApiBearerAuth('booking-client-token')
   @UseGuards(JwtBookingClientGuard)
-  @Get('public/bookings/manage')
+  @Get('public/bookings/me')
   async getByClientToken(
     @BookingClientToken() tokenPayload: BookingClientTokenPayloadDto,
   ): Promise<BaseResponseDto<BookingResponseDto>> {
@@ -89,7 +88,7 @@ export class BookingsController {
   @ApiConflictResponse({ description: 'Booking is already cancelled' })
   @ApiBearerAuth('booking-client-token')
   @UseGuards(JwtBookingClientGuard)
-  @Post('public/bookings/manage/cancel')
+  @Post('public/bookings/me/cancel')
   async cancelByClientToken(
     @BookingClientToken() tokenPayload: BookingClientTokenPayloadDto,
     @Body() dto: CancelBookingDto,
@@ -113,6 +112,35 @@ export class BookingsController {
     assertBusinessRole(tokenPayload, dto.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
     const booking = await this.bookingCreateService.createManualBooking(dto.businessId, dto, auditActorFromToken(tokenPayload, dto.businessId));
     return BaseResponseDto.success({ id: booking.id });
+  }
+
+  @ApiOperation({ summary: 'Get booking by ID' })
+  @ApiOkResponse({ type: ApiResponse(BookingResponseDto) })
+  @ApiNotFoundResponse({ description: 'Booking not found' })
+  @Auth()
+  @Get('bookings/:id')
+  async findById(
+    @Param('id', ParseUUIDPipe) id: string,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
+  ): Promise<BaseResponseDto<BookingResponseDto>> {
+    const booking = await this.bookingsService.findById(id);
+    assertBusinessRole(tokenPayload, booking.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
+    return BaseResponseDto.success(BookingResponseDto.fromEntity(booking));
+  }
+
+  @ApiOperation({ summary: 'Search bookings' })
+  @ApiOkResponse({ type: ApiResponse(BookingSearchResponseDto) })
+  @Auth()
+  @Get('bookings')
+  async search(
+    @Query() dto: BookingSearchRequestDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
+  ): Promise<BaseResponseDto<BookingSearchResponseDto>> {
+    assertBusinessRole(tokenPayload, dto.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
+    const { items, totalItems } = await this.bookingsService.search(dto.businessId, dto);
+    return BaseResponseDto.success(
+      new BookingSearchResponseDto(items.map(BookingResponseDto.fromEntity), dto.page, dto.pageSize, totalItems, dto.isExport),
+    );
   }
 
   @ApiOperation({ summary: 'Update booking (owner / staff)' })
@@ -142,34 +170,6 @@ export class BookingsController {
   ): Promise<BaseResponseDto<IdResponseDto>> {
     const booking = await this.bookingsService.updateStatus(id, tokenPayload, dto);
     return BaseResponseDto.success({ id: booking.id });
-  }
-
-  @ApiOperation({ summary: 'Get booking by ID' })
-  @ApiOkResponse({ type: ApiResponse(BookingResponseDto) })
-  @ApiNotFoundResponse({ description: 'Booking not found' })
-  @Auth()
-  @Get('bookings/:id')
-  async findById(
-    @Param('id', ParseUUIDPipe) id: string,
-    @TokenPayload() tokenPayload: TokenPayloadDto,
-  ): Promise<BaseResponseDto<BookingResponseDto>> {
-    const booking = await this.bookingsService.findById(id);
-    assertBusinessRole(tokenPayload, booking.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
-    return BaseResponseDto.success(BookingResponseDto.fromEntity(booking));
-  }
-
-  @ApiOperation({ summary: 'Search bookings' })
-  @ApiOkResponse({ type: ApiResponse(BookingSearchResponseDto) })
-  @RBAC(BusinessRole.OWNER, BusinessRole.STAFF)
-  @Get('businesses/:businessId/bookings')
-  async search(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
-    @Query() dto: BookingSearchRequestDto,
-  ): Promise<BaseResponseDto<BookingSearchResponseDto>> {
-    const { items, totalItems } = await this.bookingsService.search(businessId, dto);
-    return BaseResponseDto.success(
-      new BookingSearchResponseDto(items.map(BookingResponseDto.fromEntity), dto.page, dto.pageSize, totalItems, dto.isExport),
-    );
   }
 
   @ApiOperation({ summary: 'Generate client management token for a booking' })

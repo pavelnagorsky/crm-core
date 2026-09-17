@@ -103,7 +103,7 @@ export class BookingResponseDto {
 
   static fromEntityPublic(booking: Booking): BookingResponseDto {
     const dto = BookingResponseDto.fromEntity(booking);
-    dto.internalNotes = null;
+    dto.internalNotes = null; // staff-only field, not exposed to clients
     return dto;
   }
 }

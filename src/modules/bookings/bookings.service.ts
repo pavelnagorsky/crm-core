@@ -49,38 +49,31 @@ export class BookingsService {
 
     const slotChanging = dto.startAt !== undefined || dto.staffId !== undefined || dto.serviceId !== undefined;
 
-    let updated: Booking;
-
-    if (slotChanging) {
-      updated = await this.updateWithSlotReschedule(old, businessId, dto);
-    } else {
-      updated = await this.db.booking.update({
-        where: { id: bookingId },
-        data: {
-          clientFirstName: dto.firstName ?? old.clientFirstName,
-          clientLastName: dto.lastName ?? old.clientLastName,
-          clientPhone: dto.phone ?? old.clientPhone,
-          clientEmail: dto.email !== undefined ? (dto.email ?? null) : old.clientEmail,
-          customPrice: dto.customPrice !== undefined ? dto.customPrice : undefined,
-          notes: dto.notes !== undefined ? (dto.notes ?? null) : undefined,
-          internalNotes: dto.internalNotes !== undefined ? (dto.internalNotes ?? null) : undefined,
-        },
-      });
-    }
+    const updated = slotChanging
+      ? await this.updateWithSlotReschedule(old, businessId, dto)
+      : await this.db.booking.update({
+          where: { id: bookingId },
+          data: {
+            clientFirstName: dto.firstName ?? old.clientFirstName,
+            clientLastName: dto.lastName ?? old.clientLastName,
+            clientPhone: dto.phone ?? old.clientPhone,
+            clientEmail: dto.email !== undefined ? (dto.email ?? null) : old.clientEmail,
+            customPrice: dto.customPrice !== undefined ? dto.customPrice : undefined,
+            notes: dto.notes !== undefined ? (dto.notes ?? null) : undefined,
+            internalNotes: dto.internalNotes !== undefined ? (dto.internalNotes ?? null) : undefined,
+          },
+        });
 
     const changes = diffFields(old, updated, BOOKING_AUDIT_FIELDS);
     if (changes.length > 0) {
-      const event: AuditLogEvent = {
+      this.emitAudit({
         businessId,
-        entityType: AuditEntity.BOOKING,
         entityId: bookingId,
         eventType: AuditEvent.BOOKING_UPDATED,
         actionType: AuditActionType.MODIFY,
-        occurredAt: new Date(),
         actor,
         payload: { changes },
-      };
-      this.eventEmitter.emit(AUDIT_EVENT, event);
+      });
     }
 
     return updated;
@@ -90,17 +83,14 @@ export class BookingsService {
     const old = await this.findById(bookingId);
     assertBusinessRole(tokenPayload, old.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
     const updated = await this.db.booking.update({ where: { id: bookingId }, data: { status: dto.status } });
-    const event: AuditLogEvent = {
+    this.emitAudit({
       businessId: old.businessId,
-      entityType: AuditEntity.BOOKING,
       entityId: bookingId,
       eventType: AuditEvent.BOOKING_STATUS_CHANGED,
       actionType: AuditActionType.MODIFY,
-      occurredAt: new Date(),
       actor: auditActorFromToken(tokenPayload, old.businessId),
       payload: { from: old.status, to: dto.status },
-    };
-    this.eventEmitter.emit(AUDIT_EVENT, event);
+    });
     return updated;
   }
 
@@ -145,87 +135,62 @@ export class BookingsService {
   async cancel(bookingId: string, tokenPayload: TokenPayloadDto, cancelledBy: CancelledBy, dto: CancelBookingDto): Promise<Booking> {
     const booking = await this.findById(bookingId);
     assertBusinessRole(tokenPayload, booking.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
-    if (booking.status === BookingStatus.CANCELLED) {
-      throw new AppException(ErrorCode.BOOKING_ALREADY_CANCELLED, HttpStatus.CONFLICT);
-    }
-    const updated = await this.db.booking.update({
-      where: { id: bookingId },
-      data: {
-        status: BookingStatus.CANCELLED,
-        cancelledBy,
-        cancelledAt: new Date(),
-        cancellationReason: dto.reason ?? null,
-      },
-    });
-    const event: AuditLogEvent = {
-      businessId: booking.businessId,
-      entityType: AuditEntity.BOOKING,
-      entityId: bookingId,
-      eventType: AuditEvent.BOOKING_CANCELLED,
-      actionType: AuditActionType.MODIFY,
-      occurredAt: new Date(),
-      actor: auditActorFromToken(tokenPayload, booking.businessId),
-      payload: { cancelledBy, reason: dto.reason },
-    };
-    this.eventEmitter.emit(AUDIT_EVENT, event);
-    return updated;
+    return this.executeCancellation(booking, cancelledBy, dto.reason, auditActorFromToken(tokenPayload, booking.businessId));
   }
 
   async cancelByClient(bookingId: string, dto: CancelBookingDto): Promise<Booking> {
     const booking = await this.findById(bookingId);
-    if (booking.status === BookingStatus.CANCELLED) {
-      throw new AppException(ErrorCode.BOOKING_ALREADY_CANCELLED, HttpStatus.CONFLICT);
-    }
-    const updated = await this.db.booking.update({
-      where: { id: bookingId },
-      data: {
-        status: BookingStatus.CANCELLED,
-        cancelledBy: CancelledBy.CLIENT,
-        cancelledAt: new Date(),
-        cancellationReason: dto.reason ?? null,
-      },
-    });
     const actor: AuditActor = {
       name: `${booking.clientFirstName} ${booking.clientLastName}`,
       role: AuditActorRole.CLIENT,
     };
-    const event: AuditLogEvent = {
-      businessId: booking.businessId,
-      entityType: AuditEntity.BOOKING,
-      entityId: bookingId,
-      eventType: AuditEvent.BOOKING_CANCELLED,
-      actionType: AuditActionType.MODIFY,
-      occurredAt: new Date(),
-      actor,
-      payload: { cancelledBy: CancelledBy.CLIENT, reason: dto.reason },
-    };
-    this.eventEmitter.emit(AUDIT_EVENT, event);
-    return updated;
+    return this.executeCancellation(booking, CancelledBy.CLIENT, dto.reason, actor);
   }
 
   async delete(bookingId: string, tokenPayload: TokenPayloadDto): Promise<void> {
     const booking = await this.findById(bookingId);
     assertBusinessRole(tokenPayload, booking.businessId, BusinessRole.OWNER);
     await this.db.$transaction([
-      this.db.booking.update({ where: { id: bookingId }, data: { deletedAt: new Date() } }),
+      this.db.booking.update({ where: { id: booking.id }, data: { deletedAt: new Date() } }),
       ...(booking.calendarEventId
         ? [this.db.calendarEvent.delete({ where: { id: booking.calendarEventId } })]
         : []),
     ]);
-    const event: AuditLogEvent = {
+    this.emitAudit({
       businessId: booking.businessId,
-      entityType: AuditEntity.BOOKING,
-      entityId: bookingId,
+      entityId: booking.id,
       eventType: AuditEvent.BOOKING_DELETED,
       actionType: AuditActionType.DELETE,
-      occurredAt: new Date(),
       actor: auditActorFromToken(tokenPayload, booking.businessId),
       payload: {},
-    };
-    this.eventEmitter.emit(AUDIT_EVENT, event);
+    });
   }
 
-  // ── Slot reschedule ───────────────────────────────────────────────────────────
+  // ── Private ───────────────────────────────────────────────────────────────────
+
+  private async executeCancellation(booking: Booking, cancelledBy: CancelledBy, reason: string | undefined, actor: AuditActor): Promise<Booking> {
+    if (booking.status === BookingStatus.CANCELLED) {
+      throw new AppException(ErrorCode.BOOKING_ALREADY_CANCELLED, HttpStatus.CONFLICT);
+    }
+    const updated = await this.db.booking.update({
+      where: { id: booking.id },
+      data: {
+        status: BookingStatus.CANCELLED,
+        cancelledBy,
+        cancelledAt: new Date(),
+        cancellationReason: reason ?? null,
+      },
+    });
+    this.emitAudit({
+      businessId: booking.businessId,
+      entityId: booking.id,
+      eventType: AuditEvent.BOOKING_CANCELLED,
+      actionType: AuditActionType.MODIFY,
+      actor,
+      payload: { cancelledBy, reason },
+    });
+    return updated;
+  }
 
   private async updateWithSlotReschedule(old: Booking, businessId: string, dto: UpdateBookingDto): Promise<Booking> {
     const serviceId = dto.serviceId ?? old.serviceId;
@@ -247,13 +212,10 @@ export class BookingsService {
     if (!business) throw new AppException(ErrorCode.BOOKING_BUSINESS_NOT_FOUND, HttpStatus.NOT_FOUND);
     if (!service) throw new AppException(ErrorCode.BOOKING_SERVICE_NOT_FOUND, HttpStatus.NOT_FOUND);
 
-    const startAt = dto.startAt
-      ? this.time.localToUtc(dto.startAt, business.timezone)
-      : old.startAt;
+    const startAt = dto.startAt ? this.time.localToUtc(dto.startAt, business.timezone) : old.startAt;
     const endAt = new Date(startAt.getTime() + service.durationMinutes * 60_000);
     const dateStr = format(startAt, 'yyyy-MM-dd');
 
-    // Validate staff performs this service whenever either staff or service changes
     if (dto.staffId !== undefined || dto.serviceId !== undefined) {
       const candidates = await this.staffService.resolveStaffForService(businessId, serviceId, staffId);
       if (candidates.length === 0) throw new AppException(ErrorCode.BOOKING_STAFF_NOT_FOUND, HttpStatus.NOT_FOUND);
@@ -273,7 +235,6 @@ export class BookingsService {
             repeatType: CalendarEventRepeatType.NONE,
             startDateTime: { lte: endAt },
             endDateTime: { gte: startAt },
-            // Exclude the existing calendar event so it doesn't block itself
             NOT: old.calendarEventId ? { id: old.calendarEventId } : undefined,
           },
           include: { cancelledOccurrences: { select: { occurrenceDate: true } } },
@@ -285,7 +246,6 @@ export class BookingsService {
         throw new AppException(ErrorCode.BOOKING_SLOT_UNAVAILABLE, HttpStatus.CONFLICT);
       }
 
-      // Move the calendar event to the new time (or create if missing)
       if (old.calendarEventId) {
         await tx.calendarEvent.update({
           where: { id: old.calendarEventId },
@@ -328,9 +288,29 @@ export class BookingsService {
     });
   }
 
+  private emitAudit(params: {
+    businessId: string;
+    entityId: string;
+    eventType: AuditEvent;
+    actionType: AuditActionType;
+    actor: AuditActor;
+    payload: Record<string, unknown>;
+  }): void {
+    const event: AuditLogEvent = {
+      businessId: params.businessId,
+      entityType: AuditEntity.BOOKING,
+      entityId: params.entityId,
+      eventType: params.eventType,
+      actionType: params.actionType,
+      occurredAt: new Date(),
+      actor: params.actor,
+      payload: params.payload,
+    };
+    this.eventEmitter.emit(AUDIT_EVENT, event);
+  }
+
   private buildLockKey(staffId: string, dateStr: string): bigint {
     const hash = createHash('sha256').update(`${staffId}:${dateStr}`).digest();
     return hash.readBigInt64BE(0);
   }
-
 }

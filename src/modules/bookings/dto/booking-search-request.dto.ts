@@ -6,6 +6,10 @@ import { BookingSearchOrderBy } from '../enums/booking-search-order-by.enum.js';
 import { BookingStatus } from '../enums/booking-status.enum.js';
 
 export class BookingSearchRequestDto extends PaginationRequestDto<BookingSearchOrderBy> {
+  @ApiProperty({ type: String, format: 'uuid' })
+  @IsUUID()
+  businessId: string;
+
   @ApiProperty({ enum: BookingStatus, required: false })
   @IsOptional()
   @IsEnum(BookingStatus)
