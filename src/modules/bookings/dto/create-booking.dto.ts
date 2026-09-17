@@ -6,6 +6,10 @@ import { IsLocalDateTime } from '../../time/decorators/is-local-date-time.valida
 export class CreateBookingDto {
   @ApiProperty({ type: String, format: 'uuid' })
   @IsUUID()
+  businessId: string;
+
+  @ApiProperty({ type: String, format: 'uuid' })
+  @IsUUID()
   serviceId: string;
 
   @ApiProperty({ type: String, format: 'uuid', required: false, nullable: true })

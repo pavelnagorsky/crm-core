@@ -62,12 +62,11 @@ export class BookingsController {
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Business, service, or staff not found' })
   @ApiConflictResponse({ description: 'Slot is no longer available' })
-  @Post('public/businesses/:businessId/bookings')
+  @Post('public/bookings')
   async createPublic(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
     @Body() dto: CreateBookingDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    const booking = await this.bookingCreateService.createPublicBooking(businessId, dto);
+    const booking = await this.bookingCreateService.createPublicBooking(dto.businessId, dto);
     return BaseResponseDto.success({ id: booking.id });
   }
 
@@ -105,14 +104,14 @@ export class BookingsController {
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Business, service, or staff not found' })
   @ApiConflictResponse({ description: 'Slot is no longer available' })
-  @RBAC(BusinessRole.OWNER, BusinessRole.STAFF)
-  @Post('businesses/:businessId/bookings/manual')
+  @Auth()
+  @Post('bookings/manual')
   async createManual(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
     @Body() dto: ManualCreateBookingDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    const booking = await this.bookingCreateService.createManualBooking(businessId, dto, auditActorFromToken(tokenPayload, businessId));
+    assertBusinessRole(tokenPayload, dto.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
+    const booking = await this.bookingCreateService.createManualBooking(dto.businessId, dto, auditActorFromToken(tokenPayload, dto.businessId));
     return BaseResponseDto.success({ id: booking.id });
   }
 
