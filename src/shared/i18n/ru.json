@@ -20,8 +20,14 @@
   },
   "fields": {
     "BOOKING": {
+      "staffId": "Сотрудник",
+      "serviceId": "Услуга",
       "startAt": "Начало",
       "endAt": "Конец",
+      "clientFirstName": "Имя клиента",
+      "clientLastName": "Фамилия клиента",
+      "clientPhone": "Телефон клиента",
+      "clientEmail": "Email клиента",
       "customPrice": "Цена",
       "notes": "Заметки клиента",
       "internalNotes": "Внутренние заметки"

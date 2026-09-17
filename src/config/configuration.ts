@@ -31,6 +31,8 @@ export default () => {
         process.env['RESET_PASSWORD_TOKEN_EXPIRATION'],
       refreshTokenSecret: process.env['REFRESH_TOKEN_SECRET'],
       refreshTokenExpiration: process.env['REFRESH_TOKEN_EXPIRATION'],
+      bookingClientTokenSecret: process.env['BOOKING_CLIENT_TOKEN_SECRET'],
+      bookingClientTokenExpiration: process.env['BOOKING_CLIENT_TOKEN_EXPIRATION'],
     },
     frontend: {
       domain: process.env['DOMAIN'],
@@ -75,6 +77,8 @@ export interface IJwtConfig {
   resetPasswordTokenExpiration: string;
   refreshTokenSecret: string;
   refreshTokenExpiration: string;
+  bookingClientTokenSecret: string;
+  bookingClientTokenExpiration: string;
 }
 
 export interface IMailerConfig {
