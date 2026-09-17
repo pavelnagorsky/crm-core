@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Patch } from '@nestjs/common';
+import { Body, Controller, Get, Put } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiTags, ApiUnauthorizedResponse } from '@nestjs/swagger';
 import { UserService } from './user.service.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
@@ -28,7 +28,7 @@ export class UserController {
   @ApiOkResponse({ type: ApiResponse(UserResponseDto) })
   @ApiUnauthorizedResponse({ type: UnauthorizedResponseDto })
   @Auth()
-  @Patch('me')
+  @Put('me')
   async updateMe(
     @TokenPayload() payload: TokenPayloadDto,
     @Body() dto: UpdateUserDto,

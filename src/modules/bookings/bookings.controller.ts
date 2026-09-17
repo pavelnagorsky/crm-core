@@ -9,6 +9,7 @@ import {
   ParseUUIDPipe,
   Patch,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -148,7 +149,7 @@ export class BookingsController {
   @ApiNotFoundResponse({ description: 'Booking not found' })
   @ApiConflictResponse({ description: 'Slot is no longer available' })
   @Auth()
-  @Patch('bookings/:id')
+  @Put('bookings/:id')
   async update(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateBookingDto,
