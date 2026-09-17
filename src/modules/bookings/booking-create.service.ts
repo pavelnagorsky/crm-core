@@ -259,7 +259,9 @@ export class BookingCreateService {
       );
 
     const staffIds = candidates.map((s) => s.id);
-    const date = new Date(dateStr);
+    const dayStart = this.time.localToUtc(`${dateStr}T00:00:00`, timezone);
+    const dayEnd = this.time.localToUtc(`${dateStr}T00:00:00`, timezone);
+    dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
 
     const [available, bookingCounts] = await Promise.all([
       this.calendarService.filterAvailableStaff(
@@ -274,7 +276,7 @@ export class BookingCreateService {
         by: ['staffId'],
         where: {
           staffId: { in: staffIds },
-          startAt: { gte: date, lt: new Date(date.getTime() + 86_400_000) },
+          startAt: { gte: dayStart, lt: dayEnd },
         },
         _count: { id: true },
       }),
