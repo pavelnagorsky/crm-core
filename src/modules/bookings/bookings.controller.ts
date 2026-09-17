@@ -183,8 +183,8 @@ export class BookingsController {
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<BaseResponseDto<ClientLinkResponseDto>> {
     await this.bookingsService.findById(id, businessId);
-    const url = this.bookingClientService.generateClientLink(id);
-    return BaseResponseDto.success({ url });
+    const token = this.bookingClientService.generateClientToken(id);
+    return BaseResponseDto.success({ token });
   }
 
   @ApiOperation({ summary: 'Cancel a booking' })
