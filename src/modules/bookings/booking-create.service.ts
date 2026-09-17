@@ -5,6 +5,7 @@ import {
   CalendarEventRepeatType,
   CalendarEventType,
 } from '@prisma/client';
+import { BookingVisibility } from '../business/enums/booking-visibility.enum.js';
 import { format } from 'date-fns';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
@@ -76,7 +77,7 @@ export class BookingCreateService {
     const [business, service] = await Promise.all([
       this.db.business.findUnique({
         where: { id: businessId },
-        select: { isBookingConfirmationRequired: true, timezone: true },
+        select: { isBookingConfirmationRequired: true, timezone: true, bookingVisibility: true },
       }),
       this.db.service.findFirst({
         where: { id: dto.serviceId, businessId, isActive: true },
@@ -89,6 +90,8 @@ export class BookingCreateService {
         ErrorCode.BOOKING_BUSINESS_NOT_FOUND,
         HttpStatus.NOT_FOUND,
       );
+    if (source === BookingSource.PUBLIC_PAGE && business.bookingVisibility === BookingVisibility.PRIVATE)
+      throw new AppException(ErrorCode.BOOKING_NOT_AVAILABLE, HttpStatus.FORBIDDEN);
     if (!service)
       throw new AppException(
         ErrorCode.BOOKING_SERVICE_NOT_FOUND,

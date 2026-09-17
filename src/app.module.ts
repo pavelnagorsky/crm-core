@@ -1,8 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
-import { AppController } from './app.controller.js';
-import { AppService } from './app.service.js';
 import configuration from './config/configuration.js';
 import { CacheModule } from '@nestjs/cache-manager';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -17,6 +15,7 @@ import { CalendarModule } from './modules/calendar/calendar.module.js';
 import { ClientsModule } from './modules/clients/clients.module.js';
 import { BookingsModule } from './modules/bookings/bookings.module.js';
 import { AuditModule } from './modules/audit/audit.module.js';
+import { HealthModule } from './modules/health/health.module.js';
 
 @Module({
   imports: [
@@ -42,8 +41,7 @@ import { AuditModule } from './modules/audit/audit.module.js';
     ClientsModule,
     BookingsModule,
     AuditModule,
+    HealthModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
 })
 export class AppModule {}

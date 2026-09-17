@@ -1,5 +1,8 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { CalendarEvent, CalendarEventRepeatType, Prisma } from '@prisma/client';
+import { AppException } from '../../shared/exceptions/app.exception.js';
+import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
+import { BookingVisibility } from '../business/enums/booking-visibility.enum.js';
 import { eachDayOfInterval, format } from 'date-fns';
 import { DatabaseService } from '../../database/database.service.js';
 import { TimeService } from '../time/time.service.js';
@@ -151,6 +154,7 @@ export class CalendarService {
           advanceBookingWindowDays: true,
           slotIntervalMinutes: true,
           minimumBookingNoticeMinutes: true,
+          bookingVisibility: true,
         },
       }),
       this.db.service.findFirst({
@@ -161,6 +165,8 @@ export class CalendarService {
     ]);
 
     if (!business) throw new NotFoundException('Business not found');
+    if (business.bookingVisibility === BookingVisibility.PRIVATE)
+      throw new AppException(ErrorCode.BOOKING_NOT_AVAILABLE, HttpStatus.FORBIDDEN);
     if (!service) throw new NotFoundException('Service not found');
     if (candidateStaff.length === 0) return [];
 

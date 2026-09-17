@@ -34,6 +34,7 @@ export const ErrorCode = {
   STAFF_USER_ALREADY_MEMBER:   { code: 'STAFF_USER_ALREADY_MEMBER',   message: 'You are already a member of this business' },
 
   // bookings
+  BOOKING_NOT_AVAILABLE:     { code: 'BOOKING_NOT_AVAILABLE',     message: 'Online booking is not available for this business' },
   BOOKING_ALREADY_CANCELLED: { code: 'BOOKING_ALREADY_CANCELLED', message: 'Booking is already cancelled' },
   BOOKING_BUSINESS_NOT_FOUND:  { code: 'BOOKING_BUSINESS_NOT_FOUND',  message: 'Business not found' },
   BOOKING_SERVICE_NOT_FOUND:   { code: 'BOOKING_SERVICE_NOT_FOUND',   message: 'Service not found' },
