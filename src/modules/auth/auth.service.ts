@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable, UnauthorizedException } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { compare, hash } from 'bcrypt';
@@ -27,6 +27,8 @@ const REFRESH_TOKEN_TTL_DAYS = 90;
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private readonly db: DatabaseService,
     private readonly userService: UserService,
@@ -44,23 +46,38 @@ export class AuthService {
 
     const token = await this.generateEmailToken(user);
     this.eventEmitter.emit(MAIL_EVENT, new ConfirmEmailEmail(user.email!, token));
+    this.logger.log(`register: user=${user.id} email=${user.email}`);
   }
 
   async login(dto: LoginDto, userAgent: string | null): Promise<ITokens> {
     const user = await this.userService.findByEmail(dto.email);
 
-    if (!user) throw new LoginException(LoginErrorEnum.INVALID_DATA);
-    if (!user.passwordHash) throw new LoginException(LoginErrorEnum.PASSWORD_NOT_SET);
-    if (!user.emailVerifiedAt) throw new LoginException(LoginErrorEnum.EMAIL_NOT_CONFIRMED);
+    if (!user) {
+      this.logger.warn(`login failed: email=${dto.email} reason=USER_NOT_FOUND`);
+      throw new LoginException(LoginErrorEnum.INVALID_DATA);
+    }
+    if (!user.passwordHash) {
+      this.logger.warn(`login failed: userId=${user.id} reason=PASSWORD_NOT_SET`);
+      throw new LoginException(LoginErrorEnum.PASSWORD_NOT_SET);
+    }
+    if (!user.emailVerifiedAt) {
+      this.logger.warn(`login failed: userId=${user.id} reason=EMAIL_NOT_CONFIRMED`);
+      throw new LoginException(LoginErrorEnum.EMAIL_NOT_CONFIRMED);
+    }
 
     const valid = await compare(dto.password, user.passwordHash);
-    if (!valid) throw new LoginException(LoginErrorEnum.INVALID_DATA);
+    if (!valid) {
+      this.logger.warn(`login failed: userId=${user.id} reason=INVALID_PASSWORD`);
+      throw new LoginException(LoginErrorEnum.INVALID_DATA);
+    }
 
+    this.logger.log(`login success: userId=${user.id}`);
     return this.issueTokens(user, userAgent);
   }
 
   async logout(userId: string, refreshToken: string): Promise<void> {
     await this.db.refreshToken.deleteMany({ where: { token: refreshToken, userId } });
+    this.logger.log(`logout: userId=${userId}`);
   }
 
   async refresh(userId: string, refreshToken: string, userAgent: string | null): Promise<ITokens> {
@@ -96,6 +113,9 @@ export class AuthService {
     let user = await this.userService.findByEmail(dto.email);
     if (!user) {
       user = await this.userService.create({ email: dto.email, emailVerifiedAt: new Date() });
+      this.logger.log(`oauth register: userId=${user.id} email=${user.email} provider=${dto.providerType}`);
+    } else {
+      this.logger.log(`oauth login: userId=${user.id} provider=${dto.providerType}`);
     }
     return this.issueTokens(user, userAgent);
   }

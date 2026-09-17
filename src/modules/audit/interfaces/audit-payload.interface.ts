@@ -6,7 +6,7 @@ export interface AuditFieldChange {
 
 // ─── Booking ────────────────────────────────────────────────────────────────
 
-export interface BookingCreatedPayload {
+interface BookingCreatedPayload {
   serviceName: string;
   staffName: string;
   startTime: string;
@@ -14,66 +14,66 @@ export interface BookingCreatedPayload {
   price: string;
 }
 
-export interface BookingCancelledPayload {
+interface BookingCancelledPayload {
   cancelledBy: string;
   reason?: string;
 }
 
-export interface BookingStatusChangedPayload {
+interface BookingStatusChangedPayload {
   from: string;
   to: string;
 }
 
-export interface BookingDeletedPayload {}
+interface BookingDeletedPayload {}
 
 // ─── Client ─────────────────────────────────────────────────────────────────
 
-export interface ClientCreatedPayload {
+interface ClientCreatedPayload {
   fullName: string;
   phone: string;
 }
 
-export interface ClientUpdatedPayload {
+interface ClientUpdatedPayload {
   changes: AuditFieldChange[];
 }
 
-export interface ClientDeletedPayload {
+interface ClientDeletedPayload {
   fullName: string;
 }
 
 // ─── Staff ──────────────────────────────────────────────────────────────────
 
-export interface StaffCreatedPayload {
+interface StaffCreatedPayload {
   name: string;
 }
 
-export interface StaffUpdatedPayload {
+interface StaffUpdatedPayload {
   changes: AuditFieldChange[];
 }
 
-export interface StaffDeletedPayload {
+interface StaffDeletedPayload {
   name: string;
 }
 
 // ─── Service ────────────────────────────────────────────────────────────────
 
-export interface ServiceCreatedPayload {
+interface ServiceCreatedPayload {
   title: string;
   price: string;
   durationMinutes: number;
 }
 
-export interface ServiceUpdatedPayload {
+interface ServiceUpdatedPayload {
   changes: AuditFieldChange[];
 }
 
-export interface ServiceDeletedPayload {
+interface ServiceDeletedPayload {
   title: string;
 }
 
 // ─── Business ───────────────────────────────────────────────────────────────
 
-export interface BusinessUpdatedPayload {
+interface BusinessUpdatedPayload {
   changes: AuditFieldChange[];
 }
 

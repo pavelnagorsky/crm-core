@@ -4,12 +4,12 @@ import { join } from 'path';
 import { fileURLToPath } from 'url';
 import Handlebars from 'handlebars';
 import { format, isValid } from 'date-fns';
-import { ru as dateFnsRu } from 'date-fns/locale';
+import { ru as dateFnsRu, type Locale as DateFnsLocale } from 'date-fns/locale';
 import type { AuditLog } from '@prisma/client';
 import { AuditEntity } from '../enums/audit-entity.enum.js';
 import { AUDIT_FIELD_TYPES } from '../fields/index.js';
 
-interface Locale {
+interface I18nLocale {
   actorRole: Record<string, string>;
   bookingStatus: Record<string, string>;
   fields: Record<string, Record<string, string>>;
@@ -27,7 +27,7 @@ const SUPPORTED_LANGS = ['ru'] as const;
 export class AuditRendererService implements OnModuleInit {
   private readonly hbs: typeof Handlebars;
   private readonly templates = new Map<string, CompiledTemplate>();
-  private readonly locales = new Map<string, Locale>();
+  private readonly locales = new Map<string, I18nLocale>();
 
   constructor() {
     // Create an isolated Handlebars environment so helpers don't pollute the
@@ -73,7 +73,7 @@ export class AuditRendererService implements OnModuleInit {
     this.hbs.registerHelper('t', (...rawArgs: unknown[]) => {
       const opts = rawArgs[rawArgs.length - 1] as Handlebars.HelperOptions;
       const keys = rawArgs.slice(0, -1) as string[];
-      const locale: Locale = opts.data?.root?.locale;
+      const locale: I18nLocale = opts.data?.root?.locale;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const value = keys.reduce<any>((node, key) => node?.[key], locale);
       return typeof value === 'string' ? value : keys[keys.length - 1];
@@ -102,6 +102,6 @@ export class AuditRendererService implements OnModuleInit {
   private formatDate(iso: string, pattern: string, lang: string): string {
     const d = new Date(iso);
     if (!isValid(d)) return iso;
-    return format(d, pattern, { locale: (DATE_FNS_LOCALES[lang] ?? dateFnsRu) as Parameters<typeof format>[2]['locale'] });
+    return format(d, pattern, { locale: (DATE_FNS_LOCALES[lang] ?? dateFnsRu) as DateFnsLocale });
   }
 }

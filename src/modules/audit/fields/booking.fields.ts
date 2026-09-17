@@ -4,6 +4,6 @@ import type { FieldDescriptor } from '../utils/diff-fields.js';
 export const BOOKING_AUDIT_FIELDS: FieldDescriptor<Booking>[] = [
   { key: 'startAt', type: 'datetime' },
   { key: 'endAt', type: 'datetime' },
-  { key: 'price', format: (v) => String(v ?? '—') },
+  { key: 'customPrice', format: (v) => String(v ?? '—') },
   { key: 'notes' },
 ];

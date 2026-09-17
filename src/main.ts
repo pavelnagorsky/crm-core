@@ -4,6 +4,7 @@ import { SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module.js';
 import { ResponseInterceptor } from './shared/interceptors/response.interceptor.js';
+import { LoggingInterceptor } from './shared/interceptors/logging.interceptor.js';
 import { GlobalExceptionFilter } from './shared/filters/exception.filter.js';
 import { exceptionFactory } from './shared/validation/exception-factory.js';
 import { swaggerConfig } from './config/swagger.config.js';
@@ -16,7 +17,7 @@ async function bootstrap() {
   app.use(cookieParser());
 
   app.useGlobalFilters(new GlobalExceptionFilter());
-  app.useGlobalInterceptors(new ResponseInterceptor());
+  app.useGlobalInterceptors(new LoggingInterceptor(), new ResponseInterceptor());
   app.useGlobalPipes(
     new ValidationPipe({ transform: true, whitelist: true, exceptionFactory }),
   );

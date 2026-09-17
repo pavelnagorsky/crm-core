@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import {
   Booking,
   CalendarEventRepeatType,
@@ -28,6 +28,8 @@ import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js'
 
 @Injectable()
 export class BookingCreateService {
+  private readonly logger = new Logger(BookingCreateService.name);
+
   constructor(
     private readonly db: DatabaseService,
     private readonly time: TimeService,
@@ -42,6 +44,7 @@ export class BookingCreateService {
     dto: CreateBookingDto,
   ): Promise<Booking> {
     const booking = await this.create(businessId, BookingSource.PUBLIC_PAGE, dto);
+    this.logger.log(`booking created (public): id=${booking.id} businessId=${businessId} serviceId=${booking.serviceId} staffId=${booking.staffId} startAt=${booking.startAt.toISOString()}`);
     // Public bookings have no authenticated user — the client is the actor
     const actor: AuditActor = {
       name: `${booking.clientFirstName} ${booking.clientLastName}`,
@@ -57,6 +60,7 @@ export class BookingCreateService {
     actor: AuditActor,
   ): Promise<Booking> {
     const booking = await this.create(businessId, BookingSource.MANUAL, dto, dto.customPrice);
+    this.logger.log(`booking created (manual): id=${booking.id} businessId=${businessId} serviceId=${booking.serviceId} staffId=${booking.staffId} startAt=${booking.startAt.toISOString()} actor=${actor.name}`);
     this.emitBookingCreated(booking, actor);
     return booking;
   }
@@ -156,6 +160,7 @@ export class BookingCreateService {
           business.timezone,
         )
       ) {
+        this.logger.warn(`slot unavailable: businessId=${businessId} staffId=${staffId} startAt=${startAt.toISOString()} endAt=${endAt.toISOString()}`);
         throw new AppException(
           ErrorCode.BOOKING_SLOT_UNAVAILABLE,
           HttpStatus.CONFLICT,
