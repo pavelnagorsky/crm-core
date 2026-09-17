@@ -23,12 +23,17 @@ import { AuditEvent } from '../audit/enums/audit-event.enum.js';
 import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
 import { diffFields } from '../audit/utils/diff-fields.js';
 import { STAFF_AUDIT_FIELDS } from '../audit/fields/staff.fields.js';
+import { NOTIFICATION_EVENT } from '../notifications/notifications.service.js';
+import { StaffInvitationNotification } from '../notifications/notifications/staff-invitation.notification.js';
+import { IFrontendConfig } from '../../config/configuration.js';
+import { ConfigService } from '@nestjs/config';
 
 @Injectable()
 export class StaffService {
   constructor(
     private readonly db: DatabaseService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly config: ConfigService,
   ) {}
 
   listPublic(businessId: string, serviceId?: string): Promise<Staff[]> {
@@ -229,6 +234,16 @@ export class StaffService {
         expiresAt: new Date(dto.expiresAt),
       },
     });
+
+    if (dto.email) {
+      const cfg = this.config.get<IFrontendConfig>('frontend')!;
+      const business = await this.db.business.findFirst({ where: { id: staff.businessId }, select: { name: true } });
+      const businessName = business?.name ?? '';
+      this.eventEmitter.emit(
+        NOTIFICATION_EVENT,
+        new StaffInvitationNotification(dto.email, `${cfg.domain}/invitation?token=${token}`, staff.name, businessName),
+      );
+    }
 
     return { token };
   }

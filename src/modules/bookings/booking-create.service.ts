@@ -26,6 +26,9 @@ import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
 import { AuditActorRole } from '../audit/enums/audit-actor-role.enum.js';
 import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js';
+import { NOTIFICATION_EVENT } from '../notifications/notifications.service.js';
+import { BookingConfirmedNotification } from '../notifications/notifications/booking-confirmed.notification.js';
+import { BookingClientService } from './booking-client.service.js';
 
 @Injectable()
 export class BookingCreateService {
@@ -38,6 +41,7 @@ export class BookingCreateService {
     private readonly clientsService: ClientsService,
     private readonly staffService: StaffService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly bookingClientService: BookingClientService,
   ) {}
 
   async createPublicBooking(
@@ -52,6 +56,7 @@ export class BookingCreateService {
       role: AuditActorRole.CLIENT,
     };
     this.emitBookingCreated(booking, actor);
+    this.emitBookingNotification(booking);
     return booking;
   }
 
@@ -63,6 +68,7 @@ export class BookingCreateService {
     const booking = await this.create(businessId, BookingSource.MANUAL, dto, dto.customPrice);
     this.logger.log(`booking created (manual): id=${booking.id} businessId=${businessId} serviceId=${booking.serviceId} staffId=${booking.staffId} startAt=${booking.startAt.toISOString()} actor=${actor.name}`);
     this.emitBookingCreated(booking, actor);
+    this.emitBookingNotification(booking);
     return booking;
   }
 
@@ -227,6 +233,12 @@ export class BookingCreateService {
       },
     };
     this.eventEmitter.emit(AUDIT_EVENT, event);
+  }
+
+  private emitBookingNotification(booking: Booking): void {
+    if (!booking.clientEmail) return;
+    const clientToken = this.bookingClientService.generateClientToken(booking.id);
+    this.eventEmitter.emit(NOTIFICATION_EVENT, new BookingConfirmedNotification(booking, clientToken));
   }
 
   // ── Staff resolution ────────────────────────────────────────────────────────────

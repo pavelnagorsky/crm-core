@@ -28,6 +28,8 @@ import { AuditActorRole } from '../audit/enums/audit-actor-role.enum.js';
 import { diffFields } from '../audit/utils/diff-fields.js';
 import { BOOKING_AUDIT_FIELDS } from '../audit/fields/booking.fields.js';
 import { TokenPayloadDto, assertBusinessRole } from '../auth/dto/token-payload.dto.js';
+import { NOTIFICATION_EVENT } from '../notifications/notifications.service.js';
+import { BookingCancelledNotification } from '../notifications/notifications/booking-cancelled.notification.js';
 
 @Injectable()
 export class BookingsService {
@@ -189,6 +191,7 @@ export class BookingsService {
       actor,
       payload: { cancelledBy, reason },
     });
+    this.eventEmitter.emit(NOTIFICATION_EVENT, new BookingCancelledNotification(booking, reason));
     return updated;
   }
 

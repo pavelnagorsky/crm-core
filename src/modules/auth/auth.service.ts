@@ -6,9 +6,9 @@ import { User } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
 import { UserService } from '../user/user.service.js';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { ConfirmEmailEmail } from '../mailing/emails/confirm-email.email.js';
-import { ResetPasswordEmail } from '../mailing/emails/reset-password.email.js';
-import { MAIL_EVENT } from '../mailing/emails/abstract.email.js';
+import { NOTIFICATION_EVENT } from '../notifications/notifications.service.js';
+import { ConfirmEmailNotification } from '../notifications/notifications/confirm-email.notification.js';
+import { ResetPasswordNotification } from '../notifications/notifications/reset-password.notification.js';
 import { RegisterDto } from './dto/register.dto.js';
 import { LoginDto } from './dto/login.dto.js';
 import { ResetPasswordDto } from './dto/reset-password.dto.js';
@@ -17,7 +17,7 @@ import { OAuthResponseDto } from './dto/oauth-response.dto.js';
 import { ITokens } from './interfaces/tokens.interface.js';
 import { LoginException } from './exceptions/login.exception.js';
 import { LoginErrorEnum } from './enums/login-error.enum.js';
-import { IJwtConfig } from '../../config/configuration.js';
+import { IFrontendConfig, IJwtConfig } from '../../config/configuration.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 
@@ -45,7 +45,8 @@ export class AuthService {
     const user = await this.userService.create({ email: dto.email, passwordHash, firstName: dto.firstName, lastName: dto.lastName });
 
     const token = await this.generateEmailToken(user);
-    this.eventEmitter.emit(MAIL_EVENT, new ConfirmEmailEmail(user.email!, token));
+    const cfg = this.config.get<IFrontendConfig>('frontend')!;
+    this.eventEmitter.emit(NOTIFICATION_EVENT, new ConfirmEmailNotification(user.email!, `${cfg.domain}/auth/confirm-email?token=${token}`));
     this.logger.log(`register: user=${user.id} email=${user.email}`);
   }
 
@@ -100,7 +101,8 @@ export class AuthService {
     if (!user) return;
 
     const token = await this.generateResetPasswordToken(user);
-    this.eventEmitter.emit(MAIL_EVENT, new ResetPasswordEmail(user.email!, token));
+    const cfg = this.config.get<IFrontendConfig>('frontend')!;
+    this.eventEmitter.emit(NOTIFICATION_EVENT, new ResetPasswordNotification(user.email!, `${cfg.domain}/auth/reset-password?token=${token}`));
   }
 
   async resetPassword(userId: string, dto: ResetPasswordDto): Promise<void> {

@@ -6,7 +6,7 @@ import { CacheModule } from '@nestjs/cache-manager';
 import { ScheduleModule } from '@nestjs/schedule';
 import { DatabaseModule } from './database/database.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
-import { MailingModule } from './modules/mailing/mailing.module.js';
+import { NotificationsModule } from './modules/notifications/notifications.module.js';
 import { TimeModule } from './modules/time/time.module.js';
 import { BusinessModule } from './modules/business/business.module.js';
 import { StaffModule } from './modules/staff/staff.module.js';
@@ -32,7 +32,7 @@ import { HealthModule } from './modules/health/health.module.js';
     EventEmitterModule.forRoot({ wildcard: true }),
     DatabaseModule,
     TimeModule,
-    MailingModule,
+    NotificationsModule,
     AuthModule,
     BusinessModule,
     StaffModule,
