@@ -52,7 +52,7 @@ export class AuditService {
     const [logs, totalItems] = await this.db.$transaction([
       this.db.auditLog.findMany({
         where,
-        orderBy: { createdAt: 'desc' },
+        orderBy: { occurredAt: 'desc' },
         skip: (dto.page - 1) * dto.pageSize,
         take: dto.pageSize,
       }),

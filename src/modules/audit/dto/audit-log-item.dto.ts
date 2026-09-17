@@ -24,7 +24,7 @@ export class AuditLogItemDto {
   html: string;
 
   @ApiProperty()
-  createdAt: Date;
+  occurredAt: Date;
 
   static fromEntity(log: AuditLog, html: string): AuditLogItemDto {
     const dto = new AuditLogItemDto();
@@ -34,7 +34,7 @@ export class AuditLogItemDto {
     dto.actorName = log.actorName;
     dto.actorRole = log.actorRole as AuditActorRole;
     dto.html = html;
-    dto.createdAt = log.createdAt;
+    dto.occurredAt = log.occurredAt;
     return dto;
   }
 }

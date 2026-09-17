@@ -3,20 +3,11 @@
 {{/if}}
 
 {{#if (eq eventType "BOOKING_CANCELLED")}}
-<p><strong>{{actorName}}</strong> <span class="audit-role">({{t "actorRole" actorRole}})</span> отменил бронирование{{#if payload.reason}}: {{payload.reason}}{{/if}}</p>
+<p><strong>{{actorName}}</strong> <span class="audit-role">({{t "actorRole" actorRole}})</span> отменил бронирование ({{t "cancelledBy" payload.cancelledBy}}){{#if payload.reason}}: {{payload.reason}}{{/if}}</p>
 {{/if}}
 
 {{#if (eq eventType "BOOKING_STATUS_CHANGED")}}
 <p><strong>{{actorName}}</strong> <span class="audit-role">({{t "actorRole" actorRole}})</span> изменил статус бронирования: <s>{{t "bookingStatus" payload.from}}</s> → {{t "bookingStatus" payload.to}}</p>
-{{/if}}
-
-{{#if (eq eventType "BOOKING_UPDATED")}}
-<p><strong>{{actorName}}</strong> <span class="audit-role">({{t "actorRole" actorRole}})</span> изменил запись:</p>
-<ul>
-  {{#each payload.changes}}
-  <li>{{t "fields" ../entityType this.field}}: <s>{{formatValue this.field this.from}}</s> → {{formatValue this.field this.to}}</li>
-  {{/each}}
-</ul>
 {{/if}}
 
 {{#if (eq eventType "BOOKING_DELETED")}}
