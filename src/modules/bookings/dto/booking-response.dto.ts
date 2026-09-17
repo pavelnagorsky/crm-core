@@ -64,6 +64,9 @@ export class BookingResponseDto {
   @ApiProperty({ type: String, nullable: true })
   notes: string | null;
 
+  @ApiProperty({ type: String, nullable: true })
+  internalNotes: string | null;
+
   @ApiProperty({ type: Date })
   createdAt: Date;
 
@@ -92,6 +95,7 @@ export class BookingResponseDto {
     dto.staffName = booking.staffName;
     dto.calendarEventId = booking.calendarEventId;
     dto.notes = booking.notes;
+    dto.internalNotes = booking.internalNotes;
     dto.createdAt = booking.createdAt;
     dto.updatedAt = booking.updatedAt;
     return dto;

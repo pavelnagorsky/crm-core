@@ -22,8 +22,9 @@
     "BOOKING": {
       "startAt": "Начало",
       "endAt": "Конец",
-      "price": "Цена",
-      "notes": "Заметки"
+      "customPrice": "Цена",
+      "notes": "Заметки клиента",
+      "internalNotes": "Внутренние заметки"
     },
     "CLIENT": {
       "firstName": "Имя",

@@ -8,6 +8,7 @@ import { PaginatedResult } from '../../shared/interfaces/paginated-result.interf
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { CancelBookingDto } from './dto/cancel-booking.dto.js';
 import { UpdateBookingStatusDto } from './dto/update-booking-status.dto.js';
+import { UpdateBookingNotesDto } from './dto/update-booking-notes.dto.js';
 import { BookingSearchRequestDto } from './dto/booking-search-request.dto.js';
 import { BookingSearchOrderBy } from './enums/booking-search-order-by.enum.js';
 import { BookingStatus } from './enums/booking-status.enum.js';
@@ -17,6 +18,8 @@ import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js'
 import { AuditEntity } from '../audit/enums/audit-entity.enum.js';
 import { AuditEvent } from '../audit/enums/audit-event.enum.js';
 import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
+import { diffFields } from '../audit/utils/diff-fields.js';
+import { BOOKING_AUDIT_FIELDS } from '../audit/fields/booking.fields.js';
 
 @Injectable()
 export class BookingsService {
@@ -127,6 +130,29 @@ export class BookingsService {
       payload: {},
     };
     this.eventEmitter.emit(AUDIT_EVENT, event);
+  }
+
+  async updateNotes(bookingId: string, businessId: string, dto: UpdateBookingNotesDto, actor: AuditActor): Promise<Booking> {
+    const old = await this.findByIdInBusiness(bookingId, businessId);
+    const updated = await this.db.booking.update({
+      where: { id: bookingId },
+      data: { internalNotes: dto.internalNotes ?? null },
+    });
+    const changes = diffFields(old, updated, BOOKING_AUDIT_FIELDS);
+    if (changes.length > 0) {
+      const event: AuditLogEvent = {
+        businessId,
+        entityType: AuditEntity.BOOKING,
+        entityId: bookingId,
+        eventType: AuditEvent.BOOKING_NOTES_UPDATED,
+        actionType: AuditActionType.MODIFY,
+        occurredAt: new Date(),
+        actor,
+        payload: { changes },
+      };
+      this.eventEmitter.emit(AUDIT_EVENT, event);
+    }
+    return updated;
   }
 
   private async findByIdInBusiness(bookingId: string, businessId: string): Promise<Booking> {

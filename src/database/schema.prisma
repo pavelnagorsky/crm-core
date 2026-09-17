@@ -70,6 +70,7 @@ enum AuditEvent {
   BOOKING_CREATED
   BOOKING_CANCELLED
   BOOKING_STATUS_CHANGED
+  BOOKING_NOTES_UPDATED
   BOOKING_DELETED
   CLIENT_CREATED
   CLIENT_UPDATED
@@ -387,7 +388,8 @@ model Booking {
 
   calendarEventId String? @unique
 
-  notes String? @db.VarChar(1000)
+  notes         String? @db.VarChar(1000)
+  internalNotes String? @db.VarChar(2000)
 
   cancellationReason String?     @db.VarChar(1000)
   cancelledBy        CancelledBy?

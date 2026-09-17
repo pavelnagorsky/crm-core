@@ -27,6 +27,7 @@ import { CreateBookingDto } from './dto/create-booking.dto.js';
 import { ManualCreateBookingDto } from './dto/manual-create-booking.dto.js';
 import { CancelBookingDto } from './dto/cancel-booking.dto.js';
 import { UpdateBookingStatusDto } from './dto/update-booking-status.dto.js';
+import { UpdateBookingNotesDto } from './dto/update-booking-notes.dto.js';
 import { BookingResponseDto } from './dto/booking-response.dto.js';
 import { BookingSearchRequestDto } from './dto/booking-search-request.dto.js';
 import { BookingSearchResponseDto } from './dto/booking-search-response.dto.js';
@@ -117,6 +118,21 @@ export class BookingsController {
     return BaseResponseDto.success(
       new BookingSearchResponseDto(items.map(BookingResponseDto.fromEntity), dto.page, dto.pageSize, totalItems, dto.isExport),
     );
+  }
+
+  @ApiOperation({ summary: 'Update internal notes on a booking' })
+  @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
+  @ApiNotFoundResponse({ description: 'Booking not found' })
+  @RBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @Patch('businesses/:businessId/bookings/:id/notes')
+  async updateNotes(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateBookingNotesDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
+  ): Promise<BaseResponseDto<IdResponseDto>> {
+    const booking = await this.bookingsService.updateNotes(id, businessId, dto, auditActorFromToken(tokenPayload, businessId));
+    return BaseResponseDto.success({ id: booking.id });
   }
 
   @ApiOperation({ summary: 'Cancel a booking' })

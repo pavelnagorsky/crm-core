@@ -6,4 +6,5 @@ export const BOOKING_AUDIT_FIELDS: FieldDescriptor<Booking>[] = [
   { key: 'endAt', type: 'datetime' },
   { key: 'customPrice', format: (v) => String(v ?? '—') },
   { key: 'notes' },
+  { key: 'internalNotes' },
 ];
