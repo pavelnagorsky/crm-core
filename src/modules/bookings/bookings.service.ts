@@ -98,9 +98,9 @@ export class BookingsService {
     return updated;
   }
 
-  async findById(bookingId: string, businessId: string): Promise<Booking> {
+  async findById(bookingId: string, businessId?: string): Promise<Booking> {
     const booking = await this.db.booking.findFirst({
-      where: { id: bookingId, businessId, deletedAt: null },
+      where: { id: bookingId, ...(businessId ? { businessId } : {}), deletedAt: null },
     });
     if (!booking) throw new NotFoundException('Booking not found');
     return booking;
@@ -165,7 +165,7 @@ export class BookingsService {
   }
 
   async cancelByClient(bookingId: string, dto: CancelBookingDto): Promise<Booking> {
-    const booking = await this.findByIdPublicOrThrow(bookingId);
+    const booking = await this.findById(bookingId);
     if (booking.status === BookingStatus.CANCELLED) {
       throw new AppException(ErrorCode.BOOKING_ALREADY_CANCELLED, HttpStatus.CONFLICT);
     }
@@ -323,14 +323,6 @@ export class BookingsService {
   private buildLockKey(staffId: string, dateStr: string): bigint {
     const hash = createHash('sha256').update(`${staffId}:${dateStr}`).digest();
     return hash.readBigInt64BE(0);
-  }
-
-  async findByIdPublicOrThrow(bookingId: string): Promise<Booking> {
-    const booking = await this.db.booking.findFirst({
-      where: { id: bookingId, deletedAt: null },
-    });
-    if (!booking) throw new NotFoundException('Booking not found');
-    return booking;
   }
 
   private async findByIdInBusiness(bookingId: string, businessId: string): Promise<Booking> {

@@ -79,7 +79,7 @@ export class BookingsController {
   async getByClientToken(
     @BookingClientToken() tokenPayload: BookingClientTokenPayloadDto,
   ): Promise<BaseResponseDto<BookingResponseDto>> {
-    const booking = await this.bookingsService.findByIdPublicOrThrow(tokenPayload.bookingId);
+    const booking = await this.bookingsService.findById(tokenPayload.bookingId);
     return BaseResponseDto.success(BookingResponseDto.fromEntityPublic(booking));
   }
 
