@@ -44,7 +44,7 @@ import { Auth } from '../auth/decorators/auth.decorator.js';
 import { ApiResponse, BaseResponseDto } from '../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
 import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
-import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
+import { TokenPayloadDto, assertBusinessRole } from '../auth/dto/token-payload.dto.js';
 import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
 
 @ApiTags('Bookings')
@@ -154,7 +154,8 @@ export class BookingsController {
     @Param('id', ParseUUIDPipe) id: string,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<BookingResponseDto>> {
-    const booking = await this.bookingsService.findByIdForStaff(id, tokenPayload);
+    const booking = await this.bookingsService.findById(id);
+    assertBusinessRole(tokenPayload, booking.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
     return BaseResponseDto.success(BookingResponseDto.fromEntity(booking));
   }
 
@@ -181,7 +182,8 @@ export class BookingsController {
     @Param('id', ParseUUIDPipe) id: string,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<ClientLinkResponseDto>> {
-    await this.bookingsService.findByIdForStaff(id, tokenPayload);
+    const booking = await this.bookingsService.findById(id);
+    assertBusinessRole(tokenPayload, booking.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
     const token = this.bookingClientService.generateClientToken(id);
     return BaseResponseDto.success({ token });
   }

@@ -42,7 +42,8 @@ export class BookingsService {
   ) {}
 
   async update(bookingId: string, tokenPayload: TokenPayloadDto, dto: UpdateBookingDto): Promise<Booking> {
-    const old = await this.findByIdAndAssertRole(bookingId, tokenPayload, BusinessRole.OWNER, BusinessRole.STAFF);
+    const old = await this.findById(bookingId);
+    assertBusinessRole(tokenPayload, old.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
     const { businessId } = old;
     const actor = auditActorFromToken(tokenPayload, businessId);
 
@@ -86,7 +87,8 @@ export class BookingsService {
   }
 
   async updateStatus(bookingId: string, tokenPayload: TokenPayloadDto, dto: UpdateBookingStatusDto): Promise<Booking> {
-    const old = await this.findByIdAndAssertRole(bookingId, tokenPayload, BusinessRole.OWNER, BusinessRole.STAFF);
+    const old = await this.findById(bookingId);
+    assertBusinessRole(tokenPayload, old.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
     const updated = await this.db.booking.update({ where: { id: bookingId }, data: { status: dto.status } });
     const event: AuditLogEvent = {
       businessId: old.businessId,
@@ -108,10 +110,6 @@ export class BookingsService {
     });
     if (!booking) throw new NotFoundException('Booking not found');
     return booking;
-  }
-
-  async findByIdForStaff(bookingId: string, tokenPayload: TokenPayloadDto): Promise<Booking> {
-    return this.findByIdAndAssertRole(bookingId, tokenPayload, BusinessRole.OWNER, BusinessRole.STAFF);
   }
 
   async search(businessId: string, dto: BookingSearchRequestDto): Promise<PaginatedResult<Booking>> {
@@ -145,7 +143,8 @@ export class BookingsService {
   }
 
   async cancel(bookingId: string, tokenPayload: TokenPayloadDto, cancelledBy: CancelledBy, dto: CancelBookingDto): Promise<Booking> {
-    const booking = await this.findByIdAndAssertRole(bookingId, tokenPayload, BusinessRole.OWNER, BusinessRole.STAFF);
+    const booking = await this.findById(bookingId);
+    assertBusinessRole(tokenPayload, booking.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
     if (booking.status === BookingStatus.CANCELLED) {
       throw new AppException(ErrorCode.BOOKING_ALREADY_CANCELLED, HttpStatus.CONFLICT);
     }
@@ -205,7 +204,8 @@ export class BookingsService {
   }
 
   async delete(bookingId: string, tokenPayload: TokenPayloadDto): Promise<void> {
-    const booking = await this.findByIdAndAssertRole(bookingId, tokenPayload, BusinessRole.OWNER);
+    const booking = await this.findById(bookingId);
+    assertBusinessRole(tokenPayload, booking.businessId, BusinessRole.OWNER);
     await this.db.$transaction([
       this.db.booking.update({ where: { id: bookingId }, data: { deletedAt: new Date() } }),
       ...(booking.calendarEventId
@@ -333,12 +333,4 @@ export class BookingsService {
     return hash.readBigInt64BE(0);
   }
 
-  private async findByIdAndAssertRole(bookingId: string, tokenPayload: TokenPayloadDto, ...roles: BusinessRole[]): Promise<Booking> {
-    const booking = await this.db.booking.findFirst({
-      where: { id: bookingId, deletedAt: null },
-    });
-    if (!booking) throw new NotFoundException('Booking not found');
-    assertBusinessRole(tokenPayload, booking.businessId, ...roles);
-    return booking;
-  }
 }
