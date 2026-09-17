@@ -6,6 +6,7 @@ import { AuthController } from './auth.controller.js';
 import { UserController } from '../user/user.controller.js';
 import { AuthService } from './auth.service.js';
 import { UserModule } from '../user/user.module.js';
+import { NotificationsModule } from '../notifications/notifications.module.js';
 import { JwtAccessStrategy } from './strategy/jwt-access.strategy.js';
 import { JwtRefreshStrategy } from './strategy/jwt-refresh.strategy.js';
 import { JwtEmailStrategy } from './strategy/jwt-email.strategy.js';
@@ -20,6 +21,7 @@ import { UserFromTokenPipe } from './pipes/user-from-token.pipe.js';
 @Module({
   imports: [
     UserModule,
+    NotificationsModule,
     PassportModule.register({}),
     JwtModule.register({ global: true }),
     HttpModule,

@@ -41,6 +41,9 @@ export default () => {
       email: process.env['EMAIL'],
       emailPw: process.env['EMAIL_PW'],
     },
+    app: {
+      locale: process.env['APP_LOCALE'] ?? 'ru',
+    },
   };
 };
 
@@ -88,4 +91,8 @@ export interface IMailerConfig {
 
 export interface IFrontendConfig {
   domain: string;
+}
+
+export interface IAppConfig {
+  locale: string;
 }

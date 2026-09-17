@@ -1,0 +1,23 @@
+<p>{{{t "email" "booking-cancelled" "body"}}}</p>
+<div class="details">
+  <div class="details-title">{{t "email" "common" "details"}}</div>
+  <div class="details-row">
+    <span class="details-label">{{t "email" "common" "service"}}</span>
+    <span class="details-value">{{serviceTitle}}</span>
+  </div>
+  <div class="details-row">
+    <span class="details-label">{{t "email" "common" "specialist"}}</span>
+    <span class="details-value">{{staffName}}</span>
+  </div>
+  <div class="details-row">
+    <span class="details-label">{{t "email" "common" "dateTime"}}</span>
+    <span class="details-value">{{formatDateTime startAt}}</span>
+  </div>
+  {{#if cancellationReason}}
+  <div class="details-row">
+    <span class="details-label">{{t "email" "booking-cancelled" "reason"}}</span>
+    <span class="details-value">{{cancellationReason}}</span>
+  </div>
+  {{/if}}
+</div>
+<p class="hint">{{t "email" "booking-cancelled" "hint"}}</p>

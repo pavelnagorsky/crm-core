@@ -1,22 +1,20 @@
 import { AbstractNotification } from './abstract.notification.js';
 import { DeliveryStrategy } from '../enums/delivery-strategy.enum.js';
-import { NotificationChannel } from '../enums/notification-channel.enum.js';
+import { HasEmailChannel } from '../interfaces/has-email-channel.interface.js';
+import { ChannelPayload } from '../interfaces/channel-payload.interface.js';
 
-export class ConfirmEmailNotification extends AbstractNotification {
-  readonly strategy = DeliveryStrategy.REQUIRED;
-  readonly channels = [NotificationChannel.EMAIL];
-  readonly recipientEmail: string;
-  readonly emailTemplate = 'confirm-email';
+export class ConfirmEmailNotification extends AbstractNotification implements HasEmailChannel {
+  readonly strategy = DeliveryStrategy.BEST_EFFORT;
+  readonly emailTemplate = 'confirm-email' as const;
 
   constructor(
-    email: string,
+    private readonly email: string,
     private readonly confirmLink: string,
   ) {
     super();
-    this.recipientEmail = email;
   }
 
-  emailContext() {
-    return { confirmLink: this.confirmLink };
+  toEmail(): ChannelPayload {
+    return { to: this.email, data: { confirmLink: this.confirmLink } };
   }
 }

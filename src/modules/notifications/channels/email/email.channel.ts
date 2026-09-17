@@ -4,7 +4,8 @@ import { createTransport, Transporter } from 'nodemailer';
 import { IMailerConfig } from '../../../../config/configuration.js';
 import { AbstractChannel } from '../abstract.channel.js';
 import { AbstractNotification } from '../../notifications/abstract.notification.js';
-import { NotificationChannel } from '../../enums/notification-channel.enum.js';
+import { HasEmailChannel } from '../../interfaces/has-email-channel.interface.js';
+import { EmailRendererService, EmailTemplate } from './email-renderer.service.js';
 
 @Injectable()
 export class EmailChannel extends AbstractChannel {
@@ -13,7 +14,10 @@ export class EmailChannel extends AbstractChannel {
   private readonly transporter: Transporter;
   private readonly from: string;
 
-  constructor(private readonly config: ConfigService) {
+  constructor(
+    private readonly config: ConfigService,
+    private readonly renderer: EmailRendererService,
+  ) {
     super();
     const cfg = this.config.get<IMailerConfig>('emailConfig')!;
     this.from = cfg.email;
@@ -24,27 +28,14 @@ export class EmailChannel extends AbstractChannel {
   }
 
   canHandle(notification: AbstractNotification): boolean {
-    return notification.channels.includes(NotificationChannel.EMAIL) && !!notification.recipientEmail;
+    return 'toEmail' in notification;
   }
 
   async send(notification: AbstractNotification): Promise<void> {
-    await this.transporter.sendMail({
-      from: this.from,
-      to: notification.recipientEmail,
-      subject: this.resolveSubject(notification.emailTemplate),
-      text: JSON.stringify(notification.emailContext()),
-    });
-    this.logger.log(`[EMAIL] template=${notification.emailTemplate} to=${notification.recipientEmail}`);
-  }
-
-  private resolveSubject(template: string): string {
-    const subjects: Record<string, string> = {
-      'confirm-email': 'Confirm your email',
-      'reset-password': 'Reset your password',
-      'staff-invitation': 'You have been invited',
-      'booking-confirmed': 'Booking confirmed',
-      'booking-cancelled': 'Booking cancelled',
-    };
-    return subjects[template] ?? template;
+    const n = notification as AbstractNotification & HasEmailChannel;
+    const { to, data } = n.toEmail();
+    const { subject, html } = this.renderer.render(n.emailTemplate, data);
+    await this.transporter.sendMail({ from: this.from, to, subject, html });
+    this.logger.log(`[EMAIL] template=${n.emailTemplate} to=${to}`);
   }
 }

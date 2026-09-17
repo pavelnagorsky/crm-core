@@ -1,0 +1,18 @@
+<p>{{{t "email" "booking-confirmed" "body"}}}</p>
+<div class="details">
+  <div class="details-title">{{t "email" "common" "details"}}</div>
+  <div class="details-row">
+    <span class="details-label">{{t "email" "common" "service"}}</span>
+    <span class="details-value">{{serviceTitle}}</span>
+  </div>
+  <div class="details-row">
+    <span class="details-label">{{t "email" "common" "specialist"}}</span>
+    <span class="details-value">{{staffName}}</span>
+  </div>
+  <div class="details-row">
+    <span class="details-label">{{t "email" "common" "dateTime"}}</span>
+    <span class="details-value">{{formatDateTime startAt}} — {{formatTime endAt}}</span>
+  </div>
+</div>
+<a class="btn" href="{{manageLink}}">{{t "email" "booking-confirmed" "action"}}</a>
+<p class="hint">{{t "email" "booking-confirmed" "hint"}}</p>

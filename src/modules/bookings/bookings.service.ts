@@ -142,10 +142,7 @@ export class BookingsService {
 
   async cancelByClient(bookingId: string, dto: CancelBookingDto): Promise<Booking> {
     const booking = await this.findById(bookingId);
-    const actor: AuditActor = {
-      name: `${booking.clientFirstName} ${booking.clientLastName}`,
-      role: AuditActorRole.CLIENT,
-    };
+    const actor: AuditActor = { name: `${booking.clientFirstName} ${booking.clientLastName}`, role: AuditActorRole.CLIENT };
     return this.executeCancellation(booking, CancelledBy.CLIENT, dto.reason, actor);
   }
 

@@ -16,14 +16,20 @@ export class NotificationsService {
     this.channels = [emailChannel];
   }
 
+  /** Synchronous delivery — use for critical notifications where failure must propagate to the caller. */
+  async send(notification: AbstractNotification): Promise<void> {
+    await this.dispatch(notification);
+  }
+
   @OnEvent(NOTIFICATION_EVENT)
   async handle(notification: AbstractNotification): Promise<void> {
+    await this.dispatch(notification);
+  }
+
+  private async dispatch(notification: AbstractNotification): Promise<void> {
     const available = this.channels.filter((ch) => ch.canHandle(notification));
 
     switch (notification.strategy) {
-      case DeliveryStrategy.REQUIRED:
-        await this.sendRequired(notification, available);
-        break;
       case DeliveryStrategy.FIRST_AVAILABLE:
         await this.sendFirstAvailable(notification, available);
         break;
@@ -36,21 +42,13 @@ export class NotificationsService {
     }
   }
 
-  private async sendRequired(notification: AbstractNotification, available: AbstractChannel[]): Promise<void> {
-    if (!available.length) {
-      this.logger.error(`[REQUIRED] No channel available for ${notification.constructor.name}`);
-      throw new Error(`No channel available for required notification ${notification.constructor.name}`);
-    }
-    await available[0].send(notification);
-  }
-
   private async sendFirstAvailable(notification: AbstractNotification, available: AbstractChannel[]): Promise<void> {
     for (const channel of available) {
       try {
         await channel.send(notification);
         return;
       } catch (e: any) {
-        this.logger.warn(`[FIRST_AVAILABLE] Channel ${channel.name} failed for ${notification.constructor.name}: ${e.message}`);
+        this.logger.warn(`[FIRST_AVAILABLE] ${channel.name} failed for ${notification.constructor.name}: ${e.message}`);
       }
     }
     this.logger.warn(`[FIRST_AVAILABLE] All channels failed for ${notification.constructor.name}`);
@@ -60,7 +58,7 @@ export class NotificationsService {
     await Promise.all(
       available.map((ch) =>
         ch.send(notification).catch((e: any) =>
-          this.logger.warn(`[ALL] Channel ${ch.name} failed for ${notification.constructor.name}: ${e.message}`),
+          this.logger.warn(`[ALL] ${ch.name} failed for ${notification.constructor.name}: ${e.message}`),
         ),
       ),
     );
@@ -75,7 +73,7 @@ export class NotificationsService {
       try {
         await channel.send(notification);
       } catch (e: any) {
-        this.logger.warn(`[BEST_EFFORT] Channel ${channel.name} failed for ${notification.constructor.name}: ${e.message}`);
+        this.logger.warn(`[BEST_EFFORT] ${channel.name} failed for ${notification.constructor.name}: ${e.message}`);
       }
     }
   }
