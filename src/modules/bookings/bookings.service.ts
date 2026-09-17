@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import { HttpStatus, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { Booking, CalendarEventRepeatType, CalendarEventType, CancelledBy, Prisma } from '@prisma/client';
+import { Booking, BusinessRole, CalendarEventRepeatType, CalendarEventType, CancelledBy, Prisma } from '@prisma/client';
 import { format } from 'date-fns';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
@@ -20,12 +20,14 @@ import { BookingStatus } from './enums/booking-status.enum.js';
 import { AUDIT_EVENT } from '../audit/audit.constants.js';
 import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js';
+import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
 import { AuditEntity } from '../audit/enums/audit-entity.enum.js';
 import { AuditEvent } from '../audit/enums/audit-event.enum.js';
 import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
 import { AuditActorRole } from '../audit/enums/audit-actor-role.enum.js';
 import { diffFields } from '../audit/utils/diff-fields.js';
 import { BOOKING_AUDIT_FIELDS } from '../audit/fields/booking.fields.js';
+import { TokenPayloadDto, assertBusinessRole } from '../auth/dto/token-payload.dto.js';
 
 @Injectable()
 export class BookingsService {
@@ -39,8 +41,10 @@ export class BookingsService {
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
-  async update(bookingId: string, businessId: string, dto: UpdateBookingDto, actor: AuditActor): Promise<Booking> {
-    const old = await this.findByIdInBusiness(bookingId, businessId);
+  async update(bookingId: string, tokenPayload: TokenPayloadDto, dto: UpdateBookingDto): Promise<Booking> {
+    const old = await this.findByIdAndAssertRole(bookingId, tokenPayload, BusinessRole.OWNER, BusinessRole.STAFF);
+    const { businessId } = old;
+    const actor = auditActorFromToken(tokenPayload, businessId);
 
     const slotChanging = dto.startAt !== undefined || dto.staffId !== undefined || dto.serviceId !== undefined;
 
@@ -81,29 +85,33 @@ export class BookingsService {
     return updated;
   }
 
-  async updateStatus(bookingId: string, businessId: string, dto: UpdateBookingStatusDto, actor: AuditActor): Promise<Booking> {
-    const old = await this.findByIdInBusiness(bookingId, businessId);
+  async updateStatus(bookingId: string, tokenPayload: TokenPayloadDto, dto: UpdateBookingStatusDto): Promise<Booking> {
+    const old = await this.findByIdAndAssertRole(bookingId, tokenPayload, BusinessRole.OWNER, BusinessRole.STAFF);
     const updated = await this.db.booking.update({ where: { id: bookingId }, data: { status: dto.status } });
     const event: AuditLogEvent = {
-      businessId,
+      businessId: old.businessId,
       entityType: AuditEntity.BOOKING,
       entityId: bookingId,
       eventType: AuditEvent.BOOKING_STATUS_CHANGED,
       actionType: AuditActionType.MODIFY,
       occurredAt: new Date(),
-      actor,
+      actor: auditActorFromToken(tokenPayload, old.businessId),
       payload: { from: old.status, to: dto.status },
     };
     this.eventEmitter.emit(AUDIT_EVENT, event);
     return updated;
   }
 
-  async findById(bookingId: string, businessId?: string): Promise<Booking> {
+  async findById(bookingId: string): Promise<Booking> {
     const booking = await this.db.booking.findFirst({
-      where: { id: bookingId, ...(businessId ? { businessId } : {}), deletedAt: null },
+      where: { id: bookingId, deletedAt: null },
     });
     if (!booking) throw new NotFoundException('Booking not found');
     return booking;
+  }
+
+  async findByIdForStaff(bookingId: string, tokenPayload: TokenPayloadDto): Promise<Booking> {
+    return this.findByIdAndAssertRole(bookingId, tokenPayload, BusinessRole.OWNER, BusinessRole.STAFF);
   }
 
   async search(businessId: string, dto: BookingSearchRequestDto): Promise<PaginatedResult<Booking>> {
@@ -136,8 +144,8 @@ export class BookingsService {
     return { items, totalItems };
   }
 
-  async cancel(bookingId: string, businessId: string, cancelledBy: CancelledBy, dto: CancelBookingDto, actor: AuditActor): Promise<Booking> {
-    const booking = await this.findByIdInBusiness(bookingId, businessId);
+  async cancel(bookingId: string, tokenPayload: TokenPayloadDto, cancelledBy: CancelledBy, dto: CancelBookingDto): Promise<Booking> {
+    const booking = await this.findByIdAndAssertRole(bookingId, tokenPayload, BusinessRole.OWNER, BusinessRole.STAFF);
     if (booking.status === BookingStatus.CANCELLED) {
       throw new AppException(ErrorCode.BOOKING_ALREADY_CANCELLED, HttpStatus.CONFLICT);
     }
@@ -151,13 +159,13 @@ export class BookingsService {
       },
     });
     const event: AuditLogEvent = {
-      businessId,
+      businessId: booking.businessId,
       entityType: AuditEntity.BOOKING,
       entityId: bookingId,
       eventType: AuditEvent.BOOKING_CANCELLED,
       actionType: AuditActionType.MODIFY,
       occurredAt: new Date(),
-      actor,
+      actor: auditActorFromToken(tokenPayload, booking.businessId),
       payload: { cancelledBy, reason: dto.reason },
     };
     this.eventEmitter.emit(AUDIT_EVENT, event);
@@ -196,8 +204,8 @@ export class BookingsService {
     return updated;
   }
 
-  async delete(bookingId: string, businessId: string, actor: AuditActor): Promise<void> {
-    const booking = await this.findByIdInBusiness(bookingId, businessId);
+  async delete(bookingId: string, tokenPayload: TokenPayloadDto): Promise<void> {
+    const booking = await this.findByIdAndAssertRole(bookingId, tokenPayload, BusinessRole.OWNER);
     await this.db.$transaction([
       this.db.booking.update({ where: { id: bookingId }, data: { deletedAt: new Date() } }),
       ...(booking.calendarEventId
@@ -205,13 +213,13 @@ export class BookingsService {
         : []),
     ]);
     const event: AuditLogEvent = {
-      businessId,
+      businessId: booking.businessId,
       entityType: AuditEntity.BOOKING,
       entityId: bookingId,
       eventType: AuditEvent.BOOKING_DELETED,
       actionType: AuditActionType.DELETE,
       occurredAt: new Date(),
-      actor,
+      actor: auditActorFromToken(tokenPayload, booking.businessId),
       payload: {},
     };
     this.eventEmitter.emit(AUDIT_EVENT, event);
@@ -325,11 +333,12 @@ export class BookingsService {
     return hash.readBigInt64BE(0);
   }
 
-  private async findByIdInBusiness(bookingId: string, businessId: string): Promise<Booking> {
+  private async findByIdAndAssertRole(bookingId: string, tokenPayload: TokenPayloadDto, ...roles: BusinessRole[]): Promise<Booking> {
     const booking = await this.db.booking.findFirst({
-      where: { id: bookingId, businessId, deletedAt: null },
+      where: { id: bookingId, deletedAt: null },
     });
     if (!booking) throw new NotFoundException('Booking not found');
+    assertBusinessRole(tokenPayload, booking.businessId, ...roles);
     return booking;
   }
 }
