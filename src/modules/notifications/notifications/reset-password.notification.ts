@@ -4,7 +4,7 @@ import { HasEmailChannel } from '../interfaces/has-email-channel.interface.js';
 import { ChannelPayload } from '../interfaces/channel-payload.interface.js';
 
 export class ResetPasswordNotification extends AbstractNotification implements HasEmailChannel {
-  readonly strategy = DeliveryStrategy.BEST_EFFORT;
+  readonly strategy = DeliveryStrategy.REQUIRED;
   readonly emailTemplate = 'reset-password' as const;
 
   constructor(

@@ -188,7 +188,18 @@ export class BookingsService {
       actor,
       payload: { cancelledBy, reason },
     });
-    this.eventEmitter.emit(NOTIFICATION_EVENT, new BookingCancelledNotification(booking, reason));
+    if (booking.clientEmail) {
+      this.eventEmitter.emit(NOTIFICATION_EVENT, new BookingCancelledNotification({
+        id: booking.id,
+        clientEmail: booking.clientEmail,
+        clientFirstName: booking.clientFirstName,
+        clientLastName: booking.clientLastName,
+        serviceTitle: booking.serviceTitle,
+        staffName: booking.staffName,
+        startAt: booking.startAt,
+        endAt: booking.endAt,
+      }, reason));
+    }
     return updated;
   }
 

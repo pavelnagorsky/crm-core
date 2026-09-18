@@ -238,7 +238,16 @@ export class BookingCreateService {
   private emitBookingNotification(booking: Booking): void {
     if (!booking.clientEmail) return;
     const clientToken = this.bookingClientService.generateClientToken(booking.id);
-    this.eventEmitter.emit(NOTIFICATION_EVENT, new BookingConfirmedNotification(booking, clientToken));
+    this.eventEmitter.emit(NOTIFICATION_EVENT, new BookingConfirmedNotification({
+      id: booking.id,
+      clientEmail: booking.clientEmail,
+      clientFirstName: booking.clientFirstName,
+      clientLastName: booking.clientLastName,
+      serviceTitle: booking.serviceTitle,
+      staffName: booking.staffName,
+      startAt: booking.startAt,
+      endAt: booking.endAt,
+    }, clientToken));
   }
 
   // ── Staff resolution ────────────────────────────────────────────────────────────

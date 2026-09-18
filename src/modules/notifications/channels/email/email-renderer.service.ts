@@ -7,6 +7,7 @@ import Handlebars from 'handlebars';
 import { format, isValid } from 'date-fns';
 import { ru as dateFnsRu, type Locale as DateFnsLocale } from 'date-fns/locale';
 import { IAppConfig } from '../../../../config/configuration.js';
+import { I18nLocale } from '../../interfaces/i18n-locale.interface.js';
 
 export type EmailTemplate =
   | 'confirm-email'
@@ -14,10 +15,6 @@ export type EmailTemplate =
   | 'staff-invitation'
   | 'booking-confirmed'
   | 'booking-cancelled';
-
-interface I18nLocale {
-  email: Record<string, Record<string, string>>;
-}
 
 type CompiledTemplate = Handlebars.TemplateDelegate;
 

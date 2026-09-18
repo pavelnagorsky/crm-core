@@ -1,6 +1,6 @@
 export interface BookingNotificationData {
   id: string;
-  clientEmail: string | null;
+  clientEmail: string;
   clientFirstName: string;
   clientLastName: string;
   serviceTitle: string;

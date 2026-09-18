@@ -5,7 +5,9 @@
   "compilerOptions": {
     "deleteOutDir": true,
     "assets": [
-      { "include": "modules/audit/templates/*.hbs", "watchAssets": true }
+      { "include": "modules/audit/templates/*.hbs", "watchAssets": true },
+      { "include": "modules/notifications/channels/email/templates/**/*.hbs", "watchAssets": true },
+      { "include": "shared/i18n/*.json", "watchAssets": true }
     ]
   }
 }

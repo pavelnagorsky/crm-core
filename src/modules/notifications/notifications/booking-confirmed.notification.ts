@@ -17,7 +17,7 @@ export class BookingConfirmedNotification extends AbstractNotification implement
 
   toEmail(): ChannelPayload {
     return {
-      to: this.booking.clientEmail!,
+      to: this.booking.clientEmail,
       data: {
         clientFirstName: this.booking.clientFirstName,
         serviceTitle: this.booking.serviceTitle,

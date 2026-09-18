@@ -39,6 +39,9 @@ export class NotificationsService {
       case DeliveryStrategy.BEST_EFFORT:
         await this.sendBestEffort(notification, available);
         break;
+      case DeliveryStrategy.REQUIRED:
+        await this.sendRequired(notification, available);
+        break;
     }
   }
 
@@ -62,6 +65,18 @@ export class NotificationsService {
         ),
       ),
     );
+  }
+
+  private async sendRequired(notification: AbstractNotification, available: AbstractChannel[]): Promise<void> {
+    for (const channel of available) {
+      try {
+        await channel.send(notification);
+        return;
+      } catch (e: any) {
+        this.logger.warn(`[REQUIRED] ${channel.name} failed for ${notification.constructor.name}: ${e.message}`);
+      }
+    }
+    throw new Error(`Failed to deliver ${notification.constructor.name}: all channels failed`);
   }
 
   private async sendBestEffort(notification: AbstractNotification, available: AbstractChannel[]): Promise<void> {
