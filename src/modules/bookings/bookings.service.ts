@@ -11,8 +11,8 @@ import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { TimeService } from '../time/time.service.js';
 import { CalendarService } from '../calendar/calendar.service.js';
 import { StaffService } from '../staff/staff.service.js';
+import { BookingSetupCategoryDto } from './dto/booking-setup-category.dto.js';
 import { BookingSetupResponseDto } from './dto/booking-setup-response.dto.js';
-import { BookingSetupServiceDto } from './dto/booking-setup-service.dto.js';
 import { BookingSetupStaffDto } from './dto/booking-setup-staff.dto.js';
 import { CancelBookingDto } from './dto/cancel-booking.dto.js';
 import { UpdateBookingDto } from './dto/update-booking.dto.js';
@@ -47,16 +47,28 @@ export class BookingsService {
   ) {}
 
   async getBookingSetup(businessId: string): Promise<BookingSetupResponseDto> {
-    const [services, staff] = await Promise.all([
-      this.db.service.findMany({
-        where: { businessId, isActive: true },
-        orderBy: [{ sortOrder: 'asc' }, { title: 'asc' }],
-      }),
+    const servicesOrder = [{ sortOrder: 'asc' as const }, { title: 'asc' as const }];
+
+    const [[categories, uncategorized], staff] = await Promise.all([
+      this.db.$transaction([
+        this.db.serviceCategory.findMany({
+          where: { businessId },
+          orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+          include: { services: { where: { isActive: true }, orderBy: servicesOrder } },
+        }),
+        this.db.service.findMany({
+          where: { businessId, categoryId: null, isActive: true },
+          orderBy: servicesOrder,
+        }),
+      ]),
       this.staffService.listActiveWithServices(businessId),
     ]);
 
+    const result = categories.map(BookingSetupCategoryDto.fromEntity);
+    if (uncategorized.length) result.push(BookingSetupCategoryDto.uncategorized(uncategorized));
+
     return {
-      services: services.map(BookingSetupServiceDto.fromEntity),
+      categories: result,
       staff: staff.map(BookingSetupStaffDto.fromEntity),
     };
   }
