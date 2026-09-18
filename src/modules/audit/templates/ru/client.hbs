@@ -10,7 +10,3 @@
   {{/each}}
 </ul>
 {{/if}}
-
-{{#if (eq eventType "CLIENT_DELETED")}}
-<p><strong>{{actorName}}</strong> <span class="audit-role">({{t "actorRole" actorRole}})</span> удалил клиента: {{payload.fullName}}</p>
-{{/if}}

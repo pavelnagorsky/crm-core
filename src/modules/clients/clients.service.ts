@@ -79,22 +79,6 @@ export class ClientsService {
     return client;
   }
 
-  async delete(businessId: string, clientId: string, actor: AuditActor): Promise<void> {
-    const client = await this.findInBusiness(businessId, clientId);
-    await this.db.client.delete({ where: { id: clientId } });
-    const event: AuditLogEvent = {
-      businessId,
-      entityType: AuditEntity.CLIENT,
-      entityId: clientId,
-      eventType: AuditEvent.CLIENT_DELETED,
-      actionType: AuditActionType.DELETE,
-      occurredAt: new Date(),
-      actor,
-      payload: { fullName: `${client.firstName} ${client.lastName}` },
-    };
-    this.eventEmitter.emit(AUDIT_EVENT, event);
-  }
-
   async findById(clientId: string): Promise<Client> {
     const client = await this.db.client.findUnique({ where: { id: clientId } });
     if (!client) throw new NotFoundException('Client not found');

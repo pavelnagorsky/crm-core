@@ -1,10 +1,7 @@
 import {
   Body,
   Controller,
-  Delete,
   Get,
-  HttpCode,
-  HttpStatus,
   Param,
   ParseUUIDPipe,
   Post,
@@ -14,7 +11,6 @@ import {
 import {
   ApiConflictResponse,
   ApiCreatedResponse,
-  ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
@@ -68,21 +64,6 @@ export class ClientsController {
     assertBusinessRole(tokenPayload, client.businessId, BusinessRole.OWNER);
     const updated = await this.clientsService.update(client.businessId, id, dto, auditActorFromToken(tokenPayload, client.businessId));
     return BaseResponseDto.success({ id: updated.id });
-  }
-
-  @ApiOperation({ summary: 'Delete a client' })
-  @ApiNoContentResponse()
-  @ApiNotFoundResponse({ description: 'Client not found' })
-  @Auth()
-  @Delete(':id')
-  @HttpCode(HttpStatus.NO_CONTENT)
-  async delete(
-    @Param('id', ParseUUIDPipe) id: string,
-    @TokenPayload() tokenPayload: TokenPayloadDto,
-  ): Promise<void> {
-    const client = await this.clientsService.findById(id);
-    assertBusinessRole(tokenPayload, client.businessId, BusinessRole.OWNER);
-    await this.clientsService.delete(client.businessId, id, auditActorFromToken(tokenPayload, client.businessId));
   }
 
   @ApiOperation({ summary: 'Get client by ID' })
