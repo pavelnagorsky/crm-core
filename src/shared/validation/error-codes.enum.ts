@@ -33,6 +33,13 @@ export const ErrorCode = {
   STAFF_ALREADY_LINKED:        { code: 'STAFF_ALREADY_LINKED',        message: 'This staff member is already linked to a user account' },
   STAFF_USER_ALREADY_MEMBER:   { code: 'STAFF_USER_ALREADY_MEMBER',   message: 'You are already a member of this business' },
 
+  // files
+  FILE_TOO_LARGE:     { code: 'FILE_TOO_LARGE',     message: 'File exceeds the maximum allowed size' },
+  FILE_INVALID_TYPE:  { code: 'FILE_INVALID_TYPE',  message: 'File type is not allowed' },
+  FILE_UPLOAD_FAILED: { code: 'FILE_UPLOAD_FAILED', message: 'Failed to upload file to storage' },
+  FILE_NOT_FOUND:     { code: 'FILE_NOT_FOUND',     message: 'File not found' },
+  FILE_DELETE_FAILED: { code: 'FILE_DELETE_FAILED', message: 'Failed to delete file from storage' },
+
   // bookings
   BOOKING_NOT_AVAILABLE:     { code: 'BOOKING_NOT_AVAILABLE',     message: 'Online booking is not available for this business' },
   BOOKING_ALREADY_CANCELLED: { code: 'BOOKING_ALREADY_CANCELLED', message: 'Booking is already cancelled' },
