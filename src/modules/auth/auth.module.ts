@@ -2,6 +2,7 @@ import { Global, Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { HttpModule } from '@nestjs/axios';
+import { AuthCleanupService } from './auth-cleanup.service.js';
 import { AuthController } from './auth.controller.js';
 import { UserController } from '../user/user.controller.js';
 import { AuthService } from './auth.service.js';
@@ -29,6 +30,7 @@ import { UserFromTokenPipe } from './pipes/user-from-token.pipe.js';
   controllers: [AuthController, UserController],
   providers: [
     AuthService,
+    AuthCleanupService,
     JwtAccessStrategy,
     JwtRefreshStrategy,
     JwtEmailStrategy,

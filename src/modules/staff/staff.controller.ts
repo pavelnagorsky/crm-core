@@ -19,7 +19,6 @@ import {
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
-  ApiQuery,
   ApiTags,
 } from '@nestjs/swagger';
 import { BusinessRole } from '@prisma/client';
@@ -30,7 +29,6 @@ import { CreateInvitationDto } from './dto/create-invitation.dto.js';
 import { AcceptInvitationDto } from './dto/accept-invitation.dto.js';
 import { InvitationResponseDto } from './dto/invitation-response.dto.js';
 import { StaffResponseDto } from './dto/staff-response.dto.js';
-import { PublicStaffDto } from './dto/public-staff.dto.js';
 import { StaffSearchRequestDto } from './dto/staff-search-request.dto.js';
 import { StaffSearchResponseDto } from './dto/staff-search-response.dto.js';
 import { GetShiftsRequestDto } from './dto/get-shifts-request.dto.js';
@@ -38,7 +36,7 @@ import { ReplaceShiftsRequestDto } from './dto/replace-shifts-request.dto.js';
 import { ShiftsResponseDto } from './dto/shifts-response.dto.js';
 import { ShiftItemDto } from './dto/shift-item.dto.js';
 import { Auth } from '../auth/decorators/auth.decorator.js';
-import { ApiResponse, ApiResponseArray, BaseResponseDto } from '../../shared/dto/base-response.dto.js';
+import { ApiResponse, BaseResponseDto } from '../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
 import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto, assertBusinessRole } from '../auth/dto/token-payload.dto.js';
@@ -48,19 +46,6 @@ import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
 @Controller('staff')
 export class StaffController {
   constructor(private readonly staffService: StaffService) {}
-
-  @ApiOperation({ summary: 'List active staff members (public)' })
-  @ApiOkResponse({ type: ApiResponseArray(PublicStaffDto) })
-  @ApiQuery({ name: 'businessId', required: true, type: String })
-  @ApiQuery({ name: 'serviceId', required: false, type: String })
-  @Get('public')
-  async listPublic(
-    @Query('businessId', ParseUUIDPipe) businessId: string,
-    @Query('serviceId', new ParseUUIDPipe({ optional: true })) serviceId?: string,
-  ): Promise<BaseResponseDto<PublicStaffDto[]>> {
-    const staff = await this.staffService.listPublic(businessId, serviceId);
-    return BaseResponseDto.success(staff.map(PublicStaffDto.fromEntity));
-  }
 
   @ApiOperation({ summary: 'Create a staff member' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })

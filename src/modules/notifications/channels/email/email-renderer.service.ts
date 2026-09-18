@@ -7,14 +7,16 @@ import Handlebars from 'handlebars';
 import { format, isValid } from 'date-fns';
 import { ru as dateFnsRu, type Locale as DateFnsLocale } from 'date-fns/locale';
 import { IAppConfig } from '../../../../config/configuration.js';
-import { I18nLocale } from '../../interfaces/i18n-locale.interface.js';
+import { I18nLocale } from '../../../../shared/interfaces/i18n-locale.interface.js';
 
 export type EmailTemplate =
   | 'confirm-email'
   | 'reset-password'
   | 'staff-invitation'
   | 'booking-confirmed'
-  | 'booking-cancelled';
+  | 'booking-cancelled'
+  | 'booking-status-changed'
+  | 'booking-reminder';
 
 type CompiledTemplate = Handlebars.TemplateDelegate;
 
@@ -25,6 +27,8 @@ const EMAIL_TEMPLATES: EmailTemplate[] = [
   'staff-invitation',
   'booking-confirmed',
   'booking-cancelled',
+  'booking-status-changed',
+  'booking-reminder',
 ];
 
 @Injectable()
@@ -42,27 +46,57 @@ export class EmailRendererService implements OnModuleInit {
   }
 
   onModuleInit() {
-    const i18nDir = join(fileURLToPath(import.meta.url), '..', '..', '..', '..', '..', 'shared', 'i18n');
-    const templatesDir = join(fileURLToPath(import.meta.url), '..', 'templates');
+    const i18nDir = join(
+      fileURLToPath(import.meta.url),
+      '..',
+      '..',
+      '..',
+      '..',
+      '..',
+      'shared',
+      'i18n',
+    );
+    const templatesDir = join(
+      fileURLToPath(import.meta.url),
+      '..',
+      'templates',
+    );
 
-    this.locale = JSON.parse(readFileSync(join(i18nDir, `${this.lang}.json`), 'utf-8'));
-    this.layoutTemplate = this.hbs.compile(readFileSync(join(templatesDir, 'layout.hbs'), 'utf-8'));
+    this.locale = JSON.parse(
+      readFileSync(join(i18nDir, `${this.lang}.json`), 'utf-8'),
+    );
+    this.layoutTemplate = this.hbs.compile(
+      readFileSync(join(templatesDir, 'layout.hbs'), 'utf-8'),
+    );
 
     for (const name of EMAIL_TEMPLATES) {
-      const source = readFileSync(join(templatesDir, this.lang, `${name}.hbs`), 'utf-8');
+      const source = readFileSync(
+        join(templatesDir, this.lang, `${name}.hbs`),
+        'utf-8',
+      );
       this.contentTemplates.set(name, this.hbs.compile(source));
     }
   }
 
-  render(template: EmailTemplate, data: Record<string, unknown>): { subject: string; html: string } {
+  render(
+    template: EmailTemplate,
+    data: Record<string, unknown>,
+  ): { subject: string; html: string } {
     const contentTemplate = this.contentTemplates.get(template);
-    if (!contentTemplate) throw new Error(`Email template not found: ${template}`);
+    if (!contentTemplate)
+      throw new Error(`Email template not found: ${template}`);
 
-    const subject = this.locale.email[template]?.subject ?? template;
+    const subject =
+      (this.locale.email[template]?.subject as string | undefined) ?? template;
     const ctx = { ...data, locale: this.locale, lang: this.lang };
 
     const content = contentTemplate(ctx);
-    const html = this.layoutTemplate({ subject, content, lang: this.lang, locale: this.locale });
+    const html = this.layoutTemplate({
+      subject,
+      content,
+      lang: this.lang,
+      locale: this.locale,
+    });
 
     return { subject, html };
   }
@@ -74,7 +108,9 @@ export class EmailRendererService implements OnModuleInit {
       const locale: I18nLocale = opts.data?.root?.locale;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const value = keys.reduce<any>((node, key) => node?.[key], locale);
-      return typeof value === 'string' ? new Handlebars.SafeString(value) : keys[keys.length - 1];
+      return typeof value === 'string'
+        ? new Handlebars.SafeString(value)
+        : keys[keys.length - 1];
     });
 
     this.hbs.registerHelper('formatDateTime', (...rawArgs: unknown[]) => {
@@ -91,6 +127,8 @@ export class EmailRendererService implements OnModuleInit {
   private formatDate(value: string | Date, pattern: string): string {
     const d = new Date(value);
     if (!isValid(d)) return String(value);
-    return format(d, pattern, { locale: (DATE_FNS_LOCALES[this.lang] ?? dateFnsRu) as DateFnsLocale });
+    return format(d, pattern, {
+      locale: (DATE_FNS_LOCALES[this.lang] ?? dateFnsRu) as DateFnsLocale,
+    });
   }
 }

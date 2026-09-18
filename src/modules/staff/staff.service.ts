@@ -36,14 +36,11 @@ export class StaffService {
     private readonly config: ConfigService,
   ) {}
 
-  listPublic(businessId: string, serviceId?: string): Promise<Staff[]> {
+  listActiveWithServices(businessId: string): Promise<(Staff & { staffServices: { serviceId: string }[] })[]> {
     return this.db.staff.findMany({
-      where: {
-        businessId,
-        isActive: true,
-        ...(serviceId && { staffServices: { some: { serviceId } } }),
-      },
+      where: { businessId, isActive: true },
       orderBy: { name: 'asc' },
+      include: { staffServices: { select: { serviceId: true } } },
     });
   }
 

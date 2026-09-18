@@ -1,7 +1,6 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, Service, ServiceCategory } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { PublicServiceCategoryDto } from './dto/public-service-category.dto.js';
 import { DatabaseService } from '../../database/database.service.js';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
 import { CreateServiceCategoryDto } from './dto/create-service-category.dto.js';
@@ -52,34 +51,6 @@ export class ServicesService {
       where: { businessId },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
-  }
-
-  async listGroupedByCategory(businessId: string): Promise<PublicServiceCategoryDto[]> {
-    const activeServicesOrder: Prisma.ServiceOrderByWithRelationInput[] = [
-      { sortOrder: 'asc' },
-      { title: 'asc' },
-    ];
-
-    const [categories, uncategorized] = await this.db.$transaction([
-      this.db.serviceCategory.findMany({
-        where: { businessId },
-        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-        include: {
-          services: {
-            where: { isActive: true },
-            orderBy: activeServicesOrder,
-          },
-        },
-      }),
-      this.db.service.findMany({
-        where: { businessId, categoryId: null, isActive: true },
-        orderBy: activeServicesOrder,
-      }),
-    ]);
-
-    const result = categories.map(PublicServiceCategoryDto.fromEntity);
-    if (uncategorized.length) result.push(PublicServiceCategoryDto.uncategorized(uncategorized));
-    return result;
   }
 
   async deleteCategory(categoryId: string): Promise<void> {

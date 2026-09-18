@@ -8,12 +8,7 @@ import { ru as dateFnsRu, type Locale as DateFnsLocale } from 'date-fns/locale';
 import type { AuditLog } from '@prisma/client';
 import { AuditEntity } from '../enums/audit-entity.enum.js';
 import { AUDIT_FIELD_TYPES } from '../fields/index.js';
-
-interface I18nLocale {
-  actorRole: Record<string, string>;
-  bookingStatus: Record<string, string>;
-  fields: Record<string, Record<string, string>>;
-}
+import { I18nLocale } from '../../../shared/interfaces/i18n-locale.interface.js';
 
 type CompiledTemplate = Handlebars.TemplateDelegate;
 
@@ -37,14 +32,33 @@ export class AuditRendererService implements OnModuleInit {
   }
 
   onModuleInit() {
-    const i18nDir = join(fileURLToPath(import.meta.url), '..', '..', '..', '..', 'shared', 'i18n');
-    const templatesDir = join(fileURLToPath(import.meta.url), '..', '..', 'templates');
+    const i18nDir = join(
+      fileURLToPath(import.meta.url),
+      '..',
+      '..',
+      '..',
+      '..',
+      'shared',
+      'i18n',
+    );
+    const templatesDir = join(
+      fileURLToPath(import.meta.url),
+      '..',
+      '..',
+      'templates',
+    );
 
     for (const lang of SUPPORTED_LANGS) {
-      this.locales.set(lang, JSON.parse(readFileSync(join(i18nDir, `${lang}.json`), 'utf-8')));
+      this.locales.set(
+        lang,
+        JSON.parse(readFileSync(join(i18nDir, `${lang}.json`), 'utf-8')),
+      );
 
       for (const entity of Object.values(AuditEntity)) {
-        const source = readFileSync(join(templatesDir, lang, `${entity.toLowerCase()}.hbs`), 'utf-8');
+        const source = readFileSync(
+          join(templatesDir, lang, `${entity.toLowerCase()}.hbs`),
+          'utf-8',
+        );
         this.templates.set(`${lang}:${entity}`, this.hbs.compile(source));
       }
     }
@@ -102,6 +116,8 @@ export class AuditRendererService implements OnModuleInit {
   private formatDate(iso: string, pattern: string, lang: string): string {
     const d = new Date(iso);
     if (!isValid(d)) return iso;
-    return format(d, pattern, { locale: (DATE_FNS_LOCALES[lang] ?? dateFnsRu) as DateFnsLocale });
+    return format(d, pattern, {
+      locale: (DATE_FNS_LOCALES[lang] ?? dateFnsRu) as DateFnsLocale,
+    });
   }
 }

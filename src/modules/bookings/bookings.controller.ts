@@ -28,6 +28,7 @@ import { BusinessRole, CancelledBy } from '@prisma/client';
 import { BookingsService } from './bookings.service.js';
 import { BookingCreateService } from './booking-create.service.js';
 import { BookingClientService } from './booking-client.service.js';
+import { BookingSetupResponseDto } from './dto/booking-setup-response.dto.js';
 import { CreateBookingDto } from './dto/create-booking.dto.js';
 import { ManualCreateBookingDto } from './dto/manual-create-booking.dto.js';
 import { UpdateBookingDto } from './dto/update-booking.dto.js';
@@ -57,6 +58,15 @@ export class BookingsController {
   ) {}
 
   // ─── Public ──────────────────────────────────────────────────────────────────
+
+  @ApiOperation({ summary: 'Get services and staff for booking screen (public)' })
+  @ApiOkResponse({ type: ApiResponse(BookingSetupResponseDto) })
+  @Get('public/businesses/:businessId/booking-setup')
+  async getBookingSetup(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+  ): Promise<BaseResponseDto<BookingSetupResponseDto>> {
+    return BaseResponseDto.success(await this.bookingsService.getBookingSetup(businessId));
+  }
 
   @ApiOperation({ summary: 'Book an appointment (public / client-facing)' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })

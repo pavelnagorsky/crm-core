@@ -11,6 +11,9 @@ import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { TimeService } from '../time/time.service.js';
 import { CalendarService } from '../calendar/calendar.service.js';
 import { StaffService } from '../staff/staff.service.js';
+import { BookingSetupResponseDto } from './dto/booking-setup-response.dto.js';
+import { BookingSetupServiceDto } from './dto/booking-setup-service.dto.js';
+import { BookingSetupStaffDto } from './dto/booking-setup-staff.dto.js';
 import { CancelBookingDto } from './dto/cancel-booking.dto.js';
 import { UpdateBookingDto } from './dto/update-booking.dto.js';
 import { UpdateBookingStatusDto } from './dto/update-booking-status.dto.js';
@@ -29,7 +32,7 @@ import { diffFields } from '../audit/utils/diff-fields.js';
 import { BOOKING_AUDIT_FIELDS } from '../audit/fields/booking.fields.js';
 import { TokenPayloadDto, assertBusinessRole } from '../auth/dto/token-payload.dto.js';
 import { NOTIFICATION_EVENT } from '../notifications/notifications.service.js';
-import { BookingCancelledNotification } from '../notifications/notifications/booking-cancelled.notification.js';
+import { BookingStatusChangedNotification } from '../notifications/notifications/booking-status-changed.notification.js';
 
 @Injectable()
 export class BookingsService {
@@ -42,6 +45,21 @@ export class BookingsService {
     private readonly staffService: StaffService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
+
+  async getBookingSetup(businessId: string): Promise<BookingSetupResponseDto> {
+    const [services, staff] = await Promise.all([
+      this.db.service.findMany({
+        where: { businessId, isActive: true },
+        orderBy: [{ sortOrder: 'asc' }, { title: 'asc' }],
+      }),
+      this.staffService.listActiveWithServices(businessId),
+    ]);
+
+    return {
+      services: services.map(BookingSetupServiceDto.fromEntity),
+      staff: staff.map(BookingSetupStaffDto.fromEntity),
+    };
+  }
 
   async update(bookingId: string, tokenPayload: TokenPayloadDto, dto: UpdateBookingDto): Promise<Booking> {
     const old = await this.findById(bookingId);
@@ -93,6 +111,13 @@ export class BookingsService {
       actor: auditActorFromToken(tokenPayload, old.businessId),
       payload: { from: old.status, to: dto.status },
     });
+    if (dto.status === BookingStatus.CONFIRMED && old.clientEmail) {
+      this.eventEmitter.emit(NOTIFICATION_EVENT, new BookingStatusChangedNotification(
+        { ...old, clientEmail: old.clientEmail },
+        'CONFIRMED',
+        undefined,
+      ));
+    }
     return updated;
   }
 
@@ -188,17 +213,12 @@ export class BookingsService {
       actor,
       payload: { cancelledBy, reason },
     });
-    if (booking.clientEmail) {
-      this.eventEmitter.emit(NOTIFICATION_EVENT, new BookingCancelledNotification({
-        id: booking.id,
-        clientEmail: booking.clientEmail,
-        clientFirstName: booking.clientFirstName,
-        clientLastName: booking.clientLastName,
-        serviceTitle: booking.serviceTitle,
-        staffName: booking.staffName,
-        startAt: booking.startAt,
-        endAt: booking.endAt,
-      }, reason));
+    if (booking.clientEmail && cancelledBy === CancelledBy.STAFF) {
+      this.eventEmitter.emit(NOTIFICATION_EVENT, new BookingStatusChangedNotification(
+        { ...booking, clientEmail: booking.clientEmail },
+        'CANCELLED',
+        reason,
+      ));
     }
     return updated;
   }

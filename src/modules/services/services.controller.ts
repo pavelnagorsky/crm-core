@@ -24,7 +24,6 @@ import { BusinessRole } from '@prisma/client';
 import { ServicesService } from './services.service.js';
 import { CreateServiceCategoryDto } from './dto/create-service-category.dto.js';
 import { ServiceCategoryResponseDto } from './dto/service-category-response.dto.js';
-import { PublicServiceCategoryDto } from './dto/public-service-category.dto.js';
 import { CreateServiceDto } from './dto/create-service.dto.js';
 import { UpdateServiceDto } from './dto/update-service.dto.js';
 import { UpdateServiceStatusDto } from './dto/update-service-status.dto.js';
@@ -42,18 +41,6 @@ import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
 @Controller('businesses/:businessId')
 export class ServicesController {
   constructor(private readonly servicesService: ServicesService) {}
-
-  // ─── Public ──────────────────────────────────────────────────────────────────
-
-  @ApiOperation({ summary: 'List active services grouped by category (public)' })
-  @ApiOkResponse({ type: ApiResponseArray(PublicServiceCategoryDto) })
-  @Get('public/services')
-  async listPublicServices(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
-  ): Promise<BaseResponseDto<PublicServiceCategoryDto[]>> {
-    const categories = await this.servicesService.listGroupedByCategory(businessId);
-    return BaseResponseDto.success(categories);
-  }
 
   // ─── Service Categories ──────────────────────────────────────────────────────
 
