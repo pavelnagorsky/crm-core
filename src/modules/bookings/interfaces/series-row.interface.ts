@@ -5,4 +5,5 @@ export interface SeriesRow {
   status: BookingStatus | null;
   count: number;
   revenue: number;
+  duration: number;
 }

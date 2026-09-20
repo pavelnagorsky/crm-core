@@ -1,5 +1,4 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { DashboardWidgetKey } from '../enums/dashboard-widget-key.enum.js';
 import { WidgetKind } from '../enums/widget-kind.enum.js';
 import { WidgetBreakdownDto } from './widget-breakdown.dto.js';
 import { WidgetFunnelDto } from './widget-funnel.dto.js';
@@ -9,8 +8,8 @@ import { WidgetMetricDto } from './widget-metric.dto.js';
 import { WidgetSeriesDto } from './widget-series.dto.js';
 
 export class WidgetDto {
-  @ApiProperty({ enum: DashboardWidgetKey })
-  key: DashboardWidgetKey;
+  @ApiProperty({ type: String, description: 'Widget key identifying the metric/series/breakdown; taken from the caller-specific enum (e.g. DashboardWidgetKey or ServicesAnalyticsWidgetKey)' })
+  key: string;
 
   @ApiProperty({ enum: WidgetKind })
   kind: WidgetKind;

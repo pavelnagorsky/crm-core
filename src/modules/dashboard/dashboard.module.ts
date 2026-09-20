@@ -18,5 +18,11 @@ import { BusinessModule } from '../business/business.module.js';
     DashboardMetricFactory,
     DashboardSeriesFactory,
   ],
+  exports: [
+    DashboardRangeService,
+    DashboardBucketService,
+    DashboardMetricFactory,
+    DashboardSeriesFactory,
+  ],
 })
 export class DashboardModule {}

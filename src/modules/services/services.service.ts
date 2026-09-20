@@ -8,6 +8,7 @@ import { CreateServiceDto } from './dto/create-service.dto.js';
 import { UpdateServiceDto } from './dto/update-service.dto.js';
 import { ServiceSearchRequestDto } from './dto/service-search-request.dto.js';
 import { ServiceSearchOrderBy } from './enums/service-search-order-by.enum.js';
+import { ServiceFilter } from './interfaces/service-filter.interface.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { PrismaErrorCode } from '../../shared/database/prisma-error-codes.js';
@@ -135,11 +136,7 @@ export class ServicesService {
   }
 
   async search(businessId: string, dto: ServiceSearchRequestDto): Promise<PaginatedResult<Service>> {
-    const where: Prisma.ServiceWhereInput = { businessId };
-
-    if (dto.search) where.title = { contains: dto.search, mode: 'insensitive' };
-    if (dto.categoryId !== undefined) where.categoryId = dto.categoryId;
-    if (dto.isActive !== undefined) where.isActive = dto.isActive;
+    const where = this.buildFilterWhere(businessId, dto);
 
     const orderBy: Prisma.ServiceOrderByWithRelationInput = {
       [dto.orderBy ?? ServiceSearchOrderBy.SORT_ORDER]: dto.orderDirection ?? OrderDirection.ASC,
@@ -157,6 +154,22 @@ export class ServicesService {
     ]);
 
     return { items, totalItems };
+  }
+
+  async findIdsByFilter(businessId: string, filter: ServiceFilter): Promise<string[]> {
+    const rows = await this.db.service.findMany({
+      where: this.buildFilterWhere(businessId, filter),
+      select: { id: true },
+    });
+    return rows.map((r) => r.id);
+  }
+
+  private buildFilterWhere(businessId: string, filter: ServiceFilter): Prisma.ServiceWhereInput {
+    const where: Prisma.ServiceWhereInput = { businessId };
+    if (filter.search) where.title = { contains: filter.search, mode: 'insensitive' };
+    if (filter.categoryId !== undefined) where.categoryId = filter.categoryId;
+    if (filter.isActive !== undefined) where.isActive = filter.isActive;
+    return where;
   }
 
   async setActive(serviceId: string, isActive: boolean): Promise<Service> {

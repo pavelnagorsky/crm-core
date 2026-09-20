@@ -22,6 +22,9 @@ import {
 } from '@nestjs/swagger';
 import { BusinessRole } from '@prisma/client';
 import { ServicesService } from './services.service.js';
+import { ServicesAnalyticsService } from './services-analytics.service.js';
+import { ServicesAnalyticsRequestDto } from './dto/services-analytics-request.dto.js';
+import { ServicesAnalyticsResponseDto } from './dto/services-analytics-response.dto.js';
 import { CreateServiceCategoryDto } from './dto/create-service-category.dto.js';
 import { ServiceCategoryResponseDto } from './dto/service-category-response.dto.js';
 import { CreateServiceDto } from './dto/create-service.dto.js';
@@ -40,7 +43,10 @@ import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
 @ApiTags('Services')
 @Controller('businesses/:businessId')
 export class ServicesController {
-  constructor(private readonly servicesService: ServicesService) {}
+  constructor(
+    private readonly servicesService: ServicesService,
+    private readonly analyticsService: ServicesAnalyticsService,
+  ) {}
 
   // ─── Service Categories ──────────────────────────────────────────────────────
 
@@ -166,5 +172,17 @@ export class ServicesController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<void> {
     await this.servicesService.delete(businessId, id, auditActorFromToken(tokenPayload, businessId));
+  }
+
+  @ApiOperation({ summary: 'Fetch analytics widgets for the services page' })
+  @ApiOkResponse({ type: ApiResponse(ServicesAnalyticsResponseDto) })
+  @RBAC(BusinessRole.OWNER)
+  @Post('services/analytics')
+  async analytics(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Body() dto: ServicesAnalyticsRequestDto,
+  ): Promise<BaseResponseDto<ServicesAnalyticsResponseDto>> {
+    const widgets = await this.analyticsService.getWidgets(businessId, dto);
+    return BaseResponseDto.success(new ServicesAnalyticsResponseDto(widgets));
   }
 }

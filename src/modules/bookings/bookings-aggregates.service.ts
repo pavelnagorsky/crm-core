@@ -6,6 +6,7 @@ import { AggregateRange } from './interfaces/aggregate-range.interface.js';
 import { AggregateSeriesRange } from './interfaces/aggregate-series-range.interface.js';
 import { AggregateSnapshot } from './interfaces/aggregate-snapshot.interface.js';
 import { SeriesRow } from './interfaces/series-row.interface.js';
+import { ServiceCount } from './interfaces/service-count.interface.js';
 import { SourceCount } from './interfaces/source-count.interface.js';
 
 @Injectable()
@@ -18,27 +19,53 @@ export class BookingsAggregatesService {
    * queries per status.
    */
   async snapshot(range: AggregateRange): Promise<AggregateSnapshot> {
-    const rows = await this.db.$queryRaw<Array<{ status: BookingStatus; count: bigint; revenue: string }>>(
+    const rows = await this.db.$queryRaw<Array<{ status: BookingStatus; count: bigint; revenue: string; duration: bigint }>>(
       Prisma.sql`
         SELECT "status" AS status,
                COUNT(*)::bigint AS count,
-               COALESCE(SUM(COALESCE("customPrice", "servicePrice")), 0)::text AS revenue
+               COALESCE(SUM(COALESCE("customPrice", "servicePrice")), 0)::text AS revenue,
+               COALESCE(SUM("serviceDuration"), 0)::bigint AS duration
         FROM "Booking"
         WHERE ${this.whereClause(range)}
         GROUP BY "status"
       `,
     );
-    const byStatus = new Map<BookingStatus, { count: number; revenue: number }>();
+    const byStatus = new Map<BookingStatus, { count: number; revenue: number; duration: number }>();
     let totalCount = 0;
     let totalRevenue = 0;
+    let totalDuration = 0;
     for (const r of rows) {
       const count = Number(r.count);
       const revenue = Number(r.revenue);
-      byStatus.set(r.status, { count, revenue });
+      const duration = Number(r.duration);
+      byStatus.set(r.status, { count, revenue, duration });
       totalCount += count;
       totalRevenue += revenue;
+      totalDuration += duration;
     }
-    return { byStatus, totalCount, totalRevenue };
+    return { byStatus, totalCount, totalRevenue, totalDuration };
+  }
+
+  async countByService(range: AggregateRange, statuses?: BookingStatus[]): Promise<ServiceCount[]> {
+    const rows = await this.db.$queryRaw<Array<{ serviceId: string; serviceTitle: string; count: bigint; revenue: string; duration: bigint }>>(
+      Prisma.sql`
+        SELECT "serviceId" AS "serviceId",
+               MAX("serviceTitle") AS "serviceTitle",
+               COUNT(*)::bigint AS count,
+               COALESCE(SUM(COALESCE("customPrice", "servicePrice")), 0)::text AS revenue,
+               COALESCE(SUM("serviceDuration"), 0)::bigint AS duration
+        FROM "Booking"
+        WHERE ${this.whereClause(range, statuses)}
+        GROUP BY "serviceId"
+      `,
+    );
+    return rows.map((r) => ({
+      serviceId: r.serviceId,
+      serviceTitle: r.serviceTitle,
+      count: Number(r.count),
+      revenue: Number(r.revenue),
+      duration: Number(r.duration),
+    }));
   }
 
   async countBySource(range: AggregateRange, statuses?: BookingStatus[]): Promise<SourceCount[]> {
@@ -61,12 +88,13 @@ export class BookingsAggregatesService {
     const bucketExpr = Prisma.sql`(date_trunc(${trunc}, ("startAt" AT TIME ZONE 'UTC') AT TIME ZONE ${range.timezone})) AT TIME ZONE ${range.timezone}`;
 
     if (includeStatus) {
-      const rows = await this.db.$queryRaw<Array<{ bucket: Date; status: BookingStatus; count: bigint; revenue: string }>>(
+      const rows = await this.db.$queryRaw<Array<{ bucket: Date; status: BookingStatus; count: bigint; revenue: string; duration: bigint }>>(
         Prisma.sql`
           SELECT ${bucketExpr} AS bucket,
                  "status" AS status,
                  COUNT(*)::bigint AS count,
-                 COALESCE(SUM(COALESCE("customPrice", "servicePrice")), 0)::text AS revenue
+                 COALESCE(SUM(COALESCE("customPrice", "servicePrice")), 0)::text AS revenue,
+                 COALESCE(SUM("serviceDuration"), 0)::bigint AS duration
           FROM "Booking"
           WHERE ${filters}
           GROUP BY bucket, "status"
@@ -78,14 +106,16 @@ export class BookingsAggregatesService {
         status: r.status,
         count: Number(r.count),
         revenue: Number(r.revenue),
+        duration: Number(r.duration),
       }));
     }
 
-    const rows = await this.db.$queryRaw<Array<{ bucket: Date; count: bigint; revenue: string }>>(
+    const rows = await this.db.$queryRaw<Array<{ bucket: Date; count: bigint; revenue: string; duration: bigint }>>(
       Prisma.sql`
         SELECT ${bucketExpr} AS bucket,
                COUNT(*)::bigint AS count,
-               COALESCE(SUM(COALESCE("customPrice", "servicePrice")), 0)::text AS revenue
+               COALESCE(SUM(COALESCE("customPrice", "servicePrice")), 0)::text AS revenue,
+               COALESCE(SUM("serviceDuration"), 0)::bigint AS duration
         FROM "Booking"
         WHERE ${filters}
         GROUP BY bucket
@@ -97,6 +127,7 @@ export class BookingsAggregatesService {
       status: null,
       count: Number(r.count),
       revenue: Number(r.revenue),
+      duration: Number(r.duration),
     }));
   }
 
@@ -109,6 +140,7 @@ export class BookingsAggregatesService {
     if (statuses && statuses.length > 0) where.status = { in: statuses };
     if (range.staffId) where.staffId = range.staffId;
     if (range.serviceId) where.serviceId = range.serviceId;
+    if (range.serviceIds) where.serviceId = { in: range.serviceIds };
     if (range.categoryId) where.service = { categoryId: range.categoryId };
     return where;
   }
@@ -128,6 +160,14 @@ export class BookingsAggregatesService {
     }
     if (range.staffId) parts.push(Prisma.sql`"staffId" = ${range.staffId}`);
     if (range.serviceId) parts.push(Prisma.sql`"serviceId" = ${range.serviceId}`);
+    if (range.serviceIds) {
+      if (range.serviceIds.length === 0) {
+        // Empty in-list → force empty result set without letting Postgres see IN ().
+        parts.push(Prisma.sql`FALSE`);
+      } else {
+        parts.push(Prisma.sql`"serviceId" IN (${Prisma.join(range.serviceIds.map((id) => Prisma.sql`${id}`))})`);
+      }
+    }
     if (range.categoryId) {
       parts.push(Prisma.sql`"serviceId" IN (SELECT "id" FROM "Service" WHERE "categoryId" = ${range.categoryId})`);
     }
