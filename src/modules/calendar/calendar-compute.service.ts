@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 import { CalendarEvent, CalendarEventRepeatType, StaffShift } from '@prisma/client';
-import { format, getDay, parseISO } from 'date-fns';
 import { TimeService } from '../time/time.service.js';
 import { CalendarEventItemDto } from './dto/calendar-event-item.dto.js';
 import { ClosedTimeItemDto } from './dto/closed-time-item.dto.js';
@@ -86,10 +85,7 @@ export class CalendarComputeService {
           } else {
             // midnight-spanning: split across this date and the next
             push(sid, date, { start: blockStart, end: 24 * 60 });
-            const nextDate = format(
-              new Date(new Date(date).setDate(new Date(date).getDate() + 1)),
-              'yyyy-MM-dd',
-            );
+            const nextDate = this.time.addDaysStr(date, 1);
             push(sid, nextDate, { start: 0, end: blockEnd });
           }
         }
@@ -130,16 +126,16 @@ export class CalendarComputeService {
     eventStartStr: string,
   ): string[] {
     const cancelled = this.buildCancelledSet(event);
-    const repeatUntilStr = event.repeatUntil ? format(event.repeatUntil, 'yyyy-MM-dd') : null;
+    const repeatUntilStr = event.repeatUntil ? this.time.dateOnlyStr(event.repeatUntil) : null;
 
     return dates.filter((date) => {
       if (date < eventStartStr) return false;
       if (repeatUntilStr && date > repeatUntilStr) return false;
       if (cancelled.has(date)) return false;
       if (event.daysMask) {
-        const jsDay = getDay(parseISO(date));
-        // getDay: 0=Sun..6=Sat → convert to 0=Mon..6=Sun to match daysMask
-        const dayOfWeek = jsDay === 0 ? 6 : jsDay - 1;
+        const [y, m, d] = date.split('-').map(Number);
+        // daysMask is indexed 0=Mon..6=Sun; isoWeekday returns 1=Mon..7=Sun.
+        const dayOfWeek = this.time.isoWeekday(y, m, d) - 1;
         if (event.daysMask[dayOfWeek] !== '1') return false;
       }
       return true;
@@ -153,7 +149,7 @@ export class CalendarComputeService {
     const startParts = this.time.toZonedParts(event.startDateTime, timezone);
     const endParts = this.time.toZonedParts(event.endDateTime, timezone);
     return {
-      date: format(new Date(startParts.year, startParts.month - 1, startParts.day), 'yyyy-MM-dd'),
+      date: this.time.zonedDateStr(event.startDateTime, timezone),
       startHHmm: this.time.minutesToHHmm(startParts.hour * 60 + startParts.minute),
       endHHmm: this.time.minutesToHHmm(endParts.hour * 60 + endParts.minute),
     };
@@ -162,7 +158,7 @@ export class CalendarComputeService {
   /** Returns a set of cancelled occurrence dates (yyyy-MM-dd) for fast lookup. */
   buildCancelledSet(event: CalendarEventWithCancellations): Set<string> {
     return new Set(
-      event.cancelledOccurrences.map((o) => format(o.occurrenceDate, 'yyyy-MM-dd')),
+      event.cancelledOccurrences.map((o) => this.time.dateOnlyStr(o.occurrenceDate)),
     );
   }
 
@@ -278,7 +274,7 @@ export class CalendarComputeService {
   groupShiftsByDate(shifts: StaffShift[]): Map<string, StaffShift[]> {
     const map = new Map<string, StaffShift[]>();
     for (const shift of shifts) {
-      const key = format(shift.date, 'yyyy-MM-dd');
+      const key = this.time.dateOnlyStr(shift.date);
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(shift);
     }
@@ -289,7 +285,7 @@ export class CalendarComputeService {
   groupShiftsByStaffDate(shifts: StaffShift[]): Map<string, Map<string, StaffShift>> {
     const map = new Map<string, Map<string, StaffShift>>();
     for (const shift of shifts) {
-      const dateKey = format(shift.date, 'yyyy-MM-dd');
+      const dateKey = this.time.dateOnlyStr(shift.date);
       if (!map.has(shift.staffId)) map.set(shift.staffId, new Map());
       map.get(shift.staffId)!.set(dateKey, shift);
     }

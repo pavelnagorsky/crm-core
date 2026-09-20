@@ -7,4 +7,5 @@ export interface BookingNotificationData {
   staffName: string;
   startAt: Date;
   endAt: Date;
+  timezone: string;
 }

@@ -17,6 +17,7 @@ import { BookingsModule } from './modules/bookings/bookings.module.js';
 import { AuditModule } from './modules/audit/audit.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 import { FilesModule } from './modules/files/files.module.js';
+import { DashboardModule } from './modules/dashboard/dashboard.module.js';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { FilesModule } from './modules/files/files.module.js';
     AuditModule,
     HealthModule,
     FilesModule,
+    DashboardModule,
   ],
 })
 export class AppModule {}

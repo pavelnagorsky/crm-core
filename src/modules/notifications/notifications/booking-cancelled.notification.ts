@@ -23,6 +23,7 @@ export class BookingCancelledNotification extends AbstractNotification implement
         serviceTitle: this.booking.serviceTitle,
         staffName: this.booking.staffName,
         startAt: this.booking.startAt,
+        timezone: this.booking.timezone,
         cancellationReason: this.cancellationReason ?? null,
       },
     };

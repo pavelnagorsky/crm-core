@@ -27,6 +27,7 @@ export class BookingStatusChangedNotification extends AbstractNotification imple
         staffName: this.booking.staffName,
         startAt: this.booking.startAt,
         endAt: this.booking.endAt,
+        timezone: this.booking.timezone,
         status: this.status,
         cancellationReason: this.cancellationReason ?? null,
       },

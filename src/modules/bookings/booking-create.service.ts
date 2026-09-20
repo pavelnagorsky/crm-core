@@ -6,7 +6,6 @@ import {
   CalendarEventType,
 } from '@prisma/client';
 import { BookingVisibility } from '../business/enums/booking-visibility.enum.js';
-import { format } from 'date-fns';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
@@ -48,7 +47,7 @@ export class BookingCreateService {
     businessId: string,
     dto: CreateBookingDto,
   ): Promise<Booking> {
-    const booking = await this.create(businessId, BookingSource.PUBLIC_PAGE, dto);
+    const { booking, timezone } = await this.create(businessId, BookingSource.PUBLIC_PAGE, dto);
     this.logger.log(`booking created (public): id=${booking.id} businessId=${businessId} serviceId=${booking.serviceId} staffId=${booking.staffId} startAt=${booking.startAt.toISOString()}`);
     // Public bookings have no authenticated user — the client is the actor
     const actor: AuditActor = {
@@ -56,7 +55,7 @@ export class BookingCreateService {
       role: AuditActorRole.CLIENT,
     };
     this.emitBookingCreated(booking, actor);
-    this.emitBookingNotification(booking);
+    this.emitBookingNotification(booking, timezone);
     return booking;
   }
 
@@ -65,10 +64,10 @@ export class BookingCreateService {
     dto: ManualCreateBookingDto,
     actor: AuditActor,
   ): Promise<Booking> {
-    const booking = await this.create(businessId, BookingSource.MANUAL, dto, dto.customPrice);
+    const { booking, timezone } = await this.create(businessId, BookingSource.MANUAL, dto, dto.customPrice);
     this.logger.log(`booking created (manual): id=${booking.id} businessId=${businessId} serviceId=${booking.serviceId} staffId=${booking.staffId} startAt=${booking.startAt.toISOString()} actor=${actor.name}`);
     this.emitBookingCreated(booking, actor);
-    this.emitBookingNotification(booking);
+    this.emitBookingNotification(booking, timezone);
     return booking;
   }
 
@@ -79,7 +78,7 @@ export class BookingCreateService {
     source: BookingSource,
     dto: CreateBookingDto,
     customPrice?: string,
-  ): Promise<Booking> {
+  ): Promise<{ booking: Booking; timezone: string }> {
     const [business, service] = await Promise.all([
       this.db.business.findUnique({
         where: { id: businessId },
@@ -108,7 +107,7 @@ export class BookingCreateService {
     const endAt = new Date(
       startAt.getTime() + service.durationMinutes * 60_000,
     );
-    const dateStr = format(startAt, 'yyyy-MM-dd');
+    const dateStr = this.time.zonedDateStr(startAt, business.timezone);
 
     const [client, staffId] = await Promise.all([
       this.clientsService.resolveForBooking(
@@ -135,7 +134,7 @@ export class BookingCreateService {
       ? BookingStatus.PENDING
       : BookingStatus.CONFIRMED;
 
-    return this.db.$transaction(async (tx) => {
+    const booking = await this.db.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(${this.buildLockKey(staffId, dateStr)})`;
 
       const [shift, blockEvents] = await Promise.all([
@@ -211,6 +210,7 @@ export class BookingCreateService {
         },
       });
     });
+    return { booking, timezone: business.timezone };
   }
 
   // ── Audit ───────────────────────────────────────────────────────────────────────
@@ -235,7 +235,7 @@ export class BookingCreateService {
     this.eventEmitter.emit(AUDIT_EVENT, event);
   }
 
-  private emitBookingNotification(booking: Booking): void {
+  private emitBookingNotification(booking: Booking, timezone: string): void {
     if (!booking.clientEmail) return;
     const clientToken = this.bookingClientService.generateClientToken(booking.id);
     this.eventEmitter.emit(NOTIFICATION_EVENT, new BookingConfirmedNotification({
@@ -247,6 +247,7 @@ export class BookingCreateService {
       staffName: booking.staffName,
       startAt: booking.startAt,
       endAt: booking.endAt,
+      timezone,
     }, clientToken));
   }
 
@@ -284,8 +285,7 @@ export class BookingCreateService {
 
     const staffIds = candidates.map((s) => s.id);
     const dayStart = this.time.localToUtc(`${dateStr}T00:00:00`, timezone);
-    const dayEnd = this.time.localToUtc(`${dateStr}T00:00:00`, timezone);
-    dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+    const dayEnd = this.time.addDaysInTz(dayStart, 1, timezone);
 
     const [available, bookingCounts] = await Promise.all([
       this.calendarService.filterAvailableStaff(

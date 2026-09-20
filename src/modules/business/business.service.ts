@@ -95,6 +95,24 @@ export class BusinessService {
     return business;
   }
 
+  async getLocale(businessId: string): Promise<{ timezone: string; currency: string }> {
+    const business = await this.db.business.findUnique({
+      where: { id: businessId },
+      select: { timezone: true, currency: true },
+    });
+    if (!business) throw new NotFoundException('Business not found');
+    return business;
+  }
+
+  async getLocalesByIds(businessIds: string[]): Promise<Map<string, { timezone: string; currency: string }>> {
+    if (businessIds.length === 0) return new Map();
+    const rows = await this.db.business.findMany({
+      where: { id: { in: businessIds } },
+      select: { id: true, timezone: true, currency: true },
+    });
+    return new Map(rows.map((r) => [r.id, { timezone: r.timezone, currency: r.currency }]));
+  }
+
   async search(
     payload: TokenPayloadDto,
     dto: BusinessSearchRequestDto,

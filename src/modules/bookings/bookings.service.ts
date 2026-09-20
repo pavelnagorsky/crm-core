@@ -1,7 +1,6 @@
 import { createHash } from 'crypto';
 import { HttpStatus, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Booking, BusinessRole, CalendarEventRepeatType, CalendarEventType, CancelledBy, Prisma } from '@prisma/client';
-import { format } from 'date-fns';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
@@ -11,6 +10,7 @@ import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { TimeService } from '../time/time.service.js';
 import { CalendarService } from '../calendar/calendar.service.js';
 import { StaffService } from '../staff/staff.service.js';
+import { BusinessService } from '../business/business.service.js';
 import { BookingSetupCategoryDto } from './dto/booking-setup-category.dto.js';
 import { BookingSetupResponseDto } from './dto/booking-setup-response.dto.js';
 import { BookingSetupStaffDto } from './dto/booking-setup-staff.dto.js';
@@ -43,6 +43,7 @@ export class BookingsService {
     private readonly time: TimeService,
     private readonly calendarService: CalendarService,
     private readonly staffService: StaffService,
+    private readonly businessService: BusinessService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -124,8 +125,9 @@ export class BookingsService {
       payload: { from: old.status, to: dto.status },
     });
     if (dto.status === BookingStatus.CONFIRMED && old.clientEmail) {
+      const { timezone } = await this.businessService.getLocale(old.businessId);
       this.eventEmitter.emit(NOTIFICATION_EVENT, new BookingStatusChangedNotification(
-        { ...old, clientEmail: old.clientEmail },
+        { ...old, clientEmail: old.clientEmail, timezone },
         'CONFIRMED',
         undefined,
       ));
@@ -226,8 +228,9 @@ export class BookingsService {
       payload: { cancelledBy, reason },
     });
     if (booking.clientEmail && cancelledBy === CancelledBy.STAFF) {
+      const { timezone } = await this.businessService.getLocale(booking.businessId);
       this.eventEmitter.emit(NOTIFICATION_EVENT, new BookingStatusChangedNotification(
-        { ...booking, clientEmail: booking.clientEmail },
+        { ...booking, clientEmail: booking.clientEmail, timezone },
         'CANCELLED',
         reason,
       ));
@@ -257,7 +260,7 @@ export class BookingsService {
 
     const startAt = dto.startAt ? this.time.localToUtc(dto.startAt, business.timezone) : old.startAt;
     const endAt = new Date(startAt.getTime() + service.durationMinutes * 60_000);
-    const dateStr = format(startAt, 'yyyy-MM-dd');
+    const dateStr = this.time.zonedDateStr(startAt, business.timezone);
 
     if (dto.staffId !== undefined || dto.serviceId !== undefined) {
       const candidates = await this.staffService.resolveStaffForService(businessId, serviceId, staffId);

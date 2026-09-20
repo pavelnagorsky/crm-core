@@ -4,6 +4,7 @@ import { BookingsService } from './bookings.service.js';
 import { BookingCreateService } from './booking-create.service.js';
 import { BookingClientService } from './booking-client.service.js';
 import { BookingReminderService } from './booking-reminder.service.js';
+import { BookingsAggregatesService } from './bookings-aggregates.service.js';
 import { BookingsController } from './bookings.controller.js';
 import { JwtBookingClientStrategy } from './strategy/jwt-booking-client.strategy.js';
 import { BusinessModule } from '../business/business.module.js';
@@ -14,6 +15,7 @@ import { StaffModule } from '../staff/staff.module.js';
 @Module({
   imports: [PassportModule, BusinessModule, CalendarModule, ClientsModule, StaffModule],
   controllers: [BookingsController],
-  providers: [BookingsService, BookingCreateService, BookingClientService, BookingReminderService, JwtBookingClientStrategy],
+  providers: [BookingsService, BookingCreateService, BookingClientService, BookingReminderService, BookingsAggregatesService, JwtBookingClientStrategy],
+  exports: [BookingsAggregatesService],
 })
 export class BookingsModule {}

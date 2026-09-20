@@ -3,7 +3,6 @@ import { CalendarEvent, CalendarEventRepeatType, Prisma } from '@prisma/client';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { BookingVisibility } from '../business/enums/booking-visibility.enum.js';
-import { eachDayOfInterval, format } from 'date-fns';
 import { DatabaseService } from '../../database/database.service.js';
 import { TimeService } from '../time/time.service.js';
 import { StaffService } from '../staff/staff.service.js';
@@ -106,9 +105,7 @@ export class CalendarService {
 
     const rangeStart = new Date(dto.from);
     const rangeEnd = new Date(dto.to);
-    const dates = eachDayOfInterval({ start: rangeStart, end: rangeEnd }).map(
-      (d) => format(d, 'yyyy-MM-dd'),
-    );
+    const dates = this.time.enumerateDates(dto.from, dto.to);
 
     const [shifts, events] = await Promise.all([
       this.db.staffShift.findMany({
@@ -181,7 +178,7 @@ export class CalendarService {
     );
 
     const dates = [
-      ...new Set(shifts.map((s) => format(s.date, 'yyyy-MM-dd'))),
+      ...new Set(shifts.map((s) => this.time.dateOnlyStr(s.date))),
     ].sort();
     const shiftsByStaffDate = this.compute.groupShiftsByStaffDate(shifts);
     const blockedByStaffDate = this.compute.expandBlockEvents(
@@ -288,20 +285,13 @@ export class CalendarService {
     advanceBookingWindowDays: number;
   }) {
     const nowParts = this.time.toZonedParts(new Date(), business.timezone);
-    const todayStr = format(
-      new Date(nowParts.year, nowParts.month - 1, nowParts.day),
-      'yyyy-MM-dd',
-    );
-    const rangeStart = new Date(todayStr);
-    const rangeEnd = new Date(todayStr);
-    rangeEnd.setDate(
-      rangeEnd.getDate() + business.advanceBookingWindowDays - 1,
-    );
+    const todayStr = this.time.zonedDateStr(new Date(), business.timezone);
+    const endStr = this.time.addDaysStr(todayStr, business.advanceBookingWindowDays - 1);
     return {
       todayStr,
       nowMinutes: nowParts.hour * 60 + nowParts.minute,
-      rangeStart,
-      rangeEnd,
+      rangeStart: new Date(todayStr),
+      rangeEnd: new Date(endStr),
     };
   }
 

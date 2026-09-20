@@ -21,6 +21,7 @@ export class BookingReminderNotification extends AbstractNotification implements
         staffName: this.booking.staffName,
         startAt: this.booking.startAt,
         endAt: this.booking.endAt,
+        timezone: this.booking.timezone,
       },
     };
   }

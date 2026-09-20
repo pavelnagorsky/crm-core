@@ -4,8 +4,6 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
 import Handlebars from 'handlebars';
-import { format, isValid } from 'date-fns';
-import { ru as dateFnsRu, type Locale as DateFnsLocale } from 'date-fns/locale';
 import { IAppConfig } from '../../../../config/configuration.js';
 import { I18nLocale } from '../../../../shared/interfaces/i18n-locale.interface.js';
 
@@ -20,7 +18,7 @@ export type EmailTemplate =
 
 type CompiledTemplate = Handlebars.TemplateDelegate;
 
-const DATE_FNS_LOCALES: Record<string, object> = { ru: dateFnsRu };
+const LANG_TO_INTL_LOCALE: Record<string, string> = { ru: 'ru-RU' };
 const EMAIL_TEMPLATES: EmailTemplate[] = [
   'confirm-email',
   'reset-password',
@@ -114,21 +112,37 @@ export class EmailRendererService implements OnModuleInit {
     });
 
     this.hbs.registerHelper('formatDateTime', (...rawArgs: unknown[]) => {
+      const opts = rawArgs[rawArgs.length - 1] as Handlebars.HelperOptions;
       const value = rawArgs[0] as string | Date;
-      return this.formatDate(value, 'd MMM yyyy, HH:mm');
+      const timezone: string = opts.data?.root?.timezone ?? 'UTC';
+      return this.formatDate(value, timezone, true);
     });
 
     this.hbs.registerHelper('formatTime', (...rawArgs: unknown[]) => {
+      const opts = rawArgs[rawArgs.length - 1] as Handlebars.HelperOptions;
       const value = rawArgs[0] as string | Date;
-      return this.formatDate(value, 'HH:mm');
+      const timezone: string = opts.data?.root?.timezone ?? 'UTC';
+      return this.formatDate(value, timezone, false, true);
     });
   }
 
-  private formatDate(value: string | Date, pattern: string): string {
-    const d = new Date(value);
-    if (!isValid(d)) return String(value);
-    return format(d, pattern, {
-      locale: (DATE_FNS_LOCALES[this.lang] ?? dateFnsRu) as DateFnsLocale,
-    });
+  private formatDate(value: string | Date, timezone: string, withDate = true, timeOnly = false): string {
+    const d = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value);
+    const intlLocale = LANG_TO_INTL_LOCALE[this.lang] ?? 'ru-RU';
+    const options: Intl.DateTimeFormatOptions = { timeZone: timezone, hour12: false };
+    if (timeOnly) {
+      options.hour = '2-digit';
+      options.minute = '2-digit';
+    } else {
+      options.day = 'numeric';
+      options.month = 'short';
+      options.year = 'numeric';
+      if (withDate) {
+        options.hour = '2-digit';
+        options.minute = '2-digit';
+      }
+    }
+    return new Intl.DateTimeFormat(intlLocale, options).format(d);
   }
 }

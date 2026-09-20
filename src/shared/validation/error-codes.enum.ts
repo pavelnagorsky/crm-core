@@ -49,4 +49,8 @@ export const ErrorCode = {
   BOOKING_STAFF_NOT_FOUND:     { code: 'BOOKING_STAFF_NOT_FOUND',     message: 'Staff member not found or does not perform this service' },
   BOOKING_SLOT_UNAVAILABLE:    { code: 'BOOKING_SLOT_UNAVAILABLE',    message: 'The requested slot is not available' },
   BOOKING_NO_STAFF_AVAILABLE:  { code: 'BOOKING_NO_STAFF_AVAILABLE',  message: 'No staff available for this service at the requested time' },
+
+  // dashboard
+  DASHBOARD_CUSTOM_RANGE_REQUIRED: { code: 'DASHBOARD_CUSTOM_RANGE_REQUIRED', message: 'from and to are required when period is CUSTOM' },
+  DASHBOARD_CUSTOM_RANGE_INVALID:  { code: 'DASHBOARD_CUSTOM_RANGE_INVALID',  message: 'Invalid dashboard date range' },
 } as const satisfies Record<string, ErrorCodeEntry>;

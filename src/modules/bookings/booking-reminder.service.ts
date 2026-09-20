@@ -4,6 +4,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
 import { NOTIFICATION_EVENT } from '../notifications/notifications.service.js';
 import { BookingReminderNotification } from '../notifications/notifications/booking-reminder.notification.js';
+import { BusinessService } from '../business/business.service.js';
 import { BookingStatus } from './enums/booking-status.enum.js';
 
 const REMINDER_WINDOW_MINUTES = 60;
@@ -16,6 +17,7 @@ export class BookingReminderService {
   constructor(
     private readonly db: DatabaseService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly businessService: BusinessService,
   ) {}
 
   @Cron(CronExpression.EVERY_HOUR)
@@ -38,11 +40,18 @@ export class BookingReminderService {
 
     this.logger.log(`Sending reminders for ${bookings.length} booking(s)`);
 
+    const businessIds = [...new Set(bookings.map((b) => b.businessId))];
+    const locales = await this.businessService.getLocalesByIds(businessIds);
+
     await Promise.all(
       bookings.map(async (booking) => {
         this.eventEmitter.emit(
           NOTIFICATION_EVENT,
-          new BookingReminderNotification({ ...booking, clientEmail: booking.clientEmail! }),
+          new BookingReminderNotification({
+            ...booking,
+            clientEmail: booking.clientEmail!,
+            timezone: locales.get(booking.businessId)?.timezone ?? 'UTC',
+          }),
         );
         await this.db.booking.update({
           where: { id: booking.id },
