@@ -77,6 +77,7 @@ enum AuditEvent {
   CLIENT_DELETED
   STAFF_CREATED
   STAFF_UPDATED
+  STAFF_DEACTIVATED
   STAFF_DELETED
   SERVICE_CREATED
   SERVICE_UPDATED
@@ -241,9 +242,10 @@ model Staff {
   avatarFileId String?
   name         String   @db.VarChar(250)
   roleTitle    String?  @db.VarChar(250)
-  isActive     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
+  isActive       Boolean   @default(true)
+  deactivatedAt  DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   business      Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
   user          User?             @relation(fields: [userId], references: [id], onDelete: SetNull)

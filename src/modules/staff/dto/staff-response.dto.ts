@@ -23,6 +23,9 @@ export class StaffResponseDto {
   @ApiProperty({ type: Boolean })
   isActive: boolean;
 
+  @ApiProperty({ type: Date, nullable: true })
+  deactivatedAt: Date | null;
+
   @ApiProperty({ type: Date })
   createdAt: Date;
 
@@ -38,6 +41,7 @@ export class StaffResponseDto {
     dto.name = staff.name;
     dto.roleTitle = staff.roleTitle;
     dto.isActive = staff.isActive;
+    dto.deactivatedAt = staff.deactivatedAt;
     dto.createdAt = staff.createdAt;
     dto.updatedAt = staff.updatedAt;
     return dto;

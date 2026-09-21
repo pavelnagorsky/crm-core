@@ -1,5 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsArray, IsBoolean, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+} from 'class-validator';
 
 export class UpdateStaffDto {
   @ApiProperty({ type: String, maxLength: 250, required: false })
@@ -8,7 +15,12 @@ export class UpdateStaffDto {
   @MaxLength(250)
   name?: string;
 
-  @ApiProperty({ type: String, maxLength: 250, required: false, nullable: true })
+  @ApiProperty({
+    type: String,
+    maxLength: 250,
+    required: false,
+    nullable: true,
+  })
   @IsOptional()
   @IsString()
   @MaxLength(250)
@@ -24,7 +36,12 @@ export class UpdateStaffDto {
   @IsBoolean()
   isActive?: boolean;
 
-  @ApiProperty({ type: [String], required: false, description: 'UUIDs of services this staff member can perform — replaces the full set' })
+  @ApiProperty({
+    type: [String],
+    required: false,
+    description:
+      'UUIDs of services this staff member can perform — replaces the full set',
+  })
   @IsOptional()
   @IsArray()
   @IsUUID('all', { each: true })

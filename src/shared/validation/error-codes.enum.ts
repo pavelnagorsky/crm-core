@@ -27,6 +27,9 @@ export const ErrorCode = {
   // clients
   CLIENT_PHONE_EXISTS: { code: 'CLIENT_PHONE_EXISTS', message: 'A client with this phone number already exists in this business' },
 
+  // staff
+  STAFF_ALREADY_DEACTIVATED: { code: 'STAFF_ALREADY_DEACTIVATED', message: 'Staff member is already deactivated' },
+
   // staff invitations
   STAFF_INVITATION_NOT_FOUND:  { code: 'STAFF_INVITATION_NOT_FOUND',  message: 'Invitation not found or already used' },
   STAFF_INVITATION_EXPIRED:    { code: 'STAFF_INVITATION_EXPIRED',    message: 'Invitation has expired' },
