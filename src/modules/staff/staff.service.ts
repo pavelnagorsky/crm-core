@@ -1,6 +1,13 @@
 import { createHash, randomBytes } from 'crypto';
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
-import { BusinessRole, Prisma, Staff, StaffInvitation, StaffInvitationStatus, StaffShift } from '@prisma/client';
+import {
+  BusinessRole,
+  Prisma,
+  Staff,
+  StaffInvitation,
+  StaffInvitationStatus,
+  StaffShift,
+} from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
@@ -11,6 +18,7 @@ import { CreateStaffDto } from './dto/create-staff.dto.js';
 import { UpdateStaffDto } from './dto/update-staff.dto.js';
 import { CreateInvitationDto } from './dto/create-invitation.dto.js';
 import { StaffSearchRequestDto } from './dto/staff-search-request.dto.js';
+import { StaffFilterDto } from './dto/staff-filter.dto.js';
 import { StaffSearchOrderBy } from './enums/staff-search-order-by.enum.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { GetShiftsRequestDto } from './dto/get-shifts-request.dto.js';
@@ -36,7 +44,9 @@ export class StaffService {
     private readonly config: ConfigService,
   ) {}
 
-  listActiveWithServices(businessId: string): Promise<(Staff & { staffServices: { serviceId: string }[] })[]> {
+  listActiveWithServices(
+    businessId: string,
+  ): Promise<(Staff & { staffServices: { serviceId: string }[] })[]> {
     return this.db.staff.findMany({
       where: { businessId, isActive: true },
       orderBy: { name: 'asc' },
@@ -44,7 +54,11 @@ export class StaffService {
     });
   }
 
-  async create(businessId: string, dto: CreateStaffDto, actor: AuditActor): Promise<Staff> {
+  async create(
+    businessId: string,
+    dto: CreateStaffDto,
+    actor: AuditActor,
+  ): Promise<Staff> {
     const staff = await this.db.staff.create({
       data: {
         businessId,
@@ -71,7 +85,12 @@ export class StaffService {
     return staff;
   }
 
-  async update(businessId: string, staffId: string, dto: UpdateStaffDto, actor: AuditActor): Promise<Staff> {
+  async update(
+    businessId: string,
+    staffId: string,
+    dto: UpdateStaffDto,
+    actor: AuditActor,
+  ): Promise<Staff> {
     const old = await this.findInBusiness(businessId, staffId);
     const staff = await this.db.staff.update({
       where: { id: staffId },
@@ -96,7 +115,7 @@ export class StaffService {
         entityId: staffId,
         eventType: AuditEvent.STAFF_UPDATED,
         actionType: AuditActionType.MODIFY,
-      occurredAt: new Date(),
+        occurredAt: new Date(),
         actor,
         payload: { changes },
       };
@@ -111,20 +130,33 @@ export class StaffService {
     return staff;
   }
 
-  private async findInBusiness(businessId: string, staffId: string): Promise<Staff> {
-    const staff = await this.db.staff.findFirst({ where: { id: staffId, businessId } });
+  private async findInBusiness(
+    businessId: string,
+    staffId: string,
+  ): Promise<Staff> {
+    const staff = await this.db.staff.findFirst({
+      where: { id: staffId, businessId },
+    });
     if (!staff) throw new NotFoundException('Staff member not found');
     return staff;
   }
 
-  async search(businessId: string, dto: StaffSearchRequestDto): Promise<PaginatedResult<Staff>> {
+  private buildWhere(businessId: string, filter: StaffFilterDto): Prisma.StaffWhereInput {
     const where: Prisma.StaffWhereInput = { businessId };
+    if (filter.search) where.name = { contains: filter.search, mode: 'insensitive' };
+    if (filter.isActive !== undefined) where.isActive = filter.isActive;
+    return where;
+  }
 
-    if (dto.search) where.name = { contains: dto.search, mode: 'insensitive' };
-    if (dto.isActive !== undefined) where.isActive = dto.isActive;
+  async search(
+    businessId: string,
+    dto: StaffSearchRequestDto,
+  ): Promise<PaginatedResult<Staff>> {
+    const where = this.buildWhere(businessId, dto);
 
     const orderBy: Prisma.StaffOrderByWithRelationInput = {
-      [dto.orderBy ?? StaffSearchOrderBy.CREATED_AT]: dto.orderDirection ?? OrderDirection.DESC,
+      [dto.orderBy ?? StaffSearchOrderBy.CREATED_AT]:
+        dto.orderDirection ?? OrderDirection.DESC,
     };
 
     const findArgs: Prisma.StaffFindManyArgs = { where, orderBy };
@@ -141,29 +173,60 @@ export class StaffService {
     return { items, totalItems };
   }
 
-  resolveStaffForService(businessId: string, serviceId: string, staffId?: string): Promise<{ id: string }[]> {
+  resolveStaffForService(
+    businessId: string,
+    serviceId: string,
+    staffId?: string,
+  ): Promise<{ id: string }[]> {
     if (staffId) {
       return this.db.staff.findMany({
-        where: { id: staffId, businessId, isActive: true, staffServices: { some: { serviceId } } },
+        where: {
+          id: staffId,
+          businessId,
+          isActive: true,
+          staffServices: { some: { serviceId } },
+        },
         select: { id: true },
       });
     }
     return this.db.staff.findMany({
-      where: { businessId, isActive: true, staffServices: { some: { serviceId } } },
+      where: {
+        businessId,
+        isActive: true,
+        staffServices: { some: { serviceId } },
+      },
       select: { id: true },
     });
   }
 
-  async delete(businessId: string, staffId: string, actor: AuditActor): Promise<void> {
+  async deactivate(
+    businessId: string,
+    staffId: string,
+    actor: AuditActor,
+  ): Promise<void> {
     const staff = await this.findInBusiness(businessId, staffId);
-    await this.db.staff.delete({ where: { id: staffId } });
+    if (!staff.isActive)
+      throw new AppException(
+        ErrorCode.STAFF_ALREADY_DEACTIVATED,
+        HttpStatus.CONFLICT,
+      );
+    const now = new Date();
+    await this.db.$transaction([
+      this.db.staff.update({
+        where: { id: staffId },
+        data: { isActive: false, deactivatedAt: now },
+      }),
+      this.db.staffShift.deleteMany({
+        where: { staffId, date: { gte: now } },
+      }),
+    ]);
     const event: AuditLogEvent = {
       businessId,
       entityType: AuditEntity.STAFF,
       entityId: staffId,
-      eventType: AuditEvent.STAFF_DELETED,
-      actionType: AuditActionType.DELETE,
-      occurredAt: new Date(),
+      eventType: AuditEvent.STAFF_DEACTIVATED,
+      actionType: AuditActionType.MODIFY,
+      occurredAt: now,
       actor,
       payload: { name: staff.name },
     };
@@ -180,7 +243,10 @@ export class StaffService {
     });
   }
 
-  async replaceShifts(staffId: string, dto: ReplaceShiftsRequestDto): Promise<StaffShift[]> {
+  async replaceShifts(
+    staffId: string,
+    dto: ReplaceShiftsRequestDto,
+  ): Promise<StaffShift[]> {
     const from = new Date(dto.from);
     const to = new Date(dto.to);
 
@@ -207,11 +273,17 @@ export class StaffService {
     });
   }
 
-  async createInvitation(staffId: string, dto: CreateInvitationDto): Promise<{ token: string }> {
+  async createInvitation(
+    staffId: string,
+    dto: CreateInvitationDto,
+  ): Promise<{ token: string }> {
     const staff = await this.findById(staffId);
 
     if (staff.userId) {
-      throw new AppException(ErrorCode.STAFF_ALREADY_LINKED, HttpStatus.CONFLICT);
+      throw new AppException(
+        ErrorCode.STAFF_ALREADY_LINKED,
+        HttpStatus.CONFLICT,
+      );
     }
 
     const token = randomBytes(32).toString('hex');
@@ -234,24 +306,40 @@ export class StaffService {
 
     if (dto.email) {
       const cfg = this.config.get<IFrontendConfig>('frontend')!;
-      const business = await this.db.business.findFirst({ where: { id: staff.businessId }, select: { name: true } });
+      const business = await this.db.business.findFirst({
+        where: { id: staff.businessId },
+        select: { name: true },
+      });
       const businessName = business?.name ?? '';
       this.eventEmitter.emit(
         NOTIFICATION_EVENT,
-        new StaffInvitationNotification(dto.email, `${cfg.domain}/invitation?token=${token}`, staff.name, businessName),
+        new StaffInvitationNotification(
+          dto.email,
+          `${cfg.domain}/invitation?token=${token}`,
+          staff.name,
+          businessName,
+        ),
       );
     }
 
     return { token };
   }
 
-  async acceptInvitation(userId: string, token: string): Promise<StaffInvitation> {
+  async acceptInvitation(
+    userId: string,
+    token: string,
+  ): Promise<StaffInvitation> {
     const tokenHash = createHash('sha256').update(token).digest('hex');
 
-    const invitation = await this.db.staffInvitation.findUnique({ where: { tokenHash } });
+    const invitation = await this.db.staffInvitation.findUnique({
+      where: { tokenHash },
+    });
 
     if (!invitation || invitation.status !== StaffInvitationStatus.PENDING) {
-      throw new AppException(ErrorCode.STAFF_INVITATION_NOT_FOUND, HttpStatus.NOT_FOUND);
+      throw new AppException(
+        ErrorCode.STAFF_INVITATION_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
     }
 
     if (invitation.expiresAt < new Date()) {
@@ -259,17 +347,27 @@ export class StaffService {
         where: { id: invitation.id },
         data: { status: StaffInvitationStatus.EXPIRED },
       });
-      throw new AppException(ErrorCode.STAFF_INVITATION_EXPIRED, HttpStatus.GONE);
+      throw new AppException(
+        ErrorCode.STAFF_INVITATION_EXPIRED,
+        HttpStatus.GONE,
+      );
     }
 
     return this.db.$transaction(async (tx) => {
       try {
         await tx.membership.create({
-          data: { userId, businessId: invitation.businessId, role: BusinessRole.STAFF },
+          data: {
+            userId,
+            businessId: invitation.businessId,
+            role: BusinessRole.STAFF,
+          },
         });
       } catch (e: any) {
         if (e?.code === PrismaErrorCode.UNIQUE_CONSTRAINT_VIOLATION) {
-          throw new AppException(ErrorCode.STAFF_USER_ALREADY_MEMBER, HttpStatus.CONFLICT);
+          throw new AppException(
+            ErrorCode.STAFF_USER_ALREADY_MEMBER,
+            HttpStatus.CONFLICT,
+          );
         }
         throw e;
       }
@@ -281,7 +379,10 @@ export class StaffService {
 
       return tx.staffInvitation.update({
         where: { id: invitation.id },
-        data: { status: StaffInvitationStatus.ACCEPTED, acceptedAt: new Date() },
+        data: {
+          status: StaffInvitationStatus.ACCEPTED,
+          acceptedAt: new Date(),
+        },
       });
     });
   }
@@ -293,3 +394,4 @@ function parseTime(hhmm: string): Date {
   d.setUTCHours(h, m, 0, 0);
   return d;
 }
+

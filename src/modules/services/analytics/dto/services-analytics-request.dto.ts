@@ -12,7 +12,7 @@ import {
   IsUUID,
   MaxLength,
 } from 'class-validator';
-import { DashboardRangeDto } from '../../dashboard/dto/dashboard-range.dto.js';
+import { DashboardRangeDto } from '../../../dashboard/dto/dashboard-range.dto.js';
 import { ServicesAnalyticsWidgetKey } from '../enums/services-analytics-widget-key.enum.js';
 
 export class ServicesAnalyticsRequestDto extends DashboardRangeDto {

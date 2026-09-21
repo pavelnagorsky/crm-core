@@ -10,7 +10,9 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { TimeModule } from './modules/time/time.module.js';
 import { BusinessModule } from './modules/business/business.module.js';
 import { StaffModule } from './modules/staff/staff.module.js';
+import { StaffKpiModule } from './modules/staff/kpi/staff-kpi.module.js';
 import { ServicesModule } from './modules/services/services.module.js';
+import { ServicesAnalyticsModule } from './modules/services/analytics/services-analytics.module.js';
 import { CalendarModule } from './modules/calendar/calendar.module.js';
 import { ClientsModule } from './modules/clients/clients.module.js';
 import { BookingsModule } from './modules/bookings/bookings.module.js';
@@ -38,7 +40,9 @@ import { DashboardModule } from './modules/dashboard/dashboard.module.js';
     AuthModule,
     BusinessModule,
     StaffModule,
+    StaffKpiModule,
     ServicesModule,
+    ServicesAnalyticsModule,
     CalendarModule,
     ClientsModule,
     BookingsModule,

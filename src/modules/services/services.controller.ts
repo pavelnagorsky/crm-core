@@ -22,9 +22,6 @@ import {
 } from '@nestjs/swagger';
 import { BusinessRole } from '@prisma/client';
 import { ServicesService } from './services.service.js';
-import { ServicesAnalyticsService } from './services-analytics.service.js';
-import { ServicesAnalyticsRequestDto } from './dto/services-analytics-request.dto.js';
-import { ServicesAnalyticsResponseDto } from './dto/services-analytics-response.dto.js';
 import { CreateServiceCategoryDto } from './dto/create-service-category.dto.js';
 import { ServiceCategoryResponseDto } from './dto/service-category-response.dto.js';
 import { CreateServiceDto } from './dto/create-service.dto.js';
@@ -34,7 +31,11 @@ import { ServiceResponseDto } from './dto/service-response.dto.js';
 import { ServiceSearchRequestDto } from './dto/service-search-request.dto.js';
 import { ServiceSearchResponseDto } from './dto/service-search-response.dto.js';
 import { RBAC } from '../business/decorators/rbac.decorator.js';
-import { ApiResponse, ApiResponseArray, BaseResponseDto } from '../../shared/dto/base-response.dto.js';
+import {
+  ApiResponse,
+  ApiResponseArray,
+  BaseResponseDto,
+} from '../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
 import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
@@ -43,10 +44,7 @@ import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
 @ApiTags('Services')
 @Controller('businesses/:businessId')
 export class ServicesController {
-  constructor(
-    private readonly servicesService: ServicesService,
-    private readonly analyticsService: ServicesAnalyticsService,
-  ) {}
+  constructor(private readonly servicesService: ServicesService) {}
 
   // ─── Service Categories ──────────────────────────────────────────────────────
 
@@ -70,7 +68,9 @@ export class ServicesController {
     @Param('businessId', ParseUUIDPipe) businessId: string,
   ): Promise<BaseResponseDto<ServiceCategoryResponseDto[]>> {
     const categories = await this.servicesService.listCategories(businessId);
-    return BaseResponseDto.success(categories.map(ServiceCategoryResponseDto.fromEntity));
+    return BaseResponseDto.success(
+      categories.map(ServiceCategoryResponseDto.fromEntity),
+    );
   }
 
   @ApiOperation({ summary: 'Delete a service category' })
@@ -96,7 +96,11 @@ export class ServicesController {
     @Body() dto: CreateServiceDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<{ id: string }>> {
-    const service = await this.servicesService.create(businessId, dto, auditActorFromToken(tokenPayload, businessId));
+    const service = await this.servicesService.create(
+      businessId,
+      dto,
+      auditActorFromToken(tokenPayload, businessId),
+    );
     return BaseResponseDto.success({ id: service.id });
   }
 
@@ -111,7 +115,12 @@ export class ServicesController {
     @Body() dto: UpdateServiceDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<{ id: string }>> {
-    const service = await this.servicesService.update(businessId, id, dto, auditActorFromToken(tokenPayload, businessId));
+    const service = await this.servicesService.update(
+      businessId,
+      id,
+      dto,
+      auditActorFromToken(tokenPayload, businessId),
+    );
     return BaseResponseDto.success({ id: service.id });
   }
 
@@ -123,7 +132,10 @@ export class ServicesController {
     @Param('businessId', ParseUUIDPipe) businessId: string,
     @Query() dto: ServiceSearchRequestDto,
   ): Promise<BaseResponseDto<ServiceSearchResponseDto>> {
-    const { items, totalItems } = await this.servicesService.search(businessId, dto);
+    const { items, totalItems } = await this.servicesService.search(
+      businessId,
+      dto,
+    );
     return BaseResponseDto.success(
       new ServiceSearchResponseDto(
         items.map(ServiceResponseDto.fromEntity),
@@ -171,18 +183,10 @@ export class ServicesController {
     @Param('id', ParseUUIDPipe) id: string,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<void> {
-    await this.servicesService.delete(businessId, id, auditActorFromToken(tokenPayload, businessId));
-  }
-
-  @ApiOperation({ summary: 'Fetch analytics widgets for the services page' })
-  @ApiOkResponse({ type: ApiResponse(ServicesAnalyticsResponseDto) })
-  @RBAC(BusinessRole.OWNER)
-  @Post('services/analytics')
-  async analytics(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
-    @Body() dto: ServicesAnalyticsRequestDto,
-  ): Promise<BaseResponseDto<ServicesAnalyticsResponseDto>> {
-    const widgets = await this.analyticsService.getWidgets(businessId, dto);
-    return BaseResponseDto.success(new ServicesAnalyticsResponseDto(widgets));
+    await this.servicesService.delete(
+      businessId,
+      id,
+      auditActorFromToken(tokenPayload, businessId),
+    );
   }
 }
