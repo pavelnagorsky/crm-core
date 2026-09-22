@@ -14,6 +14,7 @@ export const ErrorCode = {
 
   // auth
   EMAIL_ALREADY_IN_USE: { code: 'EMAIL_ALREADY_IN_USE', message: 'Email already in use' },
+  PHONE_ALREADY_IN_USE: { code: 'PHONE_ALREADY_IN_USE', message: 'Phone number already in use' },
   INVALID_CREDENTIALS:  { code: 'INVALID_CREDENTIALS',  message: 'Invalid credentials' },
   EMAIL_NOT_CONFIRMED:  { code: 'EMAIL_NOT_CONFIRMED',  message: 'Email not confirmed' },
   PASSWORD_NOT_SET:     { code: 'PASSWORD_NOT_SET',     message: 'Password not set' },

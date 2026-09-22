@@ -5,7 +5,10 @@ import { IMailerConfig } from '../../../../config/configuration.js';
 import { AbstractChannel } from '../abstract.channel.js';
 import { AbstractNotification } from '../../notifications/abstract.notification.js';
 import { HasEmailChannel } from '../../interfaces/has-email-channel.interface.js';
-import { EmailRendererService, EmailTemplate } from './email-renderer.service.js';
+import {
+  EmailRendererService,
+  EmailTemplate,
+} from './email-renderer.service.js';
 
 @Injectable()
 export class EmailChannel extends AbstractChannel {
@@ -22,7 +25,9 @@ export class EmailChannel extends AbstractChannel {
     const cfg = this.config.get<IMailerConfig>('emailConfig')!;
     this.from = cfg.email;
     this.transporter = createTransport({
-      service: 'gmail',
+      host: 'smtp.hoster.by',
+      port: 465,
+      secure: true,
       auth: { user: cfg.email, pass: cfg.emailPw },
     });
   }

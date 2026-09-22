@@ -1,11 +1,12 @@
-import { HttpStatus, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { compare, hash } from 'bcrypt';
 import { User } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
 import { UserService } from '../user/user.service.js';
-import { NotificationsService } from '../notifications/notifications.service.js';
+import { NOTIFICATION_EVENT } from '../notifications/notifications.service.js';
 import { ConfirmEmailNotification } from '../notifications/notifications/confirm-email.notification.js';
 import { ResetPasswordNotification } from '../notifications/notifications/reset-password.notification.js';
 import { RegisterDto } from './dto/register.dto.js';
@@ -32,7 +33,7 @@ export class AuthService {
     private readonly db: DatabaseService,
     private readonly userService: UserService,
     private readonly jwtService: JwtService,
-    private readonly notifications: NotificationsService,
+    private readonly eventEmitter: EventEmitter2,
     private readonly config: ConfigService,
   ) {}
 
@@ -40,12 +41,17 @@ export class AuthService {
     const existing = await this.userService.findByEmail(dto.email);
     if (existing) throw new AppException(ErrorCode.EMAIL_ALREADY_IN_USE, HttpStatus.CONFLICT);
 
+    if (dto.phone) {
+      const existingPhone = await this.userService.findByPhone(dto.phone);
+      if (existingPhone) throw new AppException(ErrorCode.PHONE_ALREADY_IN_USE, HttpStatus.CONFLICT);
+    }
+
     const passwordHash = await hash(dto.password, SALT_ROUNDS);
-    const user = await this.userService.create({ email: dto.email, passwordHash, firstName: dto.firstName, lastName: dto.lastName });
+    const user = await this.userService.create({ email: dto.email, passwordHash, firstName: dto.firstName, lastName: dto.lastName, phone: dto.phone ?? null });
 
     const token = await this.generateEmailToken(user);
     const cfg = this.config.get<IFrontendConfig>('frontend')!;
-    await this.notifications.send(new ConfirmEmailNotification(user.email!, `${cfg.domain}/auth/confirm-email?token=${token}`));
+    this.eventEmitter.emit(NOTIFICATION_EVENT, new ConfirmEmailNotification(user.email!, `${cfg.domain}/auth/confirm-email?token=${token}`));
     this.logger.log(`register: user=${user.id} email=${user.email}`);
   }
 
@@ -101,7 +107,7 @@ export class AuthService {
 
     const token = await this.generateResetPasswordToken(user);
     const cfg = this.config.get<IFrontendConfig>('frontend')!;
-    await this.notifications.send(new ResetPasswordNotification(user.email!, `${cfg.domain}/auth/reset-password?token=${token}`));
+    this.eventEmitter.emit(NOTIFICATION_EVENT, new ResetPasswordNotification(user.email!, `${cfg.domain}/auth/reset-password?token=${token}`));
   }
 
   async resetPassword(userId: string, dto: ResetPasswordDto): Promise<void> {
