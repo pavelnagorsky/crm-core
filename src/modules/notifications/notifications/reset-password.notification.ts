@@ -9,12 +9,12 @@ export class ResetPasswordNotification extends AbstractNotification implements H
 
   constructor(
     private readonly email: string,
-    private readonly resetLink: string,
+    private readonly code: string,
   ) {
     super();
   }
 
   toEmail(): ChannelPayload {
-    return { to: this.email, data: { resetLink: this.resetLink } };
+    return { to: this.email, data: { code: this.code } };
   }
 }

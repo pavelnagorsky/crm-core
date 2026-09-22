@@ -3,6 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { compare, hash } from 'bcrypt';
+import { randomInt } from 'crypto';
 import { User } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
 import { UserService } from '../user/user.service.js';
@@ -24,6 +25,8 @@ import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 const SALT_ROUNDS = 10;
 const MAX_TOKENS_PER_USER = 10;
 const REFRESH_TOKEN_TTL_DAYS = 90;
+const RESET_CODE_TTL_MINUTES = 15;
+const RESET_CODE_RESEND_COOLDOWN_SECONDS = 60;
 
 @Injectable()
 export class AuthService {
@@ -105,15 +108,44 @@ export class AuthService {
     const user = await this.userService.findByEmail(dto.email);
     if (!user) return;
 
-    const token = await this.generateResetPasswordToken(user);
-    const cfg = this.config.get<IFrontendConfig>('frontend')!;
-    this.eventEmitter.emit(NOTIFICATION_EVENT, new ResetPasswordNotification(user.email!, `${cfg.domain}/auth/reset-password?token=${token}`));
+    const existing = await this.db.passwordResetCode.findUnique({ where: { userId: user.id } });
+    if (existing) {
+      const cooldownMs = RESET_CODE_RESEND_COOLDOWN_SECONDS * 1000;
+      if (existing.createdAt.getTime() + cooldownMs > Date.now()) {
+        throw new AppException(ErrorCode.RESET_CODE_RESEND_TOO_SOON, HttpStatus.TOO_MANY_REQUESTS);
+      }
+    }
+
+    const { code, codeHash } = await this.generateResetCode();
+    const expiresAt = new Date(Date.now() + RESET_CODE_TTL_MINUTES * 60 * 1000);
+
+    await this.db.passwordResetCode.upsert({
+      where: { userId: user.id },
+      create: { userId: user.id, codeHash, expiresAt },
+      update: { codeHash, expiresAt, createdAt: new Date() },
+    });
+
+    this.eventEmitter.emit(NOTIFICATION_EVENT, new ResetPasswordNotification(user.email!, code));
   }
 
-  async resetPassword(userId: string, dto: ResetPasswordDto): Promise<void> {
+  async resetPassword(dto: ResetPasswordDto): Promise<void> {
+    const user = await this.userService.findByEmail(dto.email);
+    if (!user) throw new AppException(ErrorCode.INVALID_RESET_CODE, HttpStatus.BAD_REQUEST);
+
+    const record = await this.db.passwordResetCode.findUnique({ where: { userId: user.id } });
+    if (!record || record.expiresAt < new Date()) {
+      throw new AppException(ErrorCode.INVALID_RESET_CODE, HttpStatus.BAD_REQUEST);
+    }
+
+    const valid = await compare(dto.code, record.codeHash);
+    if (!valid) throw new AppException(ErrorCode.INVALID_RESET_CODE, HttpStatus.BAD_REQUEST);
+
     const passwordHash = await hash(dto.password, SALT_ROUNDS);
-    await this.userService.update(userId, { passwordHash });
-    await this.db.refreshToken.deleteMany({ where: { userId } });
+    await this.userService.update(user.id, { passwordHash });
+    await Promise.all([
+      this.db.refreshToken.deleteMany({ where: { userId: user.id } }),
+      this.db.passwordResetCode.delete({ where: { userId: user.id } }),
+    ]);
   }
 
   async handleOAuth(dto: OAuthResponseDto, userAgent: string | null): Promise<ITokens> {
@@ -173,13 +205,14 @@ export class AuthService {
     return this.sign({ sub: user.id }, cfg.refreshTokenSecret, cfg.refreshTokenExpiration);
   }
 
+  private async generateResetCode(): Promise<{ code: string; codeHash: string }> {
+    const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
+    const codeHash = await hash(code, SALT_ROUNDS);
+    return { code, codeHash };
+  }
+
   private generateEmailToken(user: User): Promise<string> {
     const cfg = this.config.get<IJwtConfig>('jwt')!;
     return this.sign({ sub: user.id }, cfg.emailTokenSecret, cfg.emailTokenExpiration);
-  }
-
-  private generateResetPasswordToken(user: User): Promise<string> {
-    const cfg = this.config.get<IJwtConfig>('jwt')!;
-    return this.sign({ sub: user.id }, cfg.resetPasswordTokenSecret, cfg.resetPasswordTokenExpiration);
   }
 }

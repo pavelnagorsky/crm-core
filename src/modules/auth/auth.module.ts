@@ -10,7 +10,6 @@ import { UserModule } from '../user/user.module.js';
 import { JwtAccessStrategy } from './strategy/jwt-access.strategy.js';
 import { JwtRefreshStrategy } from './strategy/jwt-refresh.strategy.js';
 import { JwtEmailStrategy } from './strategy/jwt-email.strategy.js';
-import { JwtResetPasswordStrategy } from './strategy/jwt-reset-password.strategy.js';
 import { GoogleOAuthStrategy } from './strategy/google.strategy.js';
 import { VkOAuthStrategy } from './strategy/vk.strategy.js';
 import { YandexOAuthStrategy } from './strategy/yandex.strategy.js';
@@ -32,7 +31,6 @@ import { UserFromTokenPipe } from './pipes/user-from-token.pipe.js';
     JwtAccessStrategy,
     JwtRefreshStrategy,
     JwtEmailStrategy,
-    JwtResetPasswordStrategy,
     GoogleOAuthStrategy,
     VkOAuthStrategy,
     YandexOAuthStrategy,

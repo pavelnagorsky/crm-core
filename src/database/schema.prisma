@@ -117,6 +117,7 @@ model User {
   createdAt                DateTime       @default(now())
   updatedAt                DateTime       @updatedAt
   refreshTokens            RefreshToken[]
+  passwordResetCode        PasswordResetCode?
   memberships              Membership[]
   clients                  Client[]
   staffProfiles            Staff[]
@@ -130,6 +131,16 @@ model RefreshToken {
   expiryDate DateTime
   userId     String
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model PasswordResetCode {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  codeHash  String   @db.VarChar(255)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Business {

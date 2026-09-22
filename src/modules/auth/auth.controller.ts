@@ -25,7 +25,6 @@ import { OAuthResponseDto } from './dto/oauth-response.dto.js';
 import { TokenPayloadDto } from './dto/token-payload.dto.js';
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard.js';
 import { JwtEmailGuard } from './guards/jwt-email.guard.js';
-import { JwtResetPasswordGuard } from './guards/jwt-reset-password.guard.js';
 import { GoogleOAuthGuard } from './guards/google-oauth.guard.js';
 import { VkOAuthGuard } from './guards/vk-oauth.guard.js';
 import { YandexOAuthGuard } from './guards/yandex-oauth.guard.js';
@@ -115,14 +114,9 @@ export class AuthController {
 
   @ApiOperation({ summary: 'Reset password' })
   @ApiOkResponse({ type: ApiResponse(AuthDto) })
-  @ApiUnauthorizedResponse({ type: UnauthorizedResponseDto })
-  @UseGuards(JwtResetPasswordGuard)
   @Post('reset-password')
-  async resetPassword(
-    @Body() dto: ResetPasswordDto,
-    @TokenPayload() payload: TokenPayloadDto,
-  ): Promise<void> {
-    await this.authService.resetPassword(payload.sub, dto);
+  async resetPassword(@Body() dto: ResetPasswordDto): Promise<void> {
+    await this.authService.resetPassword(dto);
   }
 
   @ApiOperation({ summary: 'OAuth — Google' })
