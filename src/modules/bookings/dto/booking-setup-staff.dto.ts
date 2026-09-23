@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Staff } from '@prisma/client';
+import { StaffWithAvatar } from '../../staff/staff.service.js';
+import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
 
 export class BookingSetupStaffDto {
   @ApiProperty({ type: String })
@@ -11,18 +12,18 @@ export class BookingSetupStaffDto {
   @ApiProperty({ type: String, nullable: true })
   roleTitle: string | null;
 
-  @ApiProperty({ type: String, nullable: true })
-  avatarFileId: string | null;
+  @ApiProperty({ type: () => FileResponseDto, nullable: true })
+  avatar: FileResponseDto | null;
 
   @ApiProperty({ type: [String] })
   serviceIds: string[];
 
-  static fromEntity(staff: Staff & { staffServices: { serviceId: string }[] }): BookingSetupStaffDto {
+  static fromEntity(staff: StaffWithAvatar & { staffServices: { serviceId: string }[] }): BookingSetupStaffDto {
     const dto = new BookingSetupStaffDto();
     dto.id = staff.id;
     dto.name = staff.name;
     dto.roleTitle = staff.roleTitle;
-    dto.avatarFileId = staff.avatarFileId;
+    dto.avatar = staff.avatarFile ? FileResponseDto.fromEntity(staff.avatarFile) : null;
     dto.serviceIds = staff.staffServices.map((ss) => ss.serviceId);
     return dto;
   }

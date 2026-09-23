@@ -101,6 +101,11 @@ enum AuditActionType {
   ACTION
 }
 
+enum StaffStatus {
+  ACTIVE
+  INACTIVE
+}
+
 // ─── Models ──────────────────────────────────────────────────────────────────
 
 model User {
@@ -255,8 +260,7 @@ model Staff {
   phone        String?  @db.VarChar(30)
   email        String?  @db.VarChar(254)
   roleTitle    String?  @db.VarChar(250)
-  isActive       Boolean   @default(true)
-  deactivatedAt  DateTime?
+  status        StaffStatus @default(ACTIVE)
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 

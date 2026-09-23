@@ -1,11 +1,13 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Put,
   Query,
@@ -20,6 +22,8 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { StaffStatusCountResponseDto } from './dto/staff-status-count-response.dto.js';
+import { ChangeStaffStatusDto } from './dto/change-staff-status.dto.js';
 import { BusinessRole } from '@prisma/client';
 import { StaffService } from './staff.service.js';
 import { CreateStaffDto } from './dto/create-staff.dto.js';
@@ -37,6 +41,7 @@ import { ShiftItemDto } from './dto/shift-item.dto.js';
 import { Auth } from '../auth/decorators/auth.decorator.js';
 import {
   ApiResponse,
+  ApiResponseArray,
   BaseResponseDto,
 } from '../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
@@ -90,6 +95,19 @@ export class StaffController {
     return BaseResponseDto.success({ id: updated.id });
   }
 
+  @ApiOperation({ summary: 'Get staff count per status' })
+  @ApiOkResponse({ type: ApiResponseArray(StaffStatusCountResponseDto) })
+  @Auth()
+  @Get('status-counts')
+  async getStatusCounts(
+    @Query('businessId', ParseUUIDPipe) businessId: string,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
+  ): Promise<BaseResponseDto<StaffStatusCountResponseDto[]>> {
+    assertBusinessRole(tokenPayload, businessId, BusinessRole.OWNER, BusinessRole.STAFF);
+    const counts = await this.staffService.getStatusCounts(businessId);
+    return BaseResponseDto.success(counts);
+  }
+
   @ApiOperation({ summary: 'Get staff member by ID' })
   @ApiOkResponse({ type: ApiResponse(StaffResponseDto) })
   @ApiNotFoundResponse({ description: 'Staff member not found' })
@@ -138,24 +156,42 @@ export class StaffController {
     );
   }
 
-  @ApiOperation({ summary: 'Deactivate a staff member (soft dismiss)' })
+  @ApiOperation({ summary: 'Change status of a staff member' })
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Staff member not found' })
-  @ApiConflictResponse({ description: 'Staff member is already deactivated' })
+  @ApiConflictResponse({ description: 'Staff member already has this status' })
   @Auth()
-  @Post(':id/deactivate')
+  @Patch(':id/status')
   @HttpCode(HttpStatus.NO_CONTENT)
-  async deactivate(
+  async changeStatus(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ChangeStaffStatusDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
+  ): Promise<void> {
+    const staff = await this.staffService.findById(id);
+    assertBusinessRole(tokenPayload, staff.businessId, BusinessRole.OWNER);
+    await this.staffService.changeStatus(
+      staff.businessId,
+      id,
+      dto,
+      auditActorFromToken(tokenPayload, staff.businessId),
+    );
+  }
+
+  @ApiOperation({ summary: 'Delete a staff member' })
+  @ApiNoContentResponse()
+  @ApiNotFoundResponse({ description: 'Staff member not found' })
+  @ApiConflictResponse({ description: 'Staff member has associated bookings' })
+  @Auth()
+  @Delete(':id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async delete(
     @Param('id', ParseUUIDPipe) id: string,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<void> {
     const staff = await this.staffService.findById(id);
     assertBusinessRole(tokenPayload, staff.businessId, BusinessRole.OWNER);
-    await this.staffService.deactivate(
-      staff.businessId,
-      id,
-      auditActorFromToken(tokenPayload, staff.businessId),
-    );
+    await this.staffService.delete(staff.businessId, id);
   }
 
   @ApiOperation({

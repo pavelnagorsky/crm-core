@@ -4,5 +4,7 @@ import type { FieldDescriptor } from '../utils/diff-fields.js';
 export const STAFF_AUDIT_FIELDS: FieldDescriptor<Staff>[] = [
   { key: 'name' },
   { key: 'roleTitle' },
-  { key: 'isActive' },
+  { key: 'phone' },
+  { key: 'email' },
+  { key: 'status' },
 ];

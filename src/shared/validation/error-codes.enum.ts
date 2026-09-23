@@ -55,9 +55,13 @@ export const ErrorCode = {
   },
 
   // staff
-  STAFF_ALREADY_DEACTIVATED: {
-    code: 'STAFF_ALREADY_DEACTIVATED',
-    message: 'Staff member is already deactivated',
+  STAFF_STATUS_ALREADY_SET: {
+    code: 'STAFF_STATUS_ALREADY_SET',
+    message: 'Staff member already has this status',
+  },
+  STAFF_HAS_BOOKINGS: {
+    code: 'STAFF_HAS_BOOKINGS',
+    message: 'Staff member cannot be deleted because they have associated bookings',
   },
 
   // staff invitations

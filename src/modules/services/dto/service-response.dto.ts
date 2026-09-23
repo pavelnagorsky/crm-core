@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Service } from '@prisma/client';
+import { ServiceWithImage } from '../services.service.js';
+import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
 
 export class ServiceResponseDto {
   @ApiProperty({ type: String })
@@ -11,8 +12,8 @@ export class ServiceResponseDto {
   @ApiProperty({ type: String, nullable: true })
   categoryId: string | null;
 
-  @ApiProperty({ type: String, nullable: true })
-  imageFileId: string | null;
+  @ApiProperty({ type: () => FileResponseDto, nullable: true })
+  image: FileResponseDto | null;
 
   @ApiProperty({ type: String })
   title: string;
@@ -41,12 +42,12 @@ export class ServiceResponseDto {
   @ApiProperty({ type: Date })
   updatedAt: Date;
 
-  static fromEntity(service: Service): ServiceResponseDto {
+  static fromEntity(service: ServiceWithImage): ServiceResponseDto {
     const dto = new ServiceResponseDto();
     dto.id = service.id;
     dto.businessId = service.businessId;
     dto.categoryId = service.categoryId;
-    dto.imageFileId = service.imageFileId;
+    dto.image = service.imageFile ? FileResponseDto.fromEntity(service.imageFile) : null;
     dto.title = service.title;
     dto.description = service.description;
     dto.price = Number(service.price);

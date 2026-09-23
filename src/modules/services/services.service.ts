@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, Service, ServiceCategory } from '@prisma/client';
+import { File, Prisma, Service, ServiceCategory } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
@@ -21,6 +21,8 @@ import { AuditEvent } from '../audit/enums/audit-event.enum.js';
 import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
 import { diffFields } from '../audit/utils/diff-fields.js';
 import { SERVICE_AUDIT_FIELDS } from '../audit/fields/service.fields.js';
+
+export type ServiceWithImage = Service & { imageFile: File | null };
 
 @Injectable()
 export class ServicesService {
@@ -62,7 +64,7 @@ export class ServicesService {
 
   // ─── Services ────────────────────────────────────────────────────────────────
 
-  async create(businessId: string, dto: CreateServiceDto, actor: AuditActor): Promise<Service> {
+  async create(businessId: string, dto: CreateServiceDto, actor: AuditActor): Promise<ServiceWithImage> {
     const service = await this.db.service.create({
       data: {
         businessId,
@@ -76,6 +78,7 @@ export class ServicesService {
         isActive: dto.isActive ?? true,
         sortOrder: dto.sortOrder ?? 0,
       },
+      include: { imageFile: true },
     });
     const event: AuditLogEvent = {
       businessId,
@@ -91,7 +94,7 @@ export class ServicesService {
     return service;
   }
 
-  async update(businessId: string, serviceId: string, dto: UpdateServiceDto, actor: AuditActor): Promise<Service> {
+  async update(businessId: string, serviceId: string, dto: UpdateServiceDto, actor: AuditActor): Promise<ServiceWithImage> {
     const old = await this.findInBusiness(businessId, serviceId);
     const service = await this.db.service.update({
       where: { id: serviceId },
@@ -105,6 +108,7 @@ export class ServicesService {
         bufferMinutes: dto.bufferMinutes,
         sortOrder: dto.sortOrder,
       },
+      include: { imageFile: true },
     });
     const changes = diffFields(old, service, SERVICE_AUDIT_FIELDS);
     if (changes.length > 0) {
@@ -123,33 +127,33 @@ export class ServicesService {
     return service;
   }
 
-  async findById(serviceId: string): Promise<Service> {
-    const service = await this.db.service.findUnique({ where: { id: serviceId } });
+  async findById(serviceId: string): Promise<ServiceWithImage> {
+    const service = await this.db.service.findUnique({ where: { id: serviceId }, include: { imageFile: true } });
     if (!service) throw new NotFoundException('Service not found');
     return service;
   }
 
-  private async findInBusiness(businessId: string, serviceId: string): Promise<Service> {
-    const service = await this.db.service.findFirst({ where: { id: serviceId, businessId } });
+  private async findInBusiness(businessId: string, serviceId: string): Promise<ServiceWithImage> {
+    const service = await this.db.service.findFirst({ where: { id: serviceId, businessId }, include: { imageFile: true } });
     if (!service) throw new NotFoundException('Service not found');
     return service;
   }
 
-  async search(businessId: string, dto: ServiceSearchRequestDto): Promise<PaginatedResult<Service>> {
+  async search(businessId: string, dto: ServiceSearchRequestDto): Promise<PaginatedResult<ServiceWithImage>> {
     const where = this.buildFilterWhere(businessId, dto);
 
     const orderBy: Prisma.ServiceOrderByWithRelationInput = {
       [dto.orderBy ?? ServiceSearchOrderBy.SORT_ORDER]: dto.orderDirection ?? OrderDirection.ASC,
     };
 
-    const findArgs: Prisma.ServiceFindManyArgs = { where, orderBy };
+    const findArgs: Prisma.ServiceFindManyArgs = { where, orderBy, include: { imageFile: true } };
     if (!dto.isExport) {
       findArgs.skip = (dto.page - 1) * dto.pageSize;
       findArgs.take = dto.pageSize;
     }
 
     const [items, totalItems] = await this.db.$transaction([
-      this.db.service.findMany(findArgs),
+      this.db.service.findMany({ ...findArgs, include: { imageFile: true } }),
       this.db.service.count({ where }),
     ]);
 
@@ -172,9 +176,9 @@ export class ServicesService {
     return where;
   }
 
-  async setActive(serviceId: string, isActive: boolean): Promise<Service> {
+  async setActive(serviceId: string, isActive: boolean): Promise<ServiceWithImage> {
     await this.findById(serviceId);
-    return this.db.service.update({ where: { id: serviceId }, data: { isActive } });
+    return this.db.service.update({ where: { id: serviceId }, data: { isActive }, include: { imageFile: true } });
   }
 
   async delete(businessId: string, serviceId: string, actor: AuditActor): Promise<void> {

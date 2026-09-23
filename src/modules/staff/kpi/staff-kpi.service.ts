@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, StaffStatus } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { MetricUnit } from '../../dashboard/enums/metric-unit.enum.js';
 import { ServicesService } from '../../services/services.service.js';
@@ -78,7 +78,7 @@ export class StaffKpiService {
     const needsCoverage = dto.keys.includes(StaffWidgetKey.SERVICE_COVERAGE);
 
     const [activeCount, deactivatedRecentlyCount, staffWithShiftsCount, coverage] = await Promise.all([
-      needsActive ? this.db.staff.count({ where: { ...where, isActive: true } }) : Promise.resolve(0),
+      needsActive ? this.db.staff.count({ where: { ...where, status: StaffStatus.ACTIVE } }) : Promise.resolve(0),
       needsDeactivated ? this.db.staff.count({ where: this.deactivatedSinceWhere(businessId, dto) }) : Promise.resolve(0),
       needsShifts ? this.countActiveStaffWithShiftsInWeek(businessId, dto, week) : Promise.resolve(0),
       needsCoverage ? this.computeServiceCoverage(businessId) : Promise.resolve({ covered: 0, total: 0 }),
@@ -94,7 +94,7 @@ export class StaffKpiService {
   buildWhere(businessId: string, filter: StaffFilterDto): Prisma.StaffWhereInput {
     const where: Prisma.StaffWhereInput = { businessId };
     if (filter.search) where.name = { contains: filter.search, mode: 'insensitive' };
-    if (filter.isActive !== undefined) where.isActive = filter.isActive;
+    if (filter.status !== undefined) where.status = filter.status;
     return where;
   }
 
@@ -102,9 +102,8 @@ export class StaffKpiService {
     const since = new Date();
     since.setDate(since.getDate() - DEACTIVATION_WINDOW_DAYS);
     const where = this.buildWhere(businessId, filter);
-    // Override isActive: deactivations are inherently inactive, regardless of the list filter.
-    where.isActive = false;
-    where.deactivatedAt = { gte: since };
+    where.status = StaffStatus.INACTIVE;
+    where.updatedAt = { gte: since };
     return where;
   }
 
@@ -116,7 +115,7 @@ export class StaffKpiService {
     return this.db.staff.count({
       where: {
         ...this.buildWhere(businessId, filter),
-        isActive: true,
+        status: StaffStatus.ACTIVE,
         shifts: { some: { date: { gte: week.from, lte: week.to } } },
       },
     });
@@ -135,7 +134,7 @@ export class StaffKpiService {
     const coveredRows = await this.db.staffService.findMany({
       where: {
         serviceId: { in: activeServiceIds },
-        staff: { businessId, isActive: true },
+        staff: { businessId, status: StaffStatus.ACTIVE },
       },
       distinct: ['serviceId'],
       select: { serviceId: true },
