@@ -41,17 +41,15 @@ export class CreateBusinessDto {
   @Min(0)
   minimumBookingNoticeMinutes?: number;
 
-  @ApiProperty({ type: String, default: 'UTC', required: false, example: 'Europe/Minsk' })
-  @IsOptional()
+  @ApiProperty({ type: String, example: 'Europe/Minsk' })
   @IsString()
   @IsIanaTimezone()
-  timezone?: string;
+  timezone: string;
 
-  @ApiProperty({ type: String, default: 'USD', required: false, description: 'ISO 4217 currency code' })
-  @IsOptional()
+  @ApiProperty({ type: String, description: 'ISO 4217 currency code' })
   @IsString()
   @MaxLength(3)
-  currency?: string;
+  currency: string;
 
   @ApiProperty({ enum: BookingVisibility, default: BookingVisibility.PUBLIC, required: false })
   @IsOptional()

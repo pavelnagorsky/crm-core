@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { BusinessRole, User, UserRole } from '@prisma/client';
-import { MembershipPayloadDto, TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
+import { BusinessRole, Membership, User, UserRole } from '@prisma/client';
+import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
 
 export class MembershipResponseDto {
   @ApiProperty({ type: String })
@@ -47,7 +47,7 @@ export class UserResponseDto {
   @ApiProperty({ type: () => MembershipResponseDto, isArray: true })
   memberships: MembershipResponseDto[];
 
-  static fromEntity(user: User, payload: TokenPayloadDto): UserResponseDto {
+  static fromEntity(user: User & { memberships: Membership[] }, payload: TokenPayloadDto): UserResponseDto {
     const dto = new UserResponseDto();
     dto.id = user.id;
     dto.firstName = user.firstName;
@@ -60,7 +60,7 @@ export class UserResponseDto {
     dto.createdAt = user.createdAt;
     dto.updatedAt = user.updatedAt;
     dto.role = payload.role;
-    dto.memberships = payload.memberships.map((m: MembershipPayloadDto) => {
+    dto.memberships = user.memberships.map((m: Membership) => {
       const membership = new MembershipResponseDto();
       membership.businessId = m.businessId;
       membership.role = m.role;

@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Business } from '@prisma/client';
 import { BookingVisibility } from '../enums/booking-visibility.enum.js';
+import { BusinessWithLogo } from '../business.service.js';
+import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
 
 export class BusinessResponseDto {
   @ApiProperty({ type: String })
@@ -9,8 +10,8 @@ export class BusinessResponseDto {
   @ApiProperty({ type: String })
   name: string;
 
-  @ApiProperty({ type: String, nullable: true })
-  logoFileId: string | null;
+  @ApiProperty({ type: () => FileResponseDto, nullable: true })
+  logo: FileResponseDto | null;
 
   @ApiProperty({ type: Number })
   advanceBookingWindowDays: number;
@@ -39,11 +40,11 @@ export class BusinessResponseDto {
   @ApiProperty({ type: Date })
   updatedAt: Date;
 
-  static fromEntity(business: Business): BusinessResponseDto {
+  static fromEntity(business: BusinessWithLogo): BusinessResponseDto {
     const dto = new BusinessResponseDto();
     dto.id = business.id;
     dto.name = business.name;
-    dto.logoFileId = business.logoFileId;
+    dto.logo = business.logoFile ? FileResponseDto.fromEntity(business.logoFile) : null;
     dto.advanceBookingWindowDays = business.advanceBookingWindowDays;
     dto.slotIntervalMinutes = business.slotIntervalMinutes;
     dto.minimumBookingNoticeMinutes = business.minimumBookingNoticeMinutes;

@@ -113,7 +113,7 @@ model User {
   passwordHash             String?
   phoneVerifiedAt          DateTime?
   emailVerifiedAt          DateTime?
-  isMarketingEmailsEnabled Boolean        @default(false)
+  isMarketingEmailsEnabled Boolean        @default(true)
   createdAt                DateTime       @default(now())
   updatedAt                DateTime       @updatedAt
   refreshTokens            RefreshToken[]
@@ -252,6 +252,8 @@ model Staff {
   userId       String?
   avatarFileId String?
   name         String   @db.VarChar(250)
+  phone        String?  @db.VarChar(30)
+  email        String?  @db.VarChar(254)
   roleTitle    String?  @db.VarChar(250)
   isActive       Boolean   @default(true)
   deactivatedAt  DateTime?

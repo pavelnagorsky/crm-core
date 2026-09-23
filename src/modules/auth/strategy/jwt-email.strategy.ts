@@ -9,7 +9,7 @@ import { TokenPayloadDto } from '../dto/token-payload.dto.js';
 export class JwtEmailStrategy extends PassportStrategy(Strategy, 'email-jwt') {
   constructor(config: ConfigService) {
     super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      jwtFromRequest: ExtractJwt.fromUrlQueryParameter('token'),
       ignoreExpiration: false,
       secretOrKey: config.get<IJwtConfig>('jwt')!.emailTokenSecret,
     });

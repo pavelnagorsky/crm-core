@@ -20,7 +20,7 @@ export class UserController {
   @Auth()
   @Get('me')
   async me(@TokenPayload() payload: TokenPayloadDto): Promise<BaseResponseDto<UserResponseDto>> {
-    const user = await this.userService.findById(payload.sub);
+    const user = await this.userService.findByIdWithMemberships(payload.sub);
     return BaseResponseDto.success(UserResponseDto.fromEntity(user, payload));
   }
 
@@ -33,7 +33,8 @@ export class UserController {
     @TokenPayload() payload: TokenPayloadDto,
     @Body() dto: UpdateUserDto,
   ): Promise<BaseResponseDto<UserResponseDto>> {
-    const user = await this.userService.update(payload.sub, dto);
+    await this.userService.update(payload.sub, dto);
+    const user = await this.userService.findByIdWithMemberships(payload.sub);
     return BaseResponseDto.success(UserResponseDto.fromEntity(user, payload));
   }
 }

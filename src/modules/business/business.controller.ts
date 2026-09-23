@@ -27,13 +27,13 @@ import { BusinessResponseDto } from './dto/business-response.dto.js';
 import { BusinessPublicResponseDto } from './dto/business-public-response.dto.js';
 import { BusinessSearchItemDto } from './dto/business-search-item.dto.js';
 import { BusinessSearchRequestDto } from './dto/business-search-request.dto.js';
-import { BusinessSearchResponseDto } from './dto/business-search-response.dto.js';
 import { Auth } from '../auth/decorators/auth.decorator.js';
 import { RBAC } from './decorators/rbac.decorator.js';
 import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 import {
   ApiResponse,
+  ApiResponseArray,
   BaseResponseDto,
 } from '../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
@@ -73,26 +73,15 @@ export class BusinessController {
   @ApiOperation({
     summary: 'List businesses (own businesses for members, all for admins)',
   })
-  @ApiOkResponse({ type: ApiResponse(BusinessSearchResponseDto) })
+  @ApiOkResponse({ type: ApiResponseArray(BusinessSearchItemDto) })
   @Auth()
   @Get()
   async search(
     @TokenPayload() payload: TokenPayloadDto,
     @Query() dto: BusinessSearchRequestDto,
-  ): Promise<BaseResponseDto<BusinessSearchResponseDto>> {
-    const { items, totalItems } = await this.businessService.search(
-      payload,
-      dto,
-    );
-    return BaseResponseDto.success(
-      new BusinessSearchResponseDto(
-        items,
-        dto.page,
-        dto.pageSize,
-        totalItems,
-        dto.isExport,
-      ),
-    );
+  ): Promise<BaseResponseDto<BusinessSearchItemDto[]>> {
+    const items = await this.businessService.search(payload, dto);
+    return BaseResponseDto.success(items.map(BusinessSearchItemDto.fromEntity));
   }
 
   @ApiOperation({ summary: 'Get full business details (members only)' })

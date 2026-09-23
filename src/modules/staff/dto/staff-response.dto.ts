@@ -18,6 +18,12 @@ export class StaffResponseDto {
   name: string;
 
   @ApiProperty({ type: String, nullable: true })
+  phone: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  email: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
   roleTitle: string | null;
 
   @ApiProperty({ type: Boolean })
@@ -39,6 +45,8 @@ export class StaffResponseDto {
     dto.userId = staff.userId;
     dto.avatarFileId = staff.avatarFileId;
     dto.name = staff.name;
+    dto.phone = staff.phone;
+    dto.email = staff.email;
     dto.roleTitle = staff.roleTitle;
     dto.isActive = staff.isActive;
     dto.deactivatedAt = staff.deactivatedAt;

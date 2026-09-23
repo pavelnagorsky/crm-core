@@ -1,9 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsDateString, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
-import { PaginationRequestDto } from '../../../shared/dto/pagination-request.dto.js';
+import { OrderDirection } from '../../../shared/enums/order-direction.enum.js';
 import { BusinessSearchOrderBy } from '../enums/search-order-by.enum.js';
 
-export class BusinessSearchRequestDto extends PaginationRequestDto<BusinessSearchOrderBy> {
+export class BusinessSearchRequestDto {
   @ApiProperty({ type: String, required: false })
   @IsOptional()
   @IsString()
@@ -23,5 +23,10 @@ export class BusinessSearchRequestDto extends PaginationRequestDto<BusinessSearc
   @ApiProperty({ enum: BusinessSearchOrderBy, required: false })
   @IsOptional()
   @IsEnum(BusinessSearchOrderBy)
-  declare orderBy?: BusinessSearchOrderBy;
+  orderBy?: BusinessSearchOrderBy;
+
+  @ApiProperty({ enum: OrderDirection, required: false })
+  @IsOptional()
+  @IsEnum(OrderDirection)
+  orderDirection?: OrderDirection = OrderDirection.DESC;
 }

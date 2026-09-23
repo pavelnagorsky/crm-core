@@ -9,6 +9,7 @@ import {
   ApiBody,
   ApiOkResponse,
   ApiOperation,
+  ApiQuery,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -97,6 +98,7 @@ export class AuthController {
   }
 
   @ApiOperation({ summary: 'Confirm email' })
+  @ApiQuery({ name: 'token', type: String })
   @ApiOkResponse({ type: ApiResponse(AuthDto) })
   @ApiUnauthorizedResponse({ type: UnauthorizedResponseDto })
   @UseGuards(JwtEmailGuard)

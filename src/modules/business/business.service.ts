@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Business, BusinessRole, Prisma, UserRole } from '@prisma/client';
+import { Business, BusinessRole, File, Prisma, UserRole } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
@@ -7,10 +7,8 @@ import { UserService } from '../user/user.service.js';
 import { CreateBusinessDto } from './dto/create-business.dto.js';
 import { UpdateBusinessDto } from './dto/update-business.dto.js';
 import { BusinessSearchRequestDto } from './dto/business-search-request.dto.js';
-import { BusinessSearchItemDto } from './dto/business-search-item.dto.js';
 import { BusinessSearchOrderBy } from './enums/search-order-by.enum.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
-import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
 import { AUDIT_EVENT } from '../audit/audit.constants.js';
 import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js';
@@ -20,7 +18,9 @@ import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
 import { diffFields } from '../audit/utils/diff-fields.js';
 import { BUSINESS_AUDIT_FIELDS } from '../audit/fields/business.fields.js';
 
-type BusinessWithCounts = Business & {
+export type BusinessWithLogo = Business & { logoFile: File | null };
+
+export type BusinessWithCounts = BusinessWithLogo & {
   memberships: { role: BusinessRole }[];
   _count: { staff: number; services: number; clients: number };
 };
@@ -50,7 +50,7 @@ export class BusinessService {
           create: { userId, role: BusinessRole.OWNER },
         },
         staff: {
-          create: { userId, name: staffName },
+          create: { userId, name: staffName, phone: user.phone, email: user.email },
         },
       },
     });
@@ -89,8 +89,11 @@ export class BusinessService {
     return business;
   }
 
-  async findById(businessId: string): Promise<Business> {
-    const business = await this.db.business.findUnique({ where: { id: businessId } });
+  async findById(businessId: string): Promise<BusinessWithLogo> {
+    const business = await this.db.business.findUnique({
+      where: { id: businessId },
+      include: { logoFile: true },
+    });
     if (!business) throw new NotFoundException('Business not found');
     return business;
   }
@@ -116,7 +119,7 @@ export class BusinessService {
   async search(
     payload: TokenPayloadDto,
     dto: BusinessSearchRequestDto,
-  ): Promise<PaginatedResult<BusinessSearchItemDto>> {
+  ): Promise<BusinessWithCounts[]> {
     const isAdmin = payload.role === UserRole.ADMIN;
     const where: Prisma.BusinessWhereInput = {};
 
@@ -135,38 +138,17 @@ export class BusinessService {
       [dto.orderBy ?? BusinessSearchOrderBy.CREATED_AT]: dto.orderDirection ?? OrderDirection.DESC,
     };
 
-    const findArgs: Prisma.BusinessFindManyArgs = {
+    const rows = await this.db.business.findMany({
       where,
       orderBy,
       include: {
+        logoFile: true,
         memberships: { where: { userId: payload.sub }, select: { role: true } },
         _count: { select: { staff: true, services: true, clients: true } },
       },
-    };
+    });
 
-    if (!dto.isExport) {
-      findArgs.skip = (dto.page - 1) * dto.pageSize;
-      findArgs.take = dto.pageSize;
-    }
-
-    const [rows, totalItems] = await this.db.$transaction([
-      this.db.business.findMany(findArgs),
-      this.db.business.count({ where }),
-    ]);
-
-    const items: BusinessSearchItemDto[] = (rows as BusinessWithCounts[]).map((b) => ({
-      id: b.id,
-      name: b.name,
-      logoFileId: b.logoFileId,
-      timezone: b.timezone,
-      myRole: b.memberships[0]?.role ?? null,
-      staffCount: b._count.staff,
-      servicesCount: b._count.services,
-      clientsCount: b._count.clients,
-      createdAt: b.createdAt,
-    }));
-
-    return { items, totalItems };
+    return rows as BusinessWithCounts[];
   }
 
   async delete(businessId: string): Promise<void> {
