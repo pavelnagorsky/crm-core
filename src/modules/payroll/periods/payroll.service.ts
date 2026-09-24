@@ -25,6 +25,7 @@ import { PayrollComputeService } from './payroll-compute.service.js';
 import { StaffCompensationService } from '../compensation/staff-compensation.service.js';
 import { StaffEarningsService } from '../earnings/staff-earnings.service.js';
 import { dateOnly, dateOnlyStr, dec } from '../utils/money.js';
+import { lockedPeriodWhere } from './locked-period.js';
 
 const EDITABLE_STATUSES: PayrollPeriodStatus[] = [PayrollPeriodStatus.DRAFT, PayrollPeriodStatus.CALCULATED];
 
@@ -100,6 +101,15 @@ export class PayrollService {
       this.db.payrollPeriod.count({ where }),
     ]);
     return { items, totalItems };
+  }
+
+  /** Date ranges where a new earning is rejected. Same filter as `assertDateUnlocked`. */
+  async listLockedRanges(businessId: string): Promise<{ startDate: Date; endDate: Date }[]> {
+    return this.db.payrollPeriod.findMany({
+      where: lockedPeriodWhere(businessId),
+      select: { startDate: true, endDate: true },
+      orderBy: { startDate: 'asc' },
+    });
   }
 
   async findById(periodId: string): Promise<PayrollPeriodWithResults> {

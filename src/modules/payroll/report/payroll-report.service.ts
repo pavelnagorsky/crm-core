@@ -9,15 +9,11 @@ import { PayrollPeriodResponseDto } from '../periods/dto/payroll-period-response
 import { PayrollResultResponseDto } from '../periods/dto/payroll-result-response.dto.js';
 import { PayrollService } from '../periods/payroll.service.js';
 import { StaffEarningsService } from '../earnings/staff-earnings.service.js';
-import { dec, money } from '../utils/money.js';
-import {
-  EARNING_TYPE_LABEL,
-  EMPLOYMENT_TYPE_LABEL,
-  PAYOUT_METHOD_LABEL,
-  PAYROLL_STATUS_LABEL,
-  labelOf,
-  safeSheetName,
-} from './payroll-report.labels.js';
+import { summarizePayrollReport } from './payroll-report-summary.js';
+import { DEFAULT_LANG, LocaleService } from '../../../shared/i18n/locale.service.js';
+import { labelOf } from '../../../shared/i18n/label-of.js';
+import { I18nLocale } from '../../../shared/interfaces/i18n-locale.interface.js';
+import { safeSheetName } from './payroll-report.labels.js';
 import { addRow } from './excel-row.js';
 
 @Injectable()
@@ -26,6 +22,7 @@ export class PayrollReportService {
     private readonly payroll: PayrollService,
     private readonly earnings: StaffEarningsService,
     private readonly businessService: BusinessService,
+    private readonly locale: LocaleService,
   ) {}
 
   async build(periodId: string): Promise<PayrollReportResponseDto> {
@@ -42,11 +39,11 @@ export class PayrollReportService {
 
     const mapped = PayrollPeriodResponseDto.fromEntity(period);
     const vedomost = period.results.map(PayrollResultResponseDto.fromEntity);
-    const payslips: PayrollPayslipDto[] = period.results.map((result) => ({
-      result: PayrollResultResponseDto.fromEntity(result),
+    const payslips: PayrollPayslipDto[] = vedomost.map((result) => ({
+      result,
       earnings: (byResult.get(result.id) ?? []).map(StaffEarningResponseDto.fromEntity),
     }));
-    const grandTotal = period.results.reduce((acc, row) => acc.plus(row.totalAmount), dec(0));
+    const summary = summarizePayrollReport(vedomost);
 
     const dto = new PayrollReportResponseDto();
     dto.periodId = period.id;
@@ -56,40 +53,44 @@ export class PayrollReportService {
     dto.endDate = mapped.endDate;
     dto.currency = period.currency;
     dto.status = period.status;
-    dto.grandTotal = money(grandTotal);
-    dto.staffCount = period.results.length;
+    dto.grandTotal = summary.grandTotal;
+    dto.staffCount = summary.staffCount;
+    dto.totals = summary.totals;
+    dto.attention = summary.attention;
     dto.vedomost = vedomost;
     dto.payslips = payslips;
     return dto;
   }
 
-  async exportVedomost(periodId: string): Promise<ExportResult> {
+  async exportVedomost(periodId: string, lang = DEFAULT_LANG): Promise<ExportResult> {
     const report = await this.build(periodId);
+    const messages = this.locale.get(lang);
+    const text = messages.documents;
     const stream = new PassThrough();
     const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({ stream });
-    const sheet = workbook.addWorksheet('Ведомость');
+    const sheet = workbook.addWorksheet(text.payroll.vedomostSheet);
 
-    addRow(sheet, ['Ведомость на выплату']);
-    addRow(sheet, ['Бизнес', report.businessName]);
-    addRow(sheet, ['Период', `${report.startDate} — ${report.endDate}`]);
-    addRow(sheet, ['Статус', labelOf(PAYROLL_STATUS_LABEL, report.status)]);
-    addRow(sheet, ['Валюта', report.currency]);
+    addRow(sheet, [text.payroll.vedomostTitle]);
+    addRow(sheet, [text.common.business, report.businessName]);
+    addRow(sheet, [text.common.period, `${report.startDate} — ${report.endDate}`]);
+    addRow(sheet, [text.common.status, labelOf(messages.payrollPeriodStatus, report.status)]);
+    addRow(sheet, [text.common.currency, report.currency]);
     addRow(sheet, []);
     addRow(sheet, [
-      'Таб. №',
-      'Сотрудник',
-      'Должность',
-      'ИНН / УНП',
-      'Оформление',
-      'Способ выплаты',
-      'Оклад',
-      'Часы',
-      'Услуги',
-      'Товары',
-      'Бонусы',
-      'Удержания',
-      'Корректировки',
-      'К выплате',
+      text.payroll.employeeNumberShort,
+      text.common.staff,
+      text.common.roleTitle,
+      text.common.taxId,
+      text.common.employmentType,
+      text.common.payoutMethod,
+      text.payroll.fixedSalary,
+      text.payroll.hours,
+      text.payroll.services,
+      text.payroll.products,
+      text.payroll.bonuses,
+      text.payroll.deductions,
+      text.payroll.corrections,
+      text.payroll.toPay,
     ]);
     for (const line of report.vedomost) {
       addRow(sheet, [
@@ -97,8 +98,8 @@ export class PayrollReportService {
         line.staffName,
         line.roleTitle ?? '',
         line.taxId ?? '',
-        labelOf(EMPLOYMENT_TYPE_LABEL, line.employmentType),
-        [labelOf(PAYOUT_METHOD_LABEL, line.payoutMethod), line.payoutNote].filter(Boolean).join(' '),
+        labelOf(messages.employmentType, line.employmentType),
+        [labelOf(messages.payoutMethod, line.payoutMethod), line.payoutNote].filter(Boolean).join(' '),
         line.fixedSalaryTotal,
         line.hourlyTotal,
         line.serviceCommissionTotal,
@@ -110,55 +111,82 @@ export class PayrollReportService {
       ]);
     }
     addRow(sheet, []);
-    addRow(sheet, ['Итого', '', '', '', '', '', '', '', '', '', '', '', '', report.grandTotal]);
+    addRow(sheet, [text.common.total, '', '', '', '', '', '', '', '', '', '', '', '', report.grandTotal]);
     sheet.commit();
     void workbook.commit();
     return { stream, filename: `payroll-vedomost-${report.startDate}.xlsx` };
   }
 
-  async exportPayslips(periodId: string): Promise<ExportResult> {
+  async exportPayslips(periodId: string, lang = DEFAULT_LANG): Promise<ExportResult> {
     const report = await this.build(periodId);
+    const messages = this.locale.get(lang);
+    const text = messages.documents;
     const stream = new PassThrough();
     const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({ stream });
 
     if (report.payslips.length === 0) {
-      const empty = workbook.addWorksheet('Листки');
-      addRow(empty, ['Нет результатов за период']);
+      const empty = workbook.addWorksheet(text.payroll.payslipsSheet);
+      addRow(empty, [text.payroll.empty]);
       empty.commit();
     }
 
     for (const slip of report.payslips) {
-      const sheet = workbook.addWorksheet(safeSheetName(`${slip.result.staffName} ${slip.result.staffId.slice(0, 4)}`));
-      addRow(sheet, ['Расчётный листок']);
-      addRow(sheet, ['Бизнес', report.businessName]);
-      addRow(sheet, ['Период', `${report.startDate} — ${report.endDate}`]);
-      addRow(sheet, ['Сотрудник', slip.result.staffName]);
-      addRow(sheet, ['Должность', slip.result.roleTitle ?? '']);
-      addRow(sheet, ['Табельный номер', slip.result.employeeNumber ?? '']);
-      addRow(sheet, ['ИНН / УНП', slip.result.taxId ?? '']);
-      addRow(sheet, ['Оформление', labelOf(EMPLOYMENT_TYPE_LABEL, slip.result.employmentType)]);
-      addRow(sheet, ['Выплата', [labelOf(PAYOUT_METHOD_LABEL, slip.result.payoutMethod), slip.result.payoutNote].filter(Boolean).join(' ')]);
-      addRow(sheet, []);
-      addRow(sheet, ['Дата', 'Тип', 'Описание', 'База', 'Ставка %', 'Ставка', 'Кол-во', 'Сумма', 'Причина']);
-      for (const earning of slip.earnings) {
-        addRow(sheet, [
-          earning.earnedOn,
-          labelOf(EARNING_TYPE_LABEL, earning.type),
-          earning.description ?? '',
-          earning.baseAmount ?? '',
-          earning.ratePercent ?? '',
-          earning.rateAmount ?? '',
-          earning.quantity ?? '',
-          earning.amount,
-          earning.reason ?? '',
-        ]);
-      }
-      addRow(sheet, []);
-      addRow(sheet, ['Итого к выплате', slip.result.totalAmount]);
+      const sheet = workbook.addWorksheet(
+        safeSheetName(`${slip.result.staffName} ${slip.result.staffId.slice(0, 4)}`, text.payroll.fallbackSheet),
+      );
+      this.writePayslip(sheet, report, slip, messages);
       sheet.commit();
     }
 
     void workbook.commit();
     return { stream, filename: `payroll-payslips-${report.startDate}.xlsx` };
+  }
+
+  private writePayslip(
+    sheet: ExcelJS.Worksheet,
+    report: PayrollReportResponseDto,
+    slip: PayrollPayslipDto,
+    messages: I18nLocale,
+  ): void {
+    const text = messages.documents;
+    addRow(sheet, [text.payroll.payslipTitle]);
+    addRow(sheet, [text.common.business, report.businessName]);
+    addRow(sheet, [text.common.period, `${report.startDate} — ${report.endDate}`]);
+    addRow(sheet, [text.common.staff, slip.result.staffName]);
+    addRow(sheet, [text.common.roleTitle, slip.result.roleTitle ?? '']);
+    addRow(sheet, [text.common.employeeNumber, slip.result.employeeNumber ?? '']);
+    addRow(sheet, [text.common.taxId, slip.result.taxId ?? '']);
+    addRow(sheet, [text.common.employmentType, labelOf(messages.employmentType, slip.result.employmentType)]);
+    addRow(sheet, [
+      text.common.payout,
+      [labelOf(messages.payoutMethod, slip.result.payoutMethod), slip.result.payoutNote].filter(Boolean).join(' '),
+    ]);
+    addRow(sheet, []);
+    addRow(sheet, [
+      text.common.date,
+      text.common.type,
+      text.common.description,
+      text.common.base,
+      text.common.ratePercent,
+      text.common.rate,
+      text.common.quantity,
+      text.common.amount,
+      text.common.reason,
+    ]);
+    for (const earning of slip.earnings) {
+      addRow(sheet, [
+        earning.earnedOn,
+        labelOf(messages.earningType, earning.type),
+        earning.description ?? '',
+        earning.baseAmount ?? '',
+        earning.ratePercent ?? '',
+        earning.rateAmount ?? '',
+        earning.quantity ?? '',
+        earning.amount,
+        earning.reason ?? '',
+      ]);
+    }
+    addRow(sheet, []);
+    addRow(sheet, [text.payroll.totalToPay, slip.result.totalAmount]);
   }
 }

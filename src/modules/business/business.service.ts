@@ -85,7 +85,6 @@ export class BusinessService {
         slotIntervalMinutes: dto.slotIntervalMinutes,
         minimumBookingNoticeMinutes: dto.minimumBookingNoticeMinutes,
         timezone: dto.timezone,
-        currency: dto.currency,
         bookingVisibility: dto.bookingVisibility,
         isBookingConfirmationRequired: dto.isBookingConfirmationRequired,
       },

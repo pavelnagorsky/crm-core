@@ -15,11 +15,11 @@
 {{/if}}
 
 {{#if (eq eventType "STAFF_COMPENSATION_UPDATED")}}
-<p>{{t "fields" "STAFF" "compensation"}}: {{payload.effectiveFrom}}, {{t "fields" "STAFF" "serviceCommissionPercent"}} {{payload.serviceCommissionPercent}}, {{t "fields" "STAFF" "fixedSalaryAmount"}} {{payload.fixedSalaryAmount}}</p>
+<p>{{t "fields" "STAFF" "compensation"}}: {{t "fields" "STAFF" "effectiveFrom"}} {{payload.effectiveFrom}}, {{t "fields" "STAFF" "serviceCommissionPercent"}} {{payload.serviceCommissionPercent}}, {{t "fields" "STAFF" "productCommissionPercent"}} {{payload.productCommissionPercent}}, {{t "fields" "STAFF" "fixedSalaryAmount"}} {{payload.fixedSalaryAmount}}, {{t "fields" "STAFF" "hourlyRate"}} {{payload.hourlyRate}}, {{t "fields" "STAFF" "salaryMode"}} {{t "salaryMode" payload.salaryMode}}</p>
 {{/if}}
 
 {{#if (eq eventType "STAFF_EARNING_ADDED")}}
-<p>{{payload.type}}: {{payload.amount}}{{#if payload.reason}} — {{payload.reason}}{{/if}}</p>
+<p>{{t "earningType" payload.type}}: {{payload.amount}}{{#if payload.reason}} — {{payload.reason}}{{/if}}</p>
 {{/if}}
 
 {{#if (eq eventType "STAFF_EARNING_REVERSED")}}

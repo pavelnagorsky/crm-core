@@ -59,7 +59,13 @@ export class AuditService {
       this.db.auditLog.count({ where }),
     ]);
 
-    const items = logs.map((log) => AuditLogItemDto.fromEntity(log, this.renderer.render(log, dto.lang)));
+    const items = logs.map((log) =>
+      AuditLogItemDto.fromEntity(
+        log,
+        this.renderer.render(log, dto.lang),
+        this.renderer.eventTitle(log.eventType, dto.lang),
+      ),
+    );
 
     return { items, totalItems };
   }

@@ -46,7 +46,7 @@ export class CreateBusinessDto {
   @IsIanaTimezone()
   timezone: string;
 
-  @ApiProperty({ type: String, description: 'ISO 4217 currency code' })
+  @ApiProperty({ type: String, description: 'ISO 4217 currency code. Set on create and cannot be changed later.' })
   @IsString()
   @MaxLength(3)
   currency: string;

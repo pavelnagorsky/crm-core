@@ -48,12 +48,6 @@ export class UpdateBusinessDto {
   @IsIanaTimezone()
   timezone?: string;
 
-  @ApiProperty({ type: String, required: false, description: 'ISO 4217 currency code' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(3)
-  currency?: string;
-
   @ApiProperty({ enum: BookingVisibility, required: false })
   @IsOptional()
   @IsEnum(BookingVisibility)

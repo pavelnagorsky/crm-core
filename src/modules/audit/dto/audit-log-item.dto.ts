@@ -11,6 +11,9 @@ export class AuditLogItemDto {
   @ApiProperty({ enum: AuditEvent })
   eventType: AuditEvent;
 
+  @ApiProperty({ description: 'Localized title of eventType' })
+  eventTypeTitle: string;
+
   @ApiProperty({ enum: AuditActionType })
   actionType: AuditActionType;
 
@@ -26,10 +29,11 @@ export class AuditLogItemDto {
   @ApiProperty()
   occurredAt: Date;
 
-  static fromEntity(log: AuditLog, html: string): AuditLogItemDto {
+  static fromEntity(log: AuditLog, html: string, eventTypeTitle: string): AuditLogItemDto {
     const dto = new AuditLogItemDto();
     dto.id = log.id;
     dto.eventType = log.eventType as AuditEvent;
+    dto.eventTypeTitle = eventTypeTitle;
     dto.actionType = log.actionType as AuditActionType;
     dto.actorName = log.actorName;
     dto.actorRole = log.actorRole as AuditActorRole;

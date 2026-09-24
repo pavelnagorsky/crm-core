@@ -17,11 +17,12 @@ export class ExportService {
     rows: T[],
     columns: ExportColumn<T>[],
     basename: string,
+    sheetName = basename,
   ): ExportResult {
     const timestamp = new Date().toISOString().slice(0, 10);
     const stream = new PassThrough();
 
-    ExportService.writeXlsx(rows, columns, stream, basename);
+    ExportService.writeXlsx(rows, columns, stream, sheetName);
     return { stream, filename: `${basename}-${timestamp}.xlsx` };
   }
 

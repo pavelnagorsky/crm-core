@@ -3,7 +3,6 @@ import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   Booking,
-  PayrollPeriodStatus,
   Prisma,
   StaffEarning,
   StaffEarningSource,
@@ -33,6 +32,7 @@ import { EarningCalculatorService } from './earning-calculator.service.js';
 import { CompensationPlanWithRates } from '../compensation/interfaces/compensation-plan-with-rates.interface.js';
 import { StaffCompensationService } from '../compensation/staff-compensation.service.js';
 import { dateOnly, dec, money } from '../utils/money.js';
+import { lockedPeriodWhere } from '../periods/locked-period.js';
 
 @Injectable()
 export class StaffEarningsService {
@@ -234,6 +234,7 @@ export class StaffEarningsService {
     });
     this.emitEarningAudit(params.businessId, params.resultId, AuditEvent.PAYROLL_CORRECTED, params.actor, {
       staffId: params.staffId,
+      type: StaffEarningType.CORRECTION,
       amount: money(params.amount),
       reason: params.reason,
     }, AuditEntity.PAYROLL);
@@ -395,12 +396,7 @@ export class StaffEarningsService {
 
   private async assertDateUnlocked(businessId: string, earnedOn: Date): Promise<void> {
     const locked = await this.db.payrollPeriod.findFirst({
-      where: {
-        businessId,
-        startDate: { lte: earnedOn },
-        endDate: { gte: earnedOn },
-        status: { in: [PayrollPeriodStatus.APPROVED, PayrollPeriodStatus.PAID] },
-      },
+      where: lockedPeriodWhere(businessId, earnedOn),
       select: { id: true },
     });
     if (locked) throw new AppException(ErrorCode.STAFF_EARNING_DATE_LOCKED, HttpStatus.CONFLICT);

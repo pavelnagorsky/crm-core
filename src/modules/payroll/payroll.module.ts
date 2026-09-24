@@ -11,9 +11,10 @@ import { PayrollComputeService } from './periods/payroll-compute.service.js';
 import { PayrollController } from './periods/payroll.controller.js';
 import { PayrollService } from './periods/payroll.service.js';
 import { PayrollReportService } from './report/payroll-report.service.js';
+import { I18nModule } from '../../shared/i18n/i18n.module.js';
 
 @Module({
-  imports: [StaffModule, BusinessModule, ServicesModule],
+  imports: [StaffModule, BusinessModule, ServicesModule, I18nModule],
   controllers: [StaffCompensationController, StaffEarningsController, PayrollController],
   providers: [
     EarningCalculatorService,

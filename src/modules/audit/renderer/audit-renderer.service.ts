@@ -7,6 +7,7 @@ import { format, isValid } from 'date-fns';
 import { ru as dateFnsRu, type Locale as DateFnsLocale } from 'date-fns/locale';
 import type { AuditLog } from '@prisma/client';
 import { AuditEntity } from '../enums/audit-entity.enum.js';
+import { AuditEvent } from '../enums/audit-event.enum.js';
 import { AUDIT_FIELD_I18N, AUDIT_FIELD_TYPES } from '../fields/index.js';
 import { I18nLocale } from '../../../shared/interfaces/i18n-locale.interface.js';
 
@@ -49,10 +50,9 @@ export class AuditRendererService implements OnModuleInit {
     );
 
     for (const lang of SUPPORTED_LANGS) {
-      this.locales.set(
-        lang,
-        JSON.parse(readFileSync(join(i18nDir, `${lang}.json`), 'utf-8')),
-      );
+      const locale = JSON.parse(readFileSync(join(i18nDir, `${lang}.json`), 'utf-8')) as I18nLocale;
+      this.assertEventTitles(locale, lang);
+      this.locales.set(lang, locale);
 
       for (const entity of Object.values(AuditEntity)) {
         const source = readFileSync(
@@ -62,6 +62,12 @@ export class AuditRendererService implements OnModuleInit {
         this.templates.set(`${lang}:${entity}`, this.hbs.compile(source));
       }
     }
+  }
+
+  eventTitle(eventType: string, lang = 'ru'): string {
+    const resolvedLang = this.locales.has(lang) ? lang : 'ru';
+    const title = this.locales.get(resolvedLang)?.auditEvent?.[eventType];
+    return typeof title === 'string' && title ? title : eventType;
   }
 
   render(log: AuditLog, lang = 'ru'): string {
@@ -78,6 +84,15 @@ export class AuditRendererService implements OnModuleInit {
       locale,
       lang: resolvedLang,
     }).trim();
+  }
+
+  private assertEventTitles(locale: I18nLocale, lang: string) {
+    for (const eventType of Object.values(AuditEvent)) {
+      const title = locale.auditEvent?.[eventType];
+      if (typeof title !== 'string' || !title) {
+        throw new Error(`Missing audit event title for ${eventType} (${lang})`);
+      }
+    }
   }
 
   private registerHelpers() {

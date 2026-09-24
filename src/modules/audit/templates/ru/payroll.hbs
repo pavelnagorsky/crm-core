@@ -1,5 +1,5 @@
 {{#if (eq eventType "PAYROLL_PERIOD_CREATED")}}
-<p>{{payload.startDate}} — {{payload.endDate}}</p>
+<p>{{t "fields" "PAYROLL" "startDate"}} {{payload.startDate}} — {{t "fields" "PAYROLL" "endDate"}} {{payload.endDate}}</p>
 {{/if}}
 
 {{#if (eq eventType "PAYROLL_PERIOD_DELETED")}}
@@ -19,5 +19,5 @@
 {{/if}}
 
 {{#if (eq eventType "PAYROLL_CORRECTED")}}
-<p>{{payload.amount}}{{#if payload.reason}}: {{payload.reason}}{{/if}}</p>
+<p>{{#if payload.type}}{{t "earningType" payload.type}}{{else}}{{t "earningType" "CORRECTION"}}{{/if}}: {{payload.amount}}{{#if payload.reason}} — {{payload.reason}}{{/if}}</p>
 {{/if}}

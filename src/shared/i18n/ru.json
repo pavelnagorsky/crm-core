@@ -61,6 +61,33 @@
       "hint": "Ждём вас!"
     }
   },
+  "auditEvent": {
+    "BOOKING_CREATED": "Запись создана",
+    "BOOKING_UPDATED": "Запись изменена",
+    "BOOKING_CANCELLED": "Запись отменена",
+    "BOOKING_STATUS_CHANGED": "Статус записи изменён",
+    "BOOKING_DELETED": "Запись удалена",
+    "CLIENT_CREATED": "Клиент создан",
+    "CLIENT_UPDATED": "Данные клиента изменены",
+    "CLIENT_DELETED": "Клиент удалён",
+    "STAFF_CREATED": "Сотрудник добавлен",
+    "STAFF_UPDATED": "Данные сотрудника изменены",
+    "STAFF_DEACTIVATED": "Сотрудник деактивирован",
+    "STAFF_DELETED": "Сотрудник удалён",
+    "STAFF_COMPENSATION_UPDATED": "Правила оплаты изменены",
+    "STAFF_EARNING_ADDED": "Начисление добавлено",
+    "STAFF_EARNING_REVERSED": "Начисление отменено",
+    "SERVICE_CREATED": "Услуга создана",
+    "SERVICE_UPDATED": "Услуга изменена",
+    "SERVICE_DELETED": "Услуга удалена",
+    "BUSINESS_UPDATED": "Настройки бизнеса изменены",
+    "PAYROLL_PERIOD_CREATED": "Период зарплаты создан",
+    "PAYROLL_PERIOD_DELETED": "Период зарплаты удалён",
+    "PAYROLL_CALCULATED": "Зарплата рассчитана",
+    "PAYROLL_APPROVED": "Период зарплаты утверждён",
+    "PAYROLL_PAID": "Зарплата выплачена",
+    "PAYROLL_CORRECTED": "Корректировка зарплаты"
+  },
   "actorRole": {
     "CLIENT": "клиент",
     "STAFF": "менеджер",
@@ -104,11 +131,66 @@
     "DEDUCTION": "Удержание",
     "CORRECTION": "Корректировка"
   },
+  "salaryMode": {
+    "ADDITIVE": "Оклад добавляется к начислениям",
+    "GUARANTEED_MINIMUM": "Гарантированный минимум"
+  },
   "payrollPeriodStatus": {
     "DRAFT": "Черновик",
     "CALCULATED": "Рассчитан",
     "APPROVED": "Утверждён",
     "PAID": "Выплачен"
+  },
+  "documents": {
+    "common": {
+      "business": "Бизнес",
+      "period": "Период",
+      "status": "Статус",
+      "currency": "Валюта",
+      "staff": "Сотрудник",
+      "roleTitle": "Должность",
+      "taxId": "ИНН / УНП",
+      "employeeNumber": "Табельный номер",
+      "employmentType": "Оформление",
+      "payoutMethod": "Способ выплаты",
+      "payout": "Выплата",
+      "date": "Дата",
+      "type": "Тип",
+      "description": "Описание",
+      "base": "База",
+      "ratePercent": "Ставка %",
+      "rate": "Ставка",
+      "quantity": "Кол-во",
+      "amount": "Сумма",
+      "reason": "Причина",
+      "total": "Итого",
+      "id": "ID",
+      "name": "Имя",
+      "email": "Email",
+      "phone": "Телефон",
+      "createdAt": "Создан"
+    },
+    "payroll": {
+      "vedomostSheet": "Ведомость",
+      "vedomostTitle": "Ведомость на выплату",
+      "payslipsSheet": "Листки",
+      "payslipTitle": "Расчётный листок",
+      "empty": "Нет результатов за период",
+      "employeeNumberShort": "Таб. №",
+      "fixedSalary": "Оклад",
+      "hours": "Часы",
+      "services": "Услуги",
+      "products": "Товары",
+      "bonuses": "Бонусы",
+      "deductions": "Удержания",
+      "corrections": "Корректировки",
+      "toPay": "К выплате",
+      "totalToPay": "Итого к выплате",
+      "fallbackSheet": "сотрудник"
+    },
+    "staff": {
+      "sheet": "Сотрудники"
+    }
   },
   "cancelledBy": {
     "BUSINESS": "бизнес",
@@ -149,10 +231,16 @@
       "payoutMethod": "Способ выплаты",
       "payoutNote": "Реквизиты выплаты",
       "compensation": "Правила оплаты",
+      "effectiveFrom": "Действует с",
       "serviceCommissionPercent": "Процент с услуг",
-      "fixedSalaryAmount": "Оклад"
+      "productCommissionPercent": "Процент с товаров",
+      "fixedSalaryAmount": "Оклад",
+      "hourlyRate": "Почасовая ставка",
+      "salaryMode": "Режим оклада"
     },
     "PAYROLL": {
+      "startDate": "Начало",
+      "endDate": "Конец",
       "deleted": "Период удалён",
       "staffCount": "Сотрудников в расчёте",
       "approved": "Период утверждён",

@@ -26,8 +26,9 @@ import { Auth } from '../../auth/decorators/auth.decorator.js';
 import { TokenPayload } from '../../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto, assertBusinessRole } from '../../auth/dto/token-payload.dto.js';
 import { auditActorFromToken } from '../../audit/utils/audit-actor-from-token.js';
-import { ApiResponse, BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
+import { ApiResponse, ApiResponseArray, BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
 import { CreatePayrollCorrectionDto } from './dto/create-payroll-correction.dto.js';
+import { LockedPayrollRangeDto, LockedPayrollRangesRequestDto } from './dto/locked-payroll-range.dto.js';
 import { CreatePayrollPeriodDto } from './dto/create-payroll-period.dto.js';
 import { PayrollPeriodResponseDto } from './dto/payroll-period-response.dto.js';
 import { PayrollPeriodSearchRequestDto } from './dto/payroll-period-search-request.dto.js';
@@ -56,6 +57,22 @@ export class PayrollController {
     assertBusinessRole(tokenPayload, dto.businessId, BusinessRole.OWNER);
     const period = await this.payroll.create(dto, auditActorFromToken(tokenPayload, dto.businessId));
     return BaseResponseDto.success(PayrollPeriodResponseDto.fromEntity(period));
+  }
+
+  @ApiOperation({
+    summary: 'Date ranges closed for new earnings',
+    description: 'Approved and paid periods. A manual earning whose date falls inside one of these ranges is rejected.',
+  })
+  @ApiOkResponse({ type: ApiResponseArray(LockedPayrollRangeDto) })
+  @Auth()
+  @Get('locked-ranges')
+  async lockedRanges(
+    @Query() dto: LockedPayrollRangesRequestDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
+  ): Promise<BaseResponseDto<LockedPayrollRangeDto[]>> {
+    assertBusinessRole(tokenPayload, dto.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
+    const ranges = await this.payroll.listLockedRanges(dto.businessId);
+    return BaseResponseDto.success(ranges.map(LockedPayrollRangeDto.fromEntity));
   }
 
   @ApiOperation({ summary: 'Search payroll periods' })
