@@ -47,6 +47,14 @@ export const ErrorCode = {
     code: 'CATEGORY_NAME_EXISTS',
     message: 'Category name already exists in this business',
   },
+  SERVICE_IN_USE: {
+    code: 'SERVICE_IN_USE',
+    message: 'Service cannot be deleted because it is used in bookings or compensation plans',
+  },
+  SERVICE_STATUS_ALREADY_SET: {
+    code: 'SERVICE_STATUS_ALREADY_SET',
+    message: 'Service already has this status',
+  },
 
   // clients
   CLIENT_PHONE_EXISTS: {
@@ -133,6 +141,65 @@ export const ErrorCode = {
   BOOKING_NO_STAFF_AVAILABLE: {
     code: 'BOOKING_NO_STAFF_AVAILABLE',
     message: 'No staff available for this service at the requested time',
+  },
+
+  STAFF_HAS_EARNINGS: {
+    code: 'STAFF_HAS_EARNINGS',
+    message: 'Staff member cannot be deleted because they have associated earnings',
+  },
+
+  // compensation / payroll
+  COMPENSATION_PLAN_EFFECTIVE_FROM_INVALID: {
+    code: 'COMPENSATION_PLAN_EFFECTIVE_FROM_INVALID',
+    message: 'New compensation plan must start after the latest existing version',
+  },
+  COMPENSATION_SERVICE_NOT_FOUND: {
+    code: 'COMPENSATION_SERVICE_NOT_FOUND',
+    message: 'One or more services for commission overrides were not found in this business',
+  },
+  PAYROLL_PERIOD_DATES_INVALID: {
+    code: 'PAYROLL_PERIOD_DATES_INVALID',
+    message: 'Payroll period end date must be on or after the start date',
+  },
+  PAYROLL_PERIOD_OVERLAP: {
+    code: 'PAYROLL_PERIOD_OVERLAP',
+    message: 'Payroll period overlaps an existing period for this business',
+  },
+  PAYROLL_PERIOD_NOT_FOUND: {
+    code: 'PAYROLL_PERIOD_NOT_FOUND',
+    message: 'Payroll period not found',
+  },
+  PAYROLL_PERIOD_INVALID_STATUS: {
+    code: 'PAYROLL_PERIOD_INVALID_STATUS',
+    message: 'Payroll period is not in a valid status for this action',
+  },
+  PAYROLL_RESULT_NOT_FOUND: {
+    code: 'PAYROLL_RESULT_NOT_FOUND',
+    message: 'Payroll result not found',
+  },
+  PAYROLL_CORRECTION_NOT_ALLOWED: {
+    code: 'PAYROLL_CORRECTION_NOT_ALLOWED',
+    message: 'Corrections are only allowed after the payroll period is approved',
+  },
+  STAFF_EARNING_NOT_FOUND: {
+    code: 'STAFF_EARNING_NOT_FOUND',
+    message: 'Staff earning not found',
+  },
+  STAFF_EARNING_ALREADY_REVERSED: {
+    code: 'STAFF_EARNING_ALREADY_REVERSED',
+    message: 'This earning has already been reversed',
+  },
+  STAFF_EARNING_DATE_LOCKED: {
+    code: 'STAFF_EARNING_DATE_LOCKED',
+    message: 'Cannot add a manual earning on a date inside an approved or paid payroll period',
+  },
+  STAFF_EARNING_AMOUNT_INVALID: {
+    code: 'STAFF_EARNING_AMOUNT_INVALID',
+    message: 'Earning amount is invalid for this type',
+  },
+  PRODUCT_COMMISSION_NOT_CONFIGURED: {
+    code: 'PRODUCT_COMMISSION_NOT_CONFIGURED',
+    message: 'Staff member has no product commission for this date',
   },
 
   // dashboard

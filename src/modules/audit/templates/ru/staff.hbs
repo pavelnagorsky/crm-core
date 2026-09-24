@@ -13,3 +13,16 @@
 {{#if (eq eventType "STAFF_DELETED")}}
 <p>{{payload.name}}</p>
 {{/if}}
+
+{{#if (eq eventType "STAFF_COMPENSATION_UPDATED")}}
+<p>{{t "fields" "STAFF" "compensation"}}: {{payload.effectiveFrom}}, {{t "fields" "STAFF" "serviceCommissionPercent"}} {{payload.serviceCommissionPercent}}, {{t "fields" "STAFF" "fixedSalaryAmount"}} {{payload.fixedSalaryAmount}}</p>
+{{/if}}
+
+{{#if (eq eventType "STAFF_EARNING_ADDED")}}
+<p>{{payload.type}}: {{payload.amount}}{{#if payload.reason}} — {{payload.reason}}{{/if}}</p>
+{{/if}}
+
+{{#if (eq eventType "STAFF_EARNING_REVERSED")}}
+<p>{{payload.amount}}{{#if payload.bookingId}} ({{payload.bookingId}}){{/if}}</p>
+{{/if}}
+

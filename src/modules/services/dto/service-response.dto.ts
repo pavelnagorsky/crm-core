@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ServiceWithImage } from '../services.service.js';
 import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
+import { ServiceStatus } from '../enums/service-status.enum.js';
 
 export class ServiceResponseDto {
   @ApiProperty({ type: String })
@@ -30,8 +31,8 @@ export class ServiceResponseDto {
   @ApiProperty({ type: Number })
   bufferMinutes: number;
 
-  @ApiProperty({ type: Boolean })
-  isActive: boolean;
+  @ApiProperty({ enum: ServiceStatus, enumName: 'ServiceStatus' })
+  status: ServiceStatus;
 
   @ApiProperty({ type: Number })
   sortOrder: number;
@@ -53,7 +54,7 @@ export class ServiceResponseDto {
     dto.price = Number(service.price);
     dto.durationMinutes = service.durationMinutes;
     dto.bufferMinutes = service.bufferMinutes;
-    dto.isActive = service.isActive;
+    dto.status = service.status;
     dto.sortOrder = service.sortOrder;
     dto.createdAt = service.createdAt;
     dto.updatedAt = service.updatedAt;

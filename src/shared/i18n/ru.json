@@ -80,6 +80,36 @@
     "ACTIVE": "Активный",
     "INACTIVE": "Неактивный"
   },
+  "serviceStatus": {
+    "ACTIVE": "Активна",
+    "INACTIVE": "Неактивна"
+  },
+  "employmentType": {
+    "LABOR_CONTRACT": "Трудовой договор",
+    "CIVIL_CONTRACT": "ГПХ",
+    "SELF_EMPLOYED": "Самозанятый",
+    "INDIVIDUAL_ENTREPRENEUR": "ИП"
+  },
+  "payoutMethod": {
+    "CASH": "Наличные",
+    "CARD": "Карта",
+    "BANK_TRANSFER": "Расчётный счёт"
+  },
+  "earningType": {
+    "SERVICE_COMMISSION": "Комиссия с услуги",
+    "PRODUCT_COMMISSION": "Комиссия с товара",
+    "HOURLY": "Почасовая оплата",
+    "FIXED_SALARY": "Оклад",
+    "BONUS": "Бонус",
+    "DEDUCTION": "Удержание",
+    "CORRECTION": "Корректировка"
+  },
+  "payrollPeriodStatus": {
+    "DRAFT": "Черновик",
+    "CALCULATED": "Рассчитан",
+    "APPROVED": "Утверждён",
+    "PAID": "Выплачен"
+  },
   "cancelledBy": {
     "BUSINESS": "бизнес",
     "CLIENT": "клиент"
@@ -112,7 +142,21 @@
       "roleTitle": "Должность",
       "phone": "Телефон",
       "email": "Email",
-      "status": "Статус"
+      "status": "Статус",
+      "employmentType": "Оформление",
+      "taxId": "ИНН / УНП",
+      "employeeNumber": "Табельный номер",
+      "payoutMethod": "Способ выплаты",
+      "payoutNote": "Реквизиты выплаты",
+      "compensation": "Правила оплаты",
+      "serviceCommissionPercent": "Процент с услуг",
+      "fixedSalaryAmount": "Оклад"
+    },
+    "PAYROLL": {
+      "deleted": "Период удалён",
+      "staffCount": "Сотрудников в расчёте",
+      "approved": "Период утверждён",
+      "paid": "Период выплачен"
     },
     "SERVICE": {
       "title": "Название",
@@ -120,7 +164,7 @@
       "durationMinutes": "Длительность (мин)",
       "bufferMinutes": "Буфер (мин)",
       "description": "Описание",
-      "isActive": "Активна"
+      "status": "Статус"
     },
     "BUSINESS": {
       "name": "Название",

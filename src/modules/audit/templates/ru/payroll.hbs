@@ -1,0 +1,23 @@
+{{#if (eq eventType "PAYROLL_PERIOD_CREATED")}}
+<p>{{payload.startDate}} — {{payload.endDate}}</p>
+{{/if}}
+
+{{#if (eq eventType "PAYROLL_PERIOD_DELETED")}}
+<p>{{t "fields" "PAYROLL" "deleted"}}</p>
+{{/if}}
+
+{{#if (eq eventType "PAYROLL_CALCULATED")}}
+<p>{{t "fields" "PAYROLL" "staffCount"}}: {{payload.staffCount}}</p>
+{{/if}}
+
+{{#if (eq eventType "PAYROLL_APPROVED")}}
+<p>{{t "fields" "PAYROLL" "approved"}}</p>
+{{/if}}
+
+{{#if (eq eventType "PAYROLL_PAID")}}
+<p>{{t "fields" "PAYROLL" "paid"}}</p>
+{{/if}}
+
+{{#if (eq eventType "PAYROLL_CORRECTED")}}
+<p>{{payload.amount}}{{#if payload.reason}}: {{payload.reason}}{{/if}}</p>
+{{/if}}

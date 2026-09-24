@@ -19,6 +19,7 @@ import { AuditModule } from './modules/audit/audit.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 import { FilesModule } from './modules/files/files.module.js';
 import { DashboardModule } from './modules/dashboard/dashboard.module.js';
+import { PayrollModule } from './modules/payroll/payroll.module.js';
 
 @Module({
   imports: [
@@ -48,6 +49,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module.js';
     HealthModule,
     FilesModule,
     DashboardModule,
+    PayrollModule,
   ],
 })
 export class AppModule {}

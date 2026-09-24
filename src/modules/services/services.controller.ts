@@ -13,6 +13,7 @@ import {
   Query,
 } from '@nestjs/common';
 import {
+  ApiConflictResponse,
   ApiCreatedResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
@@ -159,22 +160,31 @@ export class ServicesController {
     return BaseResponseDto.success(ServiceResponseDto.fromEntity(service));
   }
 
-  @ApiOperation({ summary: 'Update service active status' })
+  @ApiOperation({ summary: 'Change service status' })
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Service not found' })
+  @ApiConflictResponse({ description: 'Service already has this status' })
   @RBAC(BusinessRole.OWNER)
   @HttpCode(HttpStatus.NO_CONTENT)
   @Patch('services/:id/status')
   async updateStatus(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateServiceStatusDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<void> {
-    await this.servicesService.setActive(id, dto.isActive);
+    await this.servicesService.changeStatus(
+      businessId,
+      id,
+      dto.status,
+      auditActorFromToken(tokenPayload, businessId),
+    );
   }
 
   @ApiOperation({ summary: 'Delete a service' })
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Service not found' })
+  @ApiConflictResponse({ description: 'Service is used in bookings or compensation plans' })
   @RBAC(BusinessRole.OWNER)
   @Delete('services/:id')
   @HttpCode(HttpStatus.NO_CONTENT)

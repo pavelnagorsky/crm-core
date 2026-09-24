@@ -1,11 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   ArrayNotEmpty,
   ArrayUnique,
   IsArray,
-  IsBoolean,
   IsEnum,
   IsOptional,
   IsString,
@@ -13,6 +11,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { DashboardRangeDto } from '../../../dashboard/dto/dashboard-range.dto.js';
+import { ServiceStatus } from '../../enums/service-status.enum.js';
 import { ServicesAnalyticsWidgetKey } from '../enums/services-analytics-widget-key.enum.js';
 
 export class ServicesAnalyticsRequestDto extends DashboardRangeDto {
@@ -35,9 +34,8 @@ export class ServicesAnalyticsRequestDto extends DashboardRangeDto {
   @IsUUID()
   categoryId?: string;
 
-  @ApiProperty({ type: Boolean, required: false })
+  @ApiProperty({ enum: ServiceStatus, enumName: 'ServiceStatus', required: false })
   @IsOptional()
-  @IsBoolean()
-  @Type(() => Boolean)
-  isActive?: boolean;
+  @IsEnum(ServiceStatus)
+  status?: ServiceStatus;
 }

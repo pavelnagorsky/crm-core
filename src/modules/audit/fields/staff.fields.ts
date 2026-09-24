@@ -7,4 +7,9 @@ export const STAFF_AUDIT_FIELDS: FieldDescriptor<Staff>[] = [
   { key: 'phone' },
   { key: 'email' },
   { key: 'status', i18n: 'staffStatus' },
+  { key: 'employmentType', i18n: 'employmentType' },
+  { key: 'taxId' },
+  { key: 'employeeNumber' },
+  { key: 'payoutMethod', i18n: 'payoutMethod' },
+  { key: 'payoutNote' },
 ];

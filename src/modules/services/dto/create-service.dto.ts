@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsBoolean, IsInt, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
+import { IsEnum, IsInt, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
 import { IsPrice } from '../../../shared/decorators/is-price.decorator.js';
+import { ServiceStatus } from '../enums/service-status.enum.js';
 
 export class CreateServiceDto {
   @ApiProperty({ type: String, maxLength: 150 })
@@ -38,10 +39,10 @@ export class CreateServiceDto {
   @Min(0)
   bufferMinutes?: number;
 
-  @ApiProperty({ type: Boolean, required: false, default: true })
+  @ApiProperty({ enum: ServiceStatus, enumName: 'ServiceStatus', required: false, default: ServiceStatus.ACTIVE })
   @IsOptional()
-  @IsBoolean()
-  isActive?: boolean;
+  @IsEnum(ServiceStatus)
+  status?: ServiceStatus;
 
   @ApiProperty({ type: Number, required: false, default: 0 })
   @IsOptional()

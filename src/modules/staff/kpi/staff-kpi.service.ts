@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { StaffStatus } from '@prisma/client';
+import { ServiceStatus, StaffStatus } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { MetricUnit } from '../../dashboard/enums/metric-unit.enum.js';
 import { ServicesService } from '../../services/services.service.js';
@@ -110,7 +110,7 @@ export class StaffKpiService {
     // The `service` table belongs to the services domain; get the active service ids through
     // its owning service rather than querying it here. Coverage denominator is all active
     // services (staff-name filters narrow staff, not the service catalogue).
-    const activeServiceIds = await this.servicesService.findIdsByFilter(businessId, { isActive: true });
+    const activeServiceIds = await this.servicesService.findIdsByFilter(businessId, { status: ServiceStatus.ACTIVE });
     if (activeServiceIds.length === 0) return { covered: 0, total: 0 };
 
     // `staffService` is owned by this domain; find the distinct active-service ids that have at

@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
-import { File, Prisma, Service, ServiceCategory } from '@prisma/client';
+import { File, Prisma, Service, ServiceCategory, ServiceStatus } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
@@ -75,7 +75,7 @@ export class ServicesService {
         price: dto.price,
         durationMinutes: dto.durationMinutes,
         bufferMinutes: dto.bufferMinutes ?? 0,
-        isActive: dto.isActive ?? true,
+        status: dto.status ?? ServiceStatus.ACTIVE,
         sortOrder: dto.sortOrder ?? 0,
       },
       include: { imageFile: true },
@@ -160,6 +160,18 @@ export class ServicesService {
     return { items, totalItems };
   }
 
+  async assertIdsInBusiness(businessId: string, ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    const unique = [...new Set(ids)];
+    const found = await this.db.service.findMany({
+      where: { businessId, id: { in: unique } },
+      select: { id: true },
+    });
+    if (found.length !== unique.length) {
+      throw new AppException(ErrorCode.COMPENSATION_SERVICE_NOT_FOUND, HttpStatus.NOT_FOUND);
+    }
+  }
+
   async findIdsByFilter(businessId: string, filter: ServiceFilter): Promise<string[]> {
     const rows = await this.db.service.findMany({
       where: this.buildFilterWhere(businessId, filter),
@@ -172,18 +184,39 @@ export class ServicesService {
     const where: Prisma.ServiceWhereInput = { businessId };
     if (filter.search) where.title = { contains: filter.search, mode: 'insensitive' };
     if (filter.categoryId !== undefined) where.categoryId = filter.categoryId;
-    if (filter.isActive !== undefined) where.isActive = filter.isActive;
+    if (filter.status !== undefined) where.status = filter.status;
     return where;
   }
 
-  async setActive(serviceId: string, isActive: boolean): Promise<ServiceWithImage> {
-    await this.findById(serviceId);
-    return this.db.service.update({ where: { id: serviceId }, data: { isActive }, include: { imageFile: true } });
+  async changeStatus(businessId: string, serviceId: string, status: ServiceStatus, actor: AuditActor): Promise<void> {
+    const service = await this.findInBusiness(businessId, serviceId);
+    if (service.status === status) {
+      throw new AppException(ErrorCode.SERVICE_STATUS_ALREADY_SET, HttpStatus.CONFLICT);
+    }
+    await this.db.service.update({ where: { id: serviceId }, data: { status } });
+    const event: AuditLogEvent = {
+      businessId,
+      entityType: AuditEntity.SERVICE,
+      entityId: serviceId,
+      eventType: AuditEvent.SERVICE_UPDATED,
+      actionType: AuditActionType.MODIFY,
+      occurredAt: new Date(),
+      actor,
+      payload: { changes: [{ field: 'status', from: service.status, to: status }] },
+    };
+    this.eventEmitter.emit(AUDIT_EVENT, event);
   }
 
   async delete(businessId: string, serviceId: string, actor: AuditActor): Promise<void> {
     const service = await this.findInBusiness(businessId, serviceId);
-    await this.db.service.delete({ where: { id: serviceId } });
+    try {
+      await this.db.service.delete({ where: { id: serviceId } });
+    } catch (e: any) {
+      if (e?.code === PrismaErrorCode.FOREIGN_KEY_VIOLATION) {
+        throw new AppException(ErrorCode.SERVICE_IN_USE, HttpStatus.CONFLICT);
+      }
+      throw e;
+    }
     const event: AuditLogEvent = {
       businessId,
       entityType: AuditEntity.SERVICE,

@@ -7,5 +7,5 @@ export const SERVICE_AUDIT_FIELDS: FieldDescriptor<Service>[] = [
   { key: 'durationMinutes' },
   { key: 'bufferMinutes' },
   { key: 'description' },
-  { key: 'isActive' },
+  { key: 'status' },
 ];

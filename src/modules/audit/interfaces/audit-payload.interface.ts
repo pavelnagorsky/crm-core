@@ -77,6 +77,30 @@ interface BusinessUpdatedPayload {
   changes: AuditFieldChange[];
 }
 
+interface StaffCompensationUpdatedPayload {
+  effectiveFrom: string;
+  serviceCommissionPercent: string | null;
+  productCommissionPercent: string | null;
+  fixedSalaryAmount: string | null;
+  hourlyRate: string | null;
+  salaryMode: string;
+}
+
+interface StaffEarningAuditPayload {
+  type?: string;
+  amount: string;
+  reason?: string;
+  bookingId?: string;
+  externalId?: string;
+  staffId?: string;
+}
+
+interface PayrollPeriodAuditPayload {
+  startDate?: string;
+  endDate?: string;
+  staffCount?: number;
+}
+
 // ─── Union ───────────────────────────────────────────────────────────────────
 
 export type AuditPayload =
@@ -90,7 +114,10 @@ export type AuditPayload =
   | StaffCreatedPayload
   | StaffUpdatedPayload
   | StaffDeletedPayload
+  | StaffCompensationUpdatedPayload
+  | StaffEarningAuditPayload
   | ServiceCreatedPayload
   | ServiceUpdatedPayload
   | ServiceDeletedPayload
-  | BusinessUpdatedPayload;
+  | BusinessUpdatedPayload
+  | PayrollPeriodAuditPayload;

@@ -1,4 +1,5 @@
 export const PrismaErrorCode = {
   UNIQUE_CONSTRAINT_VIOLATION: 'P2002',
+  FOREIGN_KEY_VIOLATION: 'P2003',
   RECORD_NOT_FOUND: 'P2025',
 } as const;

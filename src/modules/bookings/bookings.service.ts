@@ -1,6 +1,6 @@
 import { createHash } from 'crypto';
 import { HttpStatus, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { Booking, BusinessRole, CalendarEventRepeatType, CalendarEventType, CancelledBy, Prisma } from '@prisma/client';
+import { Booking, BusinessRole, CalendarEventRepeatType, CalendarEventType, CancelledBy, Prisma, ServiceStatus } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
@@ -10,6 +10,7 @@ import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { TimeService } from '../time/time.service.js';
 import { CalendarService } from '../calendar/calendar.service.js';
 import { StaffService } from '../staff/staff.service.js';
+import { StaffEarningsService } from '../payroll/earnings/staff-earnings.service.js';
 import { BusinessService } from '../business/business.service.js';
 import { BookingSetupCategoryDto } from './dto/booking-setup-category.dto.js';
 import { BookingSetupResponseDto } from './dto/booking-setup-response.dto.js';
@@ -19,6 +20,7 @@ import { UpdateBookingDto } from './dto/update-booking.dto.js';
 import { UpdateBookingStatusDto } from './dto/update-booking-status.dto.js';
 import { BookingSearchRequestDto } from './dto/booking-search-request.dto.js';
 import { BookingSearchOrderBy } from './enums/booking-search-order-by.enum.js';
+import { AUTO_COMPLETABLE_STATUSES } from './booking-cron.rules.js';
 import { BookingStatus } from './enums/booking-status.enum.js';
 import { AUDIT_EVENT } from '../audit/audit.constants.js';
 import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
@@ -44,6 +46,7 @@ export class BookingsService {
     private readonly calendarService: CalendarService,
     private readonly staffService: StaffService,
     private readonly businessService: BusinessService,
+    private readonly staffEarnings: StaffEarningsService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -55,10 +58,10 @@ export class BookingsService {
         this.db.serviceCategory.findMany({
           where: { businessId },
           orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-          include: { services: { where: { isActive: true }, orderBy: servicesOrder } },
+          include: { services: { where: { status: ServiceStatus.ACTIVE }, orderBy: servicesOrder } },
         }),
         this.db.service.findMany({
-          where: { businessId, categoryId: null, isActive: true },
+          where: { businessId, categoryId: null, status: ServiceStatus.ACTIVE },
           orderBy: servicesOrder,
         }),
       ]),
@@ -116,12 +119,18 @@ export class BookingsService {
     const old = await this.findById(bookingId);
     assertBusinessRole(tokenPayload, old.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
     const updated = await this.db.booking.update({ where: { id: bookingId }, data: { status: dto.status } });
+    const actor = auditActorFromToken(tokenPayload, old.businessId);
+    if (dto.status === BookingStatus.COMPLETED && old.status !== BookingStatus.COMPLETED) {
+      await this.staffEarnings.recordForCompletedBooking(updated);
+    } else if (old.status === BookingStatus.COMPLETED && dto.status !== BookingStatus.COMPLETED) {
+      await this.staffEarnings.reverseForBooking(updated, actor);
+    }
     this.emitAudit({
       businessId: old.businessId,
       entityId: bookingId,
       eventType: AuditEvent.BOOKING_STATUS_CHANGED,
       actionType: AuditActionType.MODIFY,
-      actor: auditActorFromToken(tokenPayload, old.businessId),
+      actor,
       payload: { from: old.status, to: dto.status },
     });
     if (dto.status === BookingStatus.CONFIRMED && old.clientEmail) {
@@ -133,6 +142,45 @@ export class BookingsService {
       ));
     }
     return updated;
+  }
+
+  async completeElapsed(now = new Date()): Promise<number> {
+    const due = await this.db.booking.findMany({
+      where: {
+        endAt: { lte: now },
+        status: { in: [...AUTO_COMPLETABLE_STATUSES] },
+        deletedAt: null,
+      },
+    });
+
+    let completed = 0;
+    const actor: AuditActor = { name: 'System', role: AuditActorRole.SYSTEM };
+
+    for (const booking of due) {
+      const { count } = await this.db.booking.updateMany({
+        where: {
+          id: booking.id,
+          status: { in: [...AUTO_COMPLETABLE_STATUSES] },
+          deletedAt: null,
+        },
+        data: { status: BookingStatus.COMPLETED },
+      });
+      if (count === 0) continue;
+
+      const updated = { ...booking, status: BookingStatus.COMPLETED };
+      await this.staffEarnings.recordForCompletedBooking(updated);
+      this.emitAudit({
+        businessId: booking.businessId,
+        entityId: booking.id,
+        eventType: AuditEvent.BOOKING_STATUS_CHANGED,
+        actionType: AuditActionType.MODIFY,
+        actor,
+        payload: { from: booking.status, to: BookingStatus.COMPLETED },
+      });
+      completed += 1;
+    }
+
+    return completed;
   }
 
   async findById(bookingId: string): Promise<Booking> {
@@ -194,6 +242,9 @@ export class BookingsService {
         ? [this.db.calendarEvent.delete({ where: { id: booking.calendarEventId } })]
         : []),
     ]);
+    if (booking.status === BookingStatus.COMPLETED) {
+      await this.staffEarnings.reverseForBooking(booking, auditActorFromToken(tokenPayload, booking.businessId));
+    }
     this.emitAudit({
       businessId: booking.businessId,
       entityId: booking.id,
@@ -219,6 +270,9 @@ export class BookingsService {
         cancellationReason: reason ?? null,
       },
     });
+    if (booking.status === BookingStatus.COMPLETED) {
+      await this.staffEarnings.reverseForBooking(updated, actor);
+    }
     this.emitAudit({
       businessId: booking.businessId,
       entityId: booking.id,
@@ -250,7 +304,7 @@ export class BookingsService {
         select: { timezone: true },
       }),
       this.db.service.findFirst({
-        where: { id: serviceId, businessId, isActive: true },
+        where: { id: serviceId, businessId, status: ServiceStatus.ACTIVE },
         select: { id: true, title: true, durationMinutes: true, price: true },
       }),
     ]);

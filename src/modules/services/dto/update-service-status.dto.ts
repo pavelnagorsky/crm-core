@@ -1,8 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsBoolean } from 'class-validator';
+import { IsEnum } from 'class-validator';
+import { ServiceStatus } from '../enums/service-status.enum.js';
 
 export class UpdateServiceStatusDto {
-  @ApiProperty({ type: Boolean })
-  @IsBoolean()
-  isActive: boolean;
+  @ApiProperty({ enum: ServiceStatus, enumName: 'ServiceStatus' })
+  @IsEnum(ServiceStatus)
+  status: ServiceStatus;
 }

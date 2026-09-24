@@ -64,6 +64,7 @@ enum AuditEntity {
   STAFF
   SERVICE
   BUSINESS
+  PAYROLL
 }
 
 enum AuditEvent {
@@ -79,10 +80,19 @@ enum AuditEvent {
   STAFF_UPDATED
   STAFF_DEACTIVATED
   STAFF_DELETED
+  STAFF_COMPENSATION_UPDATED
+  STAFF_EARNING_ADDED
+  STAFF_EARNING_REVERSED
   SERVICE_CREATED
   SERVICE_UPDATED
   SERVICE_DELETED
   BUSINESS_UPDATED
+  PAYROLL_PERIOD_CREATED
+  PAYROLL_PERIOD_DELETED
+  PAYROLL_CALCULATED
+  PAYROLL_APPROVED
+  PAYROLL_PAID
+  PAYROLL_CORRECTED
 }
 
 enum AuditActorRole {
@@ -104,6 +114,55 @@ enum AuditActionType {
 enum StaffStatus {
   ACTIVE
   INACTIVE
+}
+
+enum ServiceStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum StaffEarningType {
+  SERVICE_COMMISSION
+  PRODUCT_COMMISSION
+  HOURLY
+  FIXED_SALARY
+  BONUS
+  DEDUCTION
+  CORRECTION
+}
+
+enum StaffEarningSource {
+  BOOKING
+  SHIFT
+  PRODUCT_SALE
+  MANUAL
+  PAYROLL
+  IMPORT
+}
+
+enum PayrollPeriodStatus {
+  DRAFT
+  CALCULATED
+  APPROVED
+  PAID
+}
+
+enum StaffEmploymentType {
+  LABOR_CONTRACT
+  CIVIL_CONTRACT
+  SELF_EMPLOYED
+  INDIVIDUAL_ENTREPRENEUR
+}
+
+enum StaffPayoutMethod {
+  CASH
+  CARD
+  BANK_TRANSFER
+}
+
+enum CompensationSalaryMode {
+  ADDITIVE
+  GUARANTEED_MINIMUM
 }
 
 // ─── Models ──────────────────────────────────────────────────────────────────
@@ -170,6 +229,10 @@ model Business {
   staffInvitations              StaffInvitation[]
   calendarEvents                CalendarEvent[]
   bookings                      Booking[]
+  compensationPlans             StaffCompensationPlan[]
+  staffEarnings                 StaffEarning[]
+  payrollPeriods                PayrollPeriod[]
+  payrollResults                PayrollResult[]
 }
 
 model Membership {
@@ -236,16 +299,17 @@ model Service {
   price           Decimal  @db.Decimal(10, 2)
   durationMinutes Int
   bufferMinutes   Int      @default(0)
-  isActive        Boolean  @default(true)
+  status          ServiceStatus @default(ACTIVE)
   sortOrder       Int      @default(0)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  business      Business         @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  category      ServiceCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  imageFile     File?            @relation(fields: [imageFileId], references: [id], onDelete: SetNull)
-  staffServices StaffService[]
-  bookings      Booking[]
+  business         Business                      @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  category         ServiceCategory?              @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  imageFile        File?                         @relation(fields: [imageFileId], references: [id], onDelete: SetNull)
+  staffServices    StaffService[]
+  bookings         Booking[]
+  commissionRates  StaffCompensationServiceRate[]
 
   @@index([businessId])
   @@index([categoryId])
@@ -259,10 +323,15 @@ model Staff {
   name         String   @db.VarChar(250)
   phone        String?  @db.VarChar(30)
   email        String?  @db.VarChar(254)
-  roleTitle    String?  @db.VarChar(250)
-  status        StaffStatus @default(ACTIVE)
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  roleTitle        String?              @db.VarChar(250)
+  status           StaffStatus          @default(ACTIVE)
+  employmentType   StaffEmploymentType?
+  taxId            String?              @db.VarChar(20)
+  employeeNumber   String?              @db.VarChar(30)
+  payoutMethod     StaffPayoutMethod?
+  payoutNote       String?              @db.VarChar(250)
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
 
   business      Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
   user          User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
@@ -272,6 +341,9 @@ model Staff {
   shifts        StaffShift[]
   calendarEvents CalendarEvent[]
   bookings      Booking[]
+  compensationPlans StaffCompensationPlan[]
+  earnings          StaffEarning[]
+  payrollResults    PayrollResult[]
 
   @@index([businessId])
 }
@@ -335,7 +407,8 @@ model StaffShift {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  staff     Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  staff     Staff          @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  earnings  StaffEarning[]
 
   @@unique([staffId, date])
   @@index([staffId, date])
@@ -425,6 +498,7 @@ model Booking {
   service       Service        @relation(fields: [serviceId],       references: [id], onDelete: Restrict)
   client        Client         @relation(fields: [clientId],        references: [id], onDelete: Restrict)
   calendarEvent CalendarEvent? @relation(fields: [calendarEventId], references: [id], onDelete: SetNull)
+  earnings      StaffEarning[]
 
   @@index([businessId, deletedAt, startAt])
   @@index([staffId, deletedAt, startAt])
@@ -448,4 +522,147 @@ model AuditLog {
 
   @@index([businessId, entityType, entityId])
   @@index([businessId, entityType, entityId, createdAt])
+}
+
+model StaffCompensationPlan {
+  id                       String                 @id @default(uuid())
+  businessId               String
+  staffId                  String
+  effectiveFrom            DateTime               @db.Date
+  effectiveTo              DateTime?              @db.Date
+  fixedSalaryAmount        Decimal?               @db.Decimal(12, 2)
+  hourlyRate               Decimal?               @db.Decimal(10, 2)
+  serviceCommissionPercent Decimal?               @db.Decimal(5, 2)
+  productCommissionPercent Decimal?               @db.Decimal(5, 2)
+  salaryMode               CompensationSalaryMode @default(GUARANTEED_MINIMUM)
+  note                     String?                @db.VarChar(1000)
+  createdAt                DateTime               @default(now())
+
+  business     Business                       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  staff        Staff                          @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  serviceRates StaffCompensationServiceRate[]
+  earnings     StaffEarning[]
+
+  @@unique([staffId, effectiveFrom])
+  @@index([businessId])
+  @@index([staffId, effectiveFrom, effectiveTo])
+}
+
+model StaffCompensationServiceRate {
+  id                String  @id @default(uuid())
+  planId            String
+  serviceId         String
+  commissionPercent Decimal @db.Decimal(5, 2)
+
+  plan    StaffCompensationPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  service Service               @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+
+  @@unique([planId, serviceId])
+  @@index([planId])
+  @@index([serviceId])
+}
+
+model StaffEarning {
+  id                      String             @id @default(uuid())
+  businessId              String
+  staffId                 String
+  type                    StaffEarningType
+  source                  StaffEarningSource
+  earnedOn                DateTime           @db.Date
+  amount                  Decimal            @db.Decimal(12, 2)
+  currency                String             @db.VarChar(3)
+  baseAmount              Decimal?           @db.Decimal(12, 2)
+  ratePercent             Decimal?           @db.Decimal(5, 2)
+  rateAmount              Decimal?           @db.Decimal(10, 2)
+  quantity                Decimal?           @db.Decimal(10, 2)
+  description             String?            @db.VarChar(500)
+  reason                  String?            @db.VarChar(1000)
+  actorId                 String?
+  actorName               String?            @db.VarChar(300)
+  idempotencyKey          String
+  compensationPlanId      String?
+  bookingId               String?
+  shiftId                 String?
+  externalId              String?            @db.VarChar(100)
+  reversesEarningId       String?            @unique
+  correctsPayrollResultId String?
+  payrollResultId         String?
+  createdAt               DateTime           @default(now())
+
+  business              Business               @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  staff                 Staff                  @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  compensationPlan      StaffCompensationPlan? @relation(fields: [compensationPlanId], references: [id], onDelete: SetNull)
+  booking               Booking?               @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  shift                 StaffShift?            @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+  reversesEarning       StaffEarning?          @relation("EarningReversal", fields: [reversesEarningId], references: [id])
+  reversedBy            StaffEarning?          @relation("EarningReversal")
+  correctsPayrollResult PayrollResult?         @relation("PayrollCorrections", fields: [correctsPayrollResultId], references: [id], onDelete: SetNull)
+  payrollResult         PayrollResult?         @relation("PayrollResultEarnings", fields: [payrollResultId], references: [id], onDelete: SetNull)
+
+  @@unique([businessId, idempotencyKey])
+  @@index([businessId, staffId, earnedOn])
+  @@index([businessId, earnedOn])
+  @@index([bookingId])
+  @@index([shiftId])
+  @@index([payrollResultId])
+}
+
+model PayrollPeriod {
+  id             String              @id @default(uuid())
+  businessId     String
+  name           String?             @db.VarChar(255)
+  startDate      DateTime            @db.Date
+  endDate        DateTime            @db.Date
+  currency       String              @db.VarChar(3)
+  status         PayrollPeriodStatus @default(DRAFT)
+  calculatedAt   DateTime?
+  approvedAt     DateTime?
+  paidAt         DateTime?
+  approvedById   String?
+  approvedByName String?             @db.VarChar(300)
+  paidById       String?
+  paidByName     String?             @db.VarChar(300)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  business Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  results  PayrollResult[]
+
+  @@unique([businessId, startDate, endDate])
+  @@index([businessId, status])
+}
+
+model PayrollResult {
+  id                      String               @id @default(uuid())
+  periodId                String
+  businessId              String
+  staffId                 String
+  staffName               String               @db.VarChar(250)
+  roleTitle               String?              @db.VarChar(250)
+  taxId                   String?              @db.VarChar(20)
+  employeeNumber          String?              @db.VarChar(30)
+  employmentType          StaffEmploymentType?
+  payoutMethod            StaffPayoutMethod?
+  payoutNote              String?              @db.VarChar(250)
+  currency                String               @db.VarChar(3)
+  fixedSalaryTotal        Decimal              @db.Decimal(12, 2)
+  hourlyTotal             Decimal              @db.Decimal(12, 2)
+  serviceCommissionTotal  Decimal              @db.Decimal(12, 2)
+  productCommissionTotal  Decimal              @db.Decimal(12, 2)
+  bonusTotal              Decimal              @db.Decimal(12, 2)
+  deductionTotal          Decimal              @db.Decimal(12, 2)
+  correctionTotal         Decimal              @db.Decimal(12, 2)
+  totalAmount             Decimal              @db.Decimal(12, 2)
+  earningsCount           Int
+  createdAt               DateTime             @default(now())
+
+  period      PayrollPeriod  @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  business    Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  staff       Staff          @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  earnings    StaffEarning[] @relation("PayrollResultEarnings")
+  corrections StaffEarning[] @relation("PayrollCorrections")
+
+  @@unique([periodId, staffId])
+  @@index([businessId])
+  @@index([staffId])
 }

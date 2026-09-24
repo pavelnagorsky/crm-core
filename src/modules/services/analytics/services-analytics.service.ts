@@ -159,11 +159,11 @@ export class ServicesAnalyticsService {
   }
 
   private async resolveServiceIds(businessId: string, dto: ServicesAnalyticsRequestDto): Promise<string[] | undefined> {
-    if (dto.search === undefined && dto.categoryId === undefined && dto.isActive === undefined) return undefined;
+    if (dto.search === undefined && dto.categoryId === undefined && dto.status === undefined) return undefined;
     return this.servicesService.findIdsByFilter(businessId, {
       search: dto.search,
       categoryId: dto.categoryId,
-      isActive: dto.isActive,
+      status: dto.status,
     });
   }
 

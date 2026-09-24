@@ -4,6 +4,7 @@ import {
   Booking,
   CalendarEventRepeatType,
   CalendarEventType,
+  ServiceStatus,
 } from '@prisma/client';
 import { BookingVisibility } from '../business/enums/booking-visibility.enum.js';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -85,7 +86,7 @@ export class BookingCreateService {
         select: { isBookingConfirmationRequired: true, timezone: true, bookingVisibility: true },
       }),
       this.db.service.findFirst({
-        where: { id: dto.serviceId, businessId, isActive: true },
+        where: { id: dto.serviceId, businessId, status: ServiceStatus.ACTIVE },
         select: { id: true, title: true, durationMinutes: true, price: true },
       }),
     ]);

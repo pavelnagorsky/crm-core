@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
-import { CalendarEvent, CalendarEventRepeatType, Prisma } from '@prisma/client';
+import { CalendarEvent, CalendarEventRepeatType, Prisma, ServiceStatus } from '@prisma/client';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { BookingVisibility } from '../business/enums/booking-visibility.enum.js';
@@ -155,7 +155,7 @@ export class CalendarService {
         },
       }),
       this.db.service.findFirst({
-        where: { id: dto.serviceId, businessId, isActive: true },
+        where: { id: dto.serviceId, businessId, status: ServiceStatus.ACTIVE },
         select: { durationMinutes: true, bufferMinutes: true },
       }),
       this.staff.resolveStaffForService(businessId, dto.serviceId, dto.staffId),

@@ -50,6 +50,17 @@ export class StaffService {
     private readonly config: ConfigService,
   ) {}
 
+  listInBusiness(businessId: string): Promise<Staff[]> {
+    return this.db.staff.findMany({ where: { businessId }, orderBy: { name: 'asc' } });
+  }
+
+  listShiftsInRange(businessId: string, from: Date, to: Date): Promise<StaffShift[]> {
+    return this.db.staffShift.findMany({
+      where: { staff: { businessId }, date: { gte: from, lte: to } },
+      orderBy: { date: 'asc' },
+    });
+  }
+
   listActiveWithServices(
     businessId: string,
   ): Promise<(StaffWithAvatar & { staffServices: { serviceId: string }[] })[]> {
@@ -73,6 +84,11 @@ export class StaffService {
         phone: dto.phone ?? null,
         email: dto.email ?? null,
         avatarFileId: dto.avatarFileId ?? null,
+        employmentType: dto.employmentType ?? null,
+        taxId: dto.taxId ?? null,
+        employeeNumber: dto.employeeNumber ?? null,
+        payoutMethod: dto.payoutMethod ?? null,
+        payoutNote: dto.payoutNote ?? null,
         staffServices: dto.serviceIds?.length
           ? { create: dto.serviceIds.map((serviceId) => ({ serviceId })) }
           : undefined,
@@ -111,6 +127,11 @@ export class StaffService {
         phone: dto.phone,
         email: dto.email,
         avatarFileId: dto.avatarFileId,
+        employmentType: dto.employmentType,
+        taxId: dto.taxId,
+        employeeNumber: dto.employeeNumber,
+        payoutMethod: dto.payoutMethod,
+        payoutNote: dto.payoutNote,
         ...(dto.serviceIds !== undefined && {
           staffServices: {
             deleteMany: {},
@@ -253,7 +274,14 @@ export class StaffService {
     if (bookingCount > 0)
       throw new AppException(ErrorCode.STAFF_HAS_BOOKINGS, HttpStatus.CONFLICT);
 
-    await this.db.staff.delete({ where: { id: staffId } });
+    try {
+      await this.db.staff.delete({ where: { id: staffId } });
+    } catch (e: any) {
+      if (e?.code === PrismaErrorCode.FOREIGN_KEY_VIOLATION) {
+        throw new AppException(ErrorCode.STAFF_HAS_EARNINGS, HttpStatus.CONFLICT);
+      }
+      throw e;
+    }
   }
 
   async getStatusCounts(businessId: string): Promise<StaffStatusCountResponseDto[]> {

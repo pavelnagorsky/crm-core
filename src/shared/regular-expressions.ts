@@ -10,6 +10,12 @@ const regularExpressions = {
   localDateTime: /^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d:[0-5]\d$/,
   // Positive decimal number — e.g. 49, 49.1, 49.99, 49.3223
   positiveDecimal: /^\d+(\.\d+)?$/,
+  // Signed decimal — e.g. -12.50, 12.50
+  signedDecimal: /^-?\d+(\.\d+)?$/,
+  // Percent 0–100 with up to 2 decimal places
+  percent: /^(100(?:\.0{1,2})?|\d{1,2}(?:\.\d{1,2})?)$/,
+  // RF INN (10/12) or RB UNP (9)
+  taxId: /^\d{9,12}$/,
 };
 
 export default regularExpressions;

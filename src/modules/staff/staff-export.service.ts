@@ -10,6 +10,10 @@ type StaffRow = {
   email: string;
   phone: string;
   status: string;
+  employmentType: string;
+  taxId: string;
+  employeeNumber: string;
+  payoutMethod: string;
   createdAt: Date;
 };
 
@@ -20,6 +24,10 @@ const STAFF_COLUMNS: ExportColumn<StaffRow>[] = [
   { header: 'Email', key: 'email' },
   { header: 'Phone', key: 'phone' },
   { header: 'Status', key: 'status' },
+  { header: 'Employment Type', key: 'employmentType' },
+  { header: 'Tax ID', key: 'taxId' },
+  { header: 'Employee Number', key: 'employeeNumber' },
+  { header: 'Payout Method', key: 'payoutMethod' },
   { header: 'Created At', key: 'createdAt' },
 ];
 
@@ -41,6 +49,10 @@ function toRow(s: StaffWithAvatar): StaffRow {
     email: s.email ?? '',
     phone: s.phone ?? '',
     status: s.status,
+    employmentType: s.employmentType ?? '',
+    taxId: s.taxId ?? '',
+    employeeNumber: s.employeeNumber ?? '',
+    payoutMethod: s.payoutMethod ?? '',
     createdAt: s.createdAt,
   };
 }

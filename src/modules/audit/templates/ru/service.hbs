@@ -5,7 +5,7 @@
 {{#if (eq eventType "SERVICE_UPDATED")}}
 <ul>
   {{#each payload.changes}}
-  <li>{{t "fields" ../entityType this.field}}: <s>{{formatValue this.field this.from}}</s> → {{formatValue this.field this.to}}</li>
+  <li>{{t "fields" ../entityType this.field}}: <s>{{#if (eq this.field "status")}}{{t "serviceStatus" this.from}}{{else}}{{formatValue this.field this.from}}{{/if}}</s> → {{#if (eq this.field "status")}}{{t "serviceStatus" this.to}}{{else}}{{formatValue this.field this.to}}{{/if}}</li>
   {{/each}}
 </ul>
 {{/if}}

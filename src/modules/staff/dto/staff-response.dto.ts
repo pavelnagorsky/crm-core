@@ -2,6 +2,8 @@ import { ApiProperty } from '@nestjs/swagger';
 import { StaffWithAvatar } from '../staff.service.js';
 import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
 import { StaffStatus } from '../enums/staff-status.enum.js';
+import { StaffEmploymentType } from '../enums/staff-employment-type.enum.js';
+import { StaffPayoutMethod } from '../enums/staff-payout-method.enum.js';
 
 export class StaffResponseDto {
   @ApiProperty({ type: String })
@@ -31,6 +33,21 @@ export class StaffResponseDto {
   @ApiProperty({ enum: StaffStatus, enumName: 'StaffStatus' })
   status: StaffStatus;
 
+  @ApiProperty({ enum: StaffEmploymentType, enumName: 'StaffEmploymentType', nullable: true })
+  employmentType: StaffEmploymentType | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  taxId: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  employeeNumber: string | null;
+
+  @ApiProperty({ enum: StaffPayoutMethod, enumName: 'StaffPayoutMethod', nullable: true })
+  payoutMethod: StaffPayoutMethod | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  payoutNote: string | null;
+
   @ApiProperty({ type: Date })
   createdAt: Date;
 
@@ -48,6 +65,11 @@ export class StaffResponseDto {
     dto.email = staff.email;
     dto.roleTitle = staff.roleTitle;
     dto.status = staff.status as StaffStatus;
+    dto.employmentType = staff.employmentType;
+    dto.taxId = staff.taxId;
+    dto.employeeNumber = staff.employeeNumber;
+    dto.payoutMethod = staff.payoutMethod;
+    dto.payoutNote = staff.payoutNote;
     dto.createdAt = staff.createdAt;
     dto.updatedAt = staff.updatedAt;
     return dto;

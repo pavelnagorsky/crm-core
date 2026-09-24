@@ -6,10 +6,14 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  Matches,
   MaxLength,
 } from 'class-validator';
 import { IsOptionalPhone } from '../../../shared/decorators/is-phone.decorator.js';
+import regularExpressions from '../../../shared/regular-expressions.js';
 import { StaffStatus } from '../enums/staff-status.enum.js';
+import { StaffEmploymentType } from '../enums/staff-employment-type.enum.js';
+import { StaffPayoutMethod } from '../enums/staff-payout-method.enum.js';
 
 export class UpdateStaffDto {
   @ApiProperty({ type: String, maxLength: 250, required: false })
@@ -58,4 +62,31 @@ export class UpdateStaffDto {
   @IsOptional()
   @IsEnum(StaffStatus)
   status?: StaffStatus;
+
+  @ApiProperty({ enum: StaffEmploymentType, enumName: 'StaffEmploymentType', required: false, nullable: true })
+  @IsOptional()
+  @IsEnum(StaffEmploymentType)
+  employmentType?: StaffEmploymentType;
+
+  @ApiProperty({ type: String, required: false, nullable: true })
+  @IsOptional()
+  @Matches(regularExpressions.taxId)
+  taxId?: string;
+
+  @ApiProperty({ type: String, required: false, nullable: true, maxLength: 30 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  employeeNumber?: string;
+
+  @ApiProperty({ enum: StaffPayoutMethod, enumName: 'StaffPayoutMethod', required: false, nullable: true })
+  @IsOptional()
+  @IsEnum(StaffPayoutMethod)
+  payoutMethod?: StaffPayoutMethod;
+
+  @ApiProperty({ type: String, required: false, nullable: true, maxLength: 250 })
+  @IsOptional()
+  @IsString()
+  @MaxLength(250)
+  payoutNote?: string;
 }

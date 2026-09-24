@@ -5,17 +5,16 @@ import { DatabaseService } from '../../database/database.service.js';
 import { NOTIFICATION_EVENT } from '../notifications/notifications.service.js';
 import { BookingReminderNotification } from '../notifications/notifications/booking-reminder.notification.js';
 import { BusinessService } from '../business/business.service.js';
-import { BookingStatus } from './enums/booking-status.enum.js';
-
-const REMINDER_WINDOW_MINUTES = 60;
-const WINDOW_BUFFER_MINUTES = 30;
+import { BookingsService } from './bookings.service.js';
+import { AUTO_COMPLETABLE_STATUSES, reminderWindow } from './booking-cron.rules.js';
 
 @Injectable()
-export class BookingReminderService {
-  private readonly logger = new Logger(BookingReminderService.name);
+export class BookingCronService {
+  private readonly logger = new Logger(BookingCronService.name);
 
   constructor(
     private readonly db: DatabaseService,
+    private readonly bookings: BookingsService,
     private readonly eventEmitter: EventEmitter2,
     private readonly businessService: BusinessService,
   ) {}
@@ -23,13 +22,12 @@ export class BookingReminderService {
   @Cron(CronExpression.EVERY_HOUR)
   async sendReminders(): Promise<void> {
     const now = new Date();
-    const windowStart = new Date(now.getTime() + (REMINDER_WINDOW_MINUTES - WINDOW_BUFFER_MINUTES) * 60_000);
-    const windowEnd = new Date(now.getTime() + (REMINDER_WINDOW_MINUTES + WINDOW_BUFFER_MINUTES) * 60_000);
+    const { from, to } = reminderWindow(now);
 
     const bookings = await this.db.booking.findMany({
       where: {
-        startAt: { gte: windowStart, lte: windowEnd },
-        status: { in: [BookingStatus.PENDING, BookingStatus.CONFIRMED] },
+        startAt: { gt: from, lte: to },
+        status: { in: [...AUTO_COMPLETABLE_STATUSES] },
         clientEmail: { not: null },
         reminderSentAt: null,
         deletedAt: null,
@@ -59,5 +57,11 @@ export class BookingReminderService {
         });
       }),
     );
+  }
+
+  @Cron(CronExpression.EVERY_10_MINUTES)
+  async completeElapsed(): Promise<void> {
+    const count = await this.bookings.completeElapsed();
+    if (count > 0) this.logger.log(`Auto-completed ${count} elapsed booking(s)`);
   }
 }
