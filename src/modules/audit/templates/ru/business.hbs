@@ -1,5 +1,4 @@
 {{#if (eq eventType "BUSINESS_UPDATED")}}
-<p><strong>{{actorName}}</strong> <span class="audit-role">({{t "actorRole" actorRole}})</span> изменил настройки компании:</p>
 <ul>
   {{#each payload.changes}}
   <li>{{t "fields" ../entityType this.field}}: <s>{{formatValue this.field this.from}}</s> → {{formatValue this.field this.to}}</li>

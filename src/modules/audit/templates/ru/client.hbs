@@ -1,9 +1,8 @@
 {{#if (eq eventType "CLIENT_CREATED")}}
-<p><strong>{{actorName}}</strong> <span class="audit-role">({{t "actorRole" actorRole}})</span> добавил клиента: {{payload.fullName}}, {{payload.phone}}</p>
+<p>{{payload.fullName}}, {{payload.phone}}</p>
 {{/if}}
 
 {{#if (eq eventType "CLIENT_UPDATED")}}
-<p><strong>{{actorName}}</strong> <span class="audit-role">({{t "actorRole" actorRole}})</span> изменил данные клиента:</p>
 <ul>
   {{#each payload.changes}}
   <li>{{t "fields" ../entityType this.field}}: <s>{{formatValue this.field this.from}}</s> → {{formatValue this.field this.to}}</li>

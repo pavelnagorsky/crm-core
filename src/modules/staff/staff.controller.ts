@@ -11,6 +11,8 @@ import {
   Post,
   Put,
   Query,
+  Res,
+  StreamableFile,
 } from '@nestjs/common';
 import {
   ApiConflictResponse,
@@ -20,6 +22,7 @@ import {
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiProduces,
   ApiTags,
 } from '@nestjs/swagger';
 import { StaffStatusCountResponseDto } from './dto/staff-status-count-response.dto.js';
@@ -34,6 +37,8 @@ import { InvitationResponseDto } from './dto/invitation-response.dto.js';
 import { StaffResponseDto } from './dto/staff-response.dto.js';
 import { StaffSearchRequestDto } from './dto/staff-search-request.dto.js';
 import { StaffSearchResponseDto } from './dto/staff-search-response.dto.js';
+import { StaffExportRequestDto } from './dto/staff-export-request.dto.js';
+import { StaffExportService } from './staff-export.service.js';
 import { GetShiftsRequestDto } from './dto/get-shifts-request.dto.js';
 import { ReplaceShiftsRequestDto } from './dto/replace-shifts-request.dto.js';
 import { ShiftsResponseDto } from './dto/shifts-response.dto.js';
@@ -55,7 +60,10 @@ import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
 @ApiTags('Staff')
 @Controller('staff')
 export class StaffController {
-  constructor(private readonly staffService: StaffService) {}
+  constructor(
+    private readonly staffService: StaffService,
+    private readonly staffExportService: StaffExportService,
+  ) {}
 
   @ApiOperation({ summary: 'Create a staff member' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
@@ -106,6 +114,22 @@ export class StaffController {
     assertBusinessRole(tokenPayload, businessId, BusinessRole.OWNER, BusinessRole.STAFF);
     const counts = await this.staffService.getStatusCounts(businessId);
     return BaseResponseDto.success(counts);
+  }
+
+  @ApiOperation({ summary: 'Export staff members as XLSX' })
+  @ApiProduces('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @ApiOkResponse({ description: 'File stream' })
+  @Auth()
+  @Get('export')
+  async export(
+    @Query() dto: StaffExportRequestDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
+    @Res({ passthrough: true }) res: any,
+  ): Promise<StreamableFile> {
+    assertBusinessRole(tokenPayload, dto.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
+    const { stream, filename } = await this.staffExportService.stream(dto.businessId, dto);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return new StreamableFile(stream, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   }
 
   @ApiOperation({ summary: 'Get staff member by ID' })

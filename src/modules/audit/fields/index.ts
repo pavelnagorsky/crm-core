@@ -16,3 +16,7 @@ const allFields = [
 export const AUDIT_FIELD_TYPES: Record<string, FieldType> = Object.fromEntries(
   allFields.filter((f) => f.type).map((f) => [String(f.key), f.type!]),
 );
+
+export const AUDIT_FIELD_I18N: Record<string, string> = Object.fromEntries(
+  allFields.filter((f) => f.i18n).map((f) => [String(f.key), f.i18n!]),
+);

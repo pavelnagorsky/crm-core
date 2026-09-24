@@ -1,9 +1,8 @@
 {{#if (eq eventType "SERVICE_CREATED")}}
-<p><strong>{{actorName}}</strong> <span class="audit-role">({{t "actorRole" actorRole}})</span> добавил услугу: {{payload.title}}, {{payload.price}}, {{payload.durationMinutes}} мин.</p>
+<p>{{payload.title}}, {{payload.price}}, {{payload.durationMinutes}} мин.</p>
 {{/if}}
 
 {{#if (eq eventType "SERVICE_UPDATED")}}
-<p><strong>{{actorName}}</strong> <span class="audit-role">({{t "actorRole" actorRole}})</span> изменил услугу:</p>
 <ul>
   {{#each payload.changes}}
   <li>{{t "fields" ../entityType this.field}}: <s>{{formatValue this.field this.from}}</s> → {{formatValue this.field this.to}}</li>
@@ -12,5 +11,5 @@
 {{/if}}
 
 {{#if (eq eventType "SERVICE_DELETED")}}
-<p><strong>{{actorName}}</strong> <span class="audit-role">({{t "actorRole" actorRole}})</span> удалил услугу: {{payload.title}}</p>
+<p>{{payload.title}}</p>
 {{/if}}

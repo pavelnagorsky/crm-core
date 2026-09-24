@@ -76,6 +76,10 @@
     "COMPLETED": "Завершено",
     "NO_SHOW": "Не явился"
   },
+  "staffStatus": {
+    "ACTIVE": "Активный",
+    "INACTIVE": "Неактивный"
+  },
   "cancelledBy": {
     "BUSINESS": "бизнес",
     "CLIENT": "клиент"
@@ -106,7 +110,9 @@
     "STAFF": {
       "name": "Имя",
       "roleTitle": "Должность",
-      "isActive": "Активен"
+      "phone": "Телефон",
+      "email": "Email",
+      "status": "Статус"
     },
     "SERVICE": {
       "title": "Название",

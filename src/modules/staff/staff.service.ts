@@ -100,6 +100,9 @@ export class StaffService {
     actor: AuditActor,
   ): Promise<StaffWithAvatar> {
     const old = await this.findInBusiness(businessId, staffId);
+    if (dto.status !== undefined && dto.status !== old.status) {
+      await this.changeStatus(businessId, staffId, { status: dto.status }, actor);
+    }
     const staff = await this.db.staff.update({
       where: { id: staffId },
       data: {
@@ -117,7 +120,9 @@ export class StaffService {
       },
       include: { avatarFile: true },
     });
-    const changes = diffFields(old, staff, STAFF_AUDIT_FIELDS);
+    const changes = diffFields(old, staff, STAFF_AUDIT_FIELDS).filter(
+      (change) => change.field !== 'status',
+    );
     if (changes.length > 0) {
       const event: AuditLogEvent = {
         businessId,
@@ -236,7 +241,7 @@ export class StaffService {
       actionType: AuditActionType.MODIFY,
       occurredAt: now,
       actor,
-      payload: { changes: [{ key: 'status', from: staff.status, to: dto.status }] },
+      payload: { changes: [{ field: 'status', from: staff.status, to: dto.status }] },
     };
     this.eventEmitter.emit(AUDIT_EVENT, event);
   }

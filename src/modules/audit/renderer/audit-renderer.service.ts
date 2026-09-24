@@ -7,7 +7,7 @@ import { format, isValid } from 'date-fns';
 import { ru as dateFnsRu, type Locale as DateFnsLocale } from 'date-fns/locale';
 import type { AuditLog } from '@prisma/client';
 import { AuditEntity } from '../enums/audit-entity.enum.js';
-import { AUDIT_FIELD_TYPES } from '../fields/index.js';
+import { AUDIT_FIELD_I18N, AUDIT_FIELD_TYPES } from '../fields/index.js';
 import { I18nLocale } from '../../../shared/interfaces/i18n-locale.interface.js';
 
 type CompiledTemplate = Handlebars.TemplateDelegate;
@@ -74,7 +74,7 @@ export class AuditRendererService implements OnModuleInit {
       eventType: log.eventType,
       actorName: log.actorName,
       actorRole: log.actorRole,
-      payload: log.payload,
+      payload: this.normalizePayload(log.payload),
       locale,
       lang: resolvedLang,
     }).trim();
@@ -95,8 +95,16 @@ export class AuditRendererService implements OnModuleInit {
 
     this.hbs.registerHelper('formatValue', (...rawArgs: unknown[]) => {
       const opts = rawArgs[rawArgs.length - 1] as Handlebars.HelperOptions;
-      const [field, value] = rawArgs as [string, string];
+      const field = String(rawArgs[0] ?? '');
+      const value = rawArgs[1] == null ? '' : String(rawArgs[1]);
       if (!value || value === '—') return '—';
+      const locale = opts.data?.root?.locale as Record<string, unknown> | undefined;
+      const dictionaryName = AUDIT_FIELD_I18N[field];
+      const dictionary = dictionaryName ? locale?.[dictionaryName] : undefined;
+      if (dictionary && typeof dictionary === 'object') {
+        const translated = (dictionary as Record<string, unknown>)[value];
+        if (typeof translated === 'string') return translated;
+      }
       const type = AUDIT_FIELD_TYPES[field];
       if (!type) return value;
       const lang: string = opts.data?.root?.lang ?? 'ru';
@@ -111,6 +119,19 @@ export class AuditRendererService implements OnModuleInit {
       const lang: string = opts.data?.root?.lang ?? 'ru';
       return this.formatDate(value, 'd MMM yyyy, HH:mm', lang);
     });
+  }
+
+  private normalizePayload(payload: unknown): unknown {
+    if (!payload || typeof payload !== 'object') return payload;
+    const body = payload as { changes?: Array<Record<string, unknown>> };
+    if (!Array.isArray(body.changes)) return payload;
+    return {
+      ...body,
+      changes: body.changes.map((change) => ({
+        ...change,
+        field: String(change.field ?? change.key ?? ''),
+      })),
+    };
   }
 
   private formatDate(iso: string, pattern: string, lang: string): string {

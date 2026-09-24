@@ -2,12 +2,14 @@ import { ApiProperty } from '@nestjs/swagger';
 import {
   IsArray,
   IsEmail,
+  IsEnum,
   IsOptional,
   IsString,
   IsUUID,
   MaxLength,
 } from 'class-validator';
 import { IsOptionalPhone } from '../../../shared/decorators/is-phone.decorator.js';
+import { StaffStatus } from '../enums/staff-status.enum.js';
 
 export class UpdateStaffDto {
   @ApiProperty({ type: String, maxLength: 250, required: false })
@@ -51,4 +53,9 @@ export class UpdateStaffDto {
   @IsArray()
   @IsUUID('all', { each: true })
   serviceIds?: string[];
+
+  @ApiProperty({ enum: StaffStatus, enumName: 'StaffStatus', required: false })
+  @IsOptional()
+  @IsEnum(StaffStatus)
+  status?: StaffStatus;
 }

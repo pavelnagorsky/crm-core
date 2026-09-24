@@ -33,11 +33,11 @@ export class BusinessService {
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
-  async create(userId: string, dto: CreateBusinessDto): Promise<Business> {
+  async create(userId: string, dto: CreateBusinessDto, actor: AuditActor): Promise<Business> {
     const user = await this.userService.findById(userId);
     const staffName = [user.firstName, user.lastName].filter(Boolean).join(' ');
 
-    return this.db.business.create({
+    const business = await this.db.business.create({
       data: {
         name: dto.name,
         logoFileId: dto.logoFileId ?? null,
@@ -53,7 +53,25 @@ export class BusinessService {
           create: { userId, name: staffName, phone: user.phone, email: user.email },
         },
       },
+      include: { staff: true },
     });
+
+    const ownerStaff = business.staff[0];
+    if (ownerStaff) {
+      const event: AuditLogEvent = {
+        businessId: business.id,
+        entityType: AuditEntity.STAFF,
+        entityId: ownerStaff.id,
+        eventType: AuditEvent.STAFF_CREATED,
+        actionType: AuditActionType.CREATE,
+        occurredAt: new Date(),
+        actor,
+        payload: { name: ownerStaff.name },
+      };
+      this.eventEmitter.emit(AUDIT_EVENT, event);
+    }
+
+    return business;
   }
 
   async update(businessId: string, dto: UpdateBusinessDto, actor: AuditActor): Promise<Business> {

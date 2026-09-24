@@ -1,14 +1,19 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { ArrayMaxSize, ArrayNotEmpty, ArrayUnique, IsArray, IsEnum } from 'class-validator';
-import { StaffFilterDto } from '../../dto/staff-filter.dto.js';
+import { Transform, Type } from 'class-transformer';
+import { IsArray, IsEnum, IsUUID } from 'class-validator';
 import { StaffWidgetKey } from '../enums/staff-widget-key.enum.js';
 
-export class StaffWidgetsRequestDto extends StaffFilterDto {
+export class StaffWidgetsRequestDto {
+  @ApiProperty({ type: String, format: 'uuid' })
+  @Type(() => String)
+  @IsUUID()
+  businessId: string;
+
   @ApiProperty({ enum: StaffWidgetKey, isArray: true })
+  @Transform(({ value }) => {
+    return Array.isArray(value) ? value : [value];
+  })
   @IsArray()
-  @ArrayNotEmpty()
-  @ArrayUnique()
-  @ArrayMaxSize(Object.keys(StaffWidgetKey).length)
   @IsEnum(StaffWidgetKey, { each: true })
   keys: StaffWidgetKey[];
 }

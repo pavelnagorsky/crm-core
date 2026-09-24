@@ -38,6 +38,7 @@ import {
 } from '../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
 import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
+import { AuditActorRole } from '../audit/enums/audit-actor-role.enum.js';
 
 @ApiTags('Businesses')
 @Controller('businesses')
@@ -52,7 +53,12 @@ export class BusinessController {
     @TokenPayload() payload: TokenPayloadDto,
     @Body() dto: CreateBusinessDto,
   ): Promise<BaseResponseDto<{ id: string }>> {
-    const business = await this.businessService.create(payload.sub, dto);
+    const actorName = [payload.firstName, payload.lastName].filter(Boolean).join(' ') || 'Пользователь';
+    const business = await this.businessService.create(payload.sub, dto, {
+      id: payload.sub,
+      name: actorName,
+      role: AuditActorRole.OWNER,
+    });
     return BaseResponseDto.success({ id: business.id });
   }
 

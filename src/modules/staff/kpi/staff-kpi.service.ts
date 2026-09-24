@@ -1,9 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma, StaffStatus } from '@prisma/client';
+import { StaffStatus } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { MetricUnit } from '../../dashboard/enums/metric-unit.enum.js';
 import { ServicesService } from '../../services/services.service.js';
-import { StaffFilterDto } from '../dto/staff-filter.dto.js';
 import { StaffKpiCardDto } from './dto/staff-kpi-card.dto.js';
 import { StaffWidgetsRequestDto } from './dto/staff-widgets-request.dto.js';
 import { StaffWidgetKey } from './enums/staff-widget-key.enum.js';
@@ -19,7 +18,7 @@ export class StaffKpiService {
   ) {}
 
   async getWidgets(businessId: string, dto: StaffWidgetsRequestDto): Promise<StaffKpiCardDto[]> {
-    const ctx = await this.buildContext(businessId, dto);
+    const ctx = await this.buildContext(businessId, dto.keys);
     return dto.keys.map((key) => this.buildCard(key, ctx));
   }
 
@@ -61,60 +60,46 @@ export class StaffKpiService {
     }
   }
 
-  private async buildContext(businessId: string, dto: StaffWidgetsRequestDto): Promise<StaffWidgetContext> {
-    const where = this.buildWhere(businessId, dto);
+  private async buildContext(businessId: string, keys: StaffWidgetKey[]): Promise<StaffWidgetContext> {
     const week = currentWeekRange();
 
-    const needsActive = dto.keys.some(
+    const needsActive = keys.some(
       (k) =>
         k === StaffWidgetKey.ACTIVE_STAFF ||
         k === StaffWidgetKey.STAFF_UTILIZATION ||
         k === StaffWidgetKey.STAFF_WITHOUT_SHIFTS,
     );
-    const needsDeactivated = dto.keys.includes(StaffWidgetKey.ACTIVE_STAFF);
+    const needsDeactivated = keys.includes(StaffWidgetKey.ACTIVE_STAFF);
     const needsShifts =
-      dto.keys.includes(StaffWidgetKey.STAFF_UTILIZATION) ||
-      dto.keys.includes(StaffWidgetKey.STAFF_WITHOUT_SHIFTS);
-    const needsCoverage = dto.keys.includes(StaffWidgetKey.SERVICE_COVERAGE);
+      keys.includes(StaffWidgetKey.STAFF_UTILIZATION) ||
+      keys.includes(StaffWidgetKey.STAFF_WITHOUT_SHIFTS);
+    const needsCoverage = keys.includes(StaffWidgetKey.SERVICE_COVERAGE);
 
     const [activeCount, deactivatedRecentlyCount, staffWithShiftsCount, coverage] = await Promise.all([
-      needsActive ? this.db.staff.count({ where: { ...where, status: StaffStatus.ACTIVE } }) : Promise.resolve(0),
-      needsDeactivated ? this.db.staff.count({ where: this.deactivatedSinceWhere(businessId, dto) }) : Promise.resolve(0),
-      needsShifts ? this.countActiveStaffWithShiftsInWeek(businessId, dto, week) : Promise.resolve(0),
+      needsActive ? this.db.staff.count({ where: { businessId, status: StaffStatus.ACTIVE } }) : Promise.resolve(0),
+      needsDeactivated ? this.deactivatedSinceCount(businessId) : Promise.resolve(0),
+      needsShifts ? this.countActiveStaffWithShiftsInWeek(businessId, week) : Promise.resolve(0),
       needsCoverage ? this.computeServiceCoverage(businessId) : Promise.resolve({ covered: 0, total: 0 }),
     ]);
 
     return { activeCount, deactivatedRecentlyCount, staffWithShiftsCount, coveredServicesCount: coverage.covered, activeServicesCount: coverage.total };
   }
 
-  /**
-   * Shared filter surface for the staff listing and the KPI widgets, so a manager's active
-   * filters narrow the cards and the table identically.
-   */
-  buildWhere(businessId: string, filter: StaffFilterDto): Prisma.StaffWhereInput {
-    const where: Prisma.StaffWhereInput = { businessId };
-    if (filter.search) where.name = { contains: filter.search, mode: 'insensitive' };
-    if (filter.status !== undefined) where.status = filter.status;
-    return where;
-  }
-
-  private deactivatedSinceWhere(businessId: string, filter: StaffFilterDto): Prisma.StaffWhereInput {
+  private deactivatedSinceCount(businessId: string): Promise<number> {
     const since = new Date();
     since.setDate(since.getDate() - DEACTIVATION_WINDOW_DAYS);
-    const where = this.buildWhere(businessId, filter);
-    where.status = StaffStatus.INACTIVE;
-    where.updatedAt = { gte: since };
-    return where;
+    return this.db.staff.count({
+      where: { businessId, status: StaffStatus.INACTIVE, updatedAt: { gte: since } },
+    });
   }
 
   private countActiveStaffWithShiftsInWeek(
     businessId: string,
-    filter: StaffFilterDto,
     week: { from: Date; to: Date },
   ): Promise<number> {
     return this.db.staff.count({
       where: {
-        ...this.buildWhere(businessId, filter),
+        businessId,
         status: StaffStatus.ACTIVE,
         shifts: { some: { date: { gte: week.from, lte: week.to } } },
       },

@@ -48,6 +48,7 @@
     "class-validator": "^0.15.1",
     "cookie-parser": "^1.4.7",
     "date-fns": "^4.4.0",
+    "exceljs": "^4.4.0",
     "google-auth-library": "^11.0.2",
     "handlebars": "^4.7.9",
     "multer": "^2.4.0",
