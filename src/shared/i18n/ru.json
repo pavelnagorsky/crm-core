@@ -77,6 +77,8 @@
     "STAFF_COMPENSATION_UPDATED": "Правила оплаты изменены",
     "STAFF_EARNING_ADDED": "Начисление добавлено",
     "STAFF_EARNING_REVERSED": "Начисление отменено",
+    "STAFF_SHIFTS_UPDATED": "Рабочий график изменён",
+    "STAFF_BLOCK_CREATED": "Блок создан",
     "SERVICE_CREATED": "Услуга создана",
     "SERVICE_UPDATED": "Услуга изменена",
     "SERVICE_DELETED": "Услуга удалена",
@@ -190,6 +192,18 @@
     },
     "staff": {
       "sheet": "Сотрудники"
+    },
+    "clients": {
+      "sheet": "Клиенты",
+      "firstName": "Имя",
+      "lastName": "Фамилия",
+      "phone": "Телефон",
+      "email": "Email",
+      "birthDate": "Дата рождения",
+      "gender": "Пол",
+      "notes": "Заметки",
+      "genderMale": "Мужской",
+      "genderFemale": "Женский"
     }
   },
   "cancelledBy": {

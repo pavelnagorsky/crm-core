@@ -311,11 +311,13 @@ export class StaffService {
   async replaceShifts(
     staffId: string,
     dto: ReplaceShiftsRequestDto,
+    actor: AuditActor,
   ): Promise<StaffShift[]> {
+    const staff = await this.findById(staffId);
     const from = new Date(dto.from);
     const to = new Date(dto.to);
 
-    return this.db.$transaction(async (tx) => {
+    const shifts = await this.db.$transaction(async (tx) => {
       await tx.staffShift.deleteMany({
         where: { staffId, date: { gte: from, lte: to } },
       });
@@ -336,6 +338,19 @@ export class StaffService {
         orderBy: { date: 'asc' },
       });
     });
+
+    const event: AuditLogEvent = {
+      businessId: staff.businessId,
+      entityType: AuditEntity.STAFF,
+      entityId: staffId,
+      eventType: AuditEvent.STAFF_SHIFTS_UPDATED,
+      actionType: AuditActionType.MODIFY,
+      occurredAt: new Date(),
+      actor,
+      payload: { startDate: dto.from, endDate: dto.to },
+    };
+    this.eventEmitter.emit(AUDIT_EVENT, event);
+    return shifts;
   }
 
   async createInvitation(

@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 
-export class CreateServiceCategoryDto {
+export class UpdateServiceCategoryDto {
   @ApiProperty({ type: String, maxLength: 255 })
   @IsString()
   @MaxLength(255)
@@ -11,9 +11,9 @@ export class CreateServiceCategoryDto {
   @IsOptional()
   @IsString()
   @MaxLength(500)
-  description?: string;
+  description?: string | null;
 
-  @ApiProperty({ type: Number, required: false, default: 0 })
+  @ApiProperty({ type: Number, required: false })
   @IsOptional()
   @IsInt()
   @Min(0)

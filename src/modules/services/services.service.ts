@@ -4,9 +4,11 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
 import { CreateServiceCategoryDto } from './dto/create-service-category.dto.js';
+import { UpdateServiceCategoryDto } from './dto/update-service-category.dto.js';
 import { CreateServiceDto } from './dto/create-service.dto.js';
 import { UpdateServiceDto } from './dto/update-service.dto.js';
 import { ServiceSearchRequestDto } from './dto/service-search-request.dto.js';
+import { ServiceStatusCountResponseDto } from './dto/service-status-count-response.dto.js';
 import { ServiceSearchOrderBy } from './enums/service-search-order-by.enum.js';
 import { ServiceFilter } from './interfaces/service-filter.interface.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
@@ -21,6 +23,7 @@ import { AuditEvent } from '../audit/enums/audit-event.enum.js';
 import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
 import { diffFields } from '../audit/utils/diff-fields.js';
 import { SERVICE_AUDIT_FIELDS } from '../audit/fields/service.fields.js';
+import { BusinessService } from '../business/business.service.js';
 
 export type ServiceWithImage = Service & { imageFile: File | null };
 
@@ -29,6 +32,7 @@ export class ServicesService {
   constructor(
     private readonly db: DatabaseService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly businessService: BusinessService,
   ) {}
 
   // ─── Service Categories ──────────────────────────────────────────────────────
@@ -39,7 +43,34 @@ export class ServicesService {
         data: {
           businessId,
           name: dto.name,
+          description: dto.description?.trim() || null,
           sortOrder: dto.sortOrder ?? 0,
+        },
+      });
+    } catch (e: any) {
+      if (e?.code === PrismaErrorCode.UNIQUE_CONSTRAINT_VIOLATION)
+        throw new AppException(ErrorCode.CATEGORY_NAME_EXISTS, HttpStatus.CONFLICT);
+      throw e;
+    }
+  }
+
+  async updateCategory(
+    businessId: string,
+    categoryId: string,
+    dto: UpdateServiceCategoryDto,
+  ): Promise<ServiceCategory> {
+    const existing = await this.db.serviceCategory.findFirst({
+      where: { id: categoryId, businessId },
+    });
+    if (!existing) throw new NotFoundException('Service category not found');
+
+    try {
+      return await this.db.serviceCategory.update({
+        where: { id: categoryId },
+        data: {
+          name: dto.name,
+          description: dto.description?.trim() || null,
+          sortOrder: dto.sortOrder ?? existing.sortOrder,
         },
       });
     } catch (e: any) {
@@ -80,6 +111,7 @@ export class ServicesService {
       },
       include: { imageFile: true },
     });
+    const { currency } = await this.businessService.getLocale(businessId);
     const event: AuditLogEvent = {
       businessId,
       entityType: AuditEntity.SERVICE,
@@ -88,7 +120,7 @@ export class ServicesService {
       actionType: AuditActionType.CREATE,
       occurredAt: new Date(),
       actor,
-      payload: { title: service.title, price: service.price.toString(), durationMinutes: service.durationMinutes },
+      payload: { title: service.title, price: service.price.toString(), durationMinutes: service.durationMinutes, currency },
     };
     this.eventEmitter.emit(AUDIT_EVENT, event);
     return service;
@@ -112,6 +144,9 @@ export class ServicesService {
     });
     const changes = diffFields(old, service, SERVICE_AUDIT_FIELDS);
     if (changes.length > 0) {
+      const currency = changes.some((change) => change.field === 'price')
+        ? (await this.businessService.getLocale(businessId)).currency
+        : undefined;
       const event: AuditLogEvent = {
         businessId,
         entityType: AuditEntity.SERVICE,
@@ -120,7 +155,7 @@ export class ServicesService {
         actionType: AuditActionType.MODIFY,
       occurredAt: new Date(),
       actor,
-      payload: { changes },
+      payload: { changes, ...(currency ? { currency } : {}) },
       };
       this.eventEmitter.emit(AUDIT_EVENT, event);
     }
@@ -142,9 +177,10 @@ export class ServicesService {
   async search(businessId: string, dto: ServiceSearchRequestDto): Promise<PaginatedResult<ServiceWithImage>> {
     const where = this.buildFilterWhere(businessId, dto);
 
-    const orderBy: Prisma.ServiceOrderByWithRelationInput = {
-      [dto.orderBy ?? ServiceSearchOrderBy.SORT_ORDER]: dto.orderDirection ?? OrderDirection.ASC,
-    };
+    const orderBy = this.buildSearchOrderBy(
+      dto.orderBy ?? ServiceSearchOrderBy.SORT_ORDER,
+      dto.orderDirection ?? OrderDirection.ASC,
+    );
 
     const findArgs: Prisma.ServiceFindManyArgs = { where, orderBy, include: { imageFile: true } };
     if (!dto.isExport) {
@@ -158,6 +194,44 @@ export class ServicesService {
     ]);
 
     return { items, totalItems };
+  }
+
+  async getStatusCounts(businessId: string): Promise<ServiceStatusCountResponseDto[]> {
+    const rows = await this.db.service.groupBy({
+      by: ['status'],
+      where: { businessId },
+      _count: { _all: true },
+    });
+    return rows.map((row) => {
+      const dto = new ServiceStatusCountResponseDto();
+      dto.status = row.status;
+      dto.count = row._count._all;
+      return dto;
+    });
+  }
+
+  private buildSearchOrderBy(
+    orderBy: ServiceSearchOrderBy,
+    direction: OrderDirection,
+  ): Prisma.ServiceOrderByWithRelationInput {
+    switch (orderBy) {
+      case ServiceSearchOrderBy.CATEGORY:
+        return { category: { name: direction } };
+      case ServiceSearchOrderBy.TITLE:
+        return { title: direction };
+      case ServiceSearchOrderBy.DURATION_MINUTES:
+        return { durationMinutes: direction };
+      case ServiceSearchOrderBy.PRICE:
+        return { price: direction };
+      case ServiceSearchOrderBy.SORT_ORDER:
+        return { sortOrder: direction };
+      case ServiceSearchOrderBy.STATUS:
+        return { status: direction };
+      case ServiceSearchOrderBy.CREATED_AT:
+        return { createdAt: direction };
+      default:
+        return { sortOrder: direction };
+    }
   }
 
   async assertIdsInBusiness(businessId: string, ids: string[]): Promise<void> {

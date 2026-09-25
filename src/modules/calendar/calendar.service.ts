@@ -1,9 +1,16 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
-import { CalendarEvent, CalendarEventRepeatType, Prisma, ServiceStatus } from '@prisma/client';
+import { CalendarEvent, CalendarEventRepeatType, CalendarEventType, Prisma, ServiceStatus } from '@prisma/client';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { BookingVisibility } from '../business/enums/booking-visibility.enum.js';
 import { DatabaseService } from '../../database/database.service.js';
+import { AUDIT_EVENT } from '../audit/audit.constants.js';
+import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
+import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js';
+import { AuditEntity } from '../audit/enums/audit-entity.enum.js';
+import { AuditEvent } from '../audit/enums/audit-event.enum.js';
+import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
 import { TimeService } from '../time/time.service.js';
 import { StaffService } from '../staff/staff.service.js';
 import { CalendarComputeService } from './calendar-compute.service.js';
@@ -23,20 +30,46 @@ export class CalendarService {
     private readonly time: TimeService,
     private readonly staff: StaffService,
     private readonly compute: CalendarComputeService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async create(
     businessId: string,
     dto: CreateCalendarEventDto,
+    actor: AuditActor,
   ): Promise<CalendarEvent[]> {
     const staffIds = dto.staffIds?.length ? dto.staffIds : [null];
-    return this.db.$transaction(
+    const events = await this.db.$transaction(
       staffIds.map((staffId) =>
         this.db.calendarEvent.create({
           data: this.buildEventData(businessId, dto, staffId),
         }),
       ),
     );
+
+    if (dto.type === CalendarEventType.BLOCK) {
+      for (const event of events) {
+        if (!event.staffId) continue;
+        const audit: AuditLogEvent = {
+          businessId,
+          entityType: AuditEntity.STAFF,
+          entityId: event.staffId,
+          eventType: AuditEvent.STAFF_BLOCK_CREATED,
+          actionType: AuditActionType.CREATE,
+          occurredAt: new Date(),
+          actor,
+          payload: {
+            startDateTime: dto.startDateTime,
+            endDateTime: dto.endDateTime,
+            title: dto.title ?? null,
+            reason: dto.reason ?? null,
+          },
+        };
+        this.eventEmitter.emit(AUDIT_EVENT, audit);
+      }
+    }
+
+    return events;
   }
 
   async update(

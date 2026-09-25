@@ -24,6 +24,7 @@ import {
 import { BusinessRole } from '@prisma/client';
 import { ServicesService } from './services.service.js';
 import { CreateServiceCategoryDto } from './dto/create-service-category.dto.js';
+import { UpdateServiceCategoryDto } from './dto/update-service-category.dto.js';
 import { ServiceCategoryResponseDto } from './dto/service-category-response.dto.js';
 import { CreateServiceDto } from './dto/create-service.dto.js';
 import { UpdateServiceDto } from './dto/update-service.dto.js';
@@ -31,6 +32,7 @@ import { UpdateServiceStatusDto } from './dto/update-service-status.dto.js';
 import { ServiceResponseDto } from './dto/service-response.dto.js';
 import { ServiceSearchRequestDto } from './dto/service-search-request.dto.js';
 import { ServiceSearchResponseDto } from './dto/service-search-response.dto.js';
+import { ServiceStatusCountResponseDto } from './dto/service-status-count-response.dto.js';
 import { RBAC } from '../business/decorators/rbac.decorator.js';
 import {
   ApiResponse,
@@ -72,6 +74,21 @@ export class ServicesController {
     return BaseResponseDto.success(
       categories.map(ServiceCategoryResponseDto.fromEntity),
     );
+  }
+
+  @ApiOperation({ summary: 'Update a service category' })
+  @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
+  @ApiNotFoundResponse({ description: 'Service category not found' })
+  @ApiConflictResponse({ description: 'Category name already exists' })
+  @RBAC(BusinessRole.OWNER)
+  @Put('service-categories/:categoryId')
+  async updateCategory(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('categoryId', ParseUUIDPipe) categoryId: string,
+    @Body() dto: UpdateServiceCategoryDto,
+  ): Promise<BaseResponseDto<{ id: string }>> {
+    const category = await this.servicesService.updateCategory(businessId, categoryId, dto);
+    return BaseResponseDto.success({ id: category.id });
   }
 
   @ApiOperation({ summary: 'Delete a service category' })
@@ -146,6 +163,17 @@ export class ServicesController {
         dto.isExport,
       ),
     );
+  }
+
+  @ApiOperation({ summary: 'Get service count per status' })
+  @ApiOkResponse({ type: ApiResponseArray(ServiceStatusCountResponseDto) })
+  @RBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @Get('services/status-counts')
+  async getStatusCounts(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+  ): Promise<BaseResponseDto<ServiceStatusCountResponseDto[]>> {
+    const counts = await this.servicesService.getStatusCounts(businessId);
+    return BaseResponseDto.success(counts);
   }
 
   @ApiOperation({ summary: 'Get service by ID' })

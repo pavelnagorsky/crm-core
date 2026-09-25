@@ -48,4 +48,16 @@ export interface DocumentMessages {
   staff: {
     sheet: string;
   };
+  clients: {
+    sheet: string;
+    firstName: string;
+    lastName: string;
+    phone: string;
+    email: string;
+    birthDate: string;
+    gender: string;
+    notes: string;
+    genderMale: string;
+    genderFemale: string;
+  };
 }

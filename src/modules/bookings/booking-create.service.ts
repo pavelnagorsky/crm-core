@@ -48,14 +48,14 @@ export class BookingCreateService {
     businessId: string,
     dto: CreateBookingDto,
   ): Promise<Booking> {
-    const { booking, timezone } = await this.create(businessId, BookingSource.PUBLIC_PAGE, dto);
+    const { booking, timezone, currency } = await this.create(businessId, BookingSource.PUBLIC_PAGE, dto);
     this.logger.log(`booking created (public): id=${booking.id} businessId=${businessId} serviceId=${booking.serviceId} staffId=${booking.staffId} startAt=${booking.startAt.toISOString()}`);
     // Public bookings have no authenticated user — the client is the actor
     const actor: AuditActor = {
       name: `${booking.clientFirstName} ${booking.clientLastName}`,
       role: AuditActorRole.CLIENT,
     };
-    this.emitBookingCreated(booking, actor);
+    this.emitBookingCreated(booking, actor, currency);
     this.emitBookingNotification(booking, timezone);
     return booking;
   }
@@ -65,9 +65,9 @@ export class BookingCreateService {
     dto: ManualCreateBookingDto,
     actor: AuditActor,
   ): Promise<Booking> {
-    const { booking, timezone } = await this.create(businessId, BookingSource.MANUAL, dto, dto.customPrice);
+    const { booking, timezone, currency } = await this.create(businessId, BookingSource.MANUAL, dto, dto.customPrice);
     this.logger.log(`booking created (manual): id=${booking.id} businessId=${businessId} serviceId=${booking.serviceId} staffId=${booking.staffId} startAt=${booking.startAt.toISOString()} actor=${actor.name}`);
-    this.emitBookingCreated(booking, actor);
+    this.emitBookingCreated(booking, actor, currency);
     this.emitBookingNotification(booking, timezone);
     return booking;
   }
@@ -79,11 +79,11 @@ export class BookingCreateService {
     source: BookingSource,
     dto: CreateBookingDto,
     customPrice?: string,
-  ): Promise<{ booking: Booking; timezone: string }> {
+  ): Promise<{ booking: Booking; timezone: string; currency: string }> {
     const [business, service] = await Promise.all([
       this.db.business.findUnique({
         where: { id: businessId },
-        select: { isBookingConfirmationRequired: true, timezone: true, bookingVisibility: true },
+        select: { isBookingConfirmationRequired: true, timezone: true, bookingVisibility: true, currency: true },
       }),
       this.db.service.findFirst({
         where: { id: dto.serviceId, businessId, status: ServiceStatus.ACTIVE },
@@ -211,12 +211,12 @@ export class BookingCreateService {
         },
       });
     });
-    return { booking, timezone: business.timezone };
+    return { booking, timezone: business.timezone, currency: business.currency };
   }
 
   // ── Audit ───────────────────────────────────────────────────────────────────────
 
-  private emitBookingCreated(booking: Booking, actor: AuditActor): void {
+  private emitBookingCreated(booking: Booking, actor: AuditActor, currency: string): void {
     const event: AuditLogEvent = {
       businessId: booking.businessId,
       entityType: AuditEntity.BOOKING,
@@ -231,6 +231,7 @@ export class BookingCreateService {
         startTime: booking.startAt.toISOString(),
         endTime: booking.endAt.toISOString(),
         price: (booking.customPrice ?? booking.servicePrice).toString(),
+        currency,
       },
     };
     this.eventEmitter.emit(AUDIT_EVENT, event);

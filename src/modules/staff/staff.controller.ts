@@ -261,7 +261,11 @@ export class StaffController {
   ): Promise<BaseResponseDto<ShiftsResponseDto>> {
     const staff = await this.staffService.findById(id);
     assertBusinessRole(tokenPayload, staff.businessId, BusinessRole.OWNER);
-    const shifts = await this.staffService.replaceShifts(id, dto);
+    const shifts = await this.staffService.replaceShifts(
+      id,
+      dto,
+      auditActorFromToken(tokenPayload, staff.businessId),
+    );
     return BaseResponseDto.success(
       new ShiftsResponseDto(
         dto.from,

@@ -61,6 +61,10 @@ export const ErrorCode = {
     code: 'CLIENT_PHONE_EXISTS',
     message: 'A client with this phone number already exists in this business',
   },
+  CLIENT_IMPORT_FILE_INVALID: {
+    code: 'CLIENT_IMPORT_FILE_INVALID',
+    message: 'Import file is invalid',
+  },
 
   // staff
   STAFF_STATUS_ALREADY_SET: {

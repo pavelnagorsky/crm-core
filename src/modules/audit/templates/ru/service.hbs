@@ -1,5 +1,5 @@
 {{#if (eq eventType "SERVICE_CREATED")}}
-<p>{{payload.title}}, {{payload.price}}, {{payload.durationMinutes}} мин.</p>
+<p>{{payload.title}}, {{payload.price}}{{#if payload.currency}} {{payload.currency}}{{/if}}, {{payload.durationMinutes}} мин.</p>
 {{/if}}
 
 {{#if (eq eventType "SERVICE_UPDATED")}}

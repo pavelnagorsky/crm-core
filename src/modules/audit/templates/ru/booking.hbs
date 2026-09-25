@@ -1,5 +1,13 @@
 {{#if (eq eventType "BOOKING_CREATED")}}
-<p>{{payload.serviceName}} с {{payload.staffName}}, {{formatDateTime payload.startTime}} — {{formatDateTime payload.endTime}}, {{payload.price}}</p>
+<p>{{payload.serviceName}} с {{payload.staffName}}, {{formatDateTime payload.startTime}} — {{formatDateTime payload.endTime}}, {{payload.price}}{{#if payload.currency}} {{payload.currency}}{{/if}}</p>
+{{/if}}
+
+{{#if (eq eventType "BOOKING_UPDATED")}}
+<ul>
+  {{#each payload.changes}}
+  <li>{{t "fields" ../entityType this.field}}: <s>{{formatValue this.field this.from}}</s> → {{formatValue this.field this.to}}</li>
+  {{/each}}
+</ul>
 {{/if}}
 
 {{#if (eq eventType "BOOKING_CANCELLED")}}

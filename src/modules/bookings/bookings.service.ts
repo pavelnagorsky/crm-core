@@ -102,13 +102,16 @@ export class BookingsService {
 
     const changes = diffFields(old, updated, BOOKING_AUDIT_FIELDS);
     if (changes.length > 0) {
+      const currency = changes.some((change) => change.field === 'customPrice')
+        ? (await this.businessService.getLocale(businessId)).currency
+        : undefined;
       this.emitAudit({
         businessId,
         entityId: bookingId,
         eventType: AuditEvent.BOOKING_UPDATED,
         actionType: AuditActionType.MODIFY,
         actor,
-        payload: { changes },
+        payload: { changes, ...(currency ? { currency } : {}) },
       });
     }
 

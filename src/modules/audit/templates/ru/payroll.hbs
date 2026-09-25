@@ -19,5 +19,5 @@
 {{/if}}
 
 {{#if (eq eventType "PAYROLL_CORRECTED")}}
-<p>{{#if payload.type}}{{t "earningType" payload.type}}{{else}}{{t "earningType" "CORRECTION"}}{{/if}}: {{payload.amount}}{{#if payload.reason}} — {{payload.reason}}{{/if}}</p>
+<p>{{#if payload.type}}{{t "earningType" payload.type}}{{else}}{{t "earningType" "CORRECTION"}}{{/if}}: {{payload.amount}}{{#if payload.currency}} {{payload.currency}}{{/if}}{{#if payload.reason}} — {{payload.reason}}{{/if}}</p>
 {{/if}}

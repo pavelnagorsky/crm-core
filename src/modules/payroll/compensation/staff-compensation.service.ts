@@ -130,6 +130,7 @@ export class StaffCompensationService {
       }
     });
 
+    const { currency } = await this.businessService.getLocale(staff.businessId);
     const event: AuditLogEvent = {
       businessId: staff.businessId,
       entityType: AuditEntity.STAFF,
@@ -145,6 +146,7 @@ export class StaffCompensationService {
         fixedSalaryAmount: dto.fixedSalaryAmount ?? null,
         hourlyRate: dto.hourlyRate ?? null,
         salaryMode: plan.salaryMode,
+        currency,
       },
     };
     this.eventEmitter.emit(AUDIT_EVENT, event);

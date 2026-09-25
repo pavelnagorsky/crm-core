@@ -83,6 +83,8 @@ enum AuditEvent {
   STAFF_COMPENSATION_UPDATED
   STAFF_EARNING_ADDED
   STAFF_EARNING_REVERSED
+  STAFF_SHIFTS_UPDATED
+  STAFF_BLOCK_CREATED
   SERVICE_CREATED
   SERVICE_UPDATED
   SERVICE_DELETED
@@ -276,11 +278,12 @@ model Client {
 }
 
 model ServiceCategory {
-  id         String   @id @default(uuid())
-  businessId String
-  name       String   @db.VarChar(255)
-  sortOrder  Int      @default(0)
-  createdAt  DateTime @default(now())
+  id          String   @id @default(uuid())
+  businessId  String
+  name        String   @db.VarChar(255)
+  description String?  @db.VarChar(500)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
 
   business   Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
   services   Service[]

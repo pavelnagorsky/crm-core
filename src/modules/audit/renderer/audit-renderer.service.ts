@@ -19,6 +19,8 @@ const DATE_FNS_LOCALES: Record<string, object> = {
 
 const SUPPORTED_LANGS = ['ru'] as const;
 
+const MONEY_FIELDS = new Set(['price', 'customPrice', 'fixedSalaryAmount', 'hourlyRate']);
+
 @Injectable()
 export class AuditRendererService implements OnModuleInit {
   private readonly hbs: typeof Handlebars;
@@ -121,10 +123,12 @@ export class AuditRendererService implements OnModuleInit {
         if (typeof translated === 'string') return translated;
       }
       const type = AUDIT_FIELD_TYPES[field];
-      if (!type) return value;
-      const lang: string = opts.data?.root?.lang ?? 'ru';
-      const pattern = type === 'datetime' ? 'd MMM yyyy, HH:mm' : 'd MMM yyyy';
-      return this.formatDate(value, pattern, lang);
+      const formatted = type
+        ? this.formatDate(value, type === 'datetime' ? 'd MMM yyyy, HH:mm' : 'd MMM yyyy', opts.data?.root?.lang ?? 'ru')
+        : value;
+      const currency = (opts.data?.root?.payload as { currency?: string } | undefined)?.currency;
+      if (currency && MONEY_FIELDS.has(field)) return `${formatted} ${currency}`;
+      return formatted;
     });
 
     this.hbs.registerHelper('formatDateTime', (...rawArgs: unknown[]) => {

@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import { IsArray, IsDateString, IsOptional, IsUUID } from 'class-validator';
 
 export class GetCalendarRequestDto {
@@ -16,6 +17,10 @@ export class GetCalendarRequestDto {
     description: 'Filter events by staff member UUIDs. Business-level events (staffId=null) are always included.',
   })
   @IsOptional()
+  @Transform(({ value }) => {
+    if (value === undefined || value === null || value === '') return undefined;
+    return Array.isArray(value) ? value : [value];
+  })
   @IsArray()
   @IsUUID('all', { each: true })
   staffIds?: string[];

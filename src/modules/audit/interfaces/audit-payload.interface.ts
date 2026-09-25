@@ -12,6 +12,12 @@ interface BookingCreatedPayload {
   startTime: string;
   endTime: string;
   price: string;
+  currency: string;
+}
+
+interface BookingUpdatedPayload {
+  changes: AuditFieldChange[];
+  currency?: string;
 }
 
 interface BookingCancelledPayload {
@@ -55,16 +61,30 @@ interface StaffDeletedPayload {
   name: string;
 }
 
+interface StaffShiftsUpdatedPayload {
+  startDate: string;
+  endDate: string;
+}
+
+interface StaffBlockCreatedPayload {
+  startDateTime: string;
+  endDateTime: string;
+  title: string | null;
+  reason: string | null;
+}
+
 // ─── Service ────────────────────────────────────────────────────────────────
 
 interface ServiceCreatedPayload {
   title: string;
   price: string;
   durationMinutes: number;
+  currency: string;
 }
 
 interface ServiceUpdatedPayload {
   changes: AuditFieldChange[];
+  currency?: string;
 }
 
 interface ServiceDeletedPayload {
@@ -84,11 +104,13 @@ interface StaffCompensationUpdatedPayload {
   fixedSalaryAmount: string | null;
   hourlyRate: string | null;
   salaryMode: string;
+  currency: string;
 }
 
 interface StaffEarningAuditPayload {
   type?: string;
   amount: string;
+  currency: string;
   reason?: string;
   bookingId?: string;
   externalId?: string;
@@ -105,6 +127,7 @@ interface PayrollPeriodAuditPayload {
 
 export type AuditPayload =
   | BookingCreatedPayload
+  | BookingUpdatedPayload
   | BookingCancelledPayload
   | BookingStatusChangedPayload
   | BookingDeletedPayload
@@ -114,6 +137,8 @@ export type AuditPayload =
   | StaffCreatedPayload
   | StaffUpdatedPayload
   | StaffDeletedPayload
+  | StaffShiftsUpdatedPayload
+  | StaffBlockCreatedPayload
   | StaffCompensationUpdatedPayload
   | StaffEarningAuditPayload
   | ServiceCreatedPayload

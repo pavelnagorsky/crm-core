@@ -11,6 +11,9 @@ export class ServiceCategoryResponseDto {
   @ApiProperty({ type: String })
   name: string;
 
+  @ApiProperty({ type: String, nullable: true })
+  description: string | null;
+
   @ApiProperty({ type: Number })
   sortOrder: number;
 
@@ -22,6 +25,7 @@ export class ServiceCategoryResponseDto {
     dto.id = category.id;
     dto.businessId = category.businessId;
     dto.name = category.name;
+    dto.description = category.description;
     dto.sortOrder = category.sortOrder;
     dto.createdAt = category.createdAt;
     return dto;

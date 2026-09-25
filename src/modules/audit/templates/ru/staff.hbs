@@ -15,14 +15,22 @@
 {{/if}}
 
 {{#if (eq eventType "STAFF_COMPENSATION_UPDATED")}}
-<p>{{t "fields" "STAFF" "compensation"}}: {{t "fields" "STAFF" "effectiveFrom"}} {{payload.effectiveFrom}}, {{t "fields" "STAFF" "serviceCommissionPercent"}} {{payload.serviceCommissionPercent}}, {{t "fields" "STAFF" "productCommissionPercent"}} {{payload.productCommissionPercent}}, {{t "fields" "STAFF" "fixedSalaryAmount"}} {{payload.fixedSalaryAmount}}, {{t "fields" "STAFF" "hourlyRate"}} {{payload.hourlyRate}}, {{t "fields" "STAFF" "salaryMode"}} {{t "salaryMode" payload.salaryMode}}</p>
+<p>{{t "fields" "STAFF" "compensation"}}: {{t "fields" "STAFF" "effectiveFrom"}} {{payload.effectiveFrom}}, {{t "fields" "STAFF" "serviceCommissionPercent"}} {{payload.serviceCommissionPercent}}, {{t "fields" "STAFF" "productCommissionPercent"}} {{payload.productCommissionPercent}}, {{t "fields" "STAFF" "fixedSalaryAmount"}} {{payload.fixedSalaryAmount}}{{#if payload.fixedSalaryAmount}} {{payload.currency}}{{/if}}, {{t "fields" "STAFF" "hourlyRate"}} {{payload.hourlyRate}}{{#if payload.hourlyRate}} {{payload.currency}}{{/if}}, {{t "fields" "STAFF" "salaryMode"}} {{t "salaryMode" payload.salaryMode}}</p>
 {{/if}}
 
 {{#if (eq eventType "STAFF_EARNING_ADDED")}}
-<p>{{t "earningType" payload.type}}: {{payload.amount}}{{#if payload.reason}} — {{payload.reason}}{{/if}}</p>
+<p>{{t "earningType" payload.type}}: {{payload.amount}}{{#if payload.currency}} {{payload.currency}}{{/if}}{{#if payload.reason}} — {{payload.reason}}{{/if}}</p>
 {{/if}}
 
 {{#if (eq eventType "STAFF_EARNING_REVERSED")}}
-<p>{{payload.amount}}{{#if payload.bookingId}} ({{payload.bookingId}}){{/if}}</p>
+<p>{{payload.amount}}{{#if payload.currency}} {{payload.currency}}{{/if}}{{#if payload.bookingId}} ({{payload.bookingId}}){{/if}}</p>
+{{/if}}
+
+{{#if (eq eventType "STAFF_SHIFTS_UPDATED")}}
+<p>Изменён рабочий график в диапазоне {{payload.startDate}} — {{payload.endDate}}</p>
+{{/if}}
+
+{{#if (eq eventType "STAFF_BLOCK_CREATED")}}
+<p>{{formatDateTime payload.startDateTime}} — {{formatDateTime payload.endDateTime}}{{#if payload.title}} — {{payload.title}}{{/if}}{{#if payload.reason}} ({{payload.reason}}){{/if}}</p>
 {{/if}}
 

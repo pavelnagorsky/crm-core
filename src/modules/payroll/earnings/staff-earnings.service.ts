@@ -98,6 +98,7 @@ export class StaffEarningsService {
     this.emitEarningAudit(staff.businessId, staffId, AuditEvent.STAFF_EARNING_ADDED, actor, {
       type: dto.type,
       amount: money(amount),
+      currency,
       reason: dto.reason,
     });
     return earning;
@@ -135,6 +136,7 @@ export class StaffEarningsService {
     this.emitEarningAudit(businessId, staff.id, AuditEvent.STAFF_EARNING_ADDED, actor, {
       type: StaffEarningType.PRODUCT_COMMISSION,
       amount: money(amount),
+      currency,
       externalId: dto.externalId,
     });
     return earning;
@@ -236,6 +238,7 @@ export class StaffEarningsService {
       staffId: params.staffId,
       type: StaffEarningType.CORRECTION,
       amount: money(params.amount),
+      currency: params.currency,
       reason: params.reason,
     }, AuditEntity.PAYROLL);
     return earning;
@@ -389,6 +392,7 @@ export class StaffEarningsService {
       this.emitEarningAudit(booking.businessId, original.staffId, AuditEvent.STAFF_EARNING_REVERSED, actor, {
         bookingId: booking.id,
         amount: money(reversal.amount),
+        currency: original.currency,
       });
     }
     return reversal;

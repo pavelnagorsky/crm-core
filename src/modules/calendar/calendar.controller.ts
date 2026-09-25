@@ -31,6 +31,9 @@ import { GetCalendarRequestDto } from './dto/get-calendar-request.dto.js';
 import { GetCalendarResponseDto } from './dto/get-calendar-response.dto.js';
 import { AvailableSlotsRequestDto } from './dto/available-slots-request.dto.js';
 import { AvailableSlotsDayDto } from './dto/available-slots-day.dto.js';
+import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
+import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
+import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
 
 @ApiTags('Calendar')
 @Controller('businesses/:businessId/calendar')
@@ -72,8 +75,13 @@ export class CalendarController {
   async create(
     @Param('businessId', ParseUUIDPipe) businessId: string,
     @Body() dto: CreateCalendarEventDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<CalendarEventResponseDto[]>> {
-    const events = await this.calendarService.create(businessId, dto);
+    const events = await this.calendarService.create(
+      businessId,
+      dto,
+      auditActorFromToken(tokenPayload, businessId),
+    );
     return BaseResponseDto.success(events.map(CalendarEventResponseDto.fromEntity));
   }
 
