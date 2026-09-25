@@ -2,7 +2,7 @@ import { CompensationSalaryMode, StaffEarningType } from '@prisma/client';
 import { EarningCalculatorService } from '../earnings/earning-calculator.service.js';
 import { SalaryPlanSlice } from './interfaces/salary-plan-slice.interface.js';
 import { PayrollComputeService } from './payroll-compute.service.js';
-import { dateOnly, money } from '../utils/money.js';
+import { MoneyService } from '../../../shared/money/money.service.js';
 import { TimeService } from '../../time/time.service.js';
 
 function earning(type: StaffEarningType, amount: string, staffId = 'anna') {
@@ -11,9 +11,8 @@ function earning(type: StaffEarningType, amount: string, staffId = 'anna') {
 
 describe('PayrollComputeService', () => {
   const compute = new PayrollComputeService(new EarningCalculatorService());
-  const time = new TimeService();
 
-  const september = time.enumerateDates('2026-09-01', '2026-09-30');
+  const september = TimeService.enumerateDates('2026-09-01', '2026-09-30');
 
   const salaryPlan = (
     id: string,
@@ -23,19 +22,19 @@ describe('PayrollComputeService', () => {
     mode: CompensationSalaryMode = CompensationSalaryMode.GUARANTEED_MINIMUM,
   ): SalaryPlanSlice => ({
     id,
-    effectiveFrom: dateOnly(from),
-    effectiveTo: to ? dateOnly(to) : null,
+    effectiveFrom: TimeService.dateOnly(from),
+    effectiveTo: to ? TimeService.dateOnly(to) : null,
     fixedSalaryAmount: amount,
     salaryMode: mode,
   });
 
   it('prorates a monthly salary across the actual calendar days', () => {
     const full = compute.prorateSalary([salaryPlan('p1', '2026-09-01', null, '30000')], september);
-    expect(money(full.prorated)).toBe('30000.00');
+    expect(MoneyService.format(full.prorated)).toBe('30000.00');
     expect(full.daysCovered).toBe(30);
 
     const late = compute.prorateSalary([salaryPlan('p1', '2026-09-10', null, '30000')], september);
-    expect(money(late.prorated)).toBe('21000.00');
+    expect(MoneyService.format(late.prorated)).toBe('21000.00');
     expect(late.daysCovered).toBe(21);
   });
 
@@ -47,7 +46,7 @@ describe('PayrollComputeService', () => {
       ],
       september,
     );
-    expect(money(result.prorated)).toBe('45000.00');
+    expect(MoneyService.format(result.prorated)).toBe('45000.00');
     expect(result.planId).toBe('next');
     expect(result.lastSalary.toString()).toBe('60000');
   });
@@ -63,8 +62,8 @@ describe('PayrollComputeService', () => {
       earning(StaffEarningType.BONUS, '1000'),
     ];
 
-    expect(money(compute.floorBase(workAndDeduction))).toBe('28000.00');
-    expect(money(compute.salaryAmount(proration, workAndDeduction))).toBe('12000.00');
+    expect(MoneyService.format(compute.floorBase(workAndDeduction))).toBe('28000.00');
+    expect(MoneyService.format(compute.salaryAmount(proration, workAndDeduction))).toBe('12000.00');
   });
 
   it('adds a full salary on top in ADDITIVE mode', () => {
@@ -72,7 +71,7 @@ describe('PayrollComputeService', () => {
       [salaryPlan('p1', '2026-09-01', null, '40000', CompensationSalaryMode.ADDITIVE)],
       september,
     );
-    expect(money(compute.salaryAmount(proration, [earning(StaffEarningType.SERVICE_COMMISSION, '28000')]))).toBe(
+    expect(MoneyService.format(compute.salaryAmount(proration, [earning(StaffEarningType.SERVICE_COMMISSION, '28000')]))).toBe(
       '40000.00',
     );
   });
@@ -82,7 +81,7 @@ describe('PayrollComputeService', () => {
       [salaryPlan('p1', '2026-09-01', null, '40000')],
       september,
     );
-    expect(money(compute.salaryAmount(proration, [earning(StaffEarningType.HOURLY, '55000')]))).toBe('0.00');
+    expect(MoneyService.format(compute.salaryAmount(proration, [earning(StaffEarningType.HOURLY, '55000')]))).toBe('0.00');
   });
 
   it('aggregates signed totals so a reversal nets the original booking', () => {
@@ -92,11 +91,11 @@ describe('PayrollComputeService', () => {
       earning(StaffEarningType.BONUS, '5.00'),
       earning(StaffEarningType.DEDUCTION, '-2.00'),
     ]);
-    expect(money(totals.serviceCommissionTotal)).toBe('20.00');
-    expect(money(totals.correctionTotal)).toBe('-20.00');
-    expect(money(totals.bonusTotal)).toBe('5.00');
-    expect(money(totals.deductionTotal)).toBe('-2.00');
-    expect(money(totals.totalAmount)).toBe('3.00');
+    expect(MoneyService.format(totals.serviceCommissionTotal)).toBe('20.00');
+    expect(MoneyService.format(totals.correctionTotal)).toBe('-20.00');
+    expect(MoneyService.format(totals.bonusTotal)).toBe('5.00');
+    expect(MoneyService.format(totals.deductionTotal)).toBe('-2.00');
+    expect(MoneyService.format(totals.totalAmount)).toBe('3.00');
     expect(totals.earningsCount).toBe(4);
   });
 
@@ -114,8 +113,8 @@ describe('PayrollComputeService', () => {
         reversesEarningId: 'orig',
       },
     ];
-    expect(money(compute.floorBase(rows))).toBe('0.00');
-    expect(money(compute.salaryAmount(proration, rows))).toBe('40000.00');
+    expect(MoneyService.format(compute.floorBase(rows))).toBe('0.00');
+    expect(MoneyService.format(compute.salaryAmount(proration, rows))).toBe('40000.00');
   });
 
   it('does not let prior-period carry-over shrink this period salary floor', () => {
@@ -126,16 +125,16 @@ describe('PayrollComputeService', () => {
     const unpaid = [
       {
         ...earning(StaffEarningType.SERVICE_COMMISSION, '35000'),
-        earnedOn: dateOnly('2026-08-20'),
+        earnedOn: TimeService.dateOnly('2026-08-20'),
       },
       {
         ...earning(StaffEarningType.SERVICE_COMMISSION, '5000'),
-        earnedOn: dateOnly('2026-09-12'),
+        earnedOn: TimeService.dateOnly('2026-09-12'),
       },
     ];
-    const inPeriod = compute.inDateRange(unpaid, dateOnly('2026-09-01'), dateOnly('2026-09-30'));
+    const inPeriod = compute.inDateRange(unpaid, TimeService.dateOnly('2026-09-01'), TimeService.dateOnly('2026-09-30'));
     expect(inPeriod).toHaveLength(1);
-    expect(money(compute.salaryAmount(proration, inPeriod))).toBe('35000.00');
+    expect(MoneyService.format(compute.salaryAmount(proration, inPeriod))).toBe('35000.00');
   });
 
   it('groups unpaid rows by staff and drops foreign-currency leftovers', () => {

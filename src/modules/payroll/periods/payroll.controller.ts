@@ -36,6 +36,7 @@ import { PayrollPeriodSearchResponseDto } from './dto/payroll-period-search-resp
 import { PayrollReportResponseDto } from '../report/dto/payroll-report-response.dto.js';
 import { StaffEarningResponseDto } from '../earnings/dto/staff-earning-response.dto.js';
 import { PayrollReportService } from '../report/payroll-report.service.js';
+import { XlsxService } from '../../../shared/xlsx/xlsx.service.js';
 import { PayrollService } from './payroll.service.js';
 
 @ApiTags('Payroll')
@@ -124,7 +125,7 @@ export class PayrollController {
   }
 
   @ApiOperation({ summary: 'Export payment vedomost as XLSX' })
-  @ApiProduces('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @ApiProduces(XlsxService.mimeType)
   @Auth()
   @Get('periods/:id/export/vedomost')
   async exportVedomost(
@@ -136,11 +137,11 @@ export class PayrollController {
     assertBusinessRole(tokenPayload, period.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
     const { stream, filename } = await this.reports.exportVedomost(id);
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    return new StreamableFile(stream, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    return new StreamableFile(stream, { type: XlsxService.mimeType });
   }
 
   @ApiOperation({ summary: 'Export payslips as XLSX' })
-  @ApiProduces('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @ApiProduces(XlsxService.mimeType)
   @Auth()
   @Get('periods/:id/export/payslips')
   async exportPayslips(
@@ -152,7 +153,7 @@ export class PayrollController {
     assertBusinessRole(tokenPayload, period.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
     const { stream, filename } = await this.reports.exportPayslips(id);
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    return new StreamableFile(stream, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    return new StreamableFile(stream, { type: XlsxService.mimeType });
   }
 
   @ApiOperation({ summary: 'Calculate or recalculate a payroll period' })

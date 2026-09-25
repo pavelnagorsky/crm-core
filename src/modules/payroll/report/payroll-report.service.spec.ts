@@ -4,7 +4,7 @@ import { LocaleService } from '../../../shared/i18n/locale.service.js';
 import { StaffEarningsService } from '../earnings/staff-earnings.service.js';
 import { PayrollPeriodWithResults } from '../periods/interfaces/payroll-period-with-results.interface.js';
 import { PayrollService } from '../periods/payroll.service.js';
-import { dec, money } from '../utils/money.js';
+import { MoneyService } from '../../../shared/money/money.service.js';
 import { PayrollReportResponseDto } from './dto/payroll-report-response.dto.js';
 import { PayrollReportTotalsDto } from './dto/payroll-report-totals.dto.js';
 import { PayrollReportService } from './payroll-report.service.js';
@@ -58,7 +58,7 @@ function result(
     bonusTotal: new Prisma.Decimal(amounts.bonusTotal),
     deductionTotal: new Prisma.Decimal(amounts.deductionTotal),
     correctionTotal: new Prisma.Decimal(amounts.correctionTotal),
-    totalAmount: FUND_FIELDS.reduce((acc, field) => acc.plus(amounts[field]), dec(0)),
+    totalAmount: FUND_FIELDS.reduce((acc, field) => acc.plus(amounts[field]), MoneyService.decimal(0)),
     earningsCount: 0,
     createdAt: new Date('2026-09-30T12:00:00.000Z'),
   };
@@ -99,11 +99,11 @@ function serviceFor(...periods: PayrollPeriodWithResults[]): PayrollReportServic
 
 function expectFundInvariant(report: PayrollReportResponseDto): void {
   for (const field of FUND_FIELDS) {
-    const fromLines = report.vedomost.reduce((acc, line) => acc.plus(line[field]), dec(0));
-    expect(report.totals[field]).toBe(money(fromLines));
+    const fromLines = report.vedomost.reduce((acc, line) => acc.plus(line[field]), MoneyService.decimal(0));
+    expect(report.totals[field]).toBe(MoneyService.format(fromLines));
   }
-  const fundSum = FUND_FIELDS.reduce((acc, field) => acc.plus(report.totals[field]), dec(0));
-  expect(money(fundSum)).toBe(report.grandTotal);
+  const fundSum = FUND_FIELDS.reduce((acc, field) => acc.plus(report.totals[field]), MoneyService.decimal(0));
+  expect(MoneyService.format(fundSum)).toBe(report.grandTotal);
   expect(report.staffCount).toBe(report.vedomost.length);
 }
 

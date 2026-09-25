@@ -1,24 +1,27 @@
-import { ApiProperty } from '@nestjs/swagger';
+import {
+  ApiPrice,
+  ApiSignedAmount,
+} from '../../../../shared/decorators/api-decimal.decorator.js';
 
 export class PayrollReportTotalsDto {
-  @ApiProperty({ type: String })
+  @ApiPrice()
   fixedSalaryTotal: string;
 
-  @ApiProperty({ type: String })
+  @ApiPrice()
   hourlyTotal: string;
 
-  @ApiProperty({ type: String })
+  @ApiPrice()
   serviceCommissionTotal: string;
 
-  @ApiProperty({ type: String })
+  @ApiPrice()
   productCommissionTotal: string;
 
-  @ApiProperty({ type: String })
+  @ApiPrice()
   bonusTotal: string;
 
-  @ApiProperty({ type: String })
+  @ApiSignedAmount()
   deductionTotal: string;
 
-  @ApiProperty({ type: String })
+  @ApiSignedAmount()
   correctionTotal: string;
 }

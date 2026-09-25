@@ -1,8 +1,15 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { StaffEarning } from '@prisma/client';
+import {
+  ApiDecimal,
+  ApiPercent,
+  ApiPrice,
+  ApiSignedAmount,
+} from '../../../../shared/decorators/api-decimal.decorator.js';
 import { StaffEarningSource } from '../enums/staff-earning-source.enum.js';
 import { StaffEarningType } from '../enums/staff-earning-type.enum.js';
-import { dateOnlyStr, money } from '../../utils/money.js';
+import { MoneyService } from '../../../../shared/money/money.service.js';
+import { TimeService } from '../../../time/time.service.js';
 
 export class StaffEarningResponseDto {
   @ApiProperty({ type: String })
@@ -20,22 +27,22 @@ export class StaffEarningResponseDto {
   @ApiProperty({ type: String, example: '2026-09-15' })
   earnedOn: string;
 
-  @ApiProperty({ type: String, example: '20.00' })
+  @ApiSignedAmount({ example: '20.00' })
   amount: string;
 
   @ApiProperty({ type: String })
   currency: string;
 
-  @ApiProperty({ type: String, nullable: true })
+  @ApiPrice({ nullable: true })
   baseAmount: string | null;
 
-  @ApiProperty({ type: String, nullable: true })
+  @ApiPercent({ nullable: true })
   ratePercent: string | null;
 
-  @ApiProperty({ type: String, nullable: true })
+  @ApiPrice({ nullable: true })
   rateAmount: string | null;
 
-  @ApiProperty({ type: String, nullable: true })
+  @ApiDecimal({ nullable: true })
   quantity: string | null;
 
   @ApiProperty({ type: String, nullable: true })
@@ -74,13 +81,23 @@ export class StaffEarningResponseDto {
     dto.staffId = earning.staffId;
     dto.type = earning.type;
     dto.source = earning.source;
-    dto.earnedOn = dateOnlyStr(earning.earnedOn);
-    dto.amount = money(earning.amount);
+    dto.earnedOn = TimeService.dateOnlyStr(earning.earnedOn);
+    dto.amount = MoneyService.format(earning.amount);
     dto.currency = earning.currency;
-    dto.baseAmount = earning.baseAmount !== null ? money(earning.baseAmount) : null;
-    dto.ratePercent = earning.ratePercent !== null ? money(earning.ratePercent) : null;
-    dto.rateAmount = earning.rateAmount !== null ? money(earning.rateAmount) : null;
-    dto.quantity = earning.quantity !== null ? money(earning.quantity) : null;
+    dto.baseAmount =
+      earning.baseAmount !== null
+        ? MoneyService.format(earning.baseAmount)
+        : null;
+    dto.ratePercent =
+      earning.ratePercent !== null
+        ? MoneyService.format(earning.ratePercent)
+        : null;
+    dto.rateAmount =
+      earning.rateAmount !== null
+        ? MoneyService.format(earning.rateAmount)
+        : null;
+    dto.quantity =
+      earning.quantity !== null ? MoneyService.format(earning.quantity) : null;
     dto.description = earning.description;
     dto.reason = earning.reason;
     dto.actorName = earning.actorName;

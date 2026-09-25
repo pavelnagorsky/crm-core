@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { BookingSource, BookingStatus } from '@prisma/client';
+import { BookingSource, BookingStatus, Prisma } from '@prisma/client';
+import { MoneyService } from '../../shared/money/money.service.js';
 import { BookingsAggregatesService } from '../bookings/bookings-aggregates.service.js';
 import { AggregateRange } from '../bookings/interfaces/aggregate-range.interface.js';
 import { AggregateSnapshot } from '../bookings/interfaces/aggregate-snapshot.interface.js';
@@ -96,8 +97,8 @@ export class DashboardService {
       this.previousSnapshot(ctx),
       this.currentSeries(ctx, statuses),
     ]);
-    const value = sumRevenue(snap, statuses);
-    const previousValue = prevSnap ? sumRevenue(prevSnap, statuses) : undefined;
+    const value = chartMoney(sumRevenue(snap, statuses));
+    const previousValue = prevSnap ? chartMoney(sumRevenue(prevSnap, statuses)) : undefined;
     return this.metricWidget(key, ctx, {
       value,
       previousValue,
@@ -114,12 +115,12 @@ export class DashboardService {
     ]);
     const currCount = sumCount(snap, REVENUE_STATUSES);
     const currRev = sumRevenue(snap, REVENUE_STATUSES);
-    const value = currCount > 0 ? currRev / currCount : 0;
+    const value = currCount > 0 ? chartMoney(MoneyService.quantize(currRev.div(currCount))) : 0;
     let previousValue: number | undefined;
     if (prevSnap) {
       const prevCount = sumCount(prevSnap, REVENUE_STATUSES);
       const prevRev = sumRevenue(prevSnap, REVENUE_STATUSES);
-      previousValue = prevCount > 0 ? prevRev / prevCount : 0;
+      previousValue = prevCount > 0 ? chartMoney(MoneyService.quantize(prevRev.div(prevCount))) : 0;
     }
     return this.metricWidget(key, ctx, {
       value,
@@ -315,11 +316,15 @@ function sumCount(snap: AggregateSnapshot, statuses: BookingStatus[] | undefined
   return sum;
 }
 
-function sumRevenue(snap: AggregateSnapshot, statuses: BookingStatus[] | undefined): number {
+function sumRevenue(snap: AggregateSnapshot, statuses: BookingStatus[] | undefined): Prisma.Decimal {
   if (!statuses) return snap.totalRevenue;
-  let sum = 0;
-  for (const s of statuses) sum += snap.byStatus.get(s)?.revenue ?? 0;
+  let sum = MoneyService.decimal(0);
+  for (const s of statuses) sum = sum.plus(snap.byStatus.get(s)?.revenue ?? 0);
   return sum;
+}
+
+function chartMoney(value: Prisma.Decimal): number {
+  return Number(MoneyService.format(value));
 }
 
 function ratio(numerator: number, denominator: number): number {

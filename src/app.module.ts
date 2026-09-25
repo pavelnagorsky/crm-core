@@ -7,7 +7,6 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { DatabaseModule } from './database/database.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { NotificationsModule } from './modules/notifications/notifications.module.js';
-import { TimeModule } from './modules/time/time.module.js';
 import { BusinessModule } from './modules/business/business.module.js';
 import { StaffModule } from './modules/staff/staff.module.js';
 import { ServicesModule } from './modules/services/services.module.js';
@@ -35,7 +34,6 @@ import { PayrollModule } from './modules/payroll/payroll.module.js';
     ScheduleModule.forRoot(),
     EventEmitterModule.forRoot({ wildcard: true }),
     DatabaseModule,
-    TimeModule,
     NotificationsModule,
     AuthModule,
     BusinessModule,

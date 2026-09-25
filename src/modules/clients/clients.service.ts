@@ -19,6 +19,10 @@ import { AuditEvent } from '../audit/enums/audit-event.enum.js';
 import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
 import { diffFields } from '../audit/utils/diff-fields.js';
 import { CLIENT_AUDIT_FIELDS } from '../audit/fields/client.fields.js';
+import { ClientImportRow } from './clients-import/interfaces/client-import-row.interface.js';
+
+const PHONE_LOOKUP_CHUNK = 500;
+const IMPORT_INSERT_CHUNK = 200;
 
 @Injectable()
 export class ClientsService {
@@ -133,6 +137,44 @@ export class ClientsService {
     ]);
 
     return { items, totalItems };
+  }
+
+  async findExistingPhones(businessId: string, phones: string[]): Promise<Set<string>> {
+    const existing = new Set<string>();
+    if (phones.length === 0) return existing;
+
+    for (let offset = 0; offset < phones.length; offset += PHONE_LOOKUP_CHUNK) {
+      const found = await this.db.client.findMany({
+        where: { businessId, phone: { in: phones.slice(offset, offset + PHONE_LOOKUP_CHUNK) } },
+        select: { phone: true },
+      });
+      for (const client of found) existing.add(client.phone);
+    }
+
+    return existing;
+  }
+
+  async insertImported(businessId: string, rows: ClientImportRow[]): Promise<number> {
+    let inserted = 0;
+
+    for (let offset = 0; offset < rows.length; offset += IMPORT_INSERT_CHUNK) {
+      const result = await this.db.client.createMany({
+        data: rows.slice(offset, offset + IMPORT_INSERT_CHUNK).map((row) => ({
+          businessId,
+          firstName: row.firstName,
+          lastName: row.lastName,
+          phone: row.phone,
+          email: row.email,
+          birthDate: row.birthDate ? new Date(`${row.birthDate}T00:00:00.000Z`) : null,
+          gender: row.gender,
+          notes: row.notes,
+        })),
+        skipDuplicates: true,
+      });
+      inserted += result.count;
+    }
+
+    return inserted;
   }
 
   private buildClientFields(dto: CreateClientDto | UpdateClientDto) {

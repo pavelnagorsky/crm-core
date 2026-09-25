@@ -1,5 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Booking } from '@prisma/client';
+import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
+import { MoneyService } from '../../../shared/money/money.service.js';
 import { BookingSource } from '../enums/booking-source.enum.js';
 import { BookingStatus } from '../enums/booking-status.enum.js';
 
@@ -49,11 +51,11 @@ export class BookingResponseDto {
   @ApiProperty({ type: Number })
   serviceDuration: number;
 
-  @ApiProperty({ type: Number })
-  servicePrice: number;
+  @ApiPrice()
+  servicePrice: string;
 
-  @ApiProperty({ type: Number, nullable: true })
-  customPrice: number | null;
+  @ApiPrice({ nullable: true })
+  customPrice: string | null;
 
   @ApiProperty({ type: String })
   staffName: string;
@@ -90,8 +92,11 @@ export class BookingResponseDto {
     dto.clientEmail = booking.clientEmail;
     dto.serviceTitle = booking.serviceTitle;
     dto.serviceDuration = booking.serviceDuration;
-    dto.servicePrice = Number(booking.servicePrice);
-    dto.customPrice = booking.customPrice !== null ? Number(booking.customPrice) : null;
+    dto.servicePrice = MoneyService.format(booking.servicePrice);
+    dto.customPrice =
+      booking.customPrice !== null
+        ? MoneyService.format(booking.customPrice)
+        : null;
     dto.staffName = booking.staffName;
     dto.calendarEventId = booking.calendarEventId;
     dto.notes = booking.notes;

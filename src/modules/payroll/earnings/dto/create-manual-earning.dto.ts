@@ -1,9 +1,21 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsDateString, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsDateString,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 import { IsSignedAmount } from '../../../../shared/decorators/is-signed-amount.decorator.js';
+import { TrimString } from '../../../../shared/transforms/trim-string.transform.js';
 import { StaffEarningType } from '../enums/staff-earning-type.enum.js';
 
-const manualTypes = [StaffEarningType.BONUS, StaffEarningType.DEDUCTION, StaffEarningType.CORRECTION] as const;
+const manualTypes = [
+  StaffEarningType.BONUS,
+  StaffEarningType.DEDUCTION,
+  StaffEarningType.CORRECTION,
+] as const;
 
 export class CreateManualEarningDto {
   @ApiProperty({ enum: manualTypes })
@@ -11,15 +23,17 @@ export class CreateManualEarningDto {
   type: (typeof manualTypes)[number];
 
   @ApiProperty({
-    type: String,
     example: '1500.00',
-    description: 'Bonus must be positive. Deduction may be positive (stored negative) or already negative. Correction is signed.',
+    description:
+      'Bonus must be positive. Deduction may be positive (stored negative) or already negative. Correction is signed.',
   })
   @IsSignedAmount()
   amount: string;
 
   @ApiProperty({ type: String, maxLength: 1000 })
+  @TrimString()
   @IsString()
+  @IsNotEmpty()
   @MaxLength(1000)
   reason: string;
 

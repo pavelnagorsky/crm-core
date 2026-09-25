@@ -2,7 +2,6 @@ import { Test } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Booking, BookingSource, BookingStatus, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
-import { TimeService } from '../time/time.service.js';
 import { CalendarService } from '../calendar/calendar.service.js';
 import { StaffService } from '../staff/staff.service.js';
 import { BusinessService } from '../business/business.service.js';
@@ -62,7 +61,6 @@ describe('BookingsService.completeElapsed', () => {
     const module = await Test.createTestingModule({
       providers: [
         BookingsService,
-        TimeService,
         { provide: DatabaseService, useValue: db },
         { provide: CalendarService, useValue: {} },
         { provide: StaffService, useValue: {} },

@@ -27,7 +27,6 @@ import { AvailableSlotsDayDto } from './dto/available-slots-day.dto.js';
 export class CalendarService {
   constructor(
     private readonly db: DatabaseService,
-    private readonly time: TimeService,
     private readonly staff: StaffService,
     private readonly compute: CalendarComputeService,
     private readonly eventEmitter: EventEmitter2,
@@ -138,7 +137,7 @@ export class CalendarService {
 
     const rangeStart = new Date(dto.from);
     const rangeEnd = new Date(dto.to);
-    const dates = this.time.enumerateDates(dto.from, dto.to);
+    const dates = TimeService.enumerateDates(dto.from, dto.to);
 
     const [shifts, events] = await Promise.all([
       this.db.staffShift.findMany({
@@ -211,7 +210,7 @@ export class CalendarService {
     );
 
     const dates = [
-      ...new Set(shifts.map((s) => this.time.dateOnlyStr(s.date))),
+      ...new Set(shifts.map((s) => TimeService.dateOnlyStr(s.date))),
     ].sort();
     const shiftsByStaffDate = this.compute.groupShiftsByStaffDate(shifts);
     const blockedByStaffDate = this.compute.expandBlockEvents(
@@ -241,7 +240,7 @@ export class CalendarService {
             {
               date,
               slots: slots.map((start) => ({
-                time: this.time.minutesToHHmm(start),
+                time: TimeService.minutesToHHmm(start),
               })),
             },
           ]
@@ -300,10 +299,10 @@ export class CalendarService {
   ): boolean {
     if (!shift) return false;
 
-    const slotStart = this.time.dateToMinutes(startAt, timezone);
-    const slotEnd = this.time.dateToMinutes(endAt, timezone);
+    const slotStart = TimeService.dateToMinutes(startAt, timezone);
+    const slotEnd = TimeService.dateToMinutes(endAt, timezone);
 
-    if (slotStart < this.time.timeToMinutes(shift.startTime) || slotEnd > this.time.timeToMinutes(shift.endTime)) {
+    if (slotStart < TimeService.timeToMinutes(shift.startTime) || slotEnd > TimeService.timeToMinutes(shift.endTime)) {
       return false;
     }
 
@@ -317,9 +316,9 @@ export class CalendarService {
     timezone: string;
     advanceBookingWindowDays: number;
   }) {
-    const nowParts = this.time.toZonedParts(new Date(), business.timezone);
-    const todayStr = this.time.zonedDateStr(new Date(), business.timezone);
-    const endStr = this.time.addDaysStr(todayStr, business.advanceBookingWindowDays - 1);
+    const nowParts = TimeService.toZonedParts(new Date(), business.timezone);
+    const todayStr = TimeService.zonedDateStr(new Date(), business.timezone);
+    const endStr = TimeService.addDaysStr(todayStr, business.advanceBookingWindowDays - 1);
     return {
       todayStr,
       nowMinutes: nowParts.hour * 60 + nowParts.minute,

@@ -1,0 +1,2 @@
+export const CLIENT_IMPORT_MAX_BYTES = 5 * 1024 * 1024;
+export const CLIENT_IMPORT_MAX_ROWS = 2000;

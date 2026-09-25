@@ -31,7 +31,7 @@ import { StaffEarningSearchOrderBy, StaffEarningSearchRequestDto } from './dto/s
 import { EarningCalculatorService } from './earning-calculator.service.js';
 import { CompensationPlanWithRates } from '../compensation/interfaces/compensation-plan-with-rates.interface.js';
 import { StaffCompensationService } from '../compensation/staff-compensation.service.js';
-import { dateOnly, dec, money } from '../utils/money.js';
+import { MoneyService } from '../../../shared/money/money.service.js';
 import { lockedPeriodWhere } from '../periods/locked-period.js';
 
 @Injectable()
@@ -44,7 +44,6 @@ export class StaffEarningsService {
     private readonly calculator: EarningCalculatorService,
     private readonly staffService: StaffService,
     private readonly businessService: BusinessService,
-    private readonly time: TimeService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -60,9 +59,9 @@ export class StaffEarningsService {
     }
   }
 
-  async reverseForBooking(booking: Booking, actor?: AuditActor): Promise<StaffEarning | null> {
+  async reverseForBooking(booking: Booking, reason: string | null, actor?: AuditActor): Promise<StaffEarning | null> {
     try {
-      return await this.reverseBookingCommission(booking, actor);
+      return await this.reverseBookingCommission(booking, reason, actor);
     } catch (err) {
       this.logger.error(
         `Failed to reverse earning for booking ${booking.id}`,
@@ -75,8 +74,8 @@ export class StaffEarningsService {
   async createManual(staffId: string, dto: CreateManualEarningDto, actor: AuditActor): Promise<StaffEarning> {
     const staff = await this.staffService.findById(staffId);
     const { timezone, currency } = await this.businessService.getLocale(staff.businessId);
-    const earnedOnStr = dto.earnedOn ?? this.time.zonedDateStr(new Date(), timezone);
-    const earnedOn = dateOnly(earnedOnStr);
+    const earnedOnStr = dto.earnedOn ?? TimeService.zonedDateStr(new Date(), timezone);
+    const earnedOn = TimeService.dateOnly(earnedOnStr);
     await this.assertDateUnlocked(staff.businessId, earnedOn);
 
     const amount = this.calculator.manualAmount(dto.type, dto.amount);
@@ -88,16 +87,15 @@ export class StaffEarningsService {
       earnedOn,
       amount,
       currency,
-      description: dto.type,
       reason: dto.reason,
       actorId: actor.id ?? null,
       actorName: actor.name,
-      idempotencyKey: `manual:${randomUUID()}`,
+      idempotencyKey: this.idempotencyKey({ kind: 'manual' }),
     });
 
     this.emitEarningAudit(staff.businessId, staffId, AuditEvent.STAFF_EARNING_ADDED, actor, {
       type: dto.type,
-      amount: money(amount),
+      amount: MoneyService.format(amount),
       currency,
       reason: dto.reason,
     });
@@ -108,7 +106,7 @@ export class StaffEarningsService {
     const staff = await this.staffService.findById(dto.staffId);
     if (staff.businessId !== businessId) throw new AppException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND);
     const { currency } = await this.businessService.getLocale(businessId);
-    const earnedOn = dateOnly(dto.soldOn);
+    const earnedOn = TimeService.dateOnly(dto.soldOn);
     const plan = await this.compensation.resolveForDate(staff.id, earnedOn);
     if (!plan || plan.productCommissionPercent === null) {
       throw new AppException(ErrorCode.PRODUCT_COMMISSION_NOT_CONFIGURED, HttpStatus.CONFLICT);
@@ -123,19 +121,19 @@ export class StaffEarningsService {
       earnedOn,
       amount,
       currency,
-      baseAmount: dec(dto.amount),
-      ratePercent: dec(plan.productCommissionPercent),
-      description: dto.description ?? 'Product sale',
+      baseAmount: MoneyService.decimal(dto.amount),
+      ratePercent: MoneyService.decimal(plan.productCommissionPercent),
+      description: dto.description,
       actorId: actor.id ?? null,
       actorName: actor.name,
-      idempotencyKey: `product:${dto.externalId}:PRODUCT_COMMISSION`,
+      idempotencyKey: this.idempotencyKey({ kind: 'product', externalId: dto.externalId }),
       compensationPlanId: plan.id,
       externalId: dto.externalId,
     });
 
     this.emitEarningAudit(businessId, staff.id, AuditEvent.STAFF_EARNING_ADDED, actor, {
       type: StaffEarningType.PRODUCT_COMMISSION,
-      amount: money(amount),
+      amount: MoneyService.format(amount),
       currency,
       externalId: dto.externalId,
     });
@@ -152,8 +150,8 @@ export class StaffEarningsService {
     if (!plan || plan.hourlyRate === null) return null;
 
     const hours = this.calculator.hoursFromShift(
-      this.time.timeToMinutes(shift.startTime),
-      this.time.timeToMinutes(shift.endTime),
+      TimeService.timeToMinutes(shift.startTime),
+      TimeService.timeToMinutes(shift.endTime),
     );
     const amount = this.calculator.hourly(hours, plan.hourlyRate);
     return this.insertEarning(
@@ -165,10 +163,9 @@ export class StaffEarningsService {
         earnedOn: shift.date,
         amount,
         currency,
-        rateAmount: dec(plan.hourlyRate),
-        quantity: hours,
-        description: 'Hourly pay',
-        idempotencyKey: `shift:${shift.id}:HOURLY`,
+        rateAmount: MoneyService.decimal(plan.hourlyRate),
+        quantity: MoneyService.quantize(hours),
+        idempotencyKey: this.idempotencyKey({ kind: 'shift', shiftId: shift.id }),
         compensationPlanId: plan.id,
         shiftId: shift.id,
       },
@@ -201,8 +198,7 @@ export class StaffEarningsService {
         currency: params.currency,
         rateAmount: params.rateAmount,
         quantity: params.quantity,
-        description: 'Fixed salary',
-        idempotencyKey: `salary:${params.periodId}:${params.staffId}`,
+        idempotencyKey: this.idempotencyKey({ kind: 'salary', periodId: params.periodId, staffId: params.staffId }),
         compensationPlanId: params.planId,
       },
       tx,
@@ -230,14 +226,13 @@ export class StaffEarningsService {
       reason: params.reason,
       actorId: params.actor.id ?? null,
       actorName: params.actor.name,
-      description: 'Payroll correction',
-      idempotencyKey: `correction:${params.resultId}:${randomUUID()}`,
+      idempotencyKey: this.idempotencyKey({ kind: 'correction', resultId: params.resultId }),
       correctsPayrollResultId: params.resultId,
     });
     this.emitEarningAudit(params.businessId, params.resultId, AuditEvent.PAYROLL_CORRECTED, params.actor, {
       staffId: params.staffId,
       type: StaffEarningType.CORRECTION,
-      amount: money(params.amount),
+      amount: MoneyService.format(params.amount),
       currency: params.currency,
       reason: params.reason,
     }, AuditEntity.PAYROLL);
@@ -250,8 +245,8 @@ export class StaffEarningsService {
     if (dto.type) where.type = dto.type;
     if (dto.from || dto.to) {
       where.earnedOn = {};
-      if (dto.from) where.earnedOn.gte = dateOnly(dto.from);
-      if (dto.to) where.earnedOn.lte = dateOnly(dto.to);
+      if (dto.from) where.earnedOn.gte = TimeService.dateOnly(dto.from);
+      if (dto.to) where.earnedOn.lte = TimeService.dateOnly(dto.to);
     }
 
     const orderBy: Prisma.StaffEarningOrderByWithRelationInput = {
@@ -311,7 +306,7 @@ export class StaffEarningsService {
         payrollResultId: null,
         OR: [
           { source: StaffEarningSource.SHIFT, type: StaffEarningType.HOURLY },
-          { source: StaffEarningSource.PAYROLL, type: StaffEarningType.FIXED_SALARY, idempotencyKey: { startsWith: `salary:${periodId}:` } },
+          { source: StaffEarningSource.PAYROLL, type: StaffEarningType.FIXED_SALARY, idempotencyKey: { startsWith: this.idempotencyKey({ kind: 'salaryPeriod', periodId }) } },
         ],
       },
     });
@@ -327,7 +322,7 @@ export class StaffEarningsService {
 
   private async createBookingCommission(booking: Booking): Promise<StaffEarning | null> {
     const { timezone, currency } = await this.businessService.getLocale(booking.businessId);
-    const earnedOn = dateOnly(this.time.zonedDateStr(booking.startAt, timezone));
+    const earnedOn = TimeService.dateOnly(TimeService.zonedDateStr(booking.startAt, timezone));
     const plan = await this.compensation.resolveForDate(booking.staffId, earnedOn);
     if (!plan) return null;
 
@@ -345,20 +340,20 @@ export class StaffEarningsService {
       earnedOn,
       amount,
       currency,
-      baseAmount: dec(base),
-      ratePercent: dec(percent),
+      baseAmount: MoneyService.decimal(base),
+      ratePercent: MoneyService.decimal(percent),
       description: booking.serviceTitle,
-      idempotencyKey: `booking:${booking.id}:SERVICE_COMMISSION`,
+      idempotencyKey: this.idempotencyKey({ kind: 'booking', bookingId: booking.id }),
       compensationPlanId: plan.id,
       bookingId: booking.id,
     });
   }
 
-  private async reverseBookingCommission(booking: Booking, actor?: AuditActor): Promise<StaffEarning | null> {
+  private async reverseBookingCommission(booking: Booking, reason: string | null, actor?: AuditActor): Promise<StaffEarning | null> {
     const original = await this.db.staffEarning.findFirst({
       where: {
         businessId: booking.businessId,
-        idempotencyKey: `booking:${booking.id}:SERVICE_COMMISSION`,
+        idempotencyKey: this.idempotencyKey({ kind: 'booking', bookingId: booking.id }),
       },
     });
     if (!original) return null;
@@ -374,15 +369,15 @@ export class StaffEarningsService {
       type: StaffEarningType.CORRECTION,
       source: StaffEarningSource.BOOKING,
       earnedOn: original.earnedOn,
-      amount: dec(original.amount).negated(),
+      amount: MoneyService.decimal(original.amount).negated(),
       currency: original.currency,
       baseAmount: original.baseAmount,
       ratePercent: original.ratePercent,
       description: original.description,
-      reason: 'Booking status reversed',
+      reason,
       actorId: actor?.id ?? null,
       actorName: actor?.name ?? null,
-      idempotencyKey: `booking:${booking.id}:SERVICE_COMMISSION:reversal`,
+      idempotencyKey: this.idempotencyKey({ kind: 'bookingReversal', bookingId: booking.id }),
       compensationPlanId: original.compensationPlanId,
       bookingId: booking.id,
       reversesEarningId: original.id,
@@ -391,7 +386,7 @@ export class StaffEarningsService {
     if (actor) {
       this.emitEarningAudit(booking.businessId, original.staffId, AuditEvent.STAFF_EARNING_REVERSED, actor, {
         bookingId: booking.id,
-        amount: money(reversal.amount),
+        amount: MoneyService.format(reversal.amount),
         currency: original.currency,
       });
     }
@@ -408,6 +403,37 @@ export class StaffEarningsService {
 
   private store(tx?: Prisma.TransactionClient) {
     return tx ?? this.db;
+  }
+
+  private idempotencyKey(
+    input:
+      | { kind: 'manual' }
+      | { kind: 'product'; externalId: string }
+      | { kind: 'shift'; shiftId: string }
+      | { kind: 'salary'; periodId: string; staffId: string }
+      | { kind: 'salaryPeriod'; periodId: string }
+      | { kind: 'correction'; resultId: string }
+      | { kind: 'booking'; bookingId: string }
+      | { kind: 'bookingReversal'; bookingId: string },
+  ): string {
+    switch (input.kind) {
+      case 'manual':
+        return `manual:${randomUUID()}`;
+      case 'product':
+        return `product:${input.externalId}:${StaffEarningType.PRODUCT_COMMISSION}`;
+      case 'shift':
+        return `shift:${input.shiftId}:${StaffEarningType.HOURLY}`;
+      case 'salary':
+        return `salary:${input.periodId}:${input.staffId}`;
+      case 'salaryPeriod':
+        return `salary:${input.periodId}:`;
+      case 'correction':
+        return `correction:${input.resultId}:${randomUUID()}`;
+      case 'booking':
+        return `booking:${input.bookingId}:${StaffEarningType.SERVICE_COMMISSION}`;
+      case 'bookingReversal':
+        return `booking:${input.bookingId}:${StaffEarningType.SERVICE_COMMISSION}:reversal`;
+    }
   }
 
   private async insertEarning(

@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
+import { MoneyService } from '../../../shared/money/money.service.js';
 import type { PayrollResultResponseDto } from '../periods/dto/payroll-result-response.dto.js';
-import { dec, money } from '../utils/money.js';
 import { PayrollReportAttentionDto } from './dto/payroll-report-attention.dto.js';
 import { PayrollReportTotalsDto } from './dto/payroll-report-totals.dto.js';
 
@@ -9,15 +9,15 @@ type FundLine = Pick<PayrollResultResponseDto, FundField | 'totalAmount'>;
 
 export function summarizePayrollReport(lines: readonly FundLine[]) {
   const sums: Record<FundField, Prisma.Decimal> = {
-    fixedSalaryTotal: dec(0),
-    hourlyTotal: dec(0),
-    serviceCommissionTotal: dec(0),
-    productCommissionTotal: dec(0),
-    bonusTotal: dec(0),
-    deductionTotal: dec(0),
-    correctionTotal: dec(0),
+    fixedSalaryTotal: MoneyService.decimal(0),
+    hourlyTotal: MoneyService.decimal(0),
+    serviceCommissionTotal: MoneyService.decimal(0),
+    productCommissionTotal: MoneyService.decimal(0),
+    bonusTotal: MoneyService.decimal(0),
+    deductionTotal: MoneyService.decimal(0),
+    correctionTotal: MoneyService.decimal(0),
   };
-  let grand = dec(0);
+  let grand = MoneyService.decimal(0);
   let staffWithDeductions = 0;
   let staffWithCorrections = 0;
 
@@ -26,16 +26,16 @@ export function summarizePayrollReport(lines: readonly FundLine[]) {
       sums[field] = sums[field].plus(line[field]);
     }
     grand = grand.plus(line.totalAmount);
-    if (!dec(line.deductionTotal).isZero()) staffWithDeductions += 1;
-    if (!dec(line.correctionTotal).isZero()) staffWithCorrections += 1;
+    if (!MoneyService.decimal(line.deductionTotal).isZero()) staffWithDeductions += 1;
+    if (!MoneyService.decimal(line.correctionTotal).isZero()) staffWithCorrections += 1;
   }
 
   const totals = new PayrollReportTotalsDto();
-  for (const field of Object.keys(sums) as FundField[]) totals[field] = money(sums[field]);
+  for (const field of Object.keys(sums) as FundField[]) totals[field] = MoneyService.format(sums[field]);
 
   const attention = new PayrollReportAttentionDto();
   attention.staffWithDeductions = staffWithDeductions;
   attention.staffWithCorrections = staffWithCorrections;
 
-  return { totals, attention, grandTotal: money(grand), staffCount: lines.length };
+  return { totals, attention, grandTotal: MoneyService.format(grand), staffCount: lines.length };
 }

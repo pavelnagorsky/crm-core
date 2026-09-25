@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsDateString, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { IsDateString, IsNotEmpty, IsString, IsUUID, MaxLength } from 'class-validator';
 import { IsPrice } from '../../../../shared/decorators/is-price.decorator.js';
+import { TrimString } from '../../../../shared/transforms/trim-string.transform.js';
 
 export class RecordProductSaleDto {
   @ApiProperty({ type: String, format: 'uuid' })
@@ -23,9 +24,10 @@ export class RecordProductSaleDto {
   @MaxLength(100)
   externalId: string;
 
-  @ApiProperty({ type: String, required: false, maxLength: 500 })
-  @IsOptional()
+  @ApiProperty({ type: String, maxLength: 500 })
+  @TrimString()
   @IsString()
+  @IsNotEmpty()
   @MaxLength(500)
-  description?: string;
+  description: string;
 }

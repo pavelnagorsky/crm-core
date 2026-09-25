@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum } from 'class-validator';
+import { IsEnum, IsNotEmpty, IsOptional, IsString, MaxLength } from 'class-validator';
+import { TrimString } from '../../../shared/transforms/trim-string.transform.js';
 import { BookingStatus } from '../enums/booking-status.enum.js';
 
 const allowedStatuses = [
@@ -13,4 +14,12 @@ export class UpdateBookingStatusDto {
   @ApiProperty({ enum: allowedStatuses })
   @IsEnum(allowedStatuses)
   status: (typeof allowedStatuses)[number];
+
+  @ApiProperty({ type: String, required: false, maxLength: 1000 })
+  @IsOptional()
+  @TrimString()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(1000)
+  reason?: string;
 }

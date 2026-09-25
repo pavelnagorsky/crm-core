@@ -11,8 +11,6 @@ import {
 
 @Injectable()
 export class CalendarComputeService {
-  constructor(private readonly time: TimeService) {}
-
   // ─── Event expansion ──────────────────────────────────────────────────────────
 
   /** Expands a list of calendar events into flat DTO items for the given date range. */
@@ -74,8 +72,8 @@ export class CalendarComputeService {
       const occurrenceDates = event.repeatType === CalendarEventRepeatType.NONE
         ? this.occurrenceDatesOneTime(event, dates, eventStartStr)
         : this.occurrenceDatesFrom(event, dates, eventStartStr);
-      const blockStart = this.time.hhmmToMinutes(startHHmm);
-      const blockEnd = this.time.hhmmToMinutes(endHHmm);
+      const blockStart = TimeService.hhmmToMinutes(startHHmm);
+      const blockEnd = TimeService.hhmmToMinutes(endHHmm);
       const targetStaffIds = event.staffId ? [event.staffId] : staffIds;
 
       for (const sid of targetStaffIds) {
@@ -85,7 +83,7 @@ export class CalendarComputeService {
           } else {
             // midnight-spanning: split across this date and the next
             push(sid, date, { start: blockStart, end: 24 * 60 });
-            const nextDate = this.time.addDaysStr(date, 1);
+            const nextDate = TimeService.addDaysStr(date, 1);
             push(sid, nextDate, { start: 0, end: blockEnd });
           }
         }
@@ -126,7 +124,7 @@ export class CalendarComputeService {
     eventStartStr: string,
   ): string[] {
     const cancelled = this.buildCancelledSet(event);
-    const repeatUntilStr = event.repeatUntil ? this.time.dateOnlyStr(event.repeatUntil) : null;
+    const repeatUntilStr = event.repeatUntil ? TimeService.dateOnlyStr(event.repeatUntil) : null;
 
     return dates.filter((date) => {
       if (date < eventStartStr) return false;
@@ -135,7 +133,7 @@ export class CalendarComputeService {
       if (event.daysMask) {
         const [y, m, d] = date.split('-').map(Number);
         // daysMask is indexed 0=Mon..6=Sun; isoWeekday returns 1=Mon..7=Sun.
-        const dayOfWeek = this.time.isoWeekday(y, m, d) - 1;
+        const dayOfWeek = TimeService.isoWeekday(y, m, d) - 1;
         if (event.daysMask[dayOfWeek] !== '1') return false;
       }
       return true;
@@ -146,19 +144,19 @@ export class CalendarComputeService {
 
   /** Converts event UTC datetimes to local date and HH:mm times in the given timezone. */
   resolveEventTimes(event: CalendarEvent, timezone: string): EventTimes {
-    const startParts = this.time.toZonedParts(event.startDateTime, timezone);
-    const endParts = this.time.toZonedParts(event.endDateTime, timezone);
+    const startParts = TimeService.toZonedParts(event.startDateTime, timezone);
+    const endParts = TimeService.toZonedParts(event.endDateTime, timezone);
     return {
-      date: this.time.zonedDateStr(event.startDateTime, timezone),
-      startHHmm: this.time.minutesToHHmm(startParts.hour * 60 + startParts.minute),
-      endHHmm: this.time.minutesToHHmm(endParts.hour * 60 + endParts.minute),
+      date: TimeService.zonedDateStr(event.startDateTime, timezone),
+      startHHmm: TimeService.minutesToHHmm(startParts.hour * 60 + startParts.minute),
+      endHHmm: TimeService.minutesToHHmm(endParts.hour * 60 + endParts.minute),
     };
   }
 
   /** Returns a set of cancelled occurrence dates (yyyy-MM-dd) for fast lookup. */
   buildCancelledSet(event: CalendarEventWithCancellations): Set<string> {
     return new Set(
-      event.cancelledOccurrences.map((o) => this.time.dateOnlyStr(o.occurrenceDate)),
+      event.cancelledOccurrences.map((o) => TimeService.dateOnlyStr(o.occurrenceDate)),
     );
   }
 
@@ -174,8 +172,8 @@ export class CalendarComputeService {
   ): { minTime: string; maxTime: string; closedTime: ClosedTimeItemDto[] } {
     const { viewMin, viewMax } = this.computeViewBounds(shiftsByDate);
     return {
-      minTime: this.time.minutesToHHmm(viewMin),
-      maxTime: this.time.minutesToHHmm(viewMax),
+      minTime: TimeService.minutesToHHmm(viewMin),
+      maxTime: TimeService.minutesToHHmm(viewMax),
       closedTime: this.computeClosedTime(dates, shiftsByDate, viewMin, viewMax),
     };
   }
@@ -188,8 +186,8 @@ export class CalendarComputeService {
 
     for (const dayShifts of shiftsByDate.values()) {
       for (const s of dayShifts) {
-        const start = this.time.timeToMinutes(s.startTime);
-        const end = this.time.timeToMinutes(s.endTime);
+        const start = TimeService.timeToMinutes(s.startTime);
+        const end = TimeService.timeToMinutes(s.endTime);
         if (start < minMinutes) minMinutes = start;
         if (end > maxMinutes) maxMinutes = end;
       }
@@ -212,14 +210,14 @@ export class CalendarComputeService {
     for (const date of dates) {
       const dayShifts = shiftsByDate.get(date) ?? [];
       const openIntervals = dayShifts.map((s) => ({
-        start: this.time.timeToMinutes(s.startTime),
-        end: this.time.timeToMinutes(s.endTime),
+        start: TimeService.timeToMinutes(s.startTime),
+        end: TimeService.timeToMinutes(s.endTime),
       }));
       for (const block of this.subtractIntervals({ start: viewMin, end: viewMax }, openIntervals)) {
         closed.push({
           date,
-          startTime: this.time.minutesToHHmm(block.start),
-          endTime: this.time.minutesToHHmm(block.end),
+          startTime: TimeService.minutesToHHmm(block.start),
+          endTime: TimeService.minutesToHHmm(block.end),
         });
       }
     }
@@ -274,7 +272,7 @@ export class CalendarComputeService {
   groupShiftsByDate(shifts: StaffShift[]): Map<string, StaffShift[]> {
     const map = new Map<string, StaffShift[]>();
     for (const shift of shifts) {
-      const key = this.time.dateOnlyStr(shift.date);
+      const key = TimeService.dateOnlyStr(shift.date);
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(shift);
     }
@@ -285,7 +283,7 @@ export class CalendarComputeService {
   groupShiftsByStaffDate(shifts: StaffShift[]): Map<string, Map<string, StaffShift>> {
     const map = new Map<string, Map<string, StaffShift>>();
     for (const shift of shifts) {
-      const dateKey = this.time.dateOnlyStr(shift.date);
+      const dateKey = TimeService.dateOnlyStr(shift.date);
       if (!map.has(shift.staffId)) map.set(shift.staffId, new Map());
       map.get(shift.staffId)!.set(dateKey, shift);
     }
@@ -313,8 +311,8 @@ export class CalendarComputeService {
       const shift = shiftsByStaffDate.get(staff.id)?.get(date);
       if (!shift) continue;
 
-      const shiftStart = this.time.timeToMinutes(shift.startTime);
-      const shiftEnd = this.time.timeToMinutes(shift.endTime);
+      const shiftStart = TimeService.timeToMinutes(shift.startTime);
+      const shiftEnd = TimeService.timeToMinutes(shift.endTime);
       const blocked = blockedByStaffDate.get(staff.id)?.get(date) ?? [];
 
       for (const free of this.subtractIntervals({ start: shiftStart, end: shiftEnd }, blocked)) {

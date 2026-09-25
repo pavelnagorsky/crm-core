@@ -10,14 +10,11 @@ import { ResolvedRange } from '../interfaces/resolved-range.interface.js';
 
 @Injectable()
 export class DashboardRangeService {
-  constructor(
-    private readonly businessService: BusinessService,
-    private readonly time: TimeService,
-  ) {}
+  constructor(private readonly businessService: BusinessService) {}
 
   async resolve(businessId: string, dto: DashboardRangeDto): Promise<ResolvedRange> {
     const locale = await this.businessService.getLocale(businessId);
-    const timezone = dto.timezone && this.time.isValidIanaTimezone(dto.timezone) ? dto.timezone : locale.timezone;
+    const timezone = dto.timezone && TimeService.isValidIanaTimezone(dto.timezone) ? dto.timezone : locale.timezone;
 
     const { from, to } = this.resolvePeriodBounds(dto, timezone);
     const granularity = dto.groupBy ?? this.autoGranularity(from, to);
@@ -41,31 +38,31 @@ export class DashboardRangeService {
       // Both dates are treated as inclusive calendar days in the business timezone.
       // "from" is the start of that day, "to" is the start of the day AFTER the end day
       // so the half-open [from, to) window covers the end day in full.
-      const fromParts = this.time.toZonedParts(new Date(dto.from), timezone);
-      const toParts = this.time.toZonedParts(new Date(dto.to), timezone);
-      const from = this.time.zonedDayStart(fromParts.year, fromParts.month, fromParts.day, timezone);
-      const to = this.time.zonedDayStart(toParts.year, toParts.month, toParts.day + 1, timezone);
+      const fromParts = TimeService.toZonedParts(new Date(dto.from), timezone);
+      const toParts = TimeService.toZonedParts(new Date(dto.to), timezone);
+      const from = TimeService.zonedDayStart(fromParts.year, fromParts.month, fromParts.day, timezone);
+      const to = TimeService.zonedDayStart(toParts.year, toParts.month, toParts.day + 1, timezone);
       if (from >= to) throw new AppException(ErrorCode.DASHBOARD_CUSTOM_RANGE_INVALID, HttpStatus.BAD_REQUEST);
       return { from, to };
     }
 
-    const today = this.time.toZonedParts(new Date(), timezone);
-    const startOfToday = this.time.zonedDayStart(today.year, today.month, today.day, timezone);
-    const startOfTomorrow = this.time.addDaysInTz(startOfToday, 1, timezone);
+    const today = TimeService.toZonedParts(new Date(), timezone);
+    const startOfToday = TimeService.zonedDayStart(today.year, today.month, today.day, timezone);
+    const startOfTomorrow = TimeService.addDaysInTz(startOfToday, 1, timezone);
 
     switch (dto.period) {
       case DashboardPeriod.TODAY:
         return { from: startOfToday, to: startOfTomorrow };
       case DashboardPeriod.YESTERDAY:
-        return { from: this.time.addDaysInTz(startOfToday, -1, timezone), to: startOfToday };
+        return { from: TimeService.addDaysInTz(startOfToday, -1, timezone), to: startOfToday };
       case DashboardPeriod.LAST_7D:
-        return { from: this.time.addDaysInTz(startOfToday, -6, timezone), to: startOfTomorrow };
+        return { from: TimeService.addDaysInTz(startOfToday, -6, timezone), to: startOfTomorrow };
       case DashboardPeriod.LAST_30D:
-        return { from: this.time.addDaysInTz(startOfToday, -29, timezone), to: startOfTomorrow };
+        return { from: TimeService.addDaysInTz(startOfToday, -29, timezone), to: startOfTomorrow };
       case DashboardPeriod.MTD:
-        return { from: this.time.zonedDayStart(today.year, today.month, 1, timezone), to: startOfTomorrow };
+        return { from: TimeService.zonedDayStart(today.year, today.month, 1, timezone), to: startOfTomorrow };
       case DashboardPeriod.YTD:
-        return { from: this.time.zonedDayStart(today.year, 1, 1, timezone), to: startOfTomorrow };
+        return { from: TimeService.zonedDayStart(today.year, 1, 1, timezone), to: startOfTomorrow };
       default:
         throw new AppException(ErrorCode.DASHBOARD_CUSTOM_RANGE_INVALID, HttpStatus.BAD_REQUEST);
     }

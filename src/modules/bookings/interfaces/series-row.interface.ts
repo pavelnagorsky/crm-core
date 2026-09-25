@@ -1,9 +1,9 @@
-import { BookingStatus } from '@prisma/client';
+import { BookingStatus, Prisma } from '@prisma/client';
 
 export interface SeriesRow {
   bucket: Date;
   status: BookingStatus | null;
   count: number;
-  revenue: number;
+  revenue: Prisma.Decimal;
   duration: number;
 }

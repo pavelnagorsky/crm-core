@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { ExportColumn, ExportResult, ExportService } from '../../shared/export/export.service.js';
+import { XlsxColumn } from '../../shared/xlsx/interfaces/xlsx-column.interface.js';
+import { XlsxFile } from '../../shared/xlsx/interfaces/xlsx-file.interface.js';
+import { XlsxService } from '../../shared/xlsx/xlsx.service.js';
 import { DEFAULT_LANG, LocaleService } from '../../shared/i18n/locale.service.js';
 import { labelOf } from '../../shared/i18n/label-of.js';
 import { I18nLocale } from '../../shared/interfaces/i18n-locale.interface.js';
@@ -27,10 +29,10 @@ export class StaffExportService {
     private readonly locale: LocaleService,
   ) {}
 
-  async stream(businessId: string, dto: StaffExportRequestDto, lang = DEFAULT_LANG): Promise<ExportResult> {
+  async stream(businessId: string, dto: StaffExportRequestDto, lang = DEFAULT_LANG): Promise<XlsxFile> {
     const messages = this.locale.get(lang);
     const text = messages.documents;
-    const columns: ExportColumn<StaffRow>[] = [
+    const columns: XlsxColumn<StaffRow>[] = [
       { header: text.common.id, key: 'id' },
       { header: text.common.name, key: 'name' },
       { header: text.common.roleTitle, key: 'roleTitle' },
@@ -45,7 +47,7 @@ export class StaffExportService {
     ];
     const { items } = await this.staffService.search(businessId, { ...dto, isExport: true });
     const rows = items.map((staff) => this.toRow(staff, messages));
-    return ExportService.build(rows, columns, 'staff', text.staff.sheet);
+    return XlsxService.table(rows, columns, 'staff', text.staff.sheet);
   }
 
   private toRow(staff: StaffWithAvatar, messages: I18nLocale): StaffRow {

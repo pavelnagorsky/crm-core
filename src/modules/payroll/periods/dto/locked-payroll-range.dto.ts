@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsUUID } from 'class-validator';
-import { dateOnlyStr } from '../../utils/money.js';
+import { TimeService } from '../../../time/time.service.js';
 
 export class LockedPayrollRangesRequestDto {
   @ApiProperty({ type: String, format: 'uuid' })
@@ -17,8 +17,8 @@ export class LockedPayrollRangeDto {
 
   static fromEntity(range: { startDate: Date; endDate: Date }): LockedPayrollRangeDto {
     const dto = new LockedPayrollRangeDto();
-    dto.startDate = dateOnlyStr(range.startDate);
-    dto.endDate = dateOnlyStr(range.endDate);
+    dto.startDate = TimeService.dateOnlyStr(range.startDate);
+    dto.endDate = TimeService.dateOnlyStr(range.endDate);
     return dto;
   }
 }

@@ -24,7 +24,7 @@ import { PayrollPeriodWithResults } from './interfaces/payroll-period-with-resul
 import { PayrollComputeService } from './payroll-compute.service.js';
 import { StaffCompensationService } from '../compensation/staff-compensation.service.js';
 import { StaffEarningsService } from '../earnings/staff-earnings.service.js';
-import { dateOnly, dateOnlyStr, dec } from '../utils/money.js';
+import { MoneyService } from '../../../shared/money/money.service.js';
 import { lockedPeriodWhere } from './locked-period.js';
 
 const EDITABLE_STATUSES: PayrollPeriodStatus[] = [PayrollPeriodStatus.DRAFT, PayrollPeriodStatus.CALCULATED];
@@ -38,13 +38,12 @@ export class PayrollService {
     private readonly compute: PayrollComputeService,
     private readonly staffService: StaffService,
     private readonly businessService: BusinessService,
-    private readonly time: TimeService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async create(dto: CreatePayrollPeriodDto, actor: AuditActor): Promise<PayrollPeriodWithResults> {
-    const startDate = dateOnly(dto.startDate);
-    const endDate = dateOnly(dto.endDate);
+    const startDate = TimeService.dateOnly(dto.startDate);
+    const endDate = TimeService.dateOnly(dto.endDate);
     if (endDate < startDate) throw new AppException(ErrorCode.PAYROLL_PERIOD_DATES_INVALID, HttpStatus.BAD_REQUEST);
 
     const overlap = await this.db.payrollPeriod.findFirst({
@@ -150,7 +149,7 @@ export class PayrollService {
         period.endDate,
       ),
     ]);
-    const dates = this.time.enumerateDates(dateOnlyStr(period.startDate), dateOnlyStr(period.endDate));
+    const dates = TimeService.enumerateDates(TimeService.dateOnlyStr(period.startDate), TimeService.dateOnlyStr(period.endDate));
 
     const updated = await this.db.$transaction(async (tx) => {
       await this.earnings.detachPeriodEarnings(periodId, tx);
@@ -192,7 +191,7 @@ export class PayrollService {
             currency: period.currency,
             amount,
             rateAmount: proration.lastSalary,
-            quantity: dec(proration.daysCovered),
+            quantity: MoneyService.decimal(proration.daysCovered),
             planId: proration.planId,
           },
           tx,
@@ -291,13 +290,13 @@ export class PayrollService {
       throw new AppException(ErrorCode.PAYROLL_CORRECTION_NOT_ALLOWED, HttpStatus.CONFLICT);
     }
 
-    const amount = dec(dto.amount);
+    const amount = MoneyService.decimal(dto.amount);
     if (amount.isZero()) throw new AppException(ErrorCode.STAFF_EARNING_AMOUNT_INVALID, HttpStatus.BAD_REQUEST);
 
     const { timezone } = await this.businessService.getLocale(result.businessId);
-    const today = this.time.zonedDateStr(new Date(), timezone);
-    const afterPeriod = this.time.addDaysStr(dateOnlyStr(result.period.endDate), 1);
-    const earnedOn = today > dateOnlyStr(result.period.endDate) ? dateOnly(today) : dateOnly(afterPeriod);
+    const today = TimeService.zonedDateStr(new Date(), timezone);
+    const afterPeriod = TimeService.addDaysStr(TimeService.dateOnlyStr(result.period.endDate), 1);
+    const earnedOn = today > TimeService.dateOnlyStr(result.period.endDate) ? TimeService.dateOnly(today) : TimeService.dateOnly(afterPeriod);
 
     return this.earnings.createPeriodCorrection({
       businessId: result.businessId,

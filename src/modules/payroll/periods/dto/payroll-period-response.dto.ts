@@ -2,8 +2,8 @@ import { ApiProperty } from '@nestjs/swagger';
 import { PayrollPeriod } from '@prisma/client';
 import { PayrollPeriodStatus } from '../enums/payroll-period-status.enum.js';
 import { PayrollPeriodWithResults } from '../interfaces/payroll-period-with-results.interface.js';
+import { TimeService } from '../../../time/time.service.js';
 import { PayrollResultResponseDto } from './payroll-result-response.dto.js';
-import { dateOnlyStr } from '../../utils/money.js';
 
 export class PayrollPeriodResponseDto {
   @ApiProperty({ type: String })
@@ -53,8 +53,8 @@ export class PayrollPeriodResponseDto {
     dto.id = period.id;
     dto.businessId = period.businessId;
     dto.name = period.name;
-    dto.startDate = dateOnlyStr(period.startDate);
-    dto.endDate = dateOnlyStr(period.endDate);
+    dto.startDate = TimeService.dateOnlyStr(period.startDate);
+    dto.endDate = TimeService.dateOnlyStr(period.endDate);
     dto.currency = period.currency;
     dto.status = period.status;
     dto.calculatedAt = period.calculatedAt;

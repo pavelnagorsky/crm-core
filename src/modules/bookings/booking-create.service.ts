@@ -10,6 +10,7 @@ import { BookingVisibility } from '../business/enums/booking-visibility.enum.js'
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
+import { MoneyService } from '../../shared/money/money.service.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { CalendarService } from '../calendar/calendar.service.js';
 import { ClientsService } from '../clients/clients.service.js';
@@ -36,7 +37,6 @@ export class BookingCreateService {
 
   constructor(
     private readonly db: DatabaseService,
-    private readonly time: TimeService,
     private readonly calendarService: CalendarService,
     private readonly clientsService: ClientsService,
     private readonly staffService: StaffService,
@@ -104,11 +104,11 @@ export class BookingCreateService {
         HttpStatus.NOT_FOUND,
       );
 
-    const startAt = this.time.localToUtc(dto.startAt, business.timezone);
+    const startAt = TimeService.localToUtc(dto.startAt, business.timezone);
     const endAt = new Date(
       startAt.getTime() + service.durationMinutes * 60_000,
     );
-    const dateStr = this.time.zonedDateStr(startAt, business.timezone);
+    const dateStr = TimeService.zonedDateStr(startAt, business.timezone);
 
     const [client, staffId] = await Promise.all([
       this.clientsService.resolveForBooking(
@@ -230,7 +230,7 @@ export class BookingCreateService {
         staffName: booking.staffName,
         startTime: booking.startAt.toISOString(),
         endTime: booking.endAt.toISOString(),
-        price: (booking.customPrice ?? booking.servicePrice).toString(),
+        price: MoneyService.format(booking.customPrice ?? booking.servicePrice),
         currency,
       },
     };
@@ -286,8 +286,8 @@ export class BookingCreateService {
       );
 
     const staffIds = candidates.map((s) => s.id);
-    const dayStart = this.time.localToUtc(`${dateStr}T00:00:00`, timezone);
-    const dayEnd = this.time.addDaysInTz(dayStart, 1, timezone);
+    const dayStart = TimeService.localToUtc(`${dateStr}T00:00:00`, timezone);
+    const dayEnd = TimeService.addDaysInTz(dayStart, 1, timezone);
 
     const [available, bookingCounts] = await Promise.all([
       this.calendarService.filterAvailableStaff(

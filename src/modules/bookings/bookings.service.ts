@@ -42,7 +42,6 @@ export class BookingsService {
 
   constructor(
     private readonly db: DatabaseService,
-    private readonly time: TimeService,
     private readonly calendarService: CalendarService,
     private readonly staffService: StaffService,
     private readonly businessService: BusinessService,
@@ -121,12 +120,14 @@ export class BookingsService {
   async updateStatus(bookingId: string, tokenPayload: TokenPayloadDto, dto: UpdateBookingStatusDto): Promise<Booking> {
     const old = await this.findById(bookingId);
     assertBusinessRole(tokenPayload, old.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
+    const reversesCommission = old.status === BookingStatus.COMPLETED && dto.status !== BookingStatus.COMPLETED;
+    const reversalReason = reversesCommission ? this.optionalReason(dto.reason) : null;
     const updated = await this.db.booking.update({ where: { id: bookingId }, data: { status: dto.status } });
     const actor = auditActorFromToken(tokenPayload, old.businessId);
     if (dto.status === BookingStatus.COMPLETED && old.status !== BookingStatus.COMPLETED) {
       await this.staffEarnings.recordForCompletedBooking(updated);
-    } else if (old.status === BookingStatus.COMPLETED && dto.status !== BookingStatus.COMPLETED) {
-      await this.staffEarnings.reverseForBooking(updated, actor);
+    } else if (reversesCommission) {
+      await this.staffEarnings.reverseForBooking(updated, reversalReason, actor);
     }
     this.emitAudit({
       businessId: old.businessId,
@@ -134,7 +135,7 @@ export class BookingsService {
       eventType: AuditEvent.BOOKING_STATUS_CHANGED,
       actionType: AuditActionType.MODIFY,
       actor,
-      payload: { from: old.status, to: dto.status },
+      payload: { from: old.status, to: dto.status, ...(reversalReason ? { reason: reversalReason } : {}) },
     });
     if (dto.status === BookingStatus.CONFIRMED && old.clientEmail) {
       const { timezone } = await this.businessService.getLocale(old.businessId);
@@ -239,6 +240,7 @@ export class BookingsService {
   async delete(bookingId: string, tokenPayload: TokenPayloadDto): Promise<void> {
     const booking = await this.findById(bookingId);
     assertBusinessRole(tokenPayload, booking.businessId, BusinessRole.OWNER);
+    const actor = auditActorFromToken(tokenPayload, booking.businessId);
     await this.db.$transaction([
       this.db.booking.update({ where: { id: booking.id }, data: { deletedAt: new Date() } }),
       ...(booking.calendarEventId
@@ -246,35 +248,41 @@ export class BookingsService {
         : []),
     ]);
     if (booking.status === BookingStatus.COMPLETED) {
-      await this.staffEarnings.reverseForBooking(booking, auditActorFromToken(tokenPayload, booking.businessId));
+      await this.staffEarnings.reverseForBooking(booking, null, actor);
     }
     this.emitAudit({
       businessId: booking.businessId,
       entityId: booking.id,
       eventType: AuditEvent.BOOKING_DELETED,
       actionType: AuditActionType.DELETE,
-      actor: auditActorFromToken(tokenPayload, booking.businessId),
+      actor,
       payload: {},
     });
   }
 
   // ── Private ───────────────────────────────────────────────────────────────────
 
+  private optionalReason(reason?: string | null): string | null {
+    const text = reason?.trim() ?? '';
+    return text || null;
+  }
+
   private async executeCancellation(booking: Booking, cancelledBy: CancelledBy, reason: string | undefined, actor: AuditActor): Promise<Booking> {
     if (booking.status === BookingStatus.CANCELLED) {
       throw new AppException(ErrorCode.BOOKING_ALREADY_CANCELLED, HttpStatus.CONFLICT);
     }
+    const storedReason = this.optionalReason(reason);
     const updated = await this.db.booking.update({
       where: { id: booking.id },
       data: {
         status: BookingStatus.CANCELLED,
         cancelledBy,
         cancelledAt: new Date(),
-        cancellationReason: reason ?? null,
+        cancellationReason: storedReason,
       },
     });
     if (booking.status === BookingStatus.COMPLETED) {
-      await this.staffEarnings.reverseForBooking(updated, actor);
+      await this.staffEarnings.reverseForBooking(updated, storedReason, actor);
     }
     this.emitAudit({
       businessId: booking.businessId,
@@ -282,14 +290,14 @@ export class BookingsService {
       eventType: AuditEvent.BOOKING_CANCELLED,
       actionType: AuditActionType.MODIFY,
       actor,
-      payload: { cancelledBy, reason },
+      payload: { cancelledBy, reason: storedReason ?? undefined },
     });
     if (booking.clientEmail && cancelledBy === CancelledBy.STAFF) {
       const { timezone } = await this.businessService.getLocale(booking.businessId);
       this.eventEmitter.emit(NOTIFICATION_EVENT, new BookingStatusChangedNotification(
         { ...booking, clientEmail: booking.clientEmail, timezone },
         'CANCELLED',
-        reason,
+        storedReason ?? undefined,
       ));
     }
     return updated;
@@ -315,9 +323,9 @@ export class BookingsService {
     if (!business) throw new AppException(ErrorCode.BOOKING_BUSINESS_NOT_FOUND, HttpStatus.NOT_FOUND);
     if (!service) throw new AppException(ErrorCode.BOOKING_SERVICE_NOT_FOUND, HttpStatus.NOT_FOUND);
 
-    const startAt = dto.startAt ? this.time.localToUtc(dto.startAt, business.timezone) : old.startAt;
+    const startAt = dto.startAt ? TimeService.localToUtc(dto.startAt, business.timezone) : old.startAt;
     const endAt = new Date(startAt.getTime() + service.durationMinutes * 60_000);
-    const dateStr = this.time.zonedDateStr(startAt, business.timezone);
+    const dateStr = TimeService.zonedDateStr(startAt, business.timezone);
 
     if (dto.staffId !== undefined || dto.serviceId !== undefined) {
       const candidates = await this.staffService.resolveStaffForService(businessId, serviceId, staffId);

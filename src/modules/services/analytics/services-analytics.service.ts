@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { BookingStatus } from '@prisma/client';
+import { BookingStatus, Prisma } from '@prisma/client';
+import { MoneyService } from '../../../shared/money/money.service.js';
 import { BookingsAggregatesService } from '../../bookings/bookings-aggregates.service.js';
 import { AggregateRange } from '../../bookings/interfaces/aggregate-range.interface.js';
 import { AggregateSnapshot } from '../../bookings/interfaces/aggregate-snapshot.interface.js';
@@ -218,9 +219,9 @@ function countFor(snap: AggregateSnapshot, statuses: BookingStatus[]): number {
   return sum;
 }
 
-function revenueFor(snap: AggregateSnapshot, statuses: BookingStatus[]): number {
-  let sum = 0;
-  for (const s of statuses) sum += snap.byStatus.get(s)?.revenue ?? 0;
+function revenueFor(snap: AggregateSnapshot, statuses: BookingStatus[]): Prisma.Decimal {
+  let sum = MoneyService.decimal(0);
+  for (const s of statuses) sum = sum.plus(snap.byStatus.get(s)?.revenue ?? 0);
   return sum;
 }
 
@@ -233,7 +234,8 @@ function durationFor(snap: AggregateSnapshot, statuses: BookingStatus[]): number
 function revenuePerHour(snap: AggregateSnapshot, statuses: BookingStatus[]): number {
   const revenue = revenueFor(snap, statuses);
   const durationMinutes = durationFor(snap, statuses);
-  return durationMinutes > 0 ? revenue / (durationMinutes / 60) : 0;
+  if (durationMinutes <= 0) return 0;
+  return Number(MoneyService.format(MoneyService.quantize(revenue.mul(60).div(durationMinutes))));
 }
 
 function sharePct(part: number, total: number): number {
@@ -245,11 +247,11 @@ function breakdownItem(row: ServiceCount, total: number): WidgetBreakdownItemDto
     id: row.serviceId,
     label: row.serviceTitle,
     value: row.count,
-    secondaryValue: row.revenue,
+    secondaryValue: Number(MoneyService.format(row.revenue)),
     sharePct: sharePct(row.count, total),
   };
 }
 
 function emptySnapshot(): AggregateSnapshot {
-  return { byStatus: new Map(), totalCount: 0, totalRevenue: 0, totalDuration: 0 };
+  return { byStatus: new Map(), totalCount: 0, totalRevenue: MoneyService.decimal(0), totalDuration: 0 };
 }

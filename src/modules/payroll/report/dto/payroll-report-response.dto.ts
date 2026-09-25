@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { ApiSignedAmount } from '../../../../shared/decorators/api-decimal.decorator.js';
 import { PayrollPeriodStatus } from '../../periods/enums/payroll-period-status.enum.js';
 import { StaffEarningResponseDto } from '../../earnings/dto/staff-earning-response.dto.js';
 import { PayrollResultResponseDto } from '../../periods/dto/payroll-result-response.dto.js';
@@ -35,7 +36,7 @@ export class PayrollReportResponseDto {
   @ApiProperty({ enum: PayrollPeriodStatus, enumName: 'PayrollPeriodStatus' })
   status: PayrollPeriodStatus;
 
-  @ApiProperty({ type: String })
+  @ApiSignedAmount()
   grandTotal: string;
 
   @ApiProperty({ type: Number })

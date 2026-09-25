@@ -9,6 +9,7 @@ import { LoggingInterceptor } from './shared/interceptors/logging.interceptor.js
 import { GlobalExceptionFilter } from './shared/filters/exception.filter.js';
 import { exceptionFactory } from './shared/validation/exception-factory.js';
 import { swaggerConfig } from './config/swagger.config.js';
+import { registerDecimalSchemas } from './shared/decorators/api-decimal.decorator.js';
 import { corsConfig } from './config/cors.config.js';
 
 async function bootstrap() {
@@ -18,12 +19,16 @@ async function bootstrap() {
   app.use(cookieParser());
 
   app.useGlobalFilters(new GlobalExceptionFilter());
-  app.useGlobalInterceptors(new LoggingInterceptor(), new ResponseInterceptor());
+  app.useGlobalInterceptors(
+    new LoggingInterceptor(),
+    new ResponseInterceptor(),
+  );
   app.useGlobalPipes(
     new ValidationPipe({ transform: true, whitelist: true, exceptionFactory }),
   );
 
   const document = SwaggerModule.createDocument(app, swaggerConfig);
+  registerDecimalSchemas(document);
   SwaggerModule.setup('api', app, document);
 
   await app.listen(process.env.PORT ?? 3000);

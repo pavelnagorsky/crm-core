@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { BookingStatus, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
+import { MoneyService } from '../../shared/money/money.service.js';
 import { SeriesGranularity } from '../dashboard/enums/series-granularity.enum.js';
 import { AggregateRange } from './interfaces/aggregate-range.interface.js';
 import { AggregateSeriesRange } from './interfaces/aggregate-series-range.interface.js';
@@ -30,17 +31,17 @@ export class BookingsAggregatesService {
         GROUP BY "status"
       `,
     );
-    const byStatus = new Map<BookingStatus, { count: number; revenue: number; duration: number }>();
+    const byStatus = new Map<BookingStatus, { count: number; revenue: Prisma.Decimal; duration: number }>();
     let totalCount = 0;
-    let totalRevenue = 0;
+    let totalRevenue = MoneyService.decimal(0);
     let totalDuration = 0;
     for (const r of rows) {
       const count = Number(r.count);
-      const revenue = Number(r.revenue);
+      const revenue = MoneyService.decimal(r.revenue);
       const duration = Number(r.duration);
       byStatus.set(r.status, { count, revenue, duration });
       totalCount += count;
-      totalRevenue += revenue;
+      totalRevenue = totalRevenue.plus(revenue);
       totalDuration += duration;
     }
     return { byStatus, totalCount, totalRevenue, totalDuration };
@@ -63,7 +64,7 @@ export class BookingsAggregatesService {
       serviceId: r.serviceId,
       serviceTitle: r.serviceTitle,
       count: Number(r.count),
-      revenue: Number(r.revenue),
+      revenue: MoneyService.decimal(r.revenue),
       duration: Number(r.duration),
     }));
   }
@@ -105,7 +106,7 @@ export class BookingsAggregatesService {
         bucket: r.bucket,
         status: r.status,
         count: Number(r.count),
-        revenue: Number(r.revenue),
+        revenue: MoneyService.decimal(r.revenue),
         duration: Number(r.duration),
       }));
     }
@@ -126,7 +127,7 @@ export class BookingsAggregatesService {
       bucket: r.bucket,
       status: null,
       count: Number(r.count),
-      revenue: Number(r.revenue),
+      revenue: MoneyService.decimal(r.revenue),
       duration: Number(r.duration),
     }));
   }

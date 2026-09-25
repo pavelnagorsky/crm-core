@@ -18,7 +18,6 @@ import { CompensationSalaryMode } from './enums/compensation-salary-mode.enum.js
 import { ReplaceCompensationPlanDto } from './dto/replace-compensation-plan.dto.js';
 import { assertCompensationVersionStart } from './compensation-plan.rules.js';
 import { CompensationPlanWithRates } from './interfaces/compensation-plan-with-rates.interface.js';
-import { dateOnly } from '../utils/money.js';
 
 @Injectable()
 export class StaffCompensationService {
@@ -27,7 +26,6 @@ export class StaffCompensationService {
     private readonly staffService: StaffService,
     private readonly servicesService: ServicesService,
     private readonly businessService: BusinessService,
-    private readonly time: TimeService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -43,11 +41,11 @@ export class StaffCompensationService {
   async findCurrent(staffId: string): Promise<CompensationPlanWithRates | null> {
     const staff = await this.staffService.findById(staffId);
     const { timezone } = await this.businessService.getLocale(staff.businessId);
-    return this.resolveForDate(staff.id, dateOnly(this.time.zonedDateStr(new Date(), timezone)));
+    return this.resolveForDate(staff.id, TimeService.dateOnly(TimeService.zonedDateStr(new Date(), timezone)));
   }
 
   async resolveForDate(staffId: string, onDate: Date): Promise<CompensationPlanWithRates | null> {
-    const day = dateOnly(this.time.dateOnlyStr(onDate));
+    const day = TimeService.dateOnly(TimeService.dateOnlyStr(onDate));
     return this.db.staffCompensationPlan.findFirst({
       where: {
         staffId,
@@ -84,8 +82,8 @@ export class StaffCompensationService {
     const serviceIds = (dto.serviceRates ?? []).map((rate) => rate.serviceId);
     await this.servicesService.assertIdsInBusiness(staff.businessId, serviceIds);
 
-    const effectiveFrom = dateOnly(dto.effectiveFrom);
-    const previousDay = dateOnly(this.time.addDaysStr(dto.effectiveFrom, -1));
+    const effectiveFrom = TimeService.dateOnly(dto.effectiveFrom);
+    const previousDay = TimeService.dateOnly(TimeService.addDaysStr(dto.effectiveFrom, -1));
 
     const latest = await this.db.staffCompensationPlan.findFirst({
       where: { staffId },

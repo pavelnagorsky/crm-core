@@ -8,7 +8,6 @@ describe('StaffCompensationService.resolveServicePercent', () => {
     {} as never,
     {} as never,
     {} as never,
-    {} as never,
   );
 
   const plan = (overrides: Partial<CompensationPlanWithRates> = {}): CompensationPlanWithRates =>

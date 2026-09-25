@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { CompensationSalaryMode, Prisma, StaffEarningType } from '@prisma/client';
+import { TimeService } from '../../time/time.service.js';
 import { EarningCalculatorService } from '../earnings/earning-calculator.service.js';
 import { planCoversDate } from '../compensation/compensation-plan.rules.js';
 import { EarningLine } from '../earnings/interfaces/earning-line.interface.js';
 import { PayrollTotals } from './interfaces/payroll-totals.interface.js';
 import { SalaryPlanSlice } from './interfaces/salary-plan-slice.interface.js';
 import { SalaryProration } from './interfaces/salary-proration.interface.js';
-import { dateOnly, daysInUtcMonth, dec } from '../utils/money.js';
+import { MoneyService } from '../../../shared/money/money.service.js';
 
 const FLOOR_TYPES: ReadonlySet<StaffEarningType> = new Set([
   StaffEarningType.SERVICE_COMMISSION,
@@ -25,25 +26,25 @@ export class PayrollComputeService {
   }
 
   prorateSalary(plans: SalaryPlanSlice[], dateStrs: string[]): SalaryProration {
-    let prorated = dec(0);
+    let prorated = MoneyService.decimal(0);
     let planId: string | null = null;
     let mode: CompensationSalaryMode = CompensationSalaryMode.GUARANTEED_MINIMUM;
-    let lastSalary = dec(0);
+    let lastSalary = MoneyService.decimal(0);
     let daysCovered = 0;
 
     for (const iso of dateStrs) {
-      const day = dateOnly(iso);
+      const day = TimeService.dateOnly(iso);
       const plan = this.planOnDate(plans, day);
       if (!plan || plan.fixedSalaryAmount === null) continue;
-      prorated = prorated.plus(this.calculator.dailySalaryShare(plan.fixedSalaryAmount, daysInUtcMonth(day)));
+      prorated = prorated.plus(this.calculator.dailySalaryShare(plan.fixedSalaryAmount, TimeService.daysInUtcMonth(day)));
       planId = plan.id;
       mode = plan.salaryMode;
-      lastSalary = dec(plan.fixedSalaryAmount);
+      lastSalary = MoneyService.decimal(plan.fixedSalaryAmount);
       daysCovered += 1;
     }
 
     return {
-      prorated: prorated.toDecimalPlaces(2),
+      prorated: MoneyService.quantize(prorated),
       planId,
       mode,
       lastSalary,
@@ -61,7 +62,7 @@ export class PayrollComputeService {
     );
     return earnings
       .filter((row) => FLOOR_TYPES.has(row.type) && !reversedIds.has(row.id ?? ''))
-      .reduce((acc, row) => acc.plus(row.amount), dec(0));
+      .reduce((acc, row) => acc.plus(row.amount), MoneyService.decimal(0));
   }
 
   inDateRange<T extends { earnedOn: Date }>(rows: T[], from: Date, to: Date): T[] {
@@ -74,7 +75,7 @@ export class PayrollComputeService {
   }
 
   salaryAmount(proration: SalaryProration, workEarnings: EarningLine[]): Prisma.Decimal {
-    if (proration.prorated.lte(0)) return dec(0);
+    if (proration.prorated.lte(0)) return MoneyService.decimal(0);
     if (proration.mode === CompensationSalaryMode.ADDITIVE) return proration.prorated;
     return this.calculator.guaranteedTopUp(proration.prorated, this.floorBase(workEarnings));
   }
@@ -95,18 +96,18 @@ export class PayrollComputeService {
 
   totalsFrom(rows: EarningLine[]): PayrollTotals {
     const fields: PayrollTotals = {
-      fixedSalaryTotal: dec(0),
-      hourlyTotal: dec(0),
-      serviceCommissionTotal: dec(0),
-      productCommissionTotal: dec(0),
-      bonusTotal: dec(0),
-      deductionTotal: dec(0),
-      correctionTotal: dec(0),
-      totalAmount: dec(0),
+      fixedSalaryTotal: MoneyService.decimal(0),
+      hourlyTotal: MoneyService.decimal(0),
+      serviceCommissionTotal: MoneyService.decimal(0),
+      productCommissionTotal: MoneyService.decimal(0),
+      bonusTotal: MoneyService.decimal(0),
+      deductionTotal: MoneyService.decimal(0),
+      correctionTotal: MoneyService.decimal(0),
+      totalAmount: MoneyService.decimal(0),
       earningsCount: rows.length,
     };
     for (const row of rows) {
-      const amount = dec(row.amount);
+      const amount = MoneyService.decimal(row.amount);
       fields.totalAmount = fields.totalAmount.plus(amount);
       switch (row.type) {
         case StaffEarningType.FIXED_SALARY:

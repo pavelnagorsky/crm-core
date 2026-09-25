@@ -39,6 +39,7 @@ import { StaffSearchRequestDto } from './dto/staff-search-request.dto.js';
 import { StaffSearchResponseDto } from './dto/staff-search-response.dto.js';
 import { StaffExportRequestDto } from './dto/staff-export-request.dto.js';
 import { StaffExportService } from './staff-export.service.js';
+import { XlsxService } from '../../shared/xlsx/xlsx.service.js';
 import { GetShiftsRequestDto } from './dto/get-shifts-request.dto.js';
 import { ReplaceShiftsRequestDto } from './dto/replace-shifts-request.dto.js';
 import { ShiftsResponseDto } from './dto/shifts-response.dto.js';
@@ -117,7 +118,7 @@ export class StaffController {
   }
 
   @ApiOperation({ summary: 'Export staff members as XLSX' })
-  @ApiProduces('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  @ApiProduces(XlsxService.mimeType)
   @ApiOkResponse({ description: 'File stream' })
   @Auth()
   @Get('export')
@@ -129,7 +130,7 @@ export class StaffController {
     assertBusinessRole(tokenPayload, dto.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
     const { stream, filename } = await this.staffExportService.stream(dto.businessId, dto);
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    return new StreamableFile(stream, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    return new StreamableFile(stream, { type: XlsxService.mimeType });
   }
 
   @ApiOperation({ summary: 'Get staff member by ID' })

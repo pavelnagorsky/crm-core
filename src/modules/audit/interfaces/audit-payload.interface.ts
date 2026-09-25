@@ -28,6 +28,7 @@ interface BookingCancelledPayload {
 interface BookingStatusChangedPayload {
   from: string;
   to: string;
+  reason?: string;
 }
 
 interface BookingDeletedPayload {}

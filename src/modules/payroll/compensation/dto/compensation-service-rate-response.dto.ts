@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { StaffCompensationServiceRate } from '@prisma/client';
-import { money } from '../../utils/money.js';
+import { ApiPercent } from '../../../../shared/decorators/api-decimal.decorator.js';
+import { MoneyService } from '../../../../shared/money/money.service.js';
 
 export class CompensationServiceRateResponseDto {
   @ApiProperty({ type: String })
@@ -9,14 +10,16 @@ export class CompensationServiceRateResponseDto {
   @ApiProperty({ type: String })
   serviceId: string;
 
-  @ApiProperty({ type: String, example: '40.00' })
+  @ApiPercent({ example: '40.00' })
   commissionPercent: string;
 
-  static fromEntity(rate: StaffCompensationServiceRate): CompensationServiceRateResponseDto {
+  static fromEntity(
+    rate: StaffCompensationServiceRate,
+  ): CompensationServiceRateResponseDto {
     const dto = new CompensationServiceRateResponseDto();
     dto.id = rate.id;
     dto.serviceId = rate.serviceId;
-    dto.commissionPercent = money(rate.commissionPercent);
+    dto.commissionPercent = MoneyService.format(rate.commissionPercent);
     return dto;
   }
 }

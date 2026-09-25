@@ -61,9 +61,33 @@ export const ErrorCode = {
     code: 'CLIENT_PHONE_EXISTS',
     message: 'A client with this phone number already exists in this business',
   },
-  CLIENT_IMPORT_FILE_INVALID: {
-    code: 'CLIENT_IMPORT_FILE_INVALID',
-    message: 'Import file is invalid',
+  CLIENT_IMPORT_FILE_MISSING: {
+    code: 'CLIENT_IMPORT_FILE_MISSING',
+    message: 'Import file is missing',
+  },
+  CLIENT_IMPORT_FILE_TOO_LARGE: {
+    code: 'CLIENT_IMPORT_FILE_TOO_LARGE',
+    message: 'Import file exceeds the maximum allowed size',
+  },
+  CLIENT_IMPORT_FILE_UNSUPPORTED: {
+    code: 'CLIENT_IMPORT_FILE_UNSUPPORTED',
+    message: 'Import file must be an .xlsx spreadsheet',
+  },
+  CLIENT_IMPORT_FILE_CORRUPT: {
+    code: 'CLIENT_IMPORT_FILE_CORRUPT',
+    message: 'Import file could not be read',
+  },
+  CLIENT_IMPORT_MISSING_COLUMNS: {
+    code: 'CLIENT_IMPORT_MISSING_COLUMNS',
+    message: 'Import file is missing required columns',
+  },
+  CLIENT_IMPORT_FILE_EMPTY: {
+    code: 'CLIENT_IMPORT_FILE_EMPTY',
+    message: 'Import file has no client rows',
+  },
+  CLIENT_IMPORT_TOO_MANY_ROWS: {
+    code: 'CLIENT_IMPORT_TOO_MANY_ROWS',
+    message: 'Import file exceeds the row limit',
   },
 
   // staff

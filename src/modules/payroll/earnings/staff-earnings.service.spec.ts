@@ -4,7 +4,6 @@ import { Booking, BookingSource, BookingStatus, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { BusinessService } from '../../business/business.service.js';
 import { StaffService } from '../../staff/staff.service.js';
-import { TimeService } from '../../time/time.service.js';
 import { EarningCalculatorService } from './earning-calculator.service.js';
 import type { CompensationPlanWithRates } from '../compensation/interfaces/compensation-plan-with-rates.interface.js';
 import { StaffCompensationService } from '../compensation/staff-compensation.service.js';
@@ -68,7 +67,6 @@ describe('StaffEarningsService', () => {
       providers: [
         StaffEarningsService,
         EarningCalculatorService,
-        TimeService,
         { provide: DatabaseService, useValue: db },
         { provide: StaffCompensationService, useValue: compensation },
         { provide: StaffService, useValue: {} },
@@ -126,7 +124,7 @@ describe('StaffEarningsService', () => {
     });
     db.staffEarning.findUnique.mockResolvedValue({ id: 'rev-1' });
 
-    const reversal = await service.reverseForBooking(booking());
+    const reversal = await service.reverseForBooking(booking(), 'Клиент отменил визит');
     expect(reversal).toEqual({ id: 'rev-1' });
     expect(db.staffEarning.create).not.toHaveBeenCalled();
   });

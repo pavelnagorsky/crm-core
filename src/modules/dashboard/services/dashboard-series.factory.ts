@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { BookingStatus } from '@prisma/client';
+import { MoneyService } from '../../../shared/money/money.service.js';
 import { SeriesRow } from '../../bookings/interfaces/series-row.interface.js';
 import { WidgetSeriesPointDto } from '../dto/widget-series-point.dto.js';
 import { ResolvedRange } from '../interfaces/resolved-range.interface.js';
@@ -57,7 +58,7 @@ export class DashboardSeriesFactory {
     return buckets.map((b) => {
       const row = byBucket.get(b.getTime());
       if (!row) return 0;
-      return field === 'revenue' ? row.revenue : row.count;
+      return field === 'revenue' ? Number(MoneyService.format(row.revenue)) : row.count;
     });
   }
 
@@ -78,7 +79,7 @@ export class DashboardSeriesFactory {
     const byBucket = this.indexByBucket(rows);
     return buckets.map((b) => {
       const row = byBucket.get(b.getTime());
-      const raw = row ? (field === 'revenue' ? row.revenue : row.count) : 0;
+      const raw = row ? (field === 'revenue' ? Number(MoneyService.format(row.revenue)) : row.count) : 0;
       return { t: b.toISOString(), values: { [valueKey]: raw } };
     });
   }
