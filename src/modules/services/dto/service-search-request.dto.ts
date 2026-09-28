@@ -5,7 +5,11 @@ import { ServiceSearchOrderBy } from '../enums/service-search-order-by.enum.js';
 import { ServiceStatus } from '../enums/service-status.enum.js';
 
 export class ServiceSearchRequestDto extends PaginationRequestDto<ServiceSearchOrderBy> {
-  @ApiProperty({ type: String, required: false })
+  @ApiProperty({
+    type: String,
+    required: false,
+    description: 'Title, description, category name, category description',
+  })
   @IsOptional()
   @IsString()
   @MaxLength(255)

@@ -201,10 +201,30 @@ export class BookingsService {
     if (dto.status) where.status = dto.status;
     if (dto.staffId) where.staffId = dto.staffId;
     if (dto.clientId) where.clientId = dto.clientId;
+    if (dto.serviceId) where.serviceId = dto.serviceId;
     if (dto.startFrom || dto.startTo) {
       where.startAt = {};
       if (dto.startFrom) (where.startAt as Prisma.DateTimeFilter).gte = new Date(dto.startFrom);
       if (dto.startTo) (where.startAt as Prisma.DateTimeFilter).lte = new Date(dto.startTo);
+    }
+    if (dto.createdFrom || dto.createdTo) {
+      where.createdAt = {};
+      if (dto.createdFrom) (where.createdAt as Prisma.DateTimeFilter).gte = new Date(dto.createdFrom);
+      if (dto.createdTo) (where.createdAt as Prisma.DateTimeFilter).lte = new Date(dto.createdTo);
+    }
+    const search = dto.search?.trim();
+    if (search) {
+      where.OR = [
+        { clientFirstName: { contains: search, mode: 'insensitive' } },
+        { clientLastName: { contains: search, mode: 'insensitive' } },
+        { clientPhone: { contains: search } },
+        { clientEmail: { contains: search, mode: 'insensitive' } },
+        { serviceTitle: { contains: search, mode: 'insensitive' } },
+        { staffName: { contains: search, mode: 'insensitive' } },
+        { notes: { contains: search, mode: 'insensitive' } },
+        { internalNotes: { contains: search, mode: 'insensitive' } },
+        { cancellationReason: { contains: search, mode: 'insensitive' } },
+      ];
     }
 
     const orderBy: Prisma.BookingOrderByWithRelationInput = {

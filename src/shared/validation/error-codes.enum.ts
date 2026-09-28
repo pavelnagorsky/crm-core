@@ -61,6 +61,14 @@ export const ErrorCode = {
     code: 'CLIENT_PHONE_EXISTS',
     message: 'A client with this phone number already exists in this business',
   },
+  CLIENT_BANNED: {
+    code: 'CLIENT_BANNED',
+    message: 'Online booking is not available for this phone number',
+  },
+  CLIENT_BAN_ALREADY_SET: {
+    code: 'CLIENT_BAN_ALREADY_SET',
+    message: 'Client ban is already in this state',
+  },
   CLIENT_IMPORT_FILE_MISSING: {
     code: 'CLIENT_IMPORT_FILE_MISSING',
     message: 'Import file is missing',

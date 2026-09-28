@@ -9,6 +9,7 @@ import { PaginatedResult } from '../../shared/interfaces/paginated-result.interf
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { CreateClientDto } from './dto/create-client.dto.js';
 import { UpdateClientDto } from './dto/update-client.dto.js';
+import { SetClientBanDto } from './dto/set-client-ban.dto.js';
 import { ClientSearchRequestDto } from './dto/client-search-request.dto.js';
 import { ClientSearchOrderBy } from './enums/client-search-order-by.enum.js';
 import { AUDIT_EVENT } from '../audit/audit.constants.js';
@@ -41,17 +42,7 @@ export class ClientsService {
       }
       throw e;
     }
-    const event: AuditLogEvent = {
-      businessId,
-      entityType: AuditEntity.CLIENT,
-      entityId: client.id,
-      eventType: AuditEvent.CLIENT_CREATED,
-      actionType: AuditActionType.CREATE,
-      occurredAt: new Date(),
-      actor,
-      payload: { fullName: `${client.firstName} ${client.lastName}`, phone: client.phone },
-    };
-    this.eventEmitter.emit(AUDIT_EVENT, event);
+    this.emitCreated(businessId, client, actor);
     return client;
   }
 
@@ -83,6 +74,39 @@ export class ClientsService {
     return client;
   }
 
+  async setBan(businessId: string, clientId: string, dto: SetClientBanDto, actor: AuditActor): Promise<void> {
+    const old = await this.findInBusiness(businessId, clientId);
+    const banReason = dto.banned ? (dto.reason ?? '').trim() : null;
+    if (dto.banned && !banReason) {
+      throw new AppException(ErrorCode.BAD_REQUEST, HttpStatus.BAD_REQUEST);
+    }
+
+    const now = new Date();
+    const bannedAt = dto.banned ? (old.bannedAt ?? now) : null;
+    if ((old.bannedAt !== null) === dto.banned && old.banReason === banReason) {
+      throw new AppException(ErrorCode.CLIENT_BAN_ALREADY_SET, HttpStatus.CONFLICT);
+    }
+
+    const client = await this.db.client.update({
+      where: { id: clientId },
+      data: { bannedAt, banReason },
+    });
+    const changes = diffFields(old, client, CLIENT_AUDIT_FIELDS);
+    if (changes.length === 0) return;
+
+    const event: AuditLogEvent = {
+      businessId,
+      entityType: AuditEntity.CLIENT,
+      entityId: clientId,
+      eventType: AuditEvent.CLIENT_UPDATED,
+      actionType: AuditActionType.MODIFY,
+      occurredAt: now,
+      actor,
+      payload: { changes },
+    };
+    this.eventEmitter.emit(AUDIT_EVENT, event);
+  }
+
   async findById(clientId: string): Promise<Client> {
     const client = await this.db.client.findUnique({ where: { id: clientId } });
     if (!client) throw new NotFoundException('Client not found');
@@ -112,14 +136,20 @@ export class ClientsService {
   async search(businessId: string, dto: ClientSearchRequestDto): Promise<PaginatedResult<Client>> {
     const where: Prisma.ClientWhereInput = { businessId };
 
-    if (dto.search) {
+    const search = dto.search?.trim();
+    if (search) {
       where.OR = [
-        { firstName: { contains: dto.search, mode: 'insensitive' } },
-        { lastName: { contains: dto.search, mode: 'insensitive' } },
-        { phone: { contains: dto.search } },
-        { email: { contains: dto.search, mode: 'insensitive' } },
+        { firstName: { contains: search, mode: 'insensitive' } },
+        { lastName: { contains: search, mode: 'insensitive' } },
+        { phone: { contains: search } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { notes: { contains: search, mode: 'insensitive' } },
+        { gender: { contains: search, mode: 'insensitive' } },
+        { banReason: { contains: search, mode: 'insensitive' } },
       ];
     }
+    if (dto.banned === true) where.bannedAt = { not: null };
+    else if (dto.banned === false) where.bannedAt = null;
 
     const orderBy: Prisma.ClientOrderByWithRelationInput = {
       [dto.orderBy ?? ClientSearchOrderBy.CREATED_AT]: dto.orderDirection ?? OrderDirection.DESC,
@@ -154,11 +184,12 @@ export class ClientsService {
     return existing;
   }
 
-  async insertImported(businessId: string, rows: ClientImportRow[]): Promise<number> {
+  async insertImported(businessId: string, rows: ClientImportRow[], actor: AuditActor): Promise<number> {
     let inserted = 0;
+    const occurredAt = new Date();
 
     for (let offset = 0; offset < rows.length; offset += IMPORT_INSERT_CHUNK) {
-      const result = await this.db.client.createMany({
+      const created = await this.db.client.createManyAndReturn({
         data: rows.slice(offset, offset + IMPORT_INSERT_CHUNK).map((row) => ({
           businessId,
           firstName: row.firstName,
@@ -170,11 +201,32 @@ export class ClientsService {
           notes: row.notes,
         })),
         skipDuplicates: true,
+        select: { id: true, firstName: true, lastName: true, phone: true },
       });
-      inserted += result.count;
+      inserted += created.length;
+      for (const client of created) this.emitCreated(businessId, client, actor, occurredAt);
     }
 
     return inserted;
+  }
+
+  private emitCreated(
+    businessId: string,
+    client: Pick<Client, 'id' | 'firstName' | 'lastName' | 'phone'>,
+    actor: AuditActor,
+    occurredAt = new Date(),
+  ): void {
+    const event: AuditLogEvent = {
+      businessId,
+      entityType: AuditEntity.CLIENT,
+      entityId: client.id,
+      eventType: AuditEvent.CLIENT_CREATED,
+      actionType: AuditActionType.CREATE,
+      occurredAt,
+      actor,
+      payload: { fullName: `${client.firstName} ${client.lastName}`, phone: client.phone },
+    };
+    this.eventEmitter.emit(AUDIT_EVENT, event);
   }
 
   private buildClientFields(dto: CreateClientDto | UpdateClientDto) {

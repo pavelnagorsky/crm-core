@@ -26,11 +26,11 @@ export class UserService {
   }
 
   findByEmail(email: string): Promise<User | null> {
-    return this.db.user.findUnique({ where: { email } });
+    return this.db.user.findFirst({ where: { email } });
   }
 
   findByPhone(phone: string): Promise<User | null> {
-    return this.db.user.findUnique({ where: { phone } });
+    return this.db.user.findFirst({ where: { phone } });
   }
 
   create(data: Prisma.UserCreateInput): Promise<User> {

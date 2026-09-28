@@ -17,6 +17,7 @@ import {
   ApiBearerAuth,
   ApiConflictResponse,
   ApiCreatedResponse,
+  ApiForbiddenResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
@@ -71,6 +72,7 @@ export class BookingsController {
   @ApiOperation({ summary: 'Book an appointment (public / client-facing)' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Business, service, or staff not found' })
+  @ApiForbiddenResponse({ description: 'Business is closed for public booking, or this phone is banned from online booking' })
   @ApiConflictResponse({ description: 'Slot is no longer available' })
   @Post('public/bookings')
   async createPublic(

@@ -2,11 +2,16 @@ import {
   Body,
   Controller,
   Get,
+  HttpCode,
+  HttpStatus,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Put,
   Query,
+  Res,
+  StreamableFile,
   UploadedFile,
 } from '@nestjs/common';
 import {
@@ -15,10 +20,12 @@ import {
   ApiConflictResponse,
   ApiConsumes,
   ApiCreatedResponse,
+  ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiPayloadTooLargeResponse,
+  ApiProduces,
   ApiTags,
   ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
@@ -26,6 +33,7 @@ import { BusinessRole } from '@prisma/client';
 import { ClientsService } from './clients.service.js';
 import { CreateClientDto } from './dto/create-client.dto.js';
 import { UpdateClientDto } from './dto/update-client.dto.js';
+import { SetClientBanDto } from './dto/set-client-ban.dto.js';
 import { ClientResponseDto } from './dto/client-response.dto.js';
 import { ClientSearchRequestDto } from './dto/client-search-request.dto.js';
 import { ClientSearchResponseDto } from './dto/client-search-response.dto.js';
@@ -33,6 +41,9 @@ import { ClientImportRequestDto } from './clients-import/dto/client-import-reque
 import { ClientImportResponseDto } from './clients-import/dto/client-import-response.dto.js';
 import { ClientsImportService } from './clients-import/clients-import.service.js';
 import { ClientImportFile } from './clients-import/decorators/client-import-upload.decorator.js';
+import { ClientExportRequestDto } from './clients-export/dto/client-export-request.dto.js';
+import { ClientsExportService } from './clients-export/clients-export.service.js';
+import { XlsxService } from '../../shared/xlsx/xlsx.service.js';
 import { Auth } from '../auth/decorators/auth.decorator.js';
 import { ApiResponse, BaseResponseDto } from '../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
@@ -46,6 +57,7 @@ export class ClientsController {
   constructor(
     private readonly clientsService: ClientsService,
     private readonly clientsImportService: ClientsImportService,
+    private readonly clientsExportService: ClientsExportService,
   ) {}
 
   @ApiOperation({ summary: 'Create a client' })
@@ -87,7 +99,11 @@ export class ClientsController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<ClientImportResponseDto>> {
     assertBusinessRole(tokenPayload, dto.businessId, BusinessRole.OWNER);
-    const result = await this.clientsImportService.import(dto.businessId, file);
+    const result = await this.clientsImportService.import(
+      dto.businessId,
+      file,
+      auditActorFromToken(tokenPayload, dto.businessId),
+    );
     return BaseResponseDto.success(
       new ClientImportResponseDto(result.successCount, result.duplicateCount, result.errorCount),
     );
@@ -108,6 +124,39 @@ export class ClientsController {
     assertBusinessRole(tokenPayload, client.businessId, BusinessRole.OWNER);
     const updated = await this.clientsService.update(client.businessId, id, dto, auditActorFromToken(tokenPayload, client.businessId));
     return BaseResponseDto.success({ id: updated.id });
+  }
+
+  @ApiOperation({ summary: 'Ban or unban a client from online booking' })
+  @ApiNoContentResponse()
+  @ApiNotFoundResponse({ description: 'Client not found' })
+  @ApiConflictResponse({ description: 'Client ban is already in this state' })
+  @Auth()
+  @Patch(':id/ban')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async setBan(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: SetClientBanDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
+  ): Promise<void> {
+    const client = await this.clientsService.findById(id);
+    assertBusinessRole(tokenPayload, client.businessId, BusinessRole.OWNER);
+    await this.clientsService.setBan(client.businessId, id, dto, auditActorFromToken(tokenPayload, client.businessId));
+  }
+
+  @ApiOperation({ summary: 'Export clients as XLSX' })
+  @ApiProduces(XlsxService.mimeType)
+  @ApiOkResponse({ description: 'File stream' })
+  @Auth()
+  @Get('export')
+  async export(
+    @Query() dto: ClientExportRequestDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
+    @Res({ passthrough: true }) res: { setHeader: (name: string, value: string) => void },
+  ): Promise<StreamableFile> {
+    assertBusinessRole(tokenPayload, dto.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
+    const { stream, filename } = await this.clientsExportService.stream(dto.businessId, dto);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return new StreamableFile(stream, { type: XlsxService.mimeType });
   }
 
   @ApiOperation({ summary: 'Get client by ID' })

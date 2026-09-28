@@ -17,7 +17,7 @@ export class DashboardRangeService {
     const timezone = dto.timezone && TimeService.isValidIanaTimezone(dto.timezone) ? dto.timezone : locale.timezone;
 
     const { from, to } = this.resolvePeriodBounds(dto, timezone);
-    const granularity = dto.groupBy ?? this.autoGranularity(from, to);
+    const granularity = dto.groupBy ?? this.granularityFor(dto.period, from, to);
     const { previousFrom, previousTo } = this.previousPeriod(from, to);
 
     return {
@@ -76,11 +76,19 @@ export class DashboardRangeService {
     return { previousFrom: new Date(from.getTime() - durationMs), previousTo: from };
   }
 
+  // Year-to-date is a year view, so its series stay monthly even early in the year,
+  // when the elapsed window would otherwise be daily or weekly.
+  private granularityFor(period: DashboardPeriod, from: Date, to: Date): SeriesGranularity {
+    if (period === DashboardPeriod.YTD) return SeriesGranularity.MONTH;
+    return this.autoGranularity(from, to);
+  }
+
   private autoGranularity(from: Date, to: Date): SeriesGranularity {
     const days = Math.round((to.getTime() - from.getTime()) / 86_400_000);
     if (days <= 2) return SeriesGranularity.HOUR;
     if (days <= 45) return SeriesGranularity.DAY;
-    if (days <= 365) return SeriesGranularity.WEEK;
+    // A calendar year is 365 days. Weekly buckets stop short of that so a full year is monthly.
+    if (days < 365) return SeriesGranularity.WEEK;
     return SeriesGranularity.MONTH;
   }
 }

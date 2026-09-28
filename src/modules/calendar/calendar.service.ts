@@ -94,11 +94,16 @@ export class CalendarService {
         update: {},
       });
       return tx.calendarEvent.create({
-        data: this.buildEventData(
-          event.businessId,
-          dto,
-          dto.staffId !== undefined ? dto.staffId : event.staffId,
-        ),
+        data: {
+          ...this.buildEventData(
+            event.businessId,
+            dto,
+            dto.staffId !== undefined ? dto.staffId : event.staffId,
+          ),
+          repeatType: CalendarEventRepeatType.NONE,
+          daysMask: null,
+          repeatUntil: null,
+        },
       });
     });
   }

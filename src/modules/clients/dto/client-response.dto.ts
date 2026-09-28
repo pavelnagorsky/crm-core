@@ -32,6 +32,12 @@ export class ClientResponseDto {
   @ApiProperty({ type: String, nullable: true })
   notes: string | null;
 
+  @ApiProperty({ type: Date, nullable: true })
+  bannedAt: Date | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  banReason: string | null;
+
   @ApiProperty({ type: Date })
   createdAt: Date;
 
@@ -50,6 +56,8 @@ export class ClientResponseDto {
     dto.birthDate = client.birthDate;
     dto.gender = client.gender;
     dto.notes = client.notes;
+    dto.bannedAt = client.bannedAt;
+    dto.banReason = client.banReason;
     dto.createdAt = client.createdAt;
     dto.updatedAt = client.updatedAt;
     return dto;

@@ -20,6 +20,7 @@ import { CreateBookingDto } from './dto/create-booking.dto.js';
 import { ManualCreateBookingDto } from './dto/manual-create-booking.dto.js';
 import { BookingSource } from './enums/booking-source.enum.js';
 import { BookingStatus } from './enums/booking-status.enum.js';
+import { isSelfBookingBlocked } from './client-ban.rules.js';
 import { AUDIT_EVENT } from '../audit/audit.constants.js';
 import { AuditEntity } from '../audit/enums/audit-entity.enum.js';
 import { AuditEvent } from '../audit/enums/audit-event.enum.js';
@@ -110,24 +111,26 @@ export class BookingCreateService {
     );
     const dateStr = TimeService.zonedDateStr(startAt, business.timezone);
 
-    const [client, staffId] = await Promise.all([
-      this.clientsService.resolveForBooking(
-        businessId,
-        dto.phone,
-        dto.firstName,
-        dto.lastName,
-        dto.email,
-      ),
-      this.resolveStaff(
-        businessId,
-        dto.serviceId,
-        dto.staffId,
-        dateStr,
-        startAt,
-        endAt,
-        business.timezone,
-      ),
-    ]);
+    const client = await this.clientsService.resolveForBooking(
+      businessId,
+      dto.phone,
+      dto.firstName,
+      dto.lastName,
+      dto.email,
+    );
+    if (isSelfBookingBlocked(source, client.bannedAt)) {
+      throw new AppException(ErrorCode.CLIENT_BANNED, HttpStatus.FORBIDDEN);
+    }
+
+    const staffId = await this.resolveStaff(
+      businessId,
+      dto.serviceId,
+      dto.staffId,
+      dateStr,
+      startAt,
+      endAt,
+      business.timezone,
+    );
 
     const staff = await this.staffService.findById(staffId);
 

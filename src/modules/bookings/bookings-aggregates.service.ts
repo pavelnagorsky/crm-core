@@ -3,9 +3,20 @@ import { BookingStatus, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
 import { MoneyService } from '../../shared/money/money.service.js';
 import { SeriesGranularity } from '../dashboard/enums/series-granularity.enum.js';
+import {
+  CLIENT_RECENCY_BOUNDS,
+  isClientRecencyBucket,
+  recencyCutoff,
+} from './client-recency.rules.js';
 import { AggregateRange } from './interfaces/aggregate-range.interface.js';
 import { AggregateSeriesRange } from './interfaces/aggregate-series-range.interface.js';
 import { AggregateSnapshot } from './interfaces/aggregate-snapshot.interface.js';
+import { ClientCohortBucket } from './interfaces/client-cohort-bucket.interface.js';
+import { ClientCohortRange } from './interfaces/client-cohort-range.interface.js';
+import { ClientCohortSeriesRange } from './interfaces/client-cohort-series-range.interface.js';
+import { ClientCohortSummary } from './interfaces/client-cohort-summary.interface.js';
+import { ClientRecencyBound } from './interfaces/client-recency-bound.interface.js';
+import { ClientRecencyRow } from './interfaces/client-recency-row.interface.js';
 import { SeriesRow } from './interfaces/series-row.interface.js';
 import { ServiceCount } from './interfaces/service-count.interface.js';
 import { SourceCount } from './interfaces/source-count.interface.js';
@@ -20,7 +31,14 @@ export class BookingsAggregatesService {
    * queries per status.
    */
   async snapshot(range: AggregateRange): Promise<AggregateSnapshot> {
-    const rows = await this.db.$queryRaw<Array<{ status: BookingStatus; count: bigint; revenue: string; duration: bigint }>>(
+    const rows = await this.db.$queryRaw<
+      Array<{
+        status: BookingStatus;
+        count: bigint;
+        revenue: string;
+        duration: bigint;
+      }>
+    >(
       Prisma.sql`
         SELECT "status" AS status,
                COUNT(*)::bigint AS count,
@@ -31,7 +49,10 @@ export class BookingsAggregatesService {
         GROUP BY "status"
       `,
     );
-    const byStatus = new Map<BookingStatus, { count: number; revenue: Prisma.Decimal; duration: number }>();
+    const byStatus = new Map<
+      BookingStatus,
+      { count: number; revenue: Prisma.Decimal; duration: number }
+    >();
     let totalCount = 0;
     let totalRevenue = MoneyService.decimal(0);
     let totalDuration = 0;
@@ -47,8 +68,19 @@ export class BookingsAggregatesService {
     return { byStatus, totalCount, totalRevenue, totalDuration };
   }
 
-  async countByService(range: AggregateRange, statuses?: BookingStatus[]): Promise<ServiceCount[]> {
-    const rows = await this.db.$queryRaw<Array<{ serviceId: string; serviceTitle: string; count: bigint; revenue: string; duration: bigint }>>(
+  async countByService(
+    range: AggregateRange,
+    statuses?: BookingStatus[],
+  ): Promise<ServiceCount[]> {
+    const rows = await this.db.$queryRaw<
+      Array<{
+        serviceId: string;
+        serviceTitle: string;
+        count: bigint;
+        revenue: string;
+        duration: bigint;
+      }>
+    >(
       Prisma.sql`
         SELECT "serviceId" AS "serviceId",
                MAX("serviceTitle") AS "serviceTitle",
@@ -69,7 +101,10 @@ export class BookingsAggregatesService {
     }));
   }
 
-  async countBySource(range: AggregateRange, statuses?: BookingStatus[]): Promise<SourceCount[]> {
+  async countBySource(
+    range: AggregateRange,
+    statuses?: BookingStatus[],
+  ): Promise<SourceCount[]> {
     const grouped = await this.db.booking.groupBy({
       by: ['source'],
       where: this.buildWhere(range, statuses),
@@ -78,18 +113,23 @@ export class BookingsAggregatesService {
     return grouped.map((g) => ({ source: g.source, count: g._count._all }));
   }
 
-  async series(range: AggregateSeriesRange, includeStatus: boolean): Promise<SeriesRow[]> {
-    // pgTruncUnit returns a value from a closed set ('hour'|'day'|'week'|'month'), so
-    // Prisma.raw is safe here and lets the planner reuse the query plan across granularities.
-    const trunc = Prisma.raw(`'${this.pgTruncUnit(range.granularity)}'`);
+  async series(
+    range: AggregateSeriesRange,
+    includeStatus: boolean,
+  ): Promise<SeriesRow[]> {
     const filters = this.whereClause(range, range.statuses);
-    // startAt is stored as naive `timestamp` in UTC. First AT TIME ZONE 'UTC' tags it as
-    // timestamptz, second AT TIME ZONE tz converts to wall-clock in the business timezone
-    // for date_trunc, then the outer AT TIME ZONE tz maps the local midnight back to UTC.
-    const bucketExpr = Prisma.sql`(date_trunc(${trunc}, ("startAt" AT TIME ZONE 'UTC') AT TIME ZONE ${range.timezone})) AT TIME ZONE ${range.timezone}`;
+    const bucketExpr = this.bucketExpr(range.granularity, range.timezone);
 
     if (includeStatus) {
-      const rows = await this.db.$queryRaw<Array<{ bucket: Date; status: BookingStatus; count: bigint; revenue: string; duration: bigint }>>(
+      const rows = await this.db.$queryRaw<
+        Array<{
+          bucket: Date;
+          status: BookingStatus;
+          count: bigint;
+          revenue: string;
+          duration: bigint;
+        }>
+      >(
         Prisma.sql`
           SELECT ${bucketExpr} AS bucket,
                  "status" AS status,
@@ -111,7 +151,9 @@ export class BookingsAggregatesService {
       }));
     }
 
-    const rows = await this.db.$queryRaw<Array<{ bucket: Date; count: bigint; revenue: string; duration: bigint }>>(
+    const rows = await this.db.$queryRaw<
+      Array<{ bucket: Date; count: bigint; revenue: string; duration: bigint }>
+    >(
       Prisma.sql`
         SELECT ${bucketExpr} AS bucket,
                COUNT(*)::bigint AS count,
@@ -132,7 +174,131 @@ export class BookingsAggregatesService {
     }));
   }
 
-  private buildWhere(range: AggregateRange, statuses?: BookingStatus[]): Prisma.BookingWhereInput {
+  /**
+   * Completed-visit cohort for [from, to). A visit is "new" when it is the client's
+   * first completed visit ever; later completed visits are "returning". Rank is computed
+   * from history before `to`, then the window is applied — filtering the window first
+   * would mark every client's first in-range visit as new.
+   */
+  async clientCohortSummary(
+    range: ClientCohortRange,
+  ): Promise<ClientCohortSummary> {
+    const rows = await this.db.$queryRaw<
+      Array<{
+        newVisits: bigint;
+        returningVisits: bigint;
+        activeClients: bigint;
+        revenue: string;
+      }>
+    >(
+      Prisma.sql`
+        ${this.completedVisitsCte(range.businessId, range.to)}
+        SELECT ${this.cohortAggregates()}
+        FROM visits
+        WHERE "startAt" >= ${range.from}::timestamptz AT TIME ZONE 'UTC'
+      `,
+    );
+    return mapCohortSummary(rows[0]);
+  }
+
+  async clientCohortSeries(
+    range: ClientCohortSeriesRange,
+  ): Promise<ClientCohortBucket[]> {
+    const rows = await this.db.$queryRaw<
+      Array<{
+        bucket: Date;
+        newVisits: bigint;
+        returningVisits: bigint;
+        activeClients: bigint;
+        revenue: string;
+      }>
+    >(
+      Prisma.sql`
+        ${this.completedVisitsCte(range.businessId, range.to)}
+        SELECT
+          ${this.bucketExpr(range.granularity, range.timezone)} AS bucket,
+          ${this.cohortAggregates()}
+        FROM visits
+        WHERE "startAt" >= ${range.from}::timestamptz AT TIME ZONE 'UTC'
+        GROUP BY bucket
+        ORDER BY bucket ASC
+      `,
+    );
+    return rows.map((row) => ({
+      bucket: new Date(row.bucket),
+      newVisits: Number(row.newVisits),
+      returningVisits: Number(row.returningVisits),
+      activeClients: Number(row.activeClients),
+      revenue: MoneyService.decimal(row.revenue),
+    }));
+  }
+
+  /**
+   * Clients grouped by how many calendar days passed between their last completed
+   * visit and `asOf`. Comparisons match `matchesRecencyBound`.
+   */
+  async clientRecency(
+    businessId: string,
+    asOf: Date,
+    timezone: string,
+  ): Promise<ClientRecencyRow[]> {
+    const rows = await this.db.$queryRaw<
+      Array<{
+        bucket: string;
+        clients: bigint;
+        visits: bigint;
+        revenue: string;
+      }>
+    >(
+      Prisma.sql`
+        WITH last_visits AS (
+          SELECT
+            MAX("startAt") AS "lastVisit",
+            COUNT(*)::bigint AS visits,
+            COALESCE(SUM(COALESCE("customPrice", "servicePrice")), 0) AS revenue
+          FROM "Booking"
+          WHERE "businessId" = ${businessId}
+            AND "deletedAt" IS NULL
+            AND "status"::text = ${BookingStatus.COMPLETED}
+            AND "startAt" < ${asOf}::timestamptz AT TIME ZONE 'UTC'
+          GROUP BY "clientId"
+        )
+        SELECT
+          bucket,
+          COUNT(*)::bigint AS clients,
+          COALESCE(SUM(visits), 0)::bigint AS visits,
+          COALESCE(SUM(revenue), 0)::text AS revenue
+        FROM (
+          SELECT
+            visits,
+            revenue,
+            CASE
+              ${this.recencyCase(asOf, timezone)}
+              ELSE NULL
+            END AS bucket
+          FROM last_visits
+        ) tagged
+        WHERE bucket IS NOT NULL
+        GROUP BY bucket
+      `,
+    );
+    return rows.flatMap((row) => {
+      if (!isClientRecencyBucket(row.bucket)) return [];
+      return [
+        {
+          bucket: row.bucket,
+          clients: Number(row.clients),
+          visits: Number(row.visits),
+          revenue: MoneyService.decimal(row.revenue),
+        },
+      ];
+    });
+  }
+
+  private buildWhere(
+    range: AggregateRange,
+    statuses?: BookingStatus[],
+  ): Prisma.BookingWhereInput {
     const where: Prisma.BookingWhereInput = {
       businessId: range.businessId,
       deletedAt: null,
@@ -146,7 +312,10 @@ export class BookingsAggregatesService {
     return where;
   }
 
-  private whereClause(range: AggregateRange, statuses?: BookingStatus[]): Prisma.Sql {
+  private whereClause(
+    range: AggregateRange,
+    statuses?: BookingStatus[],
+  ): Prisma.Sql {
     // startAt is stored as naive `timestamp` in UTC. Cast the Date-typed bind params to
     // `timestamp` explicitly so the comparison stays on the indexed column and doesn't
     // depend on session TIMEZONE (Prisma binds Date as timestamptz).
@@ -157,30 +326,132 @@ export class BookingsAggregatesService {
       Prisma.sql`"startAt" <  ${range.to}::timestamptz AT TIME ZONE 'UTC'`,
     ];
     if (statuses && statuses.length > 0) {
-      parts.push(Prisma.sql`"status"::text IN (${Prisma.join(statuses.map((s) => Prisma.sql`${s}`))})`);
+      parts.push(
+        Prisma.sql`"status"::text IN (${Prisma.join(statuses.map((s) => Prisma.sql`${s}`))})`,
+      );
     }
     if (range.staffId) parts.push(Prisma.sql`"staffId" = ${range.staffId}`);
-    if (range.serviceId) parts.push(Prisma.sql`"serviceId" = ${range.serviceId}`);
+    if (range.serviceId)
+      parts.push(Prisma.sql`"serviceId" = ${range.serviceId}`);
     if (range.serviceIds) {
       if (range.serviceIds.length === 0) {
         // Empty in-list → force empty result set without letting Postgres see IN ().
         parts.push(Prisma.sql`FALSE`);
       } else {
-        parts.push(Prisma.sql`"serviceId" IN (${Prisma.join(range.serviceIds.map((id) => Prisma.sql`${id}`))})`);
+        parts.push(
+          Prisma.sql`"serviceId" IN (${Prisma.join(range.serviceIds.map((id) => Prisma.sql`${id}`))})`,
+        );
       }
     }
     if (range.categoryId) {
-      parts.push(Prisma.sql`"serviceId" IN (SELECT "id" FROM "Service" WHERE "categoryId" = ${range.categoryId})`);
+      parts.push(
+        Prisma.sql`"serviceId" IN (SELECT "id" FROM "Service" WHERE "categoryId" = ${range.categoryId})`,
+      );
     }
     return Prisma.join(parts, ' AND ');
   }
 
+  private cohortAggregates(): Prisma.Sql {
+    return Prisma.sql`
+      COUNT(*) FILTER (WHERE visit_rank = 1)::bigint AS "newVisits",
+      COUNT(*) FILTER (WHERE visit_rank > 1)::bigint AS "returningVisits",
+      COUNT(DISTINCT "clientId")::bigint AS "activeClients",
+      COALESCE(SUM(revenue), 0)::text AS revenue
+    `;
+  }
+
+  private completedVisitsCte(businessId: string, before: Date): Prisma.Sql {
+    return Prisma.sql`
+      WITH visits AS (
+        SELECT
+          "clientId",
+          "startAt",
+          COALESCE("customPrice", "servicePrice") AS revenue,
+          ROW_NUMBER() OVER (PARTITION BY "clientId" ORDER BY "startAt" ASC, "id" ASC) AS visit_rank
+        FROM "Booking"
+        WHERE "businessId" = ${businessId}
+          AND "deletedAt" IS NULL
+          AND "status"::text = ${BookingStatus.COMPLETED}
+          AND "startAt" < ${before}::timestamptz AT TIME ZONE 'UTC'
+      )
+    `;
+  }
+
+  private recencyCase(asOf: Date, timezone: string): Prisma.Sql {
+    const branches = CLIENT_RECENCY_BOUNDS.map((bound) =>
+      this.recencyBranch(asOf, timezone, bound),
+    );
+    return Prisma.join(branches, ' ');
+  }
+
+  private recencyBranch(
+    asOf: Date,
+    timezone: string,
+    bound: ClientRecencyBound,
+  ): Prisma.Sql {
+    const minCutoff = recencyCutoff(asOf, bound.minDays, timezone);
+    if (bound.maxDays == null) {
+      return Prisma.sql`WHEN "lastVisit" < ${minCutoff}::timestamptz AT TIME ZONE 'UTC' THEN ${bound.bucket}`;
+    }
+    const maxCutoff = recencyCutoff(asOf, bound.maxDays, timezone);
+    return Prisma.sql`WHEN "lastVisit" < ${minCutoff}::timestamptz AT TIME ZONE 'UTC' AND "lastVisit" >= ${maxCutoff}::timestamptz AT TIME ZONE 'UTC' THEN ${bound.bucket}`;
+  }
+
+  /**
+   * pgTruncUnit returns a value from a closed set ('hour'|'day'|'week'|'month'), so
+   * Prisma.raw is safe here and lets the planner reuse the query plan across granularities.
+   * startAt is stored as naive `timestamp` in UTC. First AT TIME ZONE 'UTC' tags it as
+   * timestamptz, second AT TIME ZONE tz converts to wall-clock in the business timezone
+   * for date_trunc, then the outer AT TIME ZONE tz maps the local midnight back to UTC.
+   */
+  private bucketExpr(
+    granularity: SeriesGranularity,
+    timezone: string,
+  ): Prisma.Sql {
+    const trunc = Prisma.raw(`'${this.pgTruncUnit(granularity)}'`);
+    return Prisma.sql`(date_trunc(${trunc}, ("startAt" AT TIME ZONE 'UTC') AT TIME ZONE ${timezone})) AT TIME ZONE ${timezone}`;
+  }
+
   private pgTruncUnit(granularity: SeriesGranularity): string {
     switch (granularity) {
-      case SeriesGranularity.HOUR: return 'hour';
-      case SeriesGranularity.DAY: return 'day';
-      case SeriesGranularity.WEEK: return 'week';
-      case SeriesGranularity.MONTH: return 'month';
+      case SeriesGranularity.HOUR:
+        return 'hour';
+      case SeriesGranularity.DAY:
+        return 'day';
+      case SeriesGranularity.WEEK:
+        return 'week';
+      case SeriesGranularity.MONTH:
+        return 'month';
+      default: {
+        const _exhaustive: never = granularity;
+        throw new Error(`Unhandled series granularity: ${_exhaustive}`);
+      }
     }
   }
+}
+
+function mapCohortSummary(
+  row:
+    | {
+        newVisits: bigint;
+        returningVisits: bigint;
+        activeClients: bigint;
+        revenue: string;
+      }
+    | undefined,
+): ClientCohortSummary {
+  if (!row) {
+    return {
+      newVisits: 0,
+      returningVisits: 0,
+      activeClients: 0,
+      revenue: MoneyService.decimal(0),
+    };
+  }
+  return {
+    newVisits: Number(row.newVisits),
+    returningVisits: Number(row.returningVisits),
+    activeClients: Number(row.activeClients),
+    revenue: MoneyService.decimal(row.revenue),
+  };
 }

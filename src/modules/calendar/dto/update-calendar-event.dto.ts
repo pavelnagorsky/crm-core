@@ -10,13 +10,13 @@ import {
   MaxLength,
   ValidateIf,
 } from 'class-validator';
-import { Type } from 'class-transformer';
 import { CalendarEventType, CalendarEventRepeatType } from '@prisma/client';
+import { ParseBoolean } from '../../../shared/transforms/parse-boolean.transform.js';
 
 export class UpdateCalendarEventDto {
   @ApiProperty({ type: Boolean, description: 'true updates only this occurrence; false updates the entire event' })
+  @ParseBoolean()
   @IsBoolean()
-  @Type(() => Boolean)
   thisOnly: boolean;
 
   @ApiProperty({ enum: CalendarEventType })

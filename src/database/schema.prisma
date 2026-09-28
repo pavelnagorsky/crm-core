@@ -264,6 +264,8 @@ model Client {
   birthDate  DateTime? @db.Date
   gender     String?   @db.VarChar(20)
   notes      String?   @db.VarChar(1000)
+  bannedAt   DateTime?
+  banReason  String?   @db.VarChar(500)
 
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt

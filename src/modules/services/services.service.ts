@@ -256,7 +256,15 @@ export class ServicesService {
 
   private buildFilterWhere(businessId: string, filter: ServiceFilter): Prisma.ServiceWhereInput {
     const where: Prisma.ServiceWhereInput = { businessId };
-    if (filter.search) where.title = { contains: filter.search, mode: 'insensitive' };
+    const search = filter.search?.trim();
+    if (search) {
+      where.OR = [
+        { title: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+        { category: { name: { contains: search, mode: 'insensitive' } } },
+        { category: { description: { contains: search, mode: 'insensitive' } } },
+      ];
+    }
     if (filter.categoryId !== undefined) where.categoryId = filter.categoryId;
     if (filter.status !== undefined) where.status = filter.status;
     return where;

@@ -13,6 +13,7 @@ import { ServicesModule } from './modules/services/services.module.js';
 import { ServicesAnalyticsModule } from './modules/services/analytics/services-analytics.module.js';
 import { CalendarModule } from './modules/calendar/calendar.module.js';
 import { ClientsModule } from './modules/clients/clients.module.js';
+import { ClientsAnalyticsModule } from './modules/clients/analytics/clients-analytics.module.js';
 import { BookingsModule } from './modules/bookings/bookings.module.js';
 import { AuditModule } from './modules/audit/audit.module.js';
 import { HealthModule } from './modules/health/health.module.js';
@@ -42,6 +43,7 @@ import { PayrollModule } from './modules/payroll/payroll.module.js';
     ServicesAnalyticsModule,
     CalendarModule,
     ClientsModule,
+    ClientsAnalyticsModule,
     BookingsModule,
     AuditModule,
     HealthModule,

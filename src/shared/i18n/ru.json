@@ -231,7 +231,9 @@
       "email": "Email",
       "birthDate": "Дата рождения",
       "gender": "Пол",
-      "notes": "Заметки"
+      "notes": "Заметки",
+      "bannedAt": "Бан онлайн-записи",
+      "banReason": "Причина бана"
     },
     "STAFF": {
       "name": "Имя",

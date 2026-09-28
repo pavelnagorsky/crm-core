@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode, ErrorCodeEntry } from '../../../shared/validation/error-codes.enum.js';
+import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
 import { ClientsService } from '../clients.service.js';
 import { ClientsSheetService } from './clients-sheet.service.js';
 import { ClientImportFileReason } from './enums/client-import-file-reason.enum.js';
@@ -46,7 +47,11 @@ export class ClientsImportService {
     private readonly sheet: ClientsSheetService,
   ) {}
 
-  async import(businessId: string, file: ClientImportUpload | undefined): Promise<ClientImportResult> {
+  async import(
+    businessId: string,
+    file: ClientImportUpload | undefined,
+    actor: AuditActor,
+  ): Promise<ClientImportResult> {
     const read = await this.sheet.read(file);
     if (!read.ok) this.rejectFile(read);
 
@@ -54,7 +59,7 @@ export class ClientsImportService {
       ? await this.clients.findExistingPhones(businessId, read.rows.map((row) => row.phone))
       : new Set<string>();
     const fresh = read.rows.filter((row) => !existing.has(row.phone));
-    const inserted = fresh.length ? await this.clients.insertImported(businessId, fresh) : 0;
+    const inserted = fresh.length ? await this.clients.insertImported(businessId, fresh, actor) : 0;
 
     return {
       successCount: inserted,
