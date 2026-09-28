@@ -6,6 +6,7 @@ import {
   ApiProperty,
   DocumentBuilder,
   SwaggerModule,
+  type SchemaObject,
 } from '@nestjs/swagger';
 import { IsSignedAmount } from './is-signed-amount.decorator.js';
 import {
@@ -84,7 +85,9 @@ describe('decimal swagger schemas', () => {
       example: '30.00',
     });
 
-    const moneySample = document.components?.schemas?.MoneySampleDto;
+    const moneySample = document.components?.schemas?.MoneySampleDto as
+      | SchemaObject
+      | undefined;
     const properties = moneySample?.properties as Record<
       string,
       { allOf?: { $ref: string }[]; nullable?: boolean; type?: string }

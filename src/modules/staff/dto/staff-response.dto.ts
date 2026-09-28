@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { StaffWithAvatar } from '../staff.service.js';
+import { StaffWithServiceCount } from '../staff.service.js';
 import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
 import { StaffStatus } from '../enums/staff-status.enum.js';
 import { StaffEmploymentType } from '../enums/staff-employment-type.enum.js';
@@ -33,6 +33,15 @@ export class StaffResponseDto {
   @ApiProperty({ enum: StaffStatus, enumName: 'StaffStatus' })
   status: StaffStatus;
 
+  @ApiProperty({ type: Boolean })
+  hasNoServices: boolean;
+
+  @ApiProperty({
+    type: [String],
+    description: 'UUIDs of services this staff member can perform',
+  })
+  serviceIds: string[];
+
   @ApiProperty({ enum: StaffEmploymentType, enumName: 'StaffEmploymentType', nullable: true })
   employmentType: StaffEmploymentType | null;
 
@@ -54,7 +63,7 @@ export class StaffResponseDto {
   @ApiProperty({ type: Date })
   updatedAt: Date;
 
-  static fromEntity(staff: StaffWithAvatar): StaffResponseDto {
+  static fromEntity(staff: StaffWithServiceCount): StaffResponseDto {
     const dto = new StaffResponseDto();
     dto.id = staff.id;
     dto.businessId = staff.businessId;
@@ -65,6 +74,8 @@ export class StaffResponseDto {
     dto.email = staff.email;
     dto.roleTitle = staff.roleTitle;
     dto.status = staff.status as StaffStatus;
+    dto.hasNoServices = staff._count.staffServices === 0;
+    dto.serviceIds = staff.staffServices.map((staffService) => staffService.serviceId);
     dto.employmentType = staff.employmentType;
     dto.taxId = staff.taxId;
     dto.employeeNumber = staff.employeeNumber;

@@ -1,17 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsArray, IsDateString, IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
-import { PaginationRequestDto } from '../../../shared/dto/pagination-request.dto.js';
-import { BookingSearchOrderBy } from '../enums/booking-search-order-by.enum.js';
-import { BookingStatus } from '../enums/booking-status.enum.js';
+import { OrderDirection } from '../../../../shared/enums/order-direction.enum.js';
+import { toUuidArray } from '../../dto/booking-search-request.dto.js';
+import { BookingSearchOrderBy } from '../../enums/booking-search-order-by.enum.js';
+import { BookingStatus } from '../../enums/booking-status.enum.js';
 
-export function toUuidArray(value: unknown): string[] | undefined {
-  if (value === undefined || value === null || value === '') return undefined;
-  const items = (Array.isArray(value) ? value : [value]).filter((item) => item !== '' && item != null);
-  return items.length ? items : undefined;
-}
-
-export class BookingSearchRequestDto extends PaginationRequestDto<BookingSearchOrderBy> {
+export class BookingExportRequestDto {
   @ApiProperty({ type: String, format: 'uuid' })
   @IsUUID()
   businessId: string;
@@ -83,5 +78,10 @@ export class BookingSearchRequestDto extends PaginationRequestDto<BookingSearchO
   @ApiProperty({ enum: BookingSearchOrderBy, required: false })
   @IsOptional()
   @IsEnum(BookingSearchOrderBy)
-  declare orderBy?: BookingSearchOrderBy;
+  orderBy?: BookingSearchOrderBy;
+
+  @ApiProperty({ enum: OrderDirection, required: false })
+  @IsOptional()
+  @IsEnum(OrderDirection)
+  orderDirection?: OrderDirection;
 }

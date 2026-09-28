@@ -7,7 +7,9 @@ import { StaffService } from '../staff/staff.service.js';
 import { BusinessService } from '../business/business.service.js';
 import { StaffEarningsService } from '../payroll/earnings/staff-earnings.service.js';
 import { BookingsService } from './bookings.service.js';
+import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { BookingSearchRequestDto } from './dto/booking-search-request.dto.js';
+import { BookingSearchOrderBy } from './enums/booking-search-order-by.enum.js';
 
 function booking(overrides: Partial<Booking> = {}): Booking {
   return {
@@ -98,8 +100,10 @@ describe('BookingsService.completeElapsed', () => {
 describe('BookingsService.search', () => {
   const findMany = vi.fn();
   const count = vi.fn();
+  const queryRaw = vi.fn();
   const db = {
     booking: { findMany, count },
+    $queryRaw: queryRaw,
     $transaction: (ops: Promise<unknown>[]) => Promise.all(ops),
   };
 
@@ -129,7 +133,8 @@ describe('BookingsService.search', () => {
       page: 1,
       pageSize: 25,
       search: '  стрижка  ',
-      serviceId: 'haircut',
+      staffIds: ['anna', 'boris'],
+      serviceIds: ['haircut'],
       createdFrom: '2026-09-01T00:00:00.000Z',
       createdTo: '2026-09-30T23:59:59.000Z',
     } as BookingSearchRequestDto);
@@ -137,7 +142,8 @@ describe('BookingsService.search', () => {
     expect(findMany.mock.calls[0][0].where).toEqual({
       businessId: 'biz',
       deletedAt: null,
-      serviceId: 'haircut',
+      staffId: { in: ['anna', 'boris'] },
+      serviceId: { in: ['haircut'] },
       createdAt: {
         gte: new Date('2026-09-01T00:00:00.000Z'),
         lte: new Date('2026-09-30T23:59:59.000Z'),
@@ -154,5 +160,81 @@ describe('BookingsService.search', () => {
         { cancellationReason: { contains: 'стрижка', mode: 'insensitive' } },
       ],
     });
+  });
+
+  it('does not filter by staff or service when the id lists are empty', async () => {
+    await service.search('biz', {
+      businessId: 'biz',
+      page: 1,
+      pageSize: 25,
+      staffIds: [],
+      serviceIds: [],
+    } as BookingSearchRequestDto);
+
+    expect(findMany.mock.calls[0][0].where).toEqual({
+      businessId: 'biz',
+      deletedAt: null,
+    });
+  });
+
+  it.each([
+    [BookingSearchOrderBy.START_AT, { startAt: OrderDirection.ASC }],
+    [BookingSearchOrderBy.CREATED_AT, { createdAt: OrderDirection.ASC }],
+    [BookingSearchOrderBy.SERVICE_TITLE, { serviceTitle: OrderDirection.ASC }],
+    [BookingSearchOrderBy.STAFF_NAME, { staffName: OrderDirection.ASC }],
+    [BookingSearchOrderBy.STATUS, { status: OrderDirection.ASC }],
+    [BookingSearchOrderBy.SOURCE, { source: OrderDirection.ASC }],
+  ])('orders by %s', async (orderBy, expected) => {
+    await service.search('biz', {
+      businessId: 'biz',
+      page: 1,
+      pageSize: 25,
+      orderBy,
+      orderDirection: OrderDirection.ASC,
+    } as BookingSearchRequestDto);
+
+    expect(findMany.mock.calls[0][0].orderBy).toEqual(expected);
+    expect(queryRaw).not.toHaveBeenCalled();
+  });
+
+  it('orders client name by last name, then first name', async () => {
+    await service.search('biz', {
+      businessId: 'biz',
+      page: 1,
+      pageSize: 25,
+      orderBy: BookingSearchOrderBy.CLIENT_NAME,
+      orderDirection: OrderDirection.DESC,
+    } as BookingSearchRequestDto);
+
+    expect(findMany.mock.calls[0][0].orderBy).toEqual([
+      { clientLastName: OrderDirection.DESC },
+      { clientFirstName: OrderDirection.DESC },
+    ]);
+  });
+
+  it('orders price by numeric coalesce of custom and service price', async () => {
+    queryRaw.mockResolvedValue([{ id: 'high' }, { id: 'low' }]);
+    findMany.mockResolvedValue([booking({ id: 'low' }), booking({ id: 'high' })]);
+    count.mockResolvedValue(2);
+
+    const result = await service.search('biz', {
+      businessId: 'biz',
+      page: 2,
+      pageSize: 10,
+      search: '10%',
+      orderBy: BookingSearchOrderBy.PRICE,
+      orderDirection: OrderDirection.ASC,
+    } as BookingSearchRequestDto);
+
+    const query = queryRaw.mock.calls[0][0] as Prisma.Sql;
+    expect(query.sql).toContain('ORDER BY COALESCE("customPrice", "servicePrice") ASC');
+    expect(query.sql).not.toContain('::text');
+    expect(query.sql).toContain('LIMIT ? OFFSET ?');
+    expect(query.values).toContain(10);
+    expect(query.values).toContain(10);
+    expect(query.values).toContain('%10\\%%');
+    expect(result.items.map((item) => item.id)).toEqual(['high', 'low']);
+    expect(result.totalItems).toBe(2);
+    expect(findMany.mock.calls[0][0].where).toEqual({ id: { in: ['high', 'low'] } });
   });
 });

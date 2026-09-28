@@ -60,4 +60,23 @@ export interface DocumentMessages {
     genderMale: string;
     genderFemale: string;
   };
+  bookings: {
+    sheet: string;
+    startAt: string;
+    endAt: string;
+    status: string;
+    source: string;
+    clientFirstName: string;
+    clientLastName: string;
+    clientPhone: string;
+    clientEmail: string;
+    serviceTitle: string;
+    serviceDuration: string;
+    price: string;
+    staffName: string;
+    notes: string;
+    internalNotes: string;
+    cancellationReason: string;
+    createdAt: string;
+  };
 }

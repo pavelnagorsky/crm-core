@@ -22,6 +22,9 @@ import { GetCalendarResponseDto } from './dto/get-calendar-response.dto.js';
 import { CalendarEventWithCancellations } from './interfaces/calendar-types.interface.js';
 import { AvailableSlotsRequestDto } from './dto/available-slots-request.dto.js';
 import { AvailableSlotsDayDto } from './dto/available-slots-day.dto.js';
+import { ManualAvailableSlotsRequestDto } from './dto/manual-available-slots-request.dto.js';
+
+const MANUAL_AVAILABLE_SLOTS_MAX_DAYS = 62;
 
 @Injectable()
 export class CalendarService {
@@ -180,76 +183,55 @@ export class CalendarService {
     businessId: string,
     dto: AvailableSlotsRequestDto,
   ): Promise<AvailableSlotsDayDto[]> {
-    const [business, service, candidateStaff] = await Promise.all([
-      this.db.business.findUnique({
-        where: { id: businessId },
-        select: {
-          timezone: true,
-          advanceBookingWindowDays: true,
-          slotIntervalMinutes: true,
-          minimumBookingNoticeMinutes: true,
-          bookingVisibility: true,
-        },
-      }),
-      this.db.service.findFirst({
-        where: { id: dto.serviceId, businessId, status: ServiceStatus.ACTIVE },
-        select: { durationMinutes: true, bufferMinutes: true },
-      }),
-      this.staff.resolveStaffForService(businessId, dto.serviceId, dto.staffId),
-    ]);
-
-    if (!business) throw new NotFoundException('Business not found');
+    const { business, service, candidateStaff } = await this.loadSlotCandidates(
+      businessId,
+      dto.serviceId,
+      dto.staffId,
+    );
     if (business.bookingVisibility === BookingVisibility.PRIVATE)
       throw new AppException(ErrorCode.BOOKING_NOT_AVAILABLE, HttpStatus.FORBIDDEN);
-    if (!service) throw new NotFoundException('Service not found');
     if (candidateStaff.length === 0) return [];
 
-    const { todayStr, nowMinutes, rangeStart, rangeEnd } =
-      this.resolveBookingWindow(business);
-    const staffIds = candidateStaff.map((s) => s.id);
-    const [shifts, blockEvents] = await this.fetchSlotData(
+    const { todayStr, nowMinutes, rangeStart, rangeEnd } = this.resolveBookingWindow(business);
+    return this.collectSlotDays({
       businessId,
-      staffIds,
+      timezone: business.timezone,
+      slotIntervalMinutes: business.slotIntervalMinutes,
+      service,
+      candidateStaff,
+      todayStr,
+      earliestMinuteToday: nowMinutes + business.minimumBookingNoticeMinutes,
       rangeStart,
       rangeEnd,
-    );
+    });
+  }
 
-    const dates = [
-      ...new Set(shifts.map((s) => TimeService.dateOnlyStr(s.date))),
-    ].sort();
-    const shiftsByStaffDate = this.compute.groupShiftsByStaffDate(shifts);
-    const blockedByStaffDate = this.compute.expandBlockEvents(
-      blockEvents,
-      dates,
-      staffIds,
-      business.timezone,
+  async getManualAvailableSlots(
+    businessId: string,
+    dto: ManualAvailableSlotsRequestDto,
+  ): Promise<AvailableSlotsDayDto[]> {
+    const { from, to } = this.manualSlotRange(dto.from, dto.to);
+    const { business, service, candidateStaff } = await this.loadSlotCandidates(
+      businessId,
+      dto.serviceId,
+      dto.staffId,
     );
-    const slotDuration = service.durationMinutes + service.bufferMinutes;
+    if (candidateStaff.length === 0) return [];
 
-    return dates.flatMap((date) => {
-      const earliestMinute =
-        date === todayStr
-          ? nowMinutes + business.minimumBookingNoticeMinutes
-          : 0;
-      const slots = this.compute.collectSlotsForDate(
-        date,
-        candidateStaff,
-        shiftsByStaffDate,
-        blockedByStaffDate,
-        earliestMinute,
-        slotDuration,
-        business.slotIntervalMinutes,
-      );
-      return slots.length
-        ? [
-            {
-              date,
-              slots: slots.map((start) => ({
-                time: TimeService.minutesToHHmm(start),
-              })),
-            },
-          ]
-        : [];
+    const todayStr = TimeService.zonedDateStr(new Date(), business.timezone);
+    const effectiveFrom = from < todayStr ? todayStr : from;
+    if (effectiveFrom > to) return [];
+
+    return this.collectSlotDays({
+      businessId,
+      timezone: business.timezone,
+      slotIntervalMinutes: business.slotIntervalMinutes,
+      service,
+      candidateStaff,
+      todayStr,
+      earliestMinuteToday: 0,
+      rangeStart: TimeService.dateOnly(effectiveFrom),
+      rangeEnd: new Date(`${to}T23:59:59.999Z`),
     });
   }
 
@@ -315,6 +297,86 @@ export class CalendarService {
       .get(staffId)?.get(dateStr) ?? [];
 
     return !blocked.some((b) => slotStart < b.end && slotEnd > b.start);
+  }
+
+  private async loadSlotCandidates(businessId: string, serviceId: string, staffId?: string) {
+    const [business, service, candidateStaff] = await Promise.all([
+      this.db.business.findUnique({
+        where: { id: businessId },
+        select: {
+          timezone: true,
+          advanceBookingWindowDays: true,
+          slotIntervalMinutes: true,
+          minimumBookingNoticeMinutes: true,
+          bookingVisibility: true,
+        },
+      }),
+      this.db.service.findFirst({
+        where: { id: serviceId, businessId, status: ServiceStatus.ACTIVE },
+        select: { durationMinutes: true, bufferMinutes: true },
+      }),
+      this.staff.resolveStaffForService(businessId, serviceId, staffId),
+    ]);
+
+    if (!business) throw new NotFoundException('Business not found');
+    if (!service) throw new NotFoundException('Service not found');
+    return { business, service, candidateStaff };
+  }
+
+  private manualSlotRange(fromRaw: string, toRaw: string): { from: string; to: string } {
+    const from = fromRaw.slice(0, 10);
+    const to = toRaw.slice(0, 10);
+    const span = (TimeService.dateOnly(to).getTime() - TimeService.dateOnly(from).getTime()) / 86_400_000 + 1;
+    if (span > MANUAL_AVAILABLE_SLOTS_MAX_DAYS) {
+      throw new AppException(ErrorCode.BOOKING_SLOT_RANGE_TOO_LONG, HttpStatus.BAD_REQUEST);
+    }
+    return { from, to };
+  }
+
+  private async collectSlotDays(input: {
+    businessId: string;
+    timezone: string;
+    slotIntervalMinutes: number;
+    service: { durationMinutes: number; bufferMinutes: number };
+    candidateStaff: { id: string }[];
+    todayStr: string;
+    earliestMinuteToday: number;
+    rangeStart: Date;
+    rangeEnd: Date;
+  }): Promise<AvailableSlotsDayDto[]> {
+    const staffIds = input.candidateStaff.map((staff) => staff.id);
+    const [shifts, blockEvents] = await this.fetchSlotData(
+      input.businessId,
+      staffIds,
+      input.rangeStart,
+      input.rangeEnd,
+    );
+
+    const dates = [...new Set(shifts.map((shift) => TimeService.dateOnlyStr(shift.date)))].sort();
+    const shiftsByStaffDate = this.compute.groupShiftsByStaffDate(shifts);
+    const blockedByStaffDate = this.compute.expandBlockEvents(
+      blockEvents,
+      dates,
+      staffIds,
+      input.timezone,
+    );
+    const slotDuration = input.service.durationMinutes + input.service.bufferMinutes;
+
+    return dates.flatMap((date) => {
+      const earliestMinute = date === input.todayStr ? input.earliestMinuteToday : 0;
+      const slots = this.compute.collectSlotsForDate(
+        date,
+        input.candidateStaff,
+        shiftsByStaffDate,
+        blockedByStaffDate,
+        earliestMinute,
+        slotDuration,
+        input.slotIntervalMinutes,
+      );
+      return slots.length
+        ? [{ date, slots: slots.map((start) => ({ time: TimeService.minutesToHHmm(start) })) }]
+        : [];
+    });
   }
 
   private resolveBookingWindow(business: {

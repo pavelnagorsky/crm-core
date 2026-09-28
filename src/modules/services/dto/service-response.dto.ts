@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
-import { ServiceWithImage } from '../services.service.js';
+import { ServiceWithStaffCount } from '../services.service.js';
 import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
 import { MoneyService } from '../../../shared/money/money.service.js';
 import { ServiceStatus } from '../enums/service-status.enum.js';
@@ -36,6 +36,9 @@ export class ServiceResponseDto {
   @ApiProperty({ enum: ServiceStatus, enumName: 'ServiceStatus' })
   status: ServiceStatus;
 
+  @ApiProperty({ type: Boolean })
+  hasNoStaff: boolean;
+
   @ApiProperty({ type: Number })
   sortOrder: number;
 
@@ -45,7 +48,7 @@ export class ServiceResponseDto {
   @ApiProperty({ type: Date })
   updatedAt: Date;
 
-  static fromEntity(service: ServiceWithImage): ServiceResponseDto {
+  static fromEntity(service: ServiceWithStaffCount): ServiceResponseDto {
     const dto = new ServiceResponseDto();
     dto.id = service.id;
     dto.businessId = service.businessId;
@@ -59,6 +62,7 @@ export class ServiceResponseDto {
     dto.durationMinutes = service.durationMinutes;
     dto.bufferMinutes = service.bufferMinutes;
     dto.status = service.status;
+    dto.hasNoStaff = service._count.staffServices === 0;
     dto.sortOrder = service.sortOrder;
     dto.createdAt = service.createdAt;
     dto.updatedAt = service.updatedAt;

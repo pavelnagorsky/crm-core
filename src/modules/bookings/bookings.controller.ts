@@ -11,6 +11,8 @@ import {
   Post,
   Put,
   Query,
+  Res,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
 import {
@@ -22,6 +24,7 @@ import {
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiProduces,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
@@ -38,12 +41,16 @@ import { UpdateBookingStatusDto } from './dto/update-booking-status.dto.js';
 import { BookingResponseDto } from './dto/booking-response.dto.js';
 import { BookingSearchRequestDto } from './dto/booking-search-request.dto.js';
 import { BookingSearchResponseDto } from './dto/booking-search-response.dto.js';
+import { BookingStatusCountResponseDto } from './dto/booking-status-count-response.dto.js';
+import { BookingExportRequestDto } from './bookings-export/dto/booking-export-request.dto.js';
+import { BookingsExportService } from './bookings-export/bookings-export.service.js';
+import { XlsxService } from '../../shared/xlsx/xlsx.service.js';
 import { ClientLinkResponseDto } from './dto/client-link-response.dto.js';
 import { BookingClientTokenPayloadDto } from './dto/booking-client-token-payload.dto.js';
 import { JwtBookingClientGuard } from './guards/jwt-booking-client.guard.js';
 import { BookingClientToken } from './decorators/booking-client-token.decorator.js';
 import { Auth } from '../auth/decorators/auth.decorator.js';
-import { ApiResponse, BaseResponseDto } from '../../shared/dto/base-response.dto.js';
+import { ApiResponse, ApiResponseArray, BaseResponseDto } from '../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
 import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto, assertBusinessRole } from '../auth/dto/token-payload.dto.js';
@@ -56,6 +63,7 @@ export class BookingsController {
     private readonly bookingsService: BookingsService,
     private readonly bookingCreateService: BookingCreateService,
     private readonly bookingClientService: BookingClientService,
+    private readonly bookingsExportService: BookingsExportService,
   ) {}
 
   // ─── Public ──────────────────────────────────────────────────────────────────
@@ -125,6 +133,35 @@ export class BookingsController {
     assertBusinessRole(tokenPayload, dto.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
     const booking = await this.bookingCreateService.createManualBooking(dto.businessId, dto, auditActorFromToken(tokenPayload, dto.businessId));
     return BaseResponseDto.success({ id: booking.id });
+  }
+
+  @ApiOperation({ summary: 'Get booking count per status' })
+  @ApiOkResponse({ type: ApiResponseArray(BookingStatusCountResponseDto) })
+  @Auth()
+  @Get('bookings/status-counts')
+  async getStatusCounts(
+    @Query('businessId', ParseUUIDPipe) businessId: string,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
+  ): Promise<BaseResponseDto<BookingStatusCountResponseDto[]>> {
+    assertBusinessRole(tokenPayload, businessId, BusinessRole.OWNER, BusinessRole.STAFF);
+    const counts = await this.bookingsService.getStatusCounts(businessId);
+    return BaseResponseDto.success(counts.map((r) => Object.assign(new BookingStatusCountResponseDto(), r)));
+  }
+
+  @ApiOperation({ summary: 'Export bookings as XLSX' })
+  @ApiProduces(XlsxService.mimeType)
+  @ApiOkResponse({ description: 'File stream' })
+  @Auth()
+  @Get('bookings/export')
+  async export(
+    @Query() dto: BookingExportRequestDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
+    @Res({ passthrough: true }) res: { setHeader: (name: string, value: string) => void },
+  ): Promise<StreamableFile> {
+    assertBusinessRole(tokenPayload, dto.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
+    const { stream, filename } = await this.bookingsExportService.stream(dto.businessId, dto);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return new StreamableFile(stream, { type: XlsxService.mimeType });
   }
 
   @ApiOperation({ summary: 'Get booking by ID' })

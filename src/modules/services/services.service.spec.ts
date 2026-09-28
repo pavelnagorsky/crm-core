@@ -1,6 +1,7 @@
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ServicesService } from './services.service.js';
 import { ServiceSearchRequestDto } from './dto/service-search-request.dto.js';
+import { ServiceResponseDto } from './dto/service-response.dto.js';
 import { BusinessService } from '../business/business.service.js';
 
 describe('ServicesService.search', () => {
@@ -38,5 +39,26 @@ describe('ServicesService.search', () => {
         { category: { description: { contains: 'окрашивание', mode: 'insensitive' } } },
       ],
     });
+    expect(findMany.mock.calls[0][0].include).toEqual({
+      imageFile: true,
+      _count: { select: { staffServices: true } },
+    });
+  });
+
+  it('flags a service that no staff member owns', async () => {
+    findMany.mockResolvedValue([
+      { id: 'owned', imageFile: null, price: 100, _count: { staffServices: 2 } },
+      { id: 'unowned', imageFile: null, price: 100, _count: { staffServices: 0 } },
+    ]);
+
+    const { items } = await service.search('business-1', {
+      page: 1,
+      pageSize: 25,
+    } as ServiceSearchRequestDto);
+
+    expect(items.map((item) => ServiceResponseDto.fromEntity(item).hasNoStaff)).toEqual([
+      false,
+      true,
+    ]);
   });
 });

@@ -17,6 +17,7 @@ import { ClientCohortSeriesRange } from './interfaces/client-cohort-series-range
 import { ClientCohortSummary } from './interfaces/client-cohort-summary.interface.js';
 import { ClientRecencyBound } from './interfaces/client-recency-bound.interface.js';
 import { ClientRecencyRow } from './interfaces/client-recency-row.interface.js';
+import { OccupancyBookedHours } from './interfaces/occupancy-booked-hours.interface.js';
 import { SeriesRow } from './interfaces/series-row.interface.js';
 import { ServiceCount } from './interfaces/service-count.interface.js';
 import { SourceCount } from './interfaces/source-count.interface.js';
@@ -293,6 +294,50 @@ export class BookingsAggregatesService {
         },
       ];
     });
+  }
+
+  /**
+   * Lost money in [from, to): the sum of prices on cancelled and no-show bookings.
+   * Uses customPrice when set, else servicePrice.
+   */
+  async lostRevenue(range: AggregateRange): Promise<Prisma.Decimal> {
+    const statuses = [BookingStatus.CANCELLED, BookingStatus.NO_SHOW];
+    const rows = await this.db.$queryRaw<Array<{ total: string }>>(
+      Prisma.sql`
+        SELECT COALESCE(SUM(COALESCE("customPrice", "servicePrice")), 0)::text AS total
+        FROM "Booking"
+        WHERE ${this.whereClause(range, statuses)}
+      `,
+    );
+    return MoneyService.decimal(rows[0]?.total);
+  }
+
+  /**
+   * Booked minutes for the occupancy numerator, split at `now`. Past held = bookings that already
+   * happened and were not cancelled/no-show; future = confirmed bookings still to come. Cancelled
+   * and no-show visits are excluded from both — an empty chair does not count as occupied.
+   */
+  async occupancyBookedMinutes(range: AggregateRange, now: Date): Promise<OccupancyBookedHours> {
+    const heldPast = [BookingStatus.COMPLETED, BookingStatus.CONFIRMED, BookingStatus.PENDING];
+    const rows = await this.db.$queryRaw<Array<{ pastHeld: bigint; futureConfirmed: bigint }>>(
+      Prisma.sql`
+        SELECT
+          COALESCE(SUM("serviceDuration") FILTER (
+            WHERE "startAt" < ${now}::timestamptz AT TIME ZONE 'UTC'
+              AND "status"::text IN (${Prisma.join(heldPast.map((s) => Prisma.sql`${s}`))})
+          ), 0)::bigint AS "pastHeld",
+          COALESCE(SUM("serviceDuration") FILTER (
+            WHERE "startAt" >= ${now}::timestamptz AT TIME ZONE 'UTC'
+              AND "status"::text = ${BookingStatus.CONFIRMED}
+          ), 0)::bigint AS "futureConfirmed"
+        FROM "Booking"
+        WHERE ${this.whereClause(range)}
+      `,
+    );
+    return {
+      pastHeldMinutes: Number(rows[0]?.pastHeld ?? 0),
+      futureConfirmedMinutes: Number(rows[0]?.futureConfirmed ?? 0),
+    };
   }
 
   private buildWhere(

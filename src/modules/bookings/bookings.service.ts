@@ -36,6 +36,18 @@ import { TokenPayloadDto, assertBusinessRole } from '../auth/dto/token-payload.d
 import { NOTIFICATION_EVENT } from '../notifications/notifications.service.js';
 import { BookingStatusChangedNotification } from '../notifications/notifications/booking-status-changed.notification.js';
 
+const SEARCH_TEXT_COLUMNS = new Set([
+  'clientFirstName',
+  'clientLastName',
+  'clientPhone',
+  'clientEmail',
+  'serviceTitle',
+  'staffName',
+  'notes',
+  'internalNotes',
+  'cancellationReason',
+]);
+
 @Injectable()
 export class BookingsService {
   private readonly logger = new Logger(BookingsService.name);
@@ -196,12 +208,35 @@ export class BookingsService {
   }
 
   async search(businessId: string, dto: BookingSearchRequestDto): Promise<PaginatedResult<Booking>> {
+    const where = this.buildSearchWhere(businessId, dto);
+    const direction = dto.orderDirection ?? OrderDirection.DESC;
+    const orderBy = dto.orderBy ?? BookingSearchOrderBy.START_AT;
+
+    if (orderBy === BookingSearchOrderBy.PRICE) {
+      return this.searchByChargedPrice(where, dto, direction);
+    }
+
+    const findArgs: Prisma.BookingFindManyArgs = { where, orderBy: this.searchOrderBy(orderBy, direction) };
+    if (!dto.isExport) {
+      findArgs.skip = (dto.page - 1) * dto.pageSize;
+      findArgs.take = dto.pageSize;
+    }
+
+    const [items, totalItems] = await this.db.$transaction([
+      this.db.booking.findMany(findArgs),
+      this.db.booking.count({ where }),
+    ]);
+
+    return { items, totalItems };
+  }
+
+  private buildSearchWhere(businessId: string, dto: BookingSearchRequestDto): Prisma.BookingWhereInput {
     const where: Prisma.BookingWhereInput = { businessId, deletedAt: null };
 
     if (dto.status) where.status = dto.status;
-    if (dto.staffId) where.staffId = dto.staffId;
+    if (dto.staffIds?.length) where.staffId = { in: dto.staffIds };
     if (dto.clientId) where.clientId = dto.clientId;
-    if (dto.serviceId) where.serviceId = dto.serviceId;
+    if (dto.serviceIds?.length) where.serviceId = { in: dto.serviceIds };
     if (dto.startFrom || dto.startTo) {
       where.startAt = {};
       if (dto.startFrom) (where.startAt as Prisma.DateTimeFilter).gte = new Date(dto.startFrom);
@@ -227,22 +262,163 @@ export class BookingsService {
       ];
     }
 
-    const orderBy: Prisma.BookingOrderByWithRelationInput = {
-      [dto.orderBy ?? BookingSearchOrderBy.START_AT]: dto.orderDirection ?? OrderDirection.DESC,
-    };
+    return where;
+  }
 
-    const findArgs: Prisma.BookingFindManyArgs = { where, orderBy };
-    if (!dto.isExport) {
-      findArgs.skip = (dto.page - 1) * dto.pageSize;
-      findArgs.take = dto.pageSize;
+  private searchOrderBy(
+    orderBy: BookingSearchOrderBy,
+    direction: OrderDirection,
+  ): Prisma.BookingOrderByWithRelationInput | Prisma.BookingOrderByWithRelationInput[] {
+    switch (orderBy) {
+      case BookingSearchOrderBy.CLIENT_NAME:
+        return [{ clientLastName: direction }, { clientFirstName: direction }];
+      case BookingSearchOrderBy.SERVICE_TITLE:
+        return { serviceTitle: direction };
+      case BookingSearchOrderBy.STAFF_NAME:
+        return { staffName: direction };
+      case BookingSearchOrderBy.STATUS:
+        return { status: direction };
+      case BookingSearchOrderBy.SOURCE:
+        return { source: direction };
+      case BookingSearchOrderBy.CREATED_AT:
+        return { createdAt: direction };
+      case BookingSearchOrderBy.START_AT:
+        return { startAt: direction };
+      case BookingSearchOrderBy.PRICE:
+        throw new Error('Price sort is applied in SQL');
+      default: {
+        const unexpected: never = orderBy;
+        throw new Error(`Unhandled booking search order: ${String(unexpected)}`);
+      }
     }
+  }
 
-    const [items, totalItems] = await this.db.$transaction([
-      this.db.booking.findMany(findArgs),
+  private async searchByChargedPrice(
+    where: Prisma.BookingWhereInput,
+    dto: BookingSearchRequestDto,
+    direction: OrderDirection,
+  ): Promise<PaginatedResult<Booking>> {
+    const directionSql = direction === OrderDirection.ASC ? Prisma.sql`ASC` : Prisma.sql`DESC`;
+    const paginationSql = dto.isExport
+      ? Prisma.empty
+      : Prisma.sql`LIMIT ${dto.pageSize} OFFSET ${(dto.page - 1) * dto.pageSize}`;
+    const orderedIds = Prisma.sql`
+      SELECT "id"
+      FROM "Booking"
+      WHERE ${this.bookingWhereSql(where)}
+      ORDER BY COALESCE("customPrice", "servicePrice") ${directionSql}
+      ${paginationSql}
+    `;
+
+    const [idRows, totalItems] = await this.db.$transaction([
+      this.db.$queryRaw<{ id: string }[]>(orderedIds),
       this.db.booking.count({ where }),
     ]);
 
-    return { items, totalItems };
+    const ids = idRows.map((row) => row.id);
+    if (ids.length === 0) return { items: [], totalItems };
+
+    const items = await this.db.booking.findMany({ where: { id: { in: ids } } });
+    const byId = new Map(items.map((item) => [item.id, item]));
+    return {
+      items: ids.flatMap((id) => {
+        const item = byId.get(id);
+        return item ? [item] : [];
+      }),
+      totalItems,
+    };
+  }
+
+  private bookingWhereSql(where: Prisma.BookingWhereInput): Prisma.Sql {
+    const parts = Object.keys(where).map((key) => this.bookingWherePart(key, where));
+    return Prisma.join(parts, ' AND ');
+  }
+
+  private bookingWherePart(key: string, where: Prisma.BookingWhereInput): Prisma.Sql {
+    switch (key) {
+      case 'businessId':
+        if (typeof where.businessId !== 'string') throw new Error('Unhandled booking search filter: businessId');
+        return Prisma.sql`"businessId" = ${where.businessId}`;
+      case 'deletedAt':
+        if (where.deletedAt !== null) throw new Error('Unhandled booking search filter: deletedAt');
+        return Prisma.sql`"deletedAt" IS NULL`;
+      case 'status':
+        if (typeof where.status !== 'string') throw new Error('Unhandled booking search filter: status');
+        return Prisma.sql`"status"::text = ${where.status}`;
+      case 'clientId':
+        if (typeof where.clientId !== 'string') throw new Error('Unhandled booking search filter: clientId');
+        return Prisma.sql`"clientId" = ${where.clientId}`;
+      case 'staffId':
+        return this.uuidInSql('staffId', where.staffId);
+      case 'serviceId':
+        return this.uuidInSql('serviceId', where.serviceId);
+      case 'startAt':
+        return this.dateRangeSql('startAt', where.startAt);
+      case 'createdAt':
+        return this.dateRangeSql('createdAt', where.createdAt);
+      case 'OR':
+        return this.searchOrSql(where.OR);
+      default:
+        throw new Error(`Unhandled booking search filter: ${key}`);
+    }
+  }
+
+  private uuidInSql(column: 'staffId' | 'serviceId', value: Prisma.BookingWhereInput['staffId']): Prisma.Sql {
+    if (value == null || typeof value !== 'object' || !('in' in value) || !Array.isArray(value.in) || value.in.length === 0) {
+      throw new Error(`Unhandled booking search filter: ${column}`);
+    }
+    if (Object.keys(value).some((key) => key !== 'in')) throw new Error(`Unhandled booking search filter: ${column}`);
+    return column === 'staffId'
+      ? Prisma.sql`"staffId" IN (${Prisma.join(value.in)})`
+      : Prisma.sql`"serviceId" IN (${Prisma.join(value.in)})`;
+  }
+
+  private dateRangeSql(column: 'startAt' | 'createdAt', value: Prisma.BookingWhereInput['startAt']): Prisma.Sql {
+    if (value == null || typeof value !== 'object' || value instanceof Date) {
+      throw new Error(`Unhandled booking search filter: ${column}`);
+    }
+    const range = value as Prisma.DateTimeFilter;
+    if (Object.keys(range).some((key) => key !== 'gte' && key !== 'lte')) {
+      throw new Error(`Unhandled booking search filter: ${column}`);
+    }
+    const parts: Prisma.Sql[] = [];
+    if (column === 'startAt') {
+      if (range.gte != null) parts.push(Prisma.sql`"startAt" >= ${range.gte}`);
+      if (range.lte != null) parts.push(Prisma.sql`"startAt" <= ${range.lte}`);
+    } else {
+      if (range.gte != null) parts.push(Prisma.sql`"createdAt" >= ${range.gte}`);
+      if (range.lte != null) parts.push(Prisma.sql`"createdAt" <= ${range.lte}`);
+    }
+    if (parts.length === 0) throw new Error(`Unhandled booking search filter: ${column}`);
+    return Prisma.join(parts, ' AND ');
+  }
+
+  private searchOrSql(value: Prisma.BookingWhereInput['OR']): Prisma.Sql {
+    if (!Array.isArray(value) || value.length === 0) throw new Error('Unhandled booking search filter: OR');
+    const parts = value.map((clause) => {
+      if (clause == null || typeof clause !== 'object') throw new Error('Unhandled booking search filter: OR');
+      const keys = Object.keys(clause);
+      if (keys.length !== 1) throw new Error('Unhandled booking search filter: OR');
+      const field = keys[0];
+      return this.containsSql(field, clause[field as keyof typeof clause]);
+    });
+    return Prisma.sql`(${Prisma.join(parts, ' OR ')})`;
+  }
+
+  private containsSql(field: string, filter: unknown): Prisma.Sql {
+    if (filter == null || typeof filter !== 'object' || !('contains' in filter) || typeof filter.contains !== 'string') {
+      throw new Error(`Unhandled booking search filter: ${field}`);
+    }
+    const mode = 'mode' in filter ? filter.mode : undefined;
+    if ((mode !== undefined && mode !== 'insensitive') || Object.keys(filter).some((key) => key !== 'contains' && key !== 'mode')) {
+      throw new Error(`Unhandled booking search filter: ${field}`);
+    }
+    if (!SEARCH_TEXT_COLUMNS.has(field)) throw new Error(`Unhandled booking search filter: ${field}`);
+    const pattern = `%${filter.contains.replace(/[\\%_]/g, (char) => `\\${char}`)}%`;
+    const column = Prisma.raw(`"${field}"`);
+    return mode === 'insensitive'
+      ? Prisma.sql`${column} ILIKE ${pattern} ESCAPE '\\\\'`
+      : Prisma.sql`${column} LIKE ${pattern} ESCAPE '\\\\'`;
   }
 
   async cancel(bookingId: string, tokenPayload: TokenPayloadDto, cancelledBy: CancelledBy, dto: CancelBookingDto): Promise<Booking> {
@@ -438,6 +614,15 @@ export class BookingsService {
       payload: params.payload,
     };
     this.eventEmitter.emit(AUDIT_EVENT, event);
+  }
+
+  async getStatusCounts(businessId: string): Promise<{ status: BookingStatus; count: number }[]> {
+    const rows = await this.db.booking.groupBy({
+      by: ['status'],
+      where: { businessId },
+      _count: { _all: true },
+    });
+    return rows.map((r) => ({ status: r.status as BookingStatus, count: r._count._all }));
   }
 
   private buildLockKey(staffId: string, dateStr: string): bigint {

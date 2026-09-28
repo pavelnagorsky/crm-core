@@ -142,7 +142,7 @@ export class StaffController {
     @Param('id', ParseUUIDPipe) id: string,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<StaffResponseDto>> {
-    const staff = await this.staffService.findById(id);
+    const staff = await this.staffService.findWithServiceCount(id);
     assertBusinessRole(
       tokenPayload,
       staff.businessId,

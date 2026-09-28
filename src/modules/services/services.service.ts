@@ -27,6 +27,15 @@ import { BusinessService } from '../business/business.service.js';
 
 export type ServiceWithImage = Service & { imageFile: File | null };
 
+export type ServiceWithStaffCount = ServiceWithImage & {
+  _count: { staffServices: number };
+};
+
+const serviceViewInclude = {
+  imageFile: true,
+  _count: { select: { staffServices: true } },
+} satisfies Prisma.ServiceInclude;
+
 @Injectable()
 export class ServicesService {
   constructor(
@@ -162,8 +171,11 @@ export class ServicesService {
     return service;
   }
 
-  async findById(serviceId: string): Promise<ServiceWithImage> {
-    const service = await this.db.service.findUnique({ where: { id: serviceId }, include: { imageFile: true } });
+  async findById(serviceId: string): Promise<ServiceWithStaffCount> {
+    const service = await this.db.service.findUnique({
+      where: { id: serviceId },
+      include: serviceViewInclude,
+    });
     if (!service) throw new NotFoundException('Service not found');
     return service;
   }
@@ -174,7 +186,10 @@ export class ServicesService {
     return service;
   }
 
-  async search(businessId: string, dto: ServiceSearchRequestDto): Promise<PaginatedResult<ServiceWithImage>> {
+  async search(
+    businessId: string,
+    dto: ServiceSearchRequestDto,
+  ): Promise<PaginatedResult<ServiceWithStaffCount>> {
     const where = this.buildFilterWhere(businessId, dto);
 
     const orderBy = this.buildSearchOrderBy(
@@ -182,14 +197,14 @@ export class ServicesService {
       dto.orderDirection ?? OrderDirection.ASC,
     );
 
-    const findArgs: Prisma.ServiceFindManyArgs = { where, orderBy, include: { imageFile: true } };
+    const findArgs: Prisma.ServiceFindManyArgs = { where, orderBy, include: serviceViewInclude };
     if (!dto.isExport) {
       findArgs.skip = (dto.page - 1) * dto.pageSize;
       findArgs.take = dto.pageSize;
     }
 
     const [items, totalItems] = await this.db.$transaction([
-      this.db.service.findMany({ ...findArgs, include: { imageFile: true } }),
+      this.db.service.findMany({ ...findArgs, include: serviceViewInclude }),
       this.db.service.count({ where }),
     ]);
 

@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiCreatedResponse,
+  ApiBadRequestResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
@@ -31,6 +32,7 @@ import { GetCalendarRequestDto } from './dto/get-calendar-request.dto.js';
 import { GetCalendarResponseDto } from './dto/get-calendar-response.dto.js';
 import { AvailableSlotsRequestDto } from './dto/available-slots-request.dto.js';
 import { AvailableSlotsDayDto } from './dto/available-slots-day.dto.js';
+import { ManualAvailableSlotsRequestDto } from './dto/manual-available-slots-request.dto.js';
 import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
@@ -51,6 +53,22 @@ export class CalendarController {
     @Query() dto: AvailableSlotsRequestDto,
   ): Promise<BaseResponseDto<AvailableSlotsDayDto[]>> {
     const days = await this.calendarService.getAvailableSlots(businessId, dto);
+    return BaseResponseDto.success(days);
+  }
+
+  @ApiOperation({
+    summary: 'Get available slots for manual booking (owner / staff). Same free-time rules as the public list, without online-booking visibility, minimum notice, or the advance window.',
+  })
+  @ApiOkResponse({ type: ApiResponseArray(AvailableSlotsDayDto) })
+  @ApiNotFoundResponse({ description: 'Business or service not found' })
+  @ApiBadRequestResponse({ description: 'Date range is longer than 62 days' })
+  @RBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @Get('available-slots')
+  async getManualAvailableSlots(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Query() dto: ManualAvailableSlotsRequestDto,
+  ): Promise<BaseResponseDto<AvailableSlotsDayDto[]>> {
+    const days = await this.calendarService.getManualAvailableSlots(businessId, dto);
     return BaseResponseDto.success(days);
   }
 

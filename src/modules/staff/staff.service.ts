@@ -42,6 +42,17 @@ import { ConfigService } from '@nestjs/config';
 
 export type StaffWithAvatar = Staff & { avatarFile: File | null };
 
+export type StaffWithServiceCount = StaffWithAvatar & {
+  _count: { staffServices: number };
+  staffServices: { serviceId: string }[];
+};
+
+const staffViewInclude = {
+  avatarFile: true,
+  _count: { select: { staffServices: true } },
+  staffServices: { select: { serviceId: true } },
+} satisfies Prisma.StaffInclude;
+
 @Injectable()
 export class StaffService {
   constructor(
@@ -166,6 +177,15 @@ export class StaffService {
     return staff;
   }
 
+  async findWithServiceCount(staffId: string): Promise<StaffWithServiceCount> {
+    const staff = await this.db.staff.findUnique({
+      where: { id: staffId },
+      include: staffViewInclude,
+    });
+    if (!staff) throw new NotFoundException('Staff member not found');
+    return staff;
+  }
+
   private async findInBusiness(
     businessId: string,
     staffId: string,
@@ -188,7 +208,7 @@ export class StaffService {
   async search(
     businessId: string,
     dto: StaffSearchRequestDto,
-  ): Promise<PaginatedResult<StaffWithAvatar>> {
+  ): Promise<PaginatedResult<StaffWithServiceCount>> {
     const where = this.buildWhere(businessId, dto);
 
     const orderBy: Prisma.StaffOrderByWithRelationInput = {
@@ -196,14 +216,14 @@ export class StaffService {
         dto.orderDirection ?? OrderDirection.DESC,
     };
 
-    const findArgs: Prisma.StaffFindManyArgs = { where, orderBy, include: { avatarFile: true } };
+    const findArgs: Prisma.StaffFindManyArgs = { where, orderBy, include: staffViewInclude };
     if (!dto.isExport) {
       findArgs.skip = (dto.page - 1) * dto.pageSize;
       findArgs.take = dto.pageSize;
     }
 
     const [items, totalItems] = await this.db.$transaction([
-      this.db.staff.findMany({ ...findArgs, include: { avatarFile: true } }),
+      this.db.staff.findMany({ ...findArgs, include: staffViewInclude }),
       this.db.staff.count({ where }),
     ]);
 

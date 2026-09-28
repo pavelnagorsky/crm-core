@@ -178,6 +178,10 @@ export const ErrorCode = {
     code: 'BOOKING_NO_STAFF_AVAILABLE',
     message: 'No staff available for this service at the requested time',
   },
+  BOOKING_SLOT_RANGE_TOO_LONG: {
+    code: 'BOOKING_SLOT_RANGE_TOO_LONG',
+    message: 'Date range cannot exceed 62 days',
+  },
 
   STAFF_HAS_EARNINGS: {
     code: 'STAFF_HAS_EARNINGS',

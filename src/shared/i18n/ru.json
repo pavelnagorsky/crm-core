@@ -105,6 +105,11 @@
     "COMPLETED": "Завершено",
     "NO_SHOW": "Не явился"
   },
+  "bookingSource": {
+    "PUBLIC_PAGE": "Публичная страница",
+    "WIDGET": "Виджет",
+    "MANUAL": "Вручную"
+  },
   "staffStatus": {
     "ACTIVE": "Активный",
     "INACTIVE": "Неактивный"
@@ -204,6 +209,25 @@
       "notes": "Заметки",
       "genderMale": "Мужской",
       "genderFemale": "Женский"
+    },
+    "bookings": {
+      "sheet": "Записи",
+      "startAt": "Начало",
+      "endAt": "Конец",
+      "status": "Статус",
+      "source": "Источник",
+      "clientFirstName": "Имя клиента",
+      "clientLastName": "Фамилия клиента",
+      "clientPhone": "Телефон клиента",
+      "clientEmail": "Email клиента",
+      "serviceTitle": "Услуга",
+      "serviceDuration": "Длительность (мин)",
+      "price": "Цена",
+      "staffName": "Сотрудник",
+      "notes": "Заметки клиента",
+      "internalNotes": "Внутренние заметки",
+      "cancellationReason": "Причина отмены",
+      "createdAt": "Создана"
     }
   },
   "cancelledBy": {

@@ -8,6 +8,8 @@ describe('LocaleService', () => {
     const messages = locale.get();
     expect(messages.documents.payroll.vedomostTitle).toBe('Ведомость на выплату');
     expect(messages.documents.staff.sheet).toBe('Сотрудники');
+    expect(messages.documents.bookings.sheet).toBe('Записи');
+    expect(messages.bookingSource.MANUAL).toBe('Вручную');
     expect(messages.earningType.BONUS).toBe('Бонус');
     expect(messages.earningType.CORRECTION).toBe('Корректировка');
     expect(messages.salaryMode.GUARANTEED_MINIMUM).toBe('Гарантированный минимум');
