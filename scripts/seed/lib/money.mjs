@@ -24,6 +24,18 @@ export function hourly(hours, rate) {
   return quantize(decimal(hours).mul(decimal(rate)));
 }
 
+/** Unquantized daily share of a monthly salary (quantize the month sum once). */
+export function dailySalaryShare(monthlySalary, daysInMonth) {
+  if (daysInMonth <= 0) return decimal(0);
+  return decimal(monthlySalary).div(daysInMonth);
+}
+
+/** Guaranteed-minimum top-up. Zero when work earnings already cover the salary. */
+export function guaranteedTopUp(salary, alreadyEarned) {
+  const diff = decimal(salary).minus(decimal(alreadyEarned));
+  return diff.gt(0) ? quantize(diff) : decimal(0);
+}
+
 /** Exact hours between two minute-of-day values (no quantize). */
 export function hoursFromShift(startMinutes, endMinutes) {
   let minutes = endMinutes - startMinutes;

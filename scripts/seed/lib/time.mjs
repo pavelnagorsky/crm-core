@@ -50,6 +50,11 @@ export function dateOnly(isoDate) {
   return new Date(`${isoDate}T00:00:00.000Z`);
 }
 
+/** Calendar length of the UTC month for a "@db.Date" value. */
+export function daysInUtcMonth(date) {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 0)).getUTCDate();
+}
+
 /** Formats a @db.Date value (UTC-midnight Date) as "YYYY-MM-DD". */
 export function dateOnlyStr(date) {
   return `${pad(date.getUTCFullYear(), 4)}-${pad(date.getUTCMonth() + 1, 2)}-${pad(date.getUTCDate(), 2)}`;

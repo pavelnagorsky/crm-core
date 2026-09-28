@@ -1,10 +1,11 @@
 import { Prisma } from '@prisma/client';
 import { createRng } from '../lib/random.mjs';
-import { commission, hourly, hoursFromShift, decimal } from '../lib/money.mjs';
+import { commission, hourly, hoursFromShift, decimal, quantize, dailySalaryShare, guaranteedTopUp } from '../lib/money.mjs';
 import {
   localToUtc,
   dateOnly,
   dateOnlyStr,
+  daysInUtcMonth,
   zonedDateStr,
   parseTimeToDbTime,
   isoWeekday,
@@ -16,7 +17,7 @@ import {
 
 export const meta = {
   name: 'hair-salon',
-  description: 'Realistic hair salon demo: 4 staff, schedules, blocks, bookings, earnings',
+  description: 'Realistic hair salon demo: 4 staff, schedules, blocks, bookings, earnings, payroll periods',
 };
 
 // ─── Tunables ──────────────────────────────────────────────────────────────────
@@ -38,7 +39,8 @@ const STAFF_PLAN = [
     workDays: [1, 2, 3, 4, 5], // Mon–Fri
     shift: { start: '09:00', end: '18:00' },
     dayOffChance: 0.06,
-    plan: { fixedSalaryAmount: '900.00', hourlyRate: '14.00', serviceCommissionPercent: '25.00', salaryMode: 'GUARANTEED_MINIMUM' },
+    // Floor sits above a typical month of hourly + commission (prices are 10–120), so the payslip shows a top-up.
+    plan: { fixedSalaryAmount: '5500.00', hourlyRate: '14.00', serviceCommissionPercent: '25.00', salaryMode: 'GUARANTEED_MINIMUM' },
     categories: ['Стрижки', 'Укладки и причёски', 'Уход за волосами', 'Выпрямление и завивка'],
   },
   {
@@ -50,7 +52,7 @@ const STAFF_PLAN = [
     workDays: [3, 4, 5, 6, 7], // Wed–Sun
     shift: { start: '10:00', end: '19:00' },
     dayOffChance: 0.06,
-    plan: { fixedSalaryAmount: '1000.00', hourlyRate: '15.00', serviceCommissionPercent: '30.00', salaryMode: 'GUARANTEED_MINIMUM' },
+    plan: { fixedSalaryAmount: '6500.00', hourlyRate: '15.00', serviceCommissionPercent: '30.00', salaryMode: 'GUARANTEED_MINIMUM' },
     categories: ['Окрашивание', 'Уход за волосами', 'Выпрямление и завивка'],
   },
   {
@@ -116,6 +118,45 @@ const NOTES = ['Хочет каре', 'Как в прошлый раз', 'Про
 // Target salon-wide bookings per open day (medium density). Actual per-staff is a share of this.
 const DAILY_TARGET = { min: 4, max: 8 };
 
+// Active client book for a 4-chair salon. Existing clients are kept; the seed fills up to this size.
+// Phones +375291100xxx mark rows this seed owns and may delete on the next run.
+const CLIENT_TARGET = 320;
+const SEED_PHONE_PREFIX = '+375291100';
+const DORMANT_SHARE = 0.12;
+
+const FEMALE_NAMES = [
+  'Анна', 'Мария', 'Елена', 'Ольга', 'Татьяна', 'Наталья', 'Ирина', 'Светлана', 'Юлия', 'Екатерина',
+  'Дарья', 'Алина', 'Виктория', 'Полина', 'Ксения', 'Анастасия', 'Валерия', 'Кристина', 'Вероника', 'Диана',
+  'Алёна', 'Маргарита', 'София', 'Арина', 'Милана', 'Карина', 'Яна', 'Лидия', 'Галина', 'Лариса',
+  'Инна', 'Оксана', 'Жанна', 'Регина', 'Элина', 'Василиса', 'Кира', 'Алиса', 'Ульяна', 'Злата',
+  'Ева', 'Варвара', 'Нина', 'Людмила', 'Вера', 'Ангелина', 'Ярослава', 'Алла', 'Майя', 'Лилия',
+  'Каролина', 'Влада', 'Милена', 'Эвелина', 'Доминика', 'Богдана',
+];
+const MALE_NAMES = [
+  'Александр', 'Дмитрий', 'Сергей', 'Андрей', 'Алексей', 'Максим', 'Иван', 'Никита', 'Артём', 'Илья',
+  'Павел', 'Роман', 'Кирилл', 'Егор', 'Михаил', 'Владимир', 'Олег', 'Денис', 'Антон', 'Виктор',
+  'Глеб', 'Тимофей', 'Матвей', 'Фёдор', 'Борис', 'Игорь', 'Степан', 'Юрий',
+];
+const FEMALE_SURNAMES = [
+  'Иванова', 'Петрова', 'Сидорова', 'Козлова', 'Новикова', 'Морозова', 'Соколова', 'Лебедева', 'Кузнецова', 'Попова',
+  'Орлова', 'Фёдорова', 'Белова', 'Михайлова', 'Волкова', 'Павлова', 'Смирнова', 'Никитина', 'Захарова', 'Зайцева',
+  'Соловьёва', 'Борисова', 'Яковлева', 'Григорьева', 'Сергеева', 'Максимова', 'Тарасова', 'Комарова', 'Киселёва', 'Макарова',
+  'Андреева', 'Ильина', 'Гусева', 'Титова', 'Кузьмина', 'Куликова', 'Карпова', 'Власова', 'Медведева', 'Ершова',
+  'Денисова', 'Громова', 'Фомина', 'Давыдова', 'Щербакова', 'Блинова', 'Колесникова', 'Афанасьева', 'Маслова', 'Исаева',
+  'Чернова', 'Савельева', 'Жукова', 'Баранова', 'Котова', 'Филиппова', 'Маркова',
+];
+const CLIENT_NOTES = [
+  'Стрижка каждые 5 недель',
+  'Аллергия на аммиак',
+  'Просит одного мастера',
+  'Не предлагать доп. услуги',
+  'Скидка в день рождения',
+  'Удобно только после 17:00',
+  'Чувствительная кожа головы',
+];
+const BAN_REASONS = ['Не пришёл трижды без предупреждения', 'Грубость к мастеру', 'Неоплаченный визит'];
+const EMAIL_DOMAINS = ['mail.ru', 'gmail.com', 'yandex.by'];
+
 // ─── Seed entry ──────────────────────────────────────────────────────────────────
 export async function seed(prisma) {
   const rng = createRng(SEED);
@@ -125,11 +166,7 @@ export async function seed(prisma) {
   if (!business) throw new Error('No business found — create the business/services/clients first.');
   const { id: businessId, timezone, currency, slotIntervalMinutes } = business;
 
-  const [services, clients] = await Promise.all([
-    prisma.service.findMany({ where: { businessId }, include: { category: true } }),
-    prisma.client.findMany({ where: { businessId } }),
-  ]);
-  if (clients.length === 0) throw new Error('No clients found for this business.');
+  const services = await prisma.service.findMany({ where: { businessId }, include: { category: true } });
   const activeServices = services.filter((s) => s.status === 'ACTIVE');
   const serviceByTitle = new Map(services.map((s) => [s.title, s]));
 
@@ -142,30 +179,36 @@ export async function seed(prisma) {
   // 2. Business rename.
   await prisma.business.update({ where: { id: businessId }, data: { name: BUSINESS_NAME } });
 
-  // 3. Staff: rename existing two, create the rest, wire StaffService.
+  // 3. Client book: keep whoever already exists, fill up to a realistic salon size.
+  const clients = await ensureClients(prisma, businessId, now, timezone);
+
+  // 4. Staff: rename existing two, create the rest, wire StaffService.
   const staffList = await upsertStaff(prisma, businessId, activeServices, rng);
   ensureCoverage(activeServices, staffList);
 
-  // 4. Compensation plans covering the whole history.
+  // 5. Compensation plans covering the whole history.
   const planByStaff = await createPlans(prisma, businessId, staffList, dateRange.from);
 
-  // 5. Shifts.
+  // 6. Shifts.
   const shiftIndex = await createShifts(prisma, staffList, dateRange, rng);
 
-  // 6. Recurring lunch blocks + one-off blocks.
+  // 7. Recurring lunch blocks + one-off blocks.
   const blocksByStaffDate = await createBlocks(prisma, businessId, staffList, dateRange, timezone, now);
 
-  // 7. Bookings (+ linked CalendarEvent per booking) and 8. earnings.
+  // 8. Bookings (+ linked CalendarEvent per booking) and earnings.
   const stats = await createBookings(prisma, {
     businessId, timezone, currency, slotIntervalMinutes,
-    staffList, clients, serviceByTitle, planByStaff, shiftIndex, blocksByStaffDate,
+    staffList, clients: clients.bookable, serviceByTitle, planByStaff, shiftIndex, blocksByStaffDate,
     dateRange, now, rng,
   });
 
   // Hourly earnings for past shifts (enriches payroll demo).
   const hourlyCount = await createHourlyEarnings(prisma, { businessId, currency, staffList, planByStaff, shiftIndex, now, timezone });
 
-  printSummary({ staffList, dateRange, shiftCount: countShifts(shiftIndex), stats, hourlyCount, currency });
+  // 9. Monthly payroll periods: salary top-up, then a statement that locks earnings.
+  const payroll = await createPayrollPeriods(prisma, { businessId, currency, staffList, planByStaff, dateRange, now, timezone });
+
+  printSummary({ staffList, dateRange, shiftCount: countShifts(shiftIndex), stats, hourlyCount, payroll, clients, currency });
 }
 
 // ─── Date range ────────────────────────────────────────────────────────────────
@@ -180,15 +223,110 @@ function computeDateRange(now, timezone) {
 
 // ─── Cleanup ──────────────────────────────────────────────────────────────────
 async function cleanup(prisma, businessId) {
-  // earnings reference bookings; bookings reference calendarEvents (SetNull). Delete earnings first,
-  // then bookings, then all calendar events, shifts, plans, and previously-seeded new staff.
+  // Periods cascade to results (which restrict staff deletion). Earnings reference bookings;
+  // bookings reference calendarEvents (SetNull). Then shifts, plans, and previously-seeded staff.
+  await prisma.payrollPeriod.deleteMany({ where: { businessId } });
   await prisma.staffEarning.deleteMany({ where: { businessId } });
   await prisma.booking.deleteMany({ where: { businessId } });
+  await prisma.client.deleteMany({ where: { businessId, phone: { startsWith: SEED_PHONE_PREFIX } } });
   await prisma.calendarEvent.deleteMany({ where: { businessId } });
   await prisma.staffShift.deleteMany({ where: { staff: { businessId } } });
   await prisma.staffCompensationPlan.deleteMany({ where: { businessId } });
   // Remove staff created by a previous seed run (tagged via email marker), keep the original ones.
   await prisma.staff.deleteMany({ where: { businessId, email: { endsWith: '@seed.lokon' } } });
+}
+
+// ─── Clients ──────────────────────────────────────────────────────────────────
+async function ensureClients(prisma, businessId, now, timezone) {
+  const rng = createRng(SEED + 91);
+  const existing = await prisma.client.findMany({ where: { businessId } });
+  const taken = new Set(existing.map((c) => c.phone));
+  const need = Math.max(0, CLIENT_TARGET - existing.length);
+  const todayStr = zonedDateStr(now, timezone);
+  const rows = [];
+  const seenNames = new Set(existing.map((c) => `${c.firstName}|${c.lastName}`));
+  let seq = 1;
+
+  while (rows.length < need) {
+    const phone = `${SEED_PHONE_PREFIX}${String(seq).padStart(3, '0')}`;
+    seq += 1;
+    if (taken.has(phone)) continue;
+    if (seq > 999) throw new Error('Ran out of seed phone numbers for clients.');
+
+    const female = rng.chance(0.72);
+    let firstName = rng.pick(female ? FEMALE_NAMES : MALE_NAMES);
+    let lastName = female ? rng.pick(FEMALE_SURNAMES) : masculineSurname(rng.pick(FEMALE_SURNAMES));
+    let guard = 0;
+    while (seenNames.has(`${firstName}|${lastName}`) && guard < 8) {
+      firstName = rng.pick(female ? FEMALE_NAMES : MALE_NAMES);
+      lastName = female ? rng.pick(FEMALE_SURNAMES) : masculineSurname(rng.pick(FEMALE_SURNAMES));
+      guard += 1;
+    }
+    seenNames.add(`${firstName}|${lastName}`);
+
+    const banned = rows.length >= need - 3;
+    rows.push({
+      businessId,
+      firstName,
+      lastName,
+      phone,
+      email: rng.chance(0.55) ? clientEmail(rng, seq, firstName, lastName) : null,
+      birthDate: rng.chance(0.8) ? birthDate(rng, todayStr) : null,
+      gender: female ? 'FEMALE' : 'MALE',
+      notes: rng.chance(0.12) ? rng.pick(CLIENT_NOTES) : null,
+      bannedAt: banned ? new Date(now.getTime() - rng.int(20, 80) * 86_400_000) : null,
+      banReason: banned ? rng.pick(BAN_REASONS) : null,
+      createdAt: new Date(now.getTime() - rng.int(14, 540) * 86_400_000),
+    });
+  }
+
+  if (rows.length) await prisma.client.createMany({ data: rows });
+
+  const all = await prisma.client.findMany({ where: { businessId } });
+  return { total: all.length, bookable: bookingPool(all) };
+}
+
+function masculineSurname(surname) {
+  if (surname.endsWith('ова')) return `${surname.slice(0, -3)}ов`;
+  if (surname.endsWith('ева')) return `${surname.slice(0, -3)}ев`;
+  if (surname.endsWith('ёва')) return `${surname.slice(0, -3)}ёв`;
+  if (surname.endsWith('ина')) return `${surname.slice(0, -3)}ин`;
+  return surname;
+}
+
+function clientEmail(rng, seq, firstName, lastName) {
+  const local = `${translit(firstName)}.${translit(lastName)}`;
+  const suffix = rng.chance(0.25) ? String(seq) : '';
+  return `${local}${suffix}@${rng.pick(EMAIL_DOMAINS)}`;
+}
+
+function translit(value) {
+  const map = {
+    а: 'a', б: 'b', в: 'v', г: 'g', д: 'd', е: 'e', ё: 'e', ж: 'zh', з: 'z', и: 'i', й: 'y',
+    к: 'k', л: 'l', м: 'm', н: 'n', о: 'o', п: 'p', р: 'r', с: 's', т: 't', у: 'u', ф: 'f',
+    х: 'h', ц: 'ts', ч: 'ch', ш: 'sh', щ: 'sch', ъ: '', ы: 'y', ь: '', э: 'e', ю: 'yu', я: 'ya',
+  };
+  return value.toLowerCase().split('').map((ch) => map[ch] ?? ch).join('');
+}
+
+function birthDate(rng, todayStr) {
+  const [y] = todayStr.split('-').map(Number);
+  const age = rng.int(18, 64);
+  const month = String(rng.int(1, 12)).padStart(2, '0');
+  const day = String(rng.int(1, 28)).padStart(2, '0');
+  return dateOnly(`${y - age}-${month}-${day}`);
+}
+
+function bookingPool(all) {
+  const active = all.filter((c) => !c.bannedAt);
+  const seeded = active
+    .filter((c) => c.phone.startsWith(SEED_PHONE_PREFIX))
+    .sort((a, b) => a.phone.localeCompare(b.phone));
+  const original = active.filter((c) => !c.phone.startsWith(SEED_PHONE_PREFIX));
+  const dormantCount = Math.min(seeded.length, Math.round(seeded.length * DORMANT_SHARE));
+  const visiting = seeded.slice(0, seeded.length - dormantCount);
+  // Originals sit at the front, inside the regulars window pickClient uses.
+  return [...original, ...visiting];
 }
 
 // ─── Staff ────────────────────────────────────────────────────────────────────
@@ -470,7 +608,7 @@ async function createBookings(prisma, ctx) {
           if (overlaps(occupied, cursor, endMin)) { cursor += slotIntervalMinutes; continue; }
 
           await placeBooking(prisma, {
-            businessId, timezone, currency, staff: s, service: svc, client: pickClient(clients, rng),
+            businessId, timezone, currency, staff: s, service: svc, client: pickClient(clients, rng, s),
             dateStr, startMin: cursor, plan: planByStaff.get(s.id), now, rng, stats, bump, earningRows,
           });
           occupied.push({ start: cursor, end: endMin });
@@ -494,11 +632,20 @@ function pickService(services, rng) {
   return rng.weighted(items);
 }
 
-function pickClient(clients, rng) {
-  // Bias toward a "regulars" subset so some clients recur.
+function pickClient(clients, rng, staff) {
+  // Front of the list is the regulars window: about every 4–6 weeks.
+  // The long tail is everyone else, mostly one visit in the seeded quarter.
   const regularsCount = Math.max(3, Math.floor(clients.length * 0.4));
-  if (rng.chance(0.6)) return clients[rng.int(0, regularsCount - 1)];
-  return clients[rng.int(0, clients.length - 1)];
+  const fromRegulars = rng.chance(0.6);
+  const pool = fromRegulars ? clients.slice(0, regularsCount) : clients;
+  const idx = rng.int(0, pool.length - 1);
+  // Barber's chair is mostly men; the other chairs are mostly women. Same RNG budget either way.
+  const prefer = staff?.key === 'barber' ? 'MALE' : 'FEMALE';
+  if (idx % 5 !== 0) {
+    const matched = pool.filter((c) => c.gender === prefer);
+    if (matched.length) return matched[idx % matched.length];
+  }
+  return pool[idx];
 }
 
 async function placeBooking(prisma, p) {
@@ -638,14 +785,279 @@ async function createHourlyEarnings(prisma, ctx) {
   return rows.length;
 }
 
+// ─── Payroll periods + fixed-salary top-up ───────────────────────────────────────
+// Mirrors PayrollService.calculate: prorate the monthly salary across calendar days,
+// pay a guaranteed top-up (or the full amount in ADDITIVE mode), then attach every
+// still-unpaid earning through the period end to a result.
+const FLOOR_TYPES = new Set(['SERVICE_COMMISSION', 'PRODUCT_COMMISSION', 'HOURLY']);
+const EARNING_TOTAL_FIELD = {
+  FIXED_SALARY: 'fixedSalaryTotal',
+  HOURLY: 'hourlyTotal',
+  SERVICE_COMMISSION: 'serviceCommissionTotal',
+  PRODUCT_COMMISSION: 'productCommissionTotal',
+  BONUS: 'bonusTotal',
+  DEDUCTION: 'deductionTotal',
+  CORRECTION: 'correctionTotal',
+};
+const MONTHS_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+
+async function createPayrollPeriods(prisma, ctx) {
+  const { businessId, currency, staffList, planByStaff, dateRange, now, timezone } = ctx;
+  const todayStr = dateRange.todayStr;
+  const months = calendarMonthsThrough(dateRange.from, todayStr);
+  const lastClosed = [...months].reverse().find((m) => m.end < todayStr);
+
+  const [pool, members, approver] = await Promise.all([
+    prisma.staffEarning.findMany({
+      where: { businessId },
+      orderBy: [{ staffId: 'asc' }, { earnedOn: 'asc' }],
+    }),
+    prisma.staff.findMany({ where: { id: { in: staffList.map((s) => s.id) } } }),
+    loadApprover(prisma, businessId),
+  ]);
+  const memberById = new Map(members.map((m) => [m.id, m]));
+  const attached = new Set();
+  const periods = [];
+
+  for (const month of months) {
+    const status = payrollStatus(month, todayStr, lastClosed);
+    const period = await prisma.payrollPeriod.create({
+      data: {
+        businessId,
+        name: month.name,
+        startDate: dateOnly(month.start),
+        endDate: dateOnly(month.end),
+        currency,
+        status,
+        ...payrollStamps(status, month.end, timezone, now, approver),
+      },
+    });
+
+    const dates = enumerateDates(month.start, month.end);
+    for (const s of staffList) {
+      const plan = planByStaff.get(s.id);
+      if (!plan || plan.fixedSalaryAmount == null) continue;
+      const proration = prorateSalary([plan], dates);
+      const inPeriod = pool.filter(
+        (e) => e.staffId === s.id && !attached.has(e.id) && e.currency === currency && inDateRange(e.earnedOn, month.start, month.end),
+      );
+      const amount = salaryAmount(proration, inPeriod);
+      if (amount.lte(0) || !proration.planId) continue;
+      const earning = await prisma.staffEarning.create({
+        data: {
+          businessId,
+          staffId: s.id,
+          type: 'FIXED_SALARY',
+          source: 'PAYROLL',
+          earnedOn: dateOnly(month.end),
+          amount,
+          currency,
+          rateAmount: proration.lastSalary,
+          quantity: decimal(proration.daysCovered),
+          idempotencyKey: `salary:${period.id}:${s.id}`,
+          compensationPlanId: proration.planId,
+        },
+      });
+      pool.push(earning);
+    }
+
+    const unpaid = pool.filter(
+      (e) => !attached.has(e.id) && e.currency === currency && dateOnlyStr(e.earnedOn) <= month.end,
+    );
+    const byStaff = groupBy(unpaid, (e) => e.staffId);
+    let salarySum = decimal(0);
+    let totalSum = decimal(0);
+
+    for (const [staffId, rows] of byStaff) {
+      const member = memberById.get(staffId);
+      if (!member || rows.length === 0) continue;
+      const totals = totalsFrom(rows);
+      const result = await prisma.payrollResult.create({
+        data: {
+          periodId: period.id,
+          businessId,
+          staffId,
+          staffName: member.name,
+          roleTitle: member.roleTitle,
+          taxId: member.taxId,
+          employeeNumber: member.employeeNumber,
+          employmentType: member.employmentType,
+          payoutMethod: member.payoutMethod,
+          payoutNote: member.payoutNote,
+          currency,
+          ...totals,
+        },
+      });
+      await prisma.staffEarning.updateMany({
+        where: { id: { in: rows.map((r) => r.id) } },
+        data: { payrollResultId: result.id },
+      });
+      for (const row of rows) attached.add(row.id);
+      salarySum = salarySum.plus(totals.fixedSalaryTotal);
+      totalSum = totalSum.plus(totals.totalAmount);
+    }
+
+    periods.push({
+      name: month.name,
+      status,
+      staffCount: byStaff.size,
+      salary: salarySum,
+      total: totalSum,
+    });
+  }
+
+  return periods;
+}
+
+function calendarMonthsThrough(fromStr, todayStr) {
+  const [fy, fm] = fromStr.split('-').map(Number);
+  const [ty, tm] = todayStr.split('-').map(Number);
+  const months = [];
+  let y = fy;
+  let m = fm;
+  while (y < ty || (y === ty && m <= tm)) {
+    const dim = daysInUtcMonth(dateOnly(`${y}-${String(m).padStart(2, '0')}-01`));
+    const mm = String(m).padStart(2, '0');
+    months.push({
+      start: `${y}-${mm}-01`,
+      end: `${y}-${mm}-${String(dim).padStart(2, '0')}`,
+      name: `${MONTHS_RU[m - 1]} ${y}`,
+    });
+    m += 1;
+    if (m === 13) { m = 1; y += 1; }
+  }
+  return months;
+}
+
+function payrollStatus(month, todayStr, lastClosed) {
+  if (month.start <= todayStr && todayStr <= month.end) return 'CALCULATED';
+  if (lastClosed && month.start === lastClosed.start) return 'APPROVED';
+  return 'PAID';
+}
+
+function payrollStamps(status, endStr, timezone, now, approver) {
+  const at = (dateStr, time) => {
+    const stamp = localToUtc(`${dateStr}T${time}:00`, timezone);
+    return stamp.getTime() > now.getTime() ? now : stamp;
+  };
+  const calculatedAt = status === 'CALCULATED' ? now : at(addDaysStr(endStr, 1), '10:00');
+  const data = { calculatedAt };
+  if (status === 'APPROVED' || status === 'PAID') {
+    data.approvedAt = at(addDaysStr(endStr, 1), '16:00');
+    data.approvedById = approver.id;
+    data.approvedByName = approver.name;
+  }
+  if (status === 'PAID') {
+    data.paidAt = at(addDaysStr(endStr, 3), '12:00');
+    data.paidById = approver.id;
+    data.paidByName = approver.name;
+  }
+  return data;
+}
+
+async function loadApprover(prisma, businessId) {
+  const membership = await prisma.membership.findFirst({
+    where: { businessId, role: 'OWNER' },
+    include: { user: true },
+    orderBy: { createdAt: 'asc' },
+  });
+  const user = membership?.user;
+  if (!user) return { id: null, name: 'Владелец' };
+  const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || user.email || 'Владелец';
+  return { id: user.id, name };
+}
+
+function planOnDate(plans, day) {
+  return plans
+    .filter((plan) => plan.effectiveFrom <= day && (plan.effectiveTo == null || plan.effectiveTo >= day))
+    .sort((a, b) => b.effectiveFrom.getTime() - a.effectiveFrom.getTime())[0];
+}
+
+function prorateSalary(plans, dateStrs) {
+  let prorated = decimal(0);
+  let planId = null;
+  let mode = 'GUARANTEED_MINIMUM';
+  let lastSalary = decimal(0);
+  let daysCovered = 0;
+
+  for (const iso of dateStrs) {
+    const day = dateOnly(iso);
+    const plan = planOnDate(plans, day);
+    if (!plan || plan.fixedSalaryAmount == null) continue;
+    prorated = prorated.plus(dailySalaryShare(plan.fixedSalaryAmount, daysInUtcMonth(day)));
+    planId = plan.id;
+    mode = plan.salaryMode;
+    lastSalary = decimal(plan.fixedSalaryAmount);
+    daysCovered += 1;
+  }
+
+  return { prorated: quantize(prorated), planId, mode, lastSalary, daysCovered };
+}
+
+function floorBase(earnings) {
+  const reversedIds = new Set(earnings.map((row) => row.reversesEarningId).filter(Boolean));
+  return earnings
+    .filter((row) => FLOOR_TYPES.has(row.type) && !reversedIds.has(row.id))
+    .reduce((acc, row) => acc.plus(decimal(row.amount)), decimal(0));
+}
+
+function salaryAmount(proration, workEarnings) {
+  if (proration.prorated.lte(0)) return decimal(0);
+  if (proration.mode === 'ADDITIVE') return proration.prorated;
+  return guaranteedTopUp(proration.prorated, floorBase(workEarnings));
+}
+
+function inDateRange(earnedOn, fromStr, toStr) {
+  const iso = dateOnlyStr(earnedOn);
+  return iso >= fromStr && iso <= toStr;
+}
+
+function groupBy(rows, keyFn) {
+  const map = new Map();
+  for (const row of rows) {
+    const key = keyFn(row);
+    const list = map.get(key) ?? [];
+    list.push(row);
+    map.set(key, list);
+  }
+  return map;
+}
+
+function totalsFrom(rows) {
+  const fields = {
+    fixedSalaryTotal: decimal(0),
+    hourlyTotal: decimal(0),
+    serviceCommissionTotal: decimal(0),
+    productCommissionTotal: decimal(0),
+    bonusTotal: decimal(0),
+    deductionTotal: decimal(0),
+    correctionTotal: decimal(0),
+    totalAmount: decimal(0),
+    earningsCount: rows.length,
+  };
+  for (const row of rows) {
+    const amount = decimal(row.amount);
+    fields.totalAmount = fields.totalAmount.plus(amount);
+    const key = EARNING_TOTAL_FIELD[row.type];
+    if (!key) throw new Error(`Unhandled earning type: ${row.type}`);
+    fields[key] = fields[key].plus(amount);
+  }
+  return fields;
+}
+
 // ─── Summary ────────────────────────────────────────────────────────────────────
-function printSummary({ staffList, dateRange, shiftCount, stats, hourlyCount, currency }) {
+function printSummary({ staffList, dateRange, shiftCount, stats, hourlyCount, payroll, clients, currency }) {
   console.log('\n  ── Summary ──');
   console.log(`  Staff: ${staffList.map((s) => s.name).join(', ')}`);
+  console.log(`  Clients: ${clients.total} (${clients.bookable.length} in the booking rotation)`);
   console.log(`  Date range: ${dateRange.from} .. ${dateRange.to} (today ${dateRange.todayStr})`);
   console.log(`  Shifts: ${shiftCount}`);
   console.log(`  Bookings: ${stats.total}`);
   for (const [st, n] of Object.entries(stats.byStatus).sort()) console.log(`    ${st.padEnd(10)} ${n}`);
   console.log(`  Commission earnings: ${stats.earnings} (sum ${stats.commissionSum.toFixed(2)} ${currency})`);
   console.log(`  Hourly earnings: ${hourlyCount}`);
+  console.log(`  Payroll periods: ${payroll.length}`);
+  for (const p of payroll) {
+    console.log(`    ${p.name.padEnd(16)} ${p.status.padEnd(12)} salary ${p.salary.toFixed(2)}  total ${p.total.toFixed(2)} ${currency}  (${p.staffCount} staff)`);
+  }
 }

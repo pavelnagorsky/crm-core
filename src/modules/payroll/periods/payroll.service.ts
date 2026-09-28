@@ -81,7 +81,7 @@ export class PayrollService {
     }
   }
 
-  async search(businessId: string, dto: PayrollPeriodSearchRequestDto): Promise<PaginatedResult<PayrollPeriod>> {
+  async search(businessId: string, dto: PayrollPeriodSearchRequestDto): Promise<PaginatedResult<PayrollPeriodWithResults>> {
     const where: Prisma.PayrollPeriodWhereInput = { businessId };
     if (dto.status) where.status = dto.status;
 
@@ -89,11 +89,12 @@ export class PayrollService {
       [dto.orderBy ?? PayrollPeriodSearchOrderBy.START_DATE]: dto.orderDirection ?? OrderDirection.DESC,
     };
 
-    const findArgs: Prisma.PayrollPeriodFindManyArgs = { where, orderBy };
-    if (!dto.isExport) {
-      findArgs.skip = (dto.page - 1) * dto.pageSize;
-      findArgs.take = dto.pageSize;
-    }
+    const findArgs = {
+      where,
+      orderBy,
+      include: { results: { orderBy: { staffName: 'asc' as const } } },
+      ...(!dto.isExport ? { skip: (dto.page - 1) * dto.pageSize, take: dto.pageSize } : {}),
+    };
 
     const [items, totalItems] = await this.db.$transaction([
       this.db.payrollPeriod.findMany(findArgs),
