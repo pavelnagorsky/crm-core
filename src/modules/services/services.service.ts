@@ -15,6 +15,7 @@ import { AppException } from '../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { PrismaErrorCode } from '../../shared/database/prisma-error-codes.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
+import { stableOrderBy } from '../../shared/database/stable-order-by.js';
 import { AUDIT_EVENT } from '../audit/audit.constants.js';
 import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js';
@@ -192,9 +193,10 @@ export class ServicesService {
   ): Promise<PaginatedResult<ServiceWithStaffCount>> {
     const where = this.buildFilterWhere(businessId, dto);
 
-    const orderBy = this.buildSearchOrderBy(
-      dto.orderBy ?? ServiceSearchOrderBy.SORT_ORDER,
-      dto.orderDirection ?? OrderDirection.ASC,
+    const direction = dto.orderDirection ?? OrderDirection.ASC;
+    const orderBy = stableOrderBy(
+      this.buildSearchOrderBy(dto.orderBy ?? ServiceSearchOrderBy.SORT_ORDER, direction),
+      direction,
     );
 
     const findArgs: Prisma.ServiceFindManyArgs = { where, orderBy, include: serviceViewInclude };

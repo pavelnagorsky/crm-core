@@ -3,6 +3,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PayrollPeriod, PayrollPeriodStatus, PayrollResult, Prisma, Staff, StaffEarning } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
+import { stableOrderBy } from '../../../shared/database/stable-order-by.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { PaginatedResult } from '../../../shared/interfaces/paginated-result.interface.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
@@ -85,13 +86,14 @@ export class PayrollService {
     const where: Prisma.PayrollPeriodWhereInput = { businessId };
     if (dto.status) where.status = dto.status;
 
+    const direction = dto.orderDirection ?? OrderDirection.DESC;
     const orderBy: Prisma.PayrollPeriodOrderByWithRelationInput = {
-      [dto.orderBy ?? PayrollPeriodSearchOrderBy.START_DATE]: dto.orderDirection ?? OrderDirection.DESC,
+      [dto.orderBy ?? PayrollPeriodSearchOrderBy.START_DATE]: direction,
     };
 
     const findArgs = {
       where,
-      orderBy,
+      orderBy: stableOrderBy(orderBy, direction),
       include: { results: { orderBy: { staffName: 'asc' as const } } },
       ...(!dto.isExport ? { skip: (dto.page - 1) * dto.pageSize, take: dto.pageSize } : {}),
     };
@@ -101,6 +103,15 @@ export class PayrollService {
       this.db.payrollPeriod.count({ where }),
     ]);
     return { items, totalItems };
+  }
+
+  async getStatusCounts(businessId: string): Promise<{ status: PayrollPeriodStatus; count: number }[]> {
+    const rows = await this.db.payrollPeriod.groupBy({
+      by: ['status'],
+      where: { businessId },
+      _count: { _all: true },
+    });
+    return rows.map((r) => ({ status: r.status, count: r._count._all }));
   }
 
   /** Date ranges where a new earning is rejected. Same filter as `assertDateUnlocked`. */

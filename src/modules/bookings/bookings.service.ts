@@ -7,6 +7,7 @@ import { AppException } from '../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
+import { stableOrderBy } from '../../shared/database/stable-order-by.js';
 import { TimeService } from '../time/time.service.js';
 import { CalendarService } from '../calendar/calendar.service.js';
 import { StaffService } from '../staff/staff.service.js';
@@ -216,7 +217,10 @@ export class BookingsService {
       return this.searchByChargedPrice(where, dto, direction);
     }
 
-    const findArgs: Prisma.BookingFindManyArgs = { where, orderBy: this.searchOrderBy(orderBy, direction) };
+    const findArgs: Prisma.BookingFindManyArgs = {
+      where,
+      orderBy: stableOrderBy(this.searchOrderBy(orderBy, direction), direction),
+    };
     if (!dto.isExport) {
       findArgs.skip = (dto.page - 1) * dto.pageSize;
       findArgs.take = dto.pageSize;
@@ -306,7 +310,7 @@ export class BookingsService {
       SELECT "id"
       FROM "Booking"
       WHERE ${this.bookingWhereSql(where)}
-      ORDER BY COALESCE("customPrice", "servicePrice") ${directionSql}
+      ORDER BY COALESCE("customPrice", "servicePrice") ${directionSql}, "id" ${directionSql}
       ${paginationSql}
     `;
 

@@ -33,9 +33,13 @@ import { CreatePayrollPeriodDto } from './dto/create-payroll-period.dto.js';
 import { PayrollPeriodResponseDto } from './dto/payroll-period-response.dto.js';
 import { PayrollPeriodSearchRequestDto } from './dto/payroll-period-search-request.dto.js';
 import { PayrollPeriodSearchResponseDto } from './dto/payroll-period-search-response.dto.js';
+import { PayrollPeriodStatusCountResponseDto } from './dto/payroll-period-status-count-response.dto.js';
+import { PayrollPeriodEarningsRequestDto } from '../earnings/dto/payroll-period-earnings-request.dto.js';
 import { PayrollReportResponseDto } from '../report/dto/payroll-report-response.dto.js';
 import { StaffEarningResponseDto } from '../earnings/dto/staff-earning-response.dto.js';
+import { StaffEarningSearchResponseDto } from '../earnings/dto/staff-earning-search-response.dto.js';
 import { PayrollReportService } from '../report/payroll-report.service.js';
+import { StaffEarningsService } from '../earnings/staff-earnings.service.js';
 import { XlsxService } from '../../../shared/xlsx/xlsx.service.js';
 import { PayrollService } from './payroll.service.js';
 
@@ -45,6 +49,7 @@ export class PayrollController {
   constructor(
     private readonly payroll: PayrollService,
     private readonly reports: PayrollReportService,
+    private readonly earnings: StaffEarningsService,
   ) {}
 
   @ApiOperation({ summary: 'Create a payroll period' })
@@ -97,6 +102,19 @@ export class PayrollController {
     );
   }
 
+  @ApiOperation({ summary: 'Get payroll period count per status' })
+  @ApiOkResponse({ type: ApiResponseArray(PayrollPeriodStatusCountResponseDto) })
+  @Auth()
+  @Get('periods/status-counts')
+  async getStatusCounts(
+    @Query('businessId', ParseUUIDPipe) businessId: string,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
+  ): Promise<BaseResponseDto<PayrollPeriodStatusCountResponseDto[]>> {
+    assertBusinessRole(tokenPayload, businessId, BusinessRole.OWNER, BusinessRole.STAFF);
+    const counts = await this.payroll.getStatusCounts(businessId);
+    return BaseResponseDto.success(counts.map((r) => Object.assign(new PayrollPeriodStatusCountResponseDto(), r)));
+  }
+
   @ApiOperation({ summary: 'Get payroll period with results' })
   @ApiOkResponse({ type: ApiResponse(PayrollPeriodResponseDto) })
   @ApiNotFoundResponse({ description: 'Payroll period not found' })
@@ -122,6 +140,29 @@ export class PayrollController {
     const period = await this.payroll.findById(id);
     assertBusinessRole(tokenPayload, period.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
     return BaseResponseDto.success(await this.reports.build(id));
+  }
+
+  @ApiOperation({ summary: 'List earnings attached to a payroll period' })
+  @ApiOkResponse({ type: ApiResponse(StaffEarningSearchResponseDto) })
+  @Auth()
+  @Get('periods/:id/earnings')
+  async listPeriodEarnings(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query() dto: PayrollPeriodEarningsRequestDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
+  ): Promise<BaseResponseDto<StaffEarningSearchResponseDto>> {
+    const period = await this.payroll.findById(id);
+    assertBusinessRole(tokenPayload, period.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
+    const { items, totalItems } = await this.earnings.searchByPeriod(id, dto);
+    return BaseResponseDto.success(
+      new StaffEarningSearchResponseDto(
+        items.map(StaffEarningResponseDto.fromEntity),
+        dto.page,
+        dto.pageSize,
+        totalItems,
+        dto.isExport,
+      ),
+    );
   }
 
   @ApiOperation({ summary: 'Export payment vedomost as XLSX' })

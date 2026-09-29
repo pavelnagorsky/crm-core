@@ -6,6 +6,8 @@ import type { AuditLogEvent } from './interfaces/audit-log-event.interface.js';
 import { AuditHistoryRequestDto } from './dto/audit-history-request.dto.js';
 import { AuditLogItemDto } from './dto/audit-log-item.dto.js';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
+import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
+import { stableOrderBy } from '../../shared/database/stable-order-by.js';
 import { AUDIT_EVENT } from './audit.constants.js';
 
 @Injectable()
@@ -52,7 +54,7 @@ export class AuditService {
     const [logs, totalItems] = await this.db.$transaction([
       this.db.auditLog.findMany({
         where,
-        orderBy: { occurredAt: 'desc' },
+        orderBy: stableOrderBy({ occurredAt: OrderDirection.DESC }, OrderDirection.DESC),
         skip: (dto.page - 1) * dto.pageSize,
         take: dto.pageSize,
       }),

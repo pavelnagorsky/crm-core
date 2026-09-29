@@ -26,21 +26,10 @@ export class PayrollReportService {
   async build(periodId: string): Promise<PayrollReportResponseDto> {
     const period = await this.payroll.findById(periodId);
     const business = await this.businessService.findById(period.businessId);
-    const earningRows = await this.earnings.listByResultIds(period.results.map((r) => r.id));
-    const byResult = new Map<string, typeof earningRows>();
-    for (const row of earningRows) {
-      if (!row.payrollResultId) continue;
-      const list = byResult.get(row.payrollResultId) ?? [];
-      list.push(row);
-      byResult.set(row.payrollResultId, list);
-    }
 
     const mapped = PayrollPeriodResponseDto.fromEntity(period);
     const vedomost = period.results.map(PayrollResultResponseDto.fromEntity);
-    const payslips: PayrollPayslipDto[] = vedomost.map((result) => ({
-      result,
-      earnings: (byResult.get(result.id) ?? []).map(StaffEarningResponseDto.fromEntity),
-    }));
+    const payslips: PayrollPayslipDto[] = vedomost.map((result) => ({ result }));
     const summary = summarizePayrollReport(vedomost);
 
     const dto = new PayrollReportResponseDto();
@@ -115,6 +104,7 @@ export class PayrollReportService {
     const report = await this.build(periodId);
     const messages = this.locale.get(lang);
     const text = messages.documents;
+    const byResult = await this.earningsByResult(report.vedomost.map((line) => line.id));
     return XlsxService.write(`payroll-payslips-${report.startDate}.xlsx`, (book) => {
       if (report.payslips.length === 0) {
         book.addSheet(text.payroll.payslipsSheet).addRow([text.payroll.empty]);
@@ -122,19 +112,30 @@ export class PayrollReportService {
       }
 
       for (const slip of report.payslips) {
-        const sheet = book.addSheet(
-          `${slip.result.staffName} ${slip.result.staffId.slice(0, 4)}`,
-          text.payroll.fallbackSheet,
-        );
-        this.writePayslip(sheet, report, slip, messages);
+        const sheet = book.addSheet(slip.result.staffName, text.payroll.fallbackSheet);
+        const lines = (byResult.get(slip.result.id) ?? []).map(StaffEarningResponseDto.fromEntity);
+        this.writePayslip(sheet, report, slip, lines, messages);
       }
     });
+  }
+
+  private async earningsByResult(resultIds: string[]) {
+    const earningRows = await this.earnings.listByResultIds(resultIds);
+    const byResult = new Map<string, typeof earningRows>();
+    for (const row of earningRows) {
+      if (!row.payrollResultId) continue;
+      const list = byResult.get(row.payrollResultId) ?? [];
+      list.push(row);
+      byResult.set(row.payrollResultId, list);
+    }
+    return byResult;
   }
 
   private writePayslip(
     sheet: XlsxSheet,
     report: PayrollReportResponseDto,
     slip: PayrollPayslipDto,
+    earnings: StaffEarningResponseDto[],
     messages: I18nLocale,
   ): void {
     const text = messages.documents;
@@ -162,7 +163,7 @@ export class PayrollReportService {
       text.common.amount,
       text.common.reason,
     ]);
-    for (const earning of slip.earnings) {
+    for (const earning of earnings) {
       sheet.addRow([
         earning.earnedOn,
         labelOf(messages.earningType, earning.type),

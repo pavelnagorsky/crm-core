@@ -4,6 +4,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { PrismaErrorCode } from '../../shared/database/prisma-error-codes.js';
+import { stableOrderBy } from '../../shared/database/stable-order-by.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
@@ -151,11 +152,12 @@ export class ClientsService {
     if (dto.banned === true) where.bannedAt = { not: null };
     else if (dto.banned === false) where.bannedAt = null;
 
+    const direction = dto.orderDirection ?? OrderDirection.DESC;
     const orderBy: Prisma.ClientOrderByWithRelationInput = {
-      [dto.orderBy ?? ClientSearchOrderBy.CREATED_AT]: dto.orderDirection ?? OrderDirection.DESC,
+      [dto.orderBy ?? ClientSearchOrderBy.CREATED_AT]: direction,
     };
 
-    const findArgs: Prisma.ClientFindManyArgs = { where, orderBy };
+    const findArgs: Prisma.ClientFindManyArgs = { where, orderBy: stableOrderBy(orderBy, direction) };
     if (!dto.isExport) {
       findArgs.skip = (dto.page - 1) * dto.pageSize;
       findArgs.take = dto.pageSize;

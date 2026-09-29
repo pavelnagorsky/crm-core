@@ -178,12 +178,12 @@ describe('BookingsService.search', () => {
   });
 
   it.each([
-    [BookingSearchOrderBy.START_AT, { startAt: OrderDirection.ASC }],
-    [BookingSearchOrderBy.CREATED_AT, { createdAt: OrderDirection.ASC }],
-    [BookingSearchOrderBy.SERVICE_TITLE, { serviceTitle: OrderDirection.ASC }],
-    [BookingSearchOrderBy.STAFF_NAME, { staffName: OrderDirection.ASC }],
-    [BookingSearchOrderBy.STATUS, { status: OrderDirection.ASC }],
-    [BookingSearchOrderBy.SOURCE, { source: OrderDirection.ASC }],
+    [BookingSearchOrderBy.START_AT, [{ startAt: OrderDirection.ASC }, { id: OrderDirection.ASC }]],
+    [BookingSearchOrderBy.CREATED_AT, [{ createdAt: OrderDirection.ASC }, { id: OrderDirection.ASC }]],
+    [BookingSearchOrderBy.SERVICE_TITLE, [{ serviceTitle: OrderDirection.ASC }, { id: OrderDirection.ASC }]],
+    [BookingSearchOrderBy.STAFF_NAME, [{ staffName: OrderDirection.ASC }, { id: OrderDirection.ASC }]],
+    [BookingSearchOrderBy.STATUS, [{ status: OrderDirection.ASC }, { id: OrderDirection.ASC }]],
+    [BookingSearchOrderBy.SOURCE, [{ source: OrderDirection.ASC }, { id: OrderDirection.ASC }]],
   ])('orders by %s', async (orderBy, expected) => {
     await service.search('biz', {
       businessId: 'biz',
@@ -209,6 +209,7 @@ describe('BookingsService.search', () => {
     expect(findMany.mock.calls[0][0].orderBy).toEqual([
       { clientLastName: OrderDirection.DESC },
       { clientFirstName: OrderDirection.DESC },
+      { id: OrderDirection.DESC },
     ]);
   });
 
@@ -227,7 +228,7 @@ describe('BookingsService.search', () => {
     } as BookingSearchRequestDto);
 
     const query = queryRaw.mock.calls[0][0] as Prisma.Sql;
-    expect(query.sql).toContain('ORDER BY COALESCE("customPrice", "servicePrice") ASC');
+    expect(query.sql).toContain('ORDER BY COALESCE("customPrice", "servicePrice") ASC, "id" ASC');
     expect(query.sql).not.toContain('::text');
     expect(query.sql).toContain('LIMIT ? OFFSET ?');
     expect(query.values).toContain(10);

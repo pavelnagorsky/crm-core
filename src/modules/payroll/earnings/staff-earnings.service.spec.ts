@@ -7,6 +7,7 @@ import { StaffService } from '../../staff/staff.service.js';
 import { EarningCalculatorService } from './earning-calculator.service.js';
 import type { CompensationPlanWithRates } from '../compensation/interfaces/compensation-plan-with-rates.interface.js';
 import { StaffCompensationService } from '../compensation/staff-compensation.service.js';
+import { PayrollPeriodEarningsRequestDto } from './dto/payroll-period-earnings-request.dto.js';
 import { StaffEarningsService } from './staff-earnings.service.js';
 
 function booking(overrides: Partial<Booking> = {}): Booking {
@@ -45,10 +46,13 @@ function booking(overrides: Partial<Booking> = {}): Booking {
 
 describe('StaffEarningsService', () => {
   const db = {
+    $transaction: vi.fn((ops: Promise<unknown>[]) => Promise.all(ops)),
     staffEarning: {
       create: vi.fn(),
       findUnique: vi.fn(),
       findFirst: vi.fn(),
+      findMany: vi.fn(),
+      count: vi.fn(),
     },
   };
   const compensation = {
@@ -127,5 +131,22 @@ describe('StaffEarningsService', () => {
     const reversal = await service.reverseForBooking(booking(), 'Клиент отменил визит');
     expect(reversal).toEqual({ id: 'rev-1' });
     expect(db.staffEarning.create).not.toHaveBeenCalled();
+  });
+
+  it('offsets the second earnings page by a full page and breaks date ties by id', async () => {
+    db.staffEarning.findMany.mockResolvedValue([]);
+    db.staffEarning.count.mockResolvedValue(40);
+
+    await service.searchByPeriod('period-1', {
+      page: 2,
+      pageSize: 25,
+    } as PayrollPeriodEarningsRequestDto);
+
+    expect(db.staffEarning.findMany).toHaveBeenCalledWith({
+      where: { payrollResult: { periodId: 'period-1' } },
+      orderBy: [{ earnedOn: 'desc' }, { id: 'desc' }],
+      skip: 25,
+      take: 25,
+    });
   });
 });

@@ -11,6 +11,7 @@ import {
 } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
+import { stableOrderBy } from '../../../shared/database/stable-order-by.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { PaginatedResult } from '../../../shared/interfaces/paginated-result.interface.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
@@ -27,6 +28,7 @@ import { StaffService } from '../../staff/staff.service.js';
 import { TimeService } from '../../time/time.service.js';
 import { CreateManualEarningDto } from './dto/create-manual-earning.dto.js';
 import { RecordProductSaleDto } from './dto/record-product-sale.dto.js';
+import { PayrollPeriodEarningsRequestDto } from './dto/payroll-period-earnings-request.dto.js';
 import { StaffEarningSearchOrderBy, StaffEarningSearchRequestDto } from './dto/staff-earning-search-request.dto.js';
 import { EarningCalculatorService } from './earning-calculator.service.js';
 import { CompensationPlanWithRates } from '../compensation/interfaces/compensation-plan-with-rates.interface.js';
@@ -249,9 +251,27 @@ export class StaffEarningsService {
       if (dto.to) where.earnedOn.lte = TimeService.dateOnly(dto.to);
     }
 
-    const orderBy: Prisma.StaffEarningOrderByWithRelationInput = {
-      [dto.orderBy ?? StaffEarningSearchOrderBy.EARNED_ON]: dto.orderDirection ?? OrderDirection.DESC,
+    const findArgs: Prisma.StaffEarningFindManyArgs = { where, orderBy: this.earningOrder(dto) };
+    if (!dto.isExport) {
+      findArgs.skip = (dto.page - 1) * dto.pageSize;
+      findArgs.take = dto.pageSize;
+    }
+
+    const [items, totalItems] = await this.db.$transaction([
+      this.db.staffEarning.findMany(findArgs),
+      this.db.staffEarning.count({ where }),
+    ]);
+    return { items, totalItems };
+  }
+
+  async searchByPeriod(periodId: string, dto: PayrollPeriodEarningsRequestDto): Promise<PaginatedResult<StaffEarning>> {
+    const where: Prisma.StaffEarningWhereInput = {
+      payrollResult: { periodId },
     };
+    if (dto.staffId) where.staffId = dto.staffId;
+    if (dto.type) where.type = dto.type;
+
+    const orderBy = this.earningOrder(dto);
 
     const findArgs: Prisma.StaffEarningFindManyArgs = { where, orderBy };
     if (!dto.isExport) {
@@ -264,6 +284,16 @@ export class StaffEarningsService {
       this.db.staffEarning.count({ where }),
     ]);
     return { items, totalItems };
+  }
+
+  private earningOrder(
+    dto: Pick<PayrollPeriodEarningsRequestDto, 'orderBy' | 'orderDirection'>,
+  ): Prisma.StaffEarningOrderByWithRelationInput[] {
+    const direction = dto.orderDirection ?? OrderDirection.DESC;
+    return stableOrderBy(
+      { [dto.orderBy ?? StaffEarningSearchOrderBy.EARNED_ON]: direction },
+      direction,
+    );
   }
 
   listUnpaidThrough(businessId: string, to: Date, tx?: Prisma.TransactionClient): Promise<StaffEarning[]> {

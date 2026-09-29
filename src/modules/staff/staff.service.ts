@@ -25,6 +25,7 @@ import { StaffFilterDto } from './dto/staff-filter.dto.js';
 import { StaffStatusCountResponseDto } from './dto/staff-status-count-response.dto.js';
 import { StaffSearchOrderBy } from './enums/staff-search-order-by.enum.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
+import { stableOrderBy } from '../../shared/database/stable-order-by.js';
 import { GetShiftsRequestDto } from './dto/get-shifts-request.dto.js';
 import { ReplaceShiftsRequestDto } from './dto/replace-shifts-request.dto.js';
 import { AUDIT_EVENT } from '../audit/audit.constants.js';
@@ -211,12 +212,16 @@ export class StaffService {
   ): Promise<PaginatedResult<StaffWithServiceCount>> {
     const where = this.buildWhere(businessId, dto);
 
+    const direction = dto.orderDirection ?? OrderDirection.DESC;
     const orderBy: Prisma.StaffOrderByWithRelationInput = {
-      [dto.orderBy ?? StaffSearchOrderBy.CREATED_AT]:
-        dto.orderDirection ?? OrderDirection.DESC,
+      [dto.orderBy ?? StaffSearchOrderBy.CREATED_AT]: direction,
     };
 
-    const findArgs: Prisma.StaffFindManyArgs = { where, orderBy, include: staffViewInclude };
+    const findArgs: Prisma.StaffFindManyArgs = {
+      where,
+      orderBy: stableOrderBy(orderBy, direction),
+      include: staffViewInclude,
+    };
     if (!dto.isExport) {
       findArgs.skip = (dto.page - 1) * dto.pageSize;
       findArgs.take = dto.pageSize;
