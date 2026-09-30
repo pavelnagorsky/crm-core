@@ -85,9 +85,25 @@ export enum DashboardWidgetKey {
   NO_SHOW_RATE = 'NO_SHOW_RATE',
 
   /**
-   * Three steps, top to bottom: Created (every booking), Confirmed (confirmed + completed),
-   * Completed. `value` is how many reached that step. `conversionFromPrev` is the percent
-   * that made it from the step above. Draw it as a narrowing funnel. No previous period.
+   * A 7x24 grid of booking counts. `xLabels` are hours as strings "0".."23" in business
+   * timezone. `yLabels` are ISO weekday numbers "1".."7" (1=Monday..7=Sunday). The frontend
+   * maps both axes to localized labels. `matrix[y][x]` is the count of bookings that started
+   * in that weekday-hour cell over the selected period. All statuses are counted.
    */
-  FUNNEL = 'FUNNEL',
+  BOOKINGS_HEATMAP = 'BOOKINGS_HEATMAP',
+
+  /**
+   * Bars of revenue per staff member, tallest first. `value` is the revenue from confirmed
+   * and completed bookings in the period; `secondaryValue` is the count of completed bookings.
+   * `sharePct` is the staff member's share of `breakdown.total`. Limited to `topN` (default 5).
+   * No comparison with the previous period.
+   */
+  REVENUE_BY_STAFF = 'REVENUE_BY_STAFF',
+
+  /**
+   * Big number: completed bookings as a percent of all bookings in the period.
+   * Denominator is all statuses combined. More is better.
+   * There is no sparkline.
+   */
+  COMPLETION_RATE = 'COMPLETION_RATE',
 }

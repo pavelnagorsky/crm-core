@@ -3,5 +3,4 @@ export enum WidgetKind {
   SERIES = 'series',
   BREAKDOWN = 'breakdown',
   HEATMAP = 'heatmap',
-  FUNNEL = 'funnel',
 }

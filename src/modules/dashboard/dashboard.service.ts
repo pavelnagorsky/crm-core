@@ -8,7 +8,6 @@ import { SeriesRow } from '../bookings/interfaces/series-row.interface.js';
 import { DashboardWidgetsRequestDto } from './dto/dashboard-widgets-request.dto.js';
 import { WidgetBreakdownItemDto } from './dto/widget-breakdown-item.dto.js';
 import { WidgetDto } from './dto/widget.dto.js';
-import { WidgetFunnelStepDto } from './dto/widget-funnel-step.dto.js';
 import { WidgetMetaDto } from './dto/widget-meta.dto.js';
 import { WidgetMetricDto } from './dto/widget-metric.dto.js';
 import { DashboardWidgetKey } from './enums/dashboard-widget-key.enum.js';
@@ -26,6 +25,9 @@ const REVENUE_STATUSES: BookingStatus[] = [BookingStatus.CONFIRMED, BookingStatu
 // so no-show has its own separate rate widget.
 const CANCELLATION_DENOMINATOR: BookingStatus[] = [BookingStatus.CANCELLED, BookingStatus.CONFIRMED, BookingStatus.COMPLETED];
 const NO_SHOW_DENOMINATOR: BookingStatus[] = [BookingStatus.NO_SHOW, BookingStatus.COMPLETED];
+// Completion rate: completed / all statuses (total bookings in period).
+const COMPLETION_DENOMINATOR: BookingStatus[] = [BookingStatus.COMPLETED, BookingStatus.CONFIRMED, BookingStatus.CANCELLED, BookingStatus.NO_SHOW, BookingStatus.PENDING];
+const DEFAULT_TOP_N = 5;
 
 interface WidgetContext {
   dto: DashboardWidgetsRequestDto;
@@ -69,15 +71,19 @@ export class DashboardService {
       case DashboardWidgetKey.BOOKINGS_PENDING:
         return this.bookingsCountMetric(key, ctx, [BookingStatus.PENDING], false);
       case DashboardWidgetKey.CANCELLATION_RATE:
-        return this.rateMetric(key, ctx, [BookingStatus.CANCELLED], CANCELLATION_DENOMINATOR);
+        return this.rateMetric(key, ctx, [BookingStatus.CANCELLED], CANCELLATION_DENOMINATOR, false);
       case DashboardWidgetKey.NO_SHOW_RATE:
-        return this.rateMetric(key, ctx, [BookingStatus.NO_SHOW], NO_SHOW_DENOMINATOR);
+        return this.rateMetric(key, ctx, [BookingStatus.NO_SHOW], NO_SHOW_DENOMINATOR, false);
+      case DashboardWidgetKey.COMPLETION_RATE:
+        return this.rateMetric(key, ctx, [BookingStatus.COMPLETED], COMPLETION_DENOMINATOR, true);
       case DashboardWidgetKey.BOOKINGS_SERIES:
         return this.bookingsSeries(key, ctx);
       case DashboardWidgetKey.BOOKINGS_BY_SOURCE:
         return this.bookingsBySource(key, ctx);
-      case DashboardWidgetKey.FUNNEL:
-        return this.funnel(key, ctx);
+      case DashboardWidgetKey.BOOKINGS_HEATMAP:
+        return this.bookingsHeatmap(key, ctx);
+      case DashboardWidgetKey.REVENUE_BY_STAFF:
+        return this.revenueByStaff(key, ctx);
       default: {
         const _exhaustive: never = key;
         throw new Error(`Unhandled widget key: ${_exhaustive}`);
@@ -178,6 +184,7 @@ export class DashboardService {
     ctx: WidgetContext,
     numerator: BookingStatus[],
     denominator: BookingStatus[],
+    higherIsBetter: boolean,
   ): Promise<WidgetDto> {
     const [snap, prevSnap] = await Promise.all([
       this.bookingsAggregates.snapshot(this.currentRange(ctx)),
@@ -189,7 +196,7 @@ export class DashboardService {
       value,
       previousValue,
       unit: MetricUnit.PERCENT,
-      higherIsBetter: false,
+      higherIsBetter,
     }, false);
   }
 
@@ -225,7 +232,7 @@ export class DashboardService {
         id: r.source,
         label: sourceLabel(r.source),
         value: r.count,
-        sharePct: total > 0 ? +((r.count / total) * 100).toFixed(1) : 0,
+        sharePct: pct(r.count, total),
       }))
       .sort((a, b) => b.value - a.value);
     return {
@@ -236,17 +243,65 @@ export class DashboardService {
     };
   }
 
-  private async funnel(key: DashboardWidgetKey, ctx: WidgetContext): Promise<WidgetDto> {
-    const snap = await this.bookingsAggregates.snapshot(this.currentRange(ctx));
-    const created = snap.totalCount;
-    const confirmed = sumCount(snap, [BookingStatus.CONFIRMED, BookingStatus.COMPLETED]);
-    const completed = sumCount(snap, [BookingStatus.COMPLETED]);
-    const steps: WidgetFunnelStepDto[] = [
-      { label: 'Created', value: created },
-      { label: 'Confirmed', value: confirmed, conversionFromPrev: pct(confirmed, created) },
-      { label: 'Completed', value: completed, conversionFromPrev: pct(completed, confirmed) },
-    ];
-    return { key, kind: WidgetKind.FUNNEL, funnel: { steps }, meta: this.buildMeta(ctx, false) };
+  // ── heatmap ──
+
+  private async bookingsHeatmap(key: DashboardWidgetKey, ctx: WidgetContext): Promise<WidgetDto> {
+    const cells = await this.bookingsAggregates.heatmapByWeekdayHour(
+      this.currentRange(ctx),
+      ctx.range.timezone,
+    );
+    // Axes are numeric identifiers, not localized strings: xLabels are hours 0..23 and yLabels
+    // are ISO weekdays 1..7 (Mon..Sun). The frontend maps them to its own locale.
+    const xLabels = Array.from({ length: 24 }, (_, h) => String(h));
+    const yLabels = Array.from({ length: 7 }, (_, i) => String(i + 1));
+    const matrix: number[][] = yLabels.map(() => xLabels.map(() => 0));
+    for (const c of cells) {
+      if (c.weekday < 1 || c.weekday > 7 || c.hour < 0 || c.hour > 23) continue;
+      matrix[c.weekday - 1][c.hour] = c.count;
+    }
+    return {
+      key,
+      kind: WidgetKind.HEATMAP,
+      heatmap: { xLabels, yLabels, matrix },
+      meta: this.buildMeta(ctx, false),
+    };
+  }
+
+  // ── staff breakdown ──
+
+  private async revenueByStaff(key: DashboardWidgetKey, ctx: WidgetContext): Promise<WidgetDto> {
+    // Revenue uses confirmed + completed; secondary count uses completed only. Two queries
+    // instead of one because the row sets partition differently by status.
+    const range = this.currentRange(ctx);
+    const [revenueRows, completedRows] = await Promise.all([
+      this.bookingsAggregates.countByStaff(range, REVENUE_STATUSES),
+      this.bookingsAggregates.countByStaff(range, [BookingStatus.COMPLETED]),
+    ]);
+    const completedById = new Map(completedRows.map((r) => [r.staffId, r.count]));
+
+    const total = chartMoney(sumDecimals(revenueRows.map((r) => r.revenue)));
+    const topN = ctx.dto.topN ?? DEFAULT_TOP_N;
+
+    const items: WidgetBreakdownItemDto[] = revenueRows
+      .map((r) => {
+        const value = chartMoney(r.revenue);
+        return {
+          id: r.staffId,
+          label: r.staffName,
+          value,
+          secondaryValue: completedById.get(r.staffId) ?? 0,
+          sharePct: pct(value, total),
+        };
+      })
+      .sort((a, b) => b.value - a.value)
+      .slice(0, topN);
+
+    return {
+      key,
+      kind: WidgetKind.BREAKDOWN,
+      breakdown: { dimension: 'staff', items, total },
+      meta: this.buildMeta(ctx, true),
+    };
   }
 
   // ── helpers ──
@@ -333,6 +388,12 @@ function ratio(numerator: number, denominator: number): number {
 
 function pct(part: number, whole: number): number {
   return whole > 0 ? +((part / whole) * 100).toFixed(1) : 0;
+}
+
+function sumDecimals(values: Prisma.Decimal[]): Prisma.Decimal {
+  let sum = MoneyService.decimal(0);
+  for (const v of values) sum = sum.plus(v);
+  return sum;
 }
 
 function sourceLabel(s: BookingSource): string {

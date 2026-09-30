@@ -17,10 +17,12 @@ import { ClientCohortSeriesRange } from './interfaces/client-cohort-series-range
 import { ClientCohortSummary } from './interfaces/client-cohort-summary.interface.js';
 import { ClientRecencyBound } from './interfaces/client-recency-bound.interface.js';
 import { ClientRecencyRow } from './interfaces/client-recency-row.interface.js';
+import { HeatmapCell } from './interfaces/heatmap-cell.interface.js';
 import { OccupancyBookedHours } from './interfaces/occupancy-booked-hours.interface.js';
 import { SeriesRow } from './interfaces/series-row.interface.js';
 import { ServiceCount } from './interfaces/service-count.interface.js';
 import { SourceCount } from './interfaces/source-count.interface.js';
+import { StaffCount } from './interfaces/staff-count.interface.js';
 
 @Injectable()
 export class BookingsAggregatesService {
@@ -112,6 +114,62 @@ export class BookingsAggregatesService {
       _count: { _all: true },
     });
     return grouped.map((g) => ({ source: g.source, count: g._count._all }));
+  }
+
+  /**
+   * Counts bookings grouped by ISO weekday (1=Mon..7=Sun) and hour of day (0..23) in the
+   * business timezone. Zero-cell rows are omitted; callers fill the full 7x24 grid themselves.
+   */
+  async heatmapByWeekdayHour(range: AggregateRange, timezone: string): Promise<HeatmapCell[]> {
+    const localExpr = Prisma.sql`(("startAt" AT TIME ZONE 'UTC') AT TIME ZONE ${timezone})`;
+    const rows = await this.db.$queryRaw<
+      Array<{ weekday: number; hour: number; count: bigint }>
+    >(
+      Prisma.sql`
+        SELECT EXTRACT(ISODOW FROM ${localExpr})::int AS weekday,
+               EXTRACT(HOUR FROM ${localExpr})::int AS hour,
+               COUNT(*)::bigint AS count
+        FROM "Booking"
+        WHERE ${this.whereClause(range)}
+        GROUP BY weekday, hour
+      `,
+    );
+    return rows.map((r) => ({
+      weekday: Number(r.weekday),
+      hour: Number(r.hour),
+      count: Number(r.count),
+    }));
+  }
+
+  /**
+   * Bookings grouped by staff with count, revenue and a denormalized display name from the
+   * booking itself. Using `staffName` off Booking keeps this method self-contained (no join)
+   * and reflects the staff name at the time of the booking, which is what an analytics widget
+   * should show for a historical period.
+   */
+  async countByStaff(
+    range: AggregateRange,
+    statuses?: BookingStatus[],
+  ): Promise<StaffCount[]> {
+    const rows = await this.db.$queryRaw<
+      Array<{ staffId: string; staffName: string; count: bigint; revenue: string }>
+    >(
+      Prisma.sql`
+        SELECT "staffId" AS "staffId",
+               MAX("staffName") AS "staffName",
+               COUNT(*)::bigint AS count,
+               COALESCE(SUM(COALESCE("customPrice", "servicePrice")), 0)::text AS revenue
+        FROM "Booking"
+        WHERE ${this.whereClause(range, statuses)}
+        GROUP BY "staffId"
+      `,
+    );
+    return rows.map((r) => ({
+      staffId: r.staffId,
+      staffName: r.staffName,
+      count: Number(r.count),
+      revenue: MoneyService.decimal(r.revenue),
+    }));
   }
 
   async series(
