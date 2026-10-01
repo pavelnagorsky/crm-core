@@ -254,7 +254,6 @@ export class BookingsService implements CalendarBookingReader {
         customPrice: row.customPrice == null ? null : MoneyService.format(row.customPrice),
         startAt: row.startAt,
         endAt: row.endAt,
-        calendarEventId: row.calendarEventId,
       })),
       linkedEventIds: rows.flatMap((row) => (row.calendarEventId ? [row.calendarEventId] : [])),
     };

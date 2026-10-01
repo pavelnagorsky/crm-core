@@ -26,6 +26,7 @@ import { AvailableSlotsRequestDto } from './dto/available-slots-request.dto.js';
 import { AvailableSlotsDayDto } from './dto/available-slots-day.dto.js';
 import { ManualAvailableSlotsRequestDto } from './dto/manual-available-slots-request.dto.js';
 import { MoveCalendarEventDto } from './dto/move-calendar-event.dto.js';
+import { CalendarEventItemDto } from './dto/calendar-event-item.dto.js';
 
 const MANUAL_AVAILABLE_SLOTS_MAX_DAYS = 62;
 
@@ -79,10 +80,11 @@ export class CalendarService {
   }
 
   async update(
+    businessId: string,
     eventId: string,
     dto: UpdateCalendarEventDto,
   ): Promise<CalendarEvent> {
-    const event = await this.findById(eventId);
+    const event = await this.findInBusiness(businessId, eventId);
     if (!dto.thisOnly) {
       return this.db.calendarEvent.update({
         where: { id: eventId },
@@ -115,8 +117,8 @@ export class CalendarService {
     });
   }
 
-  async delete(eventId: string, dto: DeleteCalendarEventDto): Promise<void> {
-    await this.findById(eventId);
+  async delete(businessId: string, eventId: string, dto: DeleteCalendarEventDto): Promise<void> {
+    await this.findInBusiness(businessId, eventId);
     if (dto.thisOnly) {
       const occurrenceDate = new Date(dto.occurrenceDate!);
       await this.db.calendarEventCancelledOccurrence.upsert({
@@ -127,14 +129,6 @@ export class CalendarService {
       return;
     }
     await this.db.calendarEvent.delete({ where: { id: eventId } });
-  }
-
-  async findById(eventId: string): Promise<CalendarEvent> {
-    const event = await this.db.calendarEvent.findUnique({
-      where: { id: eventId },
-    });
-    if (!event) throw new NotFoundException('Calendar event not found');
-    return event;
   }
 
   async findInBusiness(businessId: string, eventId: string): Promise<CalendarEvent> {
@@ -236,7 +230,9 @@ export class CalendarService {
       this.bookings.listForCalendar(businessId, windowStart, windowEnd, dto.staffIds),
     ]);
 
-    const staffIds = [...new Set(events.flatMap((event) => (event.staffId ? [event.staffId] : [])))];
+    const linkedEventIds = new Set(feed.linkedEventIds);
+    const blocks = events.filter((event) => !linkedEventIds.has(event.id));
+    const staffIds = [...new Set(blocks.flatMap((event) => (event.staffId ? [event.staffId] : [])))];
     const staffNames = staffIds.length ? await this.staff.namesByIds(staffIds) : new Map<string, string>();
     const shiftsByDate = this.compute.groupShiftsByDate(shifts);
     const { minTime, maxTime, closedTime } =
@@ -247,16 +243,8 @@ export class CalendarService {
       view: { minTime, maxTime },
       closedTime,
       events: [
-        ...this.compute.expandEvents(
-          events,
-          dates,
-          timezone,
-          windowStart,
-          windowEnd,
-          staffNames,
-          new Set(feed.linkedEventIds),
-        ),
-        ...this.compute.bookingItems(feed.bookings, timezone, currency),
+        ...this.compute.expandEvents(blocks, dates, timezone, windowStart, windowEnd, staffNames),
+        ...feed.bookings.map((booking) => CalendarEventItemDto.booking(booking, timezone, currency)),
       ],
     };
   }

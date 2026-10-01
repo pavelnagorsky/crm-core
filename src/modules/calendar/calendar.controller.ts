@@ -137,10 +137,11 @@ export class CalendarController {
   @RBAC(BusinessRole.OWNER)
   @Put(':eventId')
   async update(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
     @Param('eventId', ParseUUIDPipe) eventId: string,
     @Body() dto: UpdateCalendarEventDto,
   ): Promise<BaseResponseDto<CalendarEventResponseDto>> {
-    const event = await this.calendarService.update(eventId, dto);
+    const event = await this.calendarService.update(businessId, eventId, dto);
     return BaseResponseDto.success(CalendarEventResponseDto.fromEntity(event));
   }
 
@@ -151,9 +152,10 @@ export class CalendarController {
   @Delete(':eventId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
     @Param('eventId', ParseUUIDPipe) eventId: string,
     @Query() dto: DeleteCalendarEventDto,
   ): Promise<void> {
-    await this.calendarService.delete(eventId, dto);
+    await this.calendarService.delete(businessId, eventId, dto);
   }
 }

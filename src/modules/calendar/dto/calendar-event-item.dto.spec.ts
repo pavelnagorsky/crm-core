@@ -14,7 +14,6 @@ function booking(overrides: Partial<CalendarBookingView> = {}): CalendarBookingV
     customPrice: null,
     startAt: new Date('2026-09-22T07:00:00.000Z'),
     endAt: new Date('2026-09-22T08:00:00.000Z'),
-    calendarEventId: null,
     ...overrides,
   };
 }

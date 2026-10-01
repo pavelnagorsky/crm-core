@@ -9,5 +9,4 @@ export interface CalendarBookingView {
   customPrice: string | null;
   startAt: Date;
   endAt: Date;
-  calendarEventId: string | null;
 }

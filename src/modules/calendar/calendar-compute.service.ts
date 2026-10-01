@@ -3,7 +3,6 @@ import { CalendarEvent, CalendarEventRepeatType, StaffShift } from '@prisma/clie
 import { TimeService } from '../time/time.service.js';
 import { CalendarEventItemDto } from './dto/calendar-event-item.dto.js';
 import { ClosedTimeItemDto } from './dto/closed-time-item.dto.js';
-import { CalendarBookingView } from './interfaces/calendar-booking-view.interface.js';
 import {
   CalendarEventWithCancellations,
   EventTimes,
@@ -15,10 +14,8 @@ export class CalendarComputeService {
   // ─── Event expansion ──────────────────────────────────────────────────────────
 
   /**
-   * Expands block series into grid cards.
    * One-time blocks are included when their interval overlaps [rangeStart, rangeEnd).
-   * Weekly series are expanded onto occurrence dates inside `dates`, same as before.
-   * Events linked to a booking are omitted — the booking is its own card.
+   * Weekly series are expanded onto occurrence dates inside `dates`.
    */
   expandEvents(
     events: CalendarEventWithCancellations[],
@@ -27,22 +24,12 @@ export class CalendarComputeService {
     rangeStart: Date,
     rangeEnd: Date,
     staffNames: ReadonlyMap<string, string>,
-    linkedEventIds: ReadonlySet<string>,
   ): CalendarEventItemDto[] {
-    return events.flatMap((event) => {
-      if (linkedEventIds.has(event.id)) return [];
-      return event.repeatType === CalendarEventRepeatType.NONE
+    return events.flatMap((event) =>
+      event.repeatType === CalendarEventRepeatType.NONE
         ? this.expandOneTimeEvent(event, timezone, rangeStart, rangeEnd, staffNames)
-        : this.expandRecurringEvent(event, dates, timezone, staffNames);
-    });
-  }
-
-  bookingItems(
-    bookings: CalendarBookingView[],
-    timezone: string,
-    currency: string,
-  ): CalendarEventItemDto[] {
-    return bookings.map((booking) => CalendarEventItemDto.booking(booking, timezone, currency));
+        : this.expandRecurringEvent(event, dates, timezone, staffNames),
+    );
   }
 
   private expandOneTimeEvent(

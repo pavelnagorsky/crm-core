@@ -53,7 +53,7 @@ describe('CalendarService.update', () => {
   };
   const db = {
     calendarEvent: {
-      findUnique: vi.fn(),
+      findFirst: vi.fn(),
       update: vi.fn(),
     },
     $transaction: vi.fn(async (fn: (client: typeof tx) => Promise<CalendarEvent>) => fn(tx)),
@@ -79,11 +79,14 @@ describe('CalendarService.update', () => {
   });
 
   it('detaches one occurrence as a non-repeating event', async () => {
-    db.calendarEvent.findUnique.mockResolvedValue(seriesEvent());
+    db.calendarEvent.findFirst.mockResolvedValue(seriesEvent());
     tx.calendarEvent.create.mockResolvedValue({ id: 'exception-1' });
 
-    await service.update('event-1', singleOccurrenceUpdate());
+    await service.update('biz', 'event-1', singleOccurrenceUpdate());
 
+    expect(db.calendarEvent.findFirst).toHaveBeenCalledWith({
+      where: { id: 'event-1', businessId: 'biz' },
+    });
     expect(tx.calendarEventCancelledOccurrence.upsert).toHaveBeenCalledWith({
       where: {
         eventId_occurrenceDate: {
@@ -106,6 +109,12 @@ describe('CalendarService.update', () => {
       }),
     });
     expect(db.calendarEvent.update).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 when the block belongs to another business', async () => {
+    db.calendarEvent.findFirst.mockResolvedValue(null);
+
+    await expect(service.update('other', 'event-1', singleOccurrenceUpdate())).rejects.toBeInstanceOf(NotFoundException);
   });
 });
 
@@ -492,7 +501,6 @@ describe('CalendarService.getCalendar', () => {
         customPrice: null,
         startAt: new Date('2026-09-22T07:00:00.000Z'),
         endAt: new Date('2026-09-22T08:00:00.000Z'),
-        calendarEventId: 'shadow',
       }],
       linkedEventIds: ['shadow'],
     });
