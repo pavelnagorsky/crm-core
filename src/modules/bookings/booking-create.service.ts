@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { forwardRef, HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
 import {
   Booking,
   CalendarEventRepeatType,
@@ -38,6 +38,7 @@ export class BookingCreateService {
 
   constructor(
     private readonly db: DatabaseService,
+    @Inject(forwardRef(() => CalendarService))
     private readonly calendarService: CalendarService,
     private readonly clientsService: ClientsService,
     private readonly staffService: StaffService,

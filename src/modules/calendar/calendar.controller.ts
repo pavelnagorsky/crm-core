@@ -28,6 +28,7 @@ import { CreateCalendarEventDto } from './dto/create-calendar-event.dto.js';
 import { UpdateCalendarEventDto } from './dto/update-calendar-event.dto.js';
 import { DeleteCalendarEventDto } from './dto/delete-calendar-event.dto.js';
 import { CalendarEventResponseDto } from './dto/calendar-event-response.dto.js';
+import { MoveCalendarEventDto } from './dto/move-calendar-event.dto.js';
 import { GetCalendarRequestDto } from './dto/get-calendar-request.dto.js';
 import { GetCalendarResponseDto } from './dto/get-calendar-response.dto.js';
 import { AvailableSlotsRequestDto } from './dto/available-slots-request.dto.js';
@@ -74,7 +75,7 @@ export class CalendarController {
 
   // ─── Owner ───────────────────────────────────────────────────────────────────
 
-  @ApiOperation({ summary: 'Get calendar view for a date range. Expands recurring events, computes closed-time blocks and view bounds in business timezone.' })
+  @ApiOperation({ summary: 'Get calendar view for a date range. Blocks, bookings, and closed time in the business timezone. Recurring blocks are expanded onto each occurrence.' })
   @ApiOkResponse({ type: ApiResponse(GetCalendarResponseDto) })
   @RBAC(BusinessRole.OWNER)
   @Get()
@@ -86,7 +87,20 @@ export class CalendarController {
     return BaseResponseDto.success(result);
   }
 
-  @ApiOperation({ summary: 'Create calendar event(s). Pass staffIds to create one per staff member; omit for a business-wide event.' })
+  @ApiOperation({ summary: 'Get one block series for the editor. eventId is the series id, not an occurrence.' })
+  @ApiOkResponse({ type: ApiResponse(CalendarEventResponseDto) })
+  @ApiNotFoundResponse({ description: 'Calendar event not found' })
+  @RBAC(BusinessRole.OWNER)
+  @Get(':eventId')
+  async getEvent(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('eventId', ParseUUIDPipe) eventId: string,
+  ): Promise<BaseResponseDto<CalendarEventResponseDto>> {
+    const event = await this.calendarService.findInBusiness(businessId, eventId);
+    return BaseResponseDto.success(CalendarEventResponseDto.fromEntity(event));
+  }
+
+  @ApiOperation({ summary: 'Create a block. Pass staffIds to create one per staff member; omit for a business-wide block.' })
   @ApiCreatedResponse({ type: ApiResponseArray(CalendarEventResponseDto) })
   @RBAC(BusinessRole.OWNER)
   @Post()
@@ -103,7 +117,21 @@ export class CalendarController {
     return BaseResponseDto.success(events.map(CalendarEventResponseDto.fromEntity));
   }
 
-  @ApiOperation({ summary: 'Update a calendar event. Use thisOnly=true to update only a single occurrence of a repeating event.' })
+  @ApiOperation({ summary: 'Move a block on the grid. Only the interval changes; title, notes, reason, and repeat stay as stored.' })
+  @ApiOkResponse({ type: ApiResponse(CalendarEventResponseDto) })
+  @ApiNotFoundResponse({ description: 'Calendar event not found' })
+  @RBAC(BusinessRole.OWNER)
+  @Put(':eventId/occurrence')
+  async moveOccurrence(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('eventId', ParseUUIDPipe) eventId: string,
+    @Body() dto: MoveCalendarEventDto,
+  ): Promise<BaseResponseDto<CalendarEventResponseDto>> {
+    const event = await this.calendarService.moveOccurrence(businessId, eventId, dto);
+    return BaseResponseDto.success(CalendarEventResponseDto.fromEntity(event));
+  }
+
+  @ApiOperation({ summary: 'Update a block. Use thisOnly=true to update only a single occurrence of a repeating block.' })
   @ApiOkResponse({ type: ApiResponse(CalendarEventResponseDto) })
   @ApiNotFoundResponse({ description: 'Calendar event not found' })
   @RBAC(BusinessRole.OWNER)
@@ -116,7 +144,7 @@ export class CalendarController {
     return BaseResponseDto.success(CalendarEventResponseDto.fromEntity(event));
   }
 
-  @ApiOperation({ summary: 'Delete a calendar event. Use thisOnly=true to cancel only a single occurrence of a repeating event.' })
+  @ApiOperation({ summary: 'Delete a block. Use thisOnly=true to cancel only a single occurrence of a repeating block.' })
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Calendar event not found' })
   @RBAC(BusinessRole.OWNER)

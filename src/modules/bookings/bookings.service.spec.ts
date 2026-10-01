@@ -239,3 +239,67 @@ describe('BookingsService.search', () => {
     expect(findMany.mock.calls[0][0].where).toEqual({ id: { in: ['high', 'low'] } });
   });
 });
+
+describe('BookingsService.listForCalendar', () => {
+  const findMany = vi.fn();
+  const db = { booking: { findMany } };
+
+  let service: BookingsService;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const module = await Test.createTestingModule({
+      providers: [
+        BookingsService,
+        { provide: DatabaseService, useValue: db },
+        { provide: CalendarService, useValue: {} },
+        { provide: StaffService, useValue: {} },
+        { provide: BusinessService, useValue: {} },
+        { provide: StaffEarningsService, useValue: {} },
+        { provide: EventEmitter2, useValue: { emit: vi.fn() } },
+      ],
+    }).compile();
+    service = module.get(BookingsService);
+  });
+
+  it('returns visible visits and every linked block id, including cancelled', async () => {
+    const rangeStart = new Date('2026-09-21T00:00:00.000Z');
+    const rangeEnd = new Date('2026-09-28T00:00:00.000Z');
+    findMany.mockResolvedValue([
+      booking({ id: 'visible', calendarEventId: 'ev-1', customPrice: new Prisma.Decimal('10.00') }),
+      booking({ id: 'cancelled', status: BookingStatus.CANCELLED, calendarEventId: 'ev-2' }),
+      booking({ id: 'noshow', status: BookingStatus.NO_SHOW, calendarEventId: null }),
+    ]);
+
+    const feed = await service.listForCalendar('biz', rangeStart, rangeEnd, ['anna']);
+
+    expect(findMany).toHaveBeenCalledWith({
+      where: {
+        businessId: 'biz',
+        deletedAt: null,
+        startAt: { lt: rangeEnd },
+        endAt: { gt: rangeStart },
+        staffId: { in: ['anna'] },
+      },
+      orderBy: [{ startAt: 'asc' }, { id: 'asc' }],
+      select: {
+        id: true,
+        staffId: true,
+        staffName: true,
+        clientFirstName: true,
+        clientLastName: true,
+        serviceTitle: true,
+        servicePrice: true,
+        customPrice: true,
+        startAt: true,
+        endAt: true,
+        calendarEventId: true,
+        status: true,
+      },
+    });
+    expect(feed.bookings.map((item) => item.id)).toEqual(['visible', 'noshow']);
+    expect(feed.bookings[0].customPrice).toBe('10.00');
+    expect(feed.bookings[0].servicePrice).toBe('50.00');
+    expect(feed.linkedEventIds).toEqual(['ev-1', 'ev-2']);
+  });
+});

@@ -10,7 +10,7 @@ import {
   MaxLength,
   ValidateIf,
 } from 'class-validator';
-import { CalendarEventType, CalendarEventRepeatType } from '@prisma/client';
+import { CalendarEventRepeatType } from '@prisma/client';
 import { ParseBoolean } from '../../../shared/transforms/parse-boolean.transform.js';
 
 export class UpdateCalendarEventDto {
@@ -18,10 +18,6 @@ export class UpdateCalendarEventDto {
   @ParseBoolean()
   @IsBoolean()
   thisOnly: boolean;
-
-  @ApiProperty({ enum: CalendarEventType })
-  @IsEnum(CalendarEventType)
-  type: CalendarEventType;
 
   @ApiProperty({ type: String, maxLength: 100, required: false, nullable: true })
   @IsOptional()

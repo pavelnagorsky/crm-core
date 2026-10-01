@@ -27,6 +27,8 @@ enum StaffInvitationStatus {
 
 enum CalendarEventType {
   BLOCK
+  BOOKING
+  INTEGRATION
 }
 
 enum CalendarEventRepeatType {

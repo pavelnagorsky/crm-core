@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { HttpStatus, Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { forwardRef, HttpStatus, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Booking, BusinessRole, CalendarEventRepeatType, CalendarEventType, CancelledBy, Prisma, ServiceStatus } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
@@ -8,7 +8,10 @@ import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { stableOrderBy } from '../../shared/database/stable-order-by.js';
+import { MoneyService } from '../../shared/money/money.service.js';
 import { TimeService } from '../time/time.service.js';
+import { CalendarBookingReader } from '../calendar/calendar-booking-reader.js';
+import { CalendarBookingFeed } from '../calendar/interfaces/calendar-booking-feed.interface.js';
 import { CalendarService } from '../calendar/calendar.service.js';
 import { StaffService } from '../staff/staff.service.js';
 import { StaffEarningsService } from '../payroll/earnings/staff-earnings.service.js';
@@ -37,6 +40,13 @@ import { TokenPayloadDto, assertBusinessRole } from '../auth/dto/token-payload.d
 import { NOTIFICATION_EVENT } from '../notifications/notifications.service.js';
 import { BookingStatusChangedNotification } from '../notifications/notifications/booking-status-changed.notification.js';
 
+const CALENDAR_VISIBLE_STATUSES: ReadonlySet<string> = new Set([
+  BookingStatus.PENDING,
+  BookingStatus.CONFIRMED,
+  BookingStatus.COMPLETED,
+  BookingStatus.NO_SHOW,
+]);
+
 const SEARCH_TEXT_COLUMNS = new Set([
   'clientFirstName',
   'clientLastName',
@@ -50,11 +60,12 @@ const SEARCH_TEXT_COLUMNS = new Set([
 ]);
 
 @Injectable()
-export class BookingsService {
+export class BookingsService implements CalendarBookingReader {
   private readonly logger = new Logger(BookingsService.name);
 
   constructor(
     private readonly db: DatabaseService,
+    @Inject(forwardRef(() => CalendarService))
     private readonly calendarService: CalendarService,
     private readonly staffService: StaffService,
     private readonly businessService: BusinessService,
@@ -198,6 +209,55 @@ export class BookingsService {
     }
 
     return completed;
+  }
+
+  async listForCalendar(
+    businessId: string,
+    rangeStart: Date,
+    rangeEnd: Date,
+    staffIds?: string[],
+  ): Promise<CalendarBookingFeed> {
+    const rows = await this.db.booking.findMany({
+      where: {
+        businessId,
+        deletedAt: null,
+        startAt: { lt: rangeEnd },
+        endAt: { gt: rangeStart },
+        ...(staffIds?.length ? { staffId: { in: staffIds } } : {}),
+      },
+      orderBy: [{ startAt: 'asc' }, { id: 'asc' }],
+      select: {
+        id: true,
+        staffId: true,
+        staffName: true,
+        clientFirstName: true,
+        clientLastName: true,
+        serviceTitle: true,
+        servicePrice: true,
+        customPrice: true,
+        startAt: true,
+        endAt: true,
+        calendarEventId: true,
+        status: true,
+      },
+    });
+
+    return {
+      bookings: rows.filter((row) => CALENDAR_VISIBLE_STATUSES.has(row.status)).map((row) => ({
+        id: row.id,
+        staffId: row.staffId,
+        staffName: row.staffName,
+        clientFirstName: row.clientFirstName,
+        clientLastName: row.clientLastName,
+        serviceTitle: row.serviceTitle,
+        servicePrice: MoneyService.format(row.servicePrice),
+        customPrice: row.customPrice == null ? null : MoneyService.format(row.customPrice),
+        startAt: row.startAt,
+        endAt: row.endAt,
+        calendarEventId: row.calendarEventId,
+      })),
+      linkedEventIds: rows.flatMap((row) => (row.calendarEventId ? [row.calendarEventId] : [])),
+    };
   }
 
   async findById(bookingId: string): Promise<Booking> {

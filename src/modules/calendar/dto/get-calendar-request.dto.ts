@@ -1,7 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsArray, IsDateString, IsOptional, IsUUID } from 'class-validator';
+import { IsDateRangeValid } from '../../staff/decorators/is-date-range-valid.decorator.js';
 
+@IsDateRangeValid()
 export class GetCalendarRequestDto {
   @ApiProperty({ type: String, example: '2026-10-01', description: 'Start date (inclusive) YYYY-MM-DD' })
   @IsDateString()

@@ -66,6 +66,15 @@ export class StaffService {
     return this.db.staff.findMany({ where: { businessId }, orderBy: { name: 'asc' } });
   }
 
+  async namesByIds(ids: string[]): Promise<Map<string, string>> {
+    if (ids.length === 0) return new Map();
+    const rows = await this.db.staff.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, name: true },
+    });
+    return new Map(rows.map((row) => [row.id, row.name]));
+  }
+
   listShiftsInRange(businessId: string, from: Date, to: Date): Promise<StaffShift[]> {
     return this.db.staffShift.findMany({
       where: { staff: { businessId }, date: { gte: from, lte: to } },

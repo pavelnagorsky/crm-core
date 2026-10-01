@@ -10,13 +10,9 @@ import {
   MaxLength,
   ValidateIf,
 } from 'class-validator';
-import { CalendarEventType, CalendarEventRepeatType } from '@prisma/client';
+import { CalendarEventRepeatType } from '@prisma/client';
 
 export class CreateCalendarEventDto {
-  @ApiProperty({ enum: CalendarEventType, default: CalendarEventType.BLOCK })
-  @IsEnum(CalendarEventType)
-  type: CalendarEventType;
-
   @ApiProperty({ type: String, maxLength: 100, required: false, nullable: true })
   @IsOptional()
   @IsString()

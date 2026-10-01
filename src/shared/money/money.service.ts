@@ -34,4 +34,30 @@ export class MoneyService {
   static format(value: Prisma.Decimal | string | number | null | undefined): string {
     return MoneyService.decimal(value).toFixed(SCALE);
   }
+
+  /**
+   * ru-RU currency label. `amount` is a decimal string and is not parsed with Number().
+   */
+  static formatCurrency(amount: string, currency: string): string {
+    const negative = amount.startsWith('-');
+    const unsigned = negative ? amount.slice(1) : amount;
+    const [intRaw, fracRaw = ''] = unsigned.split('.');
+    const fraction = fracRaw.length >= SCALE ? fracRaw.slice(0, SCALE) : fracRaw.padEnd(SCALE, '0');
+    const formatter = new Intl.NumberFormat('ru-RU', {
+      style: 'currency',
+      currency,
+      minimumFractionDigits: SCALE,
+      maximumFractionDigits: SCALE,
+    });
+    const group = formatter.formatToParts(1000).find((part) => part.type === 'group')?.value ?? '';
+    const grouped = group ? intRaw.replace(/\B(?=(\d{3})+(?!\d))/g, group) : intRaw;
+    return formatter
+      .formatToParts(negative ? -1 : 1)
+      .map((part) => {
+        if (part.type === 'integer') return grouped;
+        if (part.type === 'fraction') return fraction;
+        return part.value;
+      })
+      .join('');
+  }
 }

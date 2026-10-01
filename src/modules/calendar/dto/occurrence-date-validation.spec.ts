@@ -1,7 +1,8 @@
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { CalendarEventRepeatType, CalendarEventType } from '@prisma/client';
+import { CalendarEventRepeatType } from '@prisma/client';
 import { DeleteCalendarEventDto } from './delete-calendar-event.dto.js';
+import { MoveCalendarEventDto } from './move-calendar-event.dto.js';
 import { UpdateCalendarEventDto } from './update-calendar-event.dto.js';
 
 async function fields(dto: object) {
@@ -12,7 +13,6 @@ async function fields(dto: object) {
 function seriesUpdate(thisOnly: unknown, occurrenceDate?: unknown) {
   return plainToInstance(UpdateCalendarEventDto, {
     thisOnly,
-    type: CalendarEventType.BLOCK,
     startDateTime: '2026-10-01T09:00:00',
     endDateTime: '2026-10-01T18:00:00',
     repeatType: CalendarEventRepeatType.WEEKLY,
@@ -45,5 +45,21 @@ describe('calendar series occurrenceDate', () => {
 
   it('requires a date when updating a single occurrence', async () => {
     expect(await fields(seriesUpdate(true))).toEqual(['occurrenceDate']);
+  });
+
+  it('requires a date only when moving a single occurrence', async () => {
+    const wholeSeries = plainToInstance(MoveCalendarEventDto, {
+      thisOnly: false,
+      startDateTime: '2026-10-01T10:00:00',
+      endDateTime: '2026-10-01T11:00:00',
+    });
+    const oneOccurrence = plainToInstance(MoveCalendarEventDto, {
+      thisOnly: true,
+      startDateTime: '2026-10-01T10:00:00',
+      endDateTime: '2026-10-01T11:00:00',
+    });
+
+    expect(await fields(wholeSeries)).toEqual([]);
+    expect(await fields(oneOccurrence)).toEqual(['occurrenceDate']);
   });
 });

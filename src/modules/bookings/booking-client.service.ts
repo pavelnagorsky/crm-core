@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
 import { IJwtConfig } from '../../config/configuration.js';
+import { jwtExpirationConfig } from '../../config/token-expiration.config.js';
 import { BookingClientTokenPayloadDto } from './dto/booking-client-token-payload.dto.js';
 
 @Injectable()
@@ -14,15 +15,15 @@ export class BookingClientService {
   generateClientToken(bookingId: string): string {
     const jwtCfg = this.config.get<IJwtConfig>('jwt')!;
 
-    if (!jwtCfg.bookingClientTokenSecret || !jwtCfg.bookingClientTokenExpiration) {
-      throw new Error('BOOKING_CLIENT_TOKEN_SECRET and BOOKING_CLIENT_TOKEN_EXPIRATION must be set');
+    if (!jwtCfg.bookingClientTokenSecret) {
+      throw new Error('BOOKING_CLIENT_TOKEN_SECRET must be set');
     }
 
     return this.jwtService.sign(
       { bookingId } satisfies BookingClientTokenPayloadDto,
       {
         secret: jwtCfg.bookingClientTokenSecret,
-        expiresIn: jwtCfg.bookingClientTokenExpiration as any,
+        expiresIn: jwtExpirationConfig.bookingClientToken,
       },
     );
   }

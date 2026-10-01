@@ -20,6 +20,13 @@ describe('MoneyService', () => {
     expect(MoneyService.canonical('abc')).toBe('abc');
   });
 
+  it('formats a currency label from the decimal string', () => {
+    expect(MoneyService.formatCurrency('1500.50', 'RUB')).toBe('1\u00a0500,50\u00a0₽');
+    expect(MoneyService.formatCurrency('0.00', 'BYN')).toBe('0,00\u00a0BYN');
+    expect(MoneyService.formatCurrency('-75.50', 'USD')).toBe('-75,50\u00a0$');
+    expect(MoneyService.formatCurrency('99999999.99', 'RUB')).toBe('99\u00a0999\u00a0999,99\u00a0₽');
+  });
+
   it('quantizes half-up once', () => {
     expect(MoneyService.format(MoneyService.quantize('1.005'))).toBe('1.01');
     expect(MoneyService.format(MoneyService.quantize('8.995'))).toBe('9.00');

@@ -35,13 +35,7 @@ import { UserAgent } from './decorators/user-agent.decorator.js';
 import { CookiesEnum } from './enums/cookies.enum.js';
 import { ApiResponse, BaseResponseDto } from '../../shared/dto/base-response.dto.js';
 import { UnauthorizedResponseDto, ValidationErrorResponseDto } from '../../shared/validation/validation-exception.dto.js';
-
-const COOKIE_OPTIONS = {
-  httpOnly: true,
-  maxAge: 90 * 24 * 60 * 60 * 1000,
-  sameSite: 'none' as const,
-  secure: true,
-};
+import { cookieConfig } from '../../config/cookie.config.js';
 
 @ApiTags('Auth')
 @Controller('auth')
@@ -65,7 +59,7 @@ export class AuthController {
     @UserAgent() userAgent: string | null,
   ): Promise<AuthDto> {
     const tokens = await this.authService.login(dto, userAgent);
-    res.cookie(CookiesEnum.REFRESH_TOKEN, tokens.refreshToken, COOKIE_OPTIONS);
+    res.cookie(CookiesEnum.REFRESH_TOKEN, tokens.refreshToken, cookieConfig);
     return new AuthDto(tokens.accessToken);
   }
 
@@ -79,7 +73,7 @@ export class AuthController {
     @TokenPayload() payload: TokenPayloadDto & { refreshToken: string },
   ): Promise<void> {
     await this.authService.logout(payload.sub, payload.refreshToken);
-    res.clearCookie(CookiesEnum.REFRESH_TOKEN, COOKIE_OPTIONS);
+    res.clearCookie(CookiesEnum.REFRESH_TOKEN, cookieConfig);
   }
 
   @ApiOperation({ summary: 'Refresh tokens' })
@@ -93,7 +87,7 @@ export class AuthController {
     @UserAgent() userAgent: string | null,
   ): Promise<AuthDto> {
     const tokens = await this.authService.refresh(payload.sub, payload.refreshToken, userAgent);
-    res.cookie(CookiesEnum.REFRESH_TOKEN, tokens.refreshToken, COOKIE_OPTIONS);
+    res.cookie(CookiesEnum.REFRESH_TOKEN, tokens.refreshToken, cookieConfig);
     return new AuthDto(tokens.accessToken);
   }
 
@@ -132,7 +126,7 @@ export class AuthController {
     @UserAgent() userAgent: string | null,
   ): Promise<AuthDto> {
     const tokens = await this.authService.handleOAuth(oauthData, userAgent);
-    res.cookie(CookiesEnum.REFRESH_TOKEN, tokens.refreshToken, COOKIE_OPTIONS);
+    res.cookie(CookiesEnum.REFRESH_TOKEN, tokens.refreshToken, cookieConfig);
     return new AuthDto(tokens.accessToken);
   }
 
@@ -147,7 +141,7 @@ export class AuthController {
     @UserAgent() userAgent: string | null,
   ): Promise<AuthDto> {
     const tokens = await this.authService.handleOAuth(oauthData, userAgent);
-    res.cookie(CookiesEnum.REFRESH_TOKEN, tokens.refreshToken, COOKIE_OPTIONS);
+    res.cookie(CookiesEnum.REFRESH_TOKEN, tokens.refreshToken, cookieConfig);
     return new AuthDto(tokens.accessToken);
   }
 
@@ -162,7 +156,7 @@ export class AuthController {
     @UserAgent() userAgent: string | null,
   ): Promise<AuthDto> {
     const tokens = await this.authService.handleOAuth(oauthData, userAgent);
-    res.cookie(CookiesEnum.REFRESH_TOKEN, tokens.refreshToken, COOKIE_OPTIONS);
+    res.cookie(CookiesEnum.REFRESH_TOKEN, tokens.refreshToken, cookieConfig);
     return new AuthDto(tokens.accessToken);
   }
 }

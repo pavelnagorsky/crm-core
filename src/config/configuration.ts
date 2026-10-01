@@ -22,13 +22,9 @@ export default () => {
     },
     jwt: {
       accessTokenSecret: process.env['ACCESS_TOKEN_SECRET'],
-      accessTokenExpiration: process.env['ACCESS_TOKEN_EXPIRATION'],
       emailTokenSecret: process.env['EMAIL_TOKEN_SECRET'],
-      emailTokenExpiration: process.env['EMAIL_TOKEN_EXPIRATION'],
       refreshTokenSecret: process.env['REFRESH_TOKEN_SECRET'],
-      refreshTokenExpiration: process.env['REFRESH_TOKEN_EXPIRATION'],
       bookingClientTokenSecret: process.env['BOOKING_CLIENT_TOKEN_SECRET'],
-      bookingClientTokenExpiration: process.env['BOOKING_CLIENT_TOKEN_EXPIRATION'],
     },
     frontend: {
       domain: process.env['DOMAIN'],
@@ -68,13 +64,9 @@ export interface IDatabaseConfig {
 
 export interface IJwtConfig {
   accessTokenSecret: string;
-  accessTokenExpiration: string;
   emailTokenSecret: string;
-  emailTokenExpiration: string;
   refreshTokenSecret: string;
-  refreshTokenExpiration: string;
   bookingClientTokenSecret: string;
-  bookingClientTokenExpiration: string;
 }
 
 export interface IMailerConfig {

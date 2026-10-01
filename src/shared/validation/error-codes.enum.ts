@@ -182,7 +182,6 @@ export const ErrorCode = {
     code: 'BOOKING_SLOT_RANGE_TOO_LONG',
     message: 'Date range cannot exceed 62 days',
   },
-
   STAFF_HAS_EARNINGS: {
     code: 'STAFF_HAS_EARNINGS',
     message: 'Staff member cannot be deleted because they have associated earnings',

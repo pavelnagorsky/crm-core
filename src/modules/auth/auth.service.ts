@@ -19,14 +19,17 @@ import { ITokens } from './interfaces/tokens.interface.js';
 import { LoginException } from './exceptions/login.exception.js';
 import { LoginErrorEnum } from './enums/login-error.enum.js';
 import { IFrontendConfig, IJwtConfig } from '../../config/configuration.js';
+import {
+  jwtExpirationConfig,
+  REFRESH_TOKEN_TTL_DAYS,
+  RESET_CODE_TTL_MINUTES,
+  RESET_CODE_RESEND_COOLDOWN_SECONDS,
+} from '../../config/token-expiration.config.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 
 const SALT_ROUNDS = 10;
 const MAX_TOKENS_PER_USER = 10;
-const REFRESH_TOKEN_TTL_DAYS = 90;
-const RESET_CODE_TTL_MINUTES = 15;
-const RESET_CODE_RESEND_COOLDOWN_SECONDS = 60;
 
 @Injectable()
 export class AuthService {
@@ -197,12 +200,12 @@ export class AuthService {
       select: { businessId: true, role: true },
     });
     // firstName/lastName are embedded for audit display; can be stale until the user re-logs in — accepted trade-off.
-    return this.sign({ sub: user.id, role: user.role, firstName: user.firstName, lastName: user.lastName, memberships }, cfg.accessTokenSecret, cfg.accessTokenExpiration);
+    return this.sign({ sub: user.id, role: user.role, firstName: user.firstName, lastName: user.lastName, memberships }, cfg.accessTokenSecret, jwtExpirationConfig.accessToken);
   }
 
   private generateRefreshToken(user: User): Promise<string> {
     const cfg = this.config.get<IJwtConfig>('jwt')!;
-    return this.sign({ sub: user.id }, cfg.refreshTokenSecret, cfg.refreshTokenExpiration);
+    return this.sign({ sub: user.id }, cfg.refreshTokenSecret, jwtExpirationConfig.refreshToken);
   }
 
   private async generateResetCode(): Promise<{ code: string; codeHash: string }> {
@@ -213,6 +216,6 @@ export class AuthService {
 
   private generateEmailToken(user: User): Promise<string> {
     const cfg = this.config.get<IJwtConfig>('jwt')!;
-    return this.sign({ sub: user.id }, cfg.emailTokenSecret, cfg.emailTokenExpiration);
+    return this.sign({ sub: user.id }, cfg.emailTokenSecret, jwtExpirationConfig.emailToken);
   }
 }
