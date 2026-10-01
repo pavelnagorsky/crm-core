@@ -19,16 +19,23 @@ function booking(overrides: Partial<CalendarBookingView> = {}): CalendarBookingV
 }
 
 describe('CalendarEventItemDto.booking', () => {
-  it('uses the service name when the client name is blank', () => {
+  it('puts the service on the first line and the client on the second', () => {
+    const item = CalendarEventItemDto.booking(booking({ customPrice: '90.00' }), 'Europe/Moscow', 'RUB');
+
+    expect(item.title).toBe('Стрижка');
+    expect(item.subtitle).toBe('Петров Иван');
+    expect(item.caption).toBe(MoneyService.formatCurrency('90.00', 'RUB'));
+  });
+
+  it('leaves the subtitle empty when the client name is blank', () => {
     const item = CalendarEventItemDto.booking(
-      booking({ clientFirstName: ' ', clientLastName: ' ', customPrice: '90.00' }),
+      booking({ clientFirstName: ' ', clientLastName: ' ' }),
       'Europe/Moscow',
       'RUB',
     );
 
     expect(item.title).toBe('Стрижка');
     expect(item.subtitle).toBeNull();
-    expect(item.caption).toBe(MoneyService.formatCurrency('90.00', 'RUB'));
   });
 
   it('drops the subtitle when it repeats the title', () => {

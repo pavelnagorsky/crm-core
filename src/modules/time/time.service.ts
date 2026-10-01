@@ -95,6 +95,20 @@ export class TimeService {
   }
 
   /**
+   * Shifts a UTC Date by N calendar months in the target timezone, snapping to midnight.
+   * The day is clamped to the target month's length, so e.g. March 31 minus one month
+   * is February 28/29 rather than rolling over into March.
+   */
+  static addMonthsInTz(date: Date, months: number, timezone: string): Date {
+    const p = TimeService.toZonedParts(date, timezone);
+    const totalMonths = p.year * 12 + (p.month - 1) + months;
+    const year = Math.floor(totalMonths / 12);
+    const month = (totalMonths % 12) + 1;
+    const day = Math.min(p.day, getDaysInMonth(new Date(year, month - 1, 1)));
+    return TimeService.zonedDayStart(year, month, day, timezone);
+  }
+
+  /**
    * Returns the UTC instant of HH:00 on the given calendar day in the target timezone.
    * Handles out-of-range hour (e.g. 24, -1) and day via Date.UTC normalization.
    */

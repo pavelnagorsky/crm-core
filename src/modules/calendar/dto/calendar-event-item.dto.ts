@@ -79,7 +79,7 @@ export class CalendarEventItemDto {
   static booking(booking: CalendarBookingView, timezone: string, currency: string): CalendarEventItemDto {
     const name = `${booking.clientLastName} ${booking.clientFirstName}`.trim();
     const serviceTitle = booking.serviceTitle.trim();
-    const title = name || serviceTitle || FALLBACK_TITLE;
+    const title = serviceTitle || name || FALLBACK_TITLE;
     const start = TimeService.toZonedParts(booking.startAt, timezone);
     const end = TimeService.toZonedParts(booking.endAt, timezone);
     const dto = new CalendarEventItemDto();
@@ -89,7 +89,7 @@ export class CalendarEventItemDto {
     dto.staffId = booking.staffId;
     dto.staffName = booking.staffName;
     dto.title = title;
-    dto.subtitle = serviceTitle && serviceTitle !== title ? serviceTitle : null;
+    dto.subtitle = name && name !== title ? name : null;
     dto.caption = MoneyService.formatCurrency(booking.customPrice ?? booking.servicePrice, currency);
     dto.date = TimeService.zonedDateStr(booking.startAt, timezone);
     dto.startTime = TimeService.minutesToHHmm(start.hour * 60 + start.minute);

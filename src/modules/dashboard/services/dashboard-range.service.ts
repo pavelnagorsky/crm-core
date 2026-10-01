@@ -59,6 +59,12 @@ export class DashboardRangeService {
         return { from: TimeService.addDaysInTz(startOfToday, -6, timezone), to: startOfTomorrow };
       case DashboardPeriod.LAST_30D:
         return { from: TimeService.addDaysInTz(startOfToday, -29, timezone), to: startOfTomorrow };
+      case DashboardPeriod.LAST_3M:
+        return { from: this.rollingMonthsStart(startOfToday, 3, timezone), to: startOfTomorrow };
+      case DashboardPeriod.LAST_6M:
+        return { from: this.rollingMonthsStart(startOfToday, 6, timezone), to: startOfTomorrow };
+      case DashboardPeriod.LAST_1Y:
+        return { from: this.rollingMonthsStart(startOfToday, 12, timezone), to: startOfTomorrow };
       case DashboardPeriod.MTD:
         return { from: TimeService.zonedDayStart(today.year, today.month, 1, timezone), to: startOfTomorrow };
       case DashboardPeriod.YTD:
@@ -66,6 +72,12 @@ export class DashboardRangeService {
       default:
         throw new AppException(ErrorCode.DASHBOARD_CUSTOM_RANGE_INVALID, HttpStatus.BAD_REQUEST);
     }
+  }
+
+  // Rolling month windows stay inclusive of today, like LAST_7D/LAST_30D: the window opens
+  // on the day after the same calendar date N months ago.
+  private rollingMonthsStart(startOfToday: Date, months: number, timezone: string): Date {
+    return TimeService.addDaysInTz(TimeService.addMonthsInTz(startOfToday, -months, timezone), 1, timezone);
   }
 
   // Rolling previous period of equal length. Note: for MTD/YTD this is not a calendar
@@ -87,8 +99,9 @@ export class DashboardRangeService {
     const days = Math.round((to.getTime() - from.getTime()) / 86_400_000);
     if (days <= 2) return SeriesGranularity.HOUR;
     if (days <= 45) return SeriesGranularity.DAY;
-    // A calendar year is 365 days. Weekly buckets stop short of that so a full year is monthly.
-    if (days < 365) return SeriesGranularity.WEEK;
+    // Three calendar months span at most 92 days, so weekly buckets stop there and
+    // anything longer than a quarter is grouped by month.
+    if (days <= 92) return SeriesGranularity.WEEK;
     return SeriesGranularity.MONTH;
   }
 }
