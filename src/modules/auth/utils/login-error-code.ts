@@ -1,5 +1,3 @@
-import { HttpStatus } from '@nestjs/common';
-import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { LoginErrorEnum } from '../enums/login-error.enum.js';
 
@@ -9,8 +7,6 @@ const LOGIN_ERROR_MAP: Record<LoginErrorEnum, (typeof ErrorCode)[keyof typeof Er
   [LoginErrorEnum.PASSWORD_NOT_SET]: ErrorCode.PASSWORD_NOT_SET,
 };
 
-export class LoginException extends AppException {
-  constructor(error: LoginErrorEnum) {
-    super(LOGIN_ERROR_MAP[error], HttpStatus.UNAUTHORIZED);
-  }
+export function loginErrorCode(error: LoginErrorEnum): (typeof ErrorCode)[keyof typeof ErrorCode] {
+  return LOGIN_ERROR_MAP[error];
 }

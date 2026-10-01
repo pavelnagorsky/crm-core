@@ -13,7 +13,7 @@ import { WidgetMetricDto } from './dto/widget-metric.dto.js';
 import { DashboardWidgetKey } from './enums/dashboard-widget-key.enum.js';
 import { MetricUnit } from './enums/metric-unit.enum.js';
 import { WidgetKind } from './enums/widget-kind.enum.js';
-import { ResolvedRange } from './interfaces/resolved-range.interface.js';
+import { WidgetContext } from './interfaces/widget-context.interface.js';
 import { DashboardBucketService } from './services/dashboard-bucket.service.js';
 import { DashboardMetricFactory } from './services/dashboard-metric.factory.js';
 import { DashboardRangeService } from './services/dashboard-range.service.js';
@@ -28,11 +28,6 @@ const NO_SHOW_DENOMINATOR: BookingStatus[] = [BookingStatus.NO_SHOW, BookingStat
 // Completion rate: completed / all statuses (total bookings in period).
 const COMPLETION_DENOMINATOR: BookingStatus[] = [BookingStatus.COMPLETED, BookingStatus.CONFIRMED, BookingStatus.CANCELLED, BookingStatus.NO_SHOW, BookingStatus.PENDING];
 const DEFAULT_TOP_N = 5;
-
-interface WidgetContext {
-  dto: DashboardWidgetsRequestDto;
-  range: ResolvedRange;
-}
 
 @Injectable()
 export class DashboardService {

@@ -6,7 +6,6 @@ import { StaffService } from '../../staff/staff.service.js';
 import { BookingsAggregatesService } from '../bookings-aggregates.service.js';
 import { AggregateRange } from '../interfaces/aggregate-range.interface.js';
 import { AggregateSnapshot } from '../interfaces/aggregate-snapshot.interface.js';
-import { OccupancyBookedHours } from '../interfaces/occupancy-booked-hours.interface.js';
 import { SeriesRow } from '../interfaces/series-row.interface.js';
 import { WidgetDto } from '../../dashboard/dto/widget.dto.js';
 import { WidgetMetaDto } from '../../dashboard/dto/widget-meta.dto.js';
@@ -19,6 +18,9 @@ import { DashboardRangeService } from '../../dashboard/services/dashboard-range.
 import { DashboardSeriesFactory } from '../../dashboard/services/dashboard-series.factory.js';
 import { BookingsAnalyticsRequestDto } from './dto/bookings-analytics-request.dto.js';
 import { BookingsAnalyticsWidgetKey } from './enums/bookings-analytics-widget-key.enum.js';
+import { BookingsAnalyticsContext } from './interfaces/bookings-analytics-context.interface.js';
+import { OccupancyData } from './interfaces/occupancy-data.interface.js';
+import { OccupancyHeadline } from './interfaces/occupancy-headline.interface.js';
 
 // Statuses that occupy a chair (reserved or served): everything except cancelled/no-show. Drives
 // the occupancy sparkline's booked minutes per bucket.
@@ -38,28 +40,6 @@ const EMPTY_OCCUPANCY: OccupancyData = {
   bookedByBucket: [],
 };
 
-interface OccupancyHeadline {
-  booked: OccupancyBookedHours;
-  capacityMinutes: number;
-}
-
-interface OccupancyData extends OccupancyHeadline {
-  bookedByBucket: SeriesRow[];
-}
-
-interface AnalyticsContext {
-  range: ResolvedRange;
-  // Batched sources so overlapping widgets share the same queries; each is undefined when no
-  // requested widget needs it. Previous-period fields are set only when comparison is on — a
-  // numeric 0 means the previous window was empty, undefined means "do not compare".
-  pastSnapshot?: AggregateSnapshot;
-  previousVisitsHeld?: number;
-  lostRevenue?: Prisma.Decimal;
-  previousLostRevenue?: Prisma.Decimal;
-  pendingCount?: number;
-  occupancy?: OccupancyData;
-  previousOccupancy?: OccupancyHeadline;
-}
 
 @Injectable()
 export class BookingsAnalyticsService {
@@ -77,7 +57,7 @@ export class BookingsAnalyticsService {
     return dto.keys.map((key) => this.buildWidget(key, ctx));
   }
 
-  private buildWidget(key: BookingsAnalyticsWidgetKey, ctx: AnalyticsContext): WidgetDto {
+  private buildWidget(key: BookingsAnalyticsWidgetKey, ctx: BookingsAnalyticsContext): WidgetDto {
     switch (key) {
       case BookingsAnalyticsWidgetKey.OCCUPANCY:
         return this.occupancyWidget(key, ctx);
@@ -96,7 +76,7 @@ export class BookingsAnalyticsService {
 
   // ── widgets ──────────────────────────────────────────────────────────────
 
-  private occupancyWidget(key: BookingsAnalyticsWidgetKey, ctx: AnalyticsContext): WidgetDto {
+  private occupancyWidget(key: BookingsAnalyticsWidgetKey, ctx: BookingsAnalyticsContext): WidgetDto {
     const occupancy = ctx.occupancy ?? EMPTY_OCCUPANCY;
     const bookedMinutes = occupancy.booked.pastHeldMinutes + occupancy.booked.futureConfirmedMinutes;
     const bookedHours = minutesToHours(bookedMinutes);
@@ -126,7 +106,7 @@ export class BookingsAnalyticsService {
     };
   }
 
-  private visitsHeldWidget(key: BookingsAnalyticsWidgetKey, ctx: AnalyticsContext): WidgetDto {
+  private visitsHeldWidget(key: BookingsAnalyticsWidgetKey, ctx: BookingsAnalyticsContext): WidgetDto {
     return {
       key,
       kind: WidgetKind.METRIC,
@@ -140,7 +120,7 @@ export class BookingsAnalyticsService {
     };
   }
 
-  private lostRevenueWidget(key: BookingsAnalyticsWidgetKey, ctx: AnalyticsContext): WidgetDto {
+  private lostRevenueWidget(key: BookingsAnalyticsWidgetKey, ctx: BookingsAnalyticsContext): WidgetDto {
     return {
       key,
       kind: WidgetKind.METRIC,
@@ -154,7 +134,7 @@ export class BookingsAnalyticsService {
     };
   }
 
-  private pendingConfirmationWidget(key: BookingsAnalyticsWidgetKey, ctx: AnalyticsContext): WidgetDto {
+  private pendingConfirmationWidget(key: BookingsAnalyticsWidgetKey, ctx: BookingsAnalyticsContext): WidgetDto {
     return {
       key,
       kind: WidgetKind.METRIC,
@@ -169,7 +149,7 @@ export class BookingsAnalyticsService {
 
   // ── data plumbing ────────────────────────────────────────────────────────
 
-  private async buildContext(businessId: string, dto: BookingsAnalyticsRequestDto): Promise<AnalyticsContext> {
+  private async buildContext(businessId: string, dto: BookingsAnalyticsRequestDto): Promise<BookingsAnalyticsContext> {
     const range = await this.rangeService.resolve(businessId, dto);
     const now = new Date();
     const compare = range.compareWithPrevious;
@@ -303,7 +283,7 @@ export class BookingsAnalyticsService {
     return range;
   }
 
-  private buildMeta(ctx: AnalyticsContext, withCurrency: boolean): WidgetMetaDto {
+  private buildMeta(ctx: BookingsAnalyticsContext, withCurrency: boolean): WidgetMetaDto {
     return {
       period: this.buckets.periodDto(ctx.range),
       previousPeriod: ctx.range.compareWithPrevious ? this.buckets.previousPeriodDto(ctx.range) : undefined,

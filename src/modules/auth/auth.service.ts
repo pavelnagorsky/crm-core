@@ -16,8 +16,8 @@ import { ResetPasswordDto } from './dto/reset-password.dto.js';
 import { ResetPasswordRequestDto } from './dto/reset-password-request.dto.js';
 import { OAuthResponseDto } from './dto/oauth-response.dto.js';
 import { ITokens } from './interfaces/tokens.interface.js';
-import { LoginException } from './exceptions/login.exception.js';
 import { LoginErrorEnum } from './enums/login-error.enum.js';
+import { loginErrorCode } from './utils/login-error-code.js';
 import { IFrontendConfig, IJwtConfig } from '../../config/configuration.js';
 import {
   jwtExpirationConfig,
@@ -66,21 +66,21 @@ export class AuthService {
 
     if (!user) {
       this.logger.warn(`login failed: email=${dto.email} reason=USER_NOT_FOUND`);
-      throw new LoginException(LoginErrorEnum.INVALID_DATA);
+      throw new AppException(loginErrorCode(LoginErrorEnum.INVALID_DATA), HttpStatus.UNAUTHORIZED);
     }
     if (!user.passwordHash) {
       this.logger.warn(`login failed: userId=${user.id} reason=PASSWORD_NOT_SET`);
-      throw new LoginException(LoginErrorEnum.PASSWORD_NOT_SET);
+      throw new AppException(loginErrorCode(LoginErrorEnum.PASSWORD_NOT_SET), HttpStatus.UNAUTHORIZED);
     }
     if (!user.emailVerifiedAt) {
       this.logger.warn(`login failed: userId=${user.id} reason=EMAIL_NOT_CONFIRMED`);
-      throw new LoginException(LoginErrorEnum.EMAIL_NOT_CONFIRMED);
+      throw new AppException(loginErrorCode(LoginErrorEnum.EMAIL_NOT_CONFIRMED), HttpStatus.UNAUTHORIZED);
     }
 
     const valid = await compare(dto.password, user.passwordHash);
     if (!valid) {
       this.logger.warn(`login failed: userId=${user.id} reason=INVALID_PASSWORD`);
-      throw new LoginException(LoginErrorEnum.INVALID_DATA);
+      throw new AppException(loginErrorCode(LoginErrorEnum.INVALID_DATA), HttpStatus.UNAUTHORIZED);
     }
 
     this.logger.log(`login success: userId=${user.id}`);

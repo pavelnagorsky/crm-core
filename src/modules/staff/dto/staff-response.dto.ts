@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { StaffWithServiceCount } from '../staff.service.js';
+import { StaffWithServiceCount } from '../interfaces/staff-with-service-count.interface.js';
 import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
 import { StaffStatus } from '../enums/staff-status.enum.js';
 import { StaffEmploymentType } from '../enums/staff-employment-type.enum.js';

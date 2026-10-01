@@ -2,7 +2,6 @@ import { createHash, randomBytes } from 'crypto';
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import {
   BusinessRole,
-  File,
   Prisma,
   Staff,
   StaffInvitation,
@@ -40,13 +39,8 @@ import { NOTIFICATION_EVENT } from '../notifications/notifications.service.js';
 import { StaffInvitationNotification } from '../notifications/notifications/staff-invitation.notification.js';
 import { IFrontendConfig } from '../../config/configuration.js';
 import { ConfigService } from '@nestjs/config';
-
-export type StaffWithAvatar = Staff & { avatarFile: File | null };
-
-export type StaffWithServiceCount = StaffWithAvatar & {
-  _count: { staffServices: number };
-  staffServices: { serviceId: string }[];
-};
+import { StaffWithAvatar } from './interfaces/staff-with-avatar.interface.js';
+import { StaffWithServiceCount } from './interfaces/staff-with-service-count.interface.js';
 
 const staffViewInclude = {
   avatarFile: true,

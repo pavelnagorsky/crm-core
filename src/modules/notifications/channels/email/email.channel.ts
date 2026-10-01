@@ -5,10 +5,7 @@ import { IMailerConfig } from '../../../../config/configuration.js';
 import { AbstractChannel } from '../abstract.channel.js';
 import { AbstractNotification } from '../../notifications/abstract.notification.js';
 import { HasEmailChannel } from '../../interfaces/has-email-channel.interface.js';
-import {
-  EmailRendererService,
-  EmailTemplate,
-} from './email-renderer.service.js';
+import { EmailRendererService } from './email-renderer.service.js';
 
 @Injectable()
 export class EmailChannel extends AbstractChannel {

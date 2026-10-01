@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
-import { File, Prisma, Service, ServiceCategory, ServiceStatus } from '@prisma/client';
+import { Prisma, ServiceCategory, ServiceStatus } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
@@ -25,12 +25,8 @@ import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
 import { diffFields } from '../audit/utils/diff-fields.js';
 import { SERVICE_AUDIT_FIELDS } from '../audit/fields/service.fields.js';
 import { BusinessService } from '../business/business.service.js';
-
-export type ServiceWithImage = Service & { imageFile: File | null };
-
-export type ServiceWithStaffCount = ServiceWithImage & {
-  _count: { staffServices: number };
-};
+import { ServiceWithImage } from './interfaces/service-with-image.interface.js';
+import { ServiceWithStaffCount } from './interfaces/service-with-staff-count.interface.js';
 
 const serviceViewInclude = {
   imageFile: true,

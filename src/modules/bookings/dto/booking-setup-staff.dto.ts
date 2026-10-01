@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { StaffWithAvatar } from '../../staff/staff.service.js';
+import { StaffWithAvatar } from '../../staff/interfaces/staff-with-avatar.interface.js';
 import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
 
 export class BookingSetupStaffDto {

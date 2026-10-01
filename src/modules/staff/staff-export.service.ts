@@ -5,8 +5,9 @@ import { XlsxService } from '../../shared/xlsx/xlsx.service.js';
 import { DEFAULT_LANG, LocaleService } from '../../shared/i18n/locale.service.js';
 import { labelOf } from '../../shared/i18n/label-of.js';
 import { I18nLocale } from '../../shared/interfaces/i18n-locale.interface.js';
-import { StaffService, StaffWithAvatar } from './staff.service.js';
+import { StaffService } from './staff.service.js';
 import { StaffExportRequestDto } from './dto/staff-export-request.dto.js';
+import { StaffWithAvatar } from './interfaces/staff-with-avatar.interface.js';
 
 type StaffRow = {
   id: string;

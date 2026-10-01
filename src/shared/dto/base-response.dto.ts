@@ -1,5 +1,4 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { ErrorCode } from '../validation/error-codes.enum.js';
 
 export class BaseResponseDto<T = unknown> {
   @ApiProperty({ example: true })

@@ -13,7 +13,6 @@ import { JwtEmailStrategy } from './strategy/jwt-email.strategy.js';
 import { GoogleOAuthStrategy } from './strategy/google.strategy.js';
 import { VkOAuthStrategy } from './strategy/vk.strategy.js';
 import { YandexOAuthStrategy } from './strategy/yandex.strategy.js';
-import { JwtAuthGuard } from './guards/jwt-auth.guard.js';
 import { UserFromTokenPipe } from './pipes/user-from-token.pipe.js';
 
 @Global()

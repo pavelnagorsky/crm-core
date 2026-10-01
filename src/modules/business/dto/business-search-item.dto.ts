@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { BusinessRole } from '@prisma/client';
-import { BusinessWithCounts } from '../business.service.js';
+import { BusinessWithCounts } from '../interfaces/business-with-counts.interface.js';
 import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
 
 export class BusinessSearchItemDto {

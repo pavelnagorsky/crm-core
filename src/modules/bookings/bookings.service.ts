@@ -626,7 +626,7 @@ export class BookingsService implements CalendarBookingReader {
           data: {
             businessId,
             staffId,
-            type: CalendarEventType.BLOCK,
+            type: CalendarEventType.BOOKING,
             repeatType: CalendarEventRepeatType.NONE,
             startDateTime: startAt,
             endDateTime: endAt,

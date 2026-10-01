@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
-import { ServiceWithStaffCount } from '../services.service.js';
+import { ServiceWithStaffCount } from '../interfaces/service-with-staff-count.interface.js';
 import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
 import { MoneyService } from '../../../shared/money/money.service.js';
 import { ServiceStatus } from '../enums/service-status.enum.js';

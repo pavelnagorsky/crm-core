@@ -11,7 +11,6 @@ import { WidgetDto } from '../../dashboard/dto/widget.dto.js';
 import { WidgetMetaDto } from '../../dashboard/dto/widget-meta.dto.js';
 import { MetricUnit } from '../../dashboard/enums/metric-unit.enum.js';
 import { WidgetKind } from '../../dashboard/enums/widget-kind.enum.js';
-import { ResolvedRange } from '../../dashboard/interfaces/resolved-range.interface.js';
 import { DashboardBucketService } from '../../dashboard/services/dashboard-bucket.service.js';
 import { DashboardMetricFactory } from '../../dashboard/services/dashboard-metric.factory.js';
 import { DashboardRangeService } from '../../dashboard/services/dashboard-range.service.js';
@@ -19,23 +18,11 @@ import { DashboardSeriesFactory } from '../../dashboard/services/dashboard-serie
 import { ServicesService } from '../services.service.js';
 import { ServicesAnalyticsRequestDto } from './dto/services-analytics-request.dto.js';
 import { ServicesAnalyticsWidgetKey } from './enums/services-analytics-widget-key.enum.js';
+import { ServicesAnalyticsContext } from './interfaces/services-analytics-context.interface.js';
 
 const COMPLETED_STATUSES: BookingStatus[] = [BookingStatus.COMPLETED];
 const DEMAND_TOP_N = 5;
 
-interface AnalyticsContext {
-  businessId: string;
-  range: ResolvedRange;
-  // `undefined` means "no service filter applied"; an array (possibly empty) means the filter
-  // was applied and only these ids may contribute — an empty array intentionally results in
-  // zero-valued widgets rather than "unfiltered totals".
-  serviceIds: string[] | undefined;
-  // Batched sources so overlapping widgets share the same queries.
-  currentSnapshot: AggregateSnapshot;
-  previousSnapshot?: AggregateSnapshot;
-  currentSeries: SeriesRow[];
-  currentServiceCounts?: ServiceCount[];
-}
 
 @Injectable()
 export class ServicesAnalyticsService {
@@ -53,7 +40,7 @@ export class ServicesAnalyticsService {
     return dto.keys.map((key) => this.buildWidget(key, ctx));
   }
 
-  private buildWidget(key: ServicesAnalyticsWidgetKey, ctx: AnalyticsContext): WidgetDto {
+  private buildWidget(key: ServicesAnalyticsWidgetKey, ctx: ServicesAnalyticsContext): WidgetDto {
     switch (key) {
       case ServicesAnalyticsWidgetKey.SERVICES_COMPLETED_COUNT:
         return this.completedCountMetric(key, ctx);
@@ -70,7 +57,7 @@ export class ServicesAnalyticsService {
 
   // ── widgets ──────────────────────────────────────────────────────────────
 
-  private completedCountMetric(key: ServicesAnalyticsWidgetKey, ctx: AnalyticsContext): WidgetDto {
+  private completedCountMetric(key: ServicesAnalyticsWidgetKey, ctx: ServicesAnalyticsContext): WidgetDto {
     const value = countFor(ctx.currentSnapshot, COMPLETED_STATUSES);
     const previousValue = ctx.previousSnapshot ? countFor(ctx.previousSnapshot, COMPLETED_STATUSES) : undefined;
     return {
@@ -87,7 +74,7 @@ export class ServicesAnalyticsService {
     };
   }
 
-  private revenuePerHourMetric(key: ServicesAnalyticsWidgetKey, ctx: AnalyticsContext): WidgetDto {
+  private revenuePerHourMetric(key: ServicesAnalyticsWidgetKey, ctx: ServicesAnalyticsContext): WidgetDto {
     const value = revenuePerHour(ctx.currentSnapshot, COMPLETED_STATUSES);
     const previousValue = ctx.previousSnapshot ? revenuePerHour(ctx.previousSnapshot, COMPLETED_STATUSES) : undefined;
     return {
@@ -104,7 +91,7 @@ export class ServicesAnalyticsService {
     };
   }
 
-  private demandBreakdown(key: ServicesAnalyticsWidgetKey, ctx: AnalyticsContext): WidgetDto {
+  private demandBreakdown(key: ServicesAnalyticsWidgetKey, ctx: ServicesAnalyticsContext): WidgetDto {
     const rows = ctx.currentServiceCounts ?? [];
     const sorted = [...rows].sort((a, b) => b.count - a.count);
     const total = sorted.reduce((s, r) => s + r.count, 0);
@@ -133,7 +120,7 @@ export class ServicesAnalyticsService {
 
   // ── data plumbing ────────────────────────────────────────────────────────
 
-  private async buildContext(businessId: string, dto: ServicesAnalyticsRequestDto): Promise<AnalyticsContext> {
+  private async buildContext(businessId: string, dto: ServicesAnalyticsRequestDto): Promise<ServicesAnalyticsContext> {
     const range = await this.rangeService.resolve(businessId, dto);
     const serviceIds = await this.resolveServiceIds(businessId, dto);
     const currentRange = this.rangeFor(businessId, serviceIds, range.from, range.to);
@@ -174,7 +161,7 @@ export class ServicesAnalyticsService {
     return range;
   }
 
-  private buildRevenuePerHourSpark(ctx: AnalyticsContext): number[] {
+  private buildRevenuePerHourSpark(ctx: ServicesAnalyticsContext): number[] {
     // Delegate bucket alignment to the factory so empty buckets get zeros just like count-based
     // sparks; each bucket's ratio is revenue / (duration_minutes / 60).
     const revenueByBucket = this.seriesFactory.spark(ctx.range, ctx.currentSeries, 'revenue');
@@ -185,7 +172,7 @@ export class ServicesAnalyticsService {
     });
   }
 
-  private buildDurationSpark(ctx: AnalyticsContext): number[] {
+  private buildDurationSpark(ctx: ServicesAnalyticsContext): number[] {
     // seriesFactory.spark only understands 'revenue' | 'count'; project duration ourselves
     // using the same bucket set the factory uses so both arrays line up positionally.
     const bucketStarts = this.buckets.bucketStarts(ctx.range);
@@ -204,7 +191,7 @@ export class ServicesAnalyticsService {
     return this.needsAnyMetric(keys);
   }
 
-  private buildMeta(ctx: AnalyticsContext, withCurrency: boolean): WidgetMetaDto {
+  private buildMeta(ctx: ServicesAnalyticsContext, withCurrency: boolean): WidgetMetaDto {
     return {
       period: this.buckets.periodDto(ctx.range),
       previousPeriod: ctx.range.compareWithPrevious ? this.buckets.previousPeriodDto(ctx.range) : undefined,

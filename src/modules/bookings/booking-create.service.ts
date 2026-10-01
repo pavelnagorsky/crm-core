@@ -184,7 +184,7 @@ export class BookingCreateService {
         data: {
           businessId,
           staffId,
-          type: CalendarEventType.BLOCK,
+          type: CalendarEventType.BOOKING,
           repeatType: CalendarEventRepeatType.NONE,
           startDateTime: startAt,
           endDateTime: endAt,

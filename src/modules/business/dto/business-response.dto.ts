@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { BookingVisibility } from '../enums/booking-visibility.enum.js';
-import { BusinessWithLogo } from '../business.service.js';
+import { BusinessWithLogo } from '../interfaces/business-with-logo.interface.js';
 import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
 
 export class BusinessResponseDto {

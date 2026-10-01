@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Business, BusinessRole, File, Prisma, UserRole } from '@prisma/client';
+import { Business, BusinessRole, Prisma, UserRole } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
@@ -17,13 +17,8 @@ import { AuditEvent } from '../audit/enums/audit-event.enum.js';
 import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
 import { diffFields } from '../audit/utils/diff-fields.js';
 import { BUSINESS_AUDIT_FIELDS } from '../audit/fields/business.fields.js';
-
-export type BusinessWithLogo = Business & { logoFile: File | null };
-
-export type BusinessWithCounts = BusinessWithLogo & {
-  memberships: { role: BusinessRole }[];
-  _count: { staff: number; services: number; clients: number };
-};
+import { BusinessWithLogo } from './interfaces/business-with-logo.interface.js';
+import { BusinessWithCounts } from './interfaces/business-with-counts.interface.js';
 
 @Injectable()
 export class BusinessService {

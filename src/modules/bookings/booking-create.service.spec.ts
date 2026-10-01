@@ -1,9 +1,11 @@
 import { HttpStatus } from '@nestjs/common';
+import { CalendarEventRepeatType, CalendarEventType } from '@prisma/client';
 import { BookingCreateService } from './booking-create.service.js';
 import { CreateBookingDto } from './dto/create-booking.dto.js';
 import { BookingVisibility } from '../business/enums/booking-visibility.enum.js';
 import { AuditActorRole } from '../audit/enums/audit-actor-role.enum.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
+import { BookingStatus } from './enums/booking-status.enum.js';
 
 const dto: CreateBookingDto = {
   businessId: 'business-1',
@@ -91,5 +93,100 @@ describe('BookingCreateService client ban', () => {
 
     expect(error).toBeInstanceOf(AppException);
     expect((error as AppException).errorCode).toBe('BOOKING_STAFF_NOT_FOUND');
+  });
+});
+
+describe('BookingCreateService calendar link', () => {
+  it('creates the linked calendar event as a booking event', async () => {
+    const clients = {
+      resolveForBooking: vi.fn().mockResolvedValue({
+        id: 'client-1',
+        firstName: 'Анна',
+        lastName: 'Иванова',
+        phone: '+375291112233',
+        email: null,
+        bannedAt: null,
+      }),
+    };
+    const calendar = { isSlotFree: vi.fn().mockReturnValue(true) };
+    const staff = {
+      resolveStaffForService: vi.fn().mockResolvedValue([{ id: 'staff-1' }]),
+      findById: vi.fn().mockResolvedValue({ id: 'staff-1', name: 'Мария' }),
+    };
+    const tx = {
+      $executeRaw: vi.fn(),
+      staffShift: {
+        findFirst: vi.fn().mockResolvedValue({
+          startTime: new Date('1970-01-01T06:00:00.000Z'),
+          endTime: new Date('1970-01-01T18:00:00.000Z'),
+        }),
+      },
+      calendarEvent: {
+        findMany: vi.fn().mockResolvedValue([]),
+        create: vi.fn().mockResolvedValue({ id: 'event-1' }),
+      },
+      booking: {
+        create: vi.fn().mockResolvedValue({
+          id: 'booking-1',
+          businessId: 'business-1',
+          serviceId: 'service-1',
+          staffId: 'staff-1',
+          clientId: 'client-1',
+          startAt: new Date('2026-09-20T07:00:00.000Z'),
+          endAt: new Date('2026-09-20T08:00:00.000Z'),
+          status: BookingStatus.CONFIRMED,
+          clientFirstName: 'Анна',
+          clientLastName: 'Иванова',
+          clientPhone: '+375291112233',
+          clientEmail: null,
+          serviceTitle: 'Стрижка',
+          serviceDuration: 60,
+          servicePrice: 50,
+          customPrice: null,
+          staffName: 'Мария',
+          calendarEventId: 'event-1',
+        }),
+      },
+    };
+    const db = {
+      business: {
+        findUnique: vi.fn().mockResolvedValue({
+          isBookingConfirmationRequired: false,
+          timezone: 'Europe/Minsk',
+          bookingVisibility: BookingVisibility.PUBLIC,
+          currency: 'BYN',
+        }),
+      },
+      service: {
+        findFirst: vi.fn().mockResolvedValue({
+          id: 'service-1',
+          title: 'Стрижка',
+          durationMinutes: 60,
+          price: 50,
+        }),
+      },
+      booking: { groupBy: vi.fn().mockResolvedValue([]) },
+      $transaction: vi.fn((fn: (client: typeof tx) => Promise<unknown>) => fn(tx)),
+    };
+
+    const service = new BookingCreateService(
+      db as never,
+      calendar as never,
+      clients as never,
+      staff as never,
+      { emit: vi.fn() } as never,
+      { generateClientToken: vi.fn() } as never,
+    );
+
+    await service.createPublicBooking('business-1', dto);
+
+    expect(tx.calendarEvent.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        businessId: 'business-1',
+        staffId: 'staff-1',
+        type: CalendarEventType.BOOKING,
+        repeatType: CalendarEventRepeatType.NONE,
+      }),
+    });
   });
 });
