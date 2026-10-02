@@ -33,6 +33,10 @@ export default () => {
       email: process.env['EMAIL'],
       emailPw: process.env['EMAIL_PW'],
     },
+    notificationsConfig: {
+      // Enabled by default; set NOTIFICATIONS_ENABLED=false to mute all outgoing notifications (e.g. seeded/test runs).
+      enabled: process.env['NOTIFICATIONS_ENABLED'] !== 'false',
+    },
     app: {
       locale: process.env['APP_LOCALE'] ?? 'ru',
     },
@@ -72,6 +76,10 @@ export interface IJwtConfig {
 export interface IMailerConfig {
   email: string;
   emailPw: string;
+}
+
+export interface INotificationsConfig {
+  enabled: boolean;
 }
 
 export interface IFrontendConfig {
