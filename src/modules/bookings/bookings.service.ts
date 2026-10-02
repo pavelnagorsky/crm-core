@@ -81,11 +81,14 @@ export class BookingsService implements CalendarBookingReader {
         this.db.serviceCategory.findMany({
           where: { businessId },
           orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-          include: { services: { where: { status: ServiceStatus.ACTIVE }, orderBy: servicesOrder } },
+          include: {
+            services: { where: { status: ServiceStatus.ACTIVE }, orderBy: servicesOrder, include: { imageFile: true } },
+          },
         }),
         this.db.service.findMany({
           where: { businessId, categoryId: null, status: ServiceStatus.ACTIVE },
           orderBy: servicesOrder,
+          include: { imageFile: true },
         }),
       ]),
       this.staffService.listActiveWithServices(businessId),

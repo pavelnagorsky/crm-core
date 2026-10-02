@@ -1,6 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Service, ServiceCategory } from '@prisma/client';
+import { File, Service, ServiceCategory } from '@prisma/client';
 import { BookingSetupServiceDto } from './booking-setup-service.dto.js';
+
+type ServiceWithImage = Service & { imageFile: File | null };
 
 export class BookingSetupCategoryDto {
   @ApiProperty({ type: String, nullable: true })
@@ -12,7 +14,7 @@ export class BookingSetupCategoryDto {
   @ApiProperty({ type: () => BookingSetupServiceDto, isArray: true })
   services: BookingSetupServiceDto[];
 
-  static fromEntity(category: ServiceCategory & { services: Service[] }): BookingSetupCategoryDto {
+  static fromEntity(category: ServiceCategory & { services: ServiceWithImage[] }): BookingSetupCategoryDto {
     const dto = new BookingSetupCategoryDto();
     dto.id = category.id;
     dto.name = category.name;
@@ -20,7 +22,7 @@ export class BookingSetupCategoryDto {
     return dto;
   }
 
-  static uncategorized(services: Service[]): BookingSetupCategoryDto {
+  static uncategorized(services: ServiceWithImage[]): BookingSetupCategoryDto {
     const dto = new BookingSetupCategoryDto();
     dto.id = null;
     dto.name = null;

@@ -1,5 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { OnEvent } from '@nestjs/event-emitter';
+import { INotificationsConfig } from '../../config/configuration.js';
 import { AbstractChannel } from './channels/abstract.channel.js';
 import { EmailChannel } from './channels/email/email.channel.js';
 import { AbstractNotification } from './notifications/abstract.notification.js';
@@ -11,13 +13,22 @@ export const NOTIFICATION_EVENT = 'notification';
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
   private readonly channels: AbstractChannel[];
+  private readonly enabled: boolean;
 
-  constructor(private readonly emailChannel: EmailChannel) {
+  constructor(
+    private readonly emailChannel: EmailChannel,
+    config: ConfigService,
+  ) {
     this.channels = [emailChannel];
+    this.enabled = config.get<INotificationsConfig>('notificationsConfig')!.enabled;
   }
 
   @OnEvent(NOTIFICATION_EVENT, { suppressErrors: true })
   async handle(notification: AbstractNotification): Promise<void> {
+    if (!this.enabled) {
+      this.logger.log(`Notifications disabled, skipping ${notification.constructor.name}`);
+      return;
+    }
     try {
       await this.dispatch(notification);
     } catch (e: any) {
