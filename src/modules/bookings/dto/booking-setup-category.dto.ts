@@ -11,6 +11,9 @@ export class BookingSetupCategoryDto {
   @ApiProperty({ type: String, nullable: true })
   name: string | null;
 
+  @ApiProperty({ type: String, nullable: true })
+  description: string | null;
+
   @ApiProperty({ type: () => BookingSetupServiceDto, isArray: true })
   services: BookingSetupServiceDto[];
 
@@ -18,6 +21,7 @@ export class BookingSetupCategoryDto {
     const dto = new BookingSetupCategoryDto();
     dto.id = category.id;
     dto.name = category.name;
+    dto.description = category.description;
     dto.services = category.services.map(BookingSetupServiceDto.fromEntity);
     return dto;
   }
@@ -26,6 +30,7 @@ export class BookingSetupCategoryDto {
     const dto = new BookingSetupCategoryDto();
     dto.id = null;
     dto.name = null;
+    dto.description = null;
     dto.services = services.map(BookingSetupServiceDto.fromEntity);
     return dto;
   }
