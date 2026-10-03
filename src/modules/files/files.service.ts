@@ -41,7 +41,7 @@ export class FilesService implements OnModuleInit {
       );
     }
 
-    const ext = file.originalname.split('.').pop()?.toLowerCase() ?? 'bin';
+    const ext = file.originalname.trim().replace(/\.+$/, '').split('.').pop()?.trim().toLowerCase() || 'bin';
 
     const blockedExtensions = Object.values(BlockedFileExtension) as string[];
     if (blockedExtensions.includes(ext)) {
@@ -82,12 +82,16 @@ export class FilesService implements OnModuleInit {
     });
   }
 
-  async delete(fileId: string, businessId: string): Promise<void> {
+  async findInBusiness(businessId: string, fileId: string): Promise<File> {
     const file = await this.db.file.findUnique({ where: { id: fileId } });
-
     if (!file || !file.storageKey.startsWith(`businesses/${businessId}/`)) {
       throw new AppException(ErrorCode.FILE_NOT_FOUND, HttpStatus.NOT_FOUND);
     }
+    return file;
+  }
+
+  async delete(fileId: string, businessId: string): Promise<void> {
+    const file = await this.findInBusiness(businessId, fileId);
 
     try {
       await this.storage.bucket(this.bucketName).file(file.storageKey).delete();

@@ -55,4 +55,31 @@ export enum BlockedFileExtension {
   DOTM = 'dotm',
   XLTM = 'xltm',
   POTM = 'potm',
+
+  // Active web content — served inline from the public bucket URL, so these
+  // would execute scripts in the bucket origin (stored XSS). Images are served
+  // inline intentionally; these active types must never be.
+  HTML = 'html',
+  HTM = 'htm',
+  XHTML = 'xhtml',
+  SHTML = 'shtml',
+  SVG = 'svg',
+  XML = 'xml',
+  MHTML = 'mhtml',
+  MHT = 'mht',
+  SWF = 'swf',
+
+  // Server-side scripts
+  PHP = 'php',
+  PHTML = 'phtml',
+  PHT = 'pht',
+  PHAR = 'phar',
+  ASP = 'asp',
+  ASPX = 'aspx',
+  JSP = 'jsp',
+  JSPX = 'jspx',
+  CGI = 'cgi',
+  PL = 'pl',
+  PY = 'py',
+  RB = 'rb',
 }
