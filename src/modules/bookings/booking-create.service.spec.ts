@@ -6,6 +6,7 @@ import { BookingVisibility } from '../business/enums/booking-visibility.enum.js'
 import { AuditActorRole } from '../audit/enums/audit-actor-role.enum.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { BookingStatus } from './enums/booking-status.enum.js';
+import { BookingSource } from './enums/booking-source.enum.js';
 
 const dto: CreateBookingDto = {
   businessId: 'business-1',
@@ -16,6 +17,19 @@ const dto: CreateBookingDto = {
   lastName: 'Иванова',
   phone: '+375291112233',
 };
+
+function channelDeps(): [never, never] {
+  return [
+    {
+      resolve: vi.fn().mockResolvedValue({
+        source: BookingSource.PUBLIC_PAGE,
+        bookingPageId: null,
+        bookingWidgetId: null,
+      }),
+    } as never,
+    { assertAllowed: vi.fn() } as never,
+  ];
+}
 
 function setup() {
   const clients = { resolveForBooking: vi.fn() };
@@ -45,6 +59,7 @@ function setup() {
     staff as never,
     { emit: vi.fn() } as never,
     { generateClientToken: vi.fn() } as never,
+    ...channelDeps(),
   );
   return { service, clients, staff };
 }
@@ -93,6 +108,24 @@ describe('BookingCreateService client ban', () => {
 
     expect(error).toBeInstanceOf(AppException);
     expect((error as AppException).errorCode).toBe('BOOKING_STAFF_NOT_FOUND');
+  });
+
+  it('passes an empty surname when the guest omits it', async () => {
+    const { service, clients } = setup();
+    clients.resolveForBooking.mockResolvedValue({ bannedAt: new Date('2026-09-01T00:00:00.000Z') });
+
+    await service.createPublicBooking('business-1', { ...dto, lastName: undefined }).then(
+      () => null,
+      () => null,
+    );
+
+    expect(clients.resolveForBooking).toHaveBeenCalledWith(
+      'business-1',
+      dto.phone,
+      dto.firstName,
+      '',
+      undefined,
+    );
   });
 });
 
@@ -176,6 +209,7 @@ describe('BookingCreateService calendar link', () => {
       staff as never,
       { emit: vi.fn() } as never,
       { generateClientToken: vi.fn() } as never,
+      ...channelDeps(),
     );
 
     await service.createPublicBooking('business-1', dto);
@@ -186,6 +220,14 @@ describe('BookingCreateService calendar link', () => {
         staffId: 'staff-1',
         type: CalendarEventType.BOOKING,
         repeatType: CalendarEventRepeatType.NONE,
+      }),
+    });
+    expect(tx.booking.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        source: BookingSource.PUBLIC_PAGE,
+        bookingPageId: null,
+        bookingWidgetId: null,
+        clientLastName: 'Иванова',
       }),
     });
   });

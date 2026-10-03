@@ -78,6 +78,8 @@ function booking(overrides: Partial<Booking> = {}): Booking {
     updatedAt: new Date('2026-09-20T08:00:00.000Z'),
     deletedAt: null,
     ...overrides,
+    bookingPageId: overrides.bookingPageId ?? null,
+    bookingWidgetId: overrides.bookingWidgetId ?? null,
   };
 }
 

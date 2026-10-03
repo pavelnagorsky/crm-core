@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, ServiceCategory, ServiceStatus } from '@prisma/client';
+import { Prisma, ServiceCategory, ServiceStatus, StaffStatus } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
@@ -323,6 +323,16 @@ export class ServicesService {
       payload: { title: service.title },
     };
     this.eventEmitter.emit(AUDIT_EVENT, event);
+  }
+
+  async countBookable(businessId: string): Promise<number> {
+    return this.db.service.count({
+      where: {
+        businessId,
+        status: ServiceStatus.ACTIVE,
+        staffServices: { some: { staff: { status: StaffStatus.ACTIVE } } },
+      },
+    });
   }
 
 }

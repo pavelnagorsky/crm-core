@@ -7,6 +7,7 @@ import { BookingCronService } from './booking-cron.service.js';
 import { BookingsAggregatesService } from './bookings-aggregates.service.js';
 import { BookingsController } from './bookings.controller.js';
 import { BookingsExportService } from './bookings-export/bookings-export.service.js';
+import { PublicBookingRateLimiter } from './public-booking-rate-limiter.js';
 import { I18nModule } from '../../shared/i18n/i18n.module.js';
 import { JwtBookingClientStrategy } from './strategy/jwt-booking-client.strategy.js';
 import { CalendarBookingReader } from '../calendar/calendar-booking-reader.js';
@@ -15,10 +16,12 @@ import { CalendarModule } from '../calendar/calendar.module.js';
 import { ClientsModule } from '../clients/clients.module.js';
 import { StaffModule } from '../staff/staff.module.js';
 import { PayrollModule } from '../payroll/payroll.module.js';
+import { BookingChannelsModule } from '../booking-channels/booking-channels.module.js';
 
 @Module({
   // Booking create and reschedule use CalendarService; the calendar view reads bookings back.
-  imports: [PassportModule, BusinessModule, forwardRef(() => CalendarModule), ClientsModule, StaffModule, PayrollModule, I18nModule],
+  // Public booking creation attributes the row to a page or widget owned by BookingChannelsModule.
+  imports: [PassportModule, BusinessModule, forwardRef(() => CalendarModule), ClientsModule, StaffModule, PayrollModule, I18nModule, forwardRef(() => BookingChannelsModule)],
   controllers: [BookingsController],
   providers: [
     BookingsService,
@@ -28,8 +31,9 @@ import { PayrollModule } from '../payroll/payroll.module.js';
     BookingCronService,
     BookingsAggregatesService,
     BookingsExportService,
+    PublicBookingRateLimiter,
     JwtBookingClientStrategy,
   ],
-  exports: [BookingsAggregatesService, CalendarBookingReader],
+  exports: [BookingsAggregatesService, CalendarBookingReader, BookingsService],
 })
 export class BookingsModule {}

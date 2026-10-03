@@ -11,6 +11,7 @@ import {
   Post,
   Put,
   Query,
+  Req,
   Res,
   StreamableFile,
   UseGuards,
@@ -29,6 +30,7 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { BusinessRole, CancelledBy } from '@prisma/client';
+import type { Request } from 'express';
 import { BookingsService } from './bookings.service.js';
 import { BookingCreateService } from './booking-create.service.js';
 import { BookingClientService } from './booking-client.service.js';
@@ -55,6 +57,7 @@ import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
 import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto, assertBusinessRole } from '../auth/dto/token-payload.dto.js';
 import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
+import { clientIp, requestOrigin } from '../../shared/http/request-context.js';
 
 @ApiTags('Bookings')
 @Controller()
@@ -85,8 +88,12 @@ export class BookingsController {
   @Post('public/bookings')
   async createPublic(
     @Body() dto: CreateBookingDto,
+    @Req() req: Request,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    const booking = await this.bookingCreateService.createPublicBooking(dto.businessId, dto);
+    const booking = await this.bookingCreateService.createPublicBooking(dto.businessId, dto, {
+      ip: clientIp(req),
+      origin: requestOrigin(req),
+    });
     return BaseResponseDto.success({ id: booking.id });
   }
 

@@ -21,6 +21,10 @@ import { ManualCreateBookingDto } from './dto/manual-create-booking.dto.js';
 import { BookingSource } from './enums/booking-source.enum.js';
 import { BookingStatus } from './enums/booking-status.enum.js';
 import { isSelfBookingBlocked } from './client-ban.rules.js';
+import { BookingChannelAttributionService } from '../booking-channels/booking-channel-attribution.service.js';
+import { BookingAttribution } from './interfaces/booking-attribution.interface.js';
+import { PublicBookingRequestContext } from './interfaces/public-booking-request-context.interface.js';
+import { PublicBookingRateLimiter } from './public-booking-rate-limiter.js';
 import { AUDIT_EVENT } from '../audit/audit.constants.js';
 import { AuditEntity } from '../audit/enums/audit-entity.enum.js';
 import { AuditEvent } from '../audit/enums/audit-event.enum.js';
@@ -44,17 +48,27 @@ export class BookingCreateService {
     private readonly staffService: StaffService,
     private readonly eventEmitter: EventEmitter2,
     private readonly bookingClientService: BookingClientService,
+    @Inject(forwardRef(() => BookingChannelAttributionService))
+    private readonly attribution: BookingChannelAttributionService,
+    private readonly rateLimiter: PublicBookingRateLimiter,
   ) {}
 
   async createPublicBooking(
     businessId: string,
     dto: CreateBookingDto,
+    context: PublicBookingRequestContext = { ip: 'unknown' },
   ): Promise<Booking> {
-    const { booking, timezone, currency } = await this.create(businessId, BookingSource.PUBLIC_PAGE, dto);
+    this.rateLimiter.assertAllowed(dto.phone, context.ip);
+    const attribution = await this.attribution.resolve(
+      businessId,
+      dto.bookingPageId,
+      dto.bookingWidgetId,
+      context.origin,
+    );
+    const { booking, timezone, currency } = await this.create(businessId, attribution, dto);
     this.logger.log(`booking created (public): id=${booking.id} businessId=${businessId} serviceId=${booking.serviceId} staffId=${booking.staffId} startAt=${booking.startAt.toISOString()}`);
-    // Public bookings have no authenticated user — the client is the actor
     const actor: AuditActor = {
-      name: `${booking.clientFirstName} ${booking.clientLastName}`,
+      name: [booking.clientFirstName, booking.clientLastName].filter((part) => part.trim()).join(' '),
       role: AuditActorRole.CLIENT,
     };
     this.emitBookingCreated(booking, actor, currency);
@@ -67,7 +81,12 @@ export class BookingCreateService {
     dto: ManualCreateBookingDto,
     actor: AuditActor,
   ): Promise<Booking> {
-    const { booking, timezone, currency } = await this.create(businessId, BookingSource.MANUAL, dto, dto.customPrice);
+    const { booking, timezone, currency } = await this.create(
+      businessId,
+      { source: BookingSource.MANUAL, bookingPageId: null, bookingWidgetId: null },
+      dto,
+      dto.customPrice,
+    );
     this.logger.log(`booking created (manual): id=${booking.id} businessId=${businessId} serviceId=${booking.serviceId} staffId=${booking.staffId} startAt=${booking.startAt.toISOString()} actor=${actor.name}`);
     this.emitBookingCreated(booking, actor, currency);
     this.emitBookingNotification(booking, timezone);
@@ -78,7 +97,7 @@ export class BookingCreateService {
 
   private async create(
     businessId: string,
-    source: BookingSource,
+    attribution: BookingAttribution,
     dto: CreateBookingDto,
     customPrice?: string,
   ): Promise<{ booking: Booking; timezone: string; currency: string }> {
@@ -98,7 +117,7 @@ export class BookingCreateService {
         ErrorCode.BOOKING_BUSINESS_NOT_FOUND,
         HttpStatus.NOT_FOUND,
       );
-    if (source === BookingSource.PUBLIC_PAGE && business.bookingVisibility === BookingVisibility.PRIVATE)
+    if (attribution.source !== BookingSource.MANUAL && business.bookingVisibility === BookingVisibility.PRIVATE)
       throw new AppException(ErrorCode.BOOKING_NOT_AVAILABLE, HttpStatus.FORBIDDEN);
     if (!service)
       throw new AppException(
@@ -112,14 +131,15 @@ export class BookingCreateService {
     );
     const dateStr = TimeService.zonedDateStr(startAt, business.timezone);
 
+    const lastName = dto.lastName?.trim() || '';
     const client = await this.clientsService.resolveForBooking(
       businessId,
       dto.phone,
       dto.firstName,
-      dto.lastName,
+      lastName,
       dto.email,
     );
-    if (isSelfBookingBlocked(source, client.bannedAt)) {
+    if (isSelfBookingBlocked(attribution.source, client.bannedAt)) {
       throw new AppException(ErrorCode.CLIENT_BANNED, HttpStatus.FORBIDDEN);
     }
 
@@ -200,7 +220,9 @@ export class BookingCreateService {
           startAt,
           endAt,
           status,
-          source,
+          source: attribution.source,
+          bookingPageId: attribution.bookingPageId,
+          bookingWidgetId: attribution.bookingWidgetId,
           clientFirstName: client.firstName,
           clientLastName: client.lastName,
           clientPhone: client.phone,

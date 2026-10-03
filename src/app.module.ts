@@ -15,6 +15,7 @@ import { CalendarModule } from './modules/calendar/calendar.module.js';
 import { ClientsModule } from './modules/clients/clients.module.js';
 import { ClientsAnalyticsModule } from './modules/clients/analytics/clients-analytics.module.js';
 import { BookingsModule } from './modules/bookings/bookings.module.js';
+import { BookingChannelsModule } from './modules/booking-channels/booking-channels.module.js';
 import { BookingsAnalyticsModule } from './modules/bookings/analytics/bookings-analytics.module.js';
 import { AuditModule } from './modules/audit/audit.module.js';
 import { HealthModule } from './modules/health/health.module.js';
@@ -46,6 +47,7 @@ import { PayrollModule } from './modules/payroll/payroll.module.js';
     ClientsModule,
     ClientsAnalyticsModule,
     BookingsModule,
+    BookingChannelsModule,
     BookingsAnalyticsModule,
     AuditModule,
     HealthModule,

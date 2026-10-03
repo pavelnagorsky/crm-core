@@ -182,6 +182,56 @@ export const ErrorCode = {
     code: 'BOOKING_SLOT_RANGE_TOO_LONG',
     message: 'Date range cannot exceed 62 days',
   },
+  BOOKING_RATE_LIMITED: {
+    code: 'BOOKING_RATE_LIMITED',
+    message: 'Too many booking attempts. Try again later',
+  },
+  BOOKING_CHANNEL_CONFLICT: {
+    code: 'BOOKING_CHANNEL_CONFLICT',
+    message: 'Set either a booking page or a booking widget, not both',
+  },
+
+  // booking channels
+  BOOKING_PAGE_NOT_FOUND: {
+    code: 'BOOKING_PAGE_NOT_FOUND',
+    message: 'Booking page not found',
+  },
+  BOOKING_PAGE_SLUG_TAKEN: {
+    code: 'BOOKING_PAGE_SLUG_TAKEN',
+    message: 'This slug is already used',
+  },
+  BOOKING_PAGE_SLUG_RESERVED: {
+    code: 'BOOKING_PAGE_SLUG_RESERVED',
+    message: 'This slug is reserved',
+  },
+  BOOKING_PAGE_COVER_INVALID: {
+    code: 'BOOKING_PAGE_COVER_INVALID',
+    message: 'Cover must be an image uploaded for this business',
+  },
+  BOOKING_WIDGET_NOT_FOUND: {
+    code: 'BOOKING_WIDGET_NOT_FOUND',
+    message: 'Booking widget not found',
+  },
+  BOOKING_WIDGET_TITLE_EXISTS: {
+    code: 'BOOKING_WIDGET_TITLE_EXISTS',
+    message: 'A widget with this title already exists in this business',
+  },
+  BOOKING_CHANNEL_STATUS_ALREADY_SET: {
+    code: 'BOOKING_CHANNEL_STATUS_ALREADY_SET',
+    message: 'Booking channel already has this status',
+  },
+  BOOKING_CHANNEL_CLOSED: {
+    code: 'BOOKING_CHANNEL_CLOSED',
+    message: 'Online booking is closed for this business',
+  },
+  BOOKING_CHANNEL_NOT_BOOKABLE: {
+    code: 'BOOKING_CHANNEL_NOT_BOOKABLE',
+    message: 'Publish requires an active service assigned to an active staff member',
+  },
+  WIDGET_DOMAIN_NOT_ALLOWED: {
+    code: 'WIDGET_DOMAIN_NOT_ALLOWED',
+    message: 'This widget is not allowed on the requesting domain',
+  },
   STAFF_HAS_EARNINGS: {
     code: 'STAFF_HAS_EARNINGS',
     message: 'Staff member cannot be deleted because they have associated earnings',

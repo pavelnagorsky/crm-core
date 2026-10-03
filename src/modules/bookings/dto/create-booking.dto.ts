@@ -1,12 +1,24 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { IsEmail, IsOptional, IsString, IsUUID, MaxLength, Validate } from 'class-validator';
 import { IsPhone } from '../../../shared/decorators/is-phone.decorator.js';
 import { IsLocalDateTime } from '../../time/decorators/is-local-date-time.validator.js';
+import { AtMostOneBookingChannelConstraint } from '../decorators/at-most-one-booking-channel.constraint.js';
 
 export class CreateBookingDto {
   @ApiProperty({ type: String, format: 'uuid' })
+  @Validate(AtMostOneBookingChannelConstraint)
   @IsUUID()
   businessId: string;
+
+  @ApiProperty({ type: String, format: 'uuid', required: false, description: 'Published booking page that produced this booking' })
+  @IsOptional()
+  @IsUUID()
+  bookingPageId?: string;
+
+  @ApiProperty({ type: String, format: 'uuid', required: false, description: 'Published booking widget that produced this booking' })
+  @IsOptional()
+  @IsUUID()
+  bookingWidgetId?: string;
 
   @ApiProperty({ type: String, format: 'uuid' })
   @IsUUID()
@@ -26,10 +38,11 @@ export class CreateBookingDto {
   @MaxLength(100)
   firstName: string;
 
-  @ApiProperty({ type: String, maxLength: 100 })
+  @ApiProperty({ type: String, maxLength: 100, required: false, nullable: true })
+  @IsOptional()
   @IsString()
   @MaxLength(100)
-  lastName: string;
+  lastName?: string | null;
 
   @IsPhone()
   phone: string;

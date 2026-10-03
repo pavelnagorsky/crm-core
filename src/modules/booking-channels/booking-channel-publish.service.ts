@@ -1,0 +1,41 @@
+import { HttpStatus, Injectable } from '@nestjs/common';
+import { BookingVisibility } from '../business/enums/booking-visibility.enum.js';
+import { BusinessService } from '../business/business.service.js';
+import { ServicesService } from '../services/services.service.js';
+import { AppException } from '../../shared/exceptions/app.exception.js';
+import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
+import { BookingChannelStatus } from './enums/booking-channel-status.enum.js';
+
+export function publishedAtFor(status: BookingChannelStatus): Date | null {
+  return status === BookingChannelStatus.PUBLISHED ? new Date() : null;
+}
+
+@Injectable()
+export class BookingChannelPublishService {
+  constructor(
+    private readonly businessService: BusinessService,
+    private readonly servicesService: ServicesService,
+  ) {}
+
+  async assertTransition(
+    businessId: string,
+    current: BookingChannelStatus,
+    next: BookingChannelStatus,
+  ): Promise<void> {
+    if (current === next) {
+      throw new AppException(ErrorCode.BOOKING_CHANNEL_STATUS_ALREADY_SET, HttpStatus.CONFLICT);
+    }
+    if (next === BookingChannelStatus.PUBLISHED) await this.assertCanPublish(businessId);
+  }
+
+  private async assertCanPublish(businessId: string): Promise<void> {
+    const business = await this.businessService.findById(businessId);
+    if (business.bookingVisibility === BookingVisibility.PRIVATE) {
+      throw new AppException(ErrorCode.BOOKING_CHANNEL_CLOSED, HttpStatus.CONFLICT);
+    }
+    const bookable = await this.servicesService.countBookable(businessId);
+    if (bookable === 0) {
+      throw new AppException(ErrorCode.BOOKING_CHANNEL_NOT_BOOKABLE, HttpStatus.CONFLICT);
+    }
+  }
+}

@@ -10,12 +10,13 @@ import { GlobalExceptionFilter } from './shared/filters/exception.filter.js';
 import { exceptionFactory } from './shared/validation/exception-factory.js';
 import { swaggerConfig } from './config/swagger.config.js';
 import { registerDecimalSchemas } from './shared/decorators/api-decimal.decorator.js';
-import { corsConfig } from './config/cors.config.js';
+import cors from 'cors';
+import { corsOptionsDelegate } from './config/embeddable-booking-cors.js';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
-  app.enableCors(corsConfig);
+  app.use(cors(corsOptionsDelegate));
   app.use(cookieParser());
 
   app.useGlobalFilters(new GlobalExceptionFilter());

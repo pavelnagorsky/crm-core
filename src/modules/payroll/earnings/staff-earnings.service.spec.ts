@@ -41,6 +41,8 @@ function booking(overrides: Partial<Booking> = {}): Booking {
     updatedAt: new Date(),
     deletedAt: null,
     ...overrides,
+    bookingPageId: overrides.bookingPageId ?? null,
+    bookingWidgetId: overrides.bookingWidgetId ?? null,
   };
 }
 

@@ -60,6 +60,43 @@ enum BookingSource {
   MANUAL
 }
 
+enum BookingChannelStatus {
+  DRAFT
+  PUBLISHED
+}
+
+enum BookingPalette {
+  INK
+  SAND
+  SAGE
+  DUSK
+  WINE
+  PEARL
+  GRAPHITE
+  EMERALD
+  SKY
+  LAVENDER
+  CORAL
+  MONO
+  CUSTOM
+}
+
+enum BookingWidgetPlacement {
+  INLINE
+  SIDEBAR
+  DIALOG
+}
+
+enum BookingWidgetTrigger {
+  INLINE_BUTTON
+  FLOATING_BUTTON
+}
+
+enum BookingWidgetButtonPosition {
+  BOTTOM_RIGHT
+  BOTTOM_LEFT
+}
+
 enum AuditEntity {
   BOOKING
   CLIENT
@@ -237,6 +274,8 @@ model Business {
   staffEarnings                 StaffEarning[]
   payrollPeriods                PayrollPeriod[]
   payrollResults                PayrollResult[]
+  bookingPages                  BookingPage[]
+  bookingWidgets                BookingWidget[]
 }
 
 model Membership {
@@ -365,10 +404,11 @@ model File {
   fileSizeBytes Int
   createdAt     DateTime @default(now())
 
-  user           User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  staffAvatars   Staff[]
-  businessLogos  Business[]
-  serviceImages  Service[]
+  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  staffAvatars      Staff[]
+  businessLogos     Business[]
+  serviceImages     Service[]
+  bookingPageCovers BookingPage[]
 
   @@index([userId])
 }
@@ -473,6 +513,9 @@ model Booking {
   status     BookingStatus @default(CONFIRMED)
   source     BookingSource
 
+  bookingPageId   String?
+  bookingWidgetId String?
+
   clientFirstName String  @db.VarChar(100)
   clientLastName  String  @db.VarChar(100)
   clientPhone     String  @db.VarChar(30)
@@ -506,11 +549,88 @@ model Booking {
   client        Client         @relation(fields: [clientId],        references: [id], onDelete: Restrict)
   calendarEvent CalendarEvent? @relation(fields: [calendarEventId], references: [id], onDelete: SetNull)
   earnings      StaffEarning[]
+  bookingPage   BookingPage?   @relation(fields: [bookingPageId], references: [id], onDelete: SetNull)
+  bookingWidget BookingWidget? @relation(fields: [bookingWidgetId], references: [id], onDelete: SetNull)
 
   @@index([businessId, deletedAt, startAt])
   @@index([staffId, deletedAt, startAt])
   @@index([clientId, deletedAt, startAt])
   @@index([status])
+  @@index([bookingPageId])
+  @@index([bookingWidgetId])
+}
+
+model BookingPage {
+  id              String               @id @default(uuid())
+  businessId      String
+  title           String               @db.VarChar(80)
+  slug            String               @unique @db.VarChar(48)
+  status          BookingChannelStatus @default(DRAFT)
+  tagline         String               @default("") @db.VarChar(120)
+  html            String               @default("") @db.VarChar(20000)
+  metaTitle       String               @default("") @db.VarChar(70)
+  metaDescription String               @default("") @db.VarChar(160)
+  coverFileId     String?
+
+  palette           BookingPalette
+  customBackground  String?        @db.VarChar(7)
+  customSurface     String?        @db.VarChar(7)
+  customText        String?        @db.VarChar(7)
+  customMuted       String?        @db.VarChar(7)
+  customAccent      String?        @db.VarChar(7)
+  customAccentText  String?        @db.VarChar(7)
+  headline          String         @db.VarChar(80)
+  caption           String         @default("") @db.VarChar(120)
+  buttonLabel       String         @db.VarChar(32)
+  showStaff         Boolean
+  showServiceImages Boolean
+  showBranding      Boolean
+
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  coverFile File?    @relation(fields: [coverFileId], references: [id], onDelete: SetNull)
+  bookings Booking[]
+
+  @@index([businessId, updatedAt])
+}
+
+model BookingWidget {
+  id              String                     @id @default(uuid())
+  businessId      String
+  title           String                     @db.VarChar(80)
+  titleKey        String                     @db.VarChar(80)
+  status          BookingChannelStatus       @default(DRAFT)
+  placement       BookingWidgetPlacement
+  trigger         BookingWidgetTrigger
+  buttonPosition  BookingWidgetButtonPosition
+  allowedDomains  String[]                   @default([])
+
+  palette           BookingPalette
+  customBackground  String?        @db.VarChar(7)
+  customSurface     String?        @db.VarChar(7)
+  customText        String?        @db.VarChar(7)
+  customMuted       String?        @db.VarChar(7)
+  customAccent      String?        @db.VarChar(7)
+  customAccentText  String?        @db.VarChar(7)
+  headline          String         @db.VarChar(80)
+  caption           String         @default("") @db.VarChar(120)
+  buttonLabel       String         @db.VarChar(32)
+  showStaff         Boolean
+  showServiceImages Boolean
+  showBranding      Boolean
+
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  business Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  bookings Booking[]
+
+  @@unique([businessId, titleKey])
+  @@index([businessId, updatedAt])
 }
 
 model AuditLog {
