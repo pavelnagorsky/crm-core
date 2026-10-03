@@ -11,7 +11,7 @@ import { exceptionFactory } from './shared/validation/exception-factory.js';
 import { swaggerConfig } from './config/swagger.config.js';
 import { registerDecimalSchemas } from './shared/decorators/api-decimal.decorator.js';
 import cors from 'cors';
-import { corsOptionsDelegate } from './config/embeddable-booking-cors.js';
+import { corsOptionsDelegate } from './config/public-cors.js';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
