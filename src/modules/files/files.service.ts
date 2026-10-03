@@ -5,7 +5,7 @@ import { DatabaseService } from '../../database/database.service.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { IGoogleCloudConfig } from '../../config/configuration.js';
-import { AllowedMimeType } from './enums/allowed-mime-type.enum.js';
+import { BlockedFileExtension } from './enums/blocked-file-extension.enum.js';
 import { randomUUID } from 'crypto';
 import { File } from '@prisma/client';
 
@@ -41,15 +41,16 @@ export class FilesService implements OnModuleInit {
       );
     }
 
-    const mimeType = file.mimetype as AllowedMimeType;
-    if (!Object.values(AllowedMimeType).includes(mimeType)) {
+    const ext = file.originalname.split('.').pop()?.toLowerCase() ?? 'bin';
+
+    const blockedExtensions = Object.values(BlockedFileExtension) as string[];
+    if (blockedExtensions.includes(ext)) {
       throw new AppException(
         ErrorCode.FILE_INVALID_TYPE,
         HttpStatus.UNPROCESSABLE_ENTITY,
       );
     }
 
-    const ext = file.originalname.split('.').pop() ?? 'bin';
     const storageKey = `businesses/${businessId}/files/${randomUUID()}.${ext}`;
 
     try {

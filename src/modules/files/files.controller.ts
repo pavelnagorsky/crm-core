@@ -50,7 +50,7 @@ export class FilesController {
   })
   @ApiOkResponse({ type: ApiResponse(UploadFileResponseDto) })
   @ApiPayloadTooLargeResponse({ description: 'File exceeds 15 MB limit' })
-  @ApiUnprocessableEntityResponse({ description: 'File type not allowed' })
+  @ApiUnprocessableEntityResponse({ description: 'File extension is blocked' })
   async upload(
     @Param('businessId', ParseUUIDPipe) businessId: string,
     @UploadedFile() file: Express.Multer.File,
