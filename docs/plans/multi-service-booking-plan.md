@@ -28,7 +28,7 @@ A **bundle** (YCLIENTS "комплекс") is a *catalog* concept: a named, pre-
 
 ### 0.3 Catalog unification — services and bundles share pages/tables
 
-Per the product owner's explicit requirement: services and bundles must be **created on the same screens and listed in the same tables** where feasible. The chosen model (below) makes a bundle a thin row that references member services — so the existing Services list/search/CRUD is **extended**, not duplicated. A `kind` discriminator (`SERVICE` | `BUNDLE`) drives the few places that must differ (e.g. a bundle has members; a service has a duration).
+Per the product owner's explicit requirement: services and bundles must be **created on the same screens and listed in the same tables** where feasible. **Decision (final, see §2.2):** at the DB level a bundle is a *separate* `ServiceBundle` table (not a column on `Service`); the unification is delivered at the **API/read-model layer** — a merged catalog endpoint (§4.3) returns both kinds tagged by a `kind` discriminator (`SERVICE` | `BUNDLE`), so one UI page/table manages both. The `kind` discriminator exists only in the read-model DTO, never as a column on `Service`.
 
 ### 0.4 Scope: both execution modes are IN scope
 
@@ -82,7 +82,7 @@ Business truths that shaped the model:
 ### 2.1 New enums (each its own file under the owning module's `enums/`, plus Prisma enum)
 
 - `BookingExecutionMode { SEQUENTIAL, PARALLEL }` — how a booking's items are scheduled.
-- `CatalogItemKind { SERVICE, BUNDLE }` — discriminator for the unified catalog (see §4 for how this is applied; may be modeled as a column on `Service` OR as a separate `ServiceBundle` table — decision below).
+- `CatalogItemKind { SERVICE, BUNDLE }` — discriminator for the unified catalog **read-model DTO only** (§4.3). It is NOT a DB column; services and bundles are separate tables (§2.2). This enum tags merged catalog rows in API responses.
 - `BundlePricingMode { SUM, FIXED }` — how a bundle's **list price** is derived: `SUM` of member list prices, or `FIXED` explicit amount. **Both are list prices, not discounts.** `FIXED` means "the business sells this combo at this price" (its own list price), NOT "a discount off the sum" — do not model it as a discount, do not compute/display a "you saved X". Discounts are a **separate future layer** (§11.1), never baked into the catalog. (No `COMPUTED`/per-member-override mode — that would be a discount baked into the service, which is explicitly rejected.)
 
 ### 2.2 Catalog: how to represent a bundle (DECISION)
@@ -274,7 +274,8 @@ New, following the services patterns exactly:
   - All member `serviceId`s belong to the business and are `ACTIVE` (reuse `ServicesService.assertIdsInBusiness`).
   - `pricingMode = FIXED` ⇒ `fixedPrice` required; `pricingMode = SUM` ⇒ `fixedPrice` must be null.
   - `executionMode = PARALLEL` ⇒ at least 2 distinct staff must be *possible* (soft check; hard feasibility is at booking time).
-- Error codes (add to `ErrorCode`): `BUNDLE_NOT_FOUND`, `BUNDLE_TITLE_EXISTS` (if unique title enforced), `BUNDLE_MEMBER_SERVICE_NOT_FOUND`, `BUNDLE_TOO_FEW_ITEMS`, `BUNDLE_TOO_MANY_ITEMS`, `BUNDLE_FIXED_PRICE_REQUIRED`, `BUNDLE_IN_USE` (FK on delete).
+- **Title uniqueness:** `Service` today has **no** unique constraint on `title` (only `ServiceCategory` is unique per business). For consistency, `ServiceBundle` also does **not** enforce unique title in v1 — drop `BUNDLE_TITLE_EXISTS`. (If product later wants unique catalog titles, that's a separate decision spanning both tables.)
+- Error codes (add to `ErrorCode`): `BUNDLE_NOT_FOUND`, `BUNDLE_MEMBER_SERVICE_NOT_FOUND`, `BUNDLE_TOO_FEW_ITEMS`, `BUNDLE_TOO_MANY_ITEMS`, `BUNDLE_FIXED_PRICE_REQUIRED`, `BUNDLE_IN_USE` (FK on delete).
 - Audit: add `AuditEntity.SERVICE` reuse or a new `AuditEntity.BUNDLE` + `BUNDLE_CREATED/UPDATED/DELETED` audit events (follow the service audit field pattern in `src/modules/audit/fields/`).
 
 ### 4.3 Unified catalog list (satisfies "same tables/pages")
@@ -299,7 +300,11 @@ Create a pure computation helper (no DB) e.g. `BundlePricingService` or static m
 - `computeBundleDuration(members[], executionMode)` → Σ `durationMinutes` for `SEQUENTIAL`; `max(durationMinutes)` for `PARALLEL` (the visit envelope length) — but per-item windows still carry each member's own duration.
 - Money via `MoneyService`; never float arithmetic.
 
-Seeding `BookingItem` snapshots at creation: `listPrice` = the service's catalog price (for a `FIXED` bundle, distribute the fixed total across member items by a documented rule — e.g. proportional to each member's list price — so per-item `listPrice` still sums to the bundle total); `chargedPrice` = `listPrice` in v1 (no pricing layer yet). These helpers are used both for catalog display and seeding.
+Seeding `BookingItem` snapshots at creation: `listPrice` per item = the member service's catalog price for a `SUM` bundle (or a standalone ad-hoc service). For a `FIXED` bundle, distribute the fixed total across member items so per-item `listPrice` sums **exactly** to the bundle total:
+- Default rule: proportional to each member's catalog price.
+- **Zero-price edge case** (member prices sum to 0, or some members are zero-priced — the YCLIENTS zero-price scenario): proportional distribution divides by zero. Fallback: distribute **equally** across all members when the price basis is 0; when only *some* members are zero-priced, give zero-priced members `0` and distribute the fixed total proportionally among the priced ones.
+- **Rounding:** distribute with `MoneyService` to 2 decimals and assign the rounding remainder (last cents) to the first item so the sum is exact. Document this.
+`chargedPrice` = `listPrice` in v1 (no pricing layer yet). These helpers are used both for catalog display and seeding.
 
 ---
 
@@ -307,8 +312,13 @@ Seeding `BookingItem` snapshots at creation: `listPrice` = the service's catalog
 
 The current engine (`CalendarService.getAvailableSlots` / `isSlotFree` / `filterAvailableStaff`, `CalendarComputeService.collectSlotsForDate`) assumes **one continuous interval for one staff**. Multi-service needs generalization. Keep `isSlotFree` conceptually pure; add higher-level orchestration.
 
-### 6.1 Inputs
-A resolution request is a list of **required items**, each: `serviceId`, `durationMinutes` (+buffer), and a set of **candidate staff** (from `StaffService`), plus the `executionMode`.
+### 6.1 Inputs & the three cases
+A resolution request is a list of **required items**, each: `serviceId`, `durationMinutes` (+buffer), and a set of **candidate staff** (from `StaffService`), plus the `executionMode`. The engine handles exactly **three cases**, and tests (§12) are table-driven over them:
+1. SEQUENTIAL, single staff (§6.2)
+2. SEQUENTIAL, different staff per item (§6.3)
+3. PARALLEL, one staff per item (§6.4)
+
+Case 1 is detected when at least one candidate staff can perform *all* items and `executionMode = SEQUENTIAL`. Otherwise cases 2/3 apply per `executionMode`.
 
 ### 6.2 SEQUENTIAL, single staff (the common, cheap case)
 Equivalent to today: total duration = Σ(duration+buffer). Reuse existing slot collection with the summed duration. Staff = anyone who can do **all** items.
@@ -317,7 +327,13 @@ Equivalent to today: total duration = Σ(duration+buffer). Reuse existing slot c
 Items are chained: item₀ at `[t, t+d₀)` by staff A, item₁ at `[t+d₀, t+d₀+d₁)` by staff B, etc. A start time `t` is valid iff there exists an assignment of candidate staff to items such that each staff is free on its sub-window and no staff is double-used in overlapping windows (they don't overlap in SEQUENTIAL, so the main constraint is per-item availability + a staff not assigned to two items unless free for both consecutively). Implementation: greedy/backtracking assignment per candidate start time. Keep the candidate-start grid at `business.slotIntervalMinutes`.
 
 ### 6.4 PARALLEL (4 hands)
-All items share the same `[t, t+max(dᵢ))` window (or each its own `[t, t+dᵢ)` starting together). A start `t` is valid iff candidate staff can be assigned **one per item, all distinct, all free** on their windows simultaneously. This is a bipartite matching (items ↔ staff) per start time — use a simple matching (Hopcroft–Karp is overkill; services are few, N≤10, greedy with backtracking suffices). 
+All items share the same start `t`, each with its own window `[t, t+dᵢ)`. A start `t` is valid iff candidate staff can be assigned **one per item, all distinct, all free** on their windows simultaneously. This is a bipartite matching (items ↔ candidate staff) per start time — a simple matching suffices (Hopcroft–Karp is overkill; N≤10, greedy with backtracking is fine).
+
+Edge cases the implementer MUST handle (fail fast with a clear `ErrorCode`, do not silently fall back):
+- **Fewer distinct candidate staff than items** → PARALLEL is infeasible for this business/set → `BOOKING_NO_STAFF_AVAILABLE` (reuse existing) at resolve/create time; `resolve` returns no slots.
+- **A staff is the only candidate for two different items** → that staff cannot do both at once in PARALLEL → the matching simply cannot cover both; if no valid matching exists for any `t`, return no slots.
+- **Duplicate service in a PARALLEL set** (same service twice, e.g. two identical treatments at once) → allowed only if ≥2 distinct staff can perform it; handled naturally by the matching.
+Document that PARALLEL correctness hinges on "distinct staff per item at the same instant" — this is the invariant the re-check inside the transaction (§6.6) must re-assert.
 
 ### 6.5 Calendar events per item — DECISION
 Create **one `CalendarEvent` per `BookingItem`** (each occupies a specific staff's time). This is uniform and makes PARALLEL/different-staff natural. For SEQUENTIAL single-staff with 3 items you get 3 adjacent events for the same staff — acceptable and consistent; the calendar feed groups them by `bookingId` for display (§9). (Alternative — one merged event for single-staff — adds a special case; avoid.)
@@ -354,10 +370,11 @@ Response (`BookingResolveResponseDto`):
   availableStaff: BookingResolveStaffDto[]; // staff selectable (empty when auto-assign)
   staffSelection: StaffSelectionMode;  // SINGLE | NONE
   executionMode: BookingExecutionMode; // implied by current selection
-  totalDuration: number;
-  totalPrice: string;                  // MoneyService-formatted
+  totalDuration: number;               // envelope duration (Σ for SEQUENTIAL, max for PARALLEL)
+  totalListPrice: string;              // MoneyService-formatted; v1 has no discounts so this is also what's charged
 }
 ```
+> Price vocabulary is consistent across the whole plan: `listPrice` / `chargedPrice` (§2.3) and their totals `totalListPrice` / `totalChargedPrice` (§10). `resolve` returns only `totalListPrice` because at the quote stage, in v1, no discount layer exists yet (§11.1) so charged == list; when the pricing layer lands, `resolve` gains `totalChargedPrice` too.
 Symmetric behavior table:
 | State | Response |
 |---|---|
@@ -402,7 +419,10 @@ Deferred (not v1, does not affect the model): pre-selected service/staff deep-li
 - New interfaces for the resolved internal shape under `interfaces/` (e.g. `ResolvedBookingItem`).
 
 ### 8.2 `BookingCreateService.create()` rewrite
-1. Load business + all services (or bundle → explode to member services), validate business/visibility/active, resolve client (unchanged).
+
+**Preserve all existing cross-cutting guards — do not drop them when rewriting.** The current `createPublicBooking` applies: `PublicBookingRateLimiter.assertAllowed(phone, ip)`, booking-channel attribution (`BookingChannelAttributionService.resolve`), private-visibility check, and the client-ban check (`isSelfBookingBlocked`). All of these still apply to a multi-item public booking exactly once per booking (not per item). Keep them at the top of the flow, unchanged.
+
+1. Load business + all services (or bundle → explode to member services), validate business/visibility/active, resolve client (unchanged). Run rate-limit + ban guards (above).
 2. Determine `executionMode` (from bundle, or inferred: if a single staff covers all and no parallel requested → SEQUENTIAL single-staff; else per rules).
 3. Resolve staffing + a concrete start time via the §6 engine → produce `ResolvedBookingItem[]` each with `staffId`, sub-window `startAt/endAt`, and snapshots (title/duration/price via §5).
 4. Transaction: acquire **multi-staff advisory locks** (§6.6, sorted); re-check every item; create one `CalendarEvent` per item; create `Booking` (envelope = min start / max end, `executionMode`, `bundleId?`); create `BookingItem[]` linked to their events.
@@ -411,6 +431,7 @@ Deferred (not v1, does not affect the model): pre-selected service/staff deep-li
 ### 8.3 Status transitions, completion, cancellation, delete
 - `updateStatus` → completion now records **per-item** earnings (§9). Reversal reverses all item earnings.
 - `completeElapsed` cron: envelope `endAt` drives completion (unchanged logic, per-item earnings on complete).
+- Reminder cron (`reminderSentAt` lives on `Booking`, visit-level): unchanged — one reminder per visit keyed on the envelope `startAt`. The reminder message summarizes the whole visit (all services / staff / envelope time), mirroring the notification change in §8.2 step 5.
 - `cancel` / `delete`: delete/cancel **all** item calendar events; reverse all item earnings if was completed. `Booking.deletedAt` soft-delete cascades to items via query filtering.
 
 ### 8.4 Update / reschedule
@@ -477,7 +498,7 @@ Highest-risk, do-with-most-care: **§3 migration**, **§6 slot engine**, **§6.6
 
 **Prisma:** `schema.prisma` (+enums, +3 models, modified `Booking`, `StaffEarning`, `CalendarEvent`); one migration dir.
 
-**enums/** (one file each): `BookingExecutionMode`, `BundlePricingMode`, `CatalogItemKind`, `StaffSelectionMode` (+ mirror in Prisma where needed).
+**enums/** (one file each): `BookingExecutionMode` and `BundlePricingMode` are **both Prisma enums and TS enums** (mirror in `schema.prisma`). `CatalogItemKind` and `StaffSelectionMode` are **TS-only** (API/read-model concerns, no DB column) — do NOT add them to Prisma.
 
 **services module:** `ServiceBundleService`, DTOs (`CreateServiceBundleDto`, `UpdateServiceBundleDto`, `ServiceBundleResponseDto`, `ServiceBundleItemDto`, search DTOs, status DTO), `CatalogItemDto`, controller routes, `BundlePricingService` (pure), audit fields.
 
