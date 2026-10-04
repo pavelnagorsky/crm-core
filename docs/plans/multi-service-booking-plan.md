@@ -83,7 +83,7 @@ Business truths that shaped the model:
 
 - `BookingExecutionMode { SEQUENTIAL, PARALLEL }` — how a booking's items are scheduled.
 - `CatalogItemKind { SERVICE, BUNDLE }` — discriminator for the unified catalog (see §4 for how this is applied; may be modeled as a column on `Service` OR as a separate `ServiceBundle` table — decision below).
-- `BundlePricingMode { SUM, FIXED, COMPUTED }` — how a bundle's price is derived (`SUM` of members, `FIXED` explicit amount, `COMPUTED` = sum with per-member overrides/discount). Start with `SUM` + `FIXED`; `COMPUTED` can be a later refinement but define the enum now.
+- `BundlePricingMode { SUM, FIXED }` — how a bundle's **list price** is derived: `SUM` of member list prices, or `FIXED` explicit amount. **Both are list prices, not discounts.** `FIXED` means "the business sells this combo at this price" (its own list price), NOT "a discount off the sum" — do not model it as a discount, do not compute/display a "you saved X". Discounts are a **separate future layer** (§11.1), never baked into the catalog. (No `COMPUTED`/per-member-override mode — that would be a discount baked into the service, which is explicitly rejected.)
 
 ### 2.2 Catalog: how to represent a bundle (DECISION)
 
@@ -92,7 +92,7 @@ Business truths that shaped the model:
 Rationale (architect's call): a `Service` row carries a single `durationMinutes`/`price` and is referenced all over (staffServices, commission rates, bookings). Overloading it with a nullable "members" relation and making half its columns meaningless for bundles creates a pervasive "is this really a service?" smell and risks every existing query. A dedicated table keeps `Service` clean and lets bundles have their own fields (pricing mode, execution mode, member list). The **unification the product owner wants is achieved at the API/UI layer** (§4.3), not by forcing one table — the catalog list endpoint returns a unified view over both.
 
 ```prisma
-enum BundlePricingMode { SUM FIXED COMPUTED }
+enum BundlePricingMode { SUM FIXED }
 enum BookingExecutionMode { SEQUENTIAL PARALLEL }
 
 model ServiceBundle {
@@ -124,7 +124,6 @@ model ServiceBundleItem {
   bundleId        String
   serviceId       String
   sortOrder       Int     @default(0)
-  priceOverride   Decimal? @db.Decimal(10, 2) // for COMPUTED pricing; null = use service price
 
   bundle  ServiceBundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
   service Service       @relation(fields: [serviceId], references: [id], onDelete: Restrict)
@@ -134,6 +133,8 @@ model ServiceBundleItem {
   @@index([serviceId])
 }
 ```
+
+> No `priceOverride` on the member: a member never carries a per-combo adjusted price. A bundle's list price is either the plain `SUM` of member list prices or a single `FIXED` amount. Any deviation from list price (coupons, promotions, seasonal, happy-hour, per-order discounts) is the future pricing layer's job (§11.1), applied over `BookingItem` at order time — never stored on the catalog.
 
 Add inverse relations to `Business`, `ServiceCategory`, `File`, `Service` (`bundleItems ServiceBundleItem[]`).
 
@@ -204,7 +205,15 @@ model BookingItem {
   // snapshots (moved off Booking)
   serviceTitle    String   @db.VarChar(150)
   serviceDuration Int
-  servicePrice    Decimal  @db.Decimal(10, 2)
+  // Price is split into three roles so a future pricing/discount layer (§11.1)
+  // can lay on top without a schema rewrite:
+  //   listPrice    = catalog list price at booking time (service price, or bundle-member share)
+  //   chargedPrice = what the client actually pays for this item (== listPrice until a
+  //                  discount/coupon/policy or admin override changes it)
+  //   customPrice  = explicit admin override on this specific booking (highest precedence)
+  // Effective charged amount = customPrice ?? chargedPrice. Commission (§9) bases on that.
+  listPrice       Decimal  @db.Decimal(10, 2)
+  chargedPrice    Decimal  @db.Decimal(10, 2)
   customPrice     Decimal? @db.Decimal(10, 2)
   staffName       String   @db.VarChar(250)
 
@@ -240,7 +249,7 @@ Order within the single Prisma migration (`src/database/migrations/<ts>_multi_se
 1. Create enums `BookingExecutionMode`, `BundlePricingMode`.
 2. Create tables `ServiceBundle`, `ServiceBundleItem`, `BookingItem`.
 3. Add `Booking.executionMode` (default `SEQUENTIAL`), `Booking.bundleId` (nullable). Keep old `Booking.*` service/staff columns **temporarily**.
-4. **Backfill:** for every existing `Booking`, insert one `BookingItem` copying `serviceId, staffId, serviceTitle, serviceDuration, servicePrice, customPrice, staffName, startAt, endAt, calendarEventId`; `sortOrder = 0`; `businessId` copied. Set `BookingItem.bookingId` accordingly.
+4. **Backfill:** for every existing `Booking`, insert one `BookingItem` copying `serviceId, staffId, serviceTitle, serviceDuration, staffName, startAt, endAt, calendarEventId`; map the old `servicePrice` → **both** `listPrice` and `chargedPrice` (no historical discount existed); copy `customPrice`; `sortOrder = 0`; `businessId` copied. Set `BookingItem.bookingId` accordingly.
 5. Add `StaffEarning.bookingItemId`; backfill by matching each earning's `bookingId` to that booking's single migrated item.
 6. Re-point `CalendarEvent` ↔ `BookingItem`: the migrated item takes over the old `Booking.calendarEventId`.
 7. **Only after backfill verified:** drop `Booking.serviceId/serviceTitle/serviceDuration/servicePrice/customPrice/staffId/staffName/calendarEventId`. (Consider shipping the drop as a *follow-up* migration once the new code is live and verified in staging — safer rollback. Recommended: two-phase.)
@@ -258,12 +267,12 @@ Write the backfill as raw SQL inside the migration (the repo already hand-writes
 ### 4.2 Bundle CRUD — new, mirrors services
 
 New, following the services patterns exactly:
-- DTOs: `CreateServiceBundleDto`, `UpdateServiceBundleDto`, `ServiceBundleResponseDto`, `ServiceBundleItemDto` (member: `serviceId`, `sortOrder`, optional `priceOverride`), `ServiceBundleSearchRequestDto`/`...ResponseDto` if bundles get their own list, plus status-change DTO mirroring `UpdateServiceStatusDto`.
+- DTOs: `CreateServiceBundleDto`, `UpdateServiceBundleDto`, `ServiceBundleResponseDto`, `ServiceBundleItemDto` (member: `serviceId`, `sortOrder`), `ServiceBundleSearchRequestDto`/`...ResponseDto` if bundles get their own list, plus status-change DTO mirroring `UpdateServiceStatusDto`.
 - Service: `ServiceBundleService` (or methods on `ServicesService` — see §4.4) with `create/update/findById/search/changeStatus/delete`.
 - Validation rules:
   - 2..N members (`N` = const, default 10 — add `MULTI_SERVICE_MAX_ITEMS` constant, not inline).
   - All member `serviceId`s belong to the business and are `ACTIVE` (reuse `ServicesService.assertIdsInBusiness`).
-  - `pricingMode = FIXED` ⇒ `fixedPrice` required; `SUM`/`COMPUTED` ⇒ `fixedPrice` must be null.
+  - `pricingMode = FIXED` ⇒ `fixedPrice` required; `pricingMode = SUM` ⇒ `fixedPrice` must be null.
   - `executionMode = PARALLEL` ⇒ at least 2 distinct staff must be *possible* (soft check; hard feasibility is at booking time).
 - Error codes (add to `ErrorCode`): `BUNDLE_NOT_FOUND`, `BUNDLE_TITLE_EXISTS` (if unique title enforced), `BUNDLE_MEMBER_SERVICE_NOT_FOUND`, `BUNDLE_TOO_FEW_ITEMS`, `BUNDLE_TOO_MANY_ITEMS`, `BUNDLE_FIXED_PRICE_REQUIRED`, `BUNDLE_IN_USE` (FK on delete).
 - Audit: add `AuditEntity.SERVICE` reuse or a new `AuditEntity.BUNDLE` + `BUNDLE_CREATED/UPDATED/DELETED` audit events (follow the service audit field pattern in `src/modules/audit/fields/`).
@@ -283,15 +292,14 @@ Put bundle code in the **services module** (`src/modules/services/`) so catalog 
 
 ## 5. Pricing & duration computation (pure helper)
 
-Create a pure computation helper (no DB) e.g. `BundlePricingService` or static methods, mirroring how `CalendarComputeService` is a private pure helper:
-- `computeBundlePrice(mode, members[], perStaffOverrides?)`:
-  - `SUM` → Σ member `servicePrice`.
+Create a pure computation helper (no DB) e.g. `BundlePricingService` or static methods, mirroring how `CalendarComputeService` is a private pure helper. **This computes list price only — no discounts.**
+- `computeBundleListPrice(mode, members[])`:
+  - `SUM` → Σ member `price`.
   - `FIXED` → `fixedPrice`.
-  - `COMPUTED` → Σ (`priceOverride ?? servicePrice`).
-- `computeBundleDuration(members[])` → Σ `durationMinutes` for `SEQUENTIAL`; `max(durationMinutes)` for `PARALLEL` (the visit envelope length) — but per-item windows still carry each member's own duration.
+- `computeBundleDuration(members[], executionMode)` → Σ `durationMinutes` for `SEQUENTIAL`; `max(durationMinutes)` for `PARALLEL` (the visit envelope length) — but per-item windows still carry each member's own duration.
 - Money via `MoneyService`; never float arithmetic.
 
-These are used both for catalog display and to seed `BookingItem` snapshots at creation.
+Seeding `BookingItem` snapshots at creation: `listPrice` = the service's catalog price (for a `FIXED` bundle, distribute the fixed total across member items by a documented rule — e.g. proportional to each member's list price — so per-item `listPrice` still sums to the bundle total); `chargedPrice` = `listPrice` in v1 (no pricing layer yet). These helpers are used both for catalog display and seeding.
 
 ---
 
@@ -413,7 +421,7 @@ Deferred (not v1, does not affect the model): pre-selected service/staff deep-li
 ## 9. Payroll (highest-care step #4)
 
 `StaffEarningsService.recordForCompletedBooking` / `reverseForBooking` are rewritten to operate **per `BookingItem`**:
-- For each item: resolve the performing staff's compensation plan, `resolveServicePercent(plan, item.serviceId)`, base = `item.customPrice ?? item.servicePrice`; create one `StaffEarning` linked via `bookingItemId` (and `staffId` from the item — items in one booking can pay **different** staff).
+- For each item: resolve the performing staff's compensation plan, `resolveServicePercent(plan, item.serviceId)`, base = `item.customPrice ?? item.chargedPrice` (the effective charged amount — this already respects any future discount written to `chargedPrice`); create one `StaffEarning` linked via `bookingItemId` (and `staffId` from the item — items in one booking can pay **different** staff).
 - Idempotency: `idempotencyKey` must key on `bookingItemId` (not just bookingId) so multi-item bookings don't collide and partial re-runs are safe.
 - Reversal: reverse each item's earning individually; a booking-level reversal iterates items.
 - Update specs: `staff-earnings.service.spec.ts` must cover multi-item, multi-staff, per-item percent.
@@ -422,9 +430,9 @@ Deferred (not v1, does not affect the model): pre-selected service/staff deep-li
 
 ## 10. Read side: responses, calendar, search, export
 
-- **`BookingResponseDto`**: add `items: BookingItemResponseDto[]` (new DTO: serviceId, serviceTitle, duration, price, customPrice, staffId, staffName, startAt, endAt), `executionMode`, `totalPrice`, `totalDuration`, `bundleId?`. Remove the single-service fields (they're now in items). `fromEntity` maps from a `Booking` with `items` included — update `BookingsService.findById`/`search` to `include: { items: ... }`.
+- **`BookingResponseDto`**: add `items: BookingItemResponseDto[]` (new DTO: serviceId, serviceTitle, duration, `listPrice`, `chargedPrice`, customPrice, staffId, staffName, startAt, endAt), `executionMode`, `totalListPrice`, `totalChargedPrice`, `totalDuration`, `bundleId?`. Remove the single-service fields (they're now in items). `fromEntity` maps from a `Booking` with `items` included — update `BookingsService.findById`/`search` to `include: { items: ... }`.
 - **Calendar feed** (`listForCalendar` / `CalendarEventItemDto`): a booking now yields **one calendar entry per item** (each on its staff's row). Group/label by `bookingId` so the UI can render "visit" grouping; a PARALLEL booking shows simultaneous entries on different staff rows; a SEQUENTIAL multi-staff booking shows adjacent entries across rows. `CalendarBookingFeed`/`CalendarBookingReader` interfaces change from per-booking to per-item rows. `linkedEventIds` now come from items.
-- **Search** (`bookings.service.ts`): `serviceId`/`serviceTitle`/`staffId` filters move to the `items` relation (`items: { some: { serviceId: { in } } }`, text search on `items.serviceTitle` / `items.staffName`). The hand-written SQL branch for price sort (`searchByChargedPrice`, `bookingWherePart`, etc.) must be reworked: "charged price" becomes a per-booking aggregate over items (`Σ COALESCE(customPrice, servicePrice)`); rewrite the raw SQL to join `BookingItem` and group. This is the fiddliest read-side change — budget time and keep the existing SQL-injection-safe whitelisting approach.
+- **Search** (`bookings.service.ts`): `serviceId`/`serviceTitle`/`staffId` filters move to the `items` relation (`items: { some: { serviceId: { in } } }`, text search on `items.serviceTitle` / `items.staffName`). The hand-written SQL branch for price sort (`searchByChargedPrice`, `bookingWherePart`, etc.) must be reworked: "charged price" becomes a per-booking aggregate over items (`Σ COALESCE(customPrice, chargedPrice)`); rewrite the raw SQL to join `BookingItem` and group. This is the fiddliest read-side change — budget time and keep the existing SQL-injection-safe whitelisting approach.
 - **Export (XLSX)**: a booking spans multiple services/staff. Decide row model: one row per booking with services concatenated, OR one row per item. Recommend **one row per item** (cleaner for payroll/accounting), with booking-level columns repeated. Update `bookings-export.service.ts` + its spec.
 
 ---
@@ -432,9 +440,19 @@ Deferred (not v1, does not affect the model): pre-selected service/staff deep-li
 ## 11. Explicitly deferred (do NOT build in v1, but don't block)
 
 - Per-staff service duration/price overrides (YCLIENTS feature). Model allows it later via a staff-service override table; `BookingItem` snapshots already capture the effective values.
-- `BundlePricingMode.COMPUTED` with per-member discounts beyond simple overrides.
 - Editing the item set of an existing booking (add/remove service post-creation).
 - Bundle-level tech cards / inventory.
+
+### 11.1 Pricing / discounts layer (future, deliberately OUT of the catalog)
+
+**Design intent (product owner):** discounts are NOT a property of a service or a bundle. They are a separate layer — **coupons, pricing policies over sets of services, seasonal pricing, happy-hours, per-order/per-client discounts** — applied *to an order* at booking time, on top of catalog list prices. The catalog only ever stores list prices (§2, §5). Do not bake any discount mechanic into `Service` or `ServiceBundle`.
+
+What v1 must do so this layer lands later **without a schema rewrite** (already reflected above — this is the whole reason for the price split):
+- `BookingItem` carries `listPrice` (catalog) **and** `chargedPrice` (what's actually paid). In v1 they are equal; the future layer writes `chargedPrice < listPrice` and records provenance.
+- Commission/payroll (§9) already bases on the *effective charged* amount (`customPrice ?? chargedPrice`), so discounts flow into payroll correctly for free.
+- Reporting/search aggregates over `chargedPrice`, so "revenue after discounts" is already the number shown.
+
+What the future module will add (sketch, NOT for v1): a `PricingPolicy` / `Coupon` / `Promotion` domain; an application step during booking creation/quote that takes resolved `BookingItem[]` + client + channel + time and returns per-item adjustments; a `BookingItemAdjustment` (or booking-level) table recording each applied discount (type, source policy/coupon, amount) for auditability and "you saved X" display. This slots in ahead of the final price write in §8.2 step 3 and does not change any table created in v1 beyond adding the adjustment table.
 
 ---
 
