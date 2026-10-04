@@ -2,7 +2,6 @@ import { randomUUID } from 'crypto';
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
-  Booking,
   Prisma,
   StaffEarning,
   StaffEarningSource,
@@ -35,6 +34,7 @@ import { CompensationPlanWithRates } from '../compensation/interfaces/compensati
 import { StaffCompensationService } from '../compensation/staff-compensation.service.js';
 import { MoneyService } from '../../../shared/money/money.service.js';
 import { lockedPeriodWhere } from '../periods/locked-period.js';
+import { BookingWithItems } from '../../bookings/interfaces/booking-with-items.interface.js';
 
 @Injectable()
 export class StaffEarningsService {
@@ -49,7 +49,7 @@ export class StaffEarningsService {
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
-  async recordForCompletedBooking(booking: Booking): Promise<StaffEarning | null> {
+  async recordForCompletedBooking(booking: BookingWithItems): Promise<StaffEarning[]> {
     try {
       return await this.createBookingCommission(booking);
     } catch (err) {
@@ -57,11 +57,11 @@ export class StaffEarningsService {
         `Failed to record earning for booking ${booking.id}`,
         err instanceof Error ? err.stack : String(err),
       );
-      return null;
+      return [];
     }
   }
 
-  async reverseForBooking(booking: Booking, reason: string | null, actor?: AuditActor): Promise<StaffEarning | null> {
+  async reverseForBooking(booking: BookingWithItems, reason: string | null, actor?: AuditActor): Promise<StaffEarning[]> {
     try {
       return await this.reverseBookingCommission(booking, reason, actor);
     } catch (err) {
@@ -69,7 +69,7 @@ export class StaffEarningsService {
         `Failed to reverse earning for booking ${booking.id}`,
         err instanceof Error ? err.stack : String(err),
       );
-      return null;
+      return [];
     }
   }
 
@@ -350,77 +350,88 @@ export class StaffEarningsService {
     });
   }
 
-  private async createBookingCommission(booking: Booking): Promise<StaffEarning | null> {
+  private async createBookingCommission(booking: BookingWithItems): Promise<StaffEarning[]> {
     const { timezone, currency } = await this.businessService.getLocale(booking.businessId);
     const earnedOn = TimeService.dateOnly(TimeService.zonedDateStr(booking.startAt, timezone));
-    const plan = await this.compensation.resolveForDate(booking.staffId, earnedOn);
-    if (!plan) return null;
-
-    const percent = this.compensation.resolveServicePercent(plan, booking.serviceId);
-    if (percent === null) return null;
-
-    const base = booking.customPrice ?? booking.servicePrice;
-    const amount = this.calculator.commission(base, percent);
-
-    return this.insertEarning({
-      businessId: booking.businessId,
-      staffId: booking.staffId,
-      type: StaffEarningType.SERVICE_COMMISSION,
-      source: StaffEarningSource.BOOKING,
-      earnedOn,
-      amount,
-      currency,
-      baseAmount: MoneyService.decimal(base),
-      ratePercent: MoneyService.decimal(percent),
-      description: booking.serviceTitle,
-      idempotencyKey: this.idempotencyKey({ kind: 'booking', bookingId: booking.id }),
-      compensationPlanId: plan.id,
-      bookingId: booking.id,
-    });
+    const earnings: StaffEarning[] = [];
+    for (const item of booking.items) {
+      const plan = await this.compensation.resolveForDate(item.staffId, earnedOn);
+      if (!plan) continue;
+      const percent = this.compensation.resolveServicePercent(plan, item.serviceId);
+      if (percent === null) continue;
+      const base = item.customPrice ?? item.chargedPrice;
+      const amount = this.calculator.commission(base, percent);
+      earnings.push(await this.insertEarning({
+        businessId: booking.businessId,
+        staffId: item.staffId,
+        type: StaffEarningType.SERVICE_COMMISSION,
+        source: StaffEarningSource.BOOKING,
+        earnedOn,
+        amount,
+        currency,
+        baseAmount: MoneyService.decimal(base),
+        ratePercent: MoneyService.decimal(percent),
+        description: item.serviceTitle,
+        idempotencyKey: this.idempotencyKey({ kind: 'bookingItem', bookingItemId: item.id }),
+        compensationPlanId: plan.id,
+        bookingId: booking.id,
+        bookingItemId: item.id,
+      }));
+    }
+    return earnings;
   }
 
-  private async reverseBookingCommission(booking: Booking, reason: string | null, actor?: AuditActor): Promise<StaffEarning | null> {
-    const original = await this.db.staffEarning.findFirst({
+  private async reverseBookingCommission(booking: BookingWithItems, reason: string | null, actor?: AuditActor): Promise<StaffEarning[]> {
+    const itemIds = booking.items.map((item) => item.id);
+    const originals = await this.db.staffEarning.findMany({
       where: {
         businessId: booking.businessId,
-        idempotencyKey: this.idempotencyKey({ kind: 'booking', bookingId: booking.id }),
+        bookingItemId: { in: itemIds },
+        type: StaffEarningType.SERVICE_COMMISSION,
+        source: StaffEarningSource.BOOKING,
       },
     });
-    if (!original) return null;
-
-    const existingReversal = await this.db.staffEarning.findUnique({
-      where: { reversesEarningId: original.id },
-    });
-    if (existingReversal) return existingReversal;
-
-    const reversal = await this.insertEarning({
-      businessId: booking.businessId,
-      staffId: original.staffId,
-      type: StaffEarningType.CORRECTION,
-      source: StaffEarningSource.BOOKING,
-      earnedOn: original.earnedOn,
-      amount: MoneyService.decimal(original.amount).negated(),
-      currency: original.currency,
-      baseAmount: original.baseAmount,
-      ratePercent: original.ratePercent,
-      description: original.description,
-      reason,
-      actorId: actor?.id ?? null,
-      actorName: actor?.name ?? null,
-      idempotencyKey: this.idempotencyKey({ kind: 'bookingReversal', bookingId: booking.id }),
-      compensationPlanId: original.compensationPlanId,
-      bookingId: booking.id,
-      reversesEarningId: original.id,
-    });
-
-    if (actor) {
-      this.emitEarningAudit(booking.businessId, original.staffId, AuditEvent.STAFF_EARNING_REVERSED, actor, {
-        bookingId: booking.id,
-        amount: MoneyService.format(reversal.amount),
-        currency: original.currency,
+    const reversals: StaffEarning[] = [];
+    for (const original of originals) {
+      const existingReversal = await this.db.staffEarning.findUnique({
+        where: { reversesEarningId: original.id },
       });
+      if (existingReversal) {
+        reversals.push(existingReversal);
+        continue;
+      }
+      const reversal = await this.insertEarning({
+        businessId: booking.businessId,
+        staffId: original.staffId,
+        type: StaffEarningType.CORRECTION,
+        source: StaffEarningSource.BOOKING,
+        earnedOn: original.earnedOn,
+        amount: MoneyService.decimal(original.amount).negated(),
+        currency: original.currency,
+        baseAmount: original.baseAmount,
+        ratePercent: original.ratePercent,
+        description: original.description,
+        reason,
+        actorId: actor?.id ?? null,
+        actorName: actor?.name ?? null,
+        idempotencyKey: this.idempotencyKey({ kind: 'bookingItemReversal', bookingItemId: original.bookingItemId ?? original.id }),
+        compensationPlanId: original.compensationPlanId,
+        bookingId: booking.id,
+        bookingItemId: original.bookingItemId,
+        reversesEarningId: original.id,
+      });
+      reversals.push(reversal);
+
+      if (actor) {
+        this.emitEarningAudit(booking.businessId, original.staffId, AuditEvent.STAFF_EARNING_REVERSED, actor, {
+          bookingId: booking.id,
+          bookingItemId: original.bookingItemId,
+          amount: MoneyService.format(reversal.amount),
+          currency: original.currency,
+        });
+      }
     }
-    return reversal;
+    return reversals;
   }
 
   private async assertDateUnlocked(businessId: string, earnedOn: Date): Promise<void> {
@@ -443,8 +454,8 @@ export class StaffEarningsService {
       | { kind: 'salary'; periodId: string; staffId: string }
       | { kind: 'salaryPeriod'; periodId: string }
       | { kind: 'correction'; resultId: string }
-      | { kind: 'booking'; bookingId: string }
-      | { kind: 'bookingReversal'; bookingId: string },
+      | { kind: 'bookingItem'; bookingItemId: string }
+      | { kind: 'bookingItemReversal'; bookingItemId: string },
   ): string {
     switch (input.kind) {
       case 'manual':
@@ -459,10 +470,10 @@ export class StaffEarningsService {
         return `salary:${input.periodId}:`;
       case 'correction':
         return `correction:${input.resultId}:${randomUUID()}`;
-      case 'booking':
-        return `booking:${input.bookingId}:${StaffEarningType.SERVICE_COMMISSION}`;
-      case 'bookingReversal':
-        return `booking:${input.bookingId}:${StaffEarningType.SERVICE_COMMISSION}:reversal`;
+      case 'bookingItem':
+        return `booking-item:${input.bookingItemId}:${StaffEarningType.SERVICE_COMMISSION}`;
+      case 'bookingItemReversal':
+        return `booking-item:${input.bookingItemId}:${StaffEarningType.SERVICE_COMMISSION}:reversal`;
     }
   }
 

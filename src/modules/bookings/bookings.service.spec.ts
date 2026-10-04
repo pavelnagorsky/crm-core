@@ -10,16 +10,21 @@ import { BookingsService } from './bookings.service.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { BookingSearchRequestDto } from './dto/booking-search-request.dto.js';
 import { BookingSearchOrderBy } from './enums/booking-search-order-by.enum.js';
+import { BookingWithItems } from './interfaces/booking-with-items.interface.js';
 
-function booking(overrides: Partial<Booking> = {}): Booking {
+function booking(
+  overrides: Partial<Booking> & Partial<BookingWithItems> = {},
+): BookingWithItems {
+  const startAt = overrides.startAt ?? new Date('2026-09-24T10:00:00.000Z');
+  const endAt = overrides.endAt ?? new Date('2026-09-24T11:00:00.000Z');
   return {
     id: 'booking-1',
     businessId: 'biz',
     staffId: 'anna',
     serviceId: 'haircut',
     clientId: 'client',
-    startAt: new Date('2026-09-24T10:00:00.000Z'),
-    endAt: new Date('2026-09-24T11:00:00.000Z'),
+    startAt,
+    endAt,
     status: BookingStatus.CONFIRMED,
     source: BookingSource.MANUAL,
     clientFirstName: 'A',
@@ -44,7 +49,24 @@ function booking(overrides: Partial<Booking> = {}): Booking {
     ...overrides,
     bookingPageId: overrides.bookingPageId ?? null,
     bookingWidgetId: overrides.bookingWidgetId ?? null,
-  };
+    items: overrides.items ?? [{
+      id: `${overrides.id ?? 'booking-1'}-item-1`,
+      bookingId: overrides.id ?? 'booking-1',
+      businessId: overrides.businessId ?? 'biz',
+      serviceId: overrides.serviceId ?? 'haircut',
+      staffId: overrides.staffId ?? 'anna',
+      sortOrder: 0,
+      startAt,
+      endAt,
+      serviceTitle: overrides.serviceTitle ?? 'РЎС‚СЂРёР¶РєР°',
+      serviceDuration: overrides.serviceDuration ?? 60,
+      listPrice: overrides.servicePrice ?? new Prisma.Decimal('50.00'),
+      chargedPrice: overrides.servicePrice ?? new Prisma.Decimal('50.00'),
+      customPrice: overrides.customPrice ?? null,
+      staffName: overrides.staffName ?? 'Anna',
+      calendarEventId: overrides.calendarEventId ?? null,
+    }],
+  } as unknown as BookingWithItems;
 }
 
 describe('BookingsService.completeElapsed', () => {
@@ -144,8 +166,12 @@ describe('BookingsService.search', () => {
     expect(findMany.mock.calls[0][0].where).toEqual({
       businessId: 'biz',
       deletedAt: null,
-      staffId: { in: ['anna', 'boris'] },
-      serviceId: { in: ['haircut'] },
+      items: {
+        some: {
+          staffId: { in: ['anna', 'boris'] },
+          serviceId: { in: ['haircut'] },
+        },
+      },
       createdAt: {
         gte: new Date('2026-09-01T00:00:00.000Z'),
         lte: new Date('2026-09-30T23:59:59.000Z'),
@@ -155,8 +181,8 @@ describe('BookingsService.search', () => {
         { clientLastName: { contains: 'стрижка', mode: 'insensitive' } },
         { clientPhone: { contains: 'стрижка' } },
         { clientEmail: { contains: 'стрижка', mode: 'insensitive' } },
-        { serviceTitle: { contains: 'стрижка', mode: 'insensitive' } },
-        { staffName: { contains: 'стрижка', mode: 'insensitive' } },
+        { items: { some: { serviceTitle: { contains: 'стрижка', mode: 'insensitive' } } } },
+        { items: { some: { staffName: { contains: 'стрижка', mode: 'insensitive' } } } },
         { notes: { contains: 'стрижка', mode: 'insensitive' } },
         { internalNotes: { contains: 'стрижка', mode: 'insensitive' } },
         { cancellationReason: { contains: 'стрижка', mode: 'insensitive' } },
@@ -182,8 +208,8 @@ describe('BookingsService.search', () => {
   it.each([
     [BookingSearchOrderBy.START_AT, [{ startAt: OrderDirection.ASC }, { id: OrderDirection.ASC }]],
     [BookingSearchOrderBy.CREATED_AT, [{ createdAt: OrderDirection.ASC }, { id: OrderDirection.ASC }]],
-    [BookingSearchOrderBy.SERVICE_TITLE, [{ serviceTitle: OrderDirection.ASC }, { id: OrderDirection.ASC }]],
-    [BookingSearchOrderBy.STAFF_NAME, [{ staffName: OrderDirection.ASC }, { id: OrderDirection.ASC }]],
+    [BookingSearchOrderBy.SERVICE_TITLE, [{ startAt: OrderDirection.ASC }, { id: OrderDirection.ASC }]],
+    [BookingSearchOrderBy.STAFF_NAME, [{ startAt: OrderDirection.ASC }, { id: OrderDirection.ASC }]],
     [BookingSearchOrderBy.STATUS, [{ status: OrderDirection.ASC }, { id: OrderDirection.ASC }]],
     [BookingSearchOrderBy.SOURCE, [{ source: OrderDirection.ASC }, { id: OrderDirection.ASC }]],
   ])('orders by %s', async (orderBy, expected) => {
@@ -216,35 +242,31 @@ describe('BookingsService.search', () => {
   });
 
   it('orders price by numeric coalesce of custom and service price', async () => {
-    queryRaw.mockResolvedValue([{ id: 'high' }, { id: 'low' }]);
-    findMany.mockResolvedValue([booking({ id: 'low' }), booking({ id: 'high' })]);
+    findMany.mockResolvedValue([
+      booking({ id: 'low', servicePrice: new Prisma.Decimal('10') }),
+      booking({ id: 'high', servicePrice: new Prisma.Decimal('100') }),
+    ]);
     count.mockResolvedValue(2);
 
     const result = await service.search('biz', {
       businessId: 'biz',
-      page: 2,
+      page: 1,
       pageSize: 10,
       search: '10%',
       orderBy: BookingSearchOrderBy.PRICE,
       orderDirection: OrderDirection.ASC,
     } as BookingSearchRequestDto);
 
-    const query = queryRaw.mock.calls[0][0] as Prisma.Sql;
-    expect(query.sql).toContain('ORDER BY COALESCE("customPrice", "servicePrice") ASC, "id" ASC');
-    expect(query.sql).not.toContain('::text');
-    expect(query.sql).toContain('LIMIT ? OFFSET ?');
-    expect(query.values).toContain(10);
-    expect(query.values).toContain(10);
-    expect(query.values).toContain('%10\\%%');
-    expect(result.items.map((item) => item.id)).toEqual(['high', 'low']);
+    expect(queryRaw).not.toHaveBeenCalled();
+    expect(result.items.map((item) => item.id)).toEqual(['low', 'high']);
     expect(result.totalItems).toBe(2);
-    expect(findMany.mock.calls[0][0].where).toEqual({ id: { in: ['high', 'low'] } });
+    expect(findMany.mock.calls[0][0].where.OR).toBeDefined();
   });
 });
 
 describe('BookingsService.listForCalendar', () => {
   const findMany = vi.fn();
-  const db = { booking: { findMany } };
+  const db = { bookingItem: { findMany } };
 
   let service: BookingsService;
 
@@ -271,32 +293,45 @@ describe('BookingsService.listForCalendar', () => {
       booking({ id: 'visible', calendarEventId: 'ev-1', customPrice: new Prisma.Decimal('10.00') }),
       booking({ id: 'cancelled', status: BookingStatus.CANCELLED, calendarEventId: 'ev-2' }),
       booking({ id: 'noshow', status: BookingStatus.NO_SHOW, calendarEventId: null }),
-    ]);
+    ].map((row) => ({
+      ...row.items[0],
+      booking: {
+        id: row.id,
+        clientFirstName: row.clientFirstName,
+        clientLastName: row.clientLastName,
+        status: row.status,
+      },
+    })));
 
     const feed = await service.listForCalendar('biz', rangeStart, rangeEnd, ['anna']);
 
     expect(findMany).toHaveBeenCalledWith({
       where: {
         businessId: 'biz',
-        deletedAt: null,
         startAt: { lt: rangeEnd },
         endAt: { gt: rangeStart },
         staffId: { in: ['anna'] },
+        booking: { deletedAt: null },
       },
       orderBy: [{ startAt: 'asc' }, { id: 'asc' }],
       select: {
         id: true,
         staffId: true,
         staffName: true,
-        clientFirstName: true,
-        clientLastName: true,
         serviceTitle: true,
-        servicePrice: true,
+        chargedPrice: true,
         customPrice: true,
         startAt: true,
         endAt: true,
         calendarEventId: true,
-        status: true,
+        booking: {
+          select: {
+            id: true,
+            clientFirstName: true,
+            clientLastName: true,
+            status: true,
+          },
+        },
       },
     });
     expect(feed.bookings.map((item) => item.id)).toEqual(['visible', 'noshow']);

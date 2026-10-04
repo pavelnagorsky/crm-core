@@ -27,6 +27,8 @@ import { AvailableSlotsDayDto } from './dto/available-slots-day.dto.js';
 import { ManualAvailableSlotsRequestDto } from './dto/manual-available-slots-request.dto.js';
 import { MoveCalendarEventDto } from './dto/move-calendar-event.dto.js';
 import { CalendarEventItemDto } from './dto/calendar-event-item.dto.js';
+import { CalendarSlotCandidate } from './interfaces/calendar-slot-candidate.interface.js';
+import { CalendarSlotItem } from './interfaces/calendar-slot-item.interface.js';
 
 const MANUAL_AVAILABLE_SLOTS_MAX_DAYS = 62;
 
@@ -253,10 +255,9 @@ export class CalendarService {
     businessId: string,
     dto: AvailableSlotsRequestDto,
   ): Promise<AvailableSlotsDayDto[]> {
-    const { business, service, candidateStaff } = await this.loadSlotCandidates(
+    const { business, service, candidateStaff, slotItems, executionMode, candidatesByService } = await this.loadSlotCandidates(
       businessId,
-      dto.serviceId,
-      dto.staffId,
+      dto,
     );
     if (business.bookingVisibility === BookingVisibility.PRIVATE)
       throw new AppException(ErrorCode.BOOKING_NOT_AVAILABLE, HttpStatus.FORBIDDEN);
@@ -269,6 +270,9 @@ export class CalendarService {
       slotIntervalMinutes: business.slotIntervalMinutes,
       service,
       candidateStaff,
+      slotItems,
+      executionMode,
+      candidatesByService,
       todayStr,
       earliestMinuteToday: nowMinutes + business.minimumBookingNoticeMinutes,
       rangeStart,
@@ -281,10 +285,9 @@ export class CalendarService {
     dto: ManualAvailableSlotsRequestDto,
   ): Promise<AvailableSlotsDayDto[]> {
     const { from, to } = this.manualSlotRange(dto.from, dto.to);
-    const { business, service, candidateStaff } = await this.loadSlotCandidates(
+    const { business, service, candidateStaff, slotItems, executionMode, candidatesByService } = await this.loadSlotCandidates(
       businessId,
-      dto.serviceId,
-      dto.staffId,
+      dto,
     );
     if (candidateStaff.length === 0) return [];
 
@@ -298,6 +301,9 @@ export class CalendarService {
       slotIntervalMinutes: business.slotIntervalMinutes,
       service,
       candidateStaff,
+      slotItems,
+      executionMode,
+      candidatesByService,
       todayStr,
       earliestMinuteToday: 0,
       rangeStart: TimeService.dateOnly(effectiveFrom),
@@ -369,8 +375,8 @@ export class CalendarService {
     return !blocked.some((b) => slotStart < b.end && slotEnd > b.start);
   }
 
-  private async loadSlotCandidates(businessId: string, serviceId: string, staffId?: string) {
-    const [business, service, candidateStaff] = await Promise.all([
+  private async loadSlotCandidates(businessId: string, dto: AvailableSlotsRequestDto) {
+    const [business, selection] = await Promise.all([
       this.db.business.findUnique({
         where: { id: businessId },
         select: {
@@ -381,16 +387,99 @@ export class CalendarService {
           bookingVisibility: true,
         },
       }),
-      this.db.service.findFirst({
-        where: { id: serviceId, businessId, status: ServiceStatus.ACTIVE },
-        select: { durationMinutes: true, bufferMinutes: true },
-      }),
-      this.staff.resolveStaffForService(businessId, serviceId, staffId),
+      this.resolveSlotSelection(businessId, dto),
     ]);
 
     if (!business) throw new NotFoundException('Business not found');
-    if (!service) throw new NotFoundException('Service not found');
-    return { business, service, candidateStaff };
+    return { business, ...selection };
+  }
+
+  private async resolveSlotSelection(businessId: string, dto: AvailableSlotsRequestDto): Promise<{
+    service: { durationMinutes: number; bufferMinutes: number };
+    candidateStaff: CalendarSlotCandidate[];
+    slotItems: CalendarSlotItem[];
+    executionMode: string;
+    candidatesByService: Map<string, CalendarSlotCandidate[]>;
+  }> {
+    if (dto.bundleId && (dto.serviceIds?.length || dto.serviceId)) {
+      throw new AppException(ErrorCode.BOOKING_SELECTION_CONFLICT, HttpStatus.BAD_REQUEST);
+    }
+    if (dto.bundleId) {
+      const bundle = await this.db.serviceBundle.findFirst({
+        where: { id: dto.bundleId, businessId, status: ServiceStatus.ACTIVE },
+        include: { items: { orderBy: { sortOrder: 'asc' }, include: { service: true } } },
+      });
+      if (!bundle) throw new NotFoundException('Service bundle not found');
+      const services = bundle.items.map((item) => item.service);
+      const candidatesByService = await this.candidatesByService(businessId, services.map((service) => service.id), dto.staffId);
+      const candidateStaff = this.uniqueCandidates(candidatesByService);
+      return {
+        service: this.slotServiceDuration(
+          services.map((service) => ({ durationMinutes: service.durationMinutes, bufferMinutes: service.bufferMinutes })),
+          bundle.executionMode,
+        ),
+        candidateStaff,
+        slotItems: services.map((service) => ({
+          serviceId: service.id,
+          durationMinutes: service.durationMinutes + service.bufferMinutes,
+        })),
+        executionMode: bundle.executionMode,
+        candidatesByService,
+      };
+    }
+
+    const serviceIds = dto.serviceIds?.length ? dto.serviceIds : dto.serviceId ? [dto.serviceId] : [];
+    if (serviceIds.length === 0) throw new NotFoundException('Service not found');
+    const uniqueServiceIds = [...new Set(serviceIds)];
+    const services = await this.db.service.findMany({
+      where: { id: { in: uniqueServiceIds }, businessId, status: ServiceStatus.ACTIVE },
+      select: { id: true, durationMinutes: true, bufferMinutes: true },
+    });
+    if (services.length !== uniqueServiceIds.length) throw new NotFoundException('Service not found');
+    const byId = new Map(services.map((service) => [service.id, service]));
+    const ordered = serviceIds.map((serviceId) => byId.get(serviceId)!);
+    const candidatesByService = await this.candidatesByService(businessId, serviceIds, dto.staffId);
+    const staff = this.uniqueCandidates(candidatesByService);
+    return {
+      service: this.slotServiceDuration(ordered, 'SEQUENTIAL'),
+      candidateStaff: staff,
+      slotItems: ordered.map((service) => ({
+        serviceId: service.id,
+        durationMinutes: service.durationMinutes + service.bufferMinutes,
+      })),
+      executionMode: 'SEQUENTIAL',
+      candidatesByService,
+    };
+  }
+
+  private async candidatesByService(
+    businessId: string,
+    serviceIds: string[],
+    staffId?: string,
+  ): Promise<Map<string, CalendarSlotCandidate[]>> {
+    const map = new Map<string, CalendarSlotCandidate[]>();
+    for (const serviceId of [...new Set(serviceIds)]) {
+      map.set(serviceId, await this.staff.resolveStaffForService(businessId, serviceId, staffId));
+    }
+    return map;
+  }
+
+  private uniqueCandidates(candidatesByService: Map<string, CalendarSlotCandidate[]>): CalendarSlotCandidate[] {
+    const byId = new Map<string, CalendarSlotCandidate>();
+    for (const candidates of candidatesByService.values()) {
+      for (const candidate of candidates) byId.set(candidate.id, candidate);
+    }
+    return [...byId.values()];
+  }
+
+  private slotServiceDuration(
+    services: { durationMinutes: number; bufferMinutes: number }[],
+    executionMode: string,
+  ): { durationMinutes: number; bufferMinutes: number } {
+    const minutes = executionMode === 'PARALLEL'
+      ? Math.max(...services.map((service) => service.durationMinutes + service.bufferMinutes), 0)
+      : services.reduce((sum, service) => sum + service.durationMinutes + service.bufferMinutes, 0);
+    return { durationMinutes: minutes, bufferMinutes: 0 };
   }
 
   private manualSlotRange(fromRaw: string, toRaw: string): { from: string; to: string } {
@@ -409,6 +498,9 @@ export class CalendarService {
     slotIntervalMinutes: number;
     service: { durationMinutes: number; bufferMinutes: number };
     candidateStaff: { id: string }[];
+    slotItems: CalendarSlotItem[];
+    executionMode: string;
+    candidatesByService: Map<string, CalendarSlotCandidate[]>;
     todayStr: string;
     earliestMinuteToday: number;
     rangeStart: Date;
@@ -434,15 +526,26 @@ export class CalendarService {
 
     return dates.flatMap((date) => {
       const earliestMinute = date === input.todayStr ? input.earliestMinuteToday : 0;
-      const slots = this.compute.collectSlotsForDate(
-        date,
-        input.candidateStaff,
-        shiftsByStaffDate,
-        blockedByStaffDate,
-        earliestMinute,
-        slotDuration,
-        input.slotIntervalMinutes,
-      );
+      const slots = input.slotItems.length === 1
+        ? this.compute.collectSlotsForDate(
+            date,
+            input.candidateStaff,
+            shiftsByStaffDate,
+            blockedByStaffDate,
+            earliestMinute,
+            slotDuration,
+            input.slotIntervalMinutes,
+          )
+        : this.compute.collectMultiServiceSlotsForDate(
+            date,
+            input.slotItems,
+            input.executionMode,
+            input.candidatesByService,
+            shiftsByStaffDate,
+            blockedByStaffDate,
+            earliestMinute,
+            input.slotIntervalMinutes,
+          );
       return slots.length
         ? [{ date, slots: slots.map((start) => ({ time: TimeService.minutesToHHmm(start) })) }]
         : [];

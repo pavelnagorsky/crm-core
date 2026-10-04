@@ -408,10 +408,10 @@ export class BookingsAggregatesService {
       startAt: { gte: range.from, lt: range.to },
     };
     if (statuses && statuses.length > 0) where.status = { in: statuses };
-    if (range.staffId) where.staffId = range.staffId;
-    if (range.serviceId) where.serviceId = range.serviceId;
-    if (range.serviceIds) where.serviceId = { in: range.serviceIds };
-    if (range.categoryId) where.service = { categoryId: range.categoryId };
+    if (range.staffId) where.items = { some: { staffId: range.staffId } };
+    if (range.serviceId) where.items = { some: { serviceId: range.serviceId } };
+    if (range.serviceIds) where.items = { some: { serviceId: { in: range.serviceIds } } };
+    if (range.categoryId) where.items = { some: { service: { categoryId: range.categoryId } } };
     return where;
   }
 
@@ -433,22 +433,22 @@ export class BookingsAggregatesService {
         Prisma.sql`"status"::text IN (${Prisma.join(statuses.map((s) => Prisma.sql`${s}`))})`,
       );
     }
-    if (range.staffId) parts.push(Prisma.sql`"staffId" = ${range.staffId}`);
+    if (range.staffId) parts.push(Prisma.sql`"id" IN (SELECT "bookingId" FROM "BookingItem" WHERE "staffId" = ${range.staffId})`);
     if (range.serviceId)
-      parts.push(Prisma.sql`"serviceId" = ${range.serviceId}`);
+      parts.push(Prisma.sql`"id" IN (SELECT "bookingId" FROM "BookingItem" WHERE "serviceId" = ${range.serviceId})`);
     if (range.serviceIds) {
       if (range.serviceIds.length === 0) {
         // Empty in-list → force empty result set without letting Postgres see IN ().
         parts.push(Prisma.sql`FALSE`);
       } else {
         parts.push(
-          Prisma.sql`"serviceId" IN (${Prisma.join(range.serviceIds.map((id) => Prisma.sql`${id}`))})`,
+          Prisma.sql`"id" IN (SELECT "bookingId" FROM "BookingItem" WHERE "serviceId" IN (${Prisma.join(range.serviceIds.map((id) => Prisma.sql`${id}`))}))`,
         );
       }
     }
     if (range.categoryId) {
       parts.push(
-        Prisma.sql`"serviceId" IN (SELECT "id" FROM "Service" WHERE "categoryId" = ${range.categoryId})`,
+        Prisma.sql`"id" IN (SELECT bi."bookingId" FROM "BookingItem" bi JOIN "Service" s ON s."id" = bi."serviceId" WHERE s."categoryId" = ${range.categoryId})`,
       );
     }
     return Prisma.join(parts, ' AND ');

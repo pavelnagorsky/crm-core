@@ -40,7 +40,15 @@ describe('BookingCronService.sendReminders', () => {
       id: 'b1',
       businessId: 'biz',
       clientEmail: 'a@example.com',
+      clientFirstName: 'A',
+      clientLastName: 'B',
+      startAt: new Date('2026-09-24T10:00:00.000Z'),
+      endAt: new Date('2026-09-24T11:00:00.000Z'),
       status: BookingStatus.CONFIRMED,
+      items: [{
+        serviceTitle: 'Haircut',
+        staffName: 'Anna',
+      }],
     };
     db.booking.findMany.mockResolvedValue([due]);
     db.booking.update.mockResolvedValue(due);

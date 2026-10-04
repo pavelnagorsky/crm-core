@@ -1,6 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Booking, BookingSource, BookingStatus, Prisma } from '@prisma/client';
+import { BookingSource, BookingStatus, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { BusinessService } from '../../business/business.service.js';
 import { StaffService } from '../../staff/staff.service.js';
@@ -9,8 +9,15 @@ import type { CompensationPlanWithRates } from '../compensation/interfaces/compe
 import { StaffCompensationService } from '../compensation/staff-compensation.service.js';
 import { PayrollPeriodEarningsRequestDto } from './dto/payroll-period-earnings-request.dto.js';
 import { StaffEarningsService } from './staff-earnings.service.js';
+import { BookingWithItems } from '../../bookings/interfaces/booking-with-items.interface.js';
 
-function booking(overrides: Partial<Booking> = {}): Booking {
+function booking(
+  overrides: Record<string, unknown> & {
+    bookingPageId?: string | null;
+    bookingWidgetId?: string | null;
+    items?: BookingWithItems['items'];
+  } = {},
+): BookingWithItems {
   return {
     id: 'booking-1',
     businessId: 'biz',
@@ -43,7 +50,24 @@ function booking(overrides: Partial<Booking> = {}): Booking {
     ...overrides,
     bookingPageId: overrides.bookingPageId ?? null,
     bookingWidgetId: overrides.bookingWidgetId ?? null,
-  };
+    items: overrides.items ?? [{
+      id: 'booking-item-1',
+      bookingId: 'booking-1',
+      businessId: 'biz',
+      serviceId: 'haircut',
+      staffId: 'anna',
+      sortOrder: 0,
+      startAt: new Date('2026-09-15T10:00:00.000Z'),
+      endAt: new Date('2026-09-15T11:00:00.000Z'),
+      serviceTitle: 'РЎС‚СЂРёР¶РєР°',
+      serviceDuration: 60,
+      listPrice: new Prisma.Decimal('50.00'),
+      chargedPrice: new Prisma.Decimal('50.00'),
+      customPrice: null,
+      staffName: 'Anna',
+      calendarEventId: null,
+    }],
+  } as unknown as BookingWithItems;
 }
 
 describe('StaffEarningsService', () => {
@@ -85,7 +109,7 @@ describe('StaffEarningsService', () => {
 
   it('skips a completed booking when payroll is not configured', async () => {
     compensation.resolveForDate.mockResolvedValue(null);
-    await expect(service.recordForCompletedBooking(booking())).resolves.toBeNull();
+    await expect(service.recordForCompletedBooking(booking())).resolves.toEqual([]);
     expect(db.staffEarning.create).not.toHaveBeenCalled();
   });
 
@@ -96,14 +120,18 @@ describe('StaffEarningsService', () => {
       Promise.resolve({ id: 'earn-1', ...data }),
     );
 
-    const created = await service.recordForCompletedBooking(
-      booking({ customPrice: new Prisma.Decimal('50.00') }),
-    );
+    const created = await service.recordForCompletedBooking(booking({
+      items: [{
+        ...booking().items[0],
+        customPrice: new Prisma.Decimal('50.00'),
+      }],
+    }));
 
-    expect(created?.amount.toString()).toBe('20');
+    expect(created[0].amount.toString()).toBe('20');
     expect(db.staffEarning.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        idempotencyKey: 'booking:booking-1:SERVICE_COMMISSION',
+        idempotencyKey: 'booking-item:booking-item-1:SERVICE_COMMISSION',
+        bookingItemId: 'booking-item-1',
         baseAmount: expect.anything(),
         ratePercent: expect.anything(),
         currency: 'RUB',
@@ -113,11 +141,11 @@ describe('StaffEarningsService', () => {
 
   it('does not fail the booking flow when earning persistence throws', async () => {
     compensation.resolveForDate.mockRejectedValue(new Error('db down'));
-    await expect(service.recordForCompletedBooking(booking())).resolves.toBeNull();
+    await expect(service.recordForCompletedBooking(booking())).resolves.toEqual([]);
   });
 
   it('reuses an existing reversal instead of inserting a second one', async () => {
-    db.staffEarning.findFirst.mockResolvedValue({
+    db.staffEarning.findMany.mockResolvedValue([{
       id: 'orig',
       staffId: 'anna',
       amount: new Prisma.Decimal('20'),
@@ -127,11 +155,12 @@ describe('StaffEarningsService', () => {
       ratePercent: new Prisma.Decimal('40'),
       description: 'Стрижка',
       compensationPlanId: 'plan-1',
-    });
+      bookingItemId: 'booking-item-1',
+    }]);
     db.staffEarning.findUnique.mockResolvedValue({ id: 'rev-1' });
 
     const reversal = await service.reverseForBooking(booking(), 'Клиент отменил визит');
-    expect(reversal).toEqual({ id: 'rev-1' });
+    expect(reversal).toEqual([{ id: 'rev-1' }]);
     expect(db.staffEarning.create).not.toHaveBeenCalled();
   });
 

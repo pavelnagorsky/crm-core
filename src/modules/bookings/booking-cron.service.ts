@@ -32,6 +32,7 @@ export class BookingCronService {
         reminderSentAt: null,
         deletedAt: null,
       },
+      include: { items: { orderBy: { sortOrder: 'asc' } } },
     });
 
     if (!bookings.length) return;
@@ -46,8 +47,14 @@ export class BookingCronService {
         this.eventEmitter.emit(
           NOTIFICATION_EVENT,
           new BookingReminderNotification({
-            ...booking,
+            id: booking.id,
+            clientFirstName: booking.clientFirstName,
+            clientLastName: booking.clientLastName,
             clientEmail: booking.clientEmail!,
+            serviceTitle: booking.items.map((item) => item.serviceTitle).join(', '),
+            staffName: [...new Set(booking.items.map((item) => item.staffName))].join(', '),
+            startAt: booking.startAt,
+            endAt: booking.endAt,
             timezone: locales.get(booking.businessId)?.timezone ?? 'UTC',
           }),
         );

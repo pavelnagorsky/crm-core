@@ -35,6 +35,8 @@ import { BookingsService } from './bookings.service.js';
 import { BookingCreateService } from './booking-create.service.js';
 import { BookingClientService } from './booking-client.service.js';
 import { BookingSetupResponseDto } from './dto/booking-setup-response.dto.js';
+import { BookingResolveRequestDto } from './dto/booking-resolve-request.dto.js';
+import { BookingResolveResponseDto } from './dto/booking-resolve-response.dto.js';
 import { CreateBookingDto } from './dto/create-booking.dto.js';
 import { ManualCreateBookingDto } from './dto/manual-create-booking.dto.js';
 import { UpdateBookingDto } from './dto/update-booking.dto.js';
@@ -78,6 +80,16 @@ export class BookingsController {
     @Param('businessId', ParseUUIDPipe) businessId: string,
   ): Promise<BaseResponseDto<BookingSetupResponseDto>> {
     return BaseResponseDto.success(await this.bookingsService.getBookingSetup(businessId));
+  }
+
+  @ApiOperation({ summary: 'Resolve available services/staff for a partial booking selection (public)' })
+  @ApiOkResponse({ type: ApiResponse(BookingResolveResponseDto) })
+  @Post('public/businesses/:businessId/booking-resolve')
+  async resolveBooking(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Body() dto: BookingResolveRequestDto,
+  ): Promise<BaseResponseDto<BookingResolveResponseDto>> {
+    return BaseResponseDto.success(await this.bookingsService.resolveBookingSelection(businessId, dto));
   }
 
   @ApiOperation({ summary: 'Book an appointment (public / client-facing)' })

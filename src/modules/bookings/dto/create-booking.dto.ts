@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsOptional, IsString, IsUUID, MaxLength, Validate } from 'class-validator';
+import { ArrayMaxSize, ArrayNotEmpty, IsArray, IsEmail, IsOptional, IsString, IsUUID, MaxLength, Validate } from 'class-validator';
+import { MULTI_SERVICE_MAX_ITEMS } from '../../../shared/constants/multi-service.constants.js';
 import { IsPhone } from '../../../shared/decorators/is-phone.decorator.js';
 import { IsLocalDateTime } from '../../time/decorators/is-local-date-time.validator.js';
 import { AtMostOneBookingChannelConstraint } from '../decorators/at-most-one-booking-channel.constraint.js';
@@ -20,9 +21,23 @@ export class CreateBookingDto {
   @IsUUID()
   bookingWidgetId?: string;
 
-  @ApiProperty({ type: String, format: 'uuid' })
+  @ApiProperty({ type: String, format: 'uuid', required: false, deprecated: true })
+  @IsOptional()
   @IsUUID()
-  serviceId: string;
+  serviceId?: string;
+
+  @ApiProperty({ type: String, format: 'uuid', isArray: true, required: false })
+  @IsOptional()
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayMaxSize(MULTI_SERVICE_MAX_ITEMS)
+  @IsUUID(undefined, { each: true })
+  serviceIds?: string[];
+
+  @ApiProperty({ type: String, format: 'uuid', required: false, nullable: true })
+  @IsOptional()
+  @IsUUID()
+  bundleId?: string;
 
   @ApiProperty({ type: String, format: 'uuid', required: false, nullable: true })
   @IsOptional()

@@ -34,6 +34,7 @@ function channelDeps(): [never, never] {
 function setup() {
   const clients = { resolveForBooking: vi.fn() };
   const staff = { resolveStaffForService: vi.fn().mockResolvedValue([]), findById: vi.fn() };
+  const calendar = { filterAvailableStaff: vi.fn().mockResolvedValue([]) };
   const db = {
     business: {
       findUnique: vi.fn().mockResolvedValue({
@@ -44,17 +45,18 @@ function setup() {
       }),
     },
     service: {
-      findFirst: vi.fn().mockResolvedValue({
+      findMany: vi.fn().mockResolvedValue([{
         id: 'service-1',
         title: 'Стрижка',
         durationMinutes: 60,
+        bufferMinutes: 0,
         price: 50,
-      }),
+      }]),
     },
   };
   const service = new BookingCreateService(
     db as never,
-    {} as never,
+    calendar as never,
     clients as never,
     staff as never,
     { emit: vi.fn() } as never,
@@ -141,7 +143,10 @@ describe('BookingCreateService calendar link', () => {
         bannedAt: null,
       }),
     };
-    const calendar = { isSlotFree: vi.fn().mockReturnValue(true) };
+    const calendar = {
+      filterAvailableStaff: vi.fn().mockResolvedValue([{ id: 'staff-1' }]),
+      isSlotFree: vi.fn().mockReturnValue(true),
+    };
     const staff = {
       resolveStaffForService: vi.fn().mockResolvedValue([{ id: 'staff-1' }]),
       findById: vi.fn().mockResolvedValue({ id: 'staff-1', name: 'Мария' }),
@@ -178,6 +183,23 @@ describe('BookingCreateService calendar link', () => {
           customPrice: null,
           staffName: 'Мария',
           calendarEventId: 'event-1',
+          items: [{
+            id: 'booking-item-1',
+            bookingId: 'booking-1',
+            businessId: 'business-1',
+            serviceId: 'service-1',
+            staffId: 'staff-1',
+            sortOrder: 0,
+            startAt: new Date('2026-09-20T07:00:00.000Z'),
+            endAt: new Date('2026-09-20T08:00:00.000Z'),
+            serviceTitle: 'РЎС‚СЂРёР¶РєР°',
+            serviceDuration: 60,
+            listPrice: 50,
+            chargedPrice: 50,
+            customPrice: null,
+            staffName: 'РњР°СЂРёСЏ',
+            calendarEventId: 'event-1',
+          }],
         }),
       },
     };
@@ -191,14 +213,15 @@ describe('BookingCreateService calendar link', () => {
         }),
       },
       service: {
-        findFirst: vi.fn().mockResolvedValue({
+        findMany: vi.fn().mockResolvedValue([{
           id: 'service-1',
           title: 'Стрижка',
           durationMinutes: 60,
+          bufferMinutes: 0,
           price: 50,
-        }),
+        }]),
       },
-      booking: { groupBy: vi.fn().mockResolvedValue([]) },
+      bookingItem: { groupBy: vi.fn().mockResolvedValue([]) },
       $transaction: vi.fn((fn: (client: typeof tx) => Promise<unknown>) => fn(tx)),
     };
 
@@ -222,13 +245,14 @@ describe('BookingCreateService calendar link', () => {
         repeatType: CalendarEventRepeatType.NONE,
       }),
     });
-    expect(tx.booking.create).toHaveBeenCalledWith({
+    expect(tx.booking.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         source: BookingSource.PUBLIC_PAGE,
         bookingPageId: null,
         bookingWidgetId: null,
         clientLastName: 'Иванова',
       }),
-    });
+      include: expect.objectContaining({ items: expect.any(Object) }),
+    }));
   });
 });

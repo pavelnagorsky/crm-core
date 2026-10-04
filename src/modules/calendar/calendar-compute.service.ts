@@ -8,6 +8,8 @@ import {
   EventTimes,
   Interval,
 } from './interfaces/calendar-types.interface.js';
+import { CalendarSlotCandidate } from './interfaces/calendar-slot-candidate.interface.js';
+import { CalendarSlotItem } from './interfaces/calendar-slot-item.interface.js';
 
 @Injectable()
 export class CalendarComputeService {
@@ -325,7 +327,7 @@ export class CalendarComputeService {
    */
   collectSlotsForDate(
     date: string,
-    candidateStaff: { id: string }[],
+    candidateStaff: CalendarSlotCandidate[],
     shiftsByStaffDate: Map<string, Map<string, StaffShift>>,
     blockedByStaffDate: Map<string, Map<string, Interval[]>>,
     earliestMinute: number,
@@ -352,5 +354,108 @@ export class CalendarComputeService {
     }
 
     return [...slotStartSet].sort((a, b) => a - b);
+  }
+
+  collectMultiServiceSlotsForDate(
+    date: string,
+    items: CalendarSlotItem[],
+    executionMode: string,
+    candidatesByService: Map<string, CalendarSlotCandidate[]>,
+    shiftsByStaffDate: Map<string, Map<string, StaffShift>>,
+    blockedByStaffDate: Map<string, Map<string, Interval[]>>,
+    earliestMinute: number,
+    slotInterval: number,
+  ): number[] {
+    const staffIds = this.uniqueCandidates(candidatesByService).map((staff) => staff.id);
+    const shifts = staffIds
+      .map((staffId) => shiftsByStaffDate.get(staffId)?.get(date))
+      .filter((shift): shift is StaffShift => !!shift);
+    if (shifts.length === 0) return [];
+
+    const minStart = Math.min(...shifts.map((shift) => TimeService.timeToMinutes(shift.startTime)));
+    const maxEnd = Math.max(...shifts.map((shift) => TimeService.timeToMinutes(shift.endTime)));
+    const envelopeDuration = executionMode === 'PARALLEL'
+      ? Math.max(...items.map((item) => item.durationMinutes))
+      : items.reduce((sum, item) => sum + item.durationMinutes, 0);
+    const slots: number[] = [];
+    let slotStart = this.alignSlotStart(Math.max(minStart, earliestMinute), slotInterval);
+
+    while (slotStart + envelopeDuration <= maxEnd) {
+      if (this.canAssignItems(
+        date,
+        slotStart,
+        items,
+        executionMode,
+        candidatesByService,
+        shiftsByStaffDate,
+        blockedByStaffDate,
+      )) {
+        slots.push(slotStart);
+      }
+      slotStart += slotInterval;
+    }
+
+    return slots;
+  }
+
+  private canAssignItems(
+    date: string,
+    slotStart: number,
+    items: CalendarSlotItem[],
+    executionMode: string,
+    candidatesByService: Map<string, CalendarSlotCandidate[]>,
+    shiftsByStaffDate: Map<string, Map<string, StaffShift>>,
+    blockedByStaffDate: Map<string, Map<string, Interval[]>>,
+  ): boolean {
+    const windows = items.map((item, index) => {
+      const offset = executionMode === 'PARALLEL'
+        ? 0
+        : items.slice(0, index).reduce((sum, previous) => sum + previous.durationMinutes, 0);
+      return {
+        serviceId: item.serviceId,
+        start: slotStart + offset,
+        end: slotStart + offset + item.durationMinutes,
+      };
+    });
+    const used = new Set<string>();
+    const assign = (index: number): boolean => {
+      if (index >= windows.length) return true;
+      const window = windows[index];
+      const candidates = candidatesByService.get(window.serviceId) ?? [];
+      for (const candidate of candidates) {
+        if (executionMode === 'PARALLEL' && used.has(candidate.id)) continue;
+        if (!this.isStaffFreeOnDate(candidate.id, date, window.start, window.end, shiftsByStaffDate, blockedByStaffDate)) continue;
+        used.add(candidate.id);
+        if (assign(index + 1)) return true;
+        used.delete(candidate.id);
+      }
+      return false;
+    };
+    return assign(0);
+  }
+
+  private isStaffFreeOnDate(
+    staffId: string,
+    date: string,
+    start: number,
+    end: number,
+    shiftsByStaffDate: Map<string, Map<string, StaffShift>>,
+    blockedByStaffDate: Map<string, Map<string, Interval[]>>,
+  ): boolean {
+    const shift = shiftsByStaffDate.get(staffId)?.get(date);
+    if (!shift) return false;
+    const shiftStart = TimeService.timeToMinutes(shift.startTime);
+    const shiftEnd = TimeService.timeToMinutes(shift.endTime);
+    if (start < shiftStart || end > shiftEnd) return false;
+    const blocked = blockedByStaffDate.get(staffId)?.get(date) ?? [];
+    return !blocked.some((block) => start < block.end && end > block.start);
+  }
+
+  private uniqueCandidates(candidatesByService: Map<string, CalendarSlotCandidate[]>): CalendarSlotCandidate[] {
+    const byId = new Map<string, CalendarSlotCandidate>();
+    for (const candidates of candidatesByService.values()) {
+      for (const candidate of candidates) byId.set(candidate.id, candidate);
+    }
+    return [...byId.values()];
   }
 }

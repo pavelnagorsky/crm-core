@@ -55,6 +55,18 @@ export const ErrorCode = {
     code: 'SERVICE_STATUS_ALREADY_SET',
     message: 'Service already has this status',
   },
+  BUNDLE_FIXED_PRICE_REQUIRED: {
+    code: 'BUNDLE_FIXED_PRICE_REQUIRED',
+    message: 'Fixed-price bundle must have a fixed price',
+  },
+  BUNDLE_PRICE_MODE_INVALID: {
+    code: 'BUNDLE_PRICE_MODE_INVALID',
+    message: 'Bundle pricing mode does not match fixed price value',
+  },
+  BUNDLE_ITEMS_INVALID: {
+    code: 'BUNDLE_ITEMS_INVALID',
+    message: 'Bundle must contain between 2 and 10 services',
+  },
 
   // clients
   CLIENT_PHONE_EXISTS: {
@@ -161,6 +173,14 @@ export const ErrorCode = {
   BOOKING_SERVICE_NOT_FOUND: {
     code: 'BOOKING_SERVICE_NOT_FOUND',
     message: 'Service not found',
+  },
+  BOOKING_BUNDLE_NOT_FOUND: {
+    code: 'BOOKING_BUNDLE_NOT_FOUND',
+    message: 'Bundle not found',
+  },
+  BOOKING_SELECTION_CONFLICT: {
+    code: 'BOOKING_SELECTION_CONFLICT',
+    message: 'Set either services or a bundle, not both',
   },
   BOOKING_SERVICE_INACTIVE: {
     code: 'BOOKING_SERVICE_INACTIVE',

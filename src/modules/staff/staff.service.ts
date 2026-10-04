@@ -264,6 +264,45 @@ export class StaffService {
     });
   }
 
+  async resolveStaffingForServices(
+    businessId: string,
+    serviceIds: string[],
+  ): Promise<{ coverableBySingle: { id: string; name: string }[]; requiresMultiple: boolean }> {
+    const uniqueServiceIds = [...new Set(serviceIds)];
+    if (uniqueServiceIds.length === 0) return { coverableBySingle: [], requiresMultiple: false };
+
+    const staff = await this.db.staff.findMany({
+      where: {
+        businessId,
+        status: StaffStatus.ACTIVE,
+        staffServices: { some: { serviceId: { in: uniqueServiceIds } } },
+      },
+      select: {
+        id: true,
+        name: true,
+        staffServices: { select: { serviceId: true } },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    const coverableBySingle = staff
+      .filter((member) => {
+        const performed = new Set(member.staffServices.map((service) => service.serviceId));
+        return uniqueServiceIds.every((serviceId) => performed.has(serviceId));
+      })
+      .map((member) => ({ id: member.id, name: member.name }));
+
+    return { coverableBySingle, requiresMultiple: coverableBySingle.length === 0 };
+  }
+
+  async servicesPerformableBy(businessId: string, staffId: string): Promise<string[]> {
+    const staff = await this.db.staff.findFirst({
+      where: { id: staffId, businessId, status: StaffStatus.ACTIVE },
+      select: { staffServices: { select: { serviceId: true } } },
+    });
+    return staff?.staffServices.map((service) => service.serviceId) ?? [];
+  }
+
   async changeStatus(
     businessId: string,
     staffId: string,
@@ -298,7 +337,7 @@ export class StaffService {
   async delete(businessId: string, staffId: string): Promise<void> {
     await this.findInBusiness(businessId, staffId);
 
-    const bookingCount = await this.db.booking.count({ where: { staffId } });
+    const bookingCount = await this.db.bookingItem.count({ where: { staffId } });
     if (bookingCount > 0)
       throw new AppException(ErrorCode.STAFF_HAS_BOOKINGS, HttpStatus.CONFLICT);
 

@@ -1,0 +1,1 @@
+export const MULTI_SERVICE_MAX_ITEMS = 10;

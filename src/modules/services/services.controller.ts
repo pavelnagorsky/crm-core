@@ -33,6 +33,10 @@ import { ServiceResponseDto } from './dto/service-response.dto.js';
 import { ServiceSearchRequestDto } from './dto/service-search-request.dto.js';
 import { ServiceSearchResponseDto } from './dto/service-search-response.dto.js';
 import { ServiceStatusCountResponseDto } from './dto/service-status-count-response.dto.js';
+import { CreateServiceBundleDto } from './dto/create-service-bundle.dto.js';
+import { UpdateServiceBundleDto } from './dto/update-service-bundle.dto.js';
+import { ServiceBundleResponseDto } from './dto/service-bundle-response.dto.js';
+import { ServiceBundleSearchResponseDto } from './dto/service-bundle-search-response.dto.js';
 import { RBAC } from '../business/decorators/rbac.decorator.js';
 import {
   ApiResponse,
@@ -43,11 +47,15 @@ import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
 import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
+import { ServiceBundleService } from './service-bundle.service.js';
 
 @ApiTags('Services')
 @Controller('businesses/:businessId')
 export class ServicesController {
-  constructor(private readonly servicesService: ServicesService) {}
+  constructor(
+    private readonly servicesService: ServicesService,
+    private readonly serviceBundles: ServiceBundleService,
+  ) {}
 
   // ─── Service Categories ──────────────────────────────────────────────────────
 
@@ -162,6 +170,115 @@ export class ServicesController {
         totalItems,
         dto.isExport,
       ),
+    );
+  }
+
+  @ApiOperation({ summary: 'Create a service bundle' })
+  @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
+  @RBAC(BusinessRole.OWNER)
+  @Post('service-bundles')
+  async createBundle(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Body() dto: CreateServiceBundleDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
+  ): Promise<BaseResponseDto<{ id: string }>> {
+    const bundle = await this.serviceBundles.create(
+      businessId,
+      dto,
+      auditActorFromToken(tokenPayload, businessId),
+    );
+    return BaseResponseDto.success({ id: bundle.id });
+  }
+
+  @ApiOperation({ summary: 'Search service bundles' })
+  @ApiOkResponse({ type: ApiResponse(ServiceBundleSearchResponseDto) })
+  @RBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @Get('service-bundles')
+  async searchBundles(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Query() dto: ServiceSearchRequestDto,
+  ): Promise<BaseResponseDto<ServiceBundleSearchResponseDto>> {
+    const { items, totalItems } = await this.serviceBundles.search(businessId, dto);
+    return BaseResponseDto.success(
+      new ServiceBundleSearchResponseDto(
+        items.map(ServiceBundleResponseDto.fromEntity),
+        dto.page,
+        dto.pageSize,
+        totalItems,
+        dto.isExport,
+      ),
+    );
+  }
+
+  @ApiOperation({ summary: 'Get service bundle by ID' })
+  @ApiOkResponse({ type: ApiResponse(ServiceBundleResponseDto) })
+  @ApiNotFoundResponse({ description: 'Service bundle not found' })
+  @RBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @Get('service-bundles/:id')
+  async findBundleById(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<BaseResponseDto<ServiceBundleResponseDto>> {
+    const bundle = await this.serviceBundles.findById(id);
+    return BaseResponseDto.success(ServiceBundleResponseDto.fromEntity(bundle));
+  }
+
+  @ApiOperation({ summary: 'Update a service bundle' })
+  @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
+  @ApiNotFoundResponse({ description: 'Service bundle not found' })
+  @RBAC(BusinessRole.OWNER)
+  @Put('service-bundles/:id')
+  async updateBundle(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateServiceBundleDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
+  ): Promise<BaseResponseDto<{ id: string }>> {
+    const bundle = await this.serviceBundles.update(
+      businessId,
+      id,
+      dto,
+      auditActorFromToken(tokenPayload, businessId),
+    );
+    return BaseResponseDto.success({ id: bundle.id });
+  }
+
+  @ApiOperation({ summary: 'Change service bundle status' })
+  @ApiNoContentResponse()
+  @ApiNotFoundResponse({ description: 'Service bundle not found' })
+  @ApiConflictResponse({ description: 'Bundle already has this status' })
+  @RBAC(BusinessRole.OWNER)
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @Patch('service-bundles/:id/status')
+  async updateBundleStatus(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateServiceStatusDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
+  ): Promise<void> {
+    await this.serviceBundles.changeStatus(
+      businessId,
+      id,
+      dto.status,
+      auditActorFromToken(tokenPayload, businessId),
+    );
+  }
+
+  @ApiOperation({ summary: 'Delete a service bundle' })
+  @ApiNoContentResponse()
+  @ApiNotFoundResponse({ description: 'Service bundle not found' })
+  @ApiConflictResponse({ description: 'Bundle is used in bookings' })
+  @RBAC(BusinessRole.OWNER)
+  @Delete('service-bundles/:id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteBundle(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
+  ): Promise<void> {
+    await this.serviceBundles.delete(
+      businessId,
+      id,
+      auditActorFromToken(tokenPayload, businessId),
     );
   }
 

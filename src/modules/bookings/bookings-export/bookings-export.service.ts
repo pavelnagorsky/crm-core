@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { Booking } from '@prisma/client';
 import { XlsxColumn } from '../../../shared/xlsx/interfaces/xlsx-column.interface.js';
 import { XlsxFile } from '../../../shared/xlsx/interfaces/xlsx-file.interface.js';
 import { XlsxService } from '../../../shared/xlsx/xlsx.service.js';
@@ -9,6 +8,7 @@ import { I18nLocale } from '../../../shared/interfaces/i18n-locale.interface.js'
 import { MoneyService } from '../../../shared/money/money.service.js';
 import { BookingsService } from '../bookings.service.js';
 import { BookingExportRequestDto } from './dto/booking-export-request.dto.js';
+import { BookingWithItems } from '../interfaces/booking-with-items.interface.js';
 
 type BookingRow = {
   startAt: string;
@@ -74,11 +74,11 @@ export class BookingsExportService {
       pageSize: 1,
       isExport: true,
     });
-    return XlsxService.table(items.map((booking) => this.toRow(booking, messages)), columns, 'bookings', text.sheet);
+    return XlsxService.table(items.flatMap((booking) => this.toRows(booking, messages)), columns, 'bookings', text.sheet);
   }
 
-  private toRow(booking: Booking, messages: I18nLocale): BookingRow {
-    return {
+  private toRows(booking: BookingWithItems, messages: I18nLocale): BookingRow[] {
+    return booking.items.map((item) => ({
       startAt: booking.startAt.toISOString(),
       endAt: booking.endAt.toISOString(),
       status: labelOf(messages.bookingStatus, booking.status),
@@ -87,14 +87,14 @@ export class BookingsExportService {
       clientLastName: booking.clientLastName,
       clientPhone: booking.clientPhone,
       clientEmail: booking.clientEmail ?? '',
-      serviceTitle: booking.serviceTitle,
-      serviceDuration: booking.serviceDuration,
-      price: MoneyService.format(booking.customPrice ?? booking.servicePrice),
-      staffName: booking.staffName,
+      serviceTitle: item.serviceTitle,
+      serviceDuration: item.serviceDuration,
+      price: MoneyService.format(item.customPrice ?? item.chargedPrice),
+      staffName: item.staffName,
       notes: booking.notes ?? '',
       internalNotes: booking.internalNotes ?? '',
       cancellationReason: booking.cancellationReason ?? '',
       createdAt: booking.createdAt.toISOString(),
-    };
+    }));
   }
 }

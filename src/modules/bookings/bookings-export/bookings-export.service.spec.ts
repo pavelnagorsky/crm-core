@@ -6,6 +6,7 @@ import { XlsxService } from '../../../shared/xlsx/xlsx.service.js';
 import { BookingsService } from '../bookings.service.js';
 import { BookingSearchOrderBy } from '../enums/booking-search-order-by.enum.js';
 import { BookingStatus as BookingStatusFilter } from '../enums/booking-status.enum.js';
+import { BookingWithItems } from '../interfaces/booking-with-items.interface.js';
 import { BookingsExportService } from './bookings-export.service.js';
 
 const labels = {
@@ -47,15 +48,19 @@ function collect(stream: PassThrough): Promise<Buffer> {
   });
 }
 
-function booking(overrides: Partial<Booking> = {}): Booking {
+function booking(
+  overrides: Partial<Booking> & Partial<BookingWithItems> = {},
+): BookingWithItems {
+  const startAt = overrides.startAt ?? new Date('2026-09-24T10:00:00.000Z');
+  const endAt = overrides.endAt ?? new Date('2026-09-24T11:00:00.000Z');
   return {
     id: 'booking-1',
     businessId: 'business-1',
     staffId: 'staff-1',
     serviceId: 'service-1',
     clientId: 'client-1',
-    startAt: new Date('2026-09-24T10:00:00.000Z'),
-    endAt: new Date('2026-09-24T11:00:00.000Z'),
+    startAt,
+    endAt,
     status: BookingStatus.CONFIRMED,
     source: BookingSource.MANUAL,
     clientFirstName: 'Анна',
@@ -80,7 +85,24 @@ function booking(overrides: Partial<Booking> = {}): Booking {
     ...overrides,
     bookingPageId: overrides.bookingPageId ?? null,
     bookingWidgetId: overrides.bookingWidgetId ?? null,
-  };
+    items: overrides.items ?? [{
+      id: `${overrides.id ?? 'booking-1'}-item-1`,
+      bookingId: overrides.id ?? 'booking-1',
+      businessId: overrides.businessId ?? 'business-1',
+      serviceId: overrides.serviceId ?? 'service-1',
+      staffId: overrides.staffId ?? 'staff-1',
+      sortOrder: 0,
+      startAt,
+      endAt,
+      serviceTitle: overrides.serviceTitle ?? 'РЎС‚СЂРёР¶РєР°',
+      serviceDuration: overrides.serviceDuration ?? 60,
+      listPrice: overrides.servicePrice ?? new Prisma.Decimal('50.00'),
+      chargedPrice: overrides.servicePrice ?? new Prisma.Decimal('50.00'),
+      customPrice: overrides.customPrice ?? null,
+      staffName: overrides.staffName ?? 'РњР°СЂРёСЏ',
+      calendarEventId: overrides.calendarEventId ?? null,
+    }],
+  } as unknown as BookingWithItems;
 }
 
 describe('BookingsExportService', () => {

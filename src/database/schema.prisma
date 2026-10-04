@@ -60,6 +60,16 @@ enum BookingSource {
   MANUAL
 }
 
+enum BookingExecutionMode {
+  SEQUENTIAL
+  PARALLEL
+}
+
+enum BundlePricingMode {
+  SUM
+  FIXED
+}
+
 enum BookingChannelStatus {
   DRAFT
   PUBLISHED
@@ -276,6 +286,8 @@ model Business {
   payrollResults                PayrollResult[]
   bookingPages                  BookingPage[]
   bookingWidgets                BookingWidget[]
+  serviceBundles                ServiceBundle[]
+  bookingItems                  BookingItem[]
 }
 
 model Membership {
@@ -330,6 +342,7 @@ model ServiceCategory {
 
   business   Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
   services   Service[]
+  bundles    ServiceBundle[]
 
   @@unique([businessId, name])
   @@index([businessId])
@@ -354,11 +367,51 @@ model Service {
   category         ServiceCategory?              @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   imageFile        File?                         @relation(fields: [imageFileId], references: [id], onDelete: SetNull)
   staffServices    StaffService[]
-  bookings         Booking[]
+  bookingItems     BookingItem[]
+  bundleItems      ServiceBundleItem[]
   commissionRates  StaffCompensationServiceRate[]
 
   @@index([businessId])
   @@index([categoryId])
+}
+
+model ServiceBundle {
+  id            String               @id @default(uuid())
+  businessId    String
+  categoryId    String?
+  imageFileId   String?
+  title         String               @db.VarChar(150)
+  description   String?              @db.VarChar(2000)
+  executionMode BookingExecutionMode @default(SEQUENTIAL)
+  pricingMode   BundlePricingMode    @default(SUM)
+  fixedPrice    Decimal?             @db.Decimal(10, 2)
+  status        ServiceStatus        @default(ACTIVE)
+  sortOrder     Int                  @default(0)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+
+  business  Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  category  ServiceCategory?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  imageFile File?               @relation(fields: [imageFileId], references: [id], onDelete: SetNull)
+  items     ServiceBundleItem[]
+  bookings  Booking[]
+
+  @@index([businessId])
+  @@index([categoryId])
+}
+
+model ServiceBundleItem {
+  id        String @id @default(uuid())
+  bundleId  String
+  serviceId String
+  sortOrder Int    @default(0)
+
+  bundle  ServiceBundle @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  service Service       @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+
+  @@unique([bundleId, serviceId])
+  @@index([bundleId])
+  @@index([serviceId])
 }
 
 model Staff {
@@ -386,7 +439,7 @@ model Staff {
   invitations   StaffInvitation[]
   shifts        StaffShift[]
   calendarEvents CalendarEvent[]
-  bookings      Booking[]
+  bookingItems  BookingItem[]
   compensationPlans StaffCompensationPlan[]
   earnings          StaffEarning[]
   payrollResults    PayrollResult[]
@@ -408,6 +461,7 @@ model File {
   staffAvatars      Staff[]
   businessLogos     Business[]
   serviceImages     Service[]
+  serviceBundleImages ServiceBundle[]
   bookingPageCovers BookingPage[]
 
   @@index([userId])
@@ -480,7 +534,7 @@ model CalendarEvent {
   business             Business                         @relation(fields: [businessId], references: [id], onDelete: Cascade)
   staff                Staff?                           @relation(fields: [staffId], references: [id], onDelete: Cascade)
   cancelledOccurrences CalendarEventCancelledOccurrence[]
-  booking              Booking?
+  bookingItem          BookingItem?
 
   @@index([businessId])
   @@index([businessId, staffId])
@@ -503,12 +557,12 @@ model Booking {
   id         String @id @default(uuid())
 
   businessId String
-  staffId    String
-  serviceId  String
   clientId   String
 
   startAt    DateTime
   endAt      DateTime
+  executionMode BookingExecutionMode @default(SEQUENTIAL)
+  bundleId   String?
 
   status     BookingStatus @default(CONFIRMED)
   source     BookingSource
@@ -520,15 +574,6 @@ model Booking {
   clientLastName  String  @db.VarChar(100)
   clientPhone     String  @db.VarChar(30)
   clientEmail     String? @db.VarChar(254)
-
-  serviceTitle    String  @db.VarChar(150)
-  serviceDuration Int
-  servicePrice    Decimal  @db.Decimal(10, 2)
-  customPrice     Decimal? @db.Decimal(10, 2)
-
-  staffName String @db.VarChar(250)
-
-  calendarEventId String? @unique
 
   notes         String? @db.VarChar(1000)
   internalNotes String? @db.VarChar(2000)
@@ -544,20 +589,49 @@ model Booking {
   deletedAt DateTime?
 
   business      Business       @relation(fields: [businessId],     references: [id], onDelete: Cascade)
-  staff         Staff          @relation(fields: [staffId],         references: [id], onDelete: Restrict)
-  service       Service        @relation(fields: [serviceId],       references: [id], onDelete: Restrict)
   client        Client         @relation(fields: [clientId],        references: [id], onDelete: Restrict)
-  calendarEvent CalendarEvent? @relation(fields: [calendarEventId], references: [id], onDelete: SetNull)
+  bundle        ServiceBundle? @relation(fields: [bundleId], references: [id], onDelete: SetNull)
+  items         BookingItem[]
   earnings      StaffEarning[]
   bookingPage   BookingPage?   @relation(fields: [bookingPageId], references: [id], onDelete: SetNull)
   bookingWidget BookingWidget? @relation(fields: [bookingWidgetId], references: [id], onDelete: SetNull)
 
   @@index([businessId, deletedAt, startAt])
-  @@index([staffId, deletedAt, startAt])
   @@index([clientId, deletedAt, startAt])
   @@index([status])
+  @@index([bundleId])
   @@index([bookingPageId])
   @@index([bookingWidgetId])
+}
+
+model BookingItem {
+  id              String   @id @default(uuid())
+  bookingId       String
+  businessId      String
+  serviceId       String
+  staffId         String
+  sortOrder       Int      @default(0)
+  startAt         DateTime
+  endAt           DateTime
+  serviceTitle    String   @db.VarChar(150)
+  serviceDuration Int
+  listPrice       Decimal  @db.Decimal(10, 2)
+  chargedPrice    Decimal  @db.Decimal(10, 2)
+  customPrice     Decimal? @db.Decimal(10, 2)
+  staffName       String   @db.VarChar(250)
+  calendarEventId String?  @unique
+
+  booking       Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  business      Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  service       Service        @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  staff         Staff          @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  calendarEvent CalendarEvent? @relation(fields: [calendarEventId], references: [id], onDelete: SetNull)
+  earnings      StaffEarning[]
+
+  @@index([bookingId])
+  @@index([businessId])
+  @@index([staffId, startAt])
+  @@index([serviceId])
 }
 
 model BookingPage {
@@ -709,6 +783,7 @@ model StaffEarning {
   idempotencyKey          String
   compensationPlanId      String?
   bookingId               String?
+  bookingItemId           String?
   shiftId                 String?
   externalId              String?            @db.VarChar(100)
   reversesEarningId       String?            @unique
@@ -720,6 +795,7 @@ model StaffEarning {
   staff                 Staff                  @relation(fields: [staffId], references: [id], onDelete: Restrict)
   compensationPlan      StaffCompensationPlan? @relation(fields: [compensationPlanId], references: [id], onDelete: SetNull)
   booking               Booking?               @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  bookingItem           BookingItem?           @relation(fields: [bookingItemId], references: [id], onDelete: SetNull)
   shift                 StaffShift?            @relation(fields: [shiftId], references: [id], onDelete: SetNull)
   reversesEarning       StaffEarning?          @relation("EarningReversal", fields: [reversesEarningId], references: [id])
   reversedBy            StaffEarning?          @relation("EarningReversal")
@@ -730,6 +806,7 @@ model StaffEarning {
   @@index([businessId, staffId, earnedOn])
   @@index([businessId, earnedOn])
   @@index([bookingId])
+  @@index([bookingItemId])
   @@index([shiftId])
   @@index([payrollResultId])
 }

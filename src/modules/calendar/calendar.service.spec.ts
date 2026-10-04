@@ -225,7 +225,7 @@ describe('CalendarService.moveOccurrence', () => {
 describe('CalendarService.getManualAvailableSlots', () => {
   const db = {
     business: { findUnique: vi.fn() },
-    service: { findFirst: vi.fn() },
+    service: { findMany: vi.fn() },
     staffShift: { findMany: vi.fn() },
     calendarEvent: { findMany: vi.fn() },
   };
@@ -251,7 +251,7 @@ describe('CalendarService.getManualAvailableSlots', () => {
     vi.setSystemTime(new Date('2026-09-28T10:00:00.000Z'));
     vi.clearAllMocks();
     db.business.findUnique.mockResolvedValue(business);
-    db.service.findFirst.mockResolvedValue({ durationMinutes: 30, bufferMinutes: 0 });
+    db.service.findMany.mockResolvedValue([{ id: 'service-1', durationMinutes: 30, bufferMinutes: 0 }]);
     staff.resolveStaffForService.mockResolvedValue([{ id: 'staff-1' }]);
     db.staffShift.findMany.mockResolvedValue([
       { staffId: 'staff-1', date: new Date('2026-09-28T00:00:00.000Z') },
