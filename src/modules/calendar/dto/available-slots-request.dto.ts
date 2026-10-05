@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ArrayMaxSize, ArrayNotEmpty, IsArray, IsOptional, IsUUID } from 'class-validator';
 import { MULTI_SERVICE_MAX_ITEMS } from '../../../shared/constants/multi-service.constants.js';
+import { ToArray } from '../../../shared/transforms/to-array.transform.js';
 
 export class AvailableSlotsRequestDto {
   @ApiProperty({ type: String, description: 'Service UUID', required: false, deprecated: true })
@@ -10,6 +11,7 @@ export class AvailableSlotsRequestDto {
 
   @ApiProperty({ type: String, isArray: true, required: false, description: 'Service UUIDs' })
   @IsOptional()
+  @ToArray()
   @IsArray()
   @ArrayNotEmpty()
   @ArrayMaxSize(MULTI_SERVICE_MAX_ITEMS)
