@@ -8,7 +8,10 @@ import {
   isClientRecencyBucket,
   recencyCutoff,
 } from './client-recency.rules.js';
-import { catalogCategoryMatch, catalogCategorySql, catalogItemMatch, catalogItemSql } from './catalog-item-filter.js';
+import {
+  catalogCategoryMatch,
+  catalogItemMatch,
+} from './catalog-item-filter.js';
 import { AggregateRange } from './interfaces/aggregate-range.interface.js';
 import { AggregateSeriesRange } from './interfaces/aggregate-series-range.interface.js';
 import { AggregateSnapshot } from './interfaces/aggregate-snapshot.interface.js';
@@ -44,13 +47,14 @@ export class BookingsAggregatesService {
       }>
     >(
       Prisma.sql`
-        SELECT "status" AS status,
+        SELECT b."status" AS status,
                COUNT(*)::bigint AS count,
-               COALESCE(SUM(COALESCE("customPrice", "servicePrice")), 0)::text AS revenue,
-               COALESCE(SUM("serviceDuration"), 0)::bigint AS duration
-        FROM "Booking"
+               COALESCE(SUM(item_totals.revenue), 0)::text AS revenue,
+               COALESCE(SUM(item_totals.duration), 0)::bigint AS duration
+        FROM "Booking" b
+        ${this.itemTotalsJoin(range)}
         WHERE ${this.whereClause(range)}
-        GROUP BY "status"
+        GROUP BY b."status"
       `,
     );
     const byStatus = new Map<
@@ -86,14 +90,16 @@ export class BookingsAggregatesService {
       }>
     >(
       Prisma.sql`
-        SELECT "serviceId" AS "serviceId",
-               MAX("serviceTitle") AS "serviceTitle",
+        SELECT bi."serviceId" AS "serviceId",
+               MAX(bi."serviceTitle") AS "serviceTitle",
                COUNT(*)::bigint AS count,
-               COALESCE(SUM(COALESCE("customPrice", "servicePrice")), 0)::text AS revenue,
-               COALESCE(SUM("serviceDuration"), 0)::bigint AS duration
-        FROM "Booking"
+               COALESCE(SUM(COALESCE(bi."customPrice", bi."chargedPrice")), 0)::text AS revenue,
+               COALESCE(SUM(bi."serviceDuration"), 0)::bigint AS duration
+        FROM "Booking" b
+        JOIN "BookingItem" bi ON bi."bookingId" = b."id"
         WHERE ${this.whereClause(range, statuses)}
-        GROUP BY "serviceId"
+          AND ${this.itemScopeClause(range, 'bi')}
+        GROUP BY bi."serviceId"
       `,
     );
     return rows.map((r) => ({
@@ -121,8 +127,11 @@ export class BookingsAggregatesService {
    * Counts bookings grouped by ISO weekday (1=Mon..7=Sun) and hour of day (0..23) in the
    * business timezone. Zero-cell rows are omitted; callers fill the full 7x24 grid themselves.
    */
-  async heatmapByWeekdayHour(range: AggregateRange, timezone: string): Promise<HeatmapCell[]> {
-    const localExpr = Prisma.sql`(("startAt" AT TIME ZONE 'UTC') AT TIME ZONE ${timezone})`;
+  async heatmapByWeekdayHour(
+    range: AggregateRange,
+    timezone: string,
+  ): Promise<HeatmapCell[]> {
+    const localExpr = Prisma.sql`((b."startAt" AT TIME ZONE 'UTC') AT TIME ZONE ${timezone})`;
     const rows = await this.db.$queryRaw<
       Array<{ weekday: number; hour: number; count: bigint }>
     >(
@@ -130,7 +139,7 @@ export class BookingsAggregatesService {
         SELECT EXTRACT(ISODOW FROM ${localExpr})::int AS weekday,
                EXTRACT(HOUR FROM ${localExpr})::int AS hour,
                COUNT(*)::bigint AS count
-        FROM "Booking"
+        FROM "Booking" b
         WHERE ${this.whereClause(range)}
         GROUP BY weekday, hour
       `,
@@ -143,26 +152,32 @@ export class BookingsAggregatesService {
   }
 
   /**
-   * Bookings grouped by staff with count, revenue and a denormalized display name from the
-   * booking itself. Using `staffName` off Booking keeps this method self-contained (no join)
-   * and reflects the staff name at the time of the booking, which is what an analytics widget
-   * should show for a historical period.
+   * Bookings grouped by staff with count, revenue and the denormalized display name from the
+   * booking item. That reflects the staff name at the time of the booking, which is what an
+   * analytics widget should show for a historical period.
    */
   async countByStaff(
     range: AggregateRange,
     statuses?: BookingStatus[],
   ): Promise<StaffCount[]> {
     const rows = await this.db.$queryRaw<
-      Array<{ staffId: string; staffName: string; count: bigint; revenue: string }>
+      Array<{
+        staffId: string;
+        staffName: string;
+        count: bigint;
+        revenue: string;
+      }>
     >(
       Prisma.sql`
-        SELECT "staffId" AS "staffId",
-               MAX("staffName") AS "staffName",
+        SELECT bi."staffId" AS "staffId",
+               MAX(bi."staffName") AS "staffName",
                COUNT(*)::bigint AS count,
-               COALESCE(SUM(COALESCE("customPrice", "servicePrice")), 0)::text AS revenue
-        FROM "Booking"
+               COALESCE(SUM(COALESCE(bi."customPrice", bi."chargedPrice")), 0)::text AS revenue
+        FROM "Booking" b
+        JOIN "BookingItem" bi ON bi."bookingId" = b."id"
         WHERE ${this.whereClause(range, statuses)}
-        GROUP BY "staffId"
+          AND ${this.itemScopeClause(range, 'bi')}
+        GROUP BY bi."staffId"
       `,
     );
     return rows.map((r) => ({
@@ -192,13 +207,14 @@ export class BookingsAggregatesService {
       >(
         Prisma.sql`
           SELECT ${bucketExpr} AS bucket,
-                 "status" AS status,
+                 b."status" AS status,
                  COUNT(*)::bigint AS count,
-                 COALESCE(SUM(COALESCE("customPrice", "servicePrice")), 0)::text AS revenue,
-                 COALESCE(SUM("serviceDuration"), 0)::bigint AS duration
-          FROM "Booking"
+                 COALESCE(SUM(item_totals.revenue), 0)::text AS revenue,
+                 COALESCE(SUM(item_totals.duration), 0)::bigint AS duration
+          FROM "Booking" b
+          ${this.itemTotalsJoin(range)}
           WHERE ${filters}
-          GROUP BY bucket, "status"
+          GROUP BY bucket, b."status"
           ORDER BY bucket ASC
         `,
       );
@@ -217,9 +233,10 @@ export class BookingsAggregatesService {
       Prisma.sql`
         SELECT ${bucketExpr} AS bucket,
                COUNT(*)::bigint AS count,
-               COALESCE(SUM(COALESCE("customPrice", "servicePrice")), 0)::text AS revenue,
-               COALESCE(SUM("serviceDuration"), 0)::bigint AS duration
-        FROM "Booking"
+               COALESCE(SUM(item_totals.revenue), 0)::text AS revenue,
+               COALESCE(SUM(item_totals.duration), 0)::bigint AS duration
+        FROM "Booking" b
+        ${this.itemTotalsJoin(range)}
         WHERE ${filters}
         GROUP BY bucket
         ORDER BY bucket ASC
@@ -276,10 +293,10 @@ export class BookingsAggregatesService {
       Prisma.sql`
         ${this.completedVisitsCte(range.businessId, range.to)}
         SELECT
-          ${this.bucketExpr(range.granularity, range.timezone)} AS bucket,
+          ${this.bucketExpr(range.granularity, range.timezone, 'v')} AS bucket,
           ${this.cohortAggregates()}
-        FROM visits
-        WHERE "startAt" >= ${range.from}::timestamptz AT TIME ZONE 'UTC'
+        FROM visits v
+        WHERE v."startAt" >= ${range.from}::timestamptz AT TIME ZONE 'UTC'
         GROUP BY bucket
         ORDER BY bucket ASC
       `,
@@ -313,15 +330,16 @@ export class BookingsAggregatesService {
       Prisma.sql`
         WITH last_visits AS (
           SELECT
-            MAX("startAt") AS "lastVisit",
+            MAX(b."startAt") AS "lastVisit",
             COUNT(*)::bigint AS visits,
-            COALESCE(SUM(COALESCE("customPrice", "servicePrice")), 0) AS revenue
-          FROM "Booking"
-          WHERE "businessId" = ${businessId}
-            AND "deletedAt" IS NULL
-            AND "status"::text = ${BookingStatus.COMPLETED}
-            AND "startAt" < ${asOf}::timestamptz AT TIME ZONE 'UTC'
-          GROUP BY "clientId"
+            COALESCE(SUM(item_totals.revenue), 0) AS revenue
+          FROM "Booking" b
+          ${this.itemTotalsJoin({ businessId, from: new Date(0), to: asOf })}
+          WHERE b."businessId" = ${businessId}
+            AND b."deletedAt" IS NULL
+            AND b."status"::text = ${BookingStatus.COMPLETED}
+            AND b."startAt" < ${asOf}::timestamptz AT TIME ZONE 'UTC'
+          GROUP BY b."clientId"
         )
         SELECT
           bucket,
@@ -357,14 +375,15 @@ export class BookingsAggregatesService {
 
   /**
    * Lost money in [from, to): the sum of prices on cancelled and no-show bookings.
-   * Uses customPrice when set, else servicePrice.
+   * Uses customPrice when set, else chargedPrice.
    */
   async lostRevenue(range: AggregateRange): Promise<Prisma.Decimal> {
     const statuses = [BookingStatus.CANCELLED, BookingStatus.NO_SHOW];
     const rows = await this.db.$queryRaw<Array<{ total: string }>>(
       Prisma.sql`
-        SELECT COALESCE(SUM(COALESCE("customPrice", "servicePrice")), 0)::text AS total
-        FROM "Booking"
+        SELECT COALESCE(SUM(item_totals.revenue), 0)::text AS total
+        FROM "Booking" b
+        ${this.itemTotalsJoin(range)}
         WHERE ${this.whereClause(range, statuses)}
       `,
     );
@@ -376,21 +395,32 @@ export class BookingsAggregatesService {
    * happened and were not cancelled/no-show; future = confirmed bookings still to come. Cancelled
    * and no-show visits are excluded from both — an empty chair does not count as occupied.
    */
-  async occupancyBookedMinutes(range: AggregateRange, now: Date): Promise<OccupancyBookedHours> {
-    const heldPast = [BookingStatus.COMPLETED, BookingStatus.CONFIRMED, BookingStatus.PENDING];
-    const rows = await this.db.$queryRaw<Array<{ pastHeld: bigint; futureConfirmed: bigint }>>(
+  async occupancyBookedMinutes(
+    range: AggregateRange,
+    now: Date,
+  ): Promise<OccupancyBookedHours> {
+    const heldPast = [
+      BookingStatus.COMPLETED,
+      BookingStatus.CONFIRMED,
+      BookingStatus.PENDING,
+    ];
+    const rows = await this.db.$queryRaw<
+      Array<{ pastHeld: bigint; futureConfirmed: bigint }>
+    >(
       Prisma.sql`
         SELECT
-          COALESCE(SUM("serviceDuration") FILTER (
-            WHERE "startAt" < ${now}::timestamptz AT TIME ZONE 'UTC'
-              AND "status"::text IN (${Prisma.join(heldPast.map((s) => Prisma.sql`${s}`))})
+          COALESCE(SUM(bi."serviceDuration") FILTER (
+            WHERE b."startAt" < ${now}::timestamptz AT TIME ZONE 'UTC'
+              AND b."status"::text IN (${Prisma.join(heldPast.map((s) => Prisma.sql`${s}`))})
           ), 0)::bigint AS "pastHeld",
-          COALESCE(SUM("serviceDuration") FILTER (
-            WHERE "startAt" >= ${now}::timestamptz AT TIME ZONE 'UTC'
-              AND "status"::text = ${BookingStatus.CONFIRMED}
+          COALESCE(SUM(bi."serviceDuration") FILTER (
+            WHERE b."startAt" >= ${now}::timestamptz AT TIME ZONE 'UTC'
+              AND b."status"::text = ${BookingStatus.CONFIRMED}
           ), 0)::bigint AS "futureConfirmed"
-        FROM "Booking"
+        FROM "Booking" b
+        JOIN "BookingItem" bi ON bi."bookingId" = b."id"
         WHERE ${this.whereClause(range)}
+          AND ${this.itemScopeClause(range, 'bi')}
       `,
     );
     return {
@@ -410,7 +440,8 @@ export class BookingsAggregatesService {
     };
     if (statuses && statuses.length > 0) where.status = { in: statuses };
     const and: Prisma.BookingWhereInput[] = [];
-    if (range.staffId) and.push({ items: { some: { staffId: range.staffId } } });
+    if (range.staffId)
+      and.push({ items: { some: { staffId: range.staffId } } });
     if (range.catalogItemId) and.push(catalogItemMatch([range.catalogItemId]));
     // serviceIds is the services-analytics filter: work performed, including inside a bundle.
     if (range.serviceIds) and.push(this.performedServices(range.serviceIds));
@@ -427,20 +458,27 @@ export class BookingsAggregatesService {
     // `timestamp` explicitly so the comparison stays on the indexed column and doesn't
     // depend on session TIMEZONE (Prisma binds Date as timestamptz).
     const parts: Prisma.Sql[] = [
-      Prisma.sql`"businessId" = ${range.businessId}`,
-      Prisma.sql`"deletedAt" IS NULL`,
-      Prisma.sql`"startAt" >= ${range.from}::timestamptz AT TIME ZONE 'UTC'`,
-      Prisma.sql`"startAt" <  ${range.to}::timestamptz AT TIME ZONE 'UTC'`,
+      Prisma.sql`b."businessId" = ${range.businessId}`,
+      Prisma.sql`b."deletedAt" IS NULL`,
+      Prisma.sql`b."startAt" >= ${range.from}::timestamptz AT TIME ZONE 'UTC'`,
+      Prisma.sql`b."startAt" <  ${range.to}::timestamptz AT TIME ZONE 'UTC'`,
     ];
     if (statuses && statuses.length > 0) {
       parts.push(
-        Prisma.sql`"status"::text IN (${Prisma.join(statuses.map((s) => Prisma.sql`${s}`))})`,
+        Prisma.sql`b."status"::text IN (${Prisma.join(statuses.map((s) => Prisma.sql`${s}`))})`,
       );
     }
-    if (range.staffId) parts.push(Prisma.sql`"id" IN (SELECT "bookingId" FROM "BookingItem" WHERE "staffId" = ${range.staffId})`);
-    if (range.catalogItemId) parts.push(catalogItemSql([range.catalogItemId]));
-    if (range.serviceIds) parts.push(this.performedServicesSql(range.serviceIds));
-    if (range.categoryId) parts.push(catalogCategorySql(range.categoryId));
+    if (range.staffId) {
+      parts.push(Prisma.sql`EXISTS (
+        SELECT 1 FROM "BookingItem" bi
+        WHERE bi."bookingId" = b."id" AND bi."staffId" = ${range.staffId}
+      )`);
+    }
+    if (range.catalogItemId)
+      parts.push(this.catalogItemSql(range.catalogItemId));
+    if (range.serviceIds)
+      parts.push(this.performedServicesSql(range.serviceIds));
+    if (range.categoryId) parts.push(this.catalogCategorySql(range.categoryId));
     return Prisma.join(parts, ' AND ');
   }
 
@@ -451,7 +489,80 @@ export class BookingsAggregatesService {
 
   private performedServicesSql(ids: string[]): Prisma.Sql {
     if (ids.length === 0) return Prisma.sql`FALSE`;
-    return Prisma.sql`"id" IN (SELECT "bookingId" FROM "BookingItem" WHERE "serviceId" IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}`))}))`;
+    return Prisma.sql`EXISTS (
+      SELECT 1 FROM "BookingItem" bi
+      WHERE bi."bookingId" = b."id"
+        AND bi."serviceId" IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}`))})
+    )`;
+  }
+
+  private catalogItemSql(id: string): Prisma.Sql {
+    return Prisma.sql`(
+      (b."bundleId" IS NULL AND EXISTS (
+        SELECT 1 FROM "BookingItem" bi
+        WHERE bi."bookingId" = b."id" AND bi."serviceId" = ${id}
+      ))
+      OR b."bundleId" = ${id}
+    )`;
+  }
+
+  private catalogCategorySql(categoryId: string): Prisma.Sql {
+    return Prisma.sql`(
+      (b."bundleId" IS NULL AND EXISTS (
+        SELECT 1 FROM "BookingItem" bi
+        JOIN "Service" s ON s."id" = bi."serviceId"
+        WHERE bi."bookingId" = b."id" AND s."categoryId" = ${categoryId}
+      ))
+      OR b."bundleId" IN (SELECT "id" FROM "ServiceBundle" WHERE "categoryId" = ${categoryId})
+    )`;
+  }
+
+  private itemTotalsJoin(range: AggregateRange): Prisma.Sql {
+    return Prisma.sql`
+      LEFT JOIN LATERAL (
+        SELECT
+          COALESCE(SUM(COALESCE(i."customPrice", i."chargedPrice")), 0) AS revenue,
+          COALESCE(SUM(i."serviceDuration"), 0)::bigint AS duration
+        FROM "BookingItem" i
+        WHERE i."bookingId" = b."id"
+          AND ${this.itemScopeClause(range, 'i')}
+      ) item_totals ON TRUE
+    `;
+  }
+
+  private itemScopeClause(
+    range: AggregateRange,
+    itemAlias: 'i' | 'bi',
+  ): Prisma.Sql {
+    const parts: Prisma.Sql[] = [];
+    const staffIdColumn = Prisma.raw(`${itemAlias}."staffId"`);
+    const serviceIdColumn = Prisma.raw(`${itemAlias}."serviceId"`);
+
+    if (range.staffId)
+      parts.push(Prisma.sql`${staffIdColumn} = ${range.staffId}`);
+    if (range.serviceIds) {
+      if (range.serviceIds.length === 0) return Prisma.sql`FALSE`;
+      parts.push(
+        Prisma.sql`${serviceIdColumn} IN (${Prisma.join(range.serviceIds.map((id) => Prisma.sql`${id}`))})`,
+      );
+    }
+    if (range.catalogItemId) {
+      parts.push(Prisma.sql`(
+        b."bundleId" = ${range.catalogItemId}
+        OR (b."bundleId" IS NULL AND ${serviceIdColumn} = ${range.catalogItemId})
+      )`);
+    }
+    if (range.categoryId) {
+      parts.push(Prisma.sql`(
+        b."bundleId" IN (SELECT "id" FROM "ServiceBundle" WHERE "categoryId" = ${range.categoryId})
+        OR (
+          b."bundleId" IS NULL
+          AND ${serviceIdColumn} IN (SELECT "id" FROM "Service" WHERE "categoryId" = ${range.categoryId})
+        )
+      )`);
+    }
+
+    return parts.length > 0 ? Prisma.join(parts, ' AND ') : Prisma.sql`TRUE`;
   }
 
   private cohortAggregates(): Prisma.Sql {
@@ -467,15 +578,16 @@ export class BookingsAggregatesService {
     return Prisma.sql`
       WITH visits AS (
         SELECT
-          "clientId",
-          "startAt",
-          COALESCE("customPrice", "servicePrice") AS revenue,
-          ROW_NUMBER() OVER (PARTITION BY "clientId" ORDER BY "startAt" ASC, "id" ASC) AS visit_rank
-        FROM "Booking"
-        WHERE "businessId" = ${businessId}
-          AND "deletedAt" IS NULL
-          AND "status"::text = ${BookingStatus.COMPLETED}
-          AND "startAt" < ${before}::timestamptz AT TIME ZONE 'UTC'
+          b."clientId",
+          b."startAt",
+          item_totals.revenue AS revenue,
+          ROW_NUMBER() OVER (PARTITION BY b."clientId" ORDER BY b."startAt" ASC, b."id" ASC) AS visit_rank
+        FROM "Booking" b
+        ${this.itemTotalsJoin({ businessId, from: new Date(0), to: before })}
+        WHERE b."businessId" = ${businessId}
+          AND b."deletedAt" IS NULL
+          AND b."status"::text = ${BookingStatus.COMPLETED}
+          AND b."startAt" < ${before}::timestamptz AT TIME ZONE 'UTC'
       )
     `;
   }
@@ -510,9 +622,11 @@ export class BookingsAggregatesService {
   private bucketExpr(
     granularity: SeriesGranularity,
     timezone: string,
+    sourceAlias: 'b' | 'v' = 'b',
   ): Prisma.Sql {
     const trunc = Prisma.raw(`'${this.pgTruncUnit(granularity)}'`);
-    return Prisma.sql`(date_trunc(${trunc}, ("startAt" AT TIME ZONE 'UTC') AT TIME ZONE ${timezone})) AT TIME ZONE ${timezone}`;
+    const startAtColumn = Prisma.raw(`${sourceAlias}."startAt"`);
+    return Prisma.sql`(date_trunc(${trunc}, (${startAtColumn} AT TIME ZONE 'UTC') AT TIME ZONE ${timezone})) AT TIME ZONE ${timezone}`;
   }
 
   private pgTruncUnit(granularity: SeriesGranularity): string {
