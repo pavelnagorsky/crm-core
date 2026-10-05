@@ -1,19 +1,16 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEmail, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
-import { IsOptionalPrice } from '../../../shared/decorators/is-price.decorator.js';
+import { Type } from 'class-transformer';
+import { ArrayMaxSize, ArrayNotEmpty, ArrayUnique, IsArray, IsEmail, IsOptional, IsString, IsUUID, MaxLength, ValidateNested } from 'class-validator';
+import { MULTI_SERVICE_MAX_ITEMS } from '../../../shared/constants/multi-service.constants.js';
 import { IsLocalDateTime } from '../../time/decorators/is-local-date-time.validator.js';
 import { IsPhone } from '../../../shared/decorators/is-phone.decorator.js';
+import { UpdateBookingItemPriceDto } from './update-booking-item-price.dto.js';
 
 export class UpdateBookingDto {
   @ApiProperty({ type: String, format: 'uuid', required: false, nullable: true })
   @IsOptional()
   @IsUUID()
   staffId?: string;
-
-  @ApiProperty({ type: String, format: 'uuid', required: false })
-  @IsOptional()
-  @IsUUID()
-  serviceId?: string;
 
   @ApiProperty({ type: String, example: '2026-09-20T10:00:00', required: false })
   @IsOptional()
@@ -43,8 +40,15 @@ export class UpdateBookingDto {
   @MaxLength(254)
   email?: string;
 
-  @IsOptionalPrice()
-  customPrice?: string;
+  @ApiProperty({ type: () => UpdateBookingItemPriceDto, isArray: true, required: false })
+  @IsOptional()
+  @IsArray()
+  @ArrayNotEmpty()
+  @ArrayMaxSize(MULTI_SERVICE_MAX_ITEMS)
+  @ArrayUnique((item: UpdateBookingItemPriceDto) => item.id)
+  @ValidateNested({ each: true })
+  @Type(() => UpdateBookingItemPriceDto)
+  items?: UpdateBookingItemPriceDto[];
 
   @ApiProperty({ type: String, maxLength: 1000, required: false, nullable: true })
   @IsOptional()

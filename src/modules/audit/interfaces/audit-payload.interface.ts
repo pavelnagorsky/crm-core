@@ -6,13 +6,24 @@ export interface AuditFieldChange {
 
 // ─── Booking ────────────────────────────────────────────────────────────────
 
-interface BookingCreatedPayload {
+interface BookingCreatedItemPayload {
   serviceName: string;
   staffName: string;
+  price: string;
+}
+
+interface BookingCreatedPayload {
+  items?: BookingCreatedItemPayload[];
+  serviceName?: string;
+  staffName?: string;
   startTime: string;
   endTime: string;
-  price: string;
+  price?: string;
+  totalPrice?: string;
   currency: string;
+  source?: string;
+  executionMode?: string;
+  bundleTitle?: string;
 }
 
 interface BookingUpdatedPayload {
@@ -31,7 +42,9 @@ interface BookingStatusChangedPayload {
   reason?: string;
 }
 
-interface BookingDeletedPayload {}
+interface BookingDeletedPayload {
+  serviceTitles?: string;
+}
 
 // ─── Client ─────────────────────────────────────────────────────────────────
 
@@ -81,6 +94,39 @@ interface ServiceCreatedPayload {
   price: string;
   durationMinutes: number;
   currency: string;
+  categoryName?: string;
+  imageName?: string;
+}
+
+interface ServiceCategoryCreatedPayload {
+  name: string;
+  description?: string;
+}
+
+interface ServiceCategoryUpdatedPayload {
+  changes: AuditFieldChange[];
+}
+
+interface ServiceCategoryDeletedPayload {
+  name: string;
+}
+
+interface ServiceBundleCreatedPayload {
+  title: string;
+  pricingMode: string;
+  executionMode: string;
+  itemTitles: string;
+  fixedPrice?: string;
+  currency?: string;
+}
+
+interface ServiceBundleUpdatedPayload {
+  changes: AuditFieldChange[];
+  currency?: string;
+}
+
+interface ServiceBundleDeletedPayload {
+  title: string;
 }
 
 interface ServiceUpdatedPayload {
@@ -145,5 +191,11 @@ export type AuditPayload =
   | ServiceCreatedPayload
   | ServiceUpdatedPayload
   | ServiceDeletedPayload
+  | ServiceCategoryCreatedPayload
+  | ServiceCategoryUpdatedPayload
+  | ServiceCategoryDeletedPayload
+  | ServiceBundleCreatedPayload
+  | ServiceBundleUpdatedPayload
+  | ServiceBundleDeletedPayload
   | BusinessUpdatedPayload
   | PayrollPeriodAuditPayload;

@@ -1,11 +1,21 @@
-import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma, ServiceStatus } from '@prisma/client';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { PrismaErrorCode } from '../../shared/database/prisma-error-codes.js';
+import { MoneyService } from '../../shared/money/money.service.js';
 import { MULTI_SERVICE_MAX_ITEMS } from '../../shared/constants/multi-service.constants.js';
+import { AUDIT_EVENT } from '../audit/audit.constants.js';
+import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
+import { AuditEntity } from '../audit/enums/audit-entity.enum.js';
+import { AuditEvent } from '../audit/enums/audit-event.enum.js';
+import { SERVICE_BUNDLE_AUDIT_FIELDS, toServiceBundleAuditShape } from '../audit/fields/service-bundle.fields.js';
 import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
+import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js';
+import { diffFields } from '../audit/utils/diff-fields.js';
+import { BusinessService } from '../business/business.service.js';
 import { CreateServiceBundleDto } from './dto/create-service-bundle.dto.js';
 import { UpdateServiceBundleDto } from './dto/update-service-bundle.dto.js';
 import { BundlePricingMode } from './enums/bundle-pricing-mode.enum.js';
@@ -17,6 +27,7 @@ import { ServiceStatusCount } from './interfaces/service-status-count.interface.
 
 const serviceBundleInclude = {
   imageFile: true,
+  category: { select: { name: true } },
   items: { orderBy: { sortOrder: 'asc' as const }, include: { service: true } },
 };
 
@@ -40,11 +51,17 @@ const serviceBundleCatalogInclude = {
 
 @Injectable()
 export class ServiceBundleService {
-  constructor(private readonly db: DatabaseService) {}
+  private readonly logger = new Logger(ServiceBundleService.name);
 
-  async create(businessId: string, dto: CreateServiceBundleDto, _actor: AuditActor): Promise<ServiceBundleView> {
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly eventEmitter: EventEmitter2,
+    private readonly businessService: BusinessService,
+  ) {}
+
+  async create(businessId: string, dto: CreateServiceBundleDto, actor: AuditActor): Promise<ServiceBundleView> {
     await this.assertBundleValid(businessId, dto);
-    return this.db.serviceBundle.create({
+    const bundle = await this.db.serviceBundle.create({
       data: {
         businessId,
         categoryId: dto.categoryId ?? null,
@@ -65,14 +82,34 @@ export class ServiceBundleService {
       },
       include: serviceBundleInclude,
     });
+    this.logger.log(`service bundle created: id=${bundle.id} businessId=${businessId} items=${bundle.items.length}`);
+    const currency = bundle.fixedPrice == null ? undefined : (await this.businessService.getLocale(businessId)).currency;
+    const event: AuditLogEvent = {
+      businessId,
+      entityType: AuditEntity.SERVICE,
+      entityId: bundle.id,
+      eventType: AuditEvent.SERVICE_BUNDLE_CREATED,
+      actionType: AuditActionType.CREATE,
+      occurredAt: new Date(),
+      actor,
+      payload: {
+        title: bundle.title,
+        pricingMode: bundle.pricingMode,
+        executionMode: bundle.executionMode,
+        itemTitles: bundle.items.map((item) => item.service.title).join(', '),
+        ...(bundle.fixedPrice == null ? {} : { fixedPrice: MoneyService.format(bundle.fixedPrice), currency }),
+      },
+    };
+    this.eventEmitter.emit(AUDIT_EVENT, event);
+    return bundle;
   }
 
-  async update(businessId: string, bundleId: string, dto: UpdateServiceBundleDto, _actor: AuditActor): Promise<ServiceBundleView> {
+  async update(businessId: string, bundleId: string, dto: UpdateServiceBundleDto, actor: AuditActor): Promise<ServiceBundleView> {
     const old = await this.findInBusiness(businessId, bundleId);
     if (dto.items) await this.assertBundleValid(businessId, { ...old, ...dto, items: dto.items } as CreateServiceBundleDto);
     else await this.assertPricingValid(dto.pricingMode ?? old.pricingMode, dto.fixedPrice !== undefined ? dto.fixedPrice : old.fixedPrice?.toString() ?? null);
 
-    return this.db.serviceBundle.update({
+    const bundle = await this.db.serviceBundle.update({
       where: { id: bundleId },
       data: {
         categoryId: dto.categoryId,
@@ -98,6 +135,25 @@ export class ServiceBundleService {
       },
       include: serviceBundleInclude,
     });
+    const changes = diffFields(toServiceBundleAuditShape(old), toServiceBundleAuditShape(bundle), SERVICE_BUNDLE_AUDIT_FIELDS);
+    if (changes.length > 0) {
+      const currency = changes.some((change) => change.field === 'fixedPrice')
+        ? (await this.businessService.getLocale(businessId)).currency
+        : undefined;
+      this.logger.log(`service bundle updated: id=${bundleId} businessId=${businessId} fields=${changes.map((change) => change.field).join(',')}`);
+      const event: AuditLogEvent = {
+        businessId,
+        entityType: AuditEntity.SERVICE,
+        entityId: bundleId,
+        eventType: AuditEvent.SERVICE_BUNDLE_UPDATED,
+        actionType: AuditActionType.MODIFY,
+        occurredAt: new Date(),
+        actor,
+        payload: { changes, ...(currency ? { currency } : {}) },
+      };
+      this.eventEmitter.emit(AUDIT_EVENT, event);
+    }
+    return bundle;
   }
 
   async findById(bundleId: string): Promise<ServiceBundleView> {
@@ -132,14 +188,26 @@ export class ServiceBundleService {
     return rows.map((row) => ({ status: row.status, count: row._count._all }));
   }
 
-  async changeStatus(businessId: string, bundleId: string, status: ServiceStatus, _actor: AuditActor): Promise<void> {
+  async changeStatus(businessId: string, bundleId: string, status: ServiceStatus, actor: AuditActor): Promise<void> {
     const bundle = await this.findInBusiness(businessId, bundleId);
     if (bundle.status === status) throw new AppException(ErrorCode.SERVICE_STATUS_ALREADY_SET, HttpStatus.CONFLICT);
     await this.db.serviceBundle.update({ where: { id: bundleId }, data: { status } });
+    this.logger.log(`service bundle status: id=${bundleId} businessId=${businessId} status=${status}`);
+    const event: AuditLogEvent = {
+      businessId,
+      entityType: AuditEntity.SERVICE,
+      entityId: bundleId,
+      eventType: AuditEvent.SERVICE_BUNDLE_UPDATED,
+      actionType: AuditActionType.MODIFY,
+      occurredAt: new Date(),
+      actor,
+      payload: { changes: [{ field: 'status', from: bundle.status, to: status }] },
+    };
+    this.eventEmitter.emit(AUDIT_EVENT, event);
   }
 
-  async delete(businessId: string, bundleId: string, _actor: AuditActor): Promise<void> {
-    await this.findInBusiness(businessId, bundleId);
+  async delete(businessId: string, bundleId: string, actor: AuditActor): Promise<void> {
+    const bundle = await this.findInBusiness(businessId, bundleId);
     try {
       await this.db.serviceBundle.delete({ where: { id: bundleId } });
     } catch (e: any) {
@@ -148,6 +216,18 @@ export class ServiceBundleService {
       }
       throw e;
     }
+    this.logger.log(`service bundle deleted: id=${bundleId} businessId=${businessId}`);
+    const event: AuditLogEvent = {
+      businessId,
+      entityType: AuditEntity.SERVICE,
+      entityId: bundleId,
+      eventType: AuditEvent.SERVICE_BUNDLE_DELETED,
+      actionType: AuditActionType.DELETE,
+      occurredAt: new Date(),
+      actor,
+      payload: { title: bundle.title },
+    };
+    this.eventEmitter.emit(AUDIT_EVENT, event);
   }
 
   private async findInBusiness(businessId: string, bundleId: string): Promise<ServiceBundleView> {

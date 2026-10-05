@@ -2,9 +2,11 @@ import { ServiceBundleService } from './service-bundle.service.js';
 
 describe('ServiceBundleService', () => {
   const findMany = vi.fn();
-  const service = new ServiceBundleService({
-    serviceBundle: { findMany },
-  } as never);
+  const service = new ServiceBundleService(
+    { serviceBundle: { findMany } } as never,
+    { emit: vi.fn() } as never,
+    {} as never,
+  );
 
   beforeEach(() => {
     findMany.mockReset();

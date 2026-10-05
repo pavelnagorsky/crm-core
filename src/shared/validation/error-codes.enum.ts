@@ -182,6 +182,10 @@ export const ErrorCode = {
     code: 'BOOKING_SELECTION_CONFLICT',
     message: 'Set either services or a bundle, not both',
   },
+  BOOKING_ITEM_NOT_FOUND: {
+    code: 'BOOKING_ITEM_NOT_FOUND',
+    message: 'Booking item not found',
+  },
   BOOKING_SERVICE_INACTIVE: {
     code: 'BOOKING_SERVICE_INACTIVE',
     message: 'Service is not available for booking',

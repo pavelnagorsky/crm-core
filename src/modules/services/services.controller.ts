@@ -69,8 +69,13 @@ export class ServicesController {
   async createCategory(
     @Param('businessId', ParseUUIDPipe) businessId: string,
     @Body() dto: CreateServiceCategoryDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<{ id: string }>> {
-    const category = await this.servicesService.createCategory(businessId, dto);
+    const category = await this.servicesService.createCategory(
+      businessId,
+      dto,
+      auditActorFromToken(tokenPayload, businessId),
+    );
     return BaseResponseDto.success({ id: category.id });
   }
 
@@ -97,8 +102,14 @@ export class ServicesController {
     @Param('businessId', ParseUUIDPipe) businessId: string,
     @Param('categoryId', ParseUUIDPipe) categoryId: string,
     @Body() dto: UpdateServiceCategoryDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<{ id: string }>> {
-    const category = await this.servicesService.updateCategory(businessId, categoryId, dto);
+    const category = await this.servicesService.updateCategory(
+      businessId,
+      categoryId,
+      dto,
+      auditActorFromToken(tokenPayload, businessId),
+    );
     return BaseResponseDto.success({ id: category.id });
   }
 
@@ -109,9 +120,15 @@ export class ServicesController {
   @Delete('service-categories/:categoryId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteCategory(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
     @Param('categoryId', ParseUUIDPipe) categoryId: string,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<void> {
-    await this.servicesService.deleteCategory(categoryId);
+    await this.servicesService.deleteCategory(
+      businessId,
+      categoryId,
+      auditActorFromToken(tokenPayload, businessId),
+    );
   }
 
   // ─── Services ────────────────────────────────────────────────────────────────

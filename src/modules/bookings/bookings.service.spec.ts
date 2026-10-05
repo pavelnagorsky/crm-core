@@ -1,6 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Booking, BookingSource, BookingStatus, Prisma } from '@prisma/client';
+import { Booking, BookingSource, BookingStatus, Prisma, UserRole } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
 import { CalendarService } from '../calendar/calendar.service.js';
 import { StaffService } from '../staff/staff.service.js';
@@ -14,6 +14,8 @@ import { BookingSearchOrderBy } from './enums/booking-search-order-by.enum.js';
 import { BookingExecutionMode } from './enums/booking-execution-mode.enum.js';
 import { ServiceCatalogKind } from '../services/enums/service-catalog-kind.enum.js';
 import { BookingWithItems } from './interfaces/booking-with-items.interface.js';
+import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
+import { AppException } from '../../shared/exceptions/app.exception.js';
 
 function booking(
   overrides: Partial<Booking> & Partial<BookingWithItems> = {},
@@ -468,5 +470,137 @@ describe('BookingsService catalog selection', () => {
     const resolved = await service.resolveBookingSelection('biz', { staffId: 'anna' } as BookingResolveRequestDto);
 
     expect(resolved.availableServiceIds).toEqual(['cut', 'pack']);
+    expect(resolved.totalListPrice).toBe('0.00');
+    expect(resolved.totalDuration).toBe(0);
+  });
+
+  it('keeps the visit price when a master is already chosen', async () => {
+    serviceFindMany.mockResolvedValue([
+      { id: 'cut', price: new Prisma.Decimal('10'), durationMinutes: 30, bufferMinutes: 5 },
+      { id: 'color', price: new Prisma.Decimal('20.50'), durationMinutes: 60, bufferMinutes: 0 },
+    ]);
+    bundleFindMany.mockResolvedValue([]);
+    staff.servicesPerformableBy.mockResolvedValue(['cut', 'color']);
+    staff.resolveStaffingForServices.mockResolvedValue({
+      coverableBySingle: [{ id: 'anna', name: 'Anna' }],
+      requiresMultiple: false,
+    });
+
+    const resolved = await service.resolveBookingSelection('biz', {
+      staffId: 'anna',
+      serviceIds: ['cut', 'color'],
+    } as BookingResolveRequestDto);
+
+    expect(resolved.totalListPrice).toBe('30.50');
+    expect(resolved.totalDuration).toBe(95);
+    expect(resolved.availableServiceIds).toEqual(['cut', 'color']);
+  });
+});
+
+describe('BookingsService.update item prices', () => {
+  const findFirst = vi.fn();
+  const update = vi.fn();
+  const db = { booking: { findFirst, update } };
+  const token = { sub: 'user-1', role: UserRole.ADMIN, memberships: [] } as TokenPayloadDto;
+  let service: BookingsService;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const module = await Test.createTestingModule({
+      providers: [
+        BookingsService,
+        { provide: DatabaseService, useValue: db },
+        { provide: CalendarService, useValue: {} },
+        { provide: StaffService, useValue: {} },
+        { provide: BusinessService, useValue: { getLocale: vi.fn().mockResolvedValue({ currency: 'BYN' }) } },
+        { provide: StaffEarningsService, useValue: {} },
+        { provide: EventEmitter2, useValue: { emit: vi.fn() } },
+      ],
+    }).compile();
+    service = module.get(BookingsService);
+  });
+
+  function visit(): BookingWithItems {
+    return booking({
+      items: [
+        {
+          id: 'item-1',
+          bookingId: 'booking-1',
+          businessId: 'biz',
+          serviceId: 'cut',
+          staffId: 'anna',
+          sortOrder: 0,
+          startAt: new Date('2026-09-24T10:00:00.000Z'),
+          endAt: new Date('2026-09-24T11:00:00.000Z'),
+          serviceTitle: 'Стрижка',
+          serviceDuration: 60,
+          listPrice: new Prisma.Decimal('50.00'),
+          chargedPrice: new Prisma.Decimal('50.00'),
+          customPrice: null,
+          staffName: 'Anna',
+          calendarEventId: null,
+        },
+        {
+          id: 'item-2',
+          bookingId: 'booking-1',
+          businessId: 'biz',
+          serviceId: 'color',
+          staffId: 'anna',
+          sortOrder: 1,
+          startAt: new Date('2026-09-24T11:00:00.000Z'),
+          endAt: new Date('2026-09-24T12:00:00.000Z'),
+          serviceTitle: 'Окрашивание',
+          serviceDuration: 60,
+          listPrice: new Prisma.Decimal('80.00'),
+          chargedPrice: new Prisma.Decimal('80.00'),
+          customPrice: new Prisma.Decimal('70.00'),
+          staffName: 'Anna',
+          calendarEventId: null,
+        },
+      ],
+    });
+  }
+
+  it('writes a custom price onto each listed item and leaves the rest', async () => {
+    const current = visit();
+    findFirst.mockResolvedValue(current);
+    update.mockResolvedValue(current);
+
+    await service.update('booking-1', token, {
+      items: [
+        { id: 'item-2', customPrice: '60.00' },
+      ],
+    });
+
+    expect(update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        items: {
+          update: [
+            { where: { id: 'item-2' }, data: { customPrice: '60.00' } },
+          ],
+        },
+      }),
+    }));
+  });
+
+  it('does not touch item prices when the request omits them', async () => {
+    findFirst.mockResolvedValue(visit());
+    update.mockResolvedValue(visit());
+
+    await service.update('booking-1', token, { notes: 'окно' });
+
+    expect(update.mock.calls[0][0].data.items).toBeUndefined();
+  });
+
+  it('rejects a price for an item that is not on this booking', async () => {
+    findFirst.mockResolvedValue(visit());
+
+    const error = await service.update('booking-1', token, {
+      items: [{ id: 'missing', customPrice: '10.00' }],
+    }).then(() => null, (caught: unknown) => caught);
+
+    expect(error).toBeInstanceOf(AppException);
+    expect((error as AppException).errorCode).toBe('BOOKING_ITEM_NOT_FOUND');
+    expect(update).not.toHaveBeenCalled();
   });
 });

@@ -294,6 +294,9 @@ export class CalendarService {
     const todayStr = TimeService.zonedDateStr(new Date(), business.timezone);
     const effectiveFrom = from < todayStr ? todayStr : from;
     if (effectiveFrom > to) return [];
+    const excludedCalendarEventIds = dto.bookingId
+      ? await this.bookings.linkedCalendarEventIdsForBooking(businessId, dto.bookingId)
+      : [];
 
     return this.collectSlotDays({
       businessId,
@@ -308,6 +311,7 @@ export class CalendarService {
       earliestMinuteToday: 0,
       rangeStart: TimeService.dateOnly(effectiveFrom),
       rangeEnd: new Date(`${to}T23:59:59.999Z`),
+      excludedCalendarEventIds,
     });
   }
 
@@ -505,6 +509,7 @@ export class CalendarService {
     earliestMinuteToday: number;
     rangeStart: Date;
     rangeEnd: Date;
+    excludedCalendarEventIds?: string[];
   }): Promise<AvailableSlotsDayDto[]> {
     const staffIds = input.candidateStaff.map((staff) => staff.id);
     const [shifts, blockEvents] = await this.fetchSlotData(
@@ -512,6 +517,7 @@ export class CalendarService {
       staffIds,
       input.rangeStart,
       input.rangeEnd,
+      input.excludedCalendarEventIds ?? [],
     );
 
     const dates = [...new Set(shifts.map((shift) => TimeService.dateOnlyStr(shift.date)))].sort();
@@ -572,6 +578,7 @@ export class CalendarService {
     staffIds: string[],
     rangeStart: Date,
     rangeEnd: Date,
+    excludedCalendarEventIds: string[] = [],
   ) {
     return Promise.all([
       this.db.staffShift.findMany({
@@ -584,6 +591,7 @@ export class CalendarService {
         where: {
           businessId,
           AND: [
+            ...(excludedCalendarEventIds.length ? [{ id: { notIn: excludedCalendarEventIds } }] : []),
             { OR: [{ staffId: null }, { staffId: { in: staffIds } }] },
             {
               OR: [

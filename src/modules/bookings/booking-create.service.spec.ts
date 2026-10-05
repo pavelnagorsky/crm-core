@@ -256,3 +256,87 @@ describe('BookingCreateService calendar link', () => {
     }));
   });
 });
+
+describe('BookingCreateService manual item prices', () => {
+  it('stores each item custom price and leaves the others on the catalog price', async () => {
+    const clients = {
+      resolveForBooking: vi.fn().mockResolvedValue({
+        id: 'client-1',
+        firstName: 'Анна',
+        lastName: 'Иванова',
+        phone: '+375291112233',
+        email: null,
+        bannedAt: null,
+      }),
+    };
+    const calendar = {
+      filterAvailableStaff: vi.fn().mockResolvedValue([{ id: 'staff-1' }]),
+      isSlotFree: vi.fn().mockReturnValue(true),
+    };
+    const staff = {
+      resolveStaffForService: vi.fn().mockResolvedValue([{ id: 'staff-1' }]),
+      findById: vi.fn().mockResolvedValue({ id: 'staff-1', name: 'Мария' }),
+    };
+    const tx = {
+      $executeRaw: vi.fn(),
+      staffShift: { findFirst: vi.fn().mockResolvedValue({ startTime: new Date(), endTime: new Date() }) },
+      calendarEvent: {
+        findMany: vi.fn().mockResolvedValue([]),
+        create: vi.fn().mockResolvedValue({ id: 'event-1' }),
+      },
+      booking: {
+        create: vi.fn().mockResolvedValue({
+          id: 'booking-1',
+          businessId: 'business-1',
+          clientFirstName: 'Анна',
+          clientLastName: 'Иванова',
+          clientEmail: null,
+          startAt: new Date('2026-09-20T07:00:00.000Z'),
+          endAt: new Date('2026-09-20T09:00:00.000Z'),
+          items: [],
+        }),
+      },
+    };
+    const db = {
+      business: {
+        findUnique: vi.fn().mockResolvedValue({
+          isBookingConfirmationRequired: false,
+          timezone: 'Europe/Minsk',
+          bookingVisibility: BookingVisibility.PUBLIC,
+          currency: 'BYN',
+        }),
+      },
+      service: {
+        findMany: vi.fn().mockResolvedValue([
+          { id: 'service-1', title: 'Стрижка', durationMinutes: 60, bufferMinutes: 0, price: 50 },
+          { id: 'service-2', title: 'Окрашивание', durationMinutes: 60, bufferMinutes: 0, price: 80 },
+        ]),
+      },
+      bookingItem: { groupBy: vi.fn().mockResolvedValue([]) },
+      $transaction: vi.fn((fn: (client: typeof tx) => Promise<unknown>) => fn(tx)),
+    };
+    const service = new BookingCreateService(
+      db as never,
+      calendar as never,
+      clients as never,
+      staff as never,
+      { emit: vi.fn() } as never,
+      { generateClientToken: vi.fn() } as never,
+      ...channelDeps(),
+    );
+
+    await service.createManualBooking('business-1', {
+      ...dto,
+      serviceId: undefined,
+      items: [
+        { serviceId: 'service-1' },
+        { serviceId: 'service-2', customPrice: '70.00' },
+      ],
+    }, { id: 'user-1', name: 'Ольга', role: AuditActorRole.OWNER });
+
+    const created = tx.booking.create.mock.calls[0][0] as {
+      data: { items: { create: { customPrice: string | null }[] } };
+    };
+    expect(created.data.items.create.map((item) => item.customPrice)).toEqual([null, '70.00']);
+  });
+});

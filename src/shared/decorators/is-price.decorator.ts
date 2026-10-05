@@ -1,4 +1,4 @@
-import { IsOptional, Matches } from 'class-validator';
+import { IsOptional, Matches, ValidateIf } from 'class-validator';
 import regularExpressions from '../regular-expressions.js';
 import { CanonicalAmount } from '../transforms/canonical-amount.transform.js';
 import { ApiPrice } from './api-decimal.decorator.js';
@@ -18,6 +18,16 @@ export const IsOptionalPrice =
   (): PropertyDecorator => (target, propertyKey) => {
     ApiPrice({ required: false, nullable: true })(target, propertyKey);
     IsOptional()(target, propertyKey);
+    CanonicalAmount()(target, propertyKey);
+    Matches(regularExpressions.moneyAmount, {
+      message: priceMatchMessage(propertyKey),
+    })(target, propertyKey);
+  };
+
+export const IsNullablePrice =
+  (): PropertyDecorator => (target, propertyKey) => {
+    ApiPrice({ required: true, nullable: true })(target, propertyKey);
+    ValidateIf((_, value) => value !== null)(target, propertyKey);
     CanonicalAmount()(target, propertyKey);
     Matches(regularExpressions.moneyAmount, {
       message: priceMatchMessage(propertyKey),

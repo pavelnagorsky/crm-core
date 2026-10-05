@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsDateString } from 'class-validator';
+import { IsDateString, IsOptional, IsUUID } from 'class-validator';
 import { IsDateRangeValid } from '../../staff/decorators/is-date-range-valid.decorator.js';
 import { AvailableSlotsRequestDto } from './available-slots-request.dto.js';
 
@@ -20,4 +20,14 @@ export class ManualAvailableSlotsRequestDto extends AvailableSlotsRequestDto {
   })
   @IsDateString()
   to: string;
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    required: false,
+    description: 'Booking being edited. Its linked calendar events are ignored while calculating available slots.',
+  })
+  @IsOptional()
+  @IsUUID()
+  bookingId?: string;
 }

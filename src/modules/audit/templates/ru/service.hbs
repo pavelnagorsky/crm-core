@@ -1,8 +1,8 @@
 {{#if (eq eventType "SERVICE_CREATED")}}
-<p>{{payload.title}}, {{payload.price}}{{#if payload.currency}} {{payload.currency}}{{/if}}, {{payload.durationMinutes}} мин.</p>
+<p>{{payload.title}}, {{payload.price}}{{#if payload.currency}} {{payload.currency}}{{/if}}, {{payload.durationMinutes}} мин.{{#if payload.categoryName}}, {{payload.categoryName}}{{/if}}{{#if payload.imageName}}, {{payload.imageName}}{{/if}}</p>
 {{/if}}
 
-{{#if (eq eventType "SERVICE_UPDATED")}}
+{{#if (or (eq eventType "SERVICE_UPDATED") (eq eventType "SERVICE_BUNDLE_UPDATED") (eq eventType "SERVICE_CATEGORY_UPDATED"))}}
 <ul>
   {{#each payload.changes}}
   <li>{{t "fields" ../entityType this.field}}: <s>{{#if (eq this.field "status")}}{{t "serviceStatus" this.from}}{{else}}{{formatValue this.field this.from}}{{/if}}</s> → {{#if (eq this.field "status")}}{{t "serviceStatus" this.to}}{{else}}{{formatValue this.field this.to}}{{/if}}</li>
@@ -11,5 +11,22 @@
 {{/if}}
 
 {{#if (eq eventType "SERVICE_DELETED")}}
+<p>{{payload.title}}</p>
+{{/if}}
+
+{{#if (eq eventType "SERVICE_CATEGORY_CREATED")}}
+<p>{{payload.name}}{{#if payload.description}}: {{payload.description}}{{/if}}</p>
+{{/if}}
+
+{{#if (eq eventType "SERVICE_CATEGORY_DELETED")}}
+<p>{{payload.name}}</p>
+{{/if}}
+
+{{#if (eq eventType "SERVICE_BUNDLE_CREATED")}}
+<p>{{payload.title}}, {{t "bundlePricingMode" payload.pricingMode}}{{#if payload.fixedPrice}}, {{payload.fixedPrice}}{{#if payload.currency}} {{payload.currency}}{{/if}}{{/if}}, {{t "executionMode" payload.executionMode}}</p>
+<p>{{payload.itemTitles}}</p>
+{{/if}}
+
+{{#if (eq eventType "SERVICE_BUNDLE_DELETED")}}
 <p>{{payload.title}}</p>
 {{/if}}

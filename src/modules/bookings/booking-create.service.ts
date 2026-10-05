@@ -73,13 +73,13 @@ export class BookingCreateService {
       dto.bookingWidgetId,
       context.origin,
     );
-    const { booking, timezone, currency } = await this.create(businessId, attribution, dto);
-    this.logger.log(`booking created (public): id=${booking.id} businessId=${businessId} items=${booking.items.length} startAt=${booking.startAt.toISOString()}`);
+    const { booking, timezone, currency, bundleTitle } = await this.create(businessId, attribution, dto);
+    this.logger.log(`booking created (public): id=${booking.id} businessId=${businessId} source=${booking.source} items=${booking.items.length} bundleId=${booking.bundleId ?? '-'} startAt=${booking.startAt.toISOString()}`);
     const actor: AuditActor = {
       name: [booking.clientFirstName, booking.clientLastName].filter((part) => part.trim()).join(' '),
       role: AuditActorRole.CLIENT,
     };
-    this.emitBookingCreated(booking, actor, currency);
+    this.emitBookingCreated(booking, actor, currency, bundleTitle);
     this.emitBookingNotification(booking, timezone);
     return booking;
   }
@@ -89,13 +89,13 @@ export class BookingCreateService {
     dto: ManualCreateBookingDto,
     actor: AuditActor,
   ): Promise<BookingWithItems> {
-    const { booking, timezone, currency } = await this.create(
+    const { booking, timezone, currency, bundleTitle } = await this.create(
       businessId,
       { source: BookingSource.MANUAL, bookingPageId: null, bookingWidgetId: null },
       dto,
     );
-    this.logger.log(`booking created (manual): id=${booking.id} businessId=${businessId} items=${booking.items.length} actor=${actor.name}`);
-    this.emitBookingCreated(booking, actor, currency);
+    this.logger.log(`booking created (manual): id=${booking.id} businessId=${businessId} source=${booking.source} items=${booking.items.length} bundleId=${booking.bundleId ?? '-'} actor=${actor.name}`);
+    this.emitBookingCreated(booking, actor, currency, bundleTitle);
     this.emitBookingNotification(booking, timezone);
     return booking;
   }
@@ -104,7 +104,7 @@ export class BookingCreateService {
     businessId: string,
     attribution: BookingAttribution,
     dto: CreateBookingDto | ManualCreateBookingDto,
-  ): Promise<{ booking: BookingWithItems; timezone: string; currency: string }> {
+  ): Promise<{ booking: BookingWithItems; timezone: string; currency: string; bundleTitle: string | null }> {
     const business = await this.db.business.findUnique({
       where: { id: businessId },
       select: { isBookingConfirmationRequired: true, timezone: true, bookingVisibility: true, currency: true },
@@ -136,7 +136,6 @@ export class BookingCreateService {
       dto.staffId,
       business.timezone,
       this.manualItems(dto),
-      this.isManualDto(dto) ? dto.customPrice : undefined,
     );
     const status = business.isBookingConfirmationRequired
       ? BookingStatus.PENDING
@@ -178,6 +177,7 @@ export class BookingCreateService {
           blockEvents,
           business.timezone,
         )) {
+          this.logger.warn(`slot unavailable on create: businessId=${businessId} staffId=${item.staffId} startAt=${item.startAt.toISOString()}`);
           throw new AppException(ErrorCode.BOOKING_SLOT_UNAVAILABLE, HttpStatus.CONFLICT);
         }
       }
@@ -236,13 +236,13 @@ export class BookingCreateService {
       });
     });
 
-    return { booking, timezone: business.timezone, currency: business.currency };
+    return { booking, timezone: business.timezone, currency: business.currency, bundleTitle: selection.bundleTitle };
   }
 
   private async loadSelection(
     businessId: string,
     dto: CreateBookingDto | ManualCreateBookingDto,
-  ): Promise<{ services: BookingServiceSnapshot[]; executionMode: PrismaBookingExecutionMode; bundleId: string | null }> {
+  ): Promise<{ services: BookingServiceSnapshot[]; executionMode: PrismaBookingExecutionMode; bundleId: string | null; bundleTitle: string | null }> {
     if (dto.bundleId && (dto.serviceIds?.length || dto.serviceId || this.manualItems(dto).length)) {
       throw new AppException(ErrorCode.BOOKING_SELECTION_CONFLICT, HttpStatus.BAD_REQUEST);
     }
@@ -258,6 +258,7 @@ export class BookingCreateService {
       const prices = this.bundleItemPrices(services.map((service) => service.price), bundle.pricingMode, bundle.fixedPrice);
       return {
         bundleId: bundle.id,
+        bundleTitle: bundle.title,
         executionMode: bundle.executionMode,
         services: services.map((service, index) => ({
           id: service.id,
@@ -293,6 +294,7 @@ export class BookingCreateService {
       : PrismaBookingExecutionMode.SEQUENTIAL;
     return {
       bundleId: null,
+      bundleTitle: null,
       executionMode,
       services: serviceIds.map((serviceId) => byId.get(serviceId)!),
     };
@@ -306,7 +308,6 @@ export class BookingCreateService {
     requestedStaffId: string | undefined,
     timezone: string,
     manualItems: ManualBookingItemDto[],
-    bookingCustomPrice?: string,
   ): Promise<ResolvedBookingItem[]> {
     const staffNames = new Map<string, string>();
     const result: ResolvedBookingItem[] = [];
@@ -342,7 +343,7 @@ export class BookingCreateService {
         serviceDuration: service.durationMinutes,
         listPrice: service.price,
         chargedPrice: service.price,
-        customPrice: manual?.customPrice ?? (index === 0 ? bookingCustomPrice ?? null : null),
+        customPrice: manual?.customPrice ?? null,
         staffName: staffNames.get(staffId)!,
       });
       if (executionMode === PrismaBookingExecutionMode.SEQUENTIAL) cursor.setTime(itemEnd.getTime());
@@ -392,7 +393,7 @@ export class BookingCreateService {
   }
 
   private isManualDto(dto: CreateBookingDto | ManualCreateBookingDto): dto is ManualCreateBookingDto {
-    return 'items' in dto || 'executionMode' in dto || 'customPrice' in dto;
+    return 'items' in dto || 'executionMode' in dto;
   }
 
   private bundleItemPrices(
@@ -429,7 +430,7 @@ export class BookingCreateService {
       .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   }
 
-  private emitBookingCreated(booking: BookingWithItems, actor: AuditActor, currency: string): void {
+  private emitBookingCreated(booking: BookingWithItems, actor: AuditActor, currency: string, bundleTitle: string | null): void {
     const event: AuditLogEvent = {
       businessId: booking.businessId,
       entityType: AuditEntity.BOOKING,
@@ -450,6 +451,9 @@ export class BookingCreateService {
           booking.items.reduce((sum, item) => sum.plus(item.customPrice ?? item.chargedPrice), new Prisma.Decimal(0)),
         ),
         currency,
+        source: booking.source,
+        executionMode: booking.executionMode,
+        ...(bundleTitle ? { bundleTitle } : {}),
       },
     };
     this.eventEmitter.emit(AUDIT_EVENT, event);

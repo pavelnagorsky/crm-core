@@ -7,4 +7,6 @@ export abstract class CalendarBookingReader {
     rangeEnd: Date,
     staffIds?: string[],
   ): Promise<CalendarBookingFeed>;
+
+  abstract linkedCalendarEventIdsForBooking(businessId: string, bookingId: string): Promise<string[]>;
 }

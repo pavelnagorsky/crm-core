@@ -83,11 +83,13 @@ export class BookingPagesService {
     await this.assertSlugAvailable(businessId, dto.slug, pageId);
     const coverFileId = await this.resolveCover(businessId, dto.coverFileId);
     try {
-      return await this.db.bookingPage.update({
+      const page = await this.db.bookingPage.update({
         where: { id: pageId },
         data: this.content(dto, coverFileId),
         include: pageInclude,
       });
+      this.logger.log(`booking page updated: id=${pageId} businessId=${businessId}`);
+      return page;
     } catch (error: unknown) {
       rethrowPrisma(error, ErrorCode.BOOKING_PAGE_SLUG_TAKEN, ErrorCode.BOOKING_PAGE_NOT_FOUND);
     }

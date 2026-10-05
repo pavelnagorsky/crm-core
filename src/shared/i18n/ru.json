@@ -82,6 +82,12 @@
     "SERVICE_CREATED": "Услуга создана",
     "SERVICE_UPDATED": "Услуга изменена",
     "SERVICE_DELETED": "Услуга удалена",
+    "SERVICE_CATEGORY_CREATED": "Категория услуг создана",
+    "SERVICE_CATEGORY_UPDATED": "Категория услуг изменена",
+    "SERVICE_CATEGORY_DELETED": "Категория услуг удалена",
+    "SERVICE_BUNDLE_CREATED": "Комплекс создан",
+    "SERVICE_BUNDLE_UPDATED": "Комплекс изменён",
+    "SERVICE_BUNDLE_DELETED": "Комплекс удалён",
     "BUSINESS_UPDATED": "Настройки бизнеса изменены",
     "PAYROLL_PERIOD_CREATED": "Период зарплаты создан",
     "PAYROLL_PERIOD_DELETED": "Период зарплаты удалён",
@@ -117,6 +123,14 @@
   "serviceStatus": {
     "ACTIVE": "Активна",
     "INACTIVE": "Неактивна"
+  },
+  "executionMode": {
+    "SEQUENTIAL": "По очереди",
+    "PARALLEL": "Одновременно"
+  },
+  "bundlePricingMode": {
+    "SUM": "Сумма услуг",
+    "FIXED": "Фиксированная цена"
   },
   "employmentType": {
     "LABOR_CONTRACT": "Трудовой договор",
@@ -245,6 +259,7 @@
       "clientPhone": "Телефон клиента",
       "clientEmail": "Email клиента",
       "customPrice": "Цена",
+      "staffName": "Сотрудник",
       "notes": "Заметки клиента",
       "internalNotes": "Внутренние заметки"
     },
@@ -289,11 +304,19 @@
     },
     "SERVICE": {
       "title": "Название",
+      "name": "Название",
       "price": "Цена",
       "durationMinutes": "Длительность (мин)",
       "bufferMinutes": "Буфер (мин)",
       "description": "Описание",
-      "status": "Статус"
+      "status": "Статус",
+      "sortOrder": "Порядок",
+      "categoryName": "Категория",
+      "imageName": "Изображение",
+      "executionMode": "Выполнение",
+      "pricingMode": "Расчёт цены",
+      "fixedPrice": "Фиксированная цена",
+      "items": "Состав"
     },
     "BUSINESS": {
       "name": "Название",

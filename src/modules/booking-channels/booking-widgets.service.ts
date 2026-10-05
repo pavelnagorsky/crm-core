@@ -51,10 +51,12 @@ export class BookingWidgetsService {
     const allowedDomains = this.domains(dto.allowedDomains);
     await this.assertTitleAvailable(businessId, dto.title, widgetId);
     try {
-      return await this.db.bookingWidget.update({
+      const widget = await this.db.bookingWidget.update({
         where: { id: widgetId },
         data: this.content(dto, allowedDomains),
       });
+      this.logger.log(`booking widget updated: id=${widgetId} businessId=${businessId}`);
+      return widget;
     } catch (error: unknown) {
       rethrowPrisma(error, ErrorCode.BOOKING_WIDGET_TITLE_EXISTS, ErrorCode.BOOKING_WIDGET_NOT_FOUND);
     }

@@ -1,5 +1,14 @@
 {{#if (eq eventType "BOOKING_CREATED")}}
+{{#if payload.items}}
+<p>{{#if payload.bundleTitle}}{{payload.bundleTitle}}, {{/if}}{{formatDateTime payload.startTime}} — {{formatDateTime payload.endTime}}, {{payload.totalPrice}}{{#if payload.currency}} {{payload.currency}}{{/if}}{{#if payload.source}}, {{t "bookingSource" payload.source}}{{/if}}{{#if payload.executionMode}}, {{t "executionMode" payload.executionMode}}{{/if}}</p>
+<ul>
+  {{#each payload.items}}
+  <li>{{serviceName}} — {{staffName}}, {{price}}{{#if ../payload.currency}} {{../payload.currency}}{{/if}}</li>
+  {{/each}}
+</ul>
+{{else}}
 <p>{{payload.serviceName}} с {{payload.staffName}}, {{formatDateTime payload.startTime}} — {{formatDateTime payload.endTime}}, {{payload.price}}{{#if payload.currency}} {{payload.currency}}{{/if}}</p>
+{{/if}}
 {{/if}}
 
 {{#if (eq eventType "BOOKING_UPDATED")}}
@@ -15,5 +24,9 @@
 {{/if}}
 
 {{#if (eq eventType "BOOKING_STATUS_CHANGED")}}
-<p><s>{{t "bookingStatus" payload.from}}</s> → {{t "bookingStatus" payload.to}}</p>
+<p><s>{{t "bookingStatus" payload.from}}</s> → {{t "bookingStatus" payload.to}}{{#if payload.reason}}: {{payload.reason}}{{/if}}</p>
+{{/if}}
+
+{{#if (eq eventType "BOOKING_DELETED")}}
+{{#if payload.serviceTitles}}<p>{{payload.serviceTitles}}</p>{{/if}}
 {{/if}}

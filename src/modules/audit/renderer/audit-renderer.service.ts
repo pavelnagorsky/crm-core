@@ -19,7 +19,7 @@ const DATE_FNS_LOCALES: Record<string, object> = {
 
 const SUPPORTED_LANGS = ['ru'] as const;
 
-const MONEY_FIELDS = new Set(['price', 'customPrice', 'fixedSalaryAmount', 'hourlyRate']);
+const MONEY_FIELDS = new Set(['price', 'customPrice', 'fixedPrice', 'fixedSalaryAmount', 'hourlyRate']);
 
 @Injectable()
 export class AuditRendererService implements OnModuleInit {
@@ -99,6 +99,7 @@ export class AuditRendererService implements OnModuleInit {
 
   private registerHelpers() {
     this.hbs.registerHelper('eq', (a: unknown, b: unknown) => a === b);
+    this.hbs.registerHelper('or', (...rawArgs: unknown[]) => rawArgs.slice(0, -1).some((value) => value === true));
 
     // All helpers read locale/lang from @root so they work correctly inside {{#each}} blocks
     this.hbs.registerHelper('t', (...rawArgs: unknown[]) => {

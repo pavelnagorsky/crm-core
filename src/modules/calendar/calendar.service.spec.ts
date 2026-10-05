@@ -230,6 +230,7 @@ describe('CalendarService.getManualAvailableSlots', () => {
     calendarEvent: { findMany: vi.fn() },
   };
   const staff = { resolveStaffForService: vi.fn() };
+  const bookings = { linkedCalendarEventIdsForBooking: vi.fn() };
   const compute = {
     groupShiftsByStaffDate: vi.fn().mockReturnValue(new Map()),
     expandBlockEvents: vi.fn().mockReturnValue(new Map()),
@@ -257,6 +258,7 @@ describe('CalendarService.getManualAvailableSlots', () => {
       { staffId: 'staff-1', date: new Date('2026-09-28T00:00:00.000Z') },
     ]);
     db.calendarEvent.findMany.mockResolvedValue([]);
+    bookings.linkedCalendarEventIdsForBooking.mockResolvedValue([]);
     compute.groupShiftsByStaffDate.mockReturnValue(new Map());
     compute.expandBlockEvents.mockReturnValue(new Map());
     compute.collectSlotsForDate.mockReturnValue([9 * 60]);
@@ -267,7 +269,7 @@ describe('CalendarService.getManualAvailableSlots', () => {
         { provide: DatabaseService, useValue: db },
         { provide: StaffService, useValue: staff },
         { provide: BusinessService, useValue: {} },
-        { provide: CalendarBookingReader, useValue: {} },
+        { provide: CalendarBookingReader, useValue: bookings },
         { provide: CalendarComputeService, useValue: compute },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
       ],
@@ -302,6 +304,28 @@ describe('CalendarService.getManualAvailableSlots', () => {
       30,
       30,
     );
+  });
+
+  it('excludes the edited booking calendar events from manual slot blocking', async () => {
+    bookings.linkedCalendarEventIdsForBooking.mockResolvedValue(['event-1', 'event-2']);
+
+    await service.getManualAvailableSlots('biz', {
+      serviceId: 'service-1',
+      from: '2026-09-01',
+      to: '2026-09-30',
+      bookingId: '28ea07df-62d3-4738-93b3-1560a3517213',
+    });
+
+    expect(bookings.linkedCalendarEventIdsForBooking).toHaveBeenCalledWith(
+      'biz',
+      '28ea07df-62d3-4738-93b3-1560a3517213',
+    );
+    expect(db.calendarEvent.findMany).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        AND: expect.arrayContaining([{ id: { notIn: ['event-1', 'event-2'] } }]),
+      }),
+      include: { cancelledOccurrences: { select: { occurrenceDate: true } } },
+    });
   });
 
   it('returns an empty list when every requested day is before today', async () => {

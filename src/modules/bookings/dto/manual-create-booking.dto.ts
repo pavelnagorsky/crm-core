@@ -1,4 +1,3 @@
-import { IsOptionalPrice } from '../../../shared/decorators/is-price.decorator.js';
 import { CreateBookingDto } from './create-booking.dto.js';
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
@@ -8,9 +7,6 @@ import { BookingExecutionMode } from '../enums/booking-execution-mode.enum.js';
 import { ManualBookingItemDto } from './manual-booking-item.dto.js';
 
 export class ManualCreateBookingDto extends CreateBookingDto {
-  @IsOptionalPrice()
-  customPrice?: string;
-
   @ApiProperty({ type: () => ManualBookingItemDto, isArray: true, required: false })
   @IsOptional()
   @IsArray()

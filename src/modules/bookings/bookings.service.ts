@@ -27,6 +27,7 @@ import { StaffSelectionMode } from './enums/staff-selection-mode.enum.js';
 import { BookingExecutionMode } from './enums/booking-execution-mode.enum.js';
 import { CancelBookingDto } from './dto/cancel-booking.dto.js';
 import { UpdateBookingDto } from './dto/update-booking.dto.js';
+import { UpdateBookingItemPriceDto } from './dto/update-booking-item-price.dto.js';
 import { UpdateBookingStatusDto } from './dto/update-booking-status.dto.js';
 import { BookingSearchRequestDto } from './dto/booking-search-request.dto.js';
 import { BookingSearchOrderBy } from './enums/booking-search-order-by.enum.js';
@@ -40,6 +41,7 @@ import { AuditEntity } from '../audit/enums/audit-entity.enum.js';
 import { AuditEvent } from '../audit/enums/audit-event.enum.js';
 import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
 import { AuditActorRole } from '../audit/enums/audit-actor-role.enum.js';
+import { AuditFieldChange } from '../audit/interfaces/audit-payload.interface.js';
 import { diffFields } from '../audit/utils/diff-fields.js';
 import { BOOKING_AUDIT_FIELDS } from '../audit/fields/booking.fields.js';
 import { TokenPayloadDto, assertBusinessRole } from '../auth/dto/token-payload.dto.js';
@@ -134,39 +136,35 @@ export class BookingsService implements CalendarBookingReader {
     ]);
     const serviceById = new Map(services.map((service) => [service.id, service]));
 
-    if (dto.staffId) {
-      const performable = new Set(await this.staffService.servicesPerformableBy(businessId, dto.staffId));
-      const availableServiceIds = services
-        .filter((service) => performable.has(service.id))
-        .map((service) => service.id);
-      for (const bundle of bundles) {
-        if (bundle.items.every((item) => performable.has(item.serviceId))) availableServiceIds.push(bundle.id);
-      }
-      return {
-        availableServiceIds,
-        availableStaff: [{ id: dto.staffId, name: (await this.staffService.findById(dto.staffId)).name }],
-        staffSelection: StaffSelectionMode.SINGLE,
-        executionMode: BookingExecutionMode.SEQUENTIAL,
-        totalDuration: 0,
-        totalListPrice: MoneyService.format(0),
-      };
-    }
-
     const bundle = dto.bundleId ? bundles.find((item) => item.id === dto.bundleId) : undefined;
     const selected = dto.bundleId
       ? bundle?.items.map((item) => item.service)
       : dto.serviceIds?.map((id) => serviceById.get(id)).filter((service): service is NonNullable<typeof service> => !!service);
     const executionMode = (bundle?.executionMode as BookingExecutionMode | undefined) ?? BookingExecutionMode.SEQUENTIAL;
 
-    const catalogIds = [
+    // A chosen master narrows the catalog. It must not wipe the visit total:
+    // price and duration still come from the selected services or bundle.
+    let availableServiceIds = [
       ...services.map((service) => service.id),
       ...bundles.map((item) => item.id),
     ];
+    if (dto.staffId) {
+      const performable = new Set(await this.staffService.servicesPerformableBy(businessId, dto.staffId));
+      availableServiceIds = services
+        .filter((service) => performable.has(service.id))
+        .map((service) => service.id);
+      for (const item of bundles) {
+        if (item.items.every((entry) => performable.has(entry.serviceId))) availableServiceIds.push(item.id);
+      }
+    }
 
     if (!selected?.length) {
+      const availableStaff = dto.staffId
+        ? [{ id: dto.staffId, name: (await this.staffService.findById(dto.staffId)).name }]
+        : (await this.staffService.listActiveWithServices(businessId)).map((staff) => ({ id: staff.id, name: staff.name }));
       return {
-        availableServiceIds: catalogIds,
-        availableStaff: (await this.staffService.listActiveWithServices(businessId)).map((staff) => ({ id: staff.id, name: staff.name })),
+        availableServiceIds,
+        availableStaff,
         staffSelection: StaffSelectionMode.SINGLE,
         executionMode: BookingExecutionMode.SEQUENTIAL,
         totalDuration: 0,
@@ -187,7 +185,7 @@ export class BookingsService implements CalendarBookingReader {
     });
 
     return {
-      availableServiceIds: catalogIds,
+      availableServiceIds,
       availableStaff: staffing.coverableBySingle,
       staffSelection: staffing.coverableBySingle.length ? StaffSelectionMode.SINGLE : StaffSelectionMode.NONE,
       executionMode,
@@ -202,13 +200,11 @@ export class BookingsService implements CalendarBookingReader {
     const { businessId } = old;
     const actor = auditActorFromToken(tokenPayload, businessId);
 
-    if (dto.serviceId !== undefined) {
-      throw new AppException(ErrorCode.BAD_REQUEST, HttpStatus.BAD_REQUEST);
-    }
     const slotChanging = dto.startAt !== undefined || dto.staffId !== undefined;
+    const pricePatches = this.pricePatches(old, dto);
 
     const updated = slotChanging
-      ? await this.updateWithSlotReschedule(old, businessId, dto)
+      ? await this.updateWithSlotReschedule(old, businessId, dto, pricePatches)
       : await this.db.booking.update({
           where: { id: bookingId },
           data: {
@@ -218,25 +214,23 @@ export class BookingsService implements CalendarBookingReader {
             clientEmail: dto.email !== undefined ? (dto.email ?? null) : old.clientEmail,
             notes: dto.notes !== undefined ? (dto.notes ?? null) : undefined,
             internalNotes: dto.internalNotes !== undefined ? (dto.internalNotes ?? null) : undefined,
-            ...(dto.customPrice !== undefined && old.items[0]
-              ? {
-                  items: {
-                    update: {
-                      where: { id: old.items[0].id },
-                      data: { customPrice: dto.customPrice },
-                    },
-                  },
-                }
-              : {}),
+            ...this.itemPriceWrite(pricePatches),
           },
           include: bookingWithItemsInclude,
         });
 
-    const changes = diffFields(old, updated, BOOKING_AUDIT_FIELDS);
+    const changes = [
+      ...diffFields(old, updated, BOOKING_AUDIT_FIELDS),
+      ...this.itemValueChanges(old, updated, 'staffName', (item) => item.staffName),
+      ...this.itemValueChanges(old, updated, 'customPrice', (item) => (
+        item.customPrice == null ? null : MoneyService.format(item.customPrice)
+      )),
+    ];
     if (changes.length > 0) {
       const currency = changes.some((change) => change.field === 'customPrice')
         ? (await this.businessService.getLocale(businessId)).currency
         : undefined;
+      this.logger.log(`booking updated: id=${bookingId} businessId=${businessId} fields=${changes.map((change) => change.field).join(',')}`);
       this.emitAudit({
         businessId,
         entityId: bookingId,
@@ -262,6 +256,7 @@ export class BookingsService implements CalendarBookingReader {
     } else if (reversesCommission) {
       await this.staffEarnings.reverseForBooking(updated, reversalReason, actor);
     }
+    this.logger.log(`booking status: id=${bookingId} businessId=${old.businessId} from=${old.status} to=${dto.status}`);
     this.emitAudit({
       businessId: old.businessId,
       entityId: bookingId,
@@ -381,6 +376,15 @@ export class BookingsService implements CalendarBookingReader {
     });
     if (!booking) throw new NotFoundException('Booking not found');
     return booking;
+  }
+
+  async linkedCalendarEventIdsForBooking(businessId: string, bookingId: string): Promise<string[]> {
+    const booking = await this.db.booking.findFirst({
+      where: { id: bookingId, businessId, deletedAt: null },
+      select: { items: { select: { calendarEventId: true } } },
+    });
+    if (!booking) throw new NotFoundException('Booking not found');
+    return booking.items.flatMap((item) => (item.calendarEventId ? [item.calendarEventId] : []));
   }
 
   async search(businessId: string, dto: BookingSearchRequestDto): Promise<PaginatedResult<BookingWithItems>> {
@@ -531,13 +535,14 @@ export class BookingsService implements CalendarBookingReader {
     if (booking.status === BookingStatus.COMPLETED) {
       await this.staffEarnings.reverseForBooking(booking, null, actor);
     }
+    this.logger.log(`booking deleted: id=${booking.id} businessId=${booking.businessId}`);
     this.emitAudit({
       businessId: booking.businessId,
       entityId: booking.id,
       eventType: AuditEvent.BOOKING_DELETED,
       actionType: AuditActionType.DELETE,
       actor,
-      payload: {},
+      payload: { serviceTitles: booking.items.map((item) => item.serviceTitle).join(', ') },
     });
   }
 
@@ -566,6 +571,7 @@ export class BookingsService implements CalendarBookingReader {
     if (booking.status === BookingStatus.COMPLETED) {
       await this.staffEarnings.reverseForBooking(updated, storedReason, actor);
     }
+    this.logger.log(`booking cancelled: id=${booking.id} businessId=${booking.businessId} cancelledBy=${cancelledBy}`);
     this.emitAudit({
       businessId: booking.businessId,
       entityId: booking.id,
@@ -585,7 +591,12 @@ export class BookingsService implements CalendarBookingReader {
     return updated;
   }
 
-  private async updateWithSlotReschedule(old: BookingWithItems, businessId: string, dto: UpdateBookingDto): Promise<BookingWithItems> {
+  private async updateWithSlotReschedule(
+    old: BookingWithItems,
+    businessId: string,
+    dto: UpdateBookingDto,
+    pricePatches: UpdateBookingItemPriceDto[],
+  ): Promise<BookingWithItems> {
     const business = await this.db.business.findUnique({
       where: { id: businessId },
       select: { timezone: true },
@@ -690,16 +701,7 @@ export class BookingsService implements CalendarBookingReader {
           clientEmail: dto.email !== undefined ? (dto.email ?? null) : old.clientEmail,
           notes: dto.notes !== undefined ? (dto.notes ?? null) : undefined,
           internalNotes: dto.internalNotes !== undefined ? (dto.internalNotes ?? null) : undefined,
-          ...(dto.customPrice !== undefined && old.items[0]
-            ? {
-                items: {
-                  update: {
-                    where: { id: old.items[0].id },
-                    data: { customPrice: dto.customPrice },
-                  },
-                },
-              }
-            : {}),
+          ...this.itemPriceWrite(pricePatches),
         },
         include: bookingWithItemsInclude,
       });
@@ -725,6 +727,54 @@ export class BookingsService implements CalendarBookingReader {
       payload: params.payload,
     };
     this.eventEmitter.emit(AUDIT_EVENT, event);
+  }
+
+  private pricePatches(old: BookingWithItems, dto: UpdateBookingDto): UpdateBookingItemPriceDto[] {
+    const patches = dto.items ?? [];
+    if (patches.length === 0) return [];
+    const known = new Set(old.items.map((item) => item.id));
+    for (const patch of patches) {
+      if (!known.has(patch.id)) {
+        throw new AppException(ErrorCode.BOOKING_ITEM_NOT_FOUND, HttpStatus.NOT_FOUND);
+      }
+    }
+    return patches;
+  }
+
+  private itemPriceWrite(patches: UpdateBookingItemPriceDto[]): { items?: Prisma.BookingUpdateInput['items'] } {
+    if (patches.length === 0) return {};
+    return {
+      items: {
+        update: patches.map((patch) => ({
+          where: { id: patch.id },
+          data: { customPrice: patch.customPrice },
+        })),
+      },
+    };
+  }
+
+  private itemValueChanges(
+    old: BookingWithItems,
+    updated: BookingWithItems,
+    field: string,
+    read: (item: BookingWithItems['items'][number]) => string | null,
+  ): AuditFieldChange[] {
+    const nextById = new Map(updated.items.map((item) => [item.id, item]));
+    const multiple = old.items.length > 1;
+    const changes: AuditFieldChange[] = [];
+    for (const item of old.items) {
+      const next = nextById.get(item.id);
+      if (!next) continue;
+      const from = read(item);
+      const to = read(next);
+      if (from === to) continue;
+      const text = (value: string | null) => {
+        if (value == null) return '—';
+        return multiple ? `${item.serviceTitle}: ${value}` : value;
+      };
+      changes.push({ field, from: text(from), to: text(to) });
+    }
+    return changes;
   }
 
   private bookingChargedTotal(booking: BookingWithItems): Prisma.Decimal {

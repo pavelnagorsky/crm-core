@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma, ServiceCategory, ServiceStatus, StaffStatus } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
@@ -17,13 +17,19 @@ import { AuditEntity } from '../audit/enums/audit-entity.enum.js';
 import { AuditEvent } from '../audit/enums/audit-event.enum.js';
 import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
 import { diffFields } from '../audit/utils/diff-fields.js';
-import { SERVICE_AUDIT_FIELDS } from '../audit/fields/service.fields.js';
+import { SERVICE_AUDIT_FIELDS, toServiceAuditShape } from '../audit/fields/service.fields.js';
+import { SERVICE_CATEGORY_AUDIT_FIELDS } from '../audit/fields/service-category.fields.js';
 import { BusinessService } from '../business/business.service.js';
 import { ServiceWithImage } from './interfaces/service-with-image.interface.js';
 import { ServiceWithStaffCount } from './interfaces/service-with-staff-count.interface.js';
 import { catalogWhere } from './catalog-where.js';
 import { ServiceForCatalog } from './interfaces/service-for-catalog.interface.js';
 import { ServiceStatusCount } from './interfaces/service-status-count.interface.js';
+
+const serviceAuditInclude = {
+  imageFile: true,
+  category: { select: { name: true } },
+} satisfies Prisma.ServiceInclude;
 
 const serviceViewInclude = {
   imageFile: true,
@@ -38,6 +44,8 @@ const serviceCatalogInclude = {
 
 @Injectable()
 export class ServicesService {
+  private readonly logger = new Logger(ServicesService.name);
+
   constructor(
     private readonly db: DatabaseService,
     private readonly eventEmitter: EventEmitter2,
@@ -46,9 +54,9 @@ export class ServicesService {
 
   // ─── Service Categories ──────────────────────────────────────────────────────
 
-  async createCategory(businessId: string, dto: CreateServiceCategoryDto): Promise<ServiceCategory> {
+  async createCategory(businessId: string, dto: CreateServiceCategoryDto, actor: AuditActor): Promise<ServiceCategory> {
     try {
-      return await this.db.serviceCategory.create({
+      const category = await this.db.serviceCategory.create({
         data: {
           businessId,
           name: dto.name,
@@ -56,6 +64,22 @@ export class ServicesService {
           sortOrder: dto.sortOrder ?? 0,
         },
       });
+      this.logger.log(`service category created: id=${category.id} businessId=${businessId}`);
+      const event: AuditLogEvent = {
+        businessId,
+        entityType: AuditEntity.SERVICE,
+        entityId: category.id,
+        eventType: AuditEvent.SERVICE_CATEGORY_CREATED,
+        actionType: AuditActionType.CREATE,
+        occurredAt: new Date(),
+        actor,
+        payload: {
+          name: category.name,
+          ...(category.description ? { description: category.description } : {}),
+        },
+      };
+      this.eventEmitter.emit(AUDIT_EVENT, event);
+      return category;
     } catch (e: any) {
       if (e?.code === PrismaErrorCode.UNIQUE_CONSTRAINT_VIOLATION)
         throw new AppException(ErrorCode.CATEGORY_NAME_EXISTS, HttpStatus.CONFLICT);
@@ -67,6 +91,7 @@ export class ServicesService {
     businessId: string,
     categoryId: string,
     dto: UpdateServiceCategoryDto,
+    actor: AuditActor,
   ): Promise<ServiceCategory> {
     const existing = await this.db.serviceCategory.findFirst({
       where: { id: categoryId, businessId },
@@ -74,7 +99,7 @@ export class ServicesService {
     if (!existing) throw new NotFoundException('Service category not found');
 
     try {
-      return await this.db.serviceCategory.update({
+      const category = await this.db.serviceCategory.update({
         where: { id: categoryId },
         data: {
           name: dto.name,
@@ -82,6 +107,22 @@ export class ServicesService {
           sortOrder: dto.sortOrder ?? existing.sortOrder,
         },
       });
+      const changes = diffFields(existing, category, SERVICE_CATEGORY_AUDIT_FIELDS);
+      if (changes.length > 0) {
+        this.logger.log(`service category updated: id=${categoryId} businessId=${businessId} fields=${changes.map((change) => change.field).join(',')}`);
+        const event: AuditLogEvent = {
+          businessId,
+          entityType: AuditEntity.SERVICE,
+          entityId: categoryId,
+          eventType: AuditEvent.SERVICE_CATEGORY_UPDATED,
+          actionType: AuditActionType.MODIFY,
+          occurredAt: new Date(),
+          actor,
+          payload: { changes },
+        };
+        this.eventEmitter.emit(AUDIT_EVENT, event);
+      }
+      return category;
     } catch (e: any) {
       if (e?.code === PrismaErrorCode.UNIQUE_CONSTRAINT_VIOLATION)
         throw new AppException(ErrorCode.CATEGORY_NAME_EXISTS, HttpStatus.CONFLICT);
@@ -96,10 +137,22 @@ export class ServicesService {
     });
   }
 
-  async deleteCategory(categoryId: string): Promise<void> {
-    const category = await this.db.serviceCategory.findUnique({ where: { id: categoryId } });
+  async deleteCategory(businessId: string, categoryId: string, actor: AuditActor): Promise<void> {
+    const category = await this.db.serviceCategory.findFirst({ where: { id: categoryId, businessId } });
     if (!category) throw new NotFoundException('Service category not found');
     await this.db.serviceCategory.delete({ where: { id: categoryId } });
+    this.logger.log(`service category deleted: id=${categoryId} businessId=${businessId}`);
+    const event: AuditLogEvent = {
+      businessId,
+      entityType: AuditEntity.SERVICE,
+      entityId: categoryId,
+      eventType: AuditEvent.SERVICE_CATEGORY_DELETED,
+      actionType: AuditActionType.DELETE,
+      occurredAt: new Date(),
+      actor,
+      payload: { name: category.name },
+    };
+    this.eventEmitter.emit(AUDIT_EVENT, event);
   }
 
   // ─── Services ────────────────────────────────────────────────────────────────
@@ -118,9 +171,10 @@ export class ServicesService {
         status: dto.status ?? ServiceStatus.ACTIVE,
         sortOrder: dto.sortOrder ?? 0,
       },
-      include: { imageFile: true },
+      include: serviceAuditInclude,
     });
     const { currency } = await this.businessService.getLocale(businessId);
+    this.logger.log(`service created: id=${service.id} businessId=${businessId}`);
     const event: AuditLogEvent = {
       businessId,
       entityType: AuditEntity.SERVICE,
@@ -129,7 +183,14 @@ export class ServicesService {
       actionType: AuditActionType.CREATE,
       occurredAt: new Date(),
       actor,
-      payload: { title: service.title, price: service.price.toString(), durationMinutes: service.durationMinutes, currency },
+      payload: {
+        title: service.title,
+        price: service.price.toString(),
+        durationMinutes: service.durationMinutes,
+        currency,
+        ...(service.category?.name ? { categoryName: service.category.name } : {}),
+        ...(service.imageFile?.fileName ? { imageName: service.imageFile.fileName } : {}),
+      },
     };
     this.eventEmitter.emit(AUDIT_EVENT, event);
     return service;
@@ -149,22 +210,23 @@ export class ServicesService {
         bufferMinutes: dto.bufferMinutes,
         sortOrder: dto.sortOrder,
       },
-      include: { imageFile: true },
+      include: serviceAuditInclude,
     });
-    const changes = diffFields(old, service, SERVICE_AUDIT_FIELDS);
+    const changes = diffFields(toServiceAuditShape(old), toServiceAuditShape(service), SERVICE_AUDIT_FIELDS);
     if (changes.length > 0) {
       const currency = changes.some((change) => change.field === 'price')
         ? (await this.businessService.getLocale(businessId)).currency
         : undefined;
+      this.logger.log(`service updated: id=${serviceId} businessId=${businessId} fields=${changes.map((change) => change.field).join(',')}`);
       const event: AuditLogEvent = {
         businessId,
         entityType: AuditEntity.SERVICE,
         entityId: serviceId,
         eventType: AuditEvent.SERVICE_UPDATED,
         actionType: AuditActionType.MODIFY,
-      occurredAt: new Date(),
-      actor,
-      payload: { changes, ...(currency ? { currency } : {}) },
+        occurredAt: new Date(),
+        actor,
+        payload: { changes, ...(currency ? { currency } : {}) },
       };
       this.eventEmitter.emit(AUDIT_EVENT, event);
     }
@@ -180,8 +242,8 @@ export class ServicesService {
     return service;
   }
 
-  private async findInBusiness(businessId: string, serviceId: string): Promise<ServiceWithImage> {
-    const service = await this.db.service.findFirst({ where: { id: serviceId, businessId }, include: { imageFile: true } });
+  private async findInBusiness(businessId: string, serviceId: string) {
+    const service = await this.db.service.findFirst({ where: { id: serviceId, businessId }, include: serviceAuditInclude });
     if (!service) throw new NotFoundException('Service not found');
     return service;
   }
@@ -251,6 +313,7 @@ export class ServicesService {
       throw new AppException(ErrorCode.SERVICE_STATUS_ALREADY_SET, HttpStatus.CONFLICT);
     }
     await this.db.service.update({ where: { id: serviceId }, data: { status } });
+    this.logger.log(`service status: id=${serviceId} businessId=${businessId} status=${status}`);
     const event: AuditLogEvent = {
       businessId,
       entityType: AuditEntity.SERVICE,
@@ -274,6 +337,7 @@ export class ServicesService {
       }
       throw e;
     }
+    this.logger.log(`service deleted: id=${serviceId} businessId=${businessId}`);
     const event: AuditLogEvent = {
       businessId,
       entityType: AuditEntity.SERVICE,
