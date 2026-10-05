@@ -1,9 +1,16 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { File, Service, ServiceCategory } from '@prisma/client';
+import { ApiExtraModels, ApiProperty, getSchemaPath } from '@nestjs/swagger';
+import { File, Service, ServiceBundle, ServiceBundleItem, ServiceCategory } from '@prisma/client';
+import { BookingSetupBundleDto } from './booking-setup-bundle.dto.js';
 import { BookingSetupServiceDto } from './booking-setup-service.dto.js';
 
 type ServiceWithImage = Service & { imageFile: File | null };
 
+type BundleWithItems = ServiceBundle & {
+  imageFile: File | null;
+  items: (ServiceBundleItem & { service: Service })[];
+};
+
+@ApiExtraModels(BookingSetupServiceDto, BookingSetupBundleDto)
 export class BookingSetupCategoryDto {
   @ApiProperty({ type: String, nullable: true })
   id: string | null;
@@ -14,24 +21,76 @@ export class BookingSetupCategoryDto {
   @ApiProperty({ type: String, nullable: true })
   description: string | null;
 
-  @ApiProperty({ type: () => BookingSetupServiceDto, isArray: true })
-  services: BookingSetupServiceDto[];
+  @ApiProperty({
+    type: 'array',
+    items: {
+      oneOf: [
+        { $ref: getSchemaPath(BookingSetupServiceDto) },
+        { $ref: getSchemaPath(BookingSetupBundleDto) },
+      ],
+      discriminator: {
+        propertyName: 'kind',
+        mapping: {
+          SERVICE: getSchemaPath(BookingSetupServiceDto),
+          BUNDLE: getSchemaPath(BookingSetupBundleDto),
+        },
+      },
+    },
+  })
+  services: Array<BookingSetupServiceDto | BookingSetupBundleDto>;
 
-  static fromEntity(category: ServiceCategory & { services: ServiceWithImage[] }): BookingSetupCategoryDto {
+  static fromEntity(
+    category: ServiceCategory & { services: ServiceWithImage[]; bundles: BundleWithItems[] },
+  ): BookingSetupCategoryDto {
+    return BookingSetupCategoryDto.build(
+      category.id,
+      category.name,
+      category.description,
+      category.services,
+      category.bundles,
+    );
+  }
+
+  static uncategorized(services: ServiceWithImage[], bundles: BundleWithItems[]): BookingSetupCategoryDto {
+    return BookingSetupCategoryDto.build(null, null, null, services, bundles);
+  }
+
+  private static build(
+    id: string | null,
+    name: string | null,
+    description: string | null,
+    services: ServiceWithImage[],
+    bundles: BundleWithItems[],
+  ): BookingSetupCategoryDto {
     const dto = new BookingSetupCategoryDto();
-    dto.id = category.id;
-    dto.name = category.name;
-    dto.description = category.description;
-    dto.services = category.services.map(BookingSetupServiceDto.fromEntity);
+    dto.id = id;
+    dto.name = name;
+    dto.description = description;
+    dto.services = BookingSetupCategoryDto.ordered(services, bundles);
     return dto;
   }
 
-  static uncategorized(services: ServiceWithImage[]): BookingSetupCategoryDto {
-    const dto = new BookingSetupCategoryDto();
-    dto.id = null;
-    dto.name = null;
-    dto.description = null;
-    dto.services = services.map(BookingSetupServiceDto.fromEntity);
-    return dto;
+  private static ordered(
+    services: ServiceWithImage[],
+    bundles: BundleWithItems[],
+  ): Array<BookingSetupServiceDto | BookingSetupBundleDto> {
+    return [
+      ...services.map((service) => ({
+        sortOrder: service.sortOrder,
+        title: service.title,
+        id: service.id,
+        item: BookingSetupServiceDto.fromEntity(service),
+      })),
+      ...bundles.map((bundle) => ({
+        sortOrder: bundle.sortOrder,
+        title: bundle.title,
+        id: bundle.id,
+        item: BookingSetupBundleDto.fromEntity(bundle),
+      })),
+    ]
+      .sort((left, right) => left.sortOrder - right.sortOrder
+        || left.title.localeCompare(right.title, 'ru')
+        || left.id.localeCompare(right.id))
+      .map((entry) => entry.item);
   }
 }

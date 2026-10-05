@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ArrayMaxSize, ArrayNotEmpty, ArrayUnique, IsArray, IsEnum, IsInt, IsOptional, IsUUID, Max, Min } from 'class-validator';
+import { catalogCategoryIdDescription, catalogItemIdDescription } from '../../bookings/catalog-item-filter.js';
 import { DashboardRangeDto } from './dashboard-range.dto.js';
 import { DashboardWidgetKey } from '../enums/dashboard-widget-key.enum.js';
 
@@ -21,12 +22,12 @@ export class DashboardWidgetsRequestDto extends DashboardRangeDto {
   @IsUUID()
   staffId?: string;
 
-  @ApiProperty({ type: String, format: 'uuid', required: false })
+  @ApiProperty({ type: String, format: 'uuid', required: false, description: catalogItemIdDescription })
   @IsOptional()
   @IsUUID()
-  serviceId?: string;
+  catalogItemId?: string;
 
-  @ApiProperty({ type: String, format: 'uuid', required: false })
+  @ApiProperty({ type: String, format: 'uuid', required: false, description: catalogCategoryIdDescription })
   @IsOptional()
   @IsUUID()
   categoryId?: string;

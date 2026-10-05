@@ -186,18 +186,6 @@ describe('BookingsAnalyticsService', () => {
       );
     });
 
-    it('ignores a serviceId filter — occupancy is not a per-service metric', async () => {
-      await widgets([BookingsAnalyticsWidgetKey.OCCUPANCY], { serviceId: 'svc-1', staffId: 'staff-1' });
-      expect(aggregates.occupancyBookedMinutes).toHaveBeenCalledTimes(2);
-      for (const [passedRange] of aggregates.occupancyBookedMinutes.mock.calls) {
-        expect(passedRange.serviceId).toBeUndefined();
-        expect(passedRange.staffId).toBe('staff-1');
-      }
-      expect(aggregates.series).toHaveBeenCalledTimes(1);
-      const seriesRange: AggregateRange = aggregates.series.mock.calls[0][0];
-      expect(seriesRange.serviceId).toBeUndefined();
-    });
-
     it('resolves the shift-capacity window in the business timezone, not UTC', async () => {
       // For a +03:00 business, local 2026-09-01 00:00 is 2026-08-31T21:00Z. A UTC-component read
       // would wrongly land on 2026-08-31; the local-day resolution must keep it on 2026-09-01.

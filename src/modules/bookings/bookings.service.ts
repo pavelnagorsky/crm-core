@@ -9,6 +9,7 @@ import { PaginatedResult } from '../../shared/interfaces/paginated-result.interf
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { stableOrderBy } from '../../shared/database/stable-order-by.js';
 import { MoneyService } from '../../shared/money/money.service.js';
+import { BundleMetrics } from '../services/bundle-metrics.js';
 import { TimeService } from '../time/time.service.js';
 import { CalendarBookingReader } from '../calendar/calendar-booking-reader.js';
 import { CalendarBookingFeed } from '../calendar/interfaces/calendar-booking-feed.interface.js';
@@ -19,7 +20,7 @@ import { BusinessService } from '../business/business.service.js';
 import { BookingSetupCategoryDto } from './dto/booking-setup-category.dto.js';
 import { BookingSetupResponseDto } from './dto/booking-setup-response.dto.js';
 import { BookingSetupStaffDto } from './dto/booking-setup-staff.dto.js';
-import { BookingSetupBundleDto } from './dto/booking-setup-bundle.dto.js';
+import { catalogItemMatch } from './catalog-item-filter.js';
 import { BookingResolveRequestDto } from './dto/booking-resolve-request.dto.js';
 import { BookingResolveResponseDto } from './dto/booking-resolve-response.dto.js';
 import { StaffSelectionMode } from './enums/staff-selection-mode.enum.js';
@@ -72,44 +73,44 @@ export class BookingsService implements CalendarBookingReader {
   ) {}
 
   async getBookingSetup(businessId: string): Promise<BookingSetupResponseDto> {
-    const servicesOrder = [{ sortOrder: 'asc' as const }, { title: 'asc' as const }];
+    const activeBundleInclude = {
+      imageFile: true,
+      items: {
+        orderBy: { sortOrder: 'asc' as const },
+        include: { service: true },
+      },
+    };
 
-    const [[categories, uncategorized], staff, bundles] = await Promise.all([
+    const [[categories, uncategorizedServices, uncategorizedBundles], staff] = await Promise.all([
       this.db.$transaction([
         this.db.serviceCategory.findMany({
           where: { businessId },
           orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
           include: {
-            services: { where: { status: ServiceStatus.ACTIVE }, orderBy: servicesOrder, include: { imageFile: true } },
+            services: { where: { status: ServiceStatus.ACTIVE }, include: { imageFile: true } },
+            bundles: { where: { status: ServiceStatus.ACTIVE }, include: activeBundleInclude },
           },
         }),
         this.db.service.findMany({
           where: { businessId, categoryId: null, status: ServiceStatus.ACTIVE },
-          orderBy: servicesOrder,
           include: { imageFile: true },
+        }),
+        this.db.serviceBundle.findMany({
+          where: { businessId, categoryId: null, status: ServiceStatus.ACTIVE },
+          include: activeBundleInclude,
         }),
       ]),
       this.staffService.listActiveWithServices(businessId),
-      this.db.serviceBundle.findMany({
-        where: { businessId, status: ServiceStatus.ACTIVE },
-        orderBy: [{ sortOrder: 'asc' }, { title: 'asc' }],
-        include: {
-          imageFile: true,
-          items: {
-            orderBy: { sortOrder: 'asc' },
-            include: { service: true },
-          },
-        },
-      }),
     ]);
 
     const result = categories.map(BookingSetupCategoryDto.fromEntity);
-    if (uncategorized.length) result.push(BookingSetupCategoryDto.uncategorized(uncategorized));
+    if (uncategorizedServices.length || uncategorizedBundles.length) {
+      result.push(BookingSetupCategoryDto.uncategorized(uncategorizedServices, uncategorizedBundles));
+    }
 
     return {
       categories: result,
       staff: staff.map(BookingSetupStaffDto.fromEntity),
-      bundles: bundles.map(BookingSetupBundleDto.fromEntity),
     };
   }
 
@@ -151,16 +152,20 @@ export class BookingsService implements CalendarBookingReader {
       };
     }
 
+    const bundle = dto.bundleId ? bundles.find((item) => item.id === dto.bundleId) : undefined;
     const selected = dto.bundleId
-      ? bundles.find((bundle) => bundle.id === dto.bundleId)?.items.map((item) => item.service)
+      ? bundle?.items.map((item) => item.service)
       : dto.serviceIds?.map((id) => serviceById.get(id)).filter((service): service is NonNullable<typeof service> => !!service);
-    const executionMode = dto.bundleId
-      ? (bundles.find((bundle) => bundle.id === dto.bundleId)?.executionMode as BookingExecutionMode | undefined) ?? BookingExecutionMode.SEQUENTIAL
-      : BookingExecutionMode.SEQUENTIAL;
+    const executionMode = (bundle?.executionMode as BookingExecutionMode | undefined) ?? BookingExecutionMode.SEQUENTIAL;
+
+    const catalogIds = [
+      ...services.map((service) => service.id),
+      ...bundles.map((item) => item.id),
+    ];
 
     if (!selected?.length) {
       return {
-        availableServiceIds: services.map((service) => service.id),
+        availableServiceIds: catalogIds,
         availableStaff: (await this.staffService.listActiveWithServices(businessId)).map((staff) => ({ id: staff.id, name: staff.name })),
         staffSelection: StaffSelectionMode.SINGLE,
         executionMode: BookingExecutionMode.SEQUENTIAL,
@@ -173,14 +178,16 @@ export class BookingsService implements CalendarBookingReader {
       businessId,
       selected.map((service) => service.id),
     );
-    const bundle = dto.bundleId ? bundles.find((item) => item.id === dto.bundleId) : null;
-    const totalListPrice = bundle?.fixedPrice ?? selected.reduce((sum, service) => sum.plus(service.price), new Prisma.Decimal(0));
-    const totalDuration = executionMode === BookingExecutionMode.PARALLEL
-      ? Math.max(...selected.map((service) => service.durationMinutes + service.bufferMinutes), 0)
-      : selected.reduce((sum, service) => sum + service.durationMinutes + service.bufferMinutes, 0);
+    const totalListPrice = bundle
+      ? BundleMetrics.price(bundle)
+      : selected.reduce((sum, service) => sum.plus(service.price), new Prisma.Decimal(0));
+    const totalDuration = BundleMetrics.durationMinutes({
+      executionMode,
+      items: selected.map((service) => ({ service })),
+    });
 
     return {
-      availableServiceIds: services.map((service) => service.id),
+      availableServiceIds: catalogIds,
       availableStaff: staffing.coverableBySingle,
       staffSelection: staffing.coverableBySingle.length ? StaffSelectionMode.SINGLE : StaffSelectionMode.NONE,
       executionMode,
@@ -403,20 +410,25 @@ export class BookingsService implements CalendarBookingReader {
     return { items, totalItems };
   }
 
+  private catalogStaffFilter(
+    staffIds: string[] | undefined,
+    catalogItemIds: string[] | undefined,
+  ): Prisma.BookingWhereInput | undefined {
+    const staff = staffIds?.length ? staffIds : undefined;
+    const catalogItems = catalogItemIds?.length ? catalogItemIds : undefined;
+    if (staff && catalogItems) return catalogItemMatch(catalogItems, staff);
+    if (staff) return { items: { some: { staffId: { in: staff } } } };
+    if (catalogItems) return catalogItemMatch(catalogItems);
+    return undefined;
+  }
+
   private buildSearchWhere(businessId: string, dto: BookingSearchRequestDto): Prisma.BookingWhereInput {
     const where: Prisma.BookingWhereInput = { businessId, deletedAt: null };
 
     if (dto.status) where.status = dto.status;
-    if (dto.staffIds?.length) where.items = { some: { staffId: { in: dto.staffIds } } };
     if (dto.clientId) where.clientId = dto.clientId;
-    if (dto.serviceIds?.length) {
-      where.items = {
-        some: {
-          ...(where.items && 'some' in where.items ? where.items.some : {}),
-          serviceId: { in: dto.serviceIds },
-        },
-      };
-    }
+    const catalogFilter = this.catalogStaffFilter(dto.staffIds, dto.catalogItemIds);
+    if (catalogFilter) where.AND = [catalogFilter];
     if (dto.startFrom || dto.startTo) {
       where.startAt = {};
       if (dto.startFrom) (where.startAt as Prisma.DateTimeFilter).gte = new Date(dto.startFrom);

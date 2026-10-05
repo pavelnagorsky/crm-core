@@ -35,6 +35,12 @@ export class CreateStaffDto {
   @MaxLength(250)
   roleTitle?: string;
 
+  @ApiProperty({ type: String, maxLength: 2000, required: false, nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  description?: string;
+
   @IsOptionalPhone()
   phone?: string;
 
@@ -52,7 +58,7 @@ export class CreateStaffDto {
   @ApiProperty({
     type: [String],
     required: false,
-    description: 'UUIDs of services this staff member can perform',
+    description: 'Ids of services this staff member can perform. A bundle can be booked with them when they can perform every service in that bundle. Bundle ids are not accepted.',
   })
   @IsOptional()
   @IsArray()

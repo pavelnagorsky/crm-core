@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ServiceStatus } from '../enums/service-status.enum.js';
 
-export class ServiceStatusCountResponseDto {
+export class ServiceCatalogStatusCountDto {
   @ApiProperty({ enum: ServiceStatus, enumName: 'ServiceStatus' })
   status: ServiceStatus;
 

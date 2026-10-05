@@ -2,24 +2,41 @@ import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, ServiceStatus } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
-import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { PrismaErrorCode } from '../../shared/database/prisma-error-codes.js';
-import { stableOrderBy } from '../../shared/database/stable-order-by.js';
-import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { MULTI_SERVICE_MAX_ITEMS } from '../../shared/constants/multi-service.constants.js';
 import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
 import { CreateServiceBundleDto } from './dto/create-service-bundle.dto.js';
 import { UpdateServiceBundleDto } from './dto/update-service-bundle.dto.js';
-import { ServiceSearchRequestDto } from './dto/service-search-request.dto.js';
-import { ServiceSearchOrderBy } from './enums/service-search-order-by.enum.js';
 import { BundlePricingMode } from './enums/bundle-pricing-mode.enum.js';
+import { catalogWhere } from './catalog-where.js';
 import { ServiceBundleView } from './interfaces/service-bundle-view.interface.js';
+import { ServiceBundleForCatalog } from './interfaces/service-bundle-for-catalog.interface.js';
+import { ServiceFilter } from './interfaces/service-filter.interface.js';
+import { ServiceStatusCount } from './interfaces/service-status-count.interface.js';
 
 const serviceBundleInclude = {
   imageFile: true,
   items: { orderBy: { sortOrder: 'asc' as const }, include: { service: true } },
 };
+
+const serviceBundleCatalogInclude = {
+  imageFile: true,
+  category: { select: { name: true } },
+  items: {
+    orderBy: { sortOrder: 'asc' as const },
+    include: {
+      service: {
+        select: {
+          title: true,
+          price: true,
+          durationMinutes: true,
+          bufferMinutes: true,
+        },
+      },
+    },
+  },
+} satisfies Prisma.ServiceBundleInclude;
 
 @Injectable()
 export class ServiceBundleService {
@@ -92,20 +109,27 @@ export class ServiceBundleService {
     return bundle;
   }
 
-  async search(businessId: string, dto: ServiceSearchRequestDto): Promise<PaginatedResult<ServiceBundleView>> {
-    const where = this.buildWhere(businessId, dto);
-    const direction = dto.orderDirection ?? OrderDirection.ASC;
-    const orderBy = stableOrderBy(this.buildOrderBy(dto.orderBy ?? ServiceSearchOrderBy.SORT_ORDER, direction), direction);
-    const findArgs: Prisma.ServiceBundleFindManyArgs = { where, orderBy, include: serviceBundleInclude };
-    if (!dto.isExport) {
-      findArgs.skip = (dto.page - 1) * dto.pageSize;
-      findArgs.take = dto.pageSize;
-    }
-    const [items, totalItems] = await Promise.all([
-      this.db.serviceBundle.findMany(findArgs) as Promise<ServiceBundleView[]>,
-      this.db.serviceBundle.count({ where }),
-    ]);
-    return { items, totalItems };
+  async listForCatalog(businessId: string, filter: ServiceFilter): Promise<ServiceBundleForCatalog[]> {
+    return this.db.serviceBundle.findMany({
+      where: catalogWhere(businessId, filter),
+      include: serviceBundleCatalogInclude,
+    }) as Promise<ServiceBundleForCatalog[]>;
+  }
+
+  async countForCatalog(businessId: string, filter: ServiceFilter): Promise<number> {
+    return this.db.serviceBundle.count({ where: catalogWhere(businessId, filter) });
+  }
+
+  async countByStatusForCatalog(
+    businessId: string,
+    filter: ServiceFilter,
+  ): Promise<ServiceStatusCount[]> {
+    const rows = await this.db.serviceBundle.groupBy({
+      by: ['status'],
+      where: catalogWhere(businessId, filter),
+      _count: { _all: true },
+    });
+    return rows.map((row) => ({ status: row.status, count: row._count._all }));
   }
 
   async changeStatus(businessId: string, bundleId: string, status: ServiceStatus, _actor: AuditActor): Promise<void> {
@@ -158,36 +182,4 @@ export class ServiceBundleService {
     }
   }
 
-  private buildWhere(businessId: string, dto: ServiceSearchRequestDto): Prisma.ServiceBundleWhereInput {
-    const where: Prisma.ServiceBundleWhereInput = { businessId };
-    const search = dto.search?.trim();
-    if (search) {
-      where.OR = [
-        { title: { contains: search, mode: 'insensitive' } },
-        { description: { contains: search, mode: 'insensitive' } },
-        { category: { name: { contains: search, mode: 'insensitive' } } },
-      ];
-    }
-    if (dto.categoryId !== undefined) where.categoryId = dto.categoryId;
-    if (dto.status !== undefined) where.status = dto.status;
-    return where;
-  }
-
-  private buildOrderBy(orderBy: ServiceSearchOrderBy, direction: OrderDirection): Prisma.ServiceBundleOrderByWithRelationInput {
-    switch (orderBy) {
-      case ServiceSearchOrderBy.CATEGORY:
-        return { category: { name: direction } };
-      case ServiceSearchOrderBy.TITLE:
-        return { title: direction };
-      case ServiceSearchOrderBy.STATUS:
-        return { status: direction };
-      case ServiceSearchOrderBy.CREATED_AT:
-        return { createdAt: direction };
-      case ServiceSearchOrderBy.SORT_ORDER:
-      case ServiceSearchOrderBy.DURATION_MINUTES:
-      case ServiceSearchOrderBy.PRICE:
-      default:
-        return { sortOrder: direction };
-    }
-  }
 }

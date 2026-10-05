@@ -63,7 +63,7 @@ export class BookingsExportService {
       status: dto.status,
       staffIds: dto.staffIds,
       clientId: dto.clientId,
-      serviceIds: dto.serviceIds,
+      catalogItemIds: dto.catalogItemIds,
       startFrom: dto.startFrom,
       startTo: dto.startTo,
       createdFrom: dto.createdFrom,

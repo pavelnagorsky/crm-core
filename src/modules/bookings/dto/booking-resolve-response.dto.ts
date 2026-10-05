@@ -5,7 +5,11 @@ import { StaffSelectionMode } from '../enums/staff-selection-mode.enum.js';
 import { BookingResolveStaffDto } from './booking-resolve-staff.dto.js';
 
 export class BookingResolveResponseDto {
-  @ApiProperty({ type: String, isArray: true })
+  @ApiProperty({
+    type: String,
+    isArray: true,
+    description: 'Service and bundle ids available for this selection. Without a staff member this is every active service and bundle. With a staff member, a service is included when they can perform it, and a bundle when they can perform every service in it.',
+  })
   availableServiceIds: string[];
 
   @ApiProperty({ type: () => BookingResolveStaffDto, isArray: true })

@@ -203,9 +203,8 @@ export class BookingsAnalyticsService {
 
   /**
    * Booked minutes, per-bucket booked minutes, and shift capacity for the occupancy card.
-   * Occupancy is a staff/room concept, so it honours a `staffId` filter but ignores `serviceId`:
-   * shift capacity cannot be scoped per service, and mixing a service-filtered numerator with an
-   * unfiltered capacity would yield a meaningless ratio.
+   * Occupancy is a staff/room concept, so it honours a `staffId` filter. Shift capacity cannot be
+   * scoped per service.
    */
   private async loadOccupancy(
     businessId: string,
@@ -228,7 +227,7 @@ export class BookingsAnalyticsService {
 
   /**
    * Same occupancy percent as the current window, over [previousFrom, previousTo). No bucket series:
-   * the spark stays on the current period. Shift capacity still ignores serviceId.
+   * the spark stays on the current period.
    */
   private async loadPreviousOccupancy(
     businessId: string,
@@ -279,7 +278,6 @@ export class BookingsAnalyticsService {
   private rangeFor(businessId: string, dto: BookingsAnalyticsRequestDto, from: Date, to: Date): AggregateRange {
     const range: AggregateRange = { businessId, from, to };
     if (dto.staffId) range.staffId = dto.staffId;
-    if (dto.serviceId) range.serviceId = dto.serviceId;
     return range;
   }
 

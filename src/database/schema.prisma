@@ -423,6 +423,7 @@ model Staff {
   phone        String?  @db.VarChar(30)
   email        String?  @db.VarChar(254)
   roleTitle        String?              @db.VarChar(250)
+  description      String?              @db.VarChar(2000)
   status           StaffStatus          @default(ACTIVE)
   employmentType   StaffEmploymentType?
   taxId            String?              @db.VarChar(20)

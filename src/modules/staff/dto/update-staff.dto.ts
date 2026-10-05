@@ -33,6 +33,12 @@ export class UpdateStaffDto {
   @MaxLength(250)
   roleTitle?: string;
 
+  @ApiProperty({ type: String, maxLength: 2000, required: false, nullable: true })
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  description?: string;
+
   @IsOptionalPhone()
   phone?: string;
 
@@ -51,7 +57,7 @@ export class UpdateStaffDto {
     type: [String],
     required: false,
     description:
-      'UUIDs of services this staff member can perform — replaces the full set',
+      'Ids of services this staff member can perform. Replaces the full set. A bundle can be booked with them when they can perform every service in that bundle. Bundle ids are not accepted.',
   })
   @IsOptional()
   @IsArray()

@@ -8,8 +8,11 @@ import { BusinessService } from '../business/business.service.js';
 import { StaffEarningsService } from '../payroll/earnings/staff-earnings.service.js';
 import { BookingsService } from './bookings.service.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
+import { BookingResolveRequestDto } from './dto/booking-resolve-request.dto.js';
 import { BookingSearchRequestDto } from './dto/booking-search-request.dto.js';
 import { BookingSearchOrderBy } from './enums/booking-search-order-by.enum.js';
+import { BookingExecutionMode } from './enums/booking-execution-mode.enum.js';
+import { ServiceCatalogKind } from '../services/enums/service-catalog-kind.enum.js';
 import { BookingWithItems } from './interfaces/booking-with-items.interface.js';
 
 function booking(
@@ -158,7 +161,7 @@ describe('BookingsService.search', () => {
       pageSize: 25,
       search: '  стрижка  ',
       staffIds: ['anna', 'boris'],
-      serviceIds: ['haircut'],
+      catalogItemIds: ['haircut'],
       createdFrom: '2026-09-01T00:00:00.000Z',
       createdTo: '2026-09-30T23:59:59.000Z',
     } as BookingSearchRequestDto);
@@ -166,12 +169,12 @@ describe('BookingsService.search', () => {
     expect(findMany.mock.calls[0][0].where).toEqual({
       businessId: 'biz',
       deletedAt: null,
-      items: {
-        some: {
-          staffId: { in: ['anna', 'boris'] },
-          serviceId: { in: ['haircut'] },
-        },
-      },
+      AND: [{
+        OR: [
+          { bundleId: null, items: { some: { staffId: { in: ['anna', 'boris'] }, serviceId: { in: ['haircut'] } } } },
+          { bundleId: { in: ['haircut'] }, items: { some: { staffId: { in: ['anna', 'boris'] } } } },
+        ],
+      }],
       createdAt: {
         gte: new Date('2026-09-01T00:00:00.000Z'),
         lte: new Date('2026-09-30T23:59:59.000Z'),
@@ -196,7 +199,7 @@ describe('BookingsService.search', () => {
       page: 1,
       pageSize: 25,
       staffIds: [],
-      serviceIds: [],
+      catalogItemIds: [],
     } as BookingSearchRequestDto);
 
     expect(findMany.mock.calls[0][0].where).toEqual({
@@ -338,5 +341,132 @@ describe('BookingsService.listForCalendar', () => {
     expect(feed.bookings[0].customPrice).toBe('10.00');
     expect(feed.bookings[0].servicePrice).toBe('50.00');
     expect(feed.linkedEventIds).toEqual(['ev-1', 'ev-2']);
+  });
+});
+
+describe('BookingsService catalog selection', () => {
+  const serviceCategoryFindMany = vi.fn();
+  const serviceFindMany = vi.fn();
+  const bundleFindMany = vi.fn();
+  const staff = {
+    listActiveWithServices: vi.fn(),
+    servicesPerformableBy: vi.fn(),
+    findById: vi.fn(),
+    resolveStaffingForServices: vi.fn(),
+  };
+  const db = {
+    serviceCategory: { findMany: serviceCategoryFindMany },
+    service: { findMany: serviceFindMany },
+    serviceBundle: { findMany: bundleFindMany },
+    $transaction: (ops: Promise<unknown>[]) => Promise.all(ops),
+  };
+
+  let service: BookingsService;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    const module = await Test.createTestingModule({
+      providers: [
+        BookingsService,
+        { provide: DatabaseService, useValue: db },
+        { provide: CalendarService, useValue: {} },
+        { provide: StaffService, useValue: staff },
+        { provide: BusinessService, useValue: {} },
+        { provide: StaffEarningsService, useValue: {} },
+        { provide: EventEmitter2, useValue: { emit: vi.fn() } },
+      ],
+    }).compile();
+    service = module.get(BookingsService);
+  });
+
+  it('places services and bundles in one category list ordered by sort order', async () => {
+    serviceCategoryFindMany.mockResolvedValue([{
+      id: 'cat',
+      name: 'Волосы',
+      description: null,
+      services: [{
+        id: 'cut',
+        categoryId: 'cat',
+        title: 'Стрижка',
+        description: null,
+        price: new Prisma.Decimal('20.00'),
+        durationMinutes: 30,
+        sortOrder: 2,
+        imageFile: null,
+      }],
+      bundles: [{
+        id: 'pack',
+        categoryId: 'cat',
+        title: 'Комплекс',
+        description: null,
+        sortOrder: 1,
+        executionMode: BookingExecutionMode.SEQUENTIAL,
+        fixedPrice: new Prisma.Decimal('30.00'),
+        imageFile: null,
+        items: [{ serviceId: 'cut', service: { price: new Prisma.Decimal('20.00'), durationMinutes: 30, bufferMinutes: 0 } }],
+      }],
+    }]);
+    serviceFindMany.mockResolvedValue([{
+      id: 'lone',
+      categoryId: null,
+      title: 'Без',
+      description: null,
+      price: new Prisma.Decimal('10.00'),
+      durationMinutes: 15,
+      sortOrder: 0,
+      imageFile: null,
+    }]);
+    bundleFindMany.mockResolvedValue([{
+      id: 'loose',
+      categoryId: null,
+      title: 'Пакет',
+      description: null,
+      sortOrder: 0,
+      executionMode: BookingExecutionMode.SEQUENTIAL,
+      fixedPrice: null,
+      imageFile: null,
+      items: [{ serviceId: 'lone', service: { price: new Prisma.Decimal('10.00'), durationMinutes: 15, bufferMinutes: 0 } }],
+    }]);
+    staff.listActiveWithServices.mockResolvedValue([]);
+
+    const setup = await service.getBookingSetup('biz');
+
+    expect(setup).not.toHaveProperty('bundles');
+    expect(setup.categories[0].services.map((item) => [item.id, item.kind])).toEqual([
+      ['pack', ServiceCatalogKind.BUNDLE],
+      ['cut', ServiceCatalogKind.SERVICE],
+    ]);
+    expect(setup.categories[1].id).toBeNull();
+    expect(setup.categories[1].services.map((item) => item.id)).toEqual(['lone', 'loose']);
+  });
+
+  it('offers every active service and bundle before a staff member is chosen', async () => {
+    serviceFindMany.mockResolvedValue([
+      { id: 'cut', price: new Prisma.Decimal('10'), durationMinutes: 30, bufferMinutes: 0 },
+      { id: 'color', price: new Prisma.Decimal('20'), durationMinutes: 60, bufferMinutes: 0 },
+    ]);
+    bundleFindMany.mockResolvedValue([{ id: 'pack', items: [] }]);
+    staff.listActiveWithServices.mockResolvedValue([]);
+
+    const resolved = await service.resolveBookingSelection('biz', {} as BookingResolveRequestDto);
+
+    expect(resolved.availableServiceIds).toEqual(['cut', 'color', 'pack']);
+  });
+
+  it('offers a bundle to a staff member only when they can perform every service in it', async () => {
+    serviceFindMany.mockResolvedValue([
+      { id: 'cut', price: new Prisma.Decimal('10'), durationMinutes: 30, bufferMinutes: 0 },
+      { id: 'color', price: new Prisma.Decimal('20'), durationMinutes: 60, bufferMinutes: 0 },
+    ]);
+    bundleFindMany.mockResolvedValue([
+      { id: 'pack', items: [{ serviceId: 'cut' }] },
+      { id: 'wedding', items: [{ serviceId: 'cut' }, { serviceId: 'color' }] },
+    ]);
+    staff.servicesPerformableBy.mockResolvedValue(['cut']);
+    staff.findById.mockResolvedValue({ name: 'Anna' });
+
+    const resolved = await service.resolveBookingSelection('biz', { staffId: 'anna' } as BookingResolveRequestDto);
+
+    expect(resolved.availableServiceIds).toEqual(['cut', 'pack']);
   });
 });

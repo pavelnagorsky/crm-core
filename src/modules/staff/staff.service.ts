@@ -41,6 +41,9 @@ import { IFrontendConfig } from '../../config/configuration.js';
 import { ConfigService } from '@nestjs/config';
 import { StaffWithAvatar } from './interfaces/staff-with-avatar.interface.js';
 import { StaffWithServiceCount } from './interfaces/staff-with-service-count.interface.js';
+import { sanitizeRichHtml } from '../../shared/html/sanitize-rich-html.js';
+
+const STAFF_DESCRIPTION_MAX_LENGTH = 2_000;
 
 const staffViewInclude = {
   avatarFile: true,
@@ -96,6 +99,7 @@ export class StaffService {
         businessId,
         name: dto.name,
         roleTitle: dto.roleTitle ?? null,
+        description: this.normalizeDescription(dto.description) ?? null,
         phone: dto.phone ?? null,
         email: dto.email ?? null,
         avatarFileId: dto.avatarFileId ?? null,
@@ -139,6 +143,7 @@ export class StaffService {
       data: {
         name: dto.name,
         roleTitle: dto.roleTitle,
+        description: this.normalizeDescription(dto.description),
         phone: dto.phone,
         email: dto.email,
         avatarFileId: dto.avatarFileId,
@@ -188,6 +193,16 @@ export class StaffService {
     });
     if (!staff) throw new NotFoundException('Staff member not found');
     return staff;
+  }
+
+  private normalizeDescription(value: string | null | undefined): string | null | undefined {
+    if (value == null) return value;
+    const html = sanitizeRichHtml(value);
+    if (!html) return null;
+    if (html.length > STAFF_DESCRIPTION_MAX_LENGTH) {
+      throw new AppException(ErrorCode.VALIDATION_ERROR, HttpStatus.BAD_REQUEST);
+    }
+    return html;
   }
 
   private async findInBusiness(

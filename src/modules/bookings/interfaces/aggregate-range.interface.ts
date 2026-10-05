@@ -3,7 +3,7 @@ export interface AggregateRange {
   from: Date;
   to: Date;
   staffId?: string;
-  serviceId?: string;
+  catalogItemId?: string;
   serviceIds?: string[];
   categoryId?: string;
 }

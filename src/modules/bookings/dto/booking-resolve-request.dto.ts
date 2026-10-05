@@ -3,7 +3,13 @@ import { ArrayMaxSize, ArrayNotEmpty, IsArray, IsOptional, IsUUID } from 'class-
 import { MULTI_SERVICE_MAX_ITEMS } from '../../../shared/constants/multi-service.constants.js';
 
 export class BookingResolveRequestDto {
-  @ApiProperty({ type: String, format: 'uuid', isArray: true, required: false })
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    isArray: true,
+    required: false,
+    description: 'Service ids being booked. Mutually exclusive with bundleId.',
+  })
   @IsOptional()
   @IsArray()
   @ArrayNotEmpty()

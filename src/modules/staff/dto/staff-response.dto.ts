@@ -30,6 +30,9 @@ export class StaffResponseDto {
   @ApiProperty({ type: String, nullable: true })
   roleTitle: string | null;
 
+  @ApiProperty({ type: String, nullable: true })
+  description: string | null;
+
   @ApiProperty({ enum: StaffStatus, enumName: 'StaffStatus' })
   status: StaffStatus;
 
@@ -38,7 +41,7 @@ export class StaffResponseDto {
 
   @ApiProperty({
     type: [String],
-    description: 'UUIDs of services this staff member can perform',
+    description: 'Ids of services this staff member can perform. A bundle can be booked with them when they can perform every service in that bundle.',
   })
   serviceIds: string[];
 
@@ -73,6 +76,7 @@ export class StaffResponseDto {
     dto.phone = staff.phone;
     dto.email = staff.email;
     dto.roleTitle = staff.roleTitle;
+    dto.description = staff.description;
     dto.status = staff.status as StaffStatus;
     dto.hasNoServices = staff._count.staffServices === 0;
     dto.serviceIds = staff.staffServices.map((staffService) => staffService.serviceId);

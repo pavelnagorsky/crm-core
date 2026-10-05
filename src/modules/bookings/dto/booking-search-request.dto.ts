@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import { IsArray, IsDateString, IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
 import { PaginationRequestDto } from '../../../shared/dto/pagination-request.dto.js';
+import { catalogItemIdsDescription } from '../catalog-item-filter.js';
 import { BookingSearchOrderBy } from '../enums/booking-search-order-by.enum.js';
 import { BookingStatus } from '../enums/booking-status.enum.js';
 
@@ -52,13 +53,13 @@ export class BookingSearchRequestDto extends PaginationRequestDto<BookingSearchO
     type: [String],
     format: 'uuid',
     required: false,
-    description: 'Filter by service. Repeat the key: ?serviceIds=UUID1&serviceIds=UUID2. A single value is accepted as a one-element array.',
+    description: catalogItemIdsDescription,
   })
   @IsOptional()
   @Transform(({ value }) => toUuidArray(value))
   @IsArray()
   @IsUUID('all', { each: true })
-  serviceIds?: string[];
+  catalogItemIds?: string[];
 
   @ApiProperty({ type: String, format: 'date-time', required: false })
   @IsOptional()

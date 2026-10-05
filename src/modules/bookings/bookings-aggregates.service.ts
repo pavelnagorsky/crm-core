@@ -8,6 +8,7 @@ import {
   isClientRecencyBucket,
   recencyCutoff,
 } from './client-recency.rules.js';
+import { catalogCategoryMatch, catalogCategorySql, catalogItemMatch, catalogItemSql } from './catalog-item-filter.js';
 import { AggregateRange } from './interfaces/aggregate-range.interface.js';
 import { AggregateSeriesRange } from './interfaces/aggregate-series-range.interface.js';
 import { AggregateSnapshot } from './interfaces/aggregate-snapshot.interface.js';
@@ -408,10 +409,13 @@ export class BookingsAggregatesService {
       startAt: { gte: range.from, lt: range.to },
     };
     if (statuses && statuses.length > 0) where.status = { in: statuses };
-    if (range.staffId) where.items = { some: { staffId: range.staffId } };
-    if (range.serviceId) where.items = { some: { serviceId: range.serviceId } };
-    if (range.serviceIds) where.items = { some: { serviceId: { in: range.serviceIds } } };
-    if (range.categoryId) where.items = { some: { service: { categoryId: range.categoryId } } };
+    const and: Prisma.BookingWhereInput[] = [];
+    if (range.staffId) and.push({ items: { some: { staffId: range.staffId } } });
+    if (range.catalogItemId) and.push(catalogItemMatch([range.catalogItemId]));
+    // serviceIds is the services-analytics filter: work performed, including inside a bundle.
+    if (range.serviceIds) and.push(this.performedServices(range.serviceIds));
+    if (range.categoryId) and.push(catalogCategoryMatch(range.categoryId));
+    if (and.length) where.AND = and;
     return where;
   }
 
@@ -434,24 +438,20 @@ export class BookingsAggregatesService {
       );
     }
     if (range.staffId) parts.push(Prisma.sql`"id" IN (SELECT "bookingId" FROM "BookingItem" WHERE "staffId" = ${range.staffId})`);
-    if (range.serviceId)
-      parts.push(Prisma.sql`"id" IN (SELECT "bookingId" FROM "BookingItem" WHERE "serviceId" = ${range.serviceId})`);
-    if (range.serviceIds) {
-      if (range.serviceIds.length === 0) {
-        // Empty in-list → force empty result set without letting Postgres see IN ().
-        parts.push(Prisma.sql`FALSE`);
-      } else {
-        parts.push(
-          Prisma.sql`"id" IN (SELECT "bookingId" FROM "BookingItem" WHERE "serviceId" IN (${Prisma.join(range.serviceIds.map((id) => Prisma.sql`${id}`))}))`,
-        );
-      }
-    }
-    if (range.categoryId) {
-      parts.push(
-        Prisma.sql`"id" IN (SELECT bi."bookingId" FROM "BookingItem" bi JOIN "Service" s ON s."id" = bi."serviceId" WHERE s."categoryId" = ${range.categoryId})`,
-      );
-    }
+    if (range.catalogItemId) parts.push(catalogItemSql([range.catalogItemId]));
+    if (range.serviceIds) parts.push(this.performedServicesSql(range.serviceIds));
+    if (range.categoryId) parts.push(catalogCategorySql(range.categoryId));
     return Prisma.join(parts, ' AND ');
+  }
+
+  private performedServices(ids: string[]): Prisma.BookingWhereInput {
+    if (ids.length === 0) return { id: { in: [] } };
+    return { items: { some: { serviceId: { in: ids } } } };
+  }
+
+  private performedServicesSql(ids: string[]): Prisma.Sql {
+    if (ids.length === 0) return Prisma.sql`FALSE`;
+    return Prisma.sql`"id" IN (SELECT "bookingId" FROM "BookingItem" WHERE "serviceId" IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}`))}))`;
   }
 
   private cohortAggregates(): Prisma.Sql {

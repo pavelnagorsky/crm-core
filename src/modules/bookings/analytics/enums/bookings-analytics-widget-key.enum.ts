@@ -10,8 +10,7 @@ export enum BookingsAnalyticsWidgetKey {
    * `metric.spark` is reserved hours per day or week (held + pending, a demand view), so its future
    * buckets may sit slightly above the headline, which excludes unconfirmed future visits.
    *
-   * Honours a `staffId` filter but ignores `serviceId`: shift capacity is not per-service, so a
-   * service-filtered numerator over unfiltered capacity would be meaningless.
+   * Honours a `staffId` filter. Shift capacity is not per-service.
    */
   OCCUPANCY = 'OCCUPANCY',
 

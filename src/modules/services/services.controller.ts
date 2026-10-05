@@ -30,13 +30,9 @@ import { CreateServiceDto } from './dto/create-service.dto.js';
 import { UpdateServiceDto } from './dto/update-service.dto.js';
 import { UpdateServiceStatusDto } from './dto/update-service-status.dto.js';
 import { ServiceResponseDto } from './dto/service-response.dto.js';
-import { ServiceSearchRequestDto } from './dto/service-search-request.dto.js';
-import { ServiceSearchResponseDto } from './dto/service-search-response.dto.js';
-import { ServiceStatusCountResponseDto } from './dto/service-status-count-response.dto.js';
 import { CreateServiceBundleDto } from './dto/create-service-bundle.dto.js';
 import { UpdateServiceBundleDto } from './dto/update-service-bundle.dto.js';
 import { ServiceBundleResponseDto } from './dto/service-bundle-response.dto.js';
-import { ServiceBundleSearchResponseDto } from './dto/service-bundle-search-response.dto.js';
 import { RBAC } from '../business/decorators/rbac.decorator.js';
 import {
   ApiResponse,
@@ -48,6 +44,12 @@ import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
 import { ServiceBundleService } from './service-bundle.service.js';
+import { ServiceCatalogService } from './service-catalog.service.js';
+import { ServiceCatalogSearchRequestDto } from './dto/service-catalog-search-request.dto.js';
+import { ServiceCatalogSearchResponseDto } from './dto/service-catalog-search-response.dto.js';
+import { ServiceCatalogItemDto } from './dto/service-catalog-item.dto.js';
+import { ServiceCatalogCountsRequestDto } from './dto/service-catalog-counts-request.dto.js';
+import { ServiceCatalogCountsResponseDto } from './dto/service-catalog-counts-response.dto.js';
 
 @ApiTags('Services')
 @Controller('businesses/:businessId')
@@ -55,6 +57,7 @@ export class ServicesController {
   constructor(
     private readonly servicesService: ServicesService,
     private readonly serviceBundles: ServiceBundleService,
+    private readonly serviceCatalog: ServiceCatalogService,
   ) {}
 
   // ─── Service Categories ──────────────────────────────────────────────────────
@@ -150,21 +153,32 @@ export class ServicesController {
     return BaseResponseDto.success({ id: service.id });
   }
 
-  @ApiOperation({ summary: 'Search services' })
-  @ApiOkResponse({ type: ApiResponse(ServiceSearchResponseDto) })
+  // ─── Service catalog ─────────────────────────────────────────────────────────
+
+  @ApiOperation({ summary: 'Get unified service catalog counts' })
+  @ApiOkResponse({ type: ApiResponse(ServiceCatalogCountsResponseDto) })
   @RBAC(BusinessRole.OWNER, BusinessRole.STAFF)
-  @Get('services')
-  async search(
+  @Get('service-catalog/counts')
+  async getCatalogCounts(
     @Param('businessId', ParseUUIDPipe) businessId: string,
-    @Query() dto: ServiceSearchRequestDto,
-  ): Promise<BaseResponseDto<ServiceSearchResponseDto>> {
-    const { items, totalItems } = await this.servicesService.search(
-      businessId,
-      dto,
-    );
+    @Query() dto: ServiceCatalogCountsRequestDto,
+  ): Promise<BaseResponseDto<ServiceCatalogCountsResponseDto>> {
+    const counts = await this.serviceCatalog.getCounts(businessId, dto);
+    return BaseResponseDto.success(ServiceCatalogCountsResponseDto.fromCounts(counts));
+  }
+
+  @ApiOperation({ summary: 'Search the unified service catalog' })
+  @ApiOkResponse({ type: ApiResponse(ServiceCatalogSearchResponseDto) })
+  @RBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @Get('service-catalog')
+  async searchCatalog(
+    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Query() dto: ServiceCatalogSearchRequestDto,
+  ): Promise<BaseResponseDto<ServiceCatalogSearchResponseDto>> {
+    const { items, totalItems } = await this.serviceCatalog.search(businessId, dto);
     return BaseResponseDto.success(
-      new ServiceSearchResponseDto(
-        items.map(ServiceResponseDto.fromEntity),
+      new ServiceCatalogSearchResponseDto(
+        items.map(ServiceCatalogItemDto.fromEntity),
         dto.page,
         dto.pageSize,
         totalItems,
@@ -188,26 +202,6 @@ export class ServicesController {
       auditActorFromToken(tokenPayload, businessId),
     );
     return BaseResponseDto.success({ id: bundle.id });
-  }
-
-  @ApiOperation({ summary: 'Search service bundles' })
-  @ApiOkResponse({ type: ApiResponse(ServiceBundleSearchResponseDto) })
-  @RBAC(BusinessRole.OWNER, BusinessRole.STAFF)
-  @Get('service-bundles')
-  async searchBundles(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
-    @Query() dto: ServiceSearchRequestDto,
-  ): Promise<BaseResponseDto<ServiceBundleSearchResponseDto>> {
-    const { items, totalItems } = await this.serviceBundles.search(businessId, dto);
-    return BaseResponseDto.success(
-      new ServiceBundleSearchResponseDto(
-        items.map(ServiceBundleResponseDto.fromEntity),
-        dto.page,
-        dto.pageSize,
-        totalItems,
-        dto.isExport,
-      ),
-    );
   }
 
   @ApiOperation({ summary: 'Get service bundle by ID' })
@@ -280,17 +274,6 @@ export class ServicesController {
       id,
       auditActorFromToken(tokenPayload, businessId),
     );
-  }
-
-  @ApiOperation({ summary: 'Get service count per status' })
-  @ApiOkResponse({ type: ApiResponseArray(ServiceStatusCountResponseDto) })
-  @RBAC(BusinessRole.OWNER, BusinessRole.STAFF)
-  @Get('services/status-counts')
-  async getStatusCounts(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
-  ): Promise<BaseResponseDto<ServiceStatusCountResponseDto[]>> {
-    const counts = await this.servicesService.getStatusCounts(businessId);
-    return BaseResponseDto.success(counts);
   }
 
   @ApiOperation({ summary: 'Get service by ID' })

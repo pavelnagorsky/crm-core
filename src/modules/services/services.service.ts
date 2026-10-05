@@ -2,20 +2,14 @@ import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, ServiceCategory, ServiceStatus, StaffStatus } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
-import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
 import { CreateServiceCategoryDto } from './dto/create-service-category.dto.js';
 import { UpdateServiceCategoryDto } from './dto/update-service-category.dto.js';
 import { CreateServiceDto } from './dto/create-service.dto.js';
 import { UpdateServiceDto } from './dto/update-service.dto.js';
-import { ServiceSearchRequestDto } from './dto/service-search-request.dto.js';
-import { ServiceStatusCountResponseDto } from './dto/service-status-count-response.dto.js';
-import { ServiceSearchOrderBy } from './enums/service-search-order-by.enum.js';
 import { ServiceFilter } from './interfaces/service-filter.interface.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { PrismaErrorCode } from '../../shared/database/prisma-error-codes.js';
-import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
-import { stableOrderBy } from '../../shared/database/stable-order-by.js';
 import { AUDIT_EVENT } from '../audit/audit.constants.js';
 import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js';
@@ -27,9 +21,18 @@ import { SERVICE_AUDIT_FIELDS } from '../audit/fields/service.fields.js';
 import { BusinessService } from '../business/business.service.js';
 import { ServiceWithImage } from './interfaces/service-with-image.interface.js';
 import { ServiceWithStaffCount } from './interfaces/service-with-staff-count.interface.js';
+import { catalogWhere } from './catalog-where.js';
+import { ServiceForCatalog } from './interfaces/service-for-catalog.interface.js';
+import { ServiceStatusCount } from './interfaces/service-status-count.interface.js';
 
 const serviceViewInclude = {
   imageFile: true,
+  _count: { select: { staffServices: true } },
+} satisfies Prisma.ServiceInclude;
+
+const serviceCatalogInclude = {
+  imageFile: true,
+  category: { select: { name: true } },
   _count: { select: { staffServices: true } },
 } satisfies Prisma.ServiceInclude;
 
@@ -183,68 +186,27 @@ export class ServicesService {
     return service;
   }
 
-  async search(
-    businessId: string,
-    dto: ServiceSearchRequestDto,
-  ): Promise<PaginatedResult<ServiceWithStaffCount>> {
-    const where = this.buildFilterWhere(businessId, dto);
-
-    const direction = dto.orderDirection ?? OrderDirection.ASC;
-    const orderBy = stableOrderBy(
-      this.buildSearchOrderBy(dto.orderBy ?? ServiceSearchOrderBy.SORT_ORDER, direction),
-      direction,
-    );
-
-    const findArgs: Prisma.ServiceFindManyArgs = { where, orderBy, include: serviceViewInclude };
-    if (!dto.isExport) {
-      findArgs.skip = (dto.page - 1) * dto.pageSize;
-      findArgs.take = dto.pageSize;
-    }
-
-    const [items, totalItems] = await this.db.$transaction([
-      this.db.service.findMany({ ...findArgs, include: serviceViewInclude }),
-      this.db.service.count({ where }),
-    ]);
-
-    return { items, totalItems };
+  async listForCatalog(businessId: string, filter: ServiceFilter): Promise<ServiceForCatalog[]> {
+    return this.db.service.findMany({
+      where: catalogWhere(businessId, filter),
+      include: serviceCatalogInclude,
+    });
   }
 
-  async getStatusCounts(businessId: string): Promise<ServiceStatusCountResponseDto[]> {
+  async countForCatalog(businessId: string, filter: ServiceFilter): Promise<number> {
+    return this.db.service.count({ where: catalogWhere(businessId, filter) });
+  }
+
+  async countByStatusForCatalog(
+    businessId: string,
+    filter: ServiceFilter,
+  ): Promise<ServiceStatusCount[]> {
     const rows = await this.db.service.groupBy({
       by: ['status'],
-      where: { businessId },
+      where: catalogWhere(businessId, filter),
       _count: { _all: true },
     });
-    return rows.map((row) => {
-      const dto = new ServiceStatusCountResponseDto();
-      dto.status = row.status;
-      dto.count = row._count._all;
-      return dto;
-    });
-  }
-
-  private buildSearchOrderBy(
-    orderBy: ServiceSearchOrderBy,
-    direction: OrderDirection,
-  ): Prisma.ServiceOrderByWithRelationInput {
-    switch (orderBy) {
-      case ServiceSearchOrderBy.CATEGORY:
-        return { category: { name: direction } };
-      case ServiceSearchOrderBy.TITLE:
-        return { title: direction };
-      case ServiceSearchOrderBy.DURATION_MINUTES:
-        return { durationMinutes: direction };
-      case ServiceSearchOrderBy.PRICE:
-        return { price: direction };
-      case ServiceSearchOrderBy.SORT_ORDER:
-        return { sortOrder: direction };
-      case ServiceSearchOrderBy.STATUS:
-        return { status: direction };
-      case ServiceSearchOrderBy.CREATED_AT:
-        return { createdAt: direction };
-      default:
-        return { sortOrder: direction };
-    }
+    return rows.map((row) => ({ status: row.status, count: row._count._all }));
   }
 
   async assertIdsInBusiness(businessId: string, ids: string[]): Promise<void> {

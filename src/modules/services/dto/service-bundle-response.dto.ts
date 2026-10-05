@@ -5,6 +5,7 @@ import { MoneyService } from '../../../shared/money/money.service.js';
 import { BookingExecutionMode } from '../../bookings/enums/booking-execution-mode.enum.js';
 import { ServiceStatus } from '../enums/service-status.enum.js';
 import { BundlePricingMode } from '../enums/bundle-pricing-mode.enum.js';
+import { BundleMetrics } from '../bundle-metrics.js';
 import { ServiceBundleView } from '../interfaces/service-bundle-view.interface.js';
 import { ServiceBundleItemResponseDto } from './service-bundle-item-response.dto.js';
 
@@ -68,13 +69,8 @@ export class ServiceBundleResponseDto {
     dto.executionMode = bundle.executionMode as BookingExecutionMode;
     dto.pricingMode = bundle.pricingMode as BundlePricingMode;
     dto.fixedPrice = bundle.fixedPrice == null ? null : MoneyService.format(bundle.fixedPrice);
-    dto.price = MoneyService.format(bundle.fixedPrice ?? bundle.items.reduce(
-      (sum, item) => sum.plus(item.service.price),
-      MoneyService.decimal(0),
-    ));
-    dto.durationMinutes = bundle.executionMode === BookingExecutionMode.PARALLEL
-      ? Math.max(...bundle.items.map((item) => item.service.durationMinutes + item.service.bufferMinutes), 0)
-      : bundle.items.reduce((sum, item) => sum + item.service.durationMinutes + item.service.bufferMinutes, 0);
+    dto.price = MoneyService.format(BundleMetrics.price(bundle));
+    dto.durationMinutes = BundleMetrics.durationMinutes(bundle);
     dto.status = bundle.status;
     dto.sortOrder = bundle.sortOrder;
     dto.items = bundle.items.map((item) => ({

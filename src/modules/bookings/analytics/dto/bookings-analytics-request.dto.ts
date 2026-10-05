@@ -24,9 +24,4 @@ export class BookingsAnalyticsRequestDto extends DashboardRangeDto {
   @IsOptional()
   @IsUUID()
   staffId?: string;
-
-  @ApiProperty({ type: String, format: 'uuid', required: false })
-  @IsOptional()
-  @IsUUID()
-  serviceId?: string;
 }

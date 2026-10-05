@@ -262,6 +262,7 @@
     "STAFF": {
       "name": "Имя",
       "roleTitle": "Должность",
+      "description": "Описание",
       "phone": "Телефон",
       "email": "Email",
       "status": "Статус",

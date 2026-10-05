@@ -315,7 +315,7 @@ export class DashboardService {
       from,
       to,
       staffId: ctx.dto.staffId,
-      serviceId: ctx.dto.serviceId,
+      catalogItemId: ctx.dto.catalogItemId,
       categoryId: ctx.dto.categoryId,
     };
   }
