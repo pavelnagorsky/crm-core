@@ -11,6 +11,10 @@ export const ErrorCode = {
   UNAUTHORIZED: { code: 'UNAUTHORIZED', message: 'Unauthorized' },
   FORBIDDEN: { code: 'FORBIDDEN', message: 'Forbidden' },
   NOT_FOUND: { code: 'NOT_FOUND', message: 'Not found' },
+  TOKEN_PAYLOAD_STALE: {
+    code: 'TOKEN_PAYLOAD_STALE',
+    message: 'Access token payload is stale; refresh and retry the request',
+  },
 
   // auth
   EMAIL_ALREADY_IN_USE: {
@@ -49,7 +53,8 @@ export const ErrorCode = {
   },
   SERVICE_IN_USE: {
     code: 'SERVICE_IN_USE',
-    message: 'Service cannot be deleted because it is used in bookings or compensation plans',
+    message:
+      'Service cannot be deleted because it is used in bookings or compensation plans',
   },
   SERVICE_STATUS_ALREADY_SET: {
     code: 'SERVICE_STATUS_ALREADY_SET',
@@ -117,7 +122,8 @@ export const ErrorCode = {
   },
   STAFF_HAS_BOOKINGS: {
     code: 'STAFF_HAS_BOOKINGS',
-    message: 'Staff member cannot be deleted because they have associated bookings',
+    message:
+      'Staff member cannot be deleted because they have associated bookings',
   },
 
   // staff invitations
@@ -250,7 +256,8 @@ export const ErrorCode = {
   },
   BOOKING_CHANNEL_NOT_BOOKABLE: {
     code: 'BOOKING_CHANNEL_NOT_BOOKABLE',
-    message: 'Publish requires an active service assigned to an active staff member',
+    message:
+      'Publish requires an active service assigned to an active staff member',
   },
   WIDGET_DOMAIN_NOT_ALLOWED: {
     code: 'WIDGET_DOMAIN_NOT_ALLOWED',
@@ -258,17 +265,20 @@ export const ErrorCode = {
   },
   STAFF_HAS_EARNINGS: {
     code: 'STAFF_HAS_EARNINGS',
-    message: 'Staff member cannot be deleted because they have associated earnings',
+    message:
+      'Staff member cannot be deleted because they have associated earnings',
   },
 
   // compensation / payroll
   COMPENSATION_PLAN_EFFECTIVE_FROM_INVALID: {
     code: 'COMPENSATION_PLAN_EFFECTIVE_FROM_INVALID',
-    message: 'New compensation plan must start after the latest existing version',
+    message:
+      'New compensation plan must start after the latest existing version',
   },
   COMPENSATION_SERVICE_NOT_FOUND: {
     code: 'COMPENSATION_SERVICE_NOT_FOUND',
-    message: 'One or more services for commission overrides were not found in this business',
+    message:
+      'One or more services for commission overrides were not found in this business',
   },
   PAYROLL_PERIOD_DATES_INVALID: {
     code: 'PAYROLL_PERIOD_DATES_INVALID',
@@ -292,7 +302,8 @@ export const ErrorCode = {
   },
   PAYROLL_CORRECTION_NOT_ALLOWED: {
     code: 'PAYROLL_CORRECTION_NOT_ALLOWED',
-    message: 'Corrections are only allowed after the payroll period is approved',
+    message:
+      'Corrections are only allowed after the payroll period is approved',
   },
   STAFF_EARNING_NOT_FOUND: {
     code: 'STAFF_EARNING_NOT_FOUND',
@@ -304,7 +315,8 @@ export const ErrorCode = {
   },
   STAFF_EARNING_DATE_LOCKED: {
     code: 'STAFF_EARNING_DATE_LOCKED',
-    message: 'Cannot add a manual earning on a date inside an approved or paid payroll period',
+    message:
+      'Cannot add a manual earning on a date inside an approved or paid payroll period',
   },
   STAFF_EARNING_AMOUNT_INVALID: {
     code: 'STAFF_EARNING_AMOUNT_INVALID',

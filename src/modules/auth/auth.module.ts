@@ -14,6 +14,10 @@ import { GoogleOAuthStrategy } from './strategy/google.strategy.js';
 import { VkOAuthStrategy } from './strategy/vk.strategy.js';
 import { YandexOAuthStrategy } from './strategy/yandex.strategy.js';
 import { UserFromTokenPipe } from './pipes/user-from-token.pipe.js';
+import { TokenEpochRegistryService } from './token-epoch-registry.service.js';
+import { TokenEpochGuard } from './guards/token-epoch.guard.js';
+import { BrandRbacGuard } from './guards/brand-rbac.guard.js';
+import { LocationRbacGuard } from './guards/location-rbac.guard.js';
 
 @Global()
 @Module({
@@ -34,11 +38,19 @@ import { UserFromTokenPipe } from './pipes/user-from-token.pipe.js';
     VkOAuthStrategy,
     YandexOAuthStrategy,
     UserFromTokenPipe,
+    TokenEpochRegistryService,
+    TokenEpochGuard,
+    BrandRbacGuard,
+    LocationRbacGuard,
   ],
   exports: [
     PassportModule,
     AuthService,
     UserFromTokenPipe,
+    TokenEpochRegistryService,
+    TokenEpochGuard,
+    BrandRbacGuard,
+    LocationRbacGuard,
     // JwtRefreshStrategy,
     // JwtAccessStrategy,
     // JwtEmailStrategy,

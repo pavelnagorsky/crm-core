@@ -18,6 +18,7 @@ import { OAuthResponseDto } from './dto/oauth-response.dto.js';
 import { ITokens } from './interfaces/tokens.interface.js';
 import { LoginErrorEnum } from './enums/login-error.enum.js';
 import { loginErrorCode } from './utils/login-error-code.js';
+import { TokenEpochRegistryService } from './token-epoch-registry.service.js';
 import { IFrontendConfig, IJwtConfig } from '../../config/configuration.js';
 import {
   jwtExpirationConfig,
@@ -41,23 +42,44 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly eventEmitter: EventEmitter2,
     private readonly config: ConfigService,
+    private readonly tokenEpochRegistry: TokenEpochRegistryService,
   ) {}
 
   async register(dto: RegisterDto): Promise<void> {
     const existing = await this.userService.findByEmail(dto.email);
-    if (existing) throw new AppException(ErrorCode.EMAIL_ALREADY_IN_USE, HttpStatus.CONFLICT);
+    if (existing)
+      throw new AppException(
+        ErrorCode.EMAIL_ALREADY_IN_USE,
+        HttpStatus.CONFLICT,
+      );
 
     if (dto.phone) {
       const existingPhone = await this.userService.findByPhone(dto.phone);
-      if (existingPhone) throw new AppException(ErrorCode.PHONE_ALREADY_IN_USE, HttpStatus.CONFLICT);
+      if (existingPhone)
+        throw new AppException(
+          ErrorCode.PHONE_ALREADY_IN_USE,
+          HttpStatus.CONFLICT,
+        );
     }
 
     const passwordHash = await hash(dto.password, SALT_ROUNDS);
-    const user = await this.userService.create({ email: dto.email, passwordHash, firstName: dto.firstName, lastName: dto.lastName, phone: dto.phone ?? null });
+    const user = await this.userService.create({
+      email: dto.email,
+      passwordHash,
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      phone: dto.phone ?? null,
+    });
 
     const token = await this.generateEmailToken(user);
     const cfg = this.config.get<IFrontendConfig>('frontend')!;
-    this.eventEmitter.emit(NOTIFICATION_EVENT, new ConfirmEmailNotification(user.email!, `${cfg.domain}/auth/confirm-email?token=${token}`));
+    this.eventEmitter.emit(
+      NOTIFICATION_EVENT,
+      new ConfirmEmailNotification(
+        user.email!,
+        `${cfg.domain}/auth/confirm-email?token=${token}`,
+      ),
+    );
     this.logger.log(`register: user=${user.id} email=${user.email}`);
   }
 
@@ -65,22 +87,42 @@ export class AuthService {
     const user = await this.userService.findByEmail(dto.email);
 
     if (!user) {
-      this.logger.warn(`login failed: email=${dto.email} reason=USER_NOT_FOUND`);
-      throw new AppException(loginErrorCode(LoginErrorEnum.INVALID_DATA), HttpStatus.UNAUTHORIZED);
+      this.logger.warn(
+        `login failed: email=${dto.email} reason=USER_NOT_FOUND`,
+      );
+      throw new AppException(
+        loginErrorCode(LoginErrorEnum.INVALID_DATA),
+        HttpStatus.UNAUTHORIZED,
+      );
     }
     if (!user.passwordHash) {
-      this.logger.warn(`login failed: userId=${user.id} reason=PASSWORD_NOT_SET`);
-      throw new AppException(loginErrorCode(LoginErrorEnum.PASSWORD_NOT_SET), HttpStatus.UNAUTHORIZED);
+      this.logger.warn(
+        `login failed: userId=${user.id} reason=PASSWORD_NOT_SET`,
+      );
+      throw new AppException(
+        loginErrorCode(LoginErrorEnum.PASSWORD_NOT_SET),
+        HttpStatus.UNAUTHORIZED,
+      );
     }
     if (!user.emailVerifiedAt) {
-      this.logger.warn(`login failed: userId=${user.id} reason=EMAIL_NOT_CONFIRMED`);
-      throw new AppException(loginErrorCode(LoginErrorEnum.EMAIL_NOT_CONFIRMED), HttpStatus.UNAUTHORIZED);
+      this.logger.warn(
+        `login failed: userId=${user.id} reason=EMAIL_NOT_CONFIRMED`,
+      );
+      throw new AppException(
+        loginErrorCode(LoginErrorEnum.EMAIL_NOT_CONFIRMED),
+        HttpStatus.UNAUTHORIZED,
+      );
     }
 
     const valid = await compare(dto.password, user.passwordHash);
     if (!valid) {
-      this.logger.warn(`login failed: userId=${user.id} reason=INVALID_PASSWORD`);
-      throw new AppException(loginErrorCode(LoginErrorEnum.INVALID_DATA), HttpStatus.UNAUTHORIZED);
+      this.logger.warn(
+        `login failed: userId=${user.id} reason=INVALID_PASSWORD`,
+      );
+      throw new AppException(
+        loginErrorCode(LoginErrorEnum.INVALID_DATA),
+        HttpStatus.UNAUTHORIZED,
+      );
     }
 
     this.logger.log(`login success: userId=${user.id}`);
@@ -88,12 +130,20 @@ export class AuthService {
   }
 
   async logout(userId: string, refreshToken: string): Promise<void> {
-    await this.db.refreshToken.deleteMany({ where: { token: refreshToken, userId } });
+    await this.db.refreshToken.deleteMany({
+      where: { token: refreshToken, userId },
+    });
     this.logger.log(`logout: userId=${userId}`);
   }
 
-  async refresh(userId: string, refreshToken: string, userAgent: string | null): Promise<ITokens> {
-    const stored = await this.db.refreshToken.findUnique({ where: { token: refreshToken } });
+  async refresh(
+    userId: string,
+    refreshToken: string,
+    userAgent: string | null,
+  ): Promise<ITokens> {
+    const stored = await this.db.refreshToken.findUnique({
+      where: { token: refreshToken },
+    });
     if (!stored || stored.userId !== userId || stored.expiryDate < new Date()) {
       throw new AppException(ErrorCode.UNAUTHORIZED, HttpStatus.UNAUTHORIZED);
     }
@@ -111,11 +161,16 @@ export class AuthService {
     const user = await this.userService.findByEmail(dto.email);
     if (!user) return;
 
-    const existing = await this.db.passwordResetCode.findUnique({ where: { userId: user.id } });
+    const existing = await this.db.passwordResetCode.findUnique({
+      where: { userId: user.id },
+    });
     if (existing) {
       const cooldownMs = RESET_CODE_RESEND_COOLDOWN_SECONDS * 1000;
       if (existing.createdAt.getTime() + cooldownMs > Date.now()) {
-        throw new AppException(ErrorCode.RESET_CODE_RESEND_TOO_SOON, HttpStatus.TOO_MANY_REQUESTS);
+        throw new AppException(
+          ErrorCode.RESET_CODE_RESEND_TOO_SOON,
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
       }
     }
 
@@ -128,20 +183,36 @@ export class AuthService {
       update: { codeHash, expiresAt, createdAt: new Date() },
     });
 
-    this.eventEmitter.emit(NOTIFICATION_EVENT, new ResetPasswordNotification(user.email!, code));
+    this.eventEmitter.emit(
+      NOTIFICATION_EVENT,
+      new ResetPasswordNotification(user.email!, code),
+    );
   }
 
   async resetPassword(dto: ResetPasswordDto): Promise<void> {
     const user = await this.userService.findByEmail(dto.email);
-    if (!user) throw new AppException(ErrorCode.INVALID_RESET_CODE, HttpStatus.BAD_REQUEST);
+    if (!user)
+      throw new AppException(
+        ErrorCode.INVALID_RESET_CODE,
+        HttpStatus.BAD_REQUEST,
+      );
 
-    const record = await this.db.passwordResetCode.findUnique({ where: { userId: user.id } });
+    const record = await this.db.passwordResetCode.findUnique({
+      where: { userId: user.id },
+    });
     if (!record || record.expiresAt < new Date()) {
-      throw new AppException(ErrorCode.INVALID_RESET_CODE, HttpStatus.BAD_REQUEST);
+      throw new AppException(
+        ErrorCode.INVALID_RESET_CODE,
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     const valid = await compare(dto.code, record.codeHash);
-    if (!valid) throw new AppException(ErrorCode.INVALID_RESET_CODE, HttpStatus.BAD_REQUEST);
+    if (!valid)
+      throw new AppException(
+        ErrorCode.INVALID_RESET_CODE,
+        HttpStatus.BAD_REQUEST,
+      );
 
     const passwordHash = await hash(dto.password, SALT_ROUNDS);
     await this.userService.update(user.id, { passwordHash });
@@ -151,18 +222,31 @@ export class AuthService {
     ]);
   }
 
-  async handleOAuth(dto: OAuthResponseDto, userAgent: string | null): Promise<ITokens> {
+  async handleOAuth(
+    dto: OAuthResponseDto,
+    userAgent: string | null,
+  ): Promise<ITokens> {
     let user = await this.userService.findByEmail(dto.email);
     if (!user) {
-      user = await this.userService.create({ email: dto.email, emailVerifiedAt: new Date() });
-      this.logger.log(`oauth register: userId=${user.id} email=${user.email} provider=${dto.providerType}`);
+      user = await this.userService.create({
+        email: dto.email,
+        emailVerifiedAt: new Date(),
+      });
+      this.logger.log(
+        `oauth register: userId=${user.id} email=${user.email} provider=${dto.providerType}`,
+      );
     } else {
-      this.logger.log(`oauth login: userId=${user.id} provider=${dto.providerType}`);
+      this.logger.log(
+        `oauth login: userId=${user.id} provider=${dto.providerType}`,
+      );
     }
     return this.issueTokens(user, userAgent);
   }
 
-  private async issueTokens(user: User, userAgent: string | null): Promise<ITokens> {
+  private async issueTokens(
+    user: User,
+    userAgent: string | null,
+  ): Promise<ITokens> {
     const [accessToken, refreshToken] = await Promise.all([
       this.generateAccessToken(user),
       this.generateRefreshToken(user),
@@ -171,11 +255,17 @@ export class AuthService {
     return { accessToken, refreshToken };
   }
 
-  private async saveRefreshToken(userId: string, token: string, userAgent: string | null): Promise<void> {
+  private async saveRefreshToken(
+    userId: string,
+    token: string,
+    userAgent: string | null,
+  ): Promise<void> {
     const expiryDate = new Date();
     expiryDate.setDate(expiryDate.getDate() + REFRESH_TOKEN_TTL_DAYS);
 
-    await this.db.refreshToken.create({ data: { userId, token, userAgent, expiryDate } });
+    await this.db.refreshToken.create({
+      data: { userId, token, userAgent, expiryDate },
+    });
 
     // keep only the newest MAX_TOKENS_PER_USER, drop expired ones
     const all = await this.db.refreshToken.findMany({
@@ -185,30 +275,80 @@ export class AuthService {
     });
     const toDelete = all.slice(MAX_TOKENS_PER_USER).map((t) => t.id);
     await this.db.refreshToken.deleteMany({
-      where: { OR: [{ id: { in: toDelete } }, { userId, expiryDate: { lt: new Date() } }] },
+      where: {
+        OR: [
+          { id: { in: toDelete } },
+          { userId, expiryDate: { lt: new Date() } },
+        ],
+      },
     });
   }
 
-  private sign(payload: Record<string, unknown>, secret: string, expiresIn: string): Promise<string> {
-    return this.jwtService.signAsync(payload, { secret, expiresIn: expiresIn as any });
+  private sign(
+    payload: Record<string, unknown>,
+    secret: string,
+    expiresIn: string,
+  ): Promise<string> {
+    return this.jwtService.signAsync(payload, {
+      secret,
+      expiresIn: expiresIn as any,
+    });
   }
 
   private async generateAccessToken(user: User): Promise<string> {
     const cfg = this.config.get<IJwtConfig>('jwt')!;
-    const memberships = await this.db.membership.findMany({
-      where: { userId: user.id },
-      select: { businessId: true, role: true },
-    });
+    const [brandMemberships, locationMembershipRows, tokenEpoch] =
+      await Promise.all([
+        this.db.brandMembership.findMany({
+          where: { userId: user.id },
+          select: { brandId: true, role: true },
+        }),
+        this.db.locationMembership.findMany({
+          where: { userId: user.id },
+          select: {
+            locationId: true,
+            role: true,
+            location: { select: { brandId: true } },
+          },
+        }),
+        this.tokenEpochRegistry.get(user.id),
+      ]);
+    const locationMemberships = locationMembershipRows.map(
+      ({ location, ...membership }) => ({
+        locationId: membership.locationId,
+        brandId: location.brandId,
+        role: membership.role,
+      }),
+    );
     // firstName/lastName are embedded for audit display; can be stale until the user re-logs in — accepted trade-off.
-    return this.sign({ sub: user.id, role: user.role, firstName: user.firstName, lastName: user.lastName, memberships }, cfg.accessTokenSecret, jwtExpirationConfig.accessToken);
+    return this.sign(
+      {
+        sub: user.id,
+        role: user.role,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        brandMemberships,
+        locationMemberships,
+        tokenEpoch,
+      },
+      cfg.accessTokenSecret,
+      jwtExpirationConfig.accessToken,
+    );
   }
 
   private generateRefreshToken(user: User): Promise<string> {
     const cfg = this.config.get<IJwtConfig>('jwt')!;
-    return this.sign({ sub: user.id }, cfg.refreshTokenSecret, jwtExpirationConfig.refreshToken);
+    return this.sign(
+      { sub: user.id },
+      cfg.refreshTokenSecret,
+      jwtExpirationConfig.refreshToken,
+    );
   }
 
-  private async generateResetCode(): Promise<{ code: string; codeHash: string }> {
+  private async generateResetCode(): Promise<{
+    code: string;
+    codeHash: string;
+  }> {
     const code = String(randomInt(0, 1_000_000)).padStart(6, '0');
     const codeHash = await hash(code, SALT_ROUNDS);
     return { code, codeHash };
@@ -216,6 +356,10 @@ export class AuthService {
 
   private generateEmailToken(user: User): Promise<string> {
     const cfg = this.config.get<IJwtConfig>('jwt')!;
-    return this.sign({ sub: user.id }, cfg.emailTokenSecret, jwtExpirationConfig.emailToken);
+    return this.sign(
+      { sub: user.id },
+      cfg.emailTokenSecret,
+      jwtExpirationConfig.emailToken,
+    );
   }
 }
