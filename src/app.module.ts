@@ -7,7 +7,6 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { DatabaseModule } from './database/database.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { NotificationsModule } from './modules/notifications/notifications.module.js';
-import { BusinessModule } from './modules/business/business.module.js';
 import { BrandModule } from './modules/brand/brand.module.js';
 import { LocationModule } from './modules/location/location.module.js';
 import { StaffModule } from './modules/staff/staff.module.js';
@@ -43,7 +42,6 @@ import { PayrollModule } from './modules/payroll/payroll.module.js';
     AuthModule,
     BrandModule,
     LocationModule,
-    BusinessModule,
     StaffModule,
     ServicesModule,
     ServicesAnalyticsModule,
