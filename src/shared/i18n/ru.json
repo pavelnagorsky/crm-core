@@ -89,6 +89,10 @@
     "SERVICE_BUNDLE_UPDATED": "Комплекс изменён",
     "SERVICE_BUNDLE_DELETED": "Комплекс удалён",
     "BUSINESS_UPDATED": "Настройки бизнеса изменены",
+    "BRAND_UPDATED": "Настройки бренда изменены",
+    "LOCATION_CREATED": "Локация создана",
+    "LOCATION_UPDATED": "Локация изменена",
+    "LOCATION_DELETED": "Локация удалена",
     "PAYROLL_PERIOD_CREATED": "Период зарплаты создан",
     "PAYROLL_PERIOD_DELETED": "Период зарплаты удалён",
     "PAYROLL_CALCULATED": "Зарплата рассчитана",
@@ -165,6 +169,7 @@
   "documents": {
     "common": {
       "business": "Бизнес",
+      "location": "Локация",
       "period": "Период",
       "status": "Статус",
       "currency": "Валюта",

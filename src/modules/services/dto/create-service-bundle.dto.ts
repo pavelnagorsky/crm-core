@@ -1,6 +1,18 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsEnum, IsInt, IsOptional, IsString, IsUUID, MaxLength, Min, ValidateNested } from 'class-validator';
+import {
+  ArrayMaxSize,
+  ArrayMinSize,
+  IsArray,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  Min,
+  ValidateNested,
+} from 'class-validator';
 import { IsOptionalPrice } from '../../../shared/decorators/is-price.decorator.js';
 import { MULTI_SERVICE_MAX_ITEMS } from '../../../shared/constants/multi-service.constants.js';
 import { BookingExecutionMode } from '../../bookings/enums/booking-execution-mode.enum.js';
@@ -14,7 +26,12 @@ export class CreateServiceBundleDto {
   @MaxLength(150)
   title: string;
 
-  @ApiProperty({ type: String, maxLength: 2000, required: false, nullable: true })
+  @ApiProperty({
+    type: String,
+    maxLength: 2000,
+    required: false,
+    nullable: true,
+  })
   @IsOptional()
   @IsString()
   @MaxLength(2000)
@@ -30,12 +47,20 @@ export class CreateServiceBundleDto {
   @IsUUID()
   imageFileId?: string;
 
-  @ApiProperty({ enum: BookingExecutionMode, enumName: 'BookingExecutionMode', required: false })
+  @ApiProperty({
+    enum: BookingExecutionMode,
+    enumName: 'BookingExecutionMode',
+    required: false,
+  })
   @IsOptional()
   @IsEnum(BookingExecutionMode)
   executionMode?: BookingExecutionMode;
 
-  @ApiProperty({ enum: BundlePricingMode, enumName: 'BundlePricingMode', required: false })
+  @ApiProperty({
+    enum: BundlePricingMode,
+    enumName: 'BundlePricingMode',
+    required: false,
+  })
   @IsOptional()
   @IsEnum(BundlePricingMode)
   pricingMode?: BundlePricingMode;
@@ -43,7 +68,11 @@ export class CreateServiceBundleDto {
   @IsOptionalPrice()
   fixedPrice?: string;
 
-  @ApiProperty({ enum: ServiceStatus, enumName: 'ServiceStatus', required: false })
+  @ApiProperty({
+    enum: ServiceStatus,
+    enumName: 'ServiceStatus',
+    required: false,
+  })
   @IsOptional()
   @IsEnum(ServiceStatus)
   status?: ServiceStatus;

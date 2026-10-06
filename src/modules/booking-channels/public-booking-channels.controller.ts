@@ -1,7 +1,24 @@
-import { Controller, forwardRef, Get, Inject, Param, ParseUUIDPipe, Req } from '@nestjs/common';
-import { ApiForbiddenResponse, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  Controller,
+  forwardRef,
+  Get,
+  Inject,
+  Param,
+  ParseUUIDPipe,
+  Req,
+} from '@nestjs/common';
+import {
+  ApiForbiddenResponse,
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import type { Request } from 'express';
-import { ApiResponse, BaseResponseDto } from '../../shared/dto/base-response.dto.js';
+import {
+  ApiResponse,
+  BaseResponseDto,
+} from '../../shared/dto/base-response.dto.js';
 import { requestOrigin } from '../../shared/http/request-context.js';
 import { BusinessService } from '../business/business.service.js';
 import { BookingsService } from '../bookings/bookings.service.js';
@@ -25,29 +42,42 @@ export class PublicBookingChannelsController {
   @ApiOkResponse({ type: ApiResponse(PublicBookingPageResponseDto) })
   @ApiNotFoundResponse({ description: 'Published booking page not found' })
   @Get('booking-pages/:slug')
-  async getPage(@Param('slug') slug: string): Promise<BaseResponseDto<PublicBookingPageResponseDto>> {
+  async getPage(
+    @Param('slug') slug: string,
+  ): Promise<BaseResponseDto<PublicBookingPageResponseDto>> {
     const page = await this.pages.getPublishedBySlug(slug);
     const [business, setup] = await Promise.all([
-      this.businessService.findById(page.businessId),
-      this.bookingsService.getBookingSetup(page.businessId),
+      this.businessService.findById(page.locationId),
+      this.bookingsService.getBookingSetup(page.locationId),
     ]);
-    return BaseResponseDto.success(PublicBookingPageResponseDto.from(page, business, setup));
+    return BaseResponseDto.success(
+      PublicBookingPageResponseDto.from(page, business, setup),
+    );
   }
 
-  @ApiOperation({ summary: 'Get a published booking widget for the embed runtime' })
+  @ApiOperation({
+    summary: 'Get a published booking widget for the embed runtime',
+  })
   @ApiOkResponse({ type: ApiResponse(PublicBookingWidgetResponseDto) })
   @ApiNotFoundResponse({ description: 'Published booking widget not found' })
-  @ApiForbiddenResponse({ description: 'Request origin is not in allowedDomains' })
+  @ApiForbiddenResponse({
+    description: 'Request origin is not in allowedDomains',
+  })
   @Get('booking-widgets/:widgetId')
   async getWidget(
     @Param('widgetId', ParseUUIDPipe) widgetId: string,
     @Req() req: Request,
   ): Promise<BaseResponseDto<PublicBookingWidgetResponseDto>> {
-    const widget = await this.widgets.getPublished(widgetId, requestOrigin(req));
+    const widget = await this.widgets.getPublished(
+      widgetId,
+      requestOrigin(req),
+    );
     const [business, setup] = await Promise.all([
-      this.businessService.findById(widget.businessId),
-      this.bookingsService.getBookingSetup(widget.businessId),
+      this.businessService.findById(widget.locationId),
+      this.bookingsService.getBookingSetup(widget.locationId),
     ]);
-    return BaseResponseDto.success(PublicBookingWidgetResponseDto.from(widget, business, setup));
+    return BaseResponseDto.success(
+      PublicBookingWidgetResponseDto.from(widget, business, setup),
+    );
   }
 }

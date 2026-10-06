@@ -10,7 +10,7 @@ export class StaffResponseDto {
   id: string;
 
   @ApiProperty({ type: String })
-  businessId: string;
+  locationId: string;
 
   @ApiProperty({ type: String, nullable: true })
   userId: string | null;
@@ -41,11 +41,16 @@ export class StaffResponseDto {
 
   @ApiProperty({
     type: [String],
-    description: 'Ids of services this staff member can perform. A bundle can be booked with them when they can perform every service in that bundle.',
+    description:
+      'Ids of services this staff member can perform. A bundle can be booked with them when they can perform every service in that bundle.',
   })
   serviceIds: string[];
 
-  @ApiProperty({ enum: StaffEmploymentType, enumName: 'StaffEmploymentType', nullable: true })
+  @ApiProperty({
+    enum: StaffEmploymentType,
+    enumName: 'StaffEmploymentType',
+    nullable: true,
+  })
   employmentType: StaffEmploymentType | null;
 
   @ApiProperty({ type: String, nullable: true })
@@ -54,7 +59,11 @@ export class StaffResponseDto {
   @ApiProperty({ type: String, nullable: true })
   employeeNumber: string | null;
 
-  @ApiProperty({ enum: StaffPayoutMethod, enumName: 'StaffPayoutMethod', nullable: true })
+  @ApiProperty({
+    enum: StaffPayoutMethod,
+    enumName: 'StaffPayoutMethod',
+    nullable: true,
+  })
   payoutMethod: StaffPayoutMethod | null;
 
   @ApiProperty({ type: String, nullable: true })
@@ -69,9 +78,11 @@ export class StaffResponseDto {
   static fromEntity(staff: StaffWithServiceCount): StaffResponseDto {
     const dto = new StaffResponseDto();
     dto.id = staff.id;
-    dto.businessId = staff.businessId;
+    dto.locationId = staff.locationId;
     dto.userId = staff.userId;
-    dto.avatar = staff.avatarFile ? FileResponseDto.fromEntity(staff.avatarFile) : null;
+    dto.avatar = staff.avatarFile
+      ? FileResponseDto.fromEntity(staff.avatarFile)
+      : null;
     dto.name = staff.name;
     dto.phone = staff.phone;
     dto.email = staff.email;
@@ -79,7 +90,9 @@ export class StaffResponseDto {
     dto.description = staff.description;
     dto.status = staff.status as StaffStatus;
     dto.hasNoServices = staff._count.staffServices === 0;
-    dto.serviceIds = staff.staffServices.map((staffService) => staffService.serviceId);
+    dto.serviceIds = staff.staffServices.map(
+      (staffService) => staffService.serviceId,
+    );
     dto.employmentType = staff.employmentType;
     dto.taxId = staff.taxId;
     dto.employeeNumber = staff.employeeNumber;

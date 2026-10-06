@@ -1,4 +1,4 @@
-import { BusinessService } from '../../business/business.service.js';
+import { LocationService } from '../../location/location.service.js';
 import { DashboardRangeDto } from '../dto/dashboard-range.dto.js';
 import { DashboardPeriod } from '../enums/dashboard-period.enum.js';
 import { SeriesGranularity } from '../enums/series-granularity.enum.js';
@@ -7,11 +7,13 @@ import { DashboardRangeService } from './dashboard-range.service.js';
 function service(): DashboardRangeService {
   const businessService = {
     getLocale: vi.fn().mockResolvedValue({ timezone: 'UTC', currency: 'USD' }),
-  } as unknown as BusinessService;
+  } as unknown as LocationService;
   return new DashboardRangeService(businessService);
 }
 
-function range(partial: Partial<DashboardRangeDto> & Pick<DashboardRangeDto, 'period'>): DashboardRangeDto {
+function range(
+  partial: Partial<DashboardRangeDto> & Pick<DashboardRangeDto, 'period'>,
+): DashboardRangeDto {
   return partial as DashboardRangeDto;
 }
 
@@ -24,7 +26,10 @@ describe('DashboardRangeService granularity', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-26T15:00:00.000Z'));
 
-    const resolved = await service().resolve('biz', range({ period: DashboardPeriod.YTD }));
+    const resolved = await service().resolve(
+      'biz',
+      range({ period: DashboardPeriod.YTD }),
+    );
 
     expect(resolved.granularity).toBe(SeriesGranularity.MONTH);
   });
@@ -33,7 +38,10 @@ describe('DashboardRangeService granularity', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-01-10T15:00:00.000Z'));
 
-    const resolved = await service().resolve('biz', range({ period: DashboardPeriod.YTD }));
+    const resolved = await service().resolve(
+      'biz',
+      range({ period: DashboardPeriod.YTD }),
+    );
 
     expect(resolved.granularity).toBe(SeriesGranularity.MONTH);
   });
@@ -68,7 +76,10 @@ describe('DashboardRangeService granularity', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-26T15:00:00.000Z'));
 
-    const resolved = await service().resolve('biz', range({ period: DashboardPeriod.LAST_3M }));
+    const resolved = await service().resolve(
+      'biz',
+      range({ period: DashboardPeriod.LAST_3M }),
+    );
 
     expect(resolved.granularity).toBe(SeriesGranularity.WEEK);
   });
@@ -77,8 +88,14 @@ describe('DashboardRangeService granularity', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-26T15:00:00.000Z'));
 
-    const sixMonths = await service().resolve('biz', range({ period: DashboardPeriod.LAST_6M }));
-    const year = await service().resolve('biz', range({ period: DashboardPeriod.LAST_1Y }));
+    const sixMonths = await service().resolve(
+      'biz',
+      range({ period: DashboardPeriod.LAST_6M }),
+    );
+    const year = await service().resolve(
+      'biz',
+      range({ period: DashboardPeriod.LAST_1Y }),
+    );
 
     expect(sixMonths.granularity).toBe(SeriesGranularity.MONTH);
     expect(year.granularity).toBe(SeriesGranularity.MONTH);
@@ -119,7 +136,10 @@ describe('DashboardRangeService rolling month periods', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-26T15:00:00.000Z'));
 
-    const resolved = await service().resolve('biz', range({ period: DashboardPeriod.LAST_3M }));
+    const resolved = await service().resolve(
+      'biz',
+      range({ period: DashboardPeriod.LAST_3M }),
+    );
 
     expect(resolved.from.toISOString()).toBe('2026-06-27T00:00:00.000Z');
     expect(resolved.to.toISOString()).toBe('2026-09-27T00:00:00.000Z');
@@ -129,7 +149,10 @@ describe('DashboardRangeService rolling month periods', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-26T15:00:00.000Z'));
 
-    const resolved = await service().resolve('biz', range({ period: DashboardPeriod.LAST_6M }));
+    const resolved = await service().resolve(
+      'biz',
+      range({ period: DashboardPeriod.LAST_6M }),
+    );
 
     expect(resolved.from.toISOString()).toBe('2026-03-27T00:00:00.000Z');
     expect(resolved.to.toISOString()).toBe('2026-09-27T00:00:00.000Z');
@@ -139,7 +162,10 @@ describe('DashboardRangeService rolling month periods', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-26T15:00:00.000Z'));
 
-    const resolved = await service().resolve('biz', range({ period: DashboardPeriod.LAST_1Y }));
+    const resolved = await service().resolve(
+      'biz',
+      range({ period: DashboardPeriod.LAST_1Y }),
+    );
 
     expect(resolved.from.toISOString()).toBe('2025-09-27T00:00:00.000Z');
     expect(resolved.to.toISOString()).toBe('2026-09-27T00:00:00.000Z');
@@ -149,7 +175,10 @@ describe('DashboardRangeService rolling month periods', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-05-31T15:00:00.000Z'));
 
-    const resolved = await service().resolve('biz', range({ period: DashboardPeriod.LAST_3M }));
+    const resolved = await service().resolve(
+      'biz',
+      range({ period: DashboardPeriod.LAST_3M }),
+    );
 
     expect(resolved.from.toISOString()).toBe('2026-03-01T00:00:00.000Z');
     expect(resolved.to.toISOString()).toBe('2026-06-01T00:00:00.000Z');
@@ -159,7 +188,10 @@ describe('DashboardRangeService rolling month periods', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-26T15:00:00.000Z'));
 
-    const resolved = await service().resolve('biz', range({ period: DashboardPeriod.LAST_3M }));
+    const resolved = await service().resolve(
+      'biz',
+      range({ period: DashboardPeriod.LAST_3M }),
+    );
 
     expect(resolved.previousTo.toISOString()).toBe(resolved.from.toISOString());
     expect(resolved.to.getTime() - resolved.from.getTime()).toBe(

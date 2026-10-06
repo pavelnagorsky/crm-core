@@ -10,7 +10,9 @@ describe('StaffCompensationService.resolveServicePercent', () => {
     {} as never,
   );
 
-  const plan = (overrides: Partial<CompensationPlanWithRates> = {}): CompensationPlanWithRates =>
+  const plan = (
+    overrides: Partial<CompensationPlanWithRates> = {},
+  ): CompensationPlanWithRates =>
     ({
       id: 'plan',
       serviceCommissionPercent: '30',
@@ -27,15 +29,22 @@ describe('StaffCompensationService.resolveServicePercent', () => {
   });
 
   it('returns null when neither override nor default exists', () => {
-    expect(service.resolveServicePercent(plan({ serviceCommissionPercent: null, serviceRates: [] }), 'massage')).toBe(
-      null,
-    );
+    expect(
+      service.resolveServicePercent(
+        plan({ serviceCommissionPercent: null, serviceRates: [] }),
+        'massage',
+      ),
+    ).toBe(null);
   });
 
   it('treats an explicit 0% override as a real rate', () => {
     expect(
       service.resolveServicePercent(
-        plan({ serviceRates: [{ serviceId: 'intern', commissionPercent: '0' }] as never }),
+        plan({
+          serviceRates: [
+            { serviceId: 'intern', commissionPercent: '0' },
+          ] as never,
+        }),
         'intern',
       ),
     ).toBe('0');

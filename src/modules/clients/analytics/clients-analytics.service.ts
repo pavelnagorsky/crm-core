@@ -49,10 +49,10 @@ export class ClientsAnalyticsService {
   ) {}
 
   async getWidgets(
-    businessId: string,
+    brandId: string,
     dto: ClientsAnalyticsRequestDto,
   ): Promise<WidgetDto[]> {
-    const ctx = await this.buildContext(businessId, dto);
+    const ctx = await this.buildContext(brandId, dto);
     return dto.keys.map((key) => this.buildWidget(key, ctx));
   }
 
@@ -188,19 +188,19 @@ export class ClientsAnalyticsService {
   }
 
   private async buildContext(
-    businessId: string,
+    brandId: string,
     dto: ClientsAnalyticsRequestDto,
   ): Promise<ClientAnalyticsContext> {
-    const range = await this.rangeService.resolve(businessId, dto);
+    const range = await this.rangeService.resolve(brandId, dto);
     const needsCohort = dto.keys.some((key) => COHORT_WIDGETS.has(key));
     const needsRecency = dto.keys.includes(
       ClientsAnalyticsWidgetKey.DORMANT_CLIENTS,
     );
     const compare = range.compareWithPrevious;
 
-    const currentRange = { businessId, from: range.from, to: range.to };
+    const currentRange = { brandId, from: range.from, to: range.to };
     const previousRange = {
-      businessId,
+      brandId,
       from: range.previousFrom,
       to: range.previousTo,
     };
@@ -234,11 +234,11 @@ export class ClientsAnalyticsService {
           })
         : [],
       needsRecency
-        ? this.aggregates.clientRecency(businessId, range.to, range.timezone)
+        ? this.aggregates.clientRecency(brandId, range.to, range.timezone)
         : [],
       needsRecency && compare
         ? this.aggregates.clientRecency(
-            businessId,
+            brandId,
             range.previousTo,
             range.timezone,
           )

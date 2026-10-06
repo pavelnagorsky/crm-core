@@ -12,7 +12,12 @@ import { I18nModule } from '../../shared/i18n/i18n.module.js';
 @Module({
   imports: [BusinessModule, ServicesModule, I18nModule],
   controllers: [StaffKpiController, StaffController],
-  providers: [StaffService, StaffCleanupService, StaffKpiService, StaffExportService],
+  providers: [
+    StaffService,
+    StaffCleanupService,
+    StaffKpiService,
+    StaffExportService,
+  ],
   exports: [StaffService],
 })
 export class StaffModule {}

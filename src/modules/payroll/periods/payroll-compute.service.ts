@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { CompensationSalaryMode, Prisma, StaffEarningType } from '@prisma/client';
+import {
+  CompensationSalaryMode,
+  Prisma,
+  StaffEarningType,
+} from '@prisma/client';
 import { TimeService } from '../../time/time.service.js';
 import { EarningCalculatorService } from '../earnings/earning-calculator.service.js';
 import { planCoversDate } from '../compensation/compensation-plan.rules.js';
@@ -28,7 +32,8 @@ export class PayrollComputeService {
   prorateSalary(plans: SalaryPlanSlice[], dateStrs: string[]): SalaryProration {
     let prorated = MoneyService.decimal(0);
     let planId: string | null = null;
-    let mode: CompensationSalaryMode = CompensationSalaryMode.GUARANTEED_MINIMUM;
+    let mode: CompensationSalaryMode =
+      CompensationSalaryMode.GUARANTEED_MINIMUM;
     let lastSalary = MoneyService.decimal(0);
     let daysCovered = 0;
 
@@ -36,7 +41,12 @@ export class PayrollComputeService {
       const day = TimeService.dateOnly(iso);
       const plan = this.planOnDate(plans, day);
       if (!plan || plan.fixedSalaryAmount === null) continue;
-      prorated = prorated.plus(this.calculator.dailySalaryShare(plan.fixedSalaryAmount, TimeService.daysInUtcMonth(day)));
+      prorated = prorated.plus(
+        this.calculator.dailySalaryShare(
+          plan.fixedSalaryAmount,
+          TimeService.daysInUtcMonth(day),
+        ),
+      );
       planId = plan.id;
       mode = plan.salaryMode;
       lastSalary = MoneyService.decimal(plan.fixedSalaryAmount);
@@ -58,14 +68,22 @@ export class PayrollComputeService {
    */
   floorBase(earnings: EarningLine[]): Prisma.Decimal {
     const reversedIds = new Set(
-      earnings.map((row) => row.reversesEarningId).filter((id): id is string => Boolean(id)),
+      earnings
+        .map((row) => row.reversesEarningId)
+        .filter((id): id is string => Boolean(id)),
     );
     return earnings
-      .filter((row) => FLOOR_TYPES.has(row.type) && !reversedIds.has(row.id ?? ''))
+      .filter(
+        (row) => FLOOR_TYPES.has(row.type) && !reversedIds.has(row.id ?? ''),
+      )
       .reduce((acc, row) => acc.plus(row.amount), MoneyService.decimal(0));
   }
 
-  inDateRange<T extends { earnedOn: Date }>(rows: T[], from: Date, to: Date): T[] {
+  inDateRange<T extends { earnedOn: Date }>(
+    rows: T[],
+    from: Date,
+    to: Date,
+  ): T[] {
     const start = from.getTime();
     const end = to.getTime();
     return rows.filter((row) => {
@@ -74,10 +92,17 @@ export class PayrollComputeService {
     });
   }
 
-  salaryAmount(proration: SalaryProration, workEarnings: EarningLine[]): Prisma.Decimal {
+  salaryAmount(
+    proration: SalaryProration,
+    workEarnings: EarningLine[],
+  ): Prisma.Decimal {
     if (proration.prorated.lte(0)) return MoneyService.decimal(0);
-    if (proration.mode === CompensationSalaryMode.ADDITIVE) return proration.prorated;
-    return this.calculator.guaranteedTopUp(proration.prorated, this.floorBase(workEarnings));
+    if (proration.mode === CompensationSalaryMode.ADDITIVE)
+      return proration.prorated;
+    return this.calculator.guaranteedTopUp(
+      proration.prorated,
+      this.floorBase(workEarnings),
+    );
   }
 
   groupByStaff<T extends { staffId: string }>(rows: T[]): Map<string, T[]> {
@@ -90,7 +115,10 @@ export class PayrollComputeService {
     return map;
   }
 
-  matchingCurrency<T extends { currency: string }>(rows: T[], currency: string): T[] {
+  matchingCurrency<T extends { currency: string }>(
+    rows: T[],
+    currency: string,
+  ): T[] {
     return rows.filter((row) => row.currency === currency);
   }
 
@@ -117,10 +145,12 @@ export class PayrollComputeService {
           fields.hourlyTotal = fields.hourlyTotal.plus(amount);
           break;
         case StaffEarningType.SERVICE_COMMISSION:
-          fields.serviceCommissionTotal = fields.serviceCommissionTotal.plus(amount);
+          fields.serviceCommissionTotal =
+            fields.serviceCommissionTotal.plus(amount);
           break;
         case StaffEarningType.PRODUCT_COMMISSION:
-          fields.productCommissionTotal = fields.productCommissionTotal.plus(amount);
+          fields.productCommissionTotal =
+            fields.productCommissionTotal.plus(amount);
           break;
         case StaffEarningType.BONUS:
           fields.bonusTotal = fields.bonusTotal.plus(amount);

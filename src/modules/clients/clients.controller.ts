@@ -45,10 +45,16 @@ import { ClientExportRequestDto } from './clients-export/dto/client-export-reque
 import { ClientsExportService } from './clients-export/clients-export.service.js';
 import { XlsxService } from '../../shared/xlsx/xlsx.service.js';
 import { Auth } from '../auth/decorators/auth.decorator.js';
-import { ApiResponse, BaseResponseDto } from '../../shared/dto/base-response.dto.js';
+import {
+  ApiResponse,
+  BaseResponseDto,
+} from '../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
 import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
-import { TokenPayloadDto, assertBusinessRole } from '../auth/dto/token-payload.dto.js';
+import {
+  TokenPayloadDto,
+  assertBusinessRole,
+} from '../auth/dto/token-payload.dto.js';
 import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
 
 @ApiTags('Clients')
@@ -69,8 +75,12 @@ export class ClientsController {
     @Body() dto: CreateClientDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    assertBusinessRole(tokenPayload, dto.businessId, BusinessRole.OWNER);
-    const client = await this.clientsService.create(dto.businessId, dto, auditActorFromToken(tokenPayload, dto.businessId));
+    assertBusinessRole(tokenPayload, dto.brandId, BusinessRole.OWNER);
+    const client = await this.clientsService.create(
+      dto.brandId,
+      dto,
+      auditActorFromToken(tokenPayload, dto.brandId),
+    );
     return BaseResponseDto.success({ id: client.id });
   }
 
@@ -79,17 +89,24 @@ export class ClientsController {
   @ApiBody({
     schema: {
       type: 'object',
-      required: ['file', 'businessId'],
+      required: ['file', 'brandId'],
       properties: {
         file: { type: 'string', format: 'binary' },
-        businessId: { type: 'string', format: 'uuid' },
+        brandId: { type: 'string', format: 'uuid' },
       },
     },
   })
   @ApiOkResponse({ type: ApiResponse(ClientImportResponseDto) })
-  @ApiBadRequestResponse({ description: 'Import file is missing, corrupt, empty, over the row limit, or has no required columns' })
-  @ApiPayloadTooLargeResponse({ description: 'Import file exceeds the size limit' })
-  @ApiUnprocessableEntityResponse({ description: 'Import file is not an .xlsx spreadsheet' })
+  @ApiBadRequestResponse({
+    description:
+      'Import file is missing, corrupt, empty, over the row limit, or has no required columns',
+  })
+  @ApiPayloadTooLargeResponse({
+    description: 'Import file exceeds the size limit',
+  })
+  @ApiUnprocessableEntityResponse({
+    description: 'Import file is not an .xlsx spreadsheet',
+  })
   @Auth()
   @ClientImportFile()
   @Post('import')
@@ -98,14 +115,18 @@ export class ClientsController {
     @Body() dto: ClientImportRequestDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<ClientImportResponseDto>> {
-    assertBusinessRole(tokenPayload, dto.businessId, BusinessRole.OWNER);
+    assertBusinessRole(tokenPayload, dto.brandId, BusinessRole.OWNER);
     const result = await this.clientsImportService.import(
-      dto.businessId,
+      dto.brandId,
       file,
-      auditActorFromToken(tokenPayload, dto.businessId),
+      auditActorFromToken(tokenPayload, dto.brandId),
     );
     return BaseResponseDto.success(
-      new ClientImportResponseDto(result.successCount, result.duplicateCount, result.errorCount),
+      new ClientImportResponseDto(
+        result.successCount,
+        result.duplicateCount,
+        result.errorCount,
+      ),
     );
   }
 
@@ -121,8 +142,13 @@ export class ClientsController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
     const client = await this.clientsService.findById(id);
-    assertBusinessRole(tokenPayload, client.businessId, BusinessRole.OWNER);
-    const updated = await this.clientsService.update(client.businessId, id, dto, auditActorFromToken(tokenPayload, client.businessId));
+    assertBusinessRole(tokenPayload, client.brandId, BusinessRole.OWNER);
+    const updated = await this.clientsService.update(
+      client.brandId,
+      id,
+      dto,
+      auditActorFromToken(tokenPayload, client.brandId),
+    );
     return BaseResponseDto.success({ id: updated.id });
   }
 
@@ -139,8 +165,13 @@ export class ClientsController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<void> {
     const client = await this.clientsService.findById(id);
-    assertBusinessRole(tokenPayload, client.businessId, BusinessRole.OWNER);
-    await this.clientsService.setBan(client.businessId, id, dto, auditActorFromToken(tokenPayload, client.businessId));
+    assertBusinessRole(tokenPayload, client.brandId, BusinessRole.OWNER);
+    await this.clientsService.setBan(
+      client.brandId,
+      id,
+      dto,
+      auditActorFromToken(tokenPayload, client.brandId),
+    );
   }
 
   @ApiOperation({ summary: 'Export clients as XLSX' })
@@ -151,10 +182,19 @@ export class ClientsController {
   async export(
     @Query() dto: ClientExportRequestDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
-    @Res({ passthrough: true }) res: { setHeader: (name: string, value: string) => void },
+    @Res({ passthrough: true })
+    res: { setHeader: (name: string, value: string) => void },
   ): Promise<StreamableFile> {
-    assertBusinessRole(tokenPayload, dto.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
-    const { stream, filename } = await this.clientsExportService.stream(dto.businessId, dto);
+    assertBusinessRole(
+      tokenPayload,
+      dto.brandId,
+      BusinessRole.OWNER,
+      BusinessRole.STAFF,
+    );
+    const { stream, filename } = await this.clientsExportService.stream(
+      dto.brandId,
+      dto,
+    );
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     return new StreamableFile(stream, { type: XlsxService.mimeType });
   }
@@ -169,7 +209,12 @@ export class ClientsController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<ClientResponseDto>> {
     const client = await this.clientsService.findById(id);
-    assertBusinessRole(tokenPayload, client.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
+    assertBusinessRole(
+      tokenPayload,
+      client.brandId,
+      BusinessRole.OWNER,
+      BusinessRole.STAFF,
+    );
     return BaseResponseDto.success(ClientResponseDto.fromEntity(client));
   }
 
@@ -181,10 +226,24 @@ export class ClientsController {
     @Query() dto: ClientSearchRequestDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<ClientSearchResponseDto>> {
-    assertBusinessRole(tokenPayload, dto.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
-    const { items, totalItems } = await this.clientsService.search(dto.businessId, dto);
+    assertBusinessRole(
+      tokenPayload,
+      dto.brandId,
+      BusinessRole.OWNER,
+      BusinessRole.STAFF,
+    );
+    const { items, totalItems } = await this.clientsService.search(
+      dto.brandId,
+      dto,
+    );
     return BaseResponseDto.success(
-      new ClientSearchResponseDto(items.map(ClientResponseDto.fromEntity), dto.page, dto.pageSize, totalItems, dto.isExport),
+      new ClientSearchResponseDto(
+        items.map(ClientResponseDto.fromEntity),
+        dto.page,
+        dto.pageSize,
+        totalItems,
+        dto.isExport,
+      ),
     );
   }
 }

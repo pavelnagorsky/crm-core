@@ -1,11 +1,28 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Put } from '@nestjs/common';
-import { ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Put,
+} from '@nestjs/common';
+import {
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { BusinessRole } from '@prisma/client';
 import { Auth } from '../../auth/decorators/auth.decorator.js';
 import { TokenPayload } from '../../auth/decorators/token-payload.decorator.js';
-import { TokenPayloadDto, assertBusinessRole } from '../../auth/dto/token-payload.dto.js';
+import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
+import { assertLocationRole } from '../../auth/guards/assert-location-role.js';
 import { auditActorFromToken } from '../../audit/utils/audit-actor-from-token.js';
-import { ApiResponse, ApiResponseArray, BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
+import {
+  ApiResponse,
+  ApiResponseArray,
+  BaseResponseDto,
+} from '../../../shared/dto/base-response.dto.js';
 import { StaffService } from '../../staff/staff.service.js';
 import { CompensationPlanResponseDto } from './dto/compensation-plan-response.dto.js';
 import { ReplaceCompensationPlanDto } from './dto/replace-compensation-plan.dto.js';
@@ -29,9 +46,16 @@ export class StaffCompensationController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<CompensationPlanResponseDto | null>> {
     const staff = await this.staffService.findById(id);
-    assertBusinessRole(tokenPayload, staff.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
+    assertLocationRole(
+      tokenPayload,
+      staff.locationId,
+      BusinessRole.OWNER,
+      BusinessRole.STAFF,
+    );
     const plan = await this.compensation.findCurrent(id);
-    return BaseResponseDto.success(plan ? CompensationPlanResponseDto.fromEntity(plan) : null);
+    return BaseResponseDto.success(
+      plan ? CompensationPlanResponseDto.fromEntity(plan) : null,
+    );
   }
 
   @ApiOperation({ summary: 'Get compensation plan history for a staff member' })
@@ -43,9 +67,16 @@ export class StaffCompensationController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<CompensationPlanResponseDto[]>> {
     const staff = await this.staffService.findById(id);
-    assertBusinessRole(tokenPayload, staff.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
+    assertLocationRole(
+      tokenPayload,
+      staff.locationId,
+      BusinessRole.OWNER,
+      BusinessRole.STAFF,
+    );
     const plans = await this.compensation.listHistory(id);
-    return BaseResponseDto.success(plans.map(CompensationPlanResponseDto.fromEntity));
+    return BaseResponseDto.success(
+      plans.map(CompensationPlanResponseDto.fromEntity),
+    );
   }
 
   @ApiOperation({
@@ -62,8 +93,14 @@ export class StaffCompensationController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<CompensationPlanResponseDto>> {
     const staff = await this.staffService.findById(id);
-    assertBusinessRole(tokenPayload, staff.businessId, BusinessRole.OWNER);
-    const plan = await this.compensation.replace(id, dto, auditActorFromToken(tokenPayload, staff.businessId));
-    return BaseResponseDto.success(CompensationPlanResponseDto.fromEntity(plan));
+    assertLocationRole(tokenPayload, staff.locationId, BusinessRole.OWNER);
+    const plan = await this.compensation.replace(
+      id,
+      dto,
+      auditActorFromToken(tokenPayload, staff.locationId),
+    );
+    return BaseResponseDto.success(
+      CompensationPlanResponseDto.fromEntity(plan),
+    );
   }
 }

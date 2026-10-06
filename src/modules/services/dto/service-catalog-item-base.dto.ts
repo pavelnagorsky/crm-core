@@ -13,7 +13,7 @@ export class ServiceCatalogItemBaseDto {
   kind: ServiceCatalogKind;
 
   @ApiProperty({ type: String })
-  businessId: string;
+  locationId: string;
 
   @ApiProperty({ type: String, nullable: true })
   categoryId: string | null;
@@ -45,12 +45,17 @@ export class ServiceCatalogItemBaseDto {
   @ApiProperty({ type: Date })
   updatedAt: Date;
 
-  static assign(dto: ServiceCatalogItemBaseDto, item: ServiceCatalogItem): void {
+  static assign(
+    dto: ServiceCatalogItemBaseDto,
+    item: ServiceCatalogItem,
+  ): void {
     dto.id = item.id;
     dto.kind = item.kind;
-    dto.businessId = item.businessId;
+    dto.locationId = item.locationId;
     dto.categoryId = item.categoryId;
-    dto.image = item.imageFile ? FileResponseDto.fromEntity(item.imageFile) : null;
+    dto.image = item.imageFile
+      ? FileResponseDto.fromEntity(item.imageFile)
+      : null;
     dto.title = item.title;
     dto.description = item.description;
     dto.price = MoneyService.format(item.price);

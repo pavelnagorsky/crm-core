@@ -20,12 +20,18 @@ describe('ServicesService.findIdsByFilter', () => {
     await service.findIdsByFilter('business-1', { search: '  окрашивание  ' });
 
     expect(findMany.mock.calls[0][0].where).toEqual({
-      businessId: 'business-1',
+      locationId: 'business-1',
       OR: [
         { title: { contains: 'окрашивание', mode: 'insensitive' } },
         { description: { contains: 'окрашивание', mode: 'insensitive' } },
-        { category: { name: { contains: 'окрашивание', mode: 'insensitive' } } },
-        { category: { description: { contains: 'окрашивание', mode: 'insensitive' } } },
+        {
+          category: { name: { contains: 'окрашивание', mode: 'insensitive' } },
+        },
+        {
+          category: {
+            description: { contains: 'окрашивание', mode: 'insensitive' },
+          },
+        },
       ],
     });
   });
@@ -34,14 +40,25 @@ describe('ServicesService.findIdsByFilter', () => {
 describe('ServiceResponseDto', () => {
   it('flags a service that no staff member owns', () => {
     const items = [
-      { id: 'owned', imageFile: null, price: 100, _count: { staffServices: 2 } },
-      { id: 'unowned', imageFile: null, price: 100, _count: { staffServices: 0 } },
+      {
+        id: 'owned',
+        imageFile: null,
+        price: 100,
+        _count: { staffServices: 2 },
+      },
+      {
+        id: 'unowned',
+        imageFile: null,
+        price: 100,
+        _count: { staffServices: 0 },
+      },
     ];
 
-    expect(items.map((item) => ServiceResponseDto.fromEntity(item as never).hasNoStaff)).toEqual([
-      false,
-      true,
-    ]);
+    expect(
+      items.map(
+        (item) => ServiceResponseDto.fromEntity(item as never).hasNoStaff,
+      ),
+    ).toEqual([false, true]);
   });
 });
 
@@ -62,7 +79,7 @@ describe('ServicesService.listForCatalog', () => {
     await service.listForCatalog('business-1', { search: '  окрашивание  ' });
 
     expect(findMany.mock.calls[0][0].where).toEqual({
-      businessId: 'business-1',
+      locationId: 'business-1',
       OR: [
         { title: { contains: 'окрашивание', mode: 'insensitive' } },
         { description: { contains: 'окрашивание', mode: 'insensitive' } },

@@ -53,7 +53,9 @@ export class BusinessController {
     @TokenPayload() payload: TokenPayloadDto,
     @Body() dto: CreateBusinessDto,
   ): Promise<BaseResponseDto<{ id: string }>> {
-    const actorName = [payload.firstName, payload.lastName].filter(Boolean).join(' ') || 'Пользователь';
+    const actorName =
+      [payload.firstName, payload.lastName].filter(Boolean).join(' ') ||
+      'Пользователь';
     const business = await this.businessService.create(payload.sub, dto, {
       id: payload.sub,
       name: actorName,
@@ -72,7 +74,11 @@ export class BusinessController {
     @Body() dto: UpdateBusinessDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<{ id: string }>> {
-    const business = await this.businessService.update(businessId, dto, auditActorFromToken(tokenPayload, businessId));
+    const business = await this.businessService.update(
+      businessId,
+      dto,
+      auditActorFromToken(tokenPayload, businessId),
+    );
     return BaseResponseDto.success({ id: business.id });
   }
 

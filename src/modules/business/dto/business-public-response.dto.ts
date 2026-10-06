@@ -26,10 +26,13 @@ export class BusinessPublicResponseDto {
     const dto = new BusinessPublicResponseDto();
     dto.id = business.id;
     dto.name = business.name;
-    dto.logo = business.logoFile ? FileResponseDto.fromEntity(business.logoFile) : null;
-    dto.timezone = business.timezone;
-    dto.currency = business.currency;
-    dto.bookingVisibility = business.bookingVisibility as BookingVisibility;
+    dto.logo = business.logoFile
+      ? FileResponseDto.fromEntity(business.logoFile)
+      : null;
+    dto.timezone = business.timezone ?? 'UTC';
+    dto.currency = business.currency ?? 'USD';
+    dto.bookingVisibility = (business.bookingVisibility ??
+      BookingVisibility.PUBLIC) as BookingVisibility;
     return dto;
   }
 }

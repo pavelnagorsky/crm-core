@@ -20,19 +20,26 @@ export class NotificationsService {
     config: ConfigService,
   ) {
     this.channels = [emailChannel];
-    this.enabled = config.get<INotificationsConfig>('notificationsConfig')!.enabled;
+    this.enabled = config.get<INotificationsConfig>(
+      'notificationsConfig',
+    )!.enabled;
   }
 
   @OnEvent(NOTIFICATION_EVENT, { suppressErrors: true })
   async handle(notification: AbstractNotification): Promise<void> {
     if (!this.enabled) {
-      this.logger.log(`Notifications disabled, skipping ${notification.constructor.name}`);
+      this.logger.log(
+        `Notifications disabled, skipping ${notification.constructor.name}`,
+      );
       return;
     }
     try {
       await this.dispatch(notification);
     } catch (e: any) {
-      this.logger.error(`Unhandled error delivering ${notification.constructor.name}: ${e.message}`, e.stack);
+      this.logger.error(
+        `Unhandled error delivering ${notification.constructor.name}: ${e.message}`,
+        e.stack,
+      );
     }
   }
 
@@ -45,16 +52,24 @@ export class NotificationsService {
           await ch.send(notification);
           return;
         } catch (e: any) {
-          this.logger.warn(`${ch.name} failed for ${notification.constructor.name}: ${e.message}`);
+          this.logger.warn(
+            `${ch.name} failed for ${notification.constructor.name}: ${e.message}`,
+          );
         }
       }
-      this.logger.warn(`All channels failed for ${notification.constructor.name}`);
+      this.logger.warn(
+        `All channels failed for ${notification.constructor.name}`,
+      );
     } else {
       await Promise.all(
         available.map((ch) =>
-          ch.send(notification).catch((e: any) =>
-            this.logger.warn(`${ch.name} failed for ${notification.constructor.name}: ${e.message}`),
-          ),
+          ch
+            .send(notification)
+            .catch((e: any) =>
+              this.logger.warn(
+                `${ch.name} failed for ${notification.constructor.name}: ${e.message}`,
+              ),
+            ),
         ),
       );
     }

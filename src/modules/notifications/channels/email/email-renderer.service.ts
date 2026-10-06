@@ -126,11 +126,19 @@ export class EmailRendererService implements OnModuleInit {
     });
   }
 
-  private formatDate(value: string | Date, timezone: string, withDate = true, timeOnly = false): string {
+  private formatDate(
+    value: string | Date,
+    timezone: string,
+    withDate = true,
+    timeOnly = false,
+  ): string {
     const d = value instanceof Date ? value : new Date(value);
     if (Number.isNaN(d.getTime())) return String(value);
     const intlLocale = LANG_TO_INTL_LOCALE[this.lang] ?? 'ru-RU';
-    const options: Intl.DateTimeFormatOptions = { timeZone: timezone, hour12: false };
+    const options: Intl.DateTimeFormatOptions = {
+      timeZone: timezone,
+      hour12: false,
+    };
     if (timeOnly) {
       options.hour = '2-digit';
       options.minute = '2-digit';

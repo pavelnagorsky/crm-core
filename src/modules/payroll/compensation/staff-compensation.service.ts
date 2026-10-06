@@ -10,7 +10,7 @@ import { AuditEntity } from '../../audit/enums/audit-entity.enum.js';
 import { AuditEvent } from '../../audit/enums/audit-event.enum.js';
 import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../../audit/interfaces/audit-log-event.interface.js';
-import { BusinessService } from '../../business/business.service.js';
+import { LocationService } from '../../location/location.service.js';
 import { ServicesService } from '../../services/services.service.js';
 import { StaffService } from '../../staff/staff.service.js';
 import { TimeService } from '../../time/time.service.js';
@@ -25,7 +25,7 @@ export class StaffCompensationService {
     private readonly db: DatabaseService,
     private readonly staffService: StaffService,
     private readonly servicesService: ServicesService,
-    private readonly businessService: BusinessService,
+    private readonly locationService: LocationService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -38,13 +38,21 @@ export class StaffCompensationService {
     });
   }
 
-  async findCurrent(staffId: string): Promise<CompensationPlanWithRates | null> {
+  async findCurrent(
+    staffId: string,
+  ): Promise<CompensationPlanWithRates | null> {
     const staff = await this.staffService.findById(staffId);
-    const { timezone } = await this.businessService.getLocale(staff.businessId);
-    return this.resolveForDate(staff.id, TimeService.dateOnly(TimeService.zonedDateStr(new Date(), timezone)));
+    const { timezone } = await this.locationService.getLocale(staff.locationId);
+    return this.resolveForDate(
+      staff.id,
+      TimeService.dateOnly(TimeService.zonedDateStr(new Date(), timezone)),
+    );
   }
 
-  async resolveForDate(staffId: string, onDate: Date): Promise<CompensationPlanWithRates | null> {
+  async resolveForDate(
+    staffId: string,
+    onDate: Date,
+  ): Promise<CompensationPlanWithRates | null> {
     const day = TimeService.dateOnly(TimeService.dateOnlyStr(onDate));
     return this.db.staffCompensationPlan.findFirst({
       where: {
@@ -57,7 +65,11 @@ export class StaffCompensationService {
     });
   }
 
-  async listOverlapping(staffIds: string[], from: Date, to: Date): Promise<CompensationPlanWithRates[]> {
+  async listOverlapping(
+    staffIds: string[],
+    from: Date,
+    to: Date,
+  ): Promise<CompensationPlanWithRates[]> {
     if (staffIds.length === 0) return [];
     return this.db.staffCompensationPlan.findMany({
       where: {
@@ -70,20 +82,35 @@ export class StaffCompensationService {
     });
   }
 
-  resolveServicePercent(plan: CompensationPlanWithRates, serviceId: string): string | null {
-    const override = plan.serviceRates.find((rate) => rate.serviceId === serviceId);
+  resolveServicePercent(
+    plan: CompensationPlanWithRates,
+    serviceId: string,
+  ): string | null {
+    const override = plan.serviceRates.find(
+      (rate) => rate.serviceId === serviceId,
+    );
     if (override) return override.commissionPercent.toString();
-    if (plan.serviceCommissionPercent !== null) return plan.serviceCommissionPercent.toString();
+    if (plan.serviceCommissionPercent !== null)
+      return plan.serviceCommissionPercent.toString();
     return null;
   }
 
-  async replace(staffId: string, dto: ReplaceCompensationPlanDto, actor: AuditActor): Promise<CompensationPlanWithRates> {
+  async replace(
+    staffId: string,
+    dto: ReplaceCompensationPlanDto,
+    actor: AuditActor,
+  ): Promise<CompensationPlanWithRates> {
     const staff = await this.staffService.findById(staffId);
     const serviceIds = (dto.serviceRates ?? []).map((rate) => rate.serviceId);
-    await this.servicesService.assertIdsInBusiness(staff.businessId, serviceIds);
+    await this.servicesService.assertIdsInBusiness(
+      staff.locationId,
+      serviceIds,
+    );
 
     const effectiveFrom = TimeService.dateOnly(dto.effectiveFrom);
-    const previousDay = TimeService.dateOnly(TimeService.addDaysStr(dto.effectiveFrom, -1));
+    const previousDay = TimeService.dateOnly(
+      TimeService.addDaysStr(dto.effectiveFrom, -1),
+    );
 
     const latest = await this.db.staffCompensationPlan.findFirst({
       where: { staffId },
@@ -105,32 +132,41 @@ export class StaffCompensationService {
       try {
         return await tx.staffCompensationPlan.create({
           data: {
-            businessId: staff.businessId,
+            locationId: staff.locationId,
             staffId,
             effectiveFrom,
             fixedSalaryAmount: dto.fixedSalaryAmount ?? null,
             hourlyRate: dto.hourlyRate ?? null,
             serviceCommissionPercent: dto.serviceCommissionPercent ?? null,
             productCommissionPercent: dto.productCommissionPercent ?? null,
-            salaryMode: dto.salaryMode ?? CompensationSalaryMode.GUARANTEED_MINIMUM,
+            salaryMode:
+              dto.salaryMode ?? CompensationSalaryMode.GUARANTEED_MINIMUM,
             note: dto.note ?? null,
             serviceRates: serviceRates.length
-              ? { create: serviceRates.map((rate) => ({ serviceId: rate.serviceId, commissionPercent: rate.commissionPercent })) }
+              ? {
+                  create: serviceRates.map((rate) => ({
+                    serviceId: rate.serviceId,
+                    commissionPercent: rate.commissionPercent,
+                  })),
+                }
               : undefined,
           },
           include: { serviceRates: true },
         });
       } catch (e: any) {
         if (e?.code === PrismaErrorCode.UNIQUE_CONSTRAINT_VIOLATION) {
-          throw new AppException(ErrorCode.COMPENSATION_PLAN_EFFECTIVE_FROM_INVALID, HttpStatus.CONFLICT);
+          throw new AppException(
+            ErrorCode.COMPENSATION_PLAN_EFFECTIVE_FROM_INVALID,
+            HttpStatus.CONFLICT,
+          );
         }
         throw e;
       }
     });
 
-    const { currency } = await this.businessService.getLocale(staff.businessId);
+    const { currency } = await this.locationService.getLocale(staff.locationId);
     const event: AuditLogEvent = {
-      businessId: staff.businessId,
+      locationId: staff.locationId,
       entityType: AuditEntity.STAFF,
       entityId: staffId,
       eventType: AuditEvent.STAFF_COMPENSATION_UPDATED,

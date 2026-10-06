@@ -13,7 +13,9 @@ export class ServiceCatalogServiceItemDto extends ServiceCatalogItemBaseDto {
   @ApiProperty({ type: Boolean })
   hasNoStaff: boolean;
 
-  static fromEntity(item: ServiceCatalogServiceItem): ServiceCatalogServiceItemDto {
+  static fromEntity(
+    item: ServiceCatalogServiceItem,
+  ): ServiceCatalogServiceItemDto {
     const dto = new ServiceCatalogServiceItemDto();
     ServiceCatalogItemBaseDto.assign(dto, item);
     dto.bufferMinutes = item.bufferMinutes;

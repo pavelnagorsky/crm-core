@@ -8,5 +8,9 @@ export const exceptionFactory = (validationErrors: ValidationError[] = []) => {
     field: error.property,
     error: Object.values(error.constraints ?? {}).join(', '),
   }));
-  return new AppException(ErrorCode.VALIDATION_ERROR, HttpStatus.BAD_REQUEST, payload);
+  return new AppException(
+    ErrorCode.VALIDATION_ERROR,
+    HttpStatus.BAD_REQUEST,
+    payload,
+  );
 };

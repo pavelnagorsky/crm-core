@@ -4,7 +4,10 @@ import { HasEmailChannel } from '../interfaces/has-email-channel.interface.js';
 import { ChannelPayload } from '../interfaces/channel-payload.interface.js';
 import { BookingNotificationData } from './booking-notification-data.interface.js';
 
-export class BookingConfirmedNotification extends AbstractNotification implements HasEmailChannel {
+export class BookingConfirmedNotification
+  extends AbstractNotification
+  implements HasEmailChannel
+{
   readonly strategy = DeliveryStrategy.BEST_EFFORT;
   readonly emailTemplate = 'booking-confirmed' as const;
 

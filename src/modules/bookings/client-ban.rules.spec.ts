@@ -5,7 +5,9 @@ describe('isSelfBookingBlocked', () => {
   const bannedAt = new Date('2026-09-01T00:00:00.000Z');
 
   it('blocks public and widget booking for a banned client', () => {
-    expect(isSelfBookingBlocked(BookingSource.PUBLIC_PAGE, bannedAt)).toBe(true);
+    expect(isSelfBookingBlocked(BookingSource.PUBLIC_PAGE, bannedAt)).toBe(
+      true,
+    );
     expect(isSelfBookingBlocked(BookingSource.WIDGET, bannedAt)).toBe(true);
   });
 

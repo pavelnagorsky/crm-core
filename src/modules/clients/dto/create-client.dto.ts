@@ -1,11 +1,18 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsDateString, IsEmail, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import {
+  IsDateString,
+  IsEmail,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+} from 'class-validator';
 import { IsPhone } from '../../../shared/decorators/is-phone.decorator.js';
 
 export class CreateClientDto {
   @ApiProperty({ type: String, format: 'uuid' })
   @IsUUID()
-  businessId: string;
+  brandId: string;
 
   @ApiProperty({ type: String, maxLength: 100 })
   @IsString()
@@ -26,7 +33,12 @@ export class CreateClientDto {
   @MaxLength(254)
   email?: string;
 
-  @ApiProperty({ type: String, format: 'date', required: false, nullable: true })
+  @ApiProperty({
+    type: String,
+    format: 'date',
+    required: false,
+    nullable: true,
+  })
   @IsOptional()
   @IsDateString()
   birthDate?: string;
@@ -37,7 +49,12 @@ export class CreateClientDto {
   @MaxLength(20)
   gender?: string;
 
-  @ApiProperty({ type: String, maxLength: 1000, required: false, nullable: true })
+  @ApiProperty({
+    type: String,
+    maxLength: 1000,
+    required: false,
+    nullable: true,
+  })
   @IsOptional()
   @IsString()
   @MaxLength(1000)

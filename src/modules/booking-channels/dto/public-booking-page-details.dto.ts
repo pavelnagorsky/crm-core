@@ -37,7 +37,9 @@ export class PublicBookingPageDetailsDto {
     dto.html = sanitizeBookingHtml(page.html);
     dto.metaTitle = page.metaTitle;
     dto.metaDescription = page.metaDescription;
-    dto.cover = page.coverFile ? FileResponseDto.fromEntity(page.coverFile) : null;
+    dto.cover = page.coverFile
+      ? FileResponseDto.fromEntity(page.coverFile)
+      : null;
     return dto;
   }
 }

@@ -3,7 +3,10 @@ import { Client } from '@prisma/client';
 import { XlsxColumn } from '../../../shared/xlsx/interfaces/xlsx-column.interface.js';
 import { XlsxFile } from '../../../shared/xlsx/interfaces/xlsx-file.interface.js';
 import { XlsxService } from '../../../shared/xlsx/xlsx.service.js';
-import { DEFAULT_LANG, LocaleService } from '../../../shared/i18n/locale.service.js';
+import {
+  DEFAULT_LANG,
+  LocaleService,
+} from '../../../shared/i18n/locale.service.js';
 import { DocumentMessages } from '../../../shared/interfaces/document-messages.interface.js';
 import { ClientsService } from '../clients.service.js';
 import { ClientExportRequestDto } from './dto/client-export-request.dto.js';
@@ -25,7 +28,11 @@ export class ClientsExportService {
     private readonly locale: LocaleService,
   ) {}
 
-  async stream(businessId: string, dto: ClientExportRequestDto, lang = DEFAULT_LANG): Promise<XlsxFile> {
+  async stream(
+    brandId: string,
+    dto: ClientExportRequestDto,
+    lang = DEFAULT_LANG,
+  ): Promise<XlsxFile> {
     const text = this.locale.get(lang).documents.clients;
     const columns: XlsxColumn<ClientRow>[] = [
       { header: text.firstName, key: 'firstName' },
@@ -36,8 +43,8 @@ export class ClientsExportService {
       { header: text.gender, key: 'gender' },
       { header: text.notes, key: 'notes', width: 40 },
     ];
-    const { items } = await this.clientsService.search(businessId, {
-      businessId,
+    const { items } = await this.clientsService.search(brandId, {
+      brandId,
       search: dto.search,
       orderBy: dto.orderBy,
       orderDirection: dto.orderDirection,
@@ -45,7 +52,12 @@ export class ClientsExportService {
       pageSize: 1,
       isExport: true,
     });
-    return XlsxService.table(items.map((client) => this.toRow(client, text)), columns, 'clients', text.sheet);
+    return XlsxService.table(
+      items.map((client) => this.toRow(client, text)),
+      columns,
+      'clients',
+      text.sheet,
+    );
   }
 
   private toRow(client: Client, text: DocumentMessages['clients']): ClientRow {
@@ -54,13 +66,18 @@ export class ClientsExportService {
       lastName: client.lastName,
       phone: client.phone,
       email: client.email ?? '',
-      birthDate: client.birthDate ? client.birthDate.toISOString().slice(0, 10) : '',
+      birthDate: client.birthDate
+        ? client.birthDate.toISOString().slice(0, 10)
+        : '',
       gender: this.genderLabel(client.gender, text),
       notes: client.notes ?? '',
     };
   }
 
-  private genderLabel(gender: string | null, text: DocumentMessages['clients']): string {
+  private genderLabel(
+    gender: string | null,
+    text: DocumentMessages['clients'],
+  ): string {
     if (gender === 'MALE') return text.genderMale;
     if (gender === 'FEMALE') return text.genderFemale;
     return gender ?? '';

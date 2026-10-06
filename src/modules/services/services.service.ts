@@ -1,5 +1,15 @@
-import { HttpStatus, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { Prisma, ServiceCategory, ServiceStatus, StaffStatus } from '@prisma/client';
+import {
+  HttpStatus,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  Prisma,
+  ServiceCategory,
+  ServiceStatus,
+  StaffStatus,
+} from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
 import { CreateServiceCategoryDto } from './dto/create-service-category.dto.js';
@@ -17,7 +27,10 @@ import { AuditEntity } from '../audit/enums/audit-entity.enum.js';
 import { AuditEvent } from '../audit/enums/audit-event.enum.js';
 import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
 import { diffFields } from '../audit/utils/diff-fields.js';
-import { SERVICE_AUDIT_FIELDS, toServiceAuditShape } from '../audit/fields/service.fields.js';
+import {
+  SERVICE_AUDIT_FIELDS,
+  toServiceAuditShape,
+} from '../audit/fields/service.fields.js';
 import { SERVICE_CATEGORY_AUDIT_FIELDS } from '../audit/fields/service-category.fields.js';
 import { BusinessService } from '../business/business.service.js';
 import { ServiceWithImage } from './interfaces/service-with-image.interface.js';
@@ -54,19 +67,25 @@ export class ServicesService {
 
   // ─── Service Categories ──────────────────────────────────────────────────────
 
-  async createCategory(businessId: string, dto: CreateServiceCategoryDto, actor: AuditActor): Promise<ServiceCategory> {
+  async createCategory(
+    locationId: string,
+    dto: CreateServiceCategoryDto,
+    actor: AuditActor,
+  ): Promise<ServiceCategory> {
     try {
       const category = await this.db.serviceCategory.create({
         data: {
-          businessId,
+          locationId,
           name: dto.name,
           description: dto.description?.trim() || null,
           sortOrder: dto.sortOrder ?? 0,
         },
       });
-      this.logger.log(`service category created: id=${category.id} businessId=${businessId}`);
+      this.logger.log(
+        `service category created: id=${category.id} locationId=${locationId}`,
+      );
       const event: AuditLogEvent = {
-        businessId,
+        locationId,
         entityType: AuditEntity.SERVICE,
         entityId: category.id,
         eventType: AuditEvent.SERVICE_CATEGORY_CREATED,
@@ -75,26 +94,31 @@ export class ServicesService {
         actor,
         payload: {
           name: category.name,
-          ...(category.description ? { description: category.description } : {}),
+          ...(category.description
+            ? { description: category.description }
+            : {}),
         },
       };
       this.eventEmitter.emit(AUDIT_EVENT, event);
       return category;
     } catch (e: any) {
       if (e?.code === PrismaErrorCode.UNIQUE_CONSTRAINT_VIOLATION)
-        throw new AppException(ErrorCode.CATEGORY_NAME_EXISTS, HttpStatus.CONFLICT);
+        throw new AppException(
+          ErrorCode.CATEGORY_NAME_EXISTS,
+          HttpStatus.CONFLICT,
+        );
       throw e;
     }
   }
 
   async updateCategory(
-    businessId: string,
+    locationId: string,
     categoryId: string,
     dto: UpdateServiceCategoryDto,
     actor: AuditActor,
   ): Promise<ServiceCategory> {
     const existing = await this.db.serviceCategory.findFirst({
-      where: { id: categoryId, businessId },
+      where: { id: categoryId, locationId },
     });
     if (!existing) throw new NotFoundException('Service category not found');
 
@@ -107,11 +131,17 @@ export class ServicesService {
           sortOrder: dto.sortOrder ?? existing.sortOrder,
         },
       });
-      const changes = diffFields(existing, category, SERVICE_CATEGORY_AUDIT_FIELDS);
+      const changes = diffFields(
+        existing,
+        category,
+        SERVICE_CATEGORY_AUDIT_FIELDS,
+      );
       if (changes.length > 0) {
-        this.logger.log(`service category updated: id=${categoryId} businessId=${businessId} fields=${changes.map((change) => change.field).join(',')}`);
+        this.logger.log(
+          `service category updated: id=${categoryId} locationId=${locationId} fields=${changes.map((change) => change.field).join(',')}`,
+        );
         const event: AuditLogEvent = {
-          businessId,
+          locationId,
           entityType: AuditEntity.SERVICE,
           entityId: categoryId,
           eventType: AuditEvent.SERVICE_CATEGORY_UPDATED,
@@ -125,25 +155,36 @@ export class ServicesService {
       return category;
     } catch (e: any) {
       if (e?.code === PrismaErrorCode.UNIQUE_CONSTRAINT_VIOLATION)
-        throw new AppException(ErrorCode.CATEGORY_NAME_EXISTS, HttpStatus.CONFLICT);
+        throw new AppException(
+          ErrorCode.CATEGORY_NAME_EXISTS,
+          HttpStatus.CONFLICT,
+        );
       throw e;
     }
   }
 
-  async listCategories(businessId: string): Promise<ServiceCategory[]> {
+  async listCategories(locationId: string): Promise<ServiceCategory[]> {
     return this.db.serviceCategory.findMany({
-      where: { businessId },
+      where: { locationId },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
   }
 
-  async deleteCategory(businessId: string, categoryId: string, actor: AuditActor): Promise<void> {
-    const category = await this.db.serviceCategory.findFirst({ where: { id: categoryId, businessId } });
+  async deleteCategory(
+    locationId: string,
+    categoryId: string,
+    actor: AuditActor,
+  ): Promise<void> {
+    const category = await this.db.serviceCategory.findFirst({
+      where: { id: categoryId, locationId },
+    });
     if (!category) throw new NotFoundException('Service category not found');
     await this.db.serviceCategory.delete({ where: { id: categoryId } });
-    this.logger.log(`service category deleted: id=${categoryId} businessId=${businessId}`);
+    this.logger.log(
+      `service category deleted: id=${categoryId} locationId=${locationId}`,
+    );
     const event: AuditLogEvent = {
-      businessId,
+      locationId,
       entityType: AuditEntity.SERVICE,
       entityId: categoryId,
       eventType: AuditEvent.SERVICE_CATEGORY_DELETED,
@@ -157,10 +198,14 @@ export class ServicesService {
 
   // ─── Services ────────────────────────────────────────────────────────────────
 
-  async create(businessId: string, dto: CreateServiceDto, actor: AuditActor): Promise<ServiceWithImage> {
+  async create(
+    locationId: string,
+    dto: CreateServiceDto,
+    actor: AuditActor,
+  ): Promise<ServiceWithImage> {
     const service = await this.db.service.create({
       data: {
-        businessId,
+        locationId,
         categoryId: dto.categoryId ?? null,
         imageFileId: dto.imageFileId ?? null,
         title: dto.title,
@@ -173,10 +218,12 @@ export class ServicesService {
       },
       include: serviceAuditInclude,
     });
-    const { currency } = await this.businessService.getLocale(businessId);
-    this.logger.log(`service created: id=${service.id} businessId=${businessId}`);
+    const { currency } = await this.businessService.getLocale(locationId);
+    this.logger.log(
+      `service created: id=${service.id} locationId=${locationId}`,
+    );
     const event: AuditLogEvent = {
-      businessId,
+      locationId,
       entityType: AuditEntity.SERVICE,
       entityId: service.id,
       eventType: AuditEvent.SERVICE_CREATED,
@@ -188,16 +235,25 @@ export class ServicesService {
         price: service.price.toString(),
         durationMinutes: service.durationMinutes,
         currency,
-        ...(service.category?.name ? { categoryName: service.category.name } : {}),
-        ...(service.imageFile?.fileName ? { imageName: service.imageFile.fileName } : {}),
+        ...(service.category?.name
+          ? { categoryName: service.category.name }
+          : {}),
+        ...(service.imageFile?.fileName
+          ? { imageName: service.imageFile.fileName }
+          : {}),
       },
     };
     this.eventEmitter.emit(AUDIT_EVENT, event);
     return service;
   }
 
-  async update(businessId: string, serviceId: string, dto: UpdateServiceDto, actor: AuditActor): Promise<ServiceWithImage> {
-    const old = await this.findInBusiness(businessId, serviceId);
+  async update(
+    locationId: string,
+    serviceId: string,
+    dto: UpdateServiceDto,
+    actor: AuditActor,
+  ): Promise<ServiceWithImage> {
+    const old = await this.findInBusiness(locationId, serviceId);
     const service = await this.db.service.update({
       where: { id: serviceId },
       data: {
@@ -212,14 +268,20 @@ export class ServicesService {
       },
       include: serviceAuditInclude,
     });
-    const changes = diffFields(toServiceAuditShape(old), toServiceAuditShape(service), SERVICE_AUDIT_FIELDS);
+    const changes = diffFields(
+      toServiceAuditShape(old),
+      toServiceAuditShape(service),
+      SERVICE_AUDIT_FIELDS,
+    );
     if (changes.length > 0) {
       const currency = changes.some((change) => change.field === 'price')
-        ? (await this.businessService.getLocale(businessId)).currency
+        ? (await this.businessService.getLocale(locationId)).currency
         : undefined;
-      this.logger.log(`service updated: id=${serviceId} businessId=${businessId} fields=${changes.map((change) => change.field).join(',')}`);
+      this.logger.log(
+        `service updated: id=${serviceId} locationId=${locationId} fields=${changes.map((change) => change.field).join(',')}`,
+      );
       const event: AuditLogEvent = {
-        businessId,
+        locationId,
         entityType: AuditEntity.SERVICE,
         entityId: serviceId,
         eventType: AuditEvent.SERVICE_UPDATED,
@@ -242,64 +304,84 @@ export class ServicesService {
     return service;
   }
 
-  private async findInBusiness(businessId: string, serviceId: string) {
-    const service = await this.db.service.findFirst({ where: { id: serviceId, businessId }, include: serviceAuditInclude });
+  private async findInBusiness(locationId: string, serviceId: string) {
+    const service = await this.db.service.findFirst({
+      where: { id: serviceId, locationId },
+      include: serviceAuditInclude,
+    });
     if (!service) throw new NotFoundException('Service not found');
     return service;
   }
 
-  async listForCatalog(businessId: string, filter: ServiceFilter): Promise<ServiceForCatalog[]> {
+  async listForCatalog(
+    locationId: string,
+    filter: ServiceFilter,
+  ): Promise<ServiceForCatalog[]> {
     return this.db.service.findMany({
-      where: catalogWhere(businessId, filter),
+      where: catalogWhere(locationId, filter),
       include: serviceCatalogInclude,
     });
   }
 
-  async countForCatalog(businessId: string, filter: ServiceFilter): Promise<number> {
-    return this.db.service.count({ where: catalogWhere(businessId, filter) });
+  async countForCatalog(
+    locationId: string,
+    filter: ServiceFilter,
+  ): Promise<number> {
+    return this.db.service.count({ where: catalogWhere(locationId, filter) });
   }
 
   async countByStatusForCatalog(
-    businessId: string,
+    locationId: string,
     filter: ServiceFilter,
   ): Promise<ServiceStatusCount[]> {
     const rows = await this.db.service.groupBy({
       by: ['status'],
-      where: catalogWhere(businessId, filter),
+      where: catalogWhere(locationId, filter),
       _count: { _all: true },
     });
     return rows.map((row) => ({ status: row.status, count: row._count._all }));
   }
 
-  async assertIdsInBusiness(businessId: string, ids: string[]): Promise<void> {
+  async assertIdsInBusiness(locationId: string, ids: string[]): Promise<void> {
     if (ids.length === 0) return;
     const unique = [...new Set(ids)];
     const found = await this.db.service.findMany({
-      where: { businessId, id: { in: unique } },
+      where: { locationId, id: { in: unique } },
       select: { id: true },
     });
     if (found.length !== unique.length) {
-      throw new AppException(ErrorCode.COMPENSATION_SERVICE_NOT_FOUND, HttpStatus.NOT_FOUND);
+      throw new AppException(
+        ErrorCode.COMPENSATION_SERVICE_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
     }
   }
 
-  async findIdsByFilter(businessId: string, filter: ServiceFilter): Promise<string[]> {
+  async findIdsByFilter(
+    locationId: string,
+    filter: ServiceFilter,
+  ): Promise<string[]> {
     const rows = await this.db.service.findMany({
-      where: this.buildFilterWhere(businessId, filter),
+      where: this.buildFilterWhere(locationId, filter),
       select: { id: true },
     });
     return rows.map((r) => r.id);
   }
 
-  private buildFilterWhere(businessId: string, filter: ServiceFilter): Prisma.ServiceWhereInput {
-    const where: Prisma.ServiceWhereInput = { businessId };
+  private buildFilterWhere(
+    locationId: string,
+    filter: ServiceFilter,
+  ): Prisma.ServiceWhereInput {
+    const where: Prisma.ServiceWhereInput = { locationId };
     const search = filter.search?.trim();
     if (search) {
       where.OR = [
         { title: { contains: search, mode: 'insensitive' } },
         { description: { contains: search, mode: 'insensitive' } },
         { category: { name: { contains: search, mode: 'insensitive' } } },
-        { category: { description: { contains: search, mode: 'insensitive' } } },
+        {
+          category: { description: { contains: search, mode: 'insensitive' } },
+        },
       ];
     }
     if (filter.categoryId !== undefined) where.categoryId = filter.categoryId;
@@ -307,28 +389,47 @@ export class ServicesService {
     return where;
   }
 
-  async changeStatus(businessId: string, serviceId: string, status: ServiceStatus, actor: AuditActor): Promise<void> {
-    const service = await this.findInBusiness(businessId, serviceId);
+  async changeStatus(
+    locationId: string,
+    serviceId: string,
+    status: ServiceStatus,
+    actor: AuditActor,
+  ): Promise<void> {
+    const service = await this.findInBusiness(locationId, serviceId);
     if (service.status === status) {
-      throw new AppException(ErrorCode.SERVICE_STATUS_ALREADY_SET, HttpStatus.CONFLICT);
+      throw new AppException(
+        ErrorCode.SERVICE_STATUS_ALREADY_SET,
+        HttpStatus.CONFLICT,
+      );
     }
-    await this.db.service.update({ where: { id: serviceId }, data: { status } });
-    this.logger.log(`service status: id=${serviceId} businessId=${businessId} status=${status}`);
+    await this.db.service.update({
+      where: { id: serviceId },
+      data: { status },
+    });
+    this.logger.log(
+      `service status: id=${serviceId} locationId=${locationId} status=${status}`,
+    );
     const event: AuditLogEvent = {
-      businessId,
+      locationId,
       entityType: AuditEntity.SERVICE,
       entityId: serviceId,
       eventType: AuditEvent.SERVICE_UPDATED,
       actionType: AuditActionType.MODIFY,
       occurredAt: new Date(),
       actor,
-      payload: { changes: [{ field: 'status', from: service.status, to: status }] },
+      payload: {
+        changes: [{ field: 'status', from: service.status, to: status }],
+      },
     };
     this.eventEmitter.emit(AUDIT_EVENT, event);
   }
 
-  async delete(businessId: string, serviceId: string, actor: AuditActor): Promise<void> {
-    const service = await this.findInBusiness(businessId, serviceId);
+  async delete(
+    locationId: string,
+    serviceId: string,
+    actor: AuditActor,
+  ): Promise<void> {
+    const service = await this.findInBusiness(locationId, serviceId);
     try {
       await this.db.service.delete({ where: { id: serviceId } });
     } catch (e: any) {
@@ -337,9 +438,11 @@ export class ServicesService {
       }
       throw e;
     }
-    this.logger.log(`service deleted: id=${serviceId} businessId=${businessId}`);
+    this.logger.log(
+      `service deleted: id=${serviceId} locationId=${locationId}`,
+    );
     const event: AuditLogEvent = {
-      businessId,
+      locationId,
       entityType: AuditEntity.SERVICE,
       entityId: serviceId,
       eventType: AuditEvent.SERVICE_DELETED,
@@ -351,14 +454,13 @@ export class ServicesService {
     this.eventEmitter.emit(AUDIT_EVENT, event);
   }
 
-  async countBookable(businessId: string): Promise<number> {
+  async countBookable(locationId: string): Promise<number> {
     return this.db.service.count({
       where: {
-        businessId,
+        locationId,
         status: ServiceStatus.ACTIVE,
         staffServices: { some: { staff: { status: StaffStatus.ACTIVE } } },
       },
     });
   }
-
 }

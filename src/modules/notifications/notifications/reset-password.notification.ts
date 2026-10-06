@@ -3,7 +3,10 @@ import { DeliveryStrategy } from '../enums/delivery-strategy.enum.js';
 import { HasEmailChannel } from '../interfaces/has-email-channel.interface.js';
 import { ChannelPayload } from '../interfaces/channel-payload.interface.js';
 
-export class ResetPasswordNotification extends AbstractNotification implements HasEmailChannel {
+export class ResetPasswordNotification
+  extends AbstractNotification
+  implements HasEmailChannel
+{
   readonly strategy = DeliveryStrategy.REQUIRED;
   readonly emailTemplate = 'reset-password' as const;
 

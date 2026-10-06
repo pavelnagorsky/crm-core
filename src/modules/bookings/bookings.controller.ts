@@ -54,10 +54,17 @@ import { BookingClientTokenPayloadDto } from './dto/booking-client-token-payload
 import { JwtBookingClientGuard } from './guards/jwt-booking-client.guard.js';
 import { BookingClientToken } from './decorators/booking-client-token.decorator.js';
 import { Auth } from '../auth/decorators/auth.decorator.js';
-import { ApiResponse, ApiResponseArray, BaseResponseDto } from '../../shared/dto/base-response.dto.js';
+import {
+  ApiResponse,
+  ApiResponseArray,
+  BaseResponseDto,
+} from '../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
 import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
-import { TokenPayloadDto, assertBusinessRole } from '../auth/dto/token-payload.dto.js';
+import {
+  TokenPayloadDto,
+  assertBusinessRole,
+} from '../auth/dto/token-payload.dto.js';
 import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
 import { clientIp, requestOrigin } from '../../shared/http/request-context.js';
 
@@ -73,39 +80,55 @@ export class BookingsController {
 
   // ─── Public ──────────────────────────────────────────────────────────────────
 
-  @ApiOperation({ summary: 'Get services and staff for booking screen (public)' })
+  @ApiOperation({
+    summary: 'Get services and staff for booking screen (public)',
+  })
   @ApiOkResponse({ type: ApiResponse(BookingSetupResponseDto) })
-  @Get('public/businesses/:businessId/booking-setup')
+  @Get('public/locations/:locationId/booking-setup')
   async getBookingSetup(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
   ): Promise<BaseResponseDto<BookingSetupResponseDto>> {
-    return BaseResponseDto.success(await this.bookingsService.getBookingSetup(businessId));
+    return BaseResponseDto.success(
+      await this.bookingsService.getBookingSetup(locationId),
+    );
   }
 
-  @ApiOperation({ summary: 'Resolve available services/staff for a partial booking selection (public)' })
+  @ApiOperation({
+    summary:
+      'Resolve available services/staff for a partial booking selection (public)',
+  })
   @ApiOkResponse({ type: ApiResponse(BookingResolveResponseDto) })
-  @Post('public/businesses/:businessId/booking-resolve')
+  @Post('public/locations/:locationId/booking-resolve')
   async resolveBooking(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Body() dto: BookingResolveRequestDto,
   ): Promise<BaseResponseDto<BookingResolveResponseDto>> {
-    return BaseResponseDto.success(await this.bookingsService.resolveBookingSelection(businessId, dto));
+    return BaseResponseDto.success(
+      await this.bookingsService.resolveBookingSelection(locationId, dto),
+    );
   }
 
   @ApiOperation({ summary: 'Book an appointment (public / client-facing)' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Business, service, or staff not found' })
-  @ApiForbiddenResponse({ description: 'Business is closed for public booking, or this phone is banned from online booking' })
+  @ApiForbiddenResponse({
+    description:
+      'Business is closed for public booking, or this phone is banned from online booking',
+  })
   @ApiConflictResponse({ description: 'Slot is no longer available' })
   @Post('public/bookings')
   async createPublic(
     @Body() dto: CreateBookingDto,
     @Req() req: Request,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    const booking = await this.bookingCreateService.createPublicBooking(dto.businessId, dto, {
-      ip: clientIp(req),
-      origin: requestOrigin(req),
-    });
+    const booking = await this.bookingCreateService.createPublicBooking(
+      dto.locationId,
+      dto,
+      {
+        ip: clientIp(req),
+        origin: requestOrigin(req),
+      },
+    );
     return BaseResponseDto.success({ id: booking.id });
   }
 
@@ -119,7 +142,9 @@ export class BookingsController {
     @BookingClientToken() tokenPayload: BookingClientTokenPayloadDto,
   ): Promise<BaseResponseDto<BookingResponseDto>> {
     const booking = await this.bookingsService.findById(tokenPayload.bookingId);
-    return BaseResponseDto.success(BookingResponseDto.fromEntityPublic(booking));
+    return BaseResponseDto.success(
+      BookingResponseDto.fromEntityPublic(booking),
+    );
   }
 
   @ApiOperation({ summary: 'Cancel booking via client management token' })
@@ -133,7 +158,10 @@ export class BookingsController {
     @BookingClientToken() tokenPayload: BookingClientTokenPayloadDto,
     @Body() dto: CancelBookingDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    const booking = await this.bookingsService.cancelByClient(tokenPayload.bookingId, dto);
+    const booking = await this.bookingsService.cancelByClient(
+      tokenPayload.bookingId,
+      dto,
+    );
     return BaseResponseDto.success({ id: booking.id });
   }
 
@@ -149,8 +177,17 @@ export class BookingsController {
     @Body() dto: ManualCreateBookingDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    assertBusinessRole(tokenPayload, dto.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
-    const booking = await this.bookingCreateService.createManualBooking(dto.businessId, dto, auditActorFromToken(tokenPayload, dto.businessId));
+    assertBusinessRole(
+      tokenPayload,
+      dto.locationId,
+      BusinessRole.OWNER,
+      BusinessRole.STAFF,
+    );
+    const booking = await this.bookingCreateService.createManualBooking(
+      dto.locationId,
+      dto,
+      auditActorFromToken(tokenPayload, dto.locationId),
+    );
     return BaseResponseDto.success({ id: booking.id });
   }
 
@@ -159,12 +196,19 @@ export class BookingsController {
   @Auth()
   @Get('bookings/status-counts')
   async getStatusCounts(
-    @Query('businessId', ParseUUIDPipe) businessId: string,
+    @Query('locationId', ParseUUIDPipe) locationId: string,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<BookingStatusCountResponseDto[]>> {
-    assertBusinessRole(tokenPayload, businessId, BusinessRole.OWNER, BusinessRole.STAFF);
-    const counts = await this.bookingsService.getStatusCounts(businessId);
-    return BaseResponseDto.success(counts.map((r) => Object.assign(new BookingStatusCountResponseDto(), r)));
+    assertBusinessRole(
+      tokenPayload,
+      locationId,
+      BusinessRole.OWNER,
+      BusinessRole.STAFF,
+    );
+    const counts = await this.bookingsService.getStatusCounts(locationId);
+    return BaseResponseDto.success(
+      counts.map((r) => Object.assign(new BookingStatusCountResponseDto(), r)),
+    );
   }
 
   @ApiOperation({ summary: 'Export bookings as XLSX' })
@@ -175,10 +219,19 @@ export class BookingsController {
   async export(
     @Query() dto: BookingExportRequestDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
-    @Res({ passthrough: true }) res: { setHeader: (name: string, value: string) => void },
+    @Res({ passthrough: true })
+    res: { setHeader: (name: string, value: string) => void },
   ): Promise<StreamableFile> {
-    assertBusinessRole(tokenPayload, dto.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
-    const { stream, filename } = await this.bookingsExportService.stream(dto.businessId, dto);
+    assertBusinessRole(
+      tokenPayload,
+      dto.locationId,
+      BusinessRole.OWNER,
+      BusinessRole.STAFF,
+    );
+    const { stream, filename } = await this.bookingsExportService.stream(
+      dto.locationId,
+      dto,
+    );
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     return new StreamableFile(stream, { type: XlsxService.mimeType });
   }
@@ -193,7 +246,12 @@ export class BookingsController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<BookingResponseDto>> {
     const booking = await this.bookingsService.findById(id);
-    assertBusinessRole(tokenPayload, booking.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
+    assertBusinessRole(
+      tokenPayload,
+      booking.locationId,
+      BusinessRole.OWNER,
+      BusinessRole.STAFF,
+    );
     return BaseResponseDto.success(BookingResponseDto.fromEntity(booking));
   }
 
@@ -205,10 +263,24 @@ export class BookingsController {
     @Query() dto: BookingSearchRequestDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<BookingSearchResponseDto>> {
-    assertBusinessRole(tokenPayload, dto.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
-    const { items, totalItems } = await this.bookingsService.search(dto.businessId, dto);
+    assertBusinessRole(
+      tokenPayload,
+      dto.locationId,
+      BusinessRole.OWNER,
+      BusinessRole.STAFF,
+    );
+    const { items, totalItems } = await this.bookingsService.search(
+      dto.locationId,
+      dto,
+    );
     return BaseResponseDto.success(
-      new BookingSearchResponseDto(items.map(BookingResponseDto.fromEntity), dto.page, dto.pageSize, totalItems, dto.isExport),
+      new BookingSearchResponseDto(
+        items.map(BookingResponseDto.fromEntity),
+        dto.page,
+        dto.pageSize,
+        totalItems,
+        dto.isExport,
+      ),
     );
   }
 
@@ -237,7 +309,11 @@ export class BookingsController {
     @Body() dto: UpdateBookingStatusDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    const booking = await this.bookingsService.updateStatus(id, tokenPayload, dto);
+    const booking = await this.bookingsService.updateStatus(
+      id,
+      tokenPayload,
+      dto,
+    );
     return BaseResponseDto.success({ id: booking.id });
   }
 
@@ -251,7 +327,12 @@ export class BookingsController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<ClientLinkResponseDto>> {
     const booking = await this.bookingsService.findById(id);
-    assertBusinessRole(tokenPayload, booking.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
+    assertBusinessRole(
+      tokenPayload,
+      booking.locationId,
+      BusinessRole.OWNER,
+      BusinessRole.STAFF,
+    );
     const token = this.bookingClientService.generateClientToken(id);
     return BaseResponseDto.success({ token });
   }
@@ -267,7 +348,12 @@ export class BookingsController {
     @Body() dto: CancelBookingDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    const booking = await this.bookingsService.cancel(id, tokenPayload, CancelledBy.STAFF, dto);
+    const booking = await this.bookingsService.cancel(
+      id,
+      tokenPayload,
+      CancelledBy.STAFF,
+      dto,
+    );
     return BaseResponseDto.success({ id: booking.id });
   }
 

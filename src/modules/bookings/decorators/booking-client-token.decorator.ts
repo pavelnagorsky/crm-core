@@ -1,4 +1,8 @@
-import { createParamDecorator, ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import {
+  createParamDecorator,
+  ExecutionContext,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { BookingClientTokenPayloadDto } from '../dto/booking-client-token-payload.dto.js';
 
 export const BookingClientToken = createParamDecorator(

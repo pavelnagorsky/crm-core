@@ -13,7 +13,7 @@ export class BookingResponseDto {
   id: string;
 
   @ApiProperty({ type: String })
-  businessId: string;
+  locationId: string;
 
   @ApiProperty({ type: String })
   clientId: string;
@@ -75,7 +75,7 @@ export class BookingResponseDto {
   static fromEntity(booking: BookingWithItems): BookingResponseDto {
     const dto = new BookingResponseDto();
     dto.id = booking.id;
-    dto.businessId = booking.businessId;
+    dto.locationId = booking.locationId;
     dto.clientId = booking.clientId;
     dto.startAt = booking.startAt;
     dto.endAt = booking.endAt;
@@ -89,12 +89,20 @@ export class BookingResponseDto {
     dto.clientEmail = booking.clientEmail;
     dto.items = booking.items.map(BookingItemResponseDto.fromEntity);
     dto.totalListPrice = MoneyService.format(
-      booking.items.reduce((sum, item) => sum.plus(item.listPrice), new Prisma.Decimal(0)),
+      booking.items.reduce(
+        (sum, item) => sum.plus(item.listPrice),
+        new Prisma.Decimal(0),
+      ),
     );
     dto.totalChargedPrice = MoneyService.format(
-      booking.items.reduce((sum, item) => sum.plus(item.customPrice ?? item.chargedPrice), new Prisma.Decimal(0)),
+      booking.items.reduce(
+        (sum, item) => sum.plus(item.customPrice ?? item.chargedPrice),
+        new Prisma.Decimal(0),
+      ),
     );
-    dto.totalDuration = Math.round((booking.endAt.getTime() - booking.startAt.getTime()) / 60_000);
+    dto.totalDuration = Math.round(
+      (booking.endAt.getTime() - booking.startAt.getTime()) / 60_000,
+    );
     dto.notes = booking.notes;
     dto.internalNotes = booking.internalNotes;
     dto.createdAt = booking.createdAt;

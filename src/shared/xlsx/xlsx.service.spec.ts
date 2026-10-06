@@ -15,7 +15,11 @@ function collect(stream: PassThrough): Promise<Buffer> {
 async function sheetNames(build: (book: XlsxBook) => void): Promise<string[]> {
   const file = XlsxService.write('book.xlsx', build);
   const workbook = new ExcelJS.Workbook();
-  await workbook.xlsx.load((await collect(file.stream)) as unknown as Parameters<ExcelJS.Xlsx['load']>[0]);
+  await workbook.xlsx.load(
+    (await collect(file.stream)) as unknown as Parameters<
+      ExcelJS.Xlsx['load']
+    >[0],
+  );
   return workbook.worksheets.map((sheet) => sheet.name);
 }
 
@@ -63,11 +67,18 @@ describe('XlsxService', () => {
     const book = new ExcelJS.Workbook();
     const sheet = book.addWorksheet('Клиенты');
     sheet.getCell('A1').value = new Date(1990, 1, 1);
-    sheet.getCell('B1').value = { richText: [{ text: 'Hello ' }, { text: 'world' }] };
+    sheet.getCell('B1').value = {
+      richText: [{ text: 'Hello ' }, { text: 'world' }],
+    };
     sheet.getCell('C1').value = { formula: '1+1', result: 2 };
-    sheet.getCell('D1').value = { text: ' site ', hyperlink: 'https://example.com' };
+    sheet.getCell('D1').value = {
+      text: ' site ',
+      hyperlink: 'https://example.com',
+    };
 
-    const grid = await XlsxService.read(Buffer.from(await book.xlsx.writeBuffer()));
+    const grid = await XlsxService.read(
+      Buffer.from(await book.xlsx.writeBuffer()),
+    );
     expect(grid).not.toBeNull();
     if (!grid) return;
     expect(grid.row(1).text(1)).toBe('1990-02-01');
@@ -77,7 +88,9 @@ describe('XlsxService', () => {
   });
 
   it('returns null for a corrupt buffer or a workbook with no sheets', async () => {
-    await expect(XlsxService.read(Buffer.from('not-a-workbook'))).resolves.toBeNull();
+    await expect(
+      XlsxService.read(Buffer.from('not-a-workbook')),
+    ).resolves.toBeNull();
     const empty = Buffer.from(await new ExcelJS.Workbook().xlsx.writeBuffer());
     await expect(XlsxService.read(empty)).resolves.toBeNull();
   });
@@ -95,6 +108,8 @@ describe('XlsxService', () => {
         mimetype: 'application/octet-stream',
       }),
     ).toBe(true);
-    expect(XlsxService.isXlsx({ originalname: 'clients.csv', mimetype: 'text/csv' })).toBe(false);
+    expect(
+      XlsxService.isXlsx({ originalname: 'clients.csv', mimetype: 'text/csv' }),
+    ).toBe(false);
   });
 });

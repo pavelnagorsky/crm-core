@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
@@ -23,7 +27,10 @@ interface YandexUserResponse {
 }
 
 @Injectable()
-export class YandexOAuthStrategy extends PassportStrategy(Strategy, 'yandex-oauth') {
+export class YandexOAuthStrategy extends PassportStrategy(
+  Strategy,
+  'yandex-oauth',
+) {
   constructor(
     private readonly config: ConfigService,
     private readonly http: HttpService,
@@ -38,12 +45,17 @@ export class YandexOAuthStrategy extends PassportStrategy(Strategy, 'yandex-oaut
       if (errors.length) throw new BadRequestException();
 
       const ya = this.config.get<IYandexCloudConfig>('yandexCloud')!;
-      const authHeader = Buffer.from(`${ya.clientId}:${ya.clientSecret}`).toString('base64');
+      const authHeader = Buffer.from(
+        `${ya.clientId}:${ya.clientSecret}`,
+      ).toString('base64');
 
       const { data: tokens } = await firstValueFrom(
         this.http.post<YandexTokensResponse>(
           'https://oauth.yandex.ru/token',
-          new URLSearchParams({ grant_type: 'authorization_code', code: dto.authCode }),
+          new URLSearchParams({
+            grant_type: 'authorization_code',
+            code: dto.authCode,
+          }),
           {
             headers: {
               'Content-Type': 'application/x-www-form-urlencoded',

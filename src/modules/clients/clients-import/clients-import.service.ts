@@ -1,6 +1,9 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
-import { ErrorCode, ErrorCodeEntry } from '../../../shared/validation/error-codes.enum.js';
+import {
+  ErrorCode,
+  ErrorCodeEntry,
+} from '../../../shared/validation/error-codes.enum.js';
 import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
 import { ClientsService } from '../clients.service.js';
 import { ClientsSheetService } from './clients-sheet.service.js';
@@ -9,7 +12,10 @@ import { ClientImportResult } from './interfaces/client-import-result.interface.
 import { ClientImportUpload } from './interfaces/client-import-upload.interface.js';
 import { ClientSheetReadResult } from './interfaces/client-sheet-read-result.interface.js';
 
-const FILE_ERRORS: Record<ClientImportFileReason, { entry: ErrorCodeEntry; status: HttpStatus }> = {
+const FILE_ERRORS: Record<
+  ClientImportFileReason,
+  { entry: ErrorCodeEntry; status: HttpStatus }
+> = {
   [ClientImportFileReason.MISSING]: {
     entry: ErrorCode.CLIENT_IMPORT_FILE_MISSING,
     status: HttpStatus.BAD_REQUEST,
@@ -48,7 +54,7 @@ export class ClientsImportService {
   ) {}
 
   async import(
-    businessId: string,
+    brandId: string,
     file: ClientImportUpload | undefined,
     actor: AuditActor,
   ): Promise<ClientImportResult> {
@@ -56,10 +62,15 @@ export class ClientsImportService {
     if (!read.ok) this.rejectFile(read);
 
     const existing = read.rows.length
-      ? await this.clients.findExistingPhones(businessId, read.rows.map((row) => row.phone))
+      ? await this.clients.findExistingPhones(
+          brandId,
+          read.rows.map((row) => row.phone),
+        )
       : new Set<string>();
     const fresh = read.rows.filter((row) => !existing.has(row.phone));
-    const inserted = fresh.length ? await this.clients.insertImported(businessId, fresh, actor) : 0;
+    const inserted = fresh.length
+      ? await this.clients.insertImported(brandId, fresh, actor)
+      : 0;
 
     return {
       successCount: inserted,
@@ -68,9 +79,14 @@ export class ClientsImportService {
     };
   }
 
-  private rejectFile(failure: Extract<ClientSheetReadResult, { ok: false }>): never {
+  private rejectFile(
+    failure: Extract<ClientSheetReadResult, { ok: false }>,
+  ): never {
     const mapped = FILE_ERRORS[failure.reason];
-    const payload = failure.reason === ClientImportFileReason.MISSING_COLUMNS ? failure.missingColumns ?? null : null;
+    const payload =
+      failure.reason === ClientImportFileReason.MISSING_COLUMNS
+        ? (failure.missingColumns ?? null)
+        : null;
     throw new AppException(mapped.entry, mapped.status, payload);
   }
 }

@@ -24,11 +24,19 @@ import {
 import { BusinessRole } from '@prisma/client';
 import { Auth } from '../../auth/decorators/auth.decorator.js';
 import { TokenPayload } from '../../auth/decorators/token-payload.decorator.js';
-import { TokenPayloadDto, assertBusinessRole } from '../../auth/dto/token-payload.dto.js';
+import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
+import { assertLocationRole } from '../../auth/guards/assert-location-role.js';
 import { auditActorFromToken } from '../../audit/utils/audit-actor-from-token.js';
-import { ApiResponse, ApiResponseArray, BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
+import {
+  ApiResponse,
+  ApiResponseArray,
+  BaseResponseDto,
+} from '../../../shared/dto/base-response.dto.js';
 import { CreatePayrollCorrectionDto } from './dto/create-payroll-correction.dto.js';
-import { LockedPayrollRangeDto, LockedPayrollRangesRequestDto } from './dto/locked-payroll-range.dto.js';
+import {
+  LockedPayrollRangeDto,
+  LockedPayrollRangesRequestDto,
+} from './dto/locked-payroll-range.dto.js';
 import { CreatePayrollPeriodDto } from './dto/create-payroll-period.dto.js';
 import { PayrollPeriodResponseDto } from './dto/payroll-period-response.dto.js';
 import { PayrollPeriodSearchRequestDto } from './dto/payroll-period-search-request.dto.js';
@@ -60,14 +68,18 @@ export class PayrollController {
     @Body() dto: CreatePayrollPeriodDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<PayrollPeriodResponseDto>> {
-    assertBusinessRole(tokenPayload, dto.businessId, BusinessRole.OWNER);
-    const period = await this.payroll.create(dto, auditActorFromToken(tokenPayload, dto.businessId));
+    assertLocationRole(tokenPayload, dto.locationId, BusinessRole.OWNER);
+    const period = await this.payroll.create(
+      dto,
+      auditActorFromToken(tokenPayload, dto.locationId),
+    );
     return BaseResponseDto.success(PayrollPeriodResponseDto.fromEntity(period));
   }
 
   @ApiOperation({
     summary: 'Date ranges closed for new earnings',
-    description: 'Approved and paid periods. A manual earning whose date falls inside one of these ranges is rejected.',
+    description:
+      'Approved and paid periods. A manual earning whose date falls inside one of these ranges is rejected.',
   })
   @ApiOkResponse({ type: ApiResponseArray(LockedPayrollRangeDto) })
   @Auth()
@@ -76,9 +88,16 @@ export class PayrollController {
     @Query() dto: LockedPayrollRangesRequestDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<LockedPayrollRangeDto[]>> {
-    assertBusinessRole(tokenPayload, dto.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
-    const ranges = await this.payroll.listLockedRanges(dto.businessId);
-    return BaseResponseDto.success(ranges.map(LockedPayrollRangeDto.fromEntity));
+    assertLocationRole(
+      tokenPayload,
+      dto.locationId,
+      BusinessRole.OWNER,
+      BusinessRole.STAFF,
+    );
+    const ranges = await this.payroll.listLockedRanges(dto.locationId);
+    return BaseResponseDto.success(
+      ranges.map(LockedPayrollRangeDto.fromEntity),
+    );
   }
 
   @ApiOperation({ summary: 'Search payroll periods' })
@@ -89,8 +108,16 @@ export class PayrollController {
     @Query() dto: PayrollPeriodSearchRequestDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<PayrollPeriodSearchResponseDto>> {
-    assertBusinessRole(tokenPayload, dto.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
-    const { items, totalItems } = await this.payroll.search(dto.businessId, dto);
+    assertLocationRole(
+      tokenPayload,
+      dto.locationId,
+      BusinessRole.OWNER,
+      BusinessRole.STAFF,
+    );
+    const { items, totalItems } = await this.payroll.search(
+      dto.locationId,
+      dto,
+    );
     return BaseResponseDto.success(
       new PayrollPeriodSearchResponseDto(
         items.map((item) => PayrollPeriodResponseDto.fromEntity(item)),
@@ -103,16 +130,27 @@ export class PayrollController {
   }
 
   @ApiOperation({ summary: 'Get payroll period count per status' })
-  @ApiOkResponse({ type: ApiResponseArray(PayrollPeriodStatusCountResponseDto) })
+  @ApiOkResponse({
+    type: ApiResponseArray(PayrollPeriodStatusCountResponseDto),
+  })
   @Auth()
   @Get('periods/status-counts')
   async getStatusCounts(
-    @Query('businessId', ParseUUIDPipe) businessId: string,
+    @Query('locationId', ParseUUIDPipe) locationId: string,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<PayrollPeriodStatusCountResponseDto[]>> {
-    assertBusinessRole(tokenPayload, businessId, BusinessRole.OWNER, BusinessRole.STAFF);
-    const counts = await this.payroll.getStatusCounts(businessId);
-    return BaseResponseDto.success(counts.map((r) => Object.assign(new PayrollPeriodStatusCountResponseDto(), r)));
+    assertLocationRole(
+      tokenPayload,
+      locationId,
+      BusinessRole.OWNER,
+      BusinessRole.STAFF,
+    );
+    const counts = await this.payroll.getStatusCounts(locationId);
+    return BaseResponseDto.success(
+      counts.map((r) =>
+        Object.assign(new PayrollPeriodStatusCountResponseDto(), r),
+      ),
+    );
   }
 
   @ApiOperation({ summary: 'Get payroll period with results' })
@@ -125,7 +163,12 @@ export class PayrollController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<PayrollPeriodResponseDto>> {
     const period = await this.payroll.findById(id);
-    assertBusinessRole(tokenPayload, period.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
+    assertLocationRole(
+      tokenPayload,
+      period.locationId,
+      BusinessRole.OWNER,
+      BusinessRole.STAFF,
+    );
     return BaseResponseDto.success(PayrollPeriodResponseDto.fromEntity(period));
   }
 
@@ -138,7 +181,12 @@ export class PayrollController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<PayrollReportResponseDto>> {
     const period = await this.payroll.findById(id);
-    assertBusinessRole(tokenPayload, period.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
+    assertLocationRole(
+      tokenPayload,
+      period.locationId,
+      BusinessRole.OWNER,
+      BusinessRole.STAFF,
+    );
     return BaseResponseDto.success(await this.reports.build(id));
   }
 
@@ -152,7 +200,12 @@ export class PayrollController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<StaffEarningSearchResponseDto>> {
     const period = await this.payroll.findById(id);
-    assertBusinessRole(tokenPayload, period.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
+    assertLocationRole(
+      tokenPayload,
+      period.locationId,
+      BusinessRole.OWNER,
+      BusinessRole.STAFF,
+    );
     const { items, totalItems } = await this.earnings.searchByPeriod(id, dto);
     return BaseResponseDto.success(
       new StaffEarningSearchResponseDto(
@@ -172,10 +225,16 @@ export class PayrollController {
   async exportVedomost(
     @Param('id', ParseUUIDPipe) id: string,
     @TokenPayload() tokenPayload: TokenPayloadDto,
-    @Res({ passthrough: true }) res: { setHeader: (name: string, value: string) => void },
+    @Res({ passthrough: true })
+    res: { setHeader: (name: string, value: string) => void },
   ): Promise<StreamableFile> {
     const period = await this.payroll.findById(id);
-    assertBusinessRole(tokenPayload, period.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
+    assertLocationRole(
+      tokenPayload,
+      period.locationId,
+      BusinessRole.OWNER,
+      BusinessRole.STAFF,
+    );
     const { stream, filename } = await this.reports.exportVedomost(id);
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     return new StreamableFile(stream, { type: XlsxService.mimeType });
@@ -188,10 +247,16 @@ export class PayrollController {
   async exportPayslips(
     @Param('id', ParseUUIDPipe) id: string,
     @TokenPayload() tokenPayload: TokenPayloadDto,
-    @Res({ passthrough: true }) res: { setHeader: (name: string, value: string) => void },
+    @Res({ passthrough: true })
+    res: { setHeader: (name: string, value: string) => void },
   ): Promise<StreamableFile> {
     const period = await this.payroll.findById(id);
-    assertBusinessRole(tokenPayload, period.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
+    assertLocationRole(
+      tokenPayload,
+      period.locationId,
+      BusinessRole.OWNER,
+      BusinessRole.STAFF,
+    );
     const { stream, filename } = await this.reports.exportPayslips(id);
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     return new StreamableFile(stream, { type: XlsxService.mimeType });
@@ -207,9 +272,14 @@ export class PayrollController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<PayrollPeriodResponseDto>> {
     const period = await this.payroll.findById(id);
-    assertBusinessRole(tokenPayload, period.businessId, BusinessRole.OWNER);
-    const updated = await this.payroll.calculate(id, auditActorFromToken(tokenPayload, period.businessId));
-    return BaseResponseDto.success(PayrollPeriodResponseDto.fromEntity(updated));
+    assertLocationRole(tokenPayload, period.locationId, BusinessRole.OWNER);
+    const updated = await this.payroll.calculate(
+      id,
+      auditActorFromToken(tokenPayload, period.locationId),
+    );
+    return BaseResponseDto.success(
+      PayrollPeriodResponseDto.fromEntity(updated),
+    );
   }
 
   @ApiOperation({ summary: 'Approve a calculated payroll period' })
@@ -222,9 +292,14 @@ export class PayrollController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<PayrollPeriodResponseDto>> {
     const period = await this.payroll.findById(id);
-    assertBusinessRole(tokenPayload, period.businessId, BusinessRole.OWNER);
-    const updated = await this.payroll.approve(id, auditActorFromToken(tokenPayload, period.businessId));
-    return BaseResponseDto.success(PayrollPeriodResponseDto.fromEntity(updated));
+    assertLocationRole(tokenPayload, period.locationId, BusinessRole.OWNER);
+    const updated = await this.payroll.approve(
+      id,
+      auditActorFromToken(tokenPayload, period.locationId),
+    );
+    return BaseResponseDto.success(
+      PayrollPeriodResponseDto.fromEntity(updated),
+    );
   }
 
   @ApiOperation({ summary: 'Mark an approved payroll period as paid' })
@@ -237,9 +312,14 @@ export class PayrollController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<PayrollPeriodResponseDto>> {
     const period = await this.payroll.findById(id);
-    assertBusinessRole(tokenPayload, period.businessId, BusinessRole.OWNER);
-    const updated = await this.payroll.pay(id, auditActorFromToken(tokenPayload, period.businessId));
-    return BaseResponseDto.success(PayrollPeriodResponseDto.fromEntity(updated));
+    assertLocationRole(tokenPayload, period.locationId, BusinessRole.OWNER);
+    const updated = await this.payroll.pay(
+      id,
+      auditActorFromToken(tokenPayload, period.locationId),
+    );
+    return BaseResponseDto.success(
+      PayrollPeriodResponseDto.fromEntity(updated),
+    );
   }
 
   @ApiOperation({ summary: 'Delete a draft or calculated payroll period' })
@@ -252,11 +332,16 @@ export class PayrollController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<void> {
     const period = await this.payroll.findById(id);
-    assertBusinessRole(tokenPayload, period.businessId, BusinessRole.OWNER);
-    await this.payroll.delete(id, auditActorFromToken(tokenPayload, period.businessId));
+    assertLocationRole(tokenPayload, period.locationId, BusinessRole.OWNER);
+    await this.payroll.delete(
+      id,
+      auditActorFromToken(tokenPayload, period.locationId),
+    );
   }
 
-  @ApiOperation({ summary: 'Add a post-approval correction; it lands in the next open period' })
+  @ApiOperation({
+    summary: 'Add a post-approval correction; it lands in the next open period',
+  })
   @ApiCreatedResponse({ type: ApiResponse(StaffEarningResponseDto) })
   @Auth()
   @Post('results/:id/corrections')
@@ -266,8 +351,12 @@ export class PayrollController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<StaffEarningResponseDto>> {
     const result = await this.payroll.findResultById(id);
-    assertBusinessRole(tokenPayload, result.businessId, BusinessRole.OWNER);
-    const earning = await this.payroll.correct(id, dto, auditActorFromToken(tokenPayload, result.businessId));
+    assertLocationRole(tokenPayload, result.locationId, BusinessRole.OWNER);
+    const earning = await this.payroll.correct(
+      id,
+      dto,
+      auditActorFromToken(tokenPayload, result.locationId),
+    );
     return BaseResponseDto.success(StaffEarningResponseDto.fromEntity(earning));
   }
 }

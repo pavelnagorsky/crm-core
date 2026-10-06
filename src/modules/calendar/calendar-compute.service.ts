@@ -1,5 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { CalendarEvent, CalendarEventRepeatType, StaffShift } from '@prisma/client';
+import {
+  CalendarEvent,
+  CalendarEventRepeatType,
+  StaffShift,
+} from '@prisma/client';
 import { TimeService } from '../time/time.service.js';
 import { CalendarEventItemDto } from './dto/calendar-event-item.dto.js';
 import { ClosedTimeItemDto } from './dto/closed-time-item.dto.js';
@@ -29,7 +33,13 @@ export class CalendarComputeService {
   ): CalendarEventItemDto[] {
     return events.flatMap((event) =>
       event.repeatType === CalendarEventRepeatType.NONE
-        ? this.expandOneTimeEvent(event, timezone, rangeStart, rangeEnd, staffNames)
+        ? this.expandOneTimeEvent(
+            event,
+            timezone,
+            rangeStart,
+            rangeEnd,
+            staffNames,
+          )
         : this.expandRecurringEvent(event, dates, timezone, staffNames),
     );
   }
@@ -41,8 +51,12 @@ export class CalendarComputeService {
     rangeEnd: Date,
     staffNames: ReadonlyMap<string, string>,
   ): CalendarEventItemDto[] {
-    if (event.startDateTime >= rangeEnd || event.endDateTime <= rangeStart) return [];
-    const { date, startHHmm, endHHmm } = this.resolveEventTimes(event, timezone);
+    if (event.startDateTime >= rangeEnd || event.endDateTime <= rangeStart)
+      return [];
+    const { date, startHHmm, endHHmm } = this.resolveEventTimes(
+      event,
+      timezone,
+    );
     if (this.buildCancelledSet(event).has(date)) return [];
     return [this.blockItem(event, date, startHHmm, endHHmm, staffNames)];
   }
@@ -54,8 +68,9 @@ export class CalendarComputeService {
     staffNames: ReadonlyMap<string, string>,
   ): CalendarEventItemDto[] {
     const times = this.resolveEventTimes(event, timezone);
-    return this.occurrenceDatesFrom(event, dates, times.date)
-      .map((date) => this.blockItem(event, date, times.startHHmm, times.endHHmm, staffNames));
+    return this.occurrenceDatesFrom(event, dates, times.date).map((date) =>
+      this.blockItem(event, date, times.startHHmm, times.endHHmm, staffNames),
+    );
   }
 
   private blockItem(
@@ -70,7 +85,7 @@ export class CalendarComputeService {
       date,
       startTime,
       endTime,
-      event.staffId ? staffNames.get(event.staffId) ?? null : null,
+      event.staffId ? (staffNames.get(event.staffId) ?? null) : null,
     );
   }
 
@@ -97,10 +112,15 @@ export class CalendarComputeService {
     };
 
     for (const event of events) {
-      const { date: eventStartStr, startHHmm, endHHmm } = this.resolveEventTimes(event, timezone);
-      const occurrenceDates = event.repeatType === CalendarEventRepeatType.NONE
-        ? this.occurrenceDatesOneTime(event, dates, eventStartStr)
-        : this.occurrenceDatesFrom(event, dates, eventStartStr);
+      const {
+        date: eventStartStr,
+        startHHmm,
+        endHHmm,
+      } = this.resolveEventTimes(event, timezone);
+      const occurrenceDates =
+        event.repeatType === CalendarEventRepeatType.NONE
+          ? this.occurrenceDatesOneTime(event, dates, eventStartStr)
+          : this.occurrenceDatesFrom(event, dates, eventStartStr);
       const blockStart = TimeService.hhmmToMinutes(startHHmm);
       const blockEnd = TimeService.hhmmToMinutes(endHHmm);
       const targetStaffIds = event.staffId ? [event.staffId] : staffIds;
@@ -153,7 +173,9 @@ export class CalendarComputeService {
     eventStartStr: string,
   ): string[] {
     const cancelled = this.buildCancelledSet(event);
-    const repeatUntilStr = event.repeatUntil ? TimeService.dateOnlyStr(event.repeatUntil) : null;
+    const repeatUntilStr = event.repeatUntil
+      ? TimeService.dateOnlyStr(event.repeatUntil)
+      : null;
 
     return dates.filter((date) => {
       if (date < eventStartStr) return false;
@@ -177,7 +199,9 @@ export class CalendarComputeService {
     const endParts = TimeService.toZonedParts(event.endDateTime, timezone);
     return {
       date: TimeService.zonedDateStr(event.startDateTime, timezone),
-      startHHmm: TimeService.minutesToHHmm(startParts.hour * 60 + startParts.minute),
+      startHHmm: TimeService.minutesToHHmm(
+        startParts.hour * 60 + startParts.minute,
+      ),
       endHHmm: TimeService.minutesToHHmm(endParts.hour * 60 + endParts.minute),
     };
   }
@@ -185,7 +209,9 @@ export class CalendarComputeService {
   /** Returns a set of cancelled occurrence dates (yyyy-MM-dd) for fast lookup. */
   buildCancelledSet(event: CalendarEventWithCancellations): Set<string> {
     return new Set(
-      event.cancelledOccurrences.map((o) => TimeService.dateOnlyStr(o.occurrenceDate)),
+      event.cancelledOccurrences.map((o) =>
+        TimeService.dateOnlyStr(o.occurrenceDate),
+      ),
     );
   }
 
@@ -207,9 +233,10 @@ export class CalendarComputeService {
     };
   }
 
-  private computeViewBounds(
-    shiftsByDate: Map<string, StaffShift[]>,
-  ): { viewMin: number; viewMax: number } {
+  private computeViewBounds(shiftsByDate: Map<string, StaffShift[]>): {
+    viewMin: number;
+    viewMax: number;
+  } {
     let minMinutes = Infinity;
     let maxMinutes = -Infinity;
 
@@ -242,7 +269,10 @@ export class CalendarComputeService {
         start: TimeService.timeToMinutes(s.startTime),
         end: TimeService.timeToMinutes(s.endTime),
       }));
-      for (const block of this.subtractIntervals({ start: viewMin, end: viewMax }, openIntervals)) {
+      for (const block of this.subtractIntervals(
+        { start: viewMin, end: viewMax },
+        openIntervals,
+      )) {
         closed.push({
           date,
           startTime: TimeService.minutesToHHmm(block.start),
@@ -275,10 +305,16 @@ export class CalendarComputeService {
         end: Math.min(interval.end, view.end),
       };
       if (clamped.start >= clamped.end) continue;
-      if (merged.length === 0 || clamped.start > merged[merged.length - 1].end) {
+      if (
+        merged.length === 0 ||
+        clamped.start > merged[merged.length - 1].end
+      ) {
         merged.push(clamped);
       } else {
-        merged[merged.length - 1].end = Math.max(merged[merged.length - 1].end, clamped.end);
+        merged[merged.length - 1].end = Math.max(
+          merged[merged.length - 1].end,
+          clamped.end,
+        );
       }
     }
 
@@ -309,7 +345,9 @@ export class CalendarComputeService {
   }
 
   /** Indexes shifts as staffId → date string → shift for O(1) lookup during slot generation. */
-  groupShiftsByStaffDate(shifts: StaffShift[]): Map<string, Map<string, StaffShift>> {
+  groupShiftsByStaffDate(
+    shifts: StaffShift[],
+  ): Map<string, Map<string, StaffShift>> {
     const map = new Map<string, Map<string, StaffShift>>();
     for (const shift of shifts) {
       const dateKey = TimeService.dateOnlyStr(shift.date);
@@ -344,8 +382,14 @@ export class CalendarComputeService {
       const shiftEnd = TimeService.timeToMinutes(shift.endTime);
       const blocked = blockedByStaffDate.get(staff.id)?.get(date) ?? [];
 
-      for (const free of this.subtractIntervals({ start: shiftStart, end: shiftEnd }, blocked)) {
-        let slotStart = this.alignSlotStart(Math.max(free.start, earliestMinute), slotInterval);
+      for (const free of this.subtractIntervals(
+        { start: shiftStart, end: shiftEnd },
+        blocked,
+      )) {
+        let slotStart = this.alignSlotStart(
+          Math.max(free.start, earliestMinute),
+          slotInterval,
+        );
         while (slotStart + slotDuration <= free.end) {
           slotStartSet.add(slotStart);
           slotStart += slotInterval;
@@ -366,30 +410,42 @@ export class CalendarComputeService {
     earliestMinute: number,
     slotInterval: number,
   ): number[] {
-    const staffIds = this.uniqueCandidates(candidatesByService).map((staff) => staff.id);
+    const staffIds = this.uniqueCandidates(candidatesByService).map(
+      (staff) => staff.id,
+    );
     const shifts = staffIds
       .map((staffId) => shiftsByStaffDate.get(staffId)?.get(date))
       .filter((shift): shift is StaffShift => !!shift);
     if (shifts.length === 0) return [];
 
-    const minStart = Math.min(...shifts.map((shift) => TimeService.timeToMinutes(shift.startTime)));
-    const maxEnd = Math.max(...shifts.map((shift) => TimeService.timeToMinutes(shift.endTime)));
-    const envelopeDuration = executionMode === 'PARALLEL'
-      ? Math.max(...items.map((item) => item.durationMinutes))
-      : items.reduce((sum, item) => sum + item.durationMinutes, 0);
+    const minStart = Math.min(
+      ...shifts.map((shift) => TimeService.timeToMinutes(shift.startTime)),
+    );
+    const maxEnd = Math.max(
+      ...shifts.map((shift) => TimeService.timeToMinutes(shift.endTime)),
+    );
+    const envelopeDuration =
+      executionMode === 'PARALLEL'
+        ? Math.max(...items.map((item) => item.durationMinutes))
+        : items.reduce((sum, item) => sum + item.durationMinutes, 0);
     const slots: number[] = [];
-    let slotStart = this.alignSlotStart(Math.max(minStart, earliestMinute), slotInterval);
+    let slotStart = this.alignSlotStart(
+      Math.max(minStart, earliestMinute),
+      slotInterval,
+    );
 
     while (slotStart + envelopeDuration <= maxEnd) {
-      if (this.canAssignItems(
-        date,
-        slotStart,
-        items,
-        executionMode,
-        candidatesByService,
-        shiftsByStaffDate,
-        blockedByStaffDate,
-      )) {
+      if (
+        this.canAssignItems(
+          date,
+          slotStart,
+          items,
+          executionMode,
+          candidatesByService,
+          shiftsByStaffDate,
+          blockedByStaffDate,
+        )
+      ) {
         slots.push(slotStart);
       }
       slotStart += slotInterval;
@@ -408,9 +464,12 @@ export class CalendarComputeService {
     blockedByStaffDate: Map<string, Map<string, Interval[]>>,
   ): boolean {
     const windows = items.map((item, index) => {
-      const offset = executionMode === 'PARALLEL'
-        ? 0
-        : items.slice(0, index).reduce((sum, previous) => sum + previous.durationMinutes, 0);
+      const offset =
+        executionMode === 'PARALLEL'
+          ? 0
+          : items
+              .slice(0, index)
+              .reduce((sum, previous) => sum + previous.durationMinutes, 0);
       return {
         serviceId: item.serviceId,
         start: slotStart + offset,
@@ -424,7 +483,17 @@ export class CalendarComputeService {
       const candidates = candidatesByService.get(window.serviceId) ?? [];
       for (const candidate of candidates) {
         if (executionMode === 'PARALLEL' && used.has(candidate.id)) continue;
-        if (!this.isStaffFreeOnDate(candidate.id, date, window.start, window.end, shiftsByStaffDate, blockedByStaffDate)) continue;
+        if (
+          !this.isStaffFreeOnDate(
+            candidate.id,
+            date,
+            window.start,
+            window.end,
+            shiftsByStaffDate,
+            blockedByStaffDate,
+          )
+        )
+          continue;
         used.add(candidate.id);
         if (assign(index + 1)) return true;
         used.delete(candidate.id);
@@ -451,7 +520,9 @@ export class CalendarComputeService {
     return !blocked.some((block) => start < block.end && end > block.start);
   }
 
-  private uniqueCandidates(candidatesByService: Map<string, CalendarSlotCandidate[]>): CalendarSlotCandidate[] {
+  private uniqueCandidates(
+    candidatesByService: Map<string, CalendarSlotCandidate[]>,
+  ): CalendarSlotCandidate[] {
     const byId = new Map<string, CalendarSlotCandidate>();
     for (const candidates of candidatesByService.values()) {
       for (const candidate of candidates) byId.set(candidate.id, candidate);

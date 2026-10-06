@@ -1,4 +1,4 @@
-import { CountryDefault } from './interfaces/country-default.interface';
+import { CountryDefault } from './interfaces/country-default.interface.js';
 
 export const COUNTRY_DEFAULTS = {
   AM: {
@@ -18,7 +18,14 @@ export const COUNTRY_DEFAULTS = {
   },
   KZ: {
     currency: 'KZT',
-    timezones: ['Asia/Almaty', 'Asia/Aqtau', 'Asia/Aqtobe', 'Asia/Atyrau', 'Asia/Oral', 'Asia/Qostanay'],
+    timezones: [
+      'Asia/Almaty',
+      'Asia/Aqtau',
+      'Asia/Aqtobe',
+      'Asia/Atyrau',
+      'Asia/Oral',
+      'Asia/Qostanay',
+    ],
     defaultTimezone: 'Asia/Almaty',
   },
   RU: {

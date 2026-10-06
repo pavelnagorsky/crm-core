@@ -26,7 +26,9 @@ export type ServiceAuditSource = {
   imageFile: { fileName: string } | null;
 };
 
-export function toServiceAuditShape(service: ServiceAuditSource): ServiceAuditShape {
+export function toServiceAuditShape(
+  service: ServiceAuditSource,
+): ServiceAuditShape {
   return {
     title: service.title,
     price: service.price,
@@ -42,7 +44,10 @@ export function toServiceAuditShape(service: ServiceAuditSource): ServiceAuditSh
 
 export const SERVICE_AUDIT_FIELDS: FieldDescriptor<ServiceAuditShape>[] = [
   { key: 'title' },
-  { key: 'price', format: (v) => (v == null ? '—' : MoneyService.format(v as Prisma.Decimal)) },
+  {
+    key: 'price',
+    format: (v) => (v == null ? '—' : MoneyService.format(v as Prisma.Decimal)),
+  },
   { key: 'durationMinutes' },
   { key: 'bufferMinutes' },
   { key: 'description' },

@@ -6,10 +6,10 @@ import { DashboardMetricFactory } from './services/dashboard-metric.factory.js';
 import { DashboardRangeService } from './services/dashboard-range.service.js';
 import { DashboardSeriesFactory } from './services/dashboard-series.factory.js';
 import { BookingsModule } from '../bookings/bookings.module.js';
-import { BusinessModule } from '../business/business.module.js';
+import { LocationModule } from '../location/location.module.js';
 
 @Module({
-  imports: [BookingsModule, BusinessModule],
+  imports: [BookingsModule, LocationModule],
   controllers: [DashboardController],
   providers: [
     DashboardService,

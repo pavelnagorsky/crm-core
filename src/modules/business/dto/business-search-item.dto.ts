@@ -16,7 +16,12 @@ export class BusinessSearchItemDto {
   @ApiProperty({ type: String })
   timezone: string;
 
-  @ApiProperty({ enum: BusinessRole, nullable: true, description: 'Current user role in this business, or null for admins viewing all' })
+  @ApiProperty({
+    enum: BusinessRole,
+    nullable: true,
+    description:
+      'Current user role in this business, or null for admins viewing all',
+  })
   myRole: BusinessRole | null;
 
   @ApiProperty({ type: Number })
@@ -36,10 +41,10 @@ export class BusinessSearchItemDto {
     dto.id = b.id;
     dto.name = b.name;
     dto.logo = b.logoFile ? FileResponseDto.fromEntity(b.logoFile) : null;
-    dto.timezone = b.timezone;
-    dto.myRole = b.memberships[0]?.role ?? null;
-    dto.staffCount = b._count.staff;
-    dto.servicesCount = b._count.services;
+    dto.timezone = b.timezone ?? 'UTC';
+    dto.myRole = b.brandMemberships[0]?.role ?? null;
+    dto.staffCount = 0;
+    dto.servicesCount = 0;
     dto.clientsCount = b._count.clients;
     dto.createdAt = b.createdAt;
     return dto;

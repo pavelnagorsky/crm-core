@@ -1,6 +1,15 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsBoolean, IsEnum, IsNotEmpty, IsString, MaxLength, Validate, ValidateIf, ValidateNested } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsNotEmpty,
+  IsString,
+  MaxLength,
+  Validate,
+  ValidateIf,
+  ValidateNested,
+} from 'class-validator';
 import { BookingPalette } from '../enums/booking-palette.enum.js';
 import { BookingFormPaletteConstraint } from '../decorators/booking-form-palette.constraint.js';
 import { Trim } from '../decorators/trim.decorator.js';

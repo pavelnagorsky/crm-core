@@ -9,7 +9,7 @@ import { BookingStatus } from './enums/booking-status.enum.js';
 import { BookingSource } from './enums/booking-source.enum.js';
 
 const dto: CreateBookingDto = {
-  businessId: 'business-1',
+  locationId: 'business-1',
   serviceId: 'service-1',
   staffId: 'staff-1',
   startAt: '2026-09-20T10:00:00',
@@ -33,10 +33,13 @@ function channelDeps(): [never, never] {
 
 function setup() {
   const clients = { resolveForBooking: vi.fn() };
-  const staff = { resolveStaffForService: vi.fn().mockResolvedValue([]), findById: vi.fn() };
+  const staff = {
+    resolveStaffForService: vi.fn().mockResolvedValue([]),
+    findById: vi.fn(),
+  };
   const calendar = { filterAvailableStaff: vi.fn().mockResolvedValue([]) };
   const db = {
-    business: {
+    location: {
       findUnique: vi.fn().mockResolvedValue({
         isBookingConfirmationRequired: false,
         timezone: 'Europe/Minsk',
@@ -45,13 +48,15 @@ function setup() {
       }),
     },
     service: {
-      findMany: vi.fn().mockResolvedValue([{
-        id: 'service-1',
-        title: 'Стрижка',
-        durationMinutes: 60,
-        bufferMinutes: 0,
-        price: 50,
-      }]),
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: 'service-1',
+          title: 'Стрижка',
+          durationMinutes: 60,
+          bufferMinutes: 0,
+          price: 50,
+        },
+      ]),
     },
   };
   const service = new BookingCreateService(
@@ -69,7 +74,9 @@ function setup() {
 describe('BookingCreateService client ban', () => {
   it('rejects public booking for a banned phone before looking up staff', async () => {
     const { service, clients, staff } = setup();
-    clients.resolveForBooking.mockResolvedValue({ bannedAt: new Date('2026-09-01T00:00:00.000Z') });
+    clients.resolveForBooking.mockResolvedValue({
+      bannedAt: new Date('2026-09-01T00:00:00.000Z'),
+    });
 
     const error = await service.createPublicBooking('business-1', dto).then(
       () => null,
@@ -84,16 +91,20 @@ describe('BookingCreateService client ban', () => {
 
   it('lets a banned client be booked from the journal', async () => {
     const { service, clients } = setup();
-    clients.resolveForBooking.mockResolvedValue({ bannedAt: new Date('2026-09-01T00:00:00.000Z') });
+    clients.resolveForBooking.mockResolvedValue({
+      bannedAt: new Date('2026-09-01T00:00:00.000Z'),
+    });
 
-    const error = await service.createManualBooking('business-1', dto, {
-      id: 'user-1',
-      name: 'Ольга',
-      role: AuditActorRole.OWNER,
-    }).then(
-      () => null,
-      (caught: unknown) => caught,
-    );
+    const error = await service
+      .createManualBooking('business-1', dto, {
+        id: 'user-1',
+        name: 'Ольга',
+        role: AuditActorRole.OWNER,
+      })
+      .then(
+        () => null,
+        (caught: unknown) => caught,
+      );
 
     expect(error).toBeInstanceOf(AppException);
     expect((error as AppException).errorCode).toBe('BOOKING_STAFF_NOT_FOUND');
@@ -114,12 +125,16 @@ describe('BookingCreateService client ban', () => {
 
   it('passes an empty surname when the guest omits it', async () => {
     const { service, clients } = setup();
-    clients.resolveForBooking.mockResolvedValue({ bannedAt: new Date('2026-09-01T00:00:00.000Z') });
+    clients.resolveForBooking.mockResolvedValue({
+      bannedAt: new Date('2026-09-01T00:00:00.000Z'),
+    });
 
-    await service.createPublicBooking('business-1', { ...dto, lastName: undefined }).then(
-      () => null,
-      () => null,
-    );
+    await service
+      .createPublicBooking('business-1', { ...dto, lastName: undefined })
+      .then(
+        () => null,
+        () => null,
+      );
 
     expect(clients.resolveForBooking).toHaveBeenCalledWith(
       'business-1',
@@ -166,7 +181,7 @@ describe('BookingCreateService calendar link', () => {
       booking: {
         create: vi.fn().mockResolvedValue({
           id: 'booking-1',
-          businessId: 'business-1',
+          locationId: 'business-1',
           serviceId: 'service-1',
           staffId: 'staff-1',
           clientId: 'client-1',
@@ -183,28 +198,30 @@ describe('BookingCreateService calendar link', () => {
           customPrice: null,
           staffName: 'Мария',
           calendarEventId: 'event-1',
-          items: [{
-            id: 'booking-item-1',
-            bookingId: 'booking-1',
-            businessId: 'business-1',
-            serviceId: 'service-1',
-            staffId: 'staff-1',
-            sortOrder: 0,
-            startAt: new Date('2026-09-20T07:00:00.000Z'),
-            endAt: new Date('2026-09-20T08:00:00.000Z'),
-            serviceTitle: 'РЎС‚СЂРёР¶РєР°',
-            serviceDuration: 60,
-            listPrice: 50,
-            chargedPrice: 50,
-            customPrice: null,
-            staffName: 'РњР°СЂРёСЏ',
-            calendarEventId: 'event-1',
-          }],
+          items: [
+            {
+              id: 'booking-item-1',
+              bookingId: 'booking-1',
+              locationId: 'business-1',
+              serviceId: 'service-1',
+              staffId: 'staff-1',
+              sortOrder: 0,
+              startAt: new Date('2026-09-20T07:00:00.000Z'),
+              endAt: new Date('2026-09-20T08:00:00.000Z'),
+              serviceTitle: 'РЎС‚СЂРёР¶РєР°',
+              serviceDuration: 60,
+              listPrice: 50,
+              chargedPrice: 50,
+              customPrice: null,
+              staffName: 'РњР°СЂРёСЏ',
+              calendarEventId: 'event-1',
+            },
+          ],
         }),
       },
     };
     const db = {
-      business: {
+      location: {
         findUnique: vi.fn().mockResolvedValue({
           isBookingConfirmationRequired: false,
           timezone: 'Europe/Minsk',
@@ -213,16 +230,20 @@ describe('BookingCreateService calendar link', () => {
         }),
       },
       service: {
-        findMany: vi.fn().mockResolvedValue([{
-          id: 'service-1',
-          title: 'Стрижка',
-          durationMinutes: 60,
-          bufferMinutes: 0,
-          price: 50,
-        }]),
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: 'service-1',
+            title: 'Стрижка',
+            durationMinutes: 60,
+            bufferMinutes: 0,
+            price: 50,
+          },
+        ]),
       },
       bookingItem: { groupBy: vi.fn().mockResolvedValue([]) },
-      $transaction: vi.fn((fn: (client: typeof tx) => Promise<unknown>) => fn(tx)),
+      $transaction: vi.fn((fn: (client: typeof tx) => Promise<unknown>) =>
+        fn(tx),
+      ),
     };
 
     const service = new BookingCreateService(
@@ -239,21 +260,23 @@ describe('BookingCreateService calendar link', () => {
 
     expect(tx.calendarEvent.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        businessId: 'business-1',
+        locationId: 'business-1',
         staffId: 'staff-1',
         type: CalendarEventType.BOOKING,
         repeatType: CalendarEventRepeatType.NONE,
       }),
     });
-    expect(tx.booking.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({
-        source: BookingSource.PUBLIC_PAGE,
-        bookingPageId: null,
-        bookingWidgetId: null,
-        clientLastName: 'Иванова',
+    expect(tx.booking.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          source: BookingSource.PUBLIC_PAGE,
+          bookingPageId: null,
+          bookingWidgetId: null,
+          clientLastName: 'Иванова',
+        }),
+        include: expect.objectContaining({ items: expect.any(Object) }),
       }),
-      include: expect.objectContaining({ items: expect.any(Object) }),
-    }));
+    );
   });
 });
 
@@ -279,7 +302,11 @@ describe('BookingCreateService manual item prices', () => {
     };
     const tx = {
       $executeRaw: vi.fn(),
-      staffShift: { findFirst: vi.fn().mockResolvedValue({ startTime: new Date(), endTime: new Date() }) },
+      staffShift: {
+        findFirst: vi
+          .fn()
+          .mockResolvedValue({ startTime: new Date(), endTime: new Date() }),
+      },
       calendarEvent: {
         findMany: vi.fn().mockResolvedValue([]),
         create: vi.fn().mockResolvedValue({ id: 'event-1' }),
@@ -287,7 +314,7 @@ describe('BookingCreateService manual item prices', () => {
       booking: {
         create: vi.fn().mockResolvedValue({
           id: 'booking-1',
-          businessId: 'business-1',
+          locationId: 'business-1',
           clientFirstName: 'Анна',
           clientLastName: 'Иванова',
           clientEmail: null,
@@ -298,7 +325,7 @@ describe('BookingCreateService manual item prices', () => {
       },
     };
     const db = {
-      business: {
+      location: {
         findUnique: vi.fn().mockResolvedValue({
           isBookingConfirmationRequired: false,
           timezone: 'Europe/Minsk',
@@ -308,12 +335,26 @@ describe('BookingCreateService manual item prices', () => {
       },
       service: {
         findMany: vi.fn().mockResolvedValue([
-          { id: 'service-1', title: 'Стрижка', durationMinutes: 60, bufferMinutes: 0, price: 50 },
-          { id: 'service-2', title: 'Окрашивание', durationMinutes: 60, bufferMinutes: 0, price: 80 },
+          {
+            id: 'service-1',
+            title: 'Стрижка',
+            durationMinutes: 60,
+            bufferMinutes: 0,
+            price: 50,
+          },
+          {
+            id: 'service-2',
+            title: 'Окрашивание',
+            durationMinutes: 60,
+            bufferMinutes: 0,
+            price: 80,
+          },
         ]),
       },
       bookingItem: { groupBy: vi.fn().mockResolvedValue([]) },
-      $transaction: vi.fn((fn: (client: typeof tx) => Promise<unknown>) => fn(tx)),
+      $transaction: vi.fn((fn: (client: typeof tx) => Promise<unknown>) =>
+        fn(tx),
+      ),
     };
     const service = new BookingCreateService(
       db as never,
@@ -325,18 +366,25 @@ describe('BookingCreateService manual item prices', () => {
       ...channelDeps(),
     );
 
-    await service.createManualBooking('business-1', {
-      ...dto,
-      serviceId: undefined,
-      items: [
-        { serviceId: 'service-1' },
-        { serviceId: 'service-2', customPrice: '70.00' },
-      ],
-    }, { id: 'user-1', name: 'Ольга', role: AuditActorRole.OWNER });
+    await service.createManualBooking(
+      'business-1',
+      {
+        ...dto,
+        serviceId: undefined,
+        items: [
+          { serviceId: 'service-1' },
+          { serviceId: 'service-2', customPrice: '70.00' },
+        ],
+      },
+      { id: 'user-1', name: 'Ольга', role: AuditActorRole.OWNER },
+    );
 
     const created = tx.booking.create.mock.calls[0][0] as {
       data: { items: { create: { customPrice: string | null }[] } };
     };
-    expect(created.data.items.create.map((item) => item.customPrice)).toEqual([null, '70.00']);
+    expect(created.data.items.create.map((item) => item.customPrice)).toEqual([
+      null,
+      '70.00',
+    ]);
   });
 });

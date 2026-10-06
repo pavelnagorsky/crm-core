@@ -21,17 +21,24 @@ export class BookingSetupStaffDto {
 
   @ApiProperty({
     type: [String],
-    description: 'Ids of services this staff member can perform. A bundle can be booked with them when they can perform every service in that bundle.',
+    description:
+      'Ids of services this staff member can perform. A bundle can be booked with them when they can perform every service in that bundle.',
   })
   serviceIds: string[];
 
-  static fromEntity(staff: StaffWithAvatar & { staffServices: { serviceId: string }[] }): BookingSetupStaffDto {
+  static fromEntity(
+    staff: StaffWithAvatar & { staffServices: { serviceId: string }[] },
+  ): BookingSetupStaffDto {
     const dto = new BookingSetupStaffDto();
     dto.id = staff.id;
     dto.name = staff.name;
     dto.roleTitle = staff.roleTitle;
-    dto.description = staff.description ? sanitizeRichHtml(staff.description) : null;
-    dto.avatar = staff.avatarFile ? FileResponseDto.fromEntity(staff.avatarFile) : null;
+    dto.description = staff.description
+      ? sanitizeRichHtml(staff.description)
+      : null;
+    dto.avatar = staff.avatarFile
+      ? FileResponseDto.fromEntity(staff.avatarFile)
+      : null;
     dto.serviceIds = staff.staffServices.map((ss) => ss.serviceId);
     return dto;
   }

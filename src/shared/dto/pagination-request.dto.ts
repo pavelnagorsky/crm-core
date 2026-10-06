@@ -1,6 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsBoolean, IsEnum, IsInt, IsOptional, IsString, Min } from 'class-validator';
+import {
+  IsBoolean,
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  Min,
+} from 'class-validator';
 import { OrderDirection } from '../enums/order-direction.enum.js';
 
 export class PaginationRequestDto<OrderBy extends string = string> {
@@ -21,12 +28,20 @@ export class PaginationRequestDto<OrderBy extends string = string> {
   @IsString()
   orderBy?: OrderBy;
 
-  @ApiProperty({ enum: OrderDirection, default: OrderDirection.DESC, required: false })
+  @ApiProperty({
+    enum: OrderDirection,
+    default: OrderDirection.DESC,
+    required: false,
+  })
   @IsOptional()
   @IsEnum(OrderDirection)
   orderDirection?: OrderDirection = OrderDirection.DESC;
 
-  @ApiProperty({ type: Boolean, required: false, description: 'When true, returns all records ignoring pagination' })
+  @ApiProperty({
+    type: Boolean,
+    required: false,
+    description: 'When true, returns all records ignoring pagination',
+  })
   @IsOptional()
   @IsBoolean()
   @Type(() => Boolean)

@@ -21,8 +21,12 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { BusinessRole } from '@prisma/client';
-import { RBAC } from '../business/decorators/rbac.decorator.js';
-import { ApiResponse, ApiResponseArray, BaseResponseDto } from '../../shared/dto/base-response.dto.js';
+import { LocationRBAC } from '../auth/decorators/location-rbac.decorator.js';
+import {
+  ApiResponse,
+  ApiResponseArray,
+  BaseResponseDto,
+} from '../../shared/dto/base-response.dto.js';
 import { CalendarService } from './calendar.service.js';
 import { CreateCalendarEventDto } from './dto/create-calendar-event.dto.js';
 import { UpdateCalendarEventDto } from './dto/update-calendar-event.dto.js';
@@ -39,123 +43,157 @@ import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
 
 @ApiTags('Calendar')
-@Controller('businesses/:businessId/calendar')
+@Controller('locations/:locationId/calendar')
 export class CalendarController {
   constructor(private readonly calendarService: CalendarService) {}
 
   // ─── Public ──────────────────────────────────────────────────────────────────
 
-  @ApiOperation({ summary: 'Get available booking slots for a service within the business advance-booking window (public).' })
+  @ApiOperation({
+    summary:
+      'Get available booking slots for a service within the business advance-booking window (public).',
+  })
   @ApiOkResponse({ type: ApiResponseArray(AvailableSlotsDayDto) })
   @ApiNotFoundResponse({ description: 'Business or service not found' })
   @Get('public/available-slots')
   async getAvailableSlots(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Query() dto: AvailableSlotsRequestDto,
   ): Promise<BaseResponseDto<AvailableSlotsDayDto[]>> {
-    const days = await this.calendarService.getAvailableSlots(businessId, dto);
+    const days = await this.calendarService.getAvailableSlots(locationId, dto);
     return BaseResponseDto.success(days);
   }
 
   @ApiOperation({
-    summary: 'Get available slots for manual booking (owner / staff). Same free-time rules as the public list, without online-booking visibility, minimum notice, or the advance window.',
+    summary:
+      'Get available slots for manual booking (owner / staff). Same free-time rules as the public list, without online-booking visibility, minimum notice, or the advance window.',
   })
   @ApiOkResponse({ type: ApiResponseArray(AvailableSlotsDayDto) })
   @ApiNotFoundResponse({ description: 'Business or service not found' })
   @ApiBadRequestResponse({ description: 'Date range is longer than 62 days' })
-  @RBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
   @Get('available-slots')
   async getManualAvailableSlots(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Query() dto: ManualAvailableSlotsRequestDto,
   ): Promise<BaseResponseDto<AvailableSlotsDayDto[]>> {
-    const days = await this.calendarService.getManualAvailableSlots(businessId, dto);
+    const days = await this.calendarService.getManualAvailableSlots(
+      locationId,
+      dto,
+    );
     return BaseResponseDto.success(days);
   }
 
   // ─── Owner ───────────────────────────────────────────────────────────────────
 
-  @ApiOperation({ summary: 'Get calendar view for a date range. Blocks, bookings, and closed time in the business timezone. Recurring blocks are expanded onto each occurrence.' })
+  @ApiOperation({
+    summary:
+      'Get calendar view for a date range. Blocks, bookings, and closed time in the business timezone. Recurring blocks are expanded onto each occurrence.',
+  })
   @ApiOkResponse({ type: ApiResponse(GetCalendarResponseDto) })
-  @RBAC(BusinessRole.OWNER)
+  @LocationRBAC(BusinessRole.OWNER)
   @Get()
   async getCalendar(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Query() dto: GetCalendarRequestDto,
   ): Promise<BaseResponseDto<GetCalendarResponseDto>> {
-    const result = await this.calendarService.getCalendar(businessId, dto);
+    const result = await this.calendarService.getCalendar(locationId, dto);
     return BaseResponseDto.success(result);
   }
 
-  @ApiOperation({ summary: 'Get one block series for the editor. eventId is the series id, not an occurrence.' })
+  @ApiOperation({
+    summary:
+      'Get one block series for the editor. eventId is the series id, not an occurrence.',
+  })
   @ApiOkResponse({ type: ApiResponse(CalendarEventResponseDto) })
   @ApiNotFoundResponse({ description: 'Calendar event not found' })
-  @RBAC(BusinessRole.OWNER)
+  @LocationRBAC(BusinessRole.OWNER)
   @Get(':eventId')
   async getEvent(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('eventId', ParseUUIDPipe) eventId: string,
   ): Promise<BaseResponseDto<CalendarEventResponseDto>> {
-    const event = await this.calendarService.findInBusiness(businessId, eventId);
+    const event = await this.calendarService.findInBusiness(
+      locationId,
+      eventId,
+    );
     return BaseResponseDto.success(CalendarEventResponseDto.fromEntity(event));
   }
 
-  @ApiOperation({ summary: 'Create a block. Pass staffIds to create one per staff member; omit for a business-wide block.' })
+  @ApiOperation({
+    summary:
+      'Create a block. Pass staffIds to create one per staff member; omit for a business-wide block.',
+  })
   @ApiCreatedResponse({ type: ApiResponseArray(CalendarEventResponseDto) })
-  @RBAC(BusinessRole.OWNER)
+  @LocationRBAC(BusinessRole.OWNER)
   @Post()
   async create(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Body() dto: CreateCalendarEventDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<CalendarEventResponseDto[]>> {
     const events = await this.calendarService.create(
-      businessId,
+      locationId,
       dto,
-      auditActorFromToken(tokenPayload, businessId),
+      auditActorFromToken(tokenPayload, locationId),
     );
-    return BaseResponseDto.success(events.map(CalendarEventResponseDto.fromEntity));
+    return BaseResponseDto.success(
+      events.map(CalendarEventResponseDto.fromEntity),
+    );
   }
 
-  @ApiOperation({ summary: 'Move a block on the grid. Only the interval changes; title, notes, reason, and repeat stay as stored.' })
+  @ApiOperation({
+    summary:
+      'Move a block on the grid. Only the interval changes; title, notes, reason, and repeat stay as stored.',
+  })
   @ApiOkResponse({ type: ApiResponse(CalendarEventResponseDto) })
   @ApiNotFoundResponse({ description: 'Calendar event not found' })
-  @RBAC(BusinessRole.OWNER)
+  @LocationRBAC(BusinessRole.OWNER)
   @Put(':eventId/occurrence')
   async moveOccurrence(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('eventId', ParseUUIDPipe) eventId: string,
     @Body() dto: MoveCalendarEventDto,
   ): Promise<BaseResponseDto<CalendarEventResponseDto>> {
-    const event = await this.calendarService.moveOccurrence(businessId, eventId, dto);
+    const event = await this.calendarService.moveOccurrence(
+      locationId,
+      eventId,
+      dto,
+    );
     return BaseResponseDto.success(CalendarEventResponseDto.fromEntity(event));
   }
 
-  @ApiOperation({ summary: 'Update a block. Use thisOnly=true to update only a single occurrence of a repeating block.' })
+  @ApiOperation({
+    summary:
+      'Update a block. Use thisOnly=true to update only a single occurrence of a repeating block.',
+  })
   @ApiOkResponse({ type: ApiResponse(CalendarEventResponseDto) })
   @ApiNotFoundResponse({ description: 'Calendar event not found' })
-  @RBAC(BusinessRole.OWNER)
+  @LocationRBAC(BusinessRole.OWNER)
   @Put(':eventId')
   async update(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('eventId', ParseUUIDPipe) eventId: string,
     @Body() dto: UpdateCalendarEventDto,
   ): Promise<BaseResponseDto<CalendarEventResponseDto>> {
-    const event = await this.calendarService.update(businessId, eventId, dto);
+    const event = await this.calendarService.update(locationId, eventId, dto);
     return BaseResponseDto.success(CalendarEventResponseDto.fromEntity(event));
   }
 
-  @ApiOperation({ summary: 'Delete a block. Use thisOnly=true to cancel only a single occurrence of a repeating block.' })
+  @ApiOperation({
+    summary:
+      'Delete a block. Use thisOnly=true to cancel only a single occurrence of a repeating block.',
+  })
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Calendar event not found' })
-  @RBAC(BusinessRole.OWNER)
+  @LocationRBAC(BusinessRole.OWNER)
   @Delete(':eventId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('eventId', ParseUUIDPipe) eventId: string,
     @Query() dto: DeleteCalendarEventDto,
   ): Promise<void> {
-    await this.calendarService.delete(businessId, eventId, dto);
+    await this.calendarService.delete(locationId, eventId, dto);
   }
 }

@@ -11,7 +11,7 @@ import { ClientsAnalyticsRequestDto } from './dto/clients-analytics-request.dto.
 import { ClientsAnalyticsResponseDto } from './dto/clients-analytics-response.dto.js';
 
 @ApiTags('Clients')
-@Controller('businesses/:businessId')
+@Controller('businesses/:brandId')
 export class ClientsAnalyticsController {
   constructor(private readonly analyticsService: ClientsAnalyticsService) {}
 
@@ -24,10 +24,10 @@ export class ClientsAnalyticsController {
   @RBAC(BusinessRole.OWNER)
   @Post('clients/analytics')
   async analytics(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('brandId', ParseUUIDPipe) brandId: string,
     @Body() dto: ClientsAnalyticsRequestDto,
   ): Promise<BaseResponseDto<ClientsAnalyticsResponseDto>> {
-    const widgets = await this.analyticsService.getWidgets(businessId, dto);
+    const widgets = await this.analyticsService.getWidgets(brandId, dto);
     return BaseResponseDto.success(new ClientsAnalyticsResponseDto(widgets));
   }
 }

@@ -30,14 +30,18 @@ export class ServiceCatalogService {
   ) {}
 
   async search(
-    businessId: string,
+    locationId: string,
     dto: ServiceCatalogSearchRequestDto,
   ): Promise<PaginatedResult<ServiceCatalogItem>> {
     const direction = dto.orderDirection ?? OrderDirection.DESC;
     const orderBy = dto.orderBy ?? ServiceSearchOrderBy.SORT_ORDER;
     // Bundle price and duration come from child services, so both kinds are
     // ordered as one list and only then sliced.
-    const items = await this.mergedItems(businessId, this.toFilter(dto), dto.kind);
+    const items = await this.mergedItems(
+      locationId,
+      this.toFilter(dto),
+      dto.kind,
+    );
     items.sort((left, right) => this.compare(left, right, orderBy, direction));
 
     const totalItems = items.length;
@@ -48,15 +52,21 @@ export class ServiceCatalogService {
   }
 
   async getCounts(
-    businessId: string,
+    locationId: string,
     dto: ServiceCatalogCountsRequestDto,
   ): Promise<ServiceCatalogCounts> {
-    const textAndCategory: ServiceFilter = { search: dto.search, categoryId: dto.categoryId };
-    const withStatus: ServiceFilter = { ...textAndCategory, status: dto.status };
+    const textAndCategory: ServiceFilter = {
+      search: dto.search,
+      categoryId: dto.categoryId,
+    };
+    const withStatus: ServiceFilter = {
+      ...textAndCategory,
+      status: dto.status,
+    };
     const [byStatus, serviceCount, bundleCount] = await Promise.all([
-      this.countByStatus(businessId, textAndCategory, dto.kind),
-      this.services.countForCatalog(businessId, withStatus),
-      this.bundles.countForCatalog(businessId, withStatus),
+      this.countByStatus(locationId, textAndCategory, dto.kind),
+      this.services.countForCatalog(locationId, withStatus),
+      this.bundles.countForCatalog(locationId, withStatus),
     ]);
 
     return {
@@ -70,13 +80,17 @@ export class ServiceCatalogService {
   }
 
   private async mergedItems(
-    businessId: string,
+    locationId: string,
     filter: ServiceFilter,
     kind?: ServiceCatalogKind,
   ): Promise<ServiceCatalogItem[]> {
     const [services, bundles] = await Promise.all([
-      this.wantsServices(kind) ? this.services.listForCatalog(businessId, filter) : [],
-      this.wantsBundles(kind) ? this.bundles.listForCatalog(businessId, filter) : [],
+      this.wantsServices(kind)
+        ? this.services.listForCatalog(locationId, filter)
+        : [],
+      this.wantsBundles(kind)
+        ? this.bundles.listForCatalog(locationId, filter)
+        : [],
     ]);
     return [
       ...services.map((service) => this.fromService(service)),
@@ -85,13 +99,17 @@ export class ServiceCatalogService {
   }
 
   private async countByStatus(
-    businessId: string,
+    locationId: string,
     filter: ServiceFilter,
     kind?: ServiceCatalogKind,
   ): Promise<ServiceStatusCount[]> {
     const [serviceRows, bundleRows] = await Promise.all([
-      this.wantsServices(kind) ? this.services.countByStatusForCatalog(businessId, filter) : [],
-      this.wantsBundles(kind) ? this.bundles.countByStatusForCatalog(businessId, filter) : [],
+      this.wantsServices(kind)
+        ? this.services.countByStatusForCatalog(locationId, filter)
+        : [],
+      this.wantsBundles(kind)
+        ? this.bundles.countByStatusForCatalog(locationId, filter)
+        : [],
     ]);
     const merged = new Map<ServiceStatus, number>();
     for (const row of [...serviceRows, ...bundleRows]) {
@@ -102,7 +120,10 @@ export class ServiceCatalogService {
 
   private withEveryStatus(rows: ServiceStatusCount[]): ServiceStatusCount[] {
     const byStatus = new Map(rows.map((row) => [row.status, row.count]));
-    return CATALOG_STATUSES.map((status) => ({ status, count: byStatus.get(status) ?? 0 }));
+    return CATALOG_STATUSES.map((status) => ({
+      status,
+      count: byStatus.get(status) ?? 0,
+    }));
   }
 
   private totalForKind(
@@ -135,7 +156,7 @@ export class ServiceCatalogService {
     return {
       id: service.id,
       kind: ServiceCatalogKind.SERVICE,
-      businessId: service.businessId,
+      locationId: service.locationId,
       categoryId: service.categoryId,
       categoryName: service.category?.name ?? null,
       imageFile: service.imageFile,
@@ -152,11 +173,13 @@ export class ServiceCatalogService {
     };
   }
 
-  private fromBundle(bundle: ServiceBundleForCatalog): ServiceCatalogBundleItem {
+  private fromBundle(
+    bundle: ServiceBundleForCatalog,
+  ): ServiceCatalogBundleItem {
     return {
       id: bundle.id,
       kind: ServiceCatalogKind.BUNDLE,
-      businessId: bundle.businessId,
+      locationId: bundle.locationId,
       categoryId: bundle.categoryId,
       categoryName: bundle.category?.name ?? null,
       imageFile: bundle.imageFile,
@@ -188,9 +211,10 @@ export class ServiceCatalogService {
     direction: OrderDirection,
   ): number {
     const sign = direction === OrderDirection.DESC ? -1 : 1;
-    const primary = orderBy === ServiceSearchOrderBy.CATEGORY
-      ? this.compareCategory(left.categoryName, right.categoryName, sign)
-      : this.compareValues(left, right, orderBy) * sign;
+    const primary =
+      orderBy === ServiceSearchOrderBy.CATEGORY
+        ? this.compareCategory(left.categoryName, right.categoryName, sign)
+        : this.compareValues(left, right, orderBy) * sign;
     if (primary !== 0) return primary;
     return left.id.localeCompare(right.id) * sign;
   }
@@ -217,7 +241,11 @@ export class ServiceCatalogService {
     }
   }
 
-  private compareCategory(left: string | null, right: string | null, sign: number): number {
+  private compareCategory(
+    left: string | null,
+    right: string | null,
+    sign: number,
+  ): number {
     if (left == null && right == null) return 0;
     if (left == null) return 1;
     if (right == null) return -1;

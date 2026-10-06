@@ -24,7 +24,9 @@ export class UnauthorizedResponseDto extends BaseResponseDto<null> {
   declare responseValue: null;
 }
 
-export class ValidationErrorResponseDto extends BaseResponseDto<ValidationFieldErrorDto[]> {
+export class ValidationErrorResponseDto extends BaseResponseDto<
+  ValidationFieldErrorDto[]
+> {
   @ApiProperty({ example: false })
   declare isSuccess: boolean;
 
@@ -34,6 +36,10 @@ export class ValidationErrorResponseDto extends BaseResponseDto<ValidationFieldE
   @ApiProperty({ example: 'Validation failed' })
   declare responseMessage: string;
 
-  @ApiProperty({ type: () => ValidationFieldErrorDto, isArray: true, nullable: true })
+  @ApiProperty({
+    type: () => ValidationFieldErrorDto,
+    isArray: true,
+    nullable: true,
+  })
   declare responseValue: ValidationFieldErrorDto[] | null;
 }

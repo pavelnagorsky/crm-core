@@ -10,7 +10,7 @@ export class PayrollPeriodResponseDto {
   id: string;
 
   @ApiProperty({ type: String })
-  businessId: string;
+  locationId: string;
 
   @ApiProperty({ type: String, nullable: true })
   name: string | null;
@@ -48,10 +48,12 @@ export class PayrollPeriodResponseDto {
   @ApiProperty({ type: Date })
   createdAt: Date;
 
-  static fromEntity(period: PayrollPeriodWithResults | PayrollPeriod): PayrollPeriodResponseDto {
+  static fromEntity(
+    period: PayrollPeriodWithResults | PayrollPeriod,
+  ): PayrollPeriodResponseDto {
     const dto = new PayrollPeriodResponseDto();
     dto.id = period.id;
-    dto.businessId = period.businessId;
+    dto.locationId = period.locationId;
     dto.name = period.name;
     dto.startDate = TimeService.dateOnlyStr(period.startDate);
     dto.endDate = TimeService.dateOnlyStr(period.endDate);
@@ -62,7 +64,9 @@ export class PayrollPeriodResponseDto {
     dto.paidAt = period.paidAt;
     dto.approvedByName = period.approvedByName;
     dto.paidByName = period.paidByName;
-    dto.results = ('results' in period ? period.results : []).map(PayrollResultResponseDto.fromEntity);
+    dto.results = ('results' in period ? period.results : []).map(
+      PayrollResultResponseDto.fromEntity,
+    );
     dto.createdAt = period.createdAt;
     return dto;
   }

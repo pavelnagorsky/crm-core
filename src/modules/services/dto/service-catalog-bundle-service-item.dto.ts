@@ -11,7 +11,9 @@ export class ServiceCatalogBundleServiceItemDto {
   @ApiProperty({ type: Number })
   sortOrder: number;
 
-  static fromEntity(item: ServiceCatalogBundleServiceItem): ServiceCatalogBundleServiceItemDto {
+  static fromEntity(
+    item: ServiceCatalogBundleServiceItem,
+  ): ServiceCatalogBundleServiceItemDto {
     const dto = new ServiceCatalogBundleServiceItemDto();
     dto.serviceId = item.serviceId;
     dto.serviceTitle = item.serviceTitle;

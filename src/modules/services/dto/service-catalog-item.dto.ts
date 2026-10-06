@@ -4,8 +4,11 @@ import { ServiceCatalogBundleItemDto } from './service-catalog-bundle-item.dto.j
 import { ServiceCatalogServiceItemDto } from './service-catalog-service-item.dto.js';
 
 export class ServiceCatalogItemDto {
-  static fromEntity(item: ServiceCatalogItem): ServiceCatalogServiceItemDto | ServiceCatalogBundleItemDto {
-    if (item.kind === ServiceCatalogKind.SERVICE) return ServiceCatalogServiceItemDto.fromEntity(item);
+  static fromEntity(
+    item: ServiceCatalogItem,
+  ): ServiceCatalogServiceItemDto | ServiceCatalogBundleItemDto {
+    if (item.kind === ServiceCatalogKind.SERVICE)
+      return ServiceCatalogServiceItemDto.fromEntity(item);
     return ServiceCatalogBundleItemDto.fromEntity(item);
   }
 }

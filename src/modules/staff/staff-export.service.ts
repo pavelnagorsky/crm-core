@@ -2,7 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { XlsxColumn } from '../../shared/xlsx/interfaces/xlsx-column.interface.js';
 import { XlsxFile } from '../../shared/xlsx/interfaces/xlsx-file.interface.js';
 import { XlsxService } from '../../shared/xlsx/xlsx.service.js';
-import { DEFAULT_LANG, LocaleService } from '../../shared/i18n/locale.service.js';
+import {
+  DEFAULT_LANG,
+  LocaleService,
+} from '../../shared/i18n/locale.service.js';
 import { labelOf } from '../../shared/i18n/label-of.js';
 import { I18nLocale } from '../../shared/interfaces/i18n-locale.interface.js';
 import { StaffService } from './staff.service.js';
@@ -30,7 +33,11 @@ export class StaffExportService {
     private readonly locale: LocaleService,
   ) {}
 
-  async stream(businessId: string, dto: StaffExportRequestDto, lang = DEFAULT_LANG): Promise<XlsxFile> {
+  async stream(
+    locationId: string,
+    dto: StaffExportRequestDto,
+    lang = DEFAULT_LANG,
+  ): Promise<XlsxFile> {
     const messages = this.locale.get(lang);
     const text = messages.documents;
     const columns: XlsxColumn<StaffRow>[] = [
@@ -46,7 +53,10 @@ export class StaffExportService {
       { header: text.common.payoutMethod, key: 'payoutMethod' },
       { header: text.common.createdAt, key: 'createdAt' },
     ];
-    const { items } = await this.staffService.search(businessId, { ...dto, isExport: true });
+    const { items } = await this.staffService.search(locationId, {
+      ...dto,
+      isExport: true,
+    });
     const rows = items.map((staff) => this.toRow(staff, messages));
     return XlsxService.table(rows, columns, 'staff', text.staff.sheet);
   }

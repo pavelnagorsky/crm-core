@@ -23,7 +23,6 @@ import { ServicesAnalyticsContext } from './interfaces/services-analytics-contex
 const COMPLETED_STATUSES: BookingStatus[] = [BookingStatus.COMPLETED];
 const DEMAND_TOP_N = 5;
 
-
 @Injectable()
 export class ServicesAnalyticsService {
   constructor(
@@ -35,12 +34,18 @@ export class ServicesAnalyticsService {
     private readonly buckets: DashboardBucketService,
   ) {}
 
-  async getWidgets(businessId: string, dto: ServicesAnalyticsRequestDto): Promise<WidgetDto[]> {
-    const ctx = await this.buildContext(businessId, dto);
+  async getWidgets(
+    locationId: string,
+    dto: ServicesAnalyticsRequestDto,
+  ): Promise<WidgetDto[]> {
+    const ctx = await this.buildContext(locationId, dto);
     return dto.keys.map((key) => this.buildWidget(key, ctx));
   }
 
-  private buildWidget(key: ServicesAnalyticsWidgetKey, ctx: ServicesAnalyticsContext): WidgetDto {
+  private buildWidget(
+    key: ServicesAnalyticsWidgetKey,
+    ctx: ServicesAnalyticsContext,
+  ): WidgetDto {
     switch (key) {
       case ServicesAnalyticsWidgetKey.SERVICES_COMPLETED_COUNT:
         return this.completedCountMetric(key, ctx);
@@ -50,16 +55,23 @@ export class ServicesAnalyticsService {
         return this.demandBreakdown(key, ctx);
       default: {
         const _exhaustive: never = key;
-        throw new Error(`Unhandled services-analytics widget key: ${_exhaustive}`);
+        throw new Error(
+          `Unhandled services-analytics widget key: ${_exhaustive}`,
+        );
       }
     }
   }
 
   // ── widgets ──────────────────────────────────────────────────────────────
 
-  private completedCountMetric(key: ServicesAnalyticsWidgetKey, ctx: ServicesAnalyticsContext): WidgetDto {
+  private completedCountMetric(
+    key: ServicesAnalyticsWidgetKey,
+    ctx: ServicesAnalyticsContext,
+  ): WidgetDto {
     const value = countFor(ctx.currentSnapshot, COMPLETED_STATUSES);
-    const previousValue = ctx.previousSnapshot ? countFor(ctx.previousSnapshot, COMPLETED_STATUSES) : undefined;
+    const previousValue = ctx.previousSnapshot
+      ? countFor(ctx.previousSnapshot, COMPLETED_STATUSES)
+      : undefined;
     return {
       key,
       kind: WidgetKind.METRIC,
@@ -74,9 +86,14 @@ export class ServicesAnalyticsService {
     };
   }
 
-  private revenuePerHourMetric(key: ServicesAnalyticsWidgetKey, ctx: ServicesAnalyticsContext): WidgetDto {
+  private revenuePerHourMetric(
+    key: ServicesAnalyticsWidgetKey,
+    ctx: ServicesAnalyticsContext,
+  ): WidgetDto {
     const value = revenuePerHour(ctx.currentSnapshot, COMPLETED_STATUSES);
-    const previousValue = ctx.previousSnapshot ? revenuePerHour(ctx.previousSnapshot, COMPLETED_STATUSES) : undefined;
+    const previousValue = ctx.previousSnapshot
+      ? revenuePerHour(ctx.previousSnapshot, COMPLETED_STATUSES)
+      : undefined;
     return {
       key,
       kind: WidgetKind.METRIC,
@@ -91,13 +108,18 @@ export class ServicesAnalyticsService {
     };
   }
 
-  private demandBreakdown(key: ServicesAnalyticsWidgetKey, ctx: ServicesAnalyticsContext): WidgetDto {
+  private demandBreakdown(
+    key: ServicesAnalyticsWidgetKey,
+    ctx: ServicesAnalyticsContext,
+  ): WidgetDto {
     const rows = ctx.currentServiceCounts ?? [];
     const sorted = [...rows].sort((a, b) => b.count - a.count);
     const total = sorted.reduce((s, r) => s + r.count, 0);
 
     const head = sorted.slice(0, DEMAND_TOP_N);
-    const items: WidgetBreakdownItemDto[] = head.map((r) => breakdownItem(r, total));
+    const items: WidgetBreakdownItemDto[] = head.map((r) =>
+      breakdownItem(r, total),
+    );
 
     const tail = sorted.slice(DEMAND_TOP_N);
     if (tail.length > 0) {
@@ -120,43 +142,96 @@ export class ServicesAnalyticsService {
 
   // ── data plumbing ────────────────────────────────────────────────────────
 
-  private async buildContext(businessId: string, dto: ServicesAnalyticsRequestDto): Promise<ServicesAnalyticsContext> {
-    const range = await this.rangeService.resolve(businessId, dto);
-    const serviceIds = await this.resolveServiceIds(businessId, dto);
-    const currentRange = this.rangeFor(businessId, serviceIds, range.from, range.to);
-    const previousRange = this.rangeFor(businessId, serviceIds, range.previousFrom, range.previousTo);
+  private async buildContext(
+    locationId: string,
+    dto: ServicesAnalyticsRequestDto,
+  ): Promise<ServicesAnalyticsContext> {
+    const range = await this.rangeService.resolve(locationId, dto);
+    const serviceIds = await this.resolveServiceIds(locationId, dto);
+    const currentRange = this.rangeFor(
+      locationId,
+      serviceIds,
+      range.from,
+      range.to,
+    );
+    const previousRange = this.rangeFor(
+      locationId,
+      serviceIds,
+      range.previousFrom,
+      range.previousTo,
+    );
 
     const needsCurrentSnapshot = this.needsAnyMetric(dto.keys);
-    const needsPreviousSnapshot = needsCurrentSnapshot && range.compareWithPrevious;
+    const needsPreviousSnapshot =
+      needsCurrentSnapshot && range.compareWithPrevious;
     const needsSeries = this.needsAnySpark(dto.keys);
-    const needsBreakdown = dto.keys.includes(ServicesAnalyticsWidgetKey.SERVICES_DEMAND_BREAKDOWN);
+    const needsBreakdown = dto.keys.includes(
+      ServicesAnalyticsWidgetKey.SERVICES_DEMAND_BREAKDOWN,
+    );
 
-    const [currentSnapshot, previousSnapshot, currentSeries, currentServiceCounts] = await Promise.all([
-      needsCurrentSnapshot ? this.aggregates.snapshot(currentRange) : Promise.resolve(emptySnapshot()),
-      needsPreviousSnapshot ? this.aggregates.snapshot(previousRange) : Promise.resolve(undefined),
+    const [
+      currentSnapshot,
+      previousSnapshot,
+      currentSeries,
+      currentServiceCounts,
+    ] = await Promise.all([
+      needsCurrentSnapshot
+        ? this.aggregates.snapshot(currentRange)
+        : Promise.resolve(emptySnapshot()),
+      needsPreviousSnapshot
+        ? this.aggregates.snapshot(previousRange)
+        : Promise.resolve(undefined),
       needsSeries
         ? this.aggregates.series(
-            { ...currentRange, granularity: range.granularity, timezone: range.timezone, statuses: COMPLETED_STATUSES },
+            {
+              ...currentRange,
+              granularity: range.granularity,
+              timezone: range.timezone,
+              statuses: COMPLETED_STATUSES,
+            },
             false,
           )
         : Promise.resolve([] as SeriesRow[]),
-      needsBreakdown ? this.aggregates.countByService(currentRange, COMPLETED_STATUSES) : Promise.resolve(undefined),
+      needsBreakdown
+        ? this.aggregates.countByService(currentRange, COMPLETED_STATUSES)
+        : Promise.resolve(undefined),
     ]);
 
-    return { businessId, range, serviceIds, currentSnapshot, previousSnapshot, currentSeries, currentServiceCounts };
+    return {
+      locationId,
+      range,
+      serviceIds,
+      currentSnapshot,
+      previousSnapshot,
+      currentSeries,
+      currentServiceCounts,
+    };
   }
 
-  private async resolveServiceIds(businessId: string, dto: ServicesAnalyticsRequestDto): Promise<string[] | undefined> {
-    if (dto.search === undefined && dto.categoryId === undefined && dto.status === undefined) return undefined;
-    return this.servicesService.findIdsByFilter(businessId, {
+  private async resolveServiceIds(
+    locationId: string,
+    dto: ServicesAnalyticsRequestDto,
+  ): Promise<string[] | undefined> {
+    if (
+      dto.search === undefined &&
+      dto.categoryId === undefined &&
+      dto.status === undefined
+    )
+      return undefined;
+    return this.servicesService.findIdsByFilter(locationId, {
       search: dto.search,
       categoryId: dto.categoryId,
       status: dto.status,
     });
   }
 
-  private rangeFor(businessId: string, serviceIds: string[] | undefined, from: Date, to: Date): AggregateRange {
-    const range: AggregateRange = { businessId, from, to };
+  private rangeFor(
+    locationId: string,
+    serviceIds: string[] | undefined,
+    from: Date,
+    to: Date,
+  ): AggregateRange {
+    const range: AggregateRange = { locationId, from, to };
     if (serviceIds !== undefined) range.serviceIds = serviceIds;
     return range;
   }
@@ -164,7 +239,11 @@ export class ServicesAnalyticsService {
   private buildRevenuePerHourSpark(ctx: ServicesAnalyticsContext): number[] {
     // Delegate bucket alignment to the factory so empty buckets get zeros just like count-based
     // sparks; each bucket's ratio is revenue / (duration_minutes / 60).
-    const revenueByBucket = this.seriesFactory.spark(ctx.range, ctx.currentSeries, 'revenue');
+    const revenueByBucket = this.seriesFactory.spark(
+      ctx.range,
+      ctx.currentSeries,
+      'revenue',
+    );
     const durationByBucket = this.buildDurationSpark(ctx);
     return revenueByBucket.map((rev, i) => {
       const durationMinutes = durationByBucket[i] ?? 0;
@@ -177,13 +256,16 @@ export class ServicesAnalyticsService {
     // using the same bucket set the factory uses so both arrays line up positionally.
     const bucketStarts = this.buckets.bucketStarts(ctx.range);
     const byBucket = new Map<number, number>();
-    for (const r of ctx.currentSeries) byBucket.set(r.bucket.getTime(), r.duration);
+    for (const r of ctx.currentSeries)
+      byBucket.set(r.bucket.getTime(), r.duration);
     return bucketStarts.map((b) => byBucket.get(b.getTime()) ?? 0);
   }
 
   private needsAnyMetric(keys: ServicesAnalyticsWidgetKey[]): boolean {
     return keys.some(
-      (k) => k === ServicesAnalyticsWidgetKey.SERVICES_COMPLETED_COUNT || k === ServicesAnalyticsWidgetKey.REVENUE_PER_HOUR,
+      (k) =>
+        k === ServicesAnalyticsWidgetKey.SERVICES_COMPLETED_COUNT ||
+        k === ServicesAnalyticsWidgetKey.REVENUE_PER_HOUR,
     );
   }
 
@@ -191,10 +273,15 @@ export class ServicesAnalyticsService {
     return this.needsAnyMetric(keys);
   }
 
-  private buildMeta(ctx: ServicesAnalyticsContext, withCurrency: boolean): WidgetMetaDto {
+  private buildMeta(
+    ctx: ServicesAnalyticsContext,
+    withCurrency: boolean,
+  ): WidgetMetaDto {
     return {
       period: this.buckets.periodDto(ctx.range),
-      previousPeriod: ctx.range.compareWithPrevious ? this.buckets.previousPeriodDto(ctx.range) : undefined,
+      previousPeriod: ctx.range.compareWithPrevious
+        ? this.buckets.previousPeriodDto(ctx.range)
+        : undefined,
       currency: withCurrency ? ctx.range.currency : undefined,
     };
   }
@@ -206,30 +293,46 @@ function countFor(snap: AggregateSnapshot, statuses: BookingStatus[]): number {
   return sum;
 }
 
-function revenueFor(snap: AggregateSnapshot, statuses: BookingStatus[]): Prisma.Decimal {
+function revenueFor(
+  snap: AggregateSnapshot,
+  statuses: BookingStatus[],
+): Prisma.Decimal {
   let sum = MoneyService.decimal(0);
   for (const s of statuses) sum = sum.plus(snap.byStatus.get(s)?.revenue ?? 0);
   return sum;
 }
 
-function durationFor(snap: AggregateSnapshot, statuses: BookingStatus[]): number {
+function durationFor(
+  snap: AggregateSnapshot,
+  statuses: BookingStatus[],
+): number {
   let sum = 0;
   for (const s of statuses) sum += snap.byStatus.get(s)?.duration ?? 0;
   return sum;
 }
 
-function revenuePerHour(snap: AggregateSnapshot, statuses: BookingStatus[]): number {
+function revenuePerHour(
+  snap: AggregateSnapshot,
+  statuses: BookingStatus[],
+): number {
   const revenue = revenueFor(snap, statuses);
   const durationMinutes = durationFor(snap, statuses);
   if (durationMinutes <= 0) return 0;
-  return Number(MoneyService.format(MoneyService.quantize(revenue.mul(60).div(durationMinutes))));
+  return Number(
+    MoneyService.format(
+      MoneyService.quantize(revenue.mul(60).div(durationMinutes)),
+    ),
+  );
 }
 
 function sharePct(part: number, total: number): number {
   return total > 0 ? +((part / total) * 100).toFixed(1) : 0;
 }
 
-function breakdownItem(row: ServiceCount, total: number): WidgetBreakdownItemDto {
+function breakdownItem(
+  row: ServiceCount,
+  total: number,
+): WidgetBreakdownItemDto {
   return {
     id: row.serviceId,
     label: row.serviceTitle,
@@ -240,5 +343,10 @@ function breakdownItem(row: ServiceCount, total: number): WidgetBreakdownItemDto
 }
 
 function emptySnapshot(): AggregateSnapshot {
-  return { byStatus: new Map(), totalCount: 0, totalRevenue: MoneyService.decimal(0), totalDuration: 0 };
+  return {
+    byStatus: new Map(),
+    totalCount: 0,
+    totalRevenue: MoneyService.decimal(0),
+    totalDuration: 0,
+  };
 }

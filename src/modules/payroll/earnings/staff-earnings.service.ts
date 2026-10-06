@@ -22,13 +22,16 @@ import { AuditEvent } from '../../audit/enums/audit-event.enum.js';
 import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../../audit/interfaces/audit-log-event.interface.js';
 import { AuditPayload } from '../../audit/interfaces/audit-payload.interface.js';
-import { BusinessService } from '../../business/business.service.js';
+import { LocationService } from '../../location/location.service.js';
 import { StaffService } from '../../staff/staff.service.js';
 import { TimeService } from '../../time/time.service.js';
 import { CreateManualEarningDto } from './dto/create-manual-earning.dto.js';
 import { RecordProductSaleDto } from './dto/record-product-sale.dto.js';
 import { PayrollPeriodEarningsRequestDto } from './dto/payroll-period-earnings-request.dto.js';
-import { StaffEarningSearchOrderBy, StaffEarningSearchRequestDto } from './dto/staff-earning-search-request.dto.js';
+import {
+  StaffEarningSearchOrderBy,
+  StaffEarningSearchRequestDto,
+} from './dto/staff-earning-search-request.dto.js';
 import { EarningCalculatorService } from './earning-calculator.service.js';
 import { CompensationPlanWithRates } from '../compensation/interfaces/compensation-plan-with-rates.interface.js';
 import { StaffCompensationService } from '../compensation/staff-compensation.service.js';
@@ -45,11 +48,13 @@ export class StaffEarningsService {
     private readonly compensation: StaffCompensationService,
     private readonly calculator: EarningCalculatorService,
     private readonly staffService: StaffService,
-    private readonly businessService: BusinessService,
+    private readonly locationService: LocationService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
-  async recordForCompletedBooking(booking: BookingWithItems): Promise<StaffEarning[]> {
+  async recordForCompletedBooking(
+    booking: BookingWithItems,
+  ): Promise<StaffEarning[]> {
     try {
       return await this.createBookingCommission(booking);
     } catch (err) {
@@ -61,7 +66,11 @@ export class StaffEarningsService {
     }
   }
 
-  async reverseForBooking(booking: BookingWithItems, reason: string | null, actor?: AuditActor): Promise<StaffEarning[]> {
+  async reverseForBooking(
+    booking: BookingWithItems,
+    reason: string | null,
+    actor?: AuditActor,
+  ): Promise<StaffEarning[]> {
     try {
       return await this.reverseBookingCommission(booking, reason, actor);
     } catch (err) {
@@ -73,16 +82,23 @@ export class StaffEarningsService {
     }
   }
 
-  async createManual(staffId: string, dto: CreateManualEarningDto, actor: AuditActor): Promise<StaffEarning> {
+  async createManual(
+    staffId: string,
+    dto: CreateManualEarningDto,
+    actor: AuditActor,
+  ): Promise<StaffEarning> {
     const staff = await this.staffService.findById(staffId);
-    const { timezone, currency } = await this.businessService.getLocale(staff.businessId);
-    const earnedOnStr = dto.earnedOn ?? TimeService.zonedDateStr(new Date(), timezone);
+    const { timezone, currency } = await this.locationService.getLocale(
+      staff.locationId,
+    );
+    const earnedOnStr =
+      dto.earnedOn ?? TimeService.zonedDateStr(new Date(), timezone);
     const earnedOn = TimeService.dateOnly(earnedOnStr);
-    await this.assertDateUnlocked(staff.businessId, earnedOn);
+    await this.assertDateUnlocked(staff.locationId, earnedOn);
 
     const amount = this.calculator.manualAmount(dto.type, dto.amount);
     const earning = await this.insertEarning({
-      businessId: staff.businessId,
+      locationId: staff.locationId,
       staffId,
       type: dto.type,
       source: StaffEarningSource.MANUAL,
@@ -95,28 +111,45 @@ export class StaffEarningsService {
       idempotencyKey: this.idempotencyKey({ kind: 'manual' }),
     });
 
-    this.emitEarningAudit(staff.businessId, staffId, AuditEvent.STAFF_EARNING_ADDED, actor, {
-      type: dto.type,
-      amount: MoneyService.format(amount),
-      currency,
-      reason: dto.reason,
-    });
+    this.emitEarningAudit(
+      staff.locationId,
+      staffId,
+      AuditEvent.STAFF_EARNING_ADDED,
+      actor,
+      {
+        type: dto.type,
+        amount: MoneyService.format(amount),
+        currency,
+        reason: dto.reason,
+      },
+    );
     return earning;
   }
 
-  async recordProductSale(businessId: string, dto: RecordProductSaleDto, actor: AuditActor): Promise<StaffEarning> {
+  async recordProductSale(
+    locationId: string,
+    dto: RecordProductSaleDto,
+    actor: AuditActor,
+  ): Promise<StaffEarning> {
     const staff = await this.staffService.findById(dto.staffId);
-    if (staff.businessId !== businessId) throw new AppException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND);
-    const { currency } = await this.businessService.getLocale(businessId);
+    if (staff.locationId !== locationId)
+      throw new AppException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND);
+    const { currency } = await this.locationService.getLocale(locationId);
     const earnedOn = TimeService.dateOnly(dto.soldOn);
     const plan = await this.compensation.resolveForDate(staff.id, earnedOn);
     if (!plan || plan.productCommissionPercent === null) {
-      throw new AppException(ErrorCode.PRODUCT_COMMISSION_NOT_CONFIGURED, HttpStatus.CONFLICT);
+      throw new AppException(
+        ErrorCode.PRODUCT_COMMISSION_NOT_CONFIGURED,
+        HttpStatus.CONFLICT,
+      );
     }
 
-    const amount = this.calculator.commission(dto.amount, plan.productCommissionPercent);
+    const amount = this.calculator.commission(
+      dto.amount,
+      plan.productCommissionPercent,
+    );
     const earning = await this.insertEarning({
-      businessId,
+      locationId,
       staffId: staff.id,
       type: StaffEarningType.PRODUCT_COMMISSION,
       source: StaffEarningSource.PRODUCT_SALE,
@@ -128,22 +161,31 @@ export class StaffEarningsService {
       description: dto.description,
       actorId: actor.id ?? null,
       actorName: actor.name,
-      idempotencyKey: this.idempotencyKey({ kind: 'product', externalId: dto.externalId }),
+      idempotencyKey: this.idempotencyKey({
+        kind: 'product',
+        externalId: dto.externalId,
+      }),
       compensationPlanId: plan.id,
       externalId: dto.externalId,
     });
 
-    this.emitEarningAudit(businessId, staff.id, AuditEvent.STAFF_EARNING_ADDED, actor, {
-      type: StaffEarningType.PRODUCT_COMMISSION,
-      amount: MoneyService.format(amount),
-      currency,
-      externalId: dto.externalId,
-    });
+    this.emitEarningAudit(
+      locationId,
+      staff.id,
+      AuditEvent.STAFF_EARNING_ADDED,
+      actor,
+      {
+        type: StaffEarningType.PRODUCT_COMMISSION,
+        amount: MoneyService.format(amount),
+        currency,
+        externalId: dto.externalId,
+      },
+    );
     return earning;
   }
 
   async materializeHourly(
-    businessId: string,
+    locationId: string,
     currency: string,
     shift: StaffShift,
     plan: CompensationPlanWithRates | null,
@@ -158,7 +200,7 @@ export class StaffEarningsService {
     const amount = this.calculator.hourly(hours, plan.hourlyRate);
     return this.insertEarning(
       {
-        businessId,
+        locationId,
         staffId: shift.staffId,
         type: StaffEarningType.HOURLY,
         source: StaffEarningSource.SHIFT,
@@ -167,7 +209,10 @@ export class StaffEarningsService {
         currency,
         rateAmount: MoneyService.decimal(plan.hourlyRate),
         quantity: MoneyService.quantize(hours),
-        idempotencyKey: this.idempotencyKey({ kind: 'shift', shiftId: shift.id }),
+        idempotencyKey: this.idempotencyKey({
+          kind: 'shift',
+          shiftId: shift.id,
+        }),
         compensationPlanId: plan.id,
         shiftId: shift.id,
       },
@@ -177,7 +222,7 @@ export class StaffEarningsService {
 
   async materializeSalary(
     params: {
-      businessId: string;
+      locationId: string;
       staffId: string;
       periodId: string;
       earnedOn: Date;
@@ -191,7 +236,7 @@ export class StaffEarningsService {
   ): Promise<StaffEarning> {
     return this.insertEarning(
       {
-        businessId: params.businessId,
+        locationId: params.locationId,
         staffId: params.staffId,
         type: StaffEarningType.FIXED_SALARY,
         source: StaffEarningSource.PAYROLL,
@@ -200,7 +245,11 @@ export class StaffEarningsService {
         currency: params.currency,
         rateAmount: params.rateAmount,
         quantity: params.quantity,
-        idempotencyKey: this.idempotencyKey({ kind: 'salary', periodId: params.periodId, staffId: params.staffId }),
+        idempotencyKey: this.idempotencyKey({
+          kind: 'salary',
+          periodId: params.periodId,
+          staffId: params.staffId,
+        }),
         compensationPlanId: params.planId,
       },
       tx,
@@ -208,7 +257,7 @@ export class StaffEarningsService {
   }
 
   async createPeriodCorrection(params: {
-    businessId: string;
+    locationId: string;
     staffId: string;
     resultId: string;
     amount: Prisma.Decimal;
@@ -218,7 +267,7 @@ export class StaffEarningsService {
     actor: AuditActor;
   }): Promise<StaffEarning> {
     const earning = await this.insertEarning({
-      businessId: params.businessId,
+      locationId: params.locationId,
       staffId: params.staffId,
       type: StaffEarningType.CORRECTION,
       source: StaffEarningSource.PAYROLL,
@@ -228,21 +277,34 @@ export class StaffEarningsService {
       reason: params.reason,
       actorId: params.actor.id ?? null,
       actorName: params.actor.name,
-      idempotencyKey: this.idempotencyKey({ kind: 'correction', resultId: params.resultId }),
+      idempotencyKey: this.idempotencyKey({
+        kind: 'correction',
+        resultId: params.resultId,
+      }),
       correctsPayrollResultId: params.resultId,
     });
-    this.emitEarningAudit(params.businessId, params.resultId, AuditEvent.PAYROLL_CORRECTED, params.actor, {
-      staffId: params.staffId,
-      type: StaffEarningType.CORRECTION,
-      amount: MoneyService.format(params.amount),
-      currency: params.currency,
-      reason: params.reason,
-    }, AuditEntity.PAYROLL);
+    this.emitEarningAudit(
+      params.locationId,
+      params.resultId,
+      AuditEvent.PAYROLL_CORRECTED,
+      params.actor,
+      {
+        staffId: params.staffId,
+        type: StaffEarningType.CORRECTION,
+        amount: MoneyService.format(params.amount),
+        currency: params.currency,
+        reason: params.reason,
+      },
+      AuditEntity.PAYROLL,
+    );
     return earning;
   }
 
-  async search(businessId: string, dto: StaffEarningSearchRequestDto): Promise<PaginatedResult<StaffEarning>> {
-    const where: Prisma.StaffEarningWhereInput = { businessId };
+  async search(
+    locationId: string,
+    dto: StaffEarningSearchRequestDto,
+  ): Promise<PaginatedResult<StaffEarning>> {
+    const where: Prisma.StaffEarningWhereInput = { locationId };
     if (dto.staffId) where.staffId = dto.staffId;
     if (dto.type) where.type = dto.type;
     if (dto.from || dto.to) {
@@ -251,7 +313,10 @@ export class StaffEarningsService {
       if (dto.to) where.earnedOn.lte = TimeService.dateOnly(dto.to);
     }
 
-    const findArgs: Prisma.StaffEarningFindManyArgs = { where, orderBy: this.earningOrder(dto) };
+    const findArgs: Prisma.StaffEarningFindManyArgs = {
+      where,
+      orderBy: this.earningOrder(dto),
+    };
     if (!dto.isExport) {
       findArgs.skip = (dto.page - 1) * dto.pageSize;
       findArgs.take = dto.pageSize;
@@ -264,7 +329,10 @@ export class StaffEarningsService {
     return { items, totalItems };
   }
 
-  async searchByPeriod(periodId: string, dto: PayrollPeriodEarningsRequestDto): Promise<PaginatedResult<StaffEarning>> {
+  async searchByPeriod(
+    periodId: string,
+    dto: PayrollPeriodEarningsRequestDto,
+  ): Promise<PaginatedResult<StaffEarning>> {
     const where: Prisma.StaffEarningWhereInput = {
       payrollResult: { periodId },
     };
@@ -296,9 +364,13 @@ export class StaffEarningsService {
     );
   }
 
-  listUnpaidThrough(businessId: string, to: Date, tx?: Prisma.TransactionClient): Promise<StaffEarning[]> {
+  listUnpaidThrough(
+    locationId: string,
+    to: Date,
+    tx?: Prisma.TransactionClient,
+  ): Promise<StaffEarning[]> {
     return this.store(tx).staffEarning.findMany({
-      where: { businessId, earnedOn: { lte: to }, payrollResultId: null },
+      where: { locationId, earnedOn: { lte: to }, payrollResultId: null },
       orderBy: [{ staffId: 'asc' }, { earnedOn: 'asc' }],
     });
   }
@@ -311,9 +383,15 @@ export class StaffEarningsService {
     });
   }
 
-  async detachPeriodEarnings(periodId: string, tx?: Prisma.TransactionClient): Promise<void> {
+  async detachPeriodEarnings(
+    periodId: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<void> {
     const db = this.store(tx);
-    const results = await db.payrollResult.findMany({ where: { periodId }, select: { id: true } });
+    const results = await db.payrollResult.findMany({
+      where: { periodId },
+      select: { id: true },
+    });
     const resultIds = results.map((r) => r.id);
     if (resultIds.length === 0) return;
     await db.staffEarning.updateMany({
@@ -323,7 +401,7 @@ export class StaffEarningsService {
   }
 
   async deleteDraftPeriodComponents(
-    businessId: string,
+    locationId: string,
     periodId: string,
     from: Date,
     to: Date,
@@ -331,18 +409,31 @@ export class StaffEarningsService {
   ): Promise<void> {
     await this.store(tx).staffEarning.deleteMany({
       where: {
-        businessId,
+        locationId,
         earnedOn: { gte: from, lte: to },
         payrollResultId: null,
         OR: [
           { source: StaffEarningSource.SHIFT, type: StaffEarningType.HOURLY },
-          { source: StaffEarningSource.PAYROLL, type: StaffEarningType.FIXED_SALARY, idempotencyKey: { startsWith: this.idempotencyKey({ kind: 'salaryPeriod', periodId }) } },
+          {
+            source: StaffEarningSource.PAYROLL,
+            type: StaffEarningType.FIXED_SALARY,
+            idempotencyKey: {
+              startsWith: this.idempotencyKey({
+                kind: 'salaryPeriod',
+                periodId,
+              }),
+            },
+          },
         ],
       },
     });
   }
 
-  async attachToResult(earningIds: string[], resultId: string, tx?: Prisma.TransactionClient): Promise<void> {
+  async attachToResult(
+    earningIds: string[],
+    resultId: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<void> {
     if (earningIds.length === 0) return;
     await this.store(tx).staffEarning.updateMany({
       where: { id: { in: earningIds } },
@@ -350,42 +441,63 @@ export class StaffEarningsService {
     });
   }
 
-  private async createBookingCommission(booking: BookingWithItems): Promise<StaffEarning[]> {
-    const { timezone, currency } = await this.businessService.getLocale(booking.businessId);
-    const earnedOn = TimeService.dateOnly(TimeService.zonedDateStr(booking.startAt, timezone));
+  private async createBookingCommission(
+    booking: BookingWithItems,
+  ): Promise<StaffEarning[]> {
+    const { timezone, currency } = await this.locationService.getLocale(
+      booking.locationId,
+    );
+    const earnedOn = TimeService.dateOnly(
+      TimeService.zonedDateStr(booking.startAt, timezone),
+    );
     const earnings: StaffEarning[] = [];
     for (const item of booking.items) {
-      const plan = await this.compensation.resolveForDate(item.staffId, earnedOn);
+      const plan = await this.compensation.resolveForDate(
+        item.staffId,
+        earnedOn,
+      );
       if (!plan) continue;
-      const percent = this.compensation.resolveServicePercent(plan, item.serviceId);
+      const percent = this.compensation.resolveServicePercent(
+        plan,
+        item.serviceId,
+      );
       if (percent === null) continue;
       const base = item.customPrice ?? item.chargedPrice;
       const amount = this.calculator.commission(base, percent);
-      earnings.push(await this.insertEarning({
-        businessId: booking.businessId,
-        staffId: item.staffId,
-        type: StaffEarningType.SERVICE_COMMISSION,
-        source: StaffEarningSource.BOOKING,
-        earnedOn,
-        amount,
-        currency,
-        baseAmount: MoneyService.decimal(base),
-        ratePercent: MoneyService.decimal(percent),
-        description: item.serviceTitle,
-        idempotencyKey: this.idempotencyKey({ kind: 'bookingItem', bookingItemId: item.id }),
-        compensationPlanId: plan.id,
-        bookingId: booking.id,
-        bookingItemId: item.id,
-      }));
+      earnings.push(
+        await this.insertEarning({
+          locationId: booking.locationId,
+          staffId: item.staffId,
+          type: StaffEarningType.SERVICE_COMMISSION,
+          source: StaffEarningSource.BOOKING,
+          earnedOn,
+          amount,
+          currency,
+          baseAmount: MoneyService.decimal(base),
+          ratePercent: MoneyService.decimal(percent),
+          description: item.serviceTitle,
+          idempotencyKey: this.idempotencyKey({
+            kind: 'bookingItem',
+            bookingItemId: item.id,
+          }),
+          compensationPlanId: plan.id,
+          bookingId: booking.id,
+          bookingItemId: item.id,
+        }),
+      );
     }
     return earnings;
   }
 
-  private async reverseBookingCommission(booking: BookingWithItems, reason: string | null, actor?: AuditActor): Promise<StaffEarning[]> {
+  private async reverseBookingCommission(
+    booking: BookingWithItems,
+    reason: string | null,
+    actor?: AuditActor,
+  ): Promise<StaffEarning[]> {
     const itemIds = booking.items.map((item) => item.id);
     const originals = await this.db.staffEarning.findMany({
       where: {
-        businessId: booking.businessId,
+        locationId: booking.locationId,
         bookingItemId: { in: itemIds },
         type: StaffEarningType.SERVICE_COMMISSION,
         source: StaffEarningSource.BOOKING,
@@ -401,7 +513,7 @@ export class StaffEarningsService {
         continue;
       }
       const reversal = await this.insertEarning({
-        businessId: booking.businessId,
+        locationId: booking.locationId,
         staffId: original.staffId,
         type: StaffEarningType.CORRECTION,
         source: StaffEarningSource.BOOKING,
@@ -414,7 +526,10 @@ export class StaffEarningsService {
         reason,
         actorId: actor?.id ?? null,
         actorName: actor?.name ?? null,
-        idempotencyKey: this.idempotencyKey({ kind: 'bookingItemReversal', bookingItemId: original.bookingItemId ?? original.id }),
+        idempotencyKey: this.idempotencyKey({
+          kind: 'bookingItemReversal',
+          bookingItemId: original.bookingItemId ?? original.id,
+        }),
         compensationPlanId: original.compensationPlanId,
         bookingId: booking.id,
         bookingItemId: original.bookingItemId,
@@ -423,23 +538,36 @@ export class StaffEarningsService {
       reversals.push(reversal);
 
       if (actor) {
-        this.emitEarningAudit(booking.businessId, original.staffId, AuditEvent.STAFF_EARNING_REVERSED, actor, {
-          bookingId: booking.id,
-          bookingItemId: original.bookingItemId,
-          amount: MoneyService.format(reversal.amount),
-          currency: original.currency,
-        });
+        this.emitEarningAudit(
+          booking.locationId,
+          original.staffId,
+          AuditEvent.STAFF_EARNING_REVERSED,
+          actor,
+          {
+            bookingId: booking.id,
+            bookingItemId: original.bookingItemId,
+            amount: MoneyService.format(reversal.amount),
+            currency: original.currency,
+          },
+        );
       }
     }
     return reversals;
   }
 
-  private async assertDateUnlocked(businessId: string, earnedOn: Date): Promise<void> {
+  private async assertDateUnlocked(
+    locationId: string,
+    earnedOn: Date,
+  ): Promise<void> {
     const locked = await this.db.payrollPeriod.findFirst({
-      where: lockedPeriodWhere(businessId, earnedOn),
+      where: lockedPeriodWhere(locationId, earnedOn),
       select: { id: true },
     });
-    if (locked) throw new AppException(ErrorCode.STAFF_EARNING_DATE_LOCKED, HttpStatus.CONFLICT);
+    if (locked)
+      throw new AppException(
+        ErrorCode.STAFF_EARNING_DATE_LOCKED,
+        HttpStatus.CONFLICT,
+      );
   }
 
   private store(tx?: Prisma.TransactionClient) {
@@ -488,8 +616,8 @@ export class StaffEarningsService {
       if (e?.code === PrismaErrorCode.UNIQUE_CONSTRAINT_VIOLATION) {
         const existing = await db.staffEarning.findUnique({
           where: {
-            businessId_idempotencyKey: {
-              businessId: data.businessId,
+            locationId_idempotencyKey: {
+              locationId: data.locationId,
               idempotencyKey: data.idempotencyKey,
             },
           },
@@ -501,7 +629,7 @@ export class StaffEarningsService {
   }
 
   private emitEarningAudit(
-    businessId: string,
+    locationId: string,
     entityId: string,
     eventType: AuditEvent,
     actor: AuditActor,
@@ -509,11 +637,14 @@ export class StaffEarningsService {
     entityType: AuditEntity = AuditEntity.STAFF,
   ): void {
     const event: AuditLogEvent = {
-      businessId,
+      locationId,
       entityType,
       entityId,
       eventType,
-      actionType: eventType === AuditEvent.STAFF_EARNING_REVERSED ? AuditActionType.MODIFY : AuditActionType.CREATE,
+      actionType:
+        eventType === AuditEvent.STAFF_EARNING_REVERSED
+          ? AuditActionType.MODIFY
+          : AuditActionType.CREATE,
       occurredAt: new Date(),
       actor,
       payload,

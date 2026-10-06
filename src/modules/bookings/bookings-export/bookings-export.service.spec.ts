@@ -55,7 +55,7 @@ function booking(
   const endAt = overrides.endAt ?? new Date('2026-09-24T11:00:00.000Z');
   return {
     id: 'booking-1',
-    businessId: 'business-1',
+    locationId: 'business-1',
     staffId: 'staff-1',
     serviceId: 'service-1',
     clientId: 'client-1',
@@ -85,23 +85,25 @@ function booking(
     ...overrides,
     bookingPageId: overrides.bookingPageId ?? null,
     bookingWidgetId: overrides.bookingWidgetId ?? null,
-    items: overrides.items ?? [{
-      id: `${overrides.id ?? 'booking-1'}-item-1`,
-      bookingId: overrides.id ?? 'booking-1',
-      businessId: overrides.businessId ?? 'business-1',
-      serviceId: overrides.serviceId ?? 'service-1',
-      staffId: overrides.staffId ?? 'staff-1',
-      sortOrder: 0,
-      startAt,
-      endAt,
-      serviceTitle: overrides.serviceTitle ?? 'РЎС‚СЂРёР¶РєР°',
-      serviceDuration: overrides.serviceDuration ?? 60,
-      listPrice: overrides.servicePrice ?? new Prisma.Decimal('50.00'),
-      chargedPrice: overrides.servicePrice ?? new Prisma.Decimal('50.00'),
-      customPrice: overrides.customPrice ?? null,
-      staffName: overrides.staffName ?? 'РњР°СЂРёСЏ',
-      calendarEventId: overrides.calendarEventId ?? null,
-    }],
+    items: overrides.items ?? [
+      {
+        id: `${overrides.id ?? 'booking-1'}-item-1`,
+        bookingId: overrides.id ?? 'booking-1',
+        locationId: overrides.locationId ?? 'business-1',
+        serviceId: overrides.serviceId ?? 'service-1',
+        staffId: overrides.staffId ?? 'staff-1',
+        sortOrder: 0,
+        startAt,
+        endAt,
+        serviceTitle: overrides.serviceTitle ?? 'РЎС‚СЂРёР¶РєР°',
+        serviceDuration: overrides.serviceDuration ?? 60,
+        listPrice: overrides.servicePrice ?? new Prisma.Decimal('50.00'),
+        chargedPrice: overrides.servicePrice ?? new Prisma.Decimal('50.00'),
+        customPrice: overrides.customPrice ?? null,
+        staffName: overrides.staffName ?? 'РњР°СЂРёСЏ',
+        calendarEventId: overrides.calendarEventId ?? null,
+      },
+    ],
   } as unknown as BookingWithItems;
 }
 
@@ -146,7 +148,7 @@ describe('BookingsExportService', () => {
     });
 
     const file = await service.stream('business-1', {
-      businessId: 'business-1',
+      locationId: 'business-1',
       search: 'анна',
       status: BookingStatusFilter.CONFIRMED,
       staffIds: ['staff-1'],
@@ -161,7 +163,7 @@ describe('BookingsExportService', () => {
     });
 
     expect(bookings.search).toHaveBeenCalledWith('business-1', {
-      businessId: 'business-1',
+      locationId: 'business-1',
       search: 'анна',
       status: BookingStatusFilter.CONFIRMED,
       staffIds: ['staff-1'],

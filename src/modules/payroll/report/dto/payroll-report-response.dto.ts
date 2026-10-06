@@ -15,7 +15,7 @@ export class PayrollReportResponseDto {
   periodId: string;
 
   @ApiProperty({ type: String })
-  businessName: string;
+  locationName: string;
 
   @ApiProperty({ type: String, nullable: true })
   periodName: string | null;

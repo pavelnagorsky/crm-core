@@ -2,7 +2,10 @@ import { Injectable } from '@nestjs/common';
 import { XlsxColumn } from '../../../shared/xlsx/interfaces/xlsx-column.interface.js';
 import { XlsxFile } from '../../../shared/xlsx/interfaces/xlsx-file.interface.js';
 import { XlsxService } from '../../../shared/xlsx/xlsx.service.js';
-import { DEFAULT_LANG, LocaleService } from '../../../shared/i18n/locale.service.js';
+import {
+  DEFAULT_LANG,
+  LocaleService,
+} from '../../../shared/i18n/locale.service.js';
 import { labelOf } from '../../../shared/i18n/label-of.js';
 import { I18nLocale } from '../../../shared/interfaces/i18n-locale.interface.js';
 import { MoneyService } from '../../../shared/money/money.service.js';
@@ -36,7 +39,11 @@ export class BookingsExportService {
     private readonly locale: LocaleService,
   ) {}
 
-  async stream(businessId: string, dto: BookingExportRequestDto, lang = DEFAULT_LANG): Promise<XlsxFile> {
+  async stream(
+    locationId: string,
+    dto: BookingExportRequestDto,
+    lang = DEFAULT_LANG,
+  ): Promise<XlsxFile> {
     const messages = this.locale.get(lang);
     const text = messages.documents.bookings;
     const columns: XlsxColumn<BookingRow>[] = [
@@ -57,8 +64,8 @@ export class BookingsExportService {
       { header: text.cancellationReason, key: 'cancellationReason', width: 40 },
       { header: text.createdAt, key: 'createdAt' },
     ];
-    const { items } = await this.bookingsService.search(businessId, {
-      businessId,
+    const { items } = await this.bookingsService.search(locationId, {
+      locationId,
       search: dto.search,
       status: dto.status,
       staffIds: dto.staffIds,
@@ -74,10 +81,18 @@ export class BookingsExportService {
       pageSize: 1,
       isExport: true,
     });
-    return XlsxService.table(items.flatMap((booking) => this.toRows(booking, messages)), columns, 'bookings', text.sheet);
+    return XlsxService.table(
+      items.flatMap((booking) => this.toRows(booking, messages)),
+      columns,
+      'bookings',
+      text.sheet,
+    );
   }
 
-  private toRows(booking: BookingWithItems, messages: I18nLocale): BookingRow[] {
+  private toRows(
+    booking: BookingWithItems,
+    messages: I18nLocale,
+  ): BookingRow[] {
     return booking.items.map((item) => ({
       startAt: booking.startAt.toISOString(),
       endAt: booking.endAt.toISOString(),

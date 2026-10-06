@@ -17,10 +17,15 @@ export class PublicBookingRateLimiter {
 
   private consume(key: string, limit: number): void {
     const now = Date.now();
-    const recent = (this.hits.get(key) ?? []).filter((ts) => now - ts < WINDOW_MS);
+    const recent = (this.hits.get(key) ?? []).filter(
+      (ts) => now - ts < WINDOW_MS,
+    );
     if (recent.length >= limit) {
       this.hits.set(key, recent);
-      throw new AppException(ErrorCode.BOOKING_RATE_LIMITED, HttpStatus.TOO_MANY_REQUESTS);
+      throw new AppException(
+        ErrorCode.BOOKING_RATE_LIMITED,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
     recent.push(now);
     this.hits.set(key, recent);

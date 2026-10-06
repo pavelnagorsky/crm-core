@@ -20,8 +20,12 @@ describe('ClientImportFileInterceptor', () => {
 
     expect(error).toBeInstanceOf(AppException);
     const exception = error as AppException;
-    expect(exception.errorCode).toBe(ErrorCode.CLIENT_IMPORT_FILE_TOO_LARGE.code);
-    expect(exception.message).toBe(ErrorCode.CLIENT_IMPORT_FILE_TOO_LARGE.message);
+    expect(exception.errorCode).toBe(
+      ErrorCode.CLIENT_IMPORT_FILE_TOO_LARGE.code,
+    );
+    expect(exception.message).toBe(
+      ErrorCode.CLIENT_IMPORT_FILE_TOO_LARGE.message,
+    );
     expect(exception.getStatus()).toBe(HttpStatus.PAYLOAD_TOO_LARGE);
   });
 });

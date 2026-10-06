@@ -14,6 +14,13 @@ export function reminderWindow(now: Date): { from: Date; to: Date } {
   };
 }
 
-export function isAutoCompletable(status: BookingStatus, endAt: Date, now: Date): boolean {
-  return endAt.getTime() <= now.getTime() && AUTO_COMPLETABLE_STATUSES.includes(status);
+export function isAutoCompletable(
+  status: BookingStatus,
+  endAt: Date,
+  now: Date,
+): boolean {
+  return (
+    endAt.getTime() <= now.getTime() &&
+    AUTO_COMPLETABLE_STATUSES.includes(status)
+  );
 }

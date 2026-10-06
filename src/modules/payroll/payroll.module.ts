@@ -1,5 +1,5 @@
 import { Module } from '@nestjs/common';
-import { BusinessModule } from '../business/business.module.js';
+import { LocationModule } from '../location/location.module.js';
 import { ServicesModule } from '../services/services.module.js';
 import { StaffModule } from '../staff/staff.module.js';
 import { StaffCompensationController } from './compensation/staff-compensation.controller.js';
@@ -14,8 +14,12 @@ import { PayrollReportService } from './report/payroll-report.service.js';
 import { I18nModule } from '../../shared/i18n/i18n.module.js';
 
 @Module({
-  imports: [StaffModule, BusinessModule, ServicesModule, I18nModule],
-  controllers: [StaffCompensationController, StaffEarningsController, PayrollController],
+  imports: [StaffModule, LocationModule, ServicesModule, I18nModule],
+  controllers: [
+    StaffCompensationController,
+    StaffEarningsController,
+    PayrollController,
+  ],
   providers: [
     EarningCalculatorService,
     PayrollComputeService,

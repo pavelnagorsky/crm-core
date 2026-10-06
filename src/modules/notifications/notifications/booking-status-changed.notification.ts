@@ -6,7 +6,10 @@ import { BookingNotificationData } from './booking-notification-data.interface.j
 
 export type BookingStatusChangedStatus = 'CONFIRMED' | 'CANCELLED';
 
-export class BookingStatusChangedNotification extends AbstractNotification implements HasEmailChannel {
+export class BookingStatusChangedNotification
+  extends AbstractNotification
+  implements HasEmailChannel
+{
   readonly strategy = DeliveryStrategy.BEST_EFFORT;
   readonly emailTemplate = 'booking-status-changed' as const;
 

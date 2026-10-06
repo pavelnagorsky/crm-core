@@ -7,7 +7,12 @@ export class CreateServiceCategoryDto {
   @MaxLength(255)
   name: string;
 
-  @ApiProperty({ type: String, maxLength: 500, required: false, nullable: true })
+  @ApiProperty({
+    type: String,
+    maxLength: 500,
+    required: false,
+    nullable: true,
+  })
   @IsOptional()
   @IsString()
   @MaxLength(500)

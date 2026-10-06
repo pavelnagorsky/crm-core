@@ -21,10 +21,17 @@ export class AuditService {
 
   @OnEvent(AUDIT_EVENT)
   async handleAuditEvent(event: AuditLogEvent): Promise<void> {
+    const brandId = event.brandId ?? event.businessId;
+    if (!brandId) {
+      this.logger.error('Failed to persist audit log: missing brandId');
+      return;
+    }
+
     try {
       await this.db.auditLog.create({
         data: {
-          businessId: event.businessId,
+          brandId,
+          locationId: event.locationId ?? null,
           entityType: event.entityType,
           entityId: event.entityId,
           eventType: event.eventType,
@@ -37,16 +44,19 @@ export class AuditService {
         },
       });
     } catch (err) {
-      this.logger.error('Failed to persist audit log', err instanceof Error ? err.stack : String(err));
+      this.logger.error(
+        'Failed to persist audit log',
+        err instanceof Error ? err.stack : String(err),
+      );
     }
   }
 
   async getHistory(
-    businessId: string,
+    brandId: string,
     dto: AuditHistoryRequestDto,
   ): Promise<PaginatedResult<AuditLogItemDto>> {
     const where = {
-      businessId,
+      brandId,
       entityType: dto.entityType,
       entityId: dto.entityId,
     };
@@ -54,7 +64,10 @@ export class AuditService {
     const [logs, totalItems] = await this.db.$transaction([
       this.db.auditLog.findMany({
         where,
-        orderBy: stableOrderBy({ occurredAt: OrderDirection.DESC }, OrderDirection.DESC),
+        orderBy: stableOrderBy(
+          { occurredAt: OrderDirection.DESC },
+          OrderDirection.DESC,
+        ),
         skip: (dto.page - 1) * dto.pageSize,
         take: dto.pageSize,
       }),

@@ -4,7 +4,10 @@ import { BookingChannelStatus } from '../enums/booking-channel-status.enum.js';
 import { BookingWidgetButtonPosition } from '../enums/booking-widget-button-position.enum.js';
 import { BookingWidgetPlacement } from '../enums/booking-widget-placement.enum.js';
 import { BookingWidgetTrigger } from '../enums/booking-widget-trigger.enum.js';
-import { resolveBookingFormTheme, toBookingFormConfig } from '../booking-form.js';
+import {
+  resolveBookingFormTheme,
+  toBookingFormConfig,
+} from '../booking-form.js';
 import { BookingFormConfigDto } from './booking-form-config.dto.js';
 import { BookingFormThemeDto } from './booking-form-theme.dto.js';
 
@@ -13,7 +16,7 @@ export class BookingWidgetResponseDto {
   id: string;
 
   @ApiProperty({ type: String })
-  businessId: string;
+  locationId: string;
 
   @ApiProperty({ type: String })
   title: string;
@@ -27,13 +30,19 @@ export class BookingWidgetResponseDto {
   @ApiProperty({ type: () => BookingFormThemeDto })
   theme: BookingFormThemeDto;
 
-  @ApiProperty({ enum: BookingWidgetPlacement, enumName: 'BookingWidgetPlacement' })
+  @ApiProperty({
+    enum: BookingWidgetPlacement,
+    enumName: 'BookingWidgetPlacement',
+  })
   placement: BookingWidgetPlacement;
 
   @ApiProperty({ enum: BookingWidgetTrigger, enumName: 'BookingWidgetTrigger' })
   trigger: BookingWidgetTrigger;
 
-  @ApiProperty({ enum: BookingWidgetButtonPosition, enumName: 'BookingWidgetButtonPosition' })
+  @ApiProperty({
+    enum: BookingWidgetButtonPosition,
+    enumName: 'BookingWidgetButtonPosition',
+  })
   buttonPosition: BookingWidgetButtonPosition;
 
   @ApiProperty({ type: [String] })
@@ -51,7 +60,7 @@ export class BookingWidgetResponseDto {
   static fromEntity(widget: BookingWidget): BookingWidgetResponseDto {
     const dto = new BookingWidgetResponseDto();
     dto.id = widget.id;
-    dto.businessId = widget.businessId;
+    dto.locationId = widget.locationId;
     dto.title = widget.title;
     dto.status = widget.status;
     dto.form = toBookingFormConfig(widget);

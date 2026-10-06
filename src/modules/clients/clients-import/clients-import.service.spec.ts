@@ -10,7 +10,11 @@ import { ClientImportFileReason } from './enums/client-import-file-reason.enum.j
 import { ClientSheetColumn } from './enums/client-sheet-column.enum.js';
 import { ClientImportRow } from './interfaces/client-import-row.interface.js';
 
-const actor: AuditActor = { id: 'user-1', name: 'Ольга', role: AuditActorRole.OWNER };
+const actor: AuditActor = {
+  id: 'user-1',
+  name: 'Ольга',
+  role: AuditActorRole.OWNER,
+};
 
 function row(phone: string): ClientImportRow {
   return {
@@ -26,8 +30,16 @@ function row(phone: string): ClientImportRow {
 
 describe('ClientsImportService', () => {
   const clients = {
-    findExistingPhones: vi.fn<(businessId: string, phones: string[]) => Promise<Set<string>>>(),
-    insertImported: vi.fn<(businessId: string, rows: ClientImportRow[], actor: AuditActor) => Promise<number>>(),
+    findExistingPhones:
+      vi.fn<(brandId: string, phones: string[]) => Promise<Set<string>>>(),
+    insertImported:
+      vi.fn<
+        (
+          brandId: string,
+          rows: ClientImportRow[],
+          actor: AuditActor,
+        ) => Promise<number>
+      >(),
   };
   const sheet = {
     read: vi.fn<ClientsSheetService['read']>(),
@@ -57,7 +69,9 @@ describe('ClientsImportService', () => {
 
     expect(error).toBeInstanceOf(AppException);
     const exception = error as AppException;
-    expect(exception.errorCode).toBe(ErrorCode.CLIENT_IMPORT_MISSING_COLUMNS.code);
+    expect(exception.errorCode).toBe(
+      ErrorCode.CLIENT_IMPORT_MISSING_COLUMNS.code,
+    );
     expect(exception.message).toBe('Import file is missing required columns');
     expect(exception.getStatus()).toBe(HttpStatus.BAD_REQUEST);
     expect(exception.payload).toEqual([ClientSheetColumn.PHONE]);
@@ -68,21 +82,44 @@ describe('ClientsImportService', () => {
   it('inserts only a phone the business does not have yet and counts that client as imported', async () => {
     const fresh = row('+375291112233');
     const existing = row('+375292223344');
-    sheet.read.mockResolvedValue({ ok: true, rows: [fresh, existing], invalidCount: 2, duplicateCount: 1 });
+    sheet.read.mockResolvedValue({
+      ok: true,
+      rows: [fresh, existing],
+      invalidCount: 2,
+      duplicateCount: 1,
+    });
     clients.findExistingPhones.mockResolvedValue(new Set([existing.phone]));
     clients.insertImported.mockResolvedValue(1);
 
     const result = await service.import('business-1', undefined, actor);
 
-    expect(clients.findExistingPhones).toHaveBeenCalledWith('business-1', [fresh.phone, existing.phone]);
-    expect(clients.insertImported).toHaveBeenCalledWith('business-1', [fresh], actor);
-    expect(result).toEqual({ successCount: 1, duplicateCount: 2, errorCount: 2 });
+    expect(clients.findExistingPhones).toHaveBeenCalledWith('business-1', [
+      fresh.phone,
+      existing.phone,
+    ]);
+    expect(clients.insertImported).toHaveBeenCalledWith(
+      'business-1',
+      [fresh],
+      actor,
+    );
+    expect(result).toEqual({
+      successCount: 1,
+      duplicateCount: 2,
+      errorCount: 2,
+    });
   });
 
   it('does not query the database when every row is invalid', async () => {
-    sheet.read.mockResolvedValue({ ok: true, rows: [], invalidCount: 5, duplicateCount: 0 });
+    sheet.read.mockResolvedValue({
+      ok: true,
+      rows: [],
+      invalidCount: 5,
+      duplicateCount: 0,
+    });
 
-    await expect(service.import('business-1', undefined, actor)).resolves.toEqual({
+    await expect(
+      service.import('business-1', undefined, actor),
+    ).resolves.toEqual({
       successCount: 0,
       duplicateCount: 0,
       errorCount: 5,

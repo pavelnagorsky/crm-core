@@ -1,7 +1,11 @@
 import { NotFoundException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { CalendarEvent, CalendarEventRepeatType, CalendarEventType } from '@prisma/client';
+import {
+  CalendarEvent,
+  CalendarEventRepeatType,
+  CalendarEventType,
+} from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { MoneyService } from '../../shared/money/money.service.js';
@@ -17,7 +21,7 @@ import { UpdateCalendarEventDto } from './dto/update-calendar-event.dto.js';
 function seriesEvent(): CalendarEvent {
   return {
     id: 'event-1',
-    businessId: 'biz',
+    locationId: 'biz',
     staffId: 'staff-1',
     type: CalendarEventType.BLOCK,
     reason: null,
@@ -56,14 +60,18 @@ describe('CalendarService.update', () => {
       findFirst: vi.fn(),
       update: vi.fn(),
     },
-    $transaction: vi.fn(async (fn: (client: typeof tx) => Promise<CalendarEvent>) => fn(tx)),
+    $transaction: vi.fn(
+      async (fn: (client: typeof tx) => Promise<CalendarEvent>) => fn(tx),
+    ),
   };
 
   let service: CalendarService;
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    db.$transaction.mockImplementation(async (fn: (client: typeof tx) => Promise<CalendarEvent>) => fn(tx));
+    db.$transaction.mockImplementation(
+      async (fn: (client: typeof tx) => Promise<CalendarEvent>) => fn(tx),
+    );
     const module = await Test.createTestingModule({
       providers: [
         CalendarService,
@@ -85,7 +93,7 @@ describe('CalendarService.update', () => {
     await service.update('biz', 'event-1', singleOccurrenceUpdate());
 
     expect(db.calendarEvent.findFirst).toHaveBeenCalledWith({
-      where: { id: 'event-1', businessId: 'biz' },
+      where: { id: 'event-1', locationId: 'biz' },
     });
     expect(tx.calendarEventCancelledOccurrence.upsert).toHaveBeenCalledWith({
       where: {
@@ -99,7 +107,7 @@ describe('CalendarService.update', () => {
     });
     expect(tx.calendarEvent.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
-        businessId: 'biz',
+        locationId: 'biz',
         staffId: 'staff-1',
         startDateTime: new Date('2026-10-08T11:00:00'),
         endDateTime: new Date('2026-10-08T12:00:00'),
@@ -114,7 +122,9 @@ describe('CalendarService.update', () => {
   it('returns 404 when the block belongs to another business', async () => {
     db.calendarEvent.findFirst.mockResolvedValue(null);
 
-    await expect(service.update('other', 'event-1', singleOccurrenceUpdate())).rejects.toBeInstanceOf(NotFoundException);
+    await expect(
+      service.update('other', 'event-1', singleOccurrenceUpdate()),
+    ).rejects.toBeInstanceOf(NotFoundException);
   });
 });
 
@@ -128,14 +138,18 @@ describe('CalendarService.moveOccurrence', () => {
       findFirst: vi.fn(),
       update: vi.fn(),
     },
-    $transaction: vi.fn(async (fn: (client: typeof tx) => Promise<CalendarEvent>) => fn(tx)),
+    $transaction: vi.fn(
+      async (fn: (client: typeof tx) => Promise<CalendarEvent>) => fn(tx),
+    ),
   };
 
   let service: CalendarService;
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    db.$transaction.mockImplementation(async (fn: (client: typeof tx) => Promise<CalendarEvent>) => fn(tx));
+    db.$transaction.mockImplementation(
+      async (fn: (client: typeof tx) => Promise<CalendarEvent>) => fn(tx),
+    );
     const module = await Test.createTestingModule({
       providers: [
         CalendarService,
@@ -171,7 +185,11 @@ describe('CalendarService.moveOccurrence', () => {
   });
 
   it('detaches one occurrence and keeps the stored title, reason, and notes', async () => {
-    db.calendarEvent.findFirst.mockResolvedValue({ ...seriesEvent(), reason: 'перерыв', notes: 'кухня' });
+    db.calendarEvent.findFirst.mockResolvedValue({
+      ...seriesEvent(),
+      reason: 'перерыв',
+      notes: 'кухня',
+    });
     tx.calendarEvent.create.mockResolvedValue({ id: 'exception-1' });
 
     await service.moveOccurrence('biz', 'event-1', {
@@ -193,7 +211,7 @@ describe('CalendarService.moveOccurrence', () => {
     });
     expect(tx.calendarEvent.create).toHaveBeenCalledWith({
       data: {
-        businessId: 'biz',
+        locationId: 'biz',
         staffId: 'staff-1',
         type: CalendarEventType.BLOCK,
         reason: 'перерыв',
@@ -224,7 +242,7 @@ describe('CalendarService.moveOccurrence', () => {
 
 describe('CalendarService.getManualAvailableSlots', () => {
   const db = {
-    business: { findUnique: vi.fn() },
+    location: { findUnique: vi.fn() },
     service: { findMany: vi.fn() },
     staffShift: { findMany: vi.fn() },
     calendarEvent: { findMany: vi.fn() },
@@ -251,8 +269,10 @@ describe('CalendarService.getManualAvailableSlots', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-09-28T10:00:00.000Z'));
     vi.clearAllMocks();
-    db.business.findUnique.mockResolvedValue(business);
-    db.service.findMany.mockResolvedValue([{ id: 'service-1', durationMinutes: 30, bufferMinutes: 0 }]);
+    db.location.findUnique.mockResolvedValue(business);
+    db.service.findMany.mockResolvedValue([
+      { id: 'service-1', durationMinutes: 30, bufferMinutes: 0 },
+    ]);
     staff.resolveStaffForService.mockResolvedValue([{ id: 'staff-1' }]);
     db.staffShift.findMany.mockResolvedValue([
       { staffId: 'staff-1', date: new Date('2026-09-28T00:00:00.000Z') },
@@ -292,7 +312,10 @@ describe('CalendarService.getManualAvailableSlots', () => {
     expect(db.staffShift.findMany).toHaveBeenCalledWith({
       where: {
         staffId: { in: ['staff-1'] },
-        date: { gte: TimeService.dateOnly('2026-09-28'), lte: new Date('2026-09-30T23:59:59.999Z') },
+        date: {
+          gte: TimeService.dateOnly('2026-09-28'),
+          lte: new Date('2026-09-30T23:59:59.999Z'),
+        },
       },
     });
     expect(compute.collectSlotsForDate).toHaveBeenCalledWith(
@@ -307,7 +330,10 @@ describe('CalendarService.getManualAvailableSlots', () => {
   });
 
   it('excludes the edited booking calendar events from manual slot blocking', async () => {
-    bookings.linkedCalendarEventIdsForBooking.mockResolvedValue(['event-1', 'event-2']);
+    bookings.linkedCalendarEventIdsForBooking.mockResolvedValue([
+      'event-1',
+      'event-2',
+    ]);
 
     await service.getManualAvailableSlots('biz', {
       serviceId: 'service-1',
@@ -322,7 +348,9 @@ describe('CalendarService.getManualAvailableSlots', () => {
     );
     expect(db.calendarEvent.findMany).toHaveBeenCalledWith({
       where: expect.objectContaining({
-        AND: expect.arrayContaining([{ id: { notIn: ['event-1', 'event-2'] } }]),
+        AND: expect.arrayContaining([
+          { id: { notIn: ['event-1', 'event-2'] } },
+        ]),
       }),
       include: { cancelledOccurrences: { select: { occurrenceDate: true } } },
     });
@@ -346,8 +374,10 @@ describe('CalendarService.getManualAvailableSlots', () => {
         from: '2026-09-01',
         to: '2026-11-02',
       }),
-    ).rejects.toMatchObject({ errorCode: ErrorCode.BOOKING_SLOT_RANGE_TOO_LONG.code });
-    expect(db.business.findUnique).not.toHaveBeenCalled();
+    ).rejects.toMatchObject({
+      errorCode: ErrorCode.BOOKING_SLOT_RANGE_TOO_LONG.code,
+    });
+    expect(db.location.findUnique).not.toHaveBeenCalled();
   });
 });
 
@@ -370,7 +400,7 @@ describe('CalendarService.getCalendar', () => {
   ): CalendarEvent {
     return {
       id,
-      businessId: 'biz',
+      locationId: 'biz',
       staffId: null,
       type: CalendarEventType.BLOCK,
       reason: null,
@@ -391,8 +421,14 @@ describe('CalendarService.getCalendar', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     db.staffShift.findMany.mockResolvedValue([]);
-    business.getLocale.mockResolvedValue({ timezone: 'Europe/Moscow', currency: 'RUB' });
-    bookings.listForCalendar.mockResolvedValue({ bookings: [], linkedEventIds: [] });
+    business.getLocale.mockResolvedValue({
+      timezone: 'Europe/Moscow',
+      currency: 'RUB',
+    });
+    bookings.listForCalendar.mockResolvedValue({
+      bookings: [],
+      linkedEventIds: [],
+    });
     staff.namesByIds.mockResolvedValue(new Map());
     const module = await Test.createTestingModule({
       providers: [
@@ -410,10 +446,25 @@ describe('CalendarService.getCalendar', () => {
 
   it('keeps blocks whose interval overlaps the business-local range', async () => {
     db.calendarEvent.findMany.mockResolvedValue([
-      oneTime('in-week', '2026-09-22T07:00:00.000Z', '2026-09-22T08:00:00.000Z'),
-      oneTime('local-boundary', '2026-09-20T21:30:00.000Z', '2026-09-20T22:00:00.000Z'),
-      oneTime('spill', '2026-09-20T20:00:00.000Z', '2026-09-20T21:30:00.000Z', { title: '  ', reason: ' Обед ' }),
-      oneTime('outside', '2026-10-02T07:00:00.000Z', '2026-10-02T08:00:00.000Z'),
+      oneTime(
+        'in-week',
+        '2026-09-22T07:00:00.000Z',
+        '2026-09-22T08:00:00.000Z',
+      ),
+      oneTime(
+        'local-boundary',
+        '2026-09-20T21:30:00.000Z',
+        '2026-09-20T22:00:00.000Z',
+      ),
+      oneTime('spill', '2026-09-20T20:00:00.000Z', '2026-09-20T21:30:00.000Z', {
+        title: '  ',
+        reason: ' Обед ',
+      }),
+      oneTime(
+        'outside',
+        '2026-10-02T07:00:00.000Z',
+        '2026-10-02T08:00:00.000Z',
+      ),
     ]);
 
     const result = await service.getCalendar('biz', {
@@ -426,7 +477,11 @@ describe('CalendarService.getCalendar', () => {
       'local-boundary:2026-09-21',
       'spill:2026-09-20',
     ]);
-    expect(result.events.map((event) => event.date)).toEqual(['2026-09-22', '2026-09-21', '2026-09-20']);
+    expect(result.events.map((event) => event.date)).toEqual([
+      '2026-09-22',
+      '2026-09-21',
+      '2026-09-20',
+    ]);
     expect(result.events[0]).toMatchObject({
       entityId: 'in-week',
       type: CalendarEventType.BLOCK,
@@ -438,7 +493,11 @@ describe('CalendarService.getCalendar', () => {
       staffId: null,
       staffName: null,
     });
-    expect(result.events[2]).toMatchObject({ title: 'Обед', startTime: '23:00', endTime: '00:30' });
+    expect(result.events[2]).toMatchObject({
+      title: 'Обед',
+      startTime: '23:00',
+      endTime: '00:30',
+    });
     expect(bookings.listForCalendar).toHaveBeenCalledWith(
       'biz',
       TimeService.localToUtc('2026-09-21T00:00:00', 'Europe/Moscow'),
@@ -447,7 +506,7 @@ describe('CalendarService.getCalendar', () => {
     );
     expect(db.calendarEvent.findMany).toHaveBeenCalledWith({
       where: {
-        businessId: 'biz',
+        locationId: 'biz',
         AND: [
           {
             OR: [
@@ -461,7 +520,9 @@ describe('CalendarService.getCalendar', () => {
                 startDateTime: { lte: new Date('2026-09-28T23:59:59.999Z') },
                 OR: [
                   { repeatUntil: null },
-                  { repeatUntil: { gte: new Date('2026-09-21T00:00:00.000Z') } },
+                  {
+                    repeatUntil: { gte: new Date('2026-09-21T00:00:00.000Z') },
+                  },
                 ],
               },
             ],
@@ -510,22 +571,31 @@ describe('CalendarService.getCalendar', () => {
 
   it('projects a booking once and hides the calendar row that points at it', async () => {
     db.calendarEvent.findMany.mockResolvedValue([
-      oneTime('shadow', '2026-09-22T07:00:00.000Z', '2026-09-22T08:00:00.000Z', { staffId: 'staff-1' }),
-      oneTime('lunch', '2026-09-22T09:00:00.000Z', '2026-09-22T10:00:00.000Z', { title: 'Обед' }),
+      oneTime(
+        'shadow',
+        '2026-09-22T07:00:00.000Z',
+        '2026-09-22T08:00:00.000Z',
+        { staffId: 'staff-1' },
+      ),
+      oneTime('lunch', '2026-09-22T09:00:00.000Z', '2026-09-22T10:00:00.000Z', {
+        title: 'Обед',
+      }),
     ]);
     bookings.listForCalendar.mockResolvedValue({
-      bookings: [{
-        id: 'booking-1',
-        staffId: 'staff-1',
-        staffName: 'Анна',
-        clientFirstName: 'Иван',
-        clientLastName: 'Петров',
-        serviceTitle: 'Стрижка',
-        servicePrice: '1500.50',
-        customPrice: null,
-        startAt: new Date('2026-09-22T07:00:00.000Z'),
-        endAt: new Date('2026-09-22T08:00:00.000Z'),
-      }],
+      bookings: [
+        {
+          id: 'booking-1',
+          staffId: 'staff-1',
+          staffName: 'Анна',
+          clientFirstName: 'Иван',
+          clientLastName: 'Петров',
+          serviceTitle: 'Стрижка',
+          servicePrice: '1500.50',
+          customPrice: null,
+          startAt: new Date('2026-09-22T07:00:00.000Z'),
+          endAt: new Date('2026-09-22T08:00:00.000Z'),
+        },
+      ],
       linkedEventIds: ['shadow'],
     });
 
@@ -536,7 +606,10 @@ describe('CalendarService.getCalendar', () => {
     });
 
     expect(result.events).toEqual([
-      expect.objectContaining({ id: 'lunch:2026-09-22', type: CalendarEventType.BLOCK }),
+      expect.objectContaining({
+        id: 'lunch:2026-09-22',
+        type: CalendarEventType.BLOCK,
+      }),
       {
         id: 'booking-1',
         type: CalendarEventType.BOOKING,

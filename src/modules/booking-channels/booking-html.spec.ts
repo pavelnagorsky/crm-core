@@ -14,7 +14,8 @@ describe('sanitizeBookingHtml', () => {
   });
 
   it('keeps editor markup', () => {
-    const html = '<div class="lead" style="color:red"><span>Text</span><img src="https://cdn.example/a.png" alt="cover"><details open><summary>More</summary></details></div>';
+    const html =
+      '<div class="lead" style="color:red"><span>Text</span><img src="https://cdn.example/a.png" alt="cover"><details open><summary>More</summary></details></div>';
     const clean = sanitizeBookingHtml(html);
     expect(clean).toContain('class="lead"');
     expect(clean).toContain('style="color:red"');

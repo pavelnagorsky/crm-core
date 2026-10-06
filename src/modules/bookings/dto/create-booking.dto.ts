@@ -1,5 +1,15 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { ArrayMaxSize, ArrayNotEmpty, IsArray, IsEmail, IsOptional, IsString, IsUUID, MaxLength, Validate } from 'class-validator';
+import {
+  ArrayMaxSize,
+  ArrayNotEmpty,
+  IsArray,
+  IsEmail,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  Validate,
+} from 'class-validator';
 import { MULTI_SERVICE_MAX_ITEMS } from '../../../shared/constants/multi-service.constants.js';
 import { IsPhone } from '../../../shared/decorators/is-phone.decorator.js';
 import { IsLocalDateTime } from '../../time/decorators/is-local-date-time.validator.js';
@@ -9,19 +19,34 @@ export class CreateBookingDto {
   @ApiProperty({ type: String, format: 'uuid' })
   @Validate(AtMostOneBookingChannelConstraint)
   @IsUUID()
-  businessId: string;
+  locationId: string;
 
-  @ApiProperty({ type: String, format: 'uuid', required: false, description: 'Published booking page that produced this booking' })
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    required: false,
+    description: 'Published booking page that produced this booking',
+  })
   @IsOptional()
   @IsUUID()
   bookingPageId?: string;
 
-  @ApiProperty({ type: String, format: 'uuid', required: false, description: 'Published booking widget that produced this booking' })
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    required: false,
+    description: 'Published booking widget that produced this booking',
+  })
   @IsOptional()
   @IsUUID()
   bookingWidgetId?: string;
 
-  @ApiProperty({ type: String, format: 'uuid', required: false, deprecated: true })
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    required: false,
+    deprecated: true,
+  })
   @IsOptional()
   @IsUUID()
   serviceId?: string;
@@ -34,17 +59,31 @@ export class CreateBookingDto {
   @IsUUID(undefined, { each: true })
   serviceIds?: string[];
 
-  @ApiProperty({ type: String, format: 'uuid', required: false, nullable: true })
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    required: false,
+    nullable: true,
+  })
   @IsOptional()
   @IsUUID()
   bundleId?: string;
 
-  @ApiProperty({ type: String, format: 'uuid', required: false, nullable: true })
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    required: false,
+    nullable: true,
+  })
   @IsOptional()
   @IsUUID()
   staffId?: string;
 
-  @ApiProperty({ type: String, example: '2026-09-20T10:00:00', description: 'Local datetime in business timezone, no offset' })
+  @ApiProperty({
+    type: String,
+    example: '2026-09-20T10:00:00',
+    description: 'Local datetime in business timezone, no offset',
+  })
   @IsLocalDateTime()
   startAt: string;
 
@@ -53,7 +92,12 @@ export class CreateBookingDto {
   @MaxLength(100)
   firstName: string;
 
-  @ApiProperty({ type: String, maxLength: 100, required: false, nullable: true })
+  @ApiProperty({
+    type: String,
+    maxLength: 100,
+    required: false,
+    nullable: true,
+  })
   @IsOptional()
   @IsString()
   @MaxLength(100)
@@ -68,7 +112,12 @@ export class CreateBookingDto {
   @MaxLength(254)
   email?: string;
 
-  @ApiProperty({ type: String, maxLength: 1000, required: false, nullable: true })
+  @ApiProperty({
+    type: String,
+    maxLength: 1000,
+    required: false,
+    nullable: true,
+  })
   @IsOptional()
   @IsString()
   @MaxLength(1000)

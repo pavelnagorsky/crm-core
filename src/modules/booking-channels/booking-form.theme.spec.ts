@@ -25,7 +25,9 @@ describe('booking form theme', () => {
     expect(theme.background).toBe('#141210');
     expect(theme.line).toBe('rgba(247,241,232,0.14)');
     expect(theme.line).toBe(BOOKING_PALETTE_PRESETS[BookingPalette.INK].line);
-    expect(BOOKING_PALETTE_PRESETS[BookingPalette.WINE].line).toBe('rgba(251,240,234,0.16)');
+    expect(BOOKING_PALETTE_PRESETS[BookingPalette.WINE].line).toBe(
+      'rgba(251,240,234,0.16)',
+    );
   });
 
   it('derives a custom line from the text color at 14% alpha', () => {
@@ -45,8 +47,8 @@ describe('booking form theme', () => {
   });
 
   it('refuses a custom palette that is missing tokens', () => {
-    expect(() => resolveBookingFormTheme({ ...base, palette: BookingPalette.CUSTOM })).toThrow(
-      'Custom booking palette is incomplete',
-    );
+    expect(() =>
+      resolveBookingFormTheme({ ...base, palette: BookingPalette.CUSTOM }),
+    ).toThrow('Custom booking palette is incomplete');
   });
 });

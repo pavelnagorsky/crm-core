@@ -1,5 +1,11 @@
 import { createHash } from 'crypto';
-import { forwardRef, HttpStatus, Inject, Injectable, Logger } from '@nestjs/common';
+import {
+  forwardRef,
+  HttpStatus,
+  Inject,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import {
   BookingExecutionMode as PrismaBookingExecutionMode,
   CalendarEventRepeatType,
@@ -39,10 +45,7 @@ import { BookingClientService } from './booking-client.service.js';
 import { BookingWithItems } from './interfaces/booking-with-items.interface.js';
 import { BookingServiceSnapshot } from './interfaces/booking-service-snapshot.interface.js';
 import { ResolvedBookingItem } from './interfaces/resolved-booking-item.interface.js';
-import { BookingExecutionMode } from './enums/booking-execution-mode.enum.js';
 import { ManualBookingItemDto } from './dto/manual-booking-item.dto.js';
-
-type StaffCandidate = { id: string; name: string };
 
 @Injectable()
 export class BookingCreateService {
@@ -62,21 +65,29 @@ export class BookingCreateService {
   ) {}
 
   async createPublicBooking(
-    businessId: string,
+    locationId: string,
     dto: CreateBookingDto,
     context: PublicBookingRequestContext = { ip: 'unknown' },
   ): Promise<BookingWithItems> {
     this.rateLimiter.assertAllowed(dto.phone, context.ip);
     const attribution = await this.attribution.resolve(
-      businessId,
+      locationId,
       dto.bookingPageId,
       dto.bookingWidgetId,
       context.origin,
     );
-    const { booking, timezone, currency, bundleTitle } = await this.create(businessId, attribution, dto);
-    this.logger.log(`booking created (public): id=${booking.id} businessId=${businessId} source=${booking.source} items=${booking.items.length} bundleId=${booking.bundleId ?? '-'} startAt=${booking.startAt.toISOString()}`);
+    const { booking, timezone, currency, bundleTitle } = await this.create(
+      locationId,
+      attribution,
+      dto,
+    );
+    this.logger.log(
+      `booking created (public): id=${booking.id} locationId=${locationId} source=${booking.source} items=${booking.items.length} bundleId=${booking.bundleId ?? '-'} startAt=${booking.startAt.toISOString()}`,
+    );
     const actor: AuditActor = {
-      name: [booking.clientFirstName, booking.clientLastName].filter((part) => part.trim()).join(' '),
+      name: [booking.clientFirstName, booking.clientLastName]
+        .filter((part) => part.trim())
+        .join(' '),
       role: AuditActorRole.CLIENT,
     };
     this.emitBookingCreated(booking, actor, currency, bundleTitle);
@@ -85,39 +96,65 @@ export class BookingCreateService {
   }
 
   async createManualBooking(
-    businessId: string,
+    locationId: string,
     dto: ManualCreateBookingDto,
     actor: AuditActor,
   ): Promise<BookingWithItems> {
     const { booking, timezone, currency, bundleTitle } = await this.create(
-      businessId,
-      { source: BookingSource.MANUAL, bookingPageId: null, bookingWidgetId: null },
+      locationId,
+      {
+        source: BookingSource.MANUAL,
+        bookingPageId: null,
+        bookingWidgetId: null,
+      },
       dto,
     );
-    this.logger.log(`booking created (manual): id=${booking.id} businessId=${businessId} source=${booking.source} items=${booking.items.length} bundleId=${booking.bundleId ?? '-'} actor=${actor.name}`);
+    this.logger.log(
+      `booking created (manual): id=${booking.id} locationId=${locationId} source=${booking.source} items=${booking.items.length} bundleId=${booking.bundleId ?? '-'} actor=${actor.name}`,
+    );
     this.emitBookingCreated(booking, actor, currency, bundleTitle);
     this.emitBookingNotification(booking, timezone);
     return booking;
   }
 
   private async create(
-    businessId: string,
+    locationId: string,
     attribution: BookingAttribution,
     dto: CreateBookingDto | ManualCreateBookingDto,
-  ): Promise<{ booking: BookingWithItems; timezone: string; currency: string; bundleTitle: string | null }> {
-    const business = await this.db.business.findUnique({
-      where: { id: businessId },
-      select: { isBookingConfirmationRequired: true, timezone: true, bookingVisibility: true, currency: true },
+  ): Promise<{
+    booking: BookingWithItems;
+    timezone: string;
+    currency: string;
+    bundleTitle: string | null;
+  }> {
+    const business = await this.db.location.findUnique({
+      where: { id: locationId },
+      select: {
+        isBookingConfirmationRequired: true,
+        timezone: true,
+        bookingVisibility: true,
+        currency: true,
+      },
     });
-    if (!business) throw new AppException(ErrorCode.BOOKING_BUSINESS_NOT_FOUND, HttpStatus.NOT_FOUND);
-    if (attribution.source !== BookingSource.MANUAL && business.bookingVisibility === BookingVisibility.PRIVATE) {
-      throw new AppException(ErrorCode.BOOKING_NOT_AVAILABLE, HttpStatus.FORBIDDEN);
+    if (!business)
+      throw new AppException(
+        ErrorCode.BOOKING_BUSINESS_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
+    if (
+      attribution.source !== BookingSource.MANUAL &&
+      business.bookingVisibility === BookingVisibility.PRIVATE
+    ) {
+      throw new AppException(
+        ErrorCode.BOOKING_NOT_AVAILABLE,
+        HttpStatus.FORBIDDEN,
+      );
     }
 
     const startAt = TimeService.localToUtc(dto.startAt, business.timezone);
     const lastName = dto.lastName?.trim() || '';
     const client = await this.clientsService.resolveForBooking(
-      businessId,
+      locationId,
       dto.phone,
       dto.firstName,
       lastName,
@@ -127,9 +164,9 @@ export class BookingCreateService {
       throw new AppException(ErrorCode.CLIENT_BANNED, HttpStatus.FORBIDDEN);
     }
 
-    const selection = await this.loadSelection(businessId, dto);
+    const selection = await this.loadSelection(locationId, dto);
     const items = await this.resolveItems(
-      businessId,
+      locationId,
       selection.services,
       startAt,
       selection.executionMode,
@@ -141,8 +178,12 @@ export class BookingCreateService {
       ? BookingStatus.PENDING
       : BookingStatus.CONFIRMED;
 
-    const envelopeStart = new Date(Math.min(...items.map((item) => item.startAt.getTime())));
-    const envelopeEnd = new Date(Math.max(...items.map((item) => item.endAt.getTime())));
+    const envelopeStart = new Date(
+      Math.min(...items.map((item) => item.startAt.getTime())),
+    );
+    const envelopeEnd = new Date(
+      Math.max(...items.map((item) => item.endAt.getTime())),
+    );
     const lockKeys = this.lockKeysForItems(items, business.timezone);
 
     const booking = await this.db.$transaction(async (tx) => {
@@ -151,34 +192,48 @@ export class BookingCreateService {
       }
 
       for (const item of items) {
-        const dateStr = TimeService.zonedDateStr(item.startAt, business.timezone);
+        const dateStr = TimeService.zonedDateStr(
+          item.startAt,
+          business.timezone,
+        );
         const [shift, blockEvents] = await Promise.all([
-          tx.staffShift.findFirst({ where: { staffId: item.staffId, date: new Date(dateStr) } }),
+          tx.staffShift.findFirst({
+            where: { staffId: item.staffId, date: new Date(dateStr) },
+          }),
           tx.calendarEvent.findMany({
             where: {
-              businessId,
+              locationId,
               OR: [{ staffId: null }, { staffId: item.staffId }],
               repeatType: CalendarEventRepeatType.NONE,
               startDateTime: { lte: item.endAt },
               endDateTime: { gte: item.startAt },
             },
-            include: { cancelledOccurrences: { select: { occurrenceDate: true } } },
+            include: {
+              cancelledOccurrences: { select: { occurrenceDate: true } },
+            },
           }),
         ]);
 
         // Re-check inside the transaction using tx-fetched data; this must run under the
         // multi-staff advisory locks acquired above so parallel bookings cannot race.
-        if (!this.calendarService.isSlotFree(
-          item.staffId,
-          dateStr,
-          item.startAt,
-          item.endAt,
-          shift,
-          blockEvents,
-          business.timezone,
-        )) {
-          this.logger.warn(`slot unavailable on create: businessId=${businessId} staffId=${item.staffId} startAt=${item.startAt.toISOString()}`);
-          throw new AppException(ErrorCode.BOOKING_SLOT_UNAVAILABLE, HttpStatus.CONFLICT);
+        if (
+          !this.calendarService.isSlotFree(
+            item.staffId,
+            dateStr,
+            item.startAt,
+            item.endAt,
+            shift,
+            blockEvents,
+            business.timezone,
+          )
+        ) {
+          this.logger.warn(
+            `slot unavailable on create: locationId=${locationId} staffId=${item.staffId} startAt=${item.startAt.toISOString()}`,
+          );
+          throw new AppException(
+            ErrorCode.BOOKING_SLOT_UNAVAILABLE,
+            HttpStatus.CONFLICT,
+          );
         }
       }
 
@@ -186,7 +241,7 @@ export class BookingCreateService {
       for (const item of items) {
         const calendarEvent = await tx.calendarEvent.create({
           data: {
-            businessId,
+            locationId,
             staffId: item.staffId,
             type: CalendarEventType.BOOKING,
             repeatType: CalendarEventRepeatType.NONE,
@@ -199,7 +254,7 @@ export class BookingCreateService {
 
       return tx.booking.create({
         data: {
-          businessId,
+          locationId,
           clientId: client.id,
           startAt: envelopeStart,
           endAt: envelopeEnd,
@@ -216,7 +271,7 @@ export class BookingCreateService {
           notes: dto.notes ?? null,
           items: {
             create: createdItems.map((item) => ({
-              businessId,
+              locationId,
               serviceId: item.serviceId,
               staffId: item.staffId,
               sortOrder: item.sortOrder,
@@ -236,26 +291,56 @@ export class BookingCreateService {
       });
     });
 
-    return { booking, timezone: business.timezone, currency: business.currency, bundleTitle: selection.bundleTitle };
+    return {
+      booking,
+      timezone: business.timezone,
+      currency: business.currency,
+      bundleTitle: selection.bundleTitle,
+    };
   }
 
   private async loadSelection(
-    businessId: string,
+    locationId: string,
     dto: CreateBookingDto | ManualCreateBookingDto,
-  ): Promise<{ services: BookingServiceSnapshot[]; executionMode: PrismaBookingExecutionMode; bundleId: string | null; bundleTitle: string | null }> {
-    if (dto.bundleId && (dto.serviceIds?.length || dto.serviceId || this.manualItems(dto).length)) {
-      throw new AppException(ErrorCode.BOOKING_SELECTION_CONFLICT, HttpStatus.BAD_REQUEST);
+  ): Promise<{
+    services: BookingServiceSnapshot[];
+    executionMode: PrismaBookingExecutionMode;
+    bundleId: string | null;
+    bundleTitle: string | null;
+  }> {
+    if (
+      dto.bundleId &&
+      (dto.serviceIds?.length || dto.serviceId || this.manualItems(dto).length)
+    ) {
+      throw new AppException(
+        ErrorCode.BOOKING_SELECTION_CONFLICT,
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     if (dto.bundleId) {
       const bundle = await this.db.serviceBundle.findFirst({
-        where: { id: dto.bundleId, businessId, status: ServiceStatus.ACTIVE },
-        include: { items: { orderBy: { sortOrder: 'asc' }, include: { service: true } } },
+        where: { id: dto.bundleId, locationId, status: ServiceStatus.ACTIVE },
+        include: {
+          items: { orderBy: { sortOrder: 'asc' }, include: { service: true } },
+        },
       });
-      if (!bundle) throw new AppException(ErrorCode.BOOKING_BUNDLE_NOT_FOUND, HttpStatus.NOT_FOUND);
-      if (bundle.items.length === 0) throw new AppException(ErrorCode.BOOKING_SERVICE_NOT_FOUND, HttpStatus.NOT_FOUND);
+      if (!bundle)
+        throw new AppException(
+          ErrorCode.BOOKING_BUNDLE_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
+      if (bundle.items.length === 0)
+        throw new AppException(
+          ErrorCode.BOOKING_SERVICE_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
       const services = bundle.items.map((item) => item.service);
-      const prices = this.bundleItemPrices(services.map((service) => service.price), bundle.pricingMode, bundle.fixedPrice);
+      const prices = this.bundleItemPrices(
+        services.map((service) => service.price),
+        bundle.pricingMode,
+        bundle.fixedPrice,
+      );
       return {
         bundleId: bundle.id,
         bundleTitle: bundle.title,
@@ -278,20 +363,38 @@ export class BookingCreateService {
         : dto.serviceId
           ? [dto.serviceId]
           : [];
-    if (serviceIds.length === 0) throw new AppException(ErrorCode.BOOKING_SERVICE_NOT_FOUND, HttpStatus.NOT_FOUND);
+    if (serviceIds.length === 0)
+      throw new AppException(
+        ErrorCode.BOOKING_SERVICE_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
 
     const uniqueServiceIds = [...new Set(serviceIds)];
     const services = await this.db.service.findMany({
-      where: { id: { in: uniqueServiceIds }, businessId, status: ServiceStatus.ACTIVE },
-      select: { id: true, title: true, durationMinutes: true, bufferMinutes: true, price: true },
+      where: {
+        id: { in: uniqueServiceIds },
+        locationId,
+        status: ServiceStatus.ACTIVE,
+      },
+      select: {
+        id: true,
+        title: true,
+        durationMinutes: true,
+        bufferMinutes: true,
+        price: true,
+      },
     });
     if (services.length !== uniqueServiceIds.length) {
-      throw new AppException(ErrorCode.BOOKING_SERVICE_NOT_FOUND, HttpStatus.NOT_FOUND);
+      throw new AppException(
+        ErrorCode.BOOKING_SERVICE_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
     }
     const byId = new Map(services.map((service) => [service.id, service]));
-    const executionMode = this.isManualDto(dto) && dto.executionMode
-      ? dto.executionMode as PrismaBookingExecutionMode
-      : PrismaBookingExecutionMode.SEQUENTIAL;
+    const executionMode =
+      this.isManualDto(dto) && dto.executionMode
+        ? (dto.executionMode as PrismaBookingExecutionMode)
+        : PrismaBookingExecutionMode.SEQUENTIAL;
     return {
       bundleId: null,
       bundleTitle: null,
@@ -301,7 +404,7 @@ export class BookingCreateService {
   }
 
   private async resolveItems(
-    businessId: string,
+    locationId: string,
     services: BookingServiceSnapshot[],
     startAt: Date,
     executionMode: PrismaBookingExecutionMode,
@@ -317,16 +420,24 @@ export class BookingCreateService {
     for (let index = 0; index < services.length; index += 1) {
       const service = services[index];
       const manual = manualItems[index];
-      const itemStart = executionMode === PrismaBookingExecutionMode.PARALLEL ? startAt : new Date(cursor);
-      const itemEnd = new Date(itemStart.getTime() + (service.durationMinutes + service.bufferMinutes) * 60_000);
+      const itemStart =
+        executionMode === PrismaBookingExecutionMode.PARALLEL
+          ? startAt
+          : new Date(cursor);
+      const itemEnd = new Date(
+        itemStart.getTime() +
+          (service.durationMinutes + service.bufferMinutes) * 60_000,
+      );
       const staffId = await this.resolveItemStaff(
-        businessId,
+        locationId,
         service.id,
         manual?.staffId ?? requestedStaffId,
         itemStart,
         itemEnd,
         timezone,
-        executionMode === PrismaBookingExecutionMode.PARALLEL ? usedParallelStaff : new Set<string>(),
+        executionMode === PrismaBookingExecutionMode.PARALLEL
+          ? usedParallelStaff
+          : new Set<string>(),
       );
       usedParallelStaff.add(staffId);
       if (!staffNames.has(staffId)) {
@@ -346,14 +457,15 @@ export class BookingCreateService {
         customPrice: manual?.customPrice ?? null,
         staffName: staffNames.get(staffId)!,
       });
-      if (executionMode === PrismaBookingExecutionMode.SEQUENTIAL) cursor.setTime(itemEnd.getTime());
+      if (executionMode === PrismaBookingExecutionMode.SEQUENTIAL)
+        cursor.setTime(itemEnd.getTime());
     }
 
     return result;
   }
 
   private async resolveItemStaff(
-    businessId: string,
+    locationId: string,
     serviceId: string,
     requestedStaffId: string | undefined,
     startAt: Date,
@@ -361,38 +473,65 @@ export class BookingCreateService {
     timezone: string,
     excludedStaffIds: Set<string>,
   ): Promise<string> {
-    const candidates = await this.staffService.resolveStaffForService(businessId, serviceId, requestedStaffId);
+    const candidates = await this.staffService.resolveStaffForService(
+      locationId,
+      serviceId,
+      requestedStaffId,
+    );
     if (requestedStaffId && candidates.length === 0) {
-      throw new AppException(ErrorCode.BOOKING_STAFF_NOT_FOUND, HttpStatus.NOT_FOUND);
+      throw new AppException(
+        ErrorCode.BOOKING_STAFF_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
     }
-    const filteredCandidates = candidates.filter((candidate) => !excludedStaffIds.has(candidate.id));
+    const filteredCandidates = candidates.filter(
+      (candidate) => !excludedStaffIds.has(candidate.id),
+    );
     const available = await this.calendarService.filterAvailableStaff(
-      businessId,
+      locationId,
       filteredCandidates,
       TimeService.zonedDateStr(startAt, timezone),
       startAt,
       endAt,
       timezone,
     );
-    if (available.length === 0) throw new AppException(ErrorCode.BOOKING_NO_STAFF_AVAILABLE, HttpStatus.CONFLICT);
+    if (available.length === 0)
+      throw new AppException(
+        ErrorCode.BOOKING_NO_STAFF_AVAILABLE,
+        HttpStatus.CONFLICT,
+      );
     if (requestedStaffId) return available[0].id;
 
-    const dayStart = TimeService.localToUtc(`${TimeService.zonedDateStr(startAt, timezone)}T00:00:00`, timezone);
+    const dayStart = TimeService.localToUtc(
+      `${TimeService.zonedDateStr(startAt, timezone)}T00:00:00`,
+      timezone,
+    );
     const dayEnd = TimeService.addDaysInTz(dayStart, 1, timezone);
     const counts = await this.db.bookingItem.groupBy({
       by: ['staffId'],
-      where: { staffId: { in: available.map((staff) => staff.id) }, startAt: { gte: dayStart, lt: dayEnd } },
+      where: {
+        staffId: { in: available.map((staff) => staff.id) },
+        startAt: { gte: dayStart, lt: dayEnd },
+      },
       _count: { id: true },
     });
-    const countByStaff = new Map(counts.map((row) => [row.staffId, row._count.id]));
-    return [...available].sort((a, b) => (countByStaff.get(a.id) ?? 0) - (countByStaff.get(b.id) ?? 0))[0].id;
+    const countByStaff = new Map(
+      counts.map((row) => [row.staffId, row._count.id]),
+    );
+    return [...available].sort(
+      (a, b) => (countByStaff.get(a.id) ?? 0) - (countByStaff.get(b.id) ?? 0),
+    )[0].id;
   }
 
-  private manualItems(dto: CreateBookingDto | ManualCreateBookingDto): ManualBookingItemDto[] {
-    return this.isManualDto(dto) ? dto.items ?? [] : [];
+  private manualItems(
+    dto: CreateBookingDto | ManualCreateBookingDto,
+  ): ManualBookingItemDto[] {
+    return this.isManualDto(dto) ? (dto.items ?? []) : [];
   }
 
-  private isManualDto(dto: CreateBookingDto | ManualCreateBookingDto): dto is ManualCreateBookingDto {
+  private isManualDto(
+    dto: CreateBookingDto | ManualCreateBookingDto,
+  ): dto is ManualCreateBookingDto {
     return 'items' in dto || 'executionMode' in dto;
   }
 
@@ -402,27 +541,45 @@ export class BookingCreateService {
     fixedPrice: Prisma.Decimal | null,
   ): Prisma.Decimal[] {
     if (pricingMode !== 'FIXED') return servicePrices;
-    if (!fixedPrice) throw new AppException(ErrorCode.BUNDLE_FIXED_PRICE_REQUIRED, HttpStatus.BAD_REQUEST);
-    const total = servicePrices.reduce((sum, price) => sum.plus(price), new Prisma.Decimal(0));
+    if (!fixedPrice)
+      throw new AppException(
+        ErrorCode.BUNDLE_FIXED_PRICE_REQUIRED,
+        HttpStatus.BAD_REQUEST,
+      );
+    const total = servicePrices.reduce(
+      (sum, price) => sum.plus(price),
+      new Prisma.Decimal(0),
+    );
     if (total.equals(0)) {
       const share = MoneyService.quantize(fixedPrice.div(servicePrices.length));
-      return servicePrices.map((_, index) => (
+      return servicePrices.map((_, index) =>
         index === servicePrices.length - 1
           ? fixedPrice.minus(share.mul(servicePrices.length - 1))
-          : share
-      ));
+          : share,
+      );
     }
     let allocated = new Prisma.Decimal(0);
     return servicePrices.map((price, index) => {
-      if (index === servicePrices.length - 1) return fixedPrice.minus(allocated);
+      if (index === servicePrices.length - 1)
+        return fixedPrice.minus(allocated);
       const share = MoneyService.quantize(fixedPrice.mul(price).div(total));
       allocated = allocated.plus(share);
       return share;
     });
   }
 
-  private lockKeysForItems(items: ResolvedBookingItem[], timezone: string): bigint[] {
-    return [...new Set(items.map((item) => `${item.staffId}:${TimeService.zonedDateStr(item.startAt, timezone)}`))]
+  private lockKeysForItems(
+    items: ResolvedBookingItem[],
+    timezone: string,
+  ): bigint[] {
+    return [
+      ...new Set(
+        items.map(
+          (item) =>
+            `${item.staffId}:${TimeService.zonedDateStr(item.startAt, timezone)}`,
+        ),
+      ),
+    ]
       .map((key) => {
         const [staffId, dateStr] = key.split(':');
         return this.buildLockKey(staffId, dateStr);
@@ -430,9 +587,14 @@ export class BookingCreateService {
       .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
   }
 
-  private emitBookingCreated(booking: BookingWithItems, actor: AuditActor, currency: string, bundleTitle: string | null): void {
+  private emitBookingCreated(
+    booking: BookingWithItems,
+    actor: AuditActor,
+    currency: string,
+    bundleTitle: string | null,
+  ): void {
     const event: AuditLogEvent = {
-      businessId: booking.businessId,
+      locationId: booking.locationId,
       entityType: AuditEntity.BOOKING,
       entityId: booking.id,
       eventType: AuditEvent.BOOKING_CREATED,
@@ -448,7 +610,10 @@ export class BookingCreateService {
         startTime: booking.startAt.toISOString(),
         endTime: booking.endAt.toISOString(),
         totalPrice: MoneyService.format(
-          booking.items.reduce((sum, item) => sum.plus(item.customPrice ?? item.chargedPrice), new Prisma.Decimal(0)),
+          booking.items.reduce(
+            (sum, item) => sum.plus(item.customPrice ?? item.chargedPrice),
+            new Prisma.Decimal(0),
+          ),
         ),
         currency,
         source: booking.source,
@@ -459,20 +624,35 @@ export class BookingCreateService {
     this.eventEmitter.emit(AUDIT_EVENT, event);
   }
 
-  private emitBookingNotification(booking: BookingWithItems, timezone: string): void {
+  private emitBookingNotification(
+    booking: BookingWithItems,
+    timezone: string,
+  ): void {
     if (!booking.clientEmail) return;
-    const clientToken = this.bookingClientService.generateClientToken(booking.id);
-    this.eventEmitter.emit(NOTIFICATION_EVENT, new BookingConfirmedNotification({
-      id: booking.id,
-      clientEmail: booking.clientEmail,
-      clientFirstName: booking.clientFirstName,
-      clientLastName: booking.clientLastName,
-      serviceTitle: booking.items.map((item) => item.serviceTitle).join(', '),
-      staffName: [...new Set(booking.items.map((item) => item.staffName))].join(', '),
-      startAt: booking.startAt,
-      endAt: booking.endAt,
-      timezone,
-    }, clientToken));
+    const clientToken = this.bookingClientService.generateClientToken(
+      booking.id,
+    );
+    this.eventEmitter.emit(
+      NOTIFICATION_EVENT,
+      new BookingConfirmedNotification(
+        {
+          id: booking.id,
+          clientEmail: booking.clientEmail,
+          clientFirstName: booking.clientFirstName,
+          clientLastName: booking.clientLastName,
+          serviceTitle: booking.items
+            .map((item) => item.serviceTitle)
+            .join(', '),
+          staffName: [
+            ...new Set(booking.items.map((item) => item.staffName)),
+          ].join(', '),
+          startAt: booking.startAt,
+          endAt: booking.endAt,
+          timezone,
+        },
+        clientToken,
+      ),
+    );
   }
 
   private buildLockKey(staffId: string, dateStr: string): bigint {

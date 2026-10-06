@@ -1,5 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import {
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+} from 'class-validator';
 import { ServiceCatalogKind } from '../enums/service-catalog-kind.enum.js';
 import { ServiceStatus } from '../enums/service-status.enum.js';
 
@@ -19,7 +25,11 @@ export class ServiceCatalogCountsRequestDto {
   @IsUUID()
   categoryId?: string;
 
-  @ApiProperty({ enum: ServiceStatus, enumName: 'ServiceStatus', required: false })
+  @ApiProperty({
+    enum: ServiceStatus,
+    enumName: 'ServiceStatus',
+    required: false,
+  })
   @IsOptional()
   @IsEnum(ServiceStatus)
   status?: ServiceStatus;

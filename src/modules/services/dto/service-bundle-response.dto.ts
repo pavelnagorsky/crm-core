@@ -14,7 +14,7 @@ export class ServiceBundleResponseDto {
   id: string;
 
   @ApiProperty({ type: String })
-  businessId: string;
+  locationId: string;
 
   @ApiProperty({ type: String, nullable: true })
   categoryId: string | null;
@@ -61,14 +61,17 @@ export class ServiceBundleResponseDto {
   static fromEntity(bundle: ServiceBundleView): ServiceBundleResponseDto {
     const dto = new ServiceBundleResponseDto();
     dto.id = bundle.id;
-    dto.businessId = bundle.businessId;
+    dto.locationId = bundle.locationId;
     dto.categoryId = bundle.categoryId;
-    dto.image = bundle.imageFile ? FileResponseDto.fromEntity(bundle.imageFile) : null;
+    dto.image = bundle.imageFile
+      ? FileResponseDto.fromEntity(bundle.imageFile)
+      : null;
     dto.title = bundle.title;
     dto.description = bundle.description;
     dto.executionMode = bundle.executionMode as BookingExecutionMode;
     dto.pricingMode = bundle.pricingMode as BundlePricingMode;
-    dto.fixedPrice = bundle.fixedPrice == null ? null : MoneyService.format(bundle.fixedPrice);
+    dto.fixedPrice =
+      bundle.fixedPrice == null ? null : MoneyService.format(bundle.fixedPrice);
     dto.price = MoneyService.format(BundleMetrics.price(bundle));
     dto.durationMinutes = BundleMetrics.durationMinutes(bundle);
     dto.status = bundle.status;

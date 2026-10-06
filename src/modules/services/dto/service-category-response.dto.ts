@@ -6,7 +6,7 @@ export class ServiceCategoryResponseDto {
   id: string;
 
   @ApiProperty({ type: String })
-  businessId: string;
+  locationId: string;
 
   @ApiProperty({ type: String })
   name: string;
@@ -23,7 +23,7 @@ export class ServiceCategoryResponseDto {
   static fromEntity(category: ServiceCategory): ServiceCategoryResponseDto {
     const dto = new ServiceCategoryResponseDto();
     dto.id = category.id;
-    dto.businessId = category.businessId;
+    dto.locationId = category.locationId;
     dto.name = category.name;
     dto.description = category.description;
     dto.sortOrder = category.sortOrder;

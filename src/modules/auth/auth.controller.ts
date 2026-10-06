@@ -1,10 +1,4 @@
-import {
-  Body,
-  Controller,
-  Post,
-  Res,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Post, Res, UseGuards } from '@nestjs/common';
 import {
   ApiBody,
   ApiOkResponse,
@@ -33,8 +27,14 @@ import { TokenPayload } from './decorators/token-payload.decorator.js';
 import { OAuthData } from './decorators/oauth-data.decorator.js';
 import { UserAgent } from './decorators/user-agent.decorator.js';
 import { CookiesEnum } from './enums/cookies.enum.js';
-import { ApiResponse, BaseResponseDto } from '../../shared/dto/base-response.dto.js';
-import { UnauthorizedResponseDto, ValidationErrorResponseDto } from '../../shared/validation/validation-exception.dto.js';
+import {
+  ApiResponse,
+  BaseResponseDto,
+} from '../../shared/dto/base-response.dto.js';
+import {
+  UnauthorizedResponseDto,
+  ValidationErrorResponseDto,
+} from '../../shared/validation/validation-exception.dto.js';
 import { cookieConfig } from '../../config/cookie.config.js';
 
 @ApiTags('Auth')
@@ -44,7 +44,10 @@ export class AuthController {
 
   @ApiOperation({ summary: 'Register' })
   @ApiOkResponse({ type: ApiResponse(AuthDto) })
-  @ApiOkResponse({ type: ValidationErrorResponseDto, description: 'Validation error' })
+  @ApiOkResponse({
+    type: ValidationErrorResponseDto,
+    description: 'Validation error',
+  })
   @Post('register')
   async register(@Body() dto: RegisterDto): Promise<void> {
     await this.authService.register(dto);
@@ -86,7 +89,11 @@ export class AuthController {
     @TokenPayload() payload: TokenPayloadDto & { refreshToken: string },
     @UserAgent() userAgent: string | null,
   ): Promise<AuthDto> {
-    const tokens = await this.authService.refresh(payload.sub, payload.refreshToken, userAgent);
+    const tokens = await this.authService.refresh(
+      payload.sub,
+      payload.refreshToken,
+      userAgent,
+    );
     res.cookie(CookiesEnum.REFRESH_TOKEN, tokens.refreshToken, cookieConfig);
     return new AuthDto(tokens.accessToken);
   }
@@ -104,7 +111,9 @@ export class AuthController {
   @ApiOperation({ summary: 'Request password reset email' })
   @ApiOkResponse({ type: ApiResponse(AuthDto) })
   @Post('reset-password-request')
-  async resetPasswordRequest(@Body() dto: ResetPasswordRequestDto): Promise<void> {
+  async resetPasswordRequest(
+    @Body() dto: ResetPasswordRequestDto,
+  ): Promise<void> {
     await this.authService.resetPasswordRequest(dto);
   }
 

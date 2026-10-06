@@ -44,14 +44,18 @@ export class BusinessResponseDto {
     const dto = new BusinessResponseDto();
     dto.id = business.id;
     dto.name = business.name;
-    dto.logo = business.logoFile ? FileResponseDto.fromEntity(business.logoFile) : null;
-    dto.advanceBookingWindowDays = business.advanceBookingWindowDays;
-    dto.slotIntervalMinutes = business.slotIntervalMinutes;
-    dto.minimumBookingNoticeMinutes = business.minimumBookingNoticeMinutes;
-    dto.timezone = business.timezone;
-    dto.currency = business.currency;
-    dto.bookingVisibility = business.bookingVisibility as BookingVisibility;
-    dto.isBookingConfirmationRequired = business.isBookingConfirmationRequired;
+    dto.logo = business.logoFile
+      ? FileResponseDto.fromEntity(business.logoFile)
+      : null;
+    dto.advanceBookingWindowDays = business.advanceBookingWindowDays ?? 60;
+    dto.slotIntervalMinutes = business.slotIntervalMinutes ?? 30;
+    dto.minimumBookingNoticeMinutes = business.minimumBookingNoticeMinutes ?? 0;
+    dto.timezone = business.timezone ?? 'UTC';
+    dto.currency = business.currency ?? 'USD';
+    dto.bookingVisibility = (business.bookingVisibility ??
+      BookingVisibility.PUBLIC) as BookingVisibility;
+    dto.isBookingConfirmationRequired =
+      business.isBookingConfirmationRequired ?? false;
     dto.createdAt = business.createdAt;
     dto.updatedAt = business.updatedAt;
     return dto;

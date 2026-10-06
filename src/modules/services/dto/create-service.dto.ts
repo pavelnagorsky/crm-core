@@ -1,5 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsInt, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
+import {
+  IsEnum,
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { IsPrice } from '../../../shared/decorators/is-price.decorator.js';
 import { ServiceStatus } from '../enums/service-status.enum.js';
 
@@ -9,7 +17,12 @@ export class CreateServiceDto {
   @MaxLength(150)
   title: string;
 
-  @ApiProperty({ type: String, maxLength: 2000, required: false, nullable: true })
+  @ApiProperty({
+    type: String,
+    maxLength: 2000,
+    required: false,
+    nullable: true,
+  })
   @IsOptional()
   @IsString()
   @MaxLength(2000)
@@ -33,13 +46,23 @@ export class CreateServiceDto {
   @Min(1)
   durationMinutes: number;
 
-  @ApiProperty({ type: Number, required: false, default: 0, description: 'Buffer time in minutes after service' })
+  @ApiProperty({
+    type: Number,
+    required: false,
+    default: 0,
+    description: 'Buffer time in minutes after service',
+  })
   @IsOptional()
   @IsInt()
   @Min(0)
   bufferMinutes?: number;
 
-  @ApiProperty({ enum: ServiceStatus, enumName: 'ServiceStatus', required: false, default: ServiceStatus.ACTIVE })
+  @ApiProperty({
+    enum: ServiceStatus,
+    enumName: 'ServiceStatus',
+    required: false,
+    default: ServiceStatus.ACTIVE,
+  })
   @IsOptional()
   @IsEnum(ServiceStatus)
   status?: ServiceStatus;

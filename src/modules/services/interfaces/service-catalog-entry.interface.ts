@@ -3,7 +3,7 @@ import { ServiceStatus } from '../enums/service-status.enum.js';
 
 export interface ServiceCatalogEntry {
   id: string;
-  businessId: string;
+  locationId: string;
   categoryId: string | null;
   categoryName: string | null;
   imageFile: File | null;

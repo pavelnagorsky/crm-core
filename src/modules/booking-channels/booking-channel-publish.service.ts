@@ -18,24 +18,34 @@ export class BookingChannelPublishService {
   ) {}
 
   async assertTransition(
-    businessId: string,
+    locationId: string,
     current: BookingChannelStatus,
     next: BookingChannelStatus,
   ): Promise<void> {
     if (current === next) {
-      throw new AppException(ErrorCode.BOOKING_CHANNEL_STATUS_ALREADY_SET, HttpStatus.CONFLICT);
+      throw new AppException(
+        ErrorCode.BOOKING_CHANNEL_STATUS_ALREADY_SET,
+        HttpStatus.CONFLICT,
+      );
     }
-    if (next === BookingChannelStatus.PUBLISHED) await this.assertCanPublish(businessId);
+    if (next === BookingChannelStatus.PUBLISHED)
+      await this.assertCanPublish(locationId);
   }
 
-  private async assertCanPublish(businessId: string): Promise<void> {
-    const business = await this.businessService.findById(businessId);
+  private async assertCanPublish(locationId: string): Promise<void> {
+    const business = await this.businessService.findById(locationId);
     if (business.bookingVisibility === BookingVisibility.PRIVATE) {
-      throw new AppException(ErrorCode.BOOKING_CHANNEL_CLOSED, HttpStatus.CONFLICT);
+      throw new AppException(
+        ErrorCode.BOOKING_CHANNEL_CLOSED,
+        HttpStatus.CONFLICT,
+      );
     }
-    const bookable = await this.servicesService.countBookable(businessId);
+    const bookable = await this.servicesService.countBookable(locationId);
     if (bookable === 0) {
-      throw new AppException(ErrorCode.BOOKING_CHANNEL_NOT_BOOKABLE, HttpStatus.CONFLICT);
+      throw new AppException(
+        ErrorCode.BOOKING_CHANNEL_NOT_BOOKABLE,
+        HttpStatus.CONFLICT,
+      );
     }
   }
 }

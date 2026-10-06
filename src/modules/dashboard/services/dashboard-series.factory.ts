@@ -20,7 +20,12 @@ export class DashboardSeriesFactory {
     valueKey: string,
     field: 'revenue' | 'count',
   ): WidgetSeriesPointDto[] {
-    return this.fillOnBuckets(this.buckets.bucketStarts(range), rows, valueKey, field);
+    return this.fillOnBuckets(
+      this.buckets.bucketStarts(range),
+      rows,
+      valueKey,
+      field,
+    );
   }
 
   /**
@@ -32,7 +37,12 @@ export class DashboardSeriesFactory {
     valueKey: string,
     field: 'revenue' | 'count',
   ): WidgetSeriesPointDto[] {
-    const buckets = this.buckets.bucketStartsForBounds(range.previousFrom, range.previousTo, range.granularity, range.timezone);
+    const buckets = this.buckets.bucketStartsForBounds(
+      range.previousFrom,
+      range.previousTo,
+      range.granularity,
+      range.timezone,
+    );
     return this.fillOnBuckets(buckets, rows, valueKey, field);
   }
 
@@ -40,25 +50,44 @@ export class DashboardSeriesFactory {
    * Splits rows into named series keyed by status, filling gaps with zeros. Ensures every point
    * has the same set of keys drawn from `keys` so the frontend can build stable series.
    */
-  fillByStatus(range: ResolvedRange, rows: SeriesRow[], keys: Set<string>): WidgetSeriesPointDto[] {
+  fillByStatus(
+    range: ResolvedRange,
+    rows: SeriesRow[],
+    keys: Set<string>,
+  ): WidgetSeriesPointDto[] {
     return this.fillByStatusOn(this.buckets.bucketStarts(range), rows, keys);
   }
 
-  fillByStatusComparison(range: ResolvedRange, rows: SeriesRow[], keys: Set<string>): WidgetSeriesPointDto[] {
-    const buckets = this.buckets.bucketStartsForBounds(range.previousFrom, range.previousTo, range.granularity, range.timezone);
+  fillByStatusComparison(
+    range: ResolvedRange,
+    rows: SeriesRow[],
+    keys: Set<string>,
+  ): WidgetSeriesPointDto[] {
+    const buckets = this.buckets.bucketStartsForBounds(
+      range.previousFrom,
+      range.previousTo,
+      range.granularity,
+      range.timezone,
+    );
     return this.fillByStatusOn(buckets, rows, keys);
   }
 
   /**
    * Extracts a spark series (raw numbers, positionally aligned with current buckets).
    */
-  spark(range: ResolvedRange, rows: SeriesRow[], field: 'revenue' | 'count'): number[] {
+  spark(
+    range: ResolvedRange,
+    rows: SeriesRow[],
+    field: 'revenue' | 'count',
+  ): number[] {
     const buckets = this.buckets.bucketStarts(range);
     const byBucket = this.indexByBucket(rows);
     return buckets.map((b) => {
       const row = byBucket.get(b.getTime());
       if (!row) return 0;
-      return field === 'revenue' ? Number(MoneyService.format(row.revenue)) : row.count;
+      return field === 'revenue'
+        ? Number(MoneyService.format(row.revenue))
+        : row.count;
     });
   }
 
@@ -66,7 +95,10 @@ export class DashboardSeriesFactory {
    * Collects the union of status keys present in both current and previous rows. Used to align
    * comparison series so every point has the same set of value keys.
    */
-  collectStatusKeys(rows: SeriesRow[], statusKey: (s: BookingStatus | null) => string): Set<string> {
+  collectStatusKeys(
+    rows: SeriesRow[],
+    statusKey: (s: BookingStatus | null) => string,
+  ): Set<string> {
     return new Set(rows.map((r) => statusKey(r.status)));
   }
 
@@ -79,12 +111,20 @@ export class DashboardSeriesFactory {
     const byBucket = this.indexByBucket(rows);
     return buckets.map((b) => {
       const row = byBucket.get(b.getTime());
-      const raw = row ? (field === 'revenue' ? Number(MoneyService.format(row.revenue)) : row.count) : 0;
+      const raw = row
+        ? field === 'revenue'
+          ? Number(MoneyService.format(row.revenue))
+          : row.count
+        : 0;
       return { t: b.toISOString(), values: { [valueKey]: raw } };
     });
   }
 
-  private fillByStatusOn(buckets: Date[], rows: SeriesRow[], keys: Set<string>): WidgetSeriesPointDto[] {
+  private fillByStatusOn(
+    buckets: Date[],
+    rows: SeriesRow[],
+    keys: Set<string>,
+  ): WidgetSeriesPointDto[] {
     const map = new Map<number, Map<string, number>>();
     for (const r of rows) {
       const k = (r.status ?? 'unknown').toString().toLowerCase();

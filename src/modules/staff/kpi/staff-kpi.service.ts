@@ -17,12 +17,18 @@ export class StaffKpiService {
     private readonly servicesService: ServicesService,
   ) {}
 
-  async getWidgets(businessId: string, dto: StaffWidgetsRequestDto): Promise<StaffKpiCardDto[]> {
-    const ctx = await this.buildContext(businessId, dto.keys);
+  async getWidgets(
+    locationId: string,
+    dto: StaffWidgetsRequestDto,
+  ): Promise<StaffKpiCardDto[]> {
+    const ctx = await this.buildContext(locationId, dto.keys);
     return dto.keys.map((key) => this.buildCard(key, ctx));
   }
 
-  private buildCard(key: StaffWidgetKey, ctx: StaffWidgetContext): StaffKpiCardDto {
+  private buildCard(
+    key: StaffWidgetKey,
+    ctx: StaffWidgetContext,
+  ): StaffKpiCardDto {
     switch (key) {
       case StaffWidgetKey.ACTIVE_STAFF:
         return new StaffKpiCardDto({
@@ -60,7 +66,10 @@ export class StaffKpiService {
     }
   }
 
-  private async buildContext(businessId: string, keys: StaffWidgetKey[]): Promise<StaffWidgetContext> {
+  private async buildContext(
+    locationId: string,
+    keys: StaffWidgetKey[],
+  ): Promise<StaffWidgetContext> {
     const week = currentWeekRange();
 
     const needsActive = keys.some(
@@ -75,42 +84,72 @@ export class StaffKpiService {
       keys.includes(StaffWidgetKey.STAFF_WITHOUT_SHIFTS);
     const needsCoverage = keys.includes(StaffWidgetKey.SERVICE_COVERAGE);
 
-    const [activeCount, deactivatedRecentlyCount, staffWithShiftsCount, coverage] = await Promise.all([
-      needsActive ? this.db.staff.count({ where: { businessId, status: StaffStatus.ACTIVE } }) : Promise.resolve(0),
-      needsDeactivated ? this.deactivatedSinceCount(businessId) : Promise.resolve(0),
-      needsShifts ? this.countActiveStaffWithShiftsInWeek(businessId, week) : Promise.resolve(0),
-      needsCoverage ? this.computeServiceCoverage(businessId) : Promise.resolve({ covered: 0, total: 0 }),
+    const [
+      activeCount,
+      deactivatedRecentlyCount,
+      staffWithShiftsCount,
+      coverage,
+    ] = await Promise.all([
+      needsActive
+        ? this.db.staff.count({
+            where: { locationId, status: StaffStatus.ACTIVE },
+          })
+        : Promise.resolve(0),
+      needsDeactivated
+        ? this.deactivatedSinceCount(locationId)
+        : Promise.resolve(0),
+      needsShifts
+        ? this.countActiveStaffWithShiftsInWeek(locationId, week)
+        : Promise.resolve(0),
+      needsCoverage
+        ? this.computeServiceCoverage(locationId)
+        : Promise.resolve({ covered: 0, total: 0 }),
     ]);
 
-    return { activeCount, deactivatedRecentlyCount, staffWithShiftsCount, coveredServicesCount: coverage.covered, activeServicesCount: coverage.total };
+    return {
+      activeCount,
+      deactivatedRecentlyCount,
+      staffWithShiftsCount,
+      coveredServicesCount: coverage.covered,
+      activeServicesCount: coverage.total,
+    };
   }
 
-  private deactivatedSinceCount(businessId: string): Promise<number> {
+  private deactivatedSinceCount(locationId: string): Promise<number> {
     const since = new Date();
     since.setDate(since.getDate() - DEACTIVATION_WINDOW_DAYS);
     return this.db.staff.count({
-      where: { businessId, status: StaffStatus.INACTIVE, updatedAt: { gte: since } },
+      where: {
+        locationId,
+        status: StaffStatus.INACTIVE,
+        updatedAt: { gte: since },
+      },
     });
   }
 
   private countActiveStaffWithShiftsInWeek(
-    businessId: string,
+    locationId: string,
     week: { from: Date; to: Date },
   ): Promise<number> {
     return this.db.staff.count({
       where: {
-        businessId,
+        locationId,
         status: StaffStatus.ACTIVE,
         shifts: { some: { date: { gte: week.from, lte: week.to } } },
       },
     });
   }
 
-  private async computeServiceCoverage(businessId: string): Promise<{ covered: number; total: number }> {
+  private async computeServiceCoverage(
+    locationId: string,
+  ): Promise<{ covered: number; total: number }> {
     // The `service` table belongs to the services domain; get the active service ids through
     // its owning service rather than querying it here. Coverage denominator is all active
     // services (staff-name filters narrow staff, not the service catalogue).
-    const activeServiceIds = await this.servicesService.findIdsByFilter(businessId, { status: ServiceStatus.ACTIVE });
+    const activeServiceIds = await this.servicesService.findIdsByFilter(
+      locationId,
+      { status: ServiceStatus.ACTIVE },
+    );
     if (activeServiceIds.length === 0) return { covered: 0, total: 0 };
 
     // `staffService` is owned by this domain; find the distinct active-service ids that have at
@@ -119,7 +158,7 @@ export class StaffKpiService {
     const coveredRows = await this.db.staffService.findMany({
       where: {
         serviceId: { in: activeServiceIds },
-        staff: { businessId, status: StaffStatus.ACTIVE },
+        staff: { locationId, status: StaffStatus.ACTIVE },
       },
       distinct: ['serviceId'],
       select: { serviceId: true },
@@ -143,7 +182,15 @@ function currentWeekRange(): { from: Date; to: Date } {
   const now = new Date();
   const dow = now.getUTCDay(); // 0=Sun..6=Sat
   const daysSinceMonday = (dow + 6) % 7;
-  const from = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() - daysSinceMonday));
-  const to = new Date(Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate() + 6));
+  const from = new Date(
+    Date.UTC(
+      now.getUTCFullYear(),
+      now.getUTCMonth(),
+      now.getUTCDate() - daysSinceMonday,
+    ),
+  );
+  const to = new Date(
+    Date.UTC(from.getUTCFullYear(), from.getUTCMonth(), from.getUTCDate() + 6),
+  );
   return { from, to };
 }

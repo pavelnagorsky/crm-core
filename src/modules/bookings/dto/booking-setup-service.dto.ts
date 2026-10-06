@@ -30,14 +30,18 @@ export class BookingSetupServiceDto {
   @ApiProperty({ type: Number })
   durationMinutes: number;
 
-  static fromEntity(service: Service & { imageFile: File | null }): BookingSetupServiceDto {
+  static fromEntity(
+    service: Service & { imageFile: File | null },
+  ): BookingSetupServiceDto {
     const dto = new BookingSetupServiceDto();
     dto.id = service.id;
     dto.kind = ServiceCatalogKind.SERVICE;
     dto.categoryId = service.categoryId;
     dto.title = service.title;
     dto.description = service.description;
-    dto.image = service.imageFile ? FileResponseDto.fromEntity(service.imageFile) : null;
+    dto.image = service.imageFile
+      ? FileResponseDto.fromEntity(service.imageFile)
+      : null;
     dto.price = MoneyService.format(service.price);
     dto.durationMinutes = service.durationMinutes;
     return dto;

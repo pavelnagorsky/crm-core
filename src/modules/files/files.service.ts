@@ -41,7 +41,14 @@ export class FilesService implements OnModuleInit {
       );
     }
 
-    const ext = file.originalname.trim().replace(/\.+$/, '').split('.').pop()?.trim().toLowerCase() || 'bin';
+    const ext =
+      file.originalname
+        .trim()
+        .replace(/\.+$/, '')
+        .split('.')
+        .pop()
+        ?.trim()
+        .toLowerCase() || 'bin';
 
     const blockedExtensions = Object.values(BlockedFileExtension) as string[];
     if (blockedExtensions.includes(ext)) {

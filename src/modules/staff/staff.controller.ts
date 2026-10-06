@@ -74,11 +74,11 @@ export class StaffController {
     @Body() dto: CreateStaffDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    assertBusinessRole(tokenPayload, dto.businessId, BusinessRole.OWNER);
+    assertBusinessRole(tokenPayload, dto.locationId, BusinessRole.OWNER);
     const staff = await this.staffService.create(
-      dto.businessId,
+      dto.locationId,
       dto,
-      auditActorFromToken(tokenPayload, dto.businessId),
+      auditActorFromToken(tokenPayload, dto.locationId),
     );
     return BaseResponseDto.success({ id: staff.id });
   }
@@ -94,12 +94,12 @@ export class StaffController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
     const staff = await this.staffService.findById(id);
-    assertBusinessRole(tokenPayload, staff.businessId, BusinessRole.OWNER);
+    assertBusinessRole(tokenPayload, staff.locationId, BusinessRole.OWNER);
     const updated = await this.staffService.update(
-      staff.businessId,
+      staff.locationId,
       id,
       dto,
-      auditActorFromToken(tokenPayload, staff.businessId),
+      auditActorFromToken(tokenPayload, staff.locationId),
     );
     return BaseResponseDto.success({ id: updated.id });
   }
@@ -109,11 +109,16 @@ export class StaffController {
   @Auth()
   @Get('status-counts')
   async getStatusCounts(
-    @Query('businessId', ParseUUIDPipe) businessId: string,
+    @Query('locationId', ParseUUIDPipe) locationId: string,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<StaffStatusCountResponseDto[]>> {
-    assertBusinessRole(tokenPayload, businessId, BusinessRole.OWNER, BusinessRole.STAFF);
-    const counts = await this.staffService.getStatusCounts(businessId);
+    assertBusinessRole(
+      tokenPayload,
+      locationId,
+      BusinessRole.OWNER,
+      BusinessRole.STAFF,
+    );
+    const counts = await this.staffService.getStatusCounts(locationId);
     return BaseResponseDto.success(counts);
   }
 
@@ -127,8 +132,16 @@ export class StaffController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
     @Res({ passthrough: true }) res: any,
   ): Promise<StreamableFile> {
-    assertBusinessRole(tokenPayload, dto.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
-    const { stream, filename } = await this.staffExportService.stream(dto.businessId, dto);
+    assertBusinessRole(
+      tokenPayload,
+      dto.locationId,
+      BusinessRole.OWNER,
+      BusinessRole.STAFF,
+    );
+    const { stream, filename } = await this.staffExportService.stream(
+      dto.locationId,
+      dto,
+    );
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     return new StreamableFile(stream, { type: XlsxService.mimeType });
   }
@@ -145,7 +158,7 @@ export class StaffController {
     const staff = await this.staffService.findWithServiceCount(id);
     assertBusinessRole(
       tokenPayload,
-      staff.businessId,
+      staff.locationId,
       BusinessRole.OWNER,
       BusinessRole.STAFF,
     );
@@ -162,12 +175,12 @@ export class StaffController {
   ): Promise<BaseResponseDto<StaffSearchResponseDto>> {
     assertBusinessRole(
       tokenPayload,
-      dto.businessId,
+      dto.locationId,
       BusinessRole.OWNER,
       BusinessRole.STAFF,
     );
     const { items, totalItems } = await this.staffService.search(
-      dto.businessId,
+      dto.locationId,
       dto,
     );
     return BaseResponseDto.success(
@@ -194,12 +207,12 @@ export class StaffController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<void> {
     const staff = await this.staffService.findById(id);
-    assertBusinessRole(tokenPayload, staff.businessId, BusinessRole.OWNER);
+    assertBusinessRole(tokenPayload, staff.locationId, BusinessRole.OWNER);
     await this.staffService.changeStatus(
-      staff.businessId,
+      staff.locationId,
       id,
       dto,
-      auditActorFromToken(tokenPayload, staff.businessId),
+      auditActorFromToken(tokenPayload, staff.locationId),
     );
   }
 
@@ -215,8 +228,8 @@ export class StaffController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<void> {
     const staff = await this.staffService.findById(id);
-    assertBusinessRole(tokenPayload, staff.businessId, BusinessRole.OWNER);
-    await this.staffService.delete(staff.businessId, id);
+    assertBusinessRole(tokenPayload, staff.locationId, BusinessRole.OWNER);
+    await this.staffService.delete(staff.locationId, id);
   }
 
   @ApiOperation({
@@ -234,7 +247,7 @@ export class StaffController {
     const staff = await this.staffService.findById(id);
     assertBusinessRole(
       tokenPayload,
-      staff.businessId,
+      staff.locationId,
       BusinessRole.OWNER,
       BusinessRole.STAFF,
     );
@@ -261,11 +274,11 @@ export class StaffController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<ShiftsResponseDto>> {
     const staff = await this.staffService.findById(id);
-    assertBusinessRole(tokenPayload, staff.businessId, BusinessRole.OWNER);
+    assertBusinessRole(tokenPayload, staff.locationId, BusinessRole.OWNER);
     const shifts = await this.staffService.replaceShifts(
       id,
       dto,
-      auditActorFromToken(tokenPayload, staff.businessId),
+      auditActorFromToken(tokenPayload, staff.locationId),
     );
     return BaseResponseDto.success(
       new ShiftsResponseDto(
@@ -292,7 +305,7 @@ export class StaffController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<InvitationResponseDto>> {
     const staff = await this.staffService.findById(id);
-    assertBusinessRole(tokenPayload, staff.businessId, BusinessRole.OWNER);
+    assertBusinessRole(tokenPayload, staff.locationId, BusinessRole.OWNER);
     const result = await this.staffService.createInvitation(id, dto);
     return BaseResponseDto.success(result);
   }

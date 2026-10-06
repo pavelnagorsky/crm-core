@@ -11,10 +11,15 @@ const RESERVED_BOOKING_SLUGS = new Set([
   'terms-of-service',
 ]);
 
-export type SlugFormat = 'OK' | SlugAvailabilityReason.INVALID | SlugAvailabilityReason.RESERVED;
+export type SlugFormat =
+  'OK' | SlugAvailabilityReason.INVALID | SlugAvailabilityReason.RESERVED;
 
 export function classifySlug(slug: string): SlugFormat {
-  if (slug.length === 0 || slug.length > 48 || !regularExpressions.bookingPageSlug.test(slug)) {
+  if (
+    slug.length === 0 ||
+    slug.length > 48 ||
+    !regularExpressions.bookingPageSlug.test(slug)
+  ) {
     return SlugAvailabilityReason.INVALID;
   }
   if (RESERVED_BOOKING_SLUGS.has(slug)) return SlugAvailabilityReason.RESERVED;

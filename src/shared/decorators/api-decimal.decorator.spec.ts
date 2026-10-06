@@ -86,8 +86,7 @@ describe('decimal swagger schemas', () => {
     });
 
     const moneySample = document.components?.schemas?.MoneySampleDto as
-      | SchemaObject
-      | undefined;
+      SchemaObject | undefined;
     const properties = moneySample?.properties as Record<
       string,
       { allOf?: { $ref: string }[]; nullable?: boolean; type?: string }

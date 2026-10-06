@@ -14,7 +14,10 @@ describe('AvailableSlotsRequestDto', () => {
 
   it('accepts repeated serviceIds query values as an array', async () => {
     const dto = plainToInstance(AvailableSlotsRequestDto, {
-      serviceIds: ['325a2f6c-75d7-46ad-bb10-115c9695fae6', '425a2f6c-75d7-46ad-bb10-115c9695fae6'],
+      serviceIds: [
+        '325a2f6c-75d7-46ad-bb10-115c9695fae6',
+        '425a2f6c-75d7-46ad-bb10-115c9695fae6',
+      ],
     });
 
     expect(dto.serviceIds).toEqual([

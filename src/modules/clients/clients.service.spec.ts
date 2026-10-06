@@ -10,7 +10,11 @@ import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
 import { ClientImportRow } from './clients-import/interfaces/client-import-row.interface.js';
 import { ClientSearchRequestDto } from './dto/client-search-request.dto.js';
 
-const actor: AuditActor = { id: 'user-1', name: 'Ольга', role: AuditActorRole.OWNER };
+const actor: AuditActor = {
+  id: 'user-1',
+  name: 'Ольга',
+  role: AuditActorRole.OWNER,
+};
 
 const row: ClientImportRow = {
   firstName: 'Анна',
@@ -37,15 +41,22 @@ describe('ClientsService.insertImported', () => {
 
   it('writes a CLIENT_CREATED audit event for each inserted client', async () => {
     createManyAndReturn.mockResolvedValue([
-      { id: 'c1', firstName: 'Анна', lastName: 'Иванова', phone: '+375291112233' },
+      {
+        id: 'c1',
+        firstName: 'Анна',
+        lastName: 'Иванова',
+        phone: '+375291112233',
+      },
     ]);
 
-    await expect(service.insertImported('business-1', [row], actor)).resolves.toBe(1);
+    await expect(
+      service.insertImported('business-1', [row], actor),
+    ).resolves.toBe(1);
 
     expect(emit).toHaveBeenCalledWith(
       AUDIT_EVENT,
       expect.objectContaining({
-        businessId: 'business-1',
+        brandId: 'business-1',
         entityType: AuditEntity.CLIENT,
         entityId: 'c1',
         eventType: AuditEvent.CLIENT_CREATED,
@@ -59,7 +70,9 @@ describe('ClientsService.insertImported', () => {
   it('does not write audit events for rows skipped as duplicates', async () => {
     createManyAndReturn.mockResolvedValue([]);
 
-    await expect(service.insertImported('business-1', [row], actor)).resolves.toBe(0);
+    await expect(
+      service.insertImported('business-1', [row], actor),
+    ).resolves.toBe(0);
 
     expect(emit).not.toHaveBeenCalled();
   });
@@ -68,7 +81,7 @@ describe('ClientsService.insertImported', () => {
 function storedClient(overrides: Partial<Client> = {}): Client {
   return {
     id: 'c1',
-    businessId: 'business-1',
+    brandId: 'business-1',
     userId: null,
     firstName: 'Анна',
     lastName: 'Иванова',
@@ -108,7 +121,12 @@ describe('ClientsService.setBan', () => {
   });
 
   it('bans a client and records the reason', async () => {
-    await service.setBan('business-1', 'c1', { banned: true, reason: '  три неявки  ' }, actor);
+    await service.setBan(
+      'business-1',
+      'c1',
+      { banned: true, reason: '  три неявки  ' },
+      actor,
+    );
 
     expect(update).toHaveBeenCalledWith({
       where: { id: 'c1' },
@@ -124,7 +142,11 @@ describe('ClientsService.setBan', () => {
         payload: {
           changes: expect.arrayContaining([
             expect.objectContaining({ field: 'bannedAt', from: '—' }),
-            expect.objectContaining({ field: 'banReason', from: '—', to: 'три неявки' }),
+            expect.objectContaining({
+              field: 'banReason',
+              from: '—',
+              to: 'три неявки',
+            }),
           ]),
         },
       }),
@@ -135,7 +157,12 @@ describe('ClientsService.setBan', () => {
     const bannedAt = new Date('2026-09-01T00:00:00.000Z');
     current = storedClient({ bannedAt, banReason: 'старая' });
 
-    await service.setBan('business-1', 'c1', { banned: true, reason: 'новая' }, actor);
+    await service.setBan(
+      'business-1',
+      'c1',
+      { banned: true, reason: 'новая' },
+      actor,
+    );
 
     expect(update).toHaveBeenCalledWith({
       where: { id: 'c1' },
@@ -164,7 +191,12 @@ describe('ClientsService.setBan', () => {
     });
 
     await expect(
-      service.setBan('business-1', 'c1', { banned: true, reason: 'три неявки' }, actor),
+      service.setBan(
+        'business-1',
+        'c1',
+        { banned: true, reason: 'три неявки' },
+        actor,
+      ),
     ).rejects.toMatchObject({ errorCode: 'CLIENT_BAN_ALREADY_SET' });
     expect(update).not.toHaveBeenCalled();
     expect(emit).not.toHaveBeenCalled();
@@ -172,7 +204,12 @@ describe('ClientsService.setBan', () => {
 
   it('rejects a ban without a reason', async () => {
     await expect(
-      service.setBan('business-1', 'c1', { banned: true, reason: '   ' }, actor),
+      service.setBan(
+        'business-1',
+        'c1',
+        { banned: true, reason: '   ' },
+        actor,
+      ),
     ).rejects.toMatchObject({ errorCode: 'BAD_REQUEST' });
     expect(update).not.toHaveBeenCalled();
   });
@@ -198,7 +235,7 @@ describe('ClientsService.search ban filter', () => {
 
   async function search(banned?: boolean) {
     await service.search('business-1', {
-      businessId: 'business-1',
+      brandId: 'business-1',
       page: 1,
       pageSize: 25,
       banned,
@@ -207,27 +244,27 @@ describe('ClientsService.search ban filter', () => {
 
   it('returns every client when the ban filter is omitted', async () => {
     await search();
-    expect(findMany.mock.calls[0][0].where).toEqual({ businessId: 'business-1' });
+    expect(findMany.mock.calls[0][0].where).toEqual({ brandId: 'business-1' });
   });
 
   it('returns only banned clients', async () => {
     await search(true);
     expect(findMany.mock.calls[0][0].where).toEqual({
-      businessId: 'business-1',
+      brandId: 'business-1',
       bannedAt: { not: null },
     });
   });
 
   it('matches name, phone, email, notes, gender and ban reason', async () => {
     await service.search('business-1', {
-      businessId: 'business-1',
+      brandId: 'business-1',
       page: 1,
       pageSize: 25,
       search: '  анна  ',
     } as ClientSearchRequestDto);
 
     expect(findMany.mock.calls[0][0].where).toEqual({
-      businessId: 'business-1',
+      brandId: 'business-1',
       OR: [
         { firstName: { contains: 'анна', mode: 'insensitive' } },
         { lastName: { contains: 'анна', mode: 'insensitive' } },
@@ -243,7 +280,7 @@ describe('ClientsService.search ban filter', () => {
   it('returns only clients who can book online', async () => {
     await search(false);
     expect(findMany.mock.calls[0][0].where).toEqual({
-      businessId: 'business-1',
+      brandId: 'business-1',
       bannedAt: null,
     });
   });

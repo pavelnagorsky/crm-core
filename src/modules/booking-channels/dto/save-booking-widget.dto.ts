@@ -1,6 +1,15 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsEnum, IsNotEmpty, IsString, MaxLength, Validate, ValidateNested } from 'class-validator';
+import {
+  ArrayMaxSize,
+  IsArray,
+  IsEnum,
+  IsNotEmpty,
+  IsString,
+  MaxLength,
+  Validate,
+  ValidateNested,
+} from 'class-validator';
 import { BookingWidgetButtonPosition } from '../enums/booking-widget-button-position.enum.js';
 import { BookingWidgetPlacement } from '../enums/booking-widget-placement.enum.js';
 import { BookingWidgetTrigger } from '../enums/booking-widget-trigger.enum.js';
@@ -21,7 +30,10 @@ export class SaveBookingWidgetDto {
   @Type(() => BookingFormConfigDto)
   form: BookingFormConfigDto;
 
-  @ApiProperty({ enum: BookingWidgetPlacement, enumName: 'BookingWidgetPlacement' })
+  @ApiProperty({
+    enum: BookingWidgetPlacement,
+    enumName: 'BookingWidgetPlacement',
+  })
   @IsEnum(BookingWidgetPlacement)
   placement: BookingWidgetPlacement;
 
@@ -29,11 +41,18 @@ export class SaveBookingWidgetDto {
   @IsEnum(BookingWidgetTrigger)
   trigger: BookingWidgetTrigger;
 
-  @ApiProperty({ enum: BookingWidgetButtonPosition, enumName: 'BookingWidgetButtonPosition' })
+  @ApiProperty({
+    enum: BookingWidgetButtonPosition,
+    enumName: 'BookingWidgetButtonPosition',
+  })
   @IsEnum(BookingWidgetButtonPosition)
   buttonPosition: BookingWidgetButtonPosition;
 
-  @ApiProperty({ type: [String], description: 'Hostnames. Empty means any site. Protocol, path, port and a leading www. are stripped.' })
+  @ApiProperty({
+    type: [String],
+    description:
+      'Hostnames. Empty means any site. Protocol, path, port and a leading www. are stripped.',
+  })
   @IsArray()
   @ArrayMaxSize(20)
   @IsString({ each: true })

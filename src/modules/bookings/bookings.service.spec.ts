@@ -1,6 +1,12 @@
 import { Test } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Booking, BookingSource, BookingStatus, Prisma, UserRole } from '@prisma/client';
+import {
+  Booking,
+  BookingSource,
+  BookingStatus,
+  Prisma,
+  UserRole,
+} from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
 import { CalendarService } from '../calendar/calendar.service.js';
 import { StaffService } from '../staff/staff.service.js';
@@ -24,7 +30,7 @@ function booking(
   const endAt = overrides.endAt ?? new Date('2026-09-24T11:00:00.000Z');
   return {
     id: 'booking-1',
-    businessId: 'biz',
+    locationId: 'biz',
     staffId: 'anna',
     serviceId: 'haircut',
     clientId: 'client',
@@ -54,23 +60,25 @@ function booking(
     ...overrides,
     bookingPageId: overrides.bookingPageId ?? null,
     bookingWidgetId: overrides.bookingWidgetId ?? null,
-    items: overrides.items ?? [{
-      id: `${overrides.id ?? 'booking-1'}-item-1`,
-      bookingId: overrides.id ?? 'booking-1',
-      businessId: overrides.businessId ?? 'biz',
-      serviceId: overrides.serviceId ?? 'haircut',
-      staffId: overrides.staffId ?? 'anna',
-      sortOrder: 0,
-      startAt,
-      endAt,
-      serviceTitle: overrides.serviceTitle ?? 'РЎС‚СЂРёР¶РєР°',
-      serviceDuration: overrides.serviceDuration ?? 60,
-      listPrice: overrides.servicePrice ?? new Prisma.Decimal('50.00'),
-      chargedPrice: overrides.servicePrice ?? new Prisma.Decimal('50.00'),
-      customPrice: overrides.customPrice ?? null,
-      staffName: overrides.staffName ?? 'Anna',
-      calendarEventId: overrides.calendarEventId ?? null,
-    }],
+    items: overrides.items ?? [
+      {
+        id: `${overrides.id ?? 'booking-1'}-item-1`,
+        bookingId: overrides.id ?? 'booking-1',
+        locationId: overrides.locationId ?? 'biz',
+        serviceId: overrides.serviceId ?? 'haircut',
+        staffId: overrides.staffId ?? 'anna',
+        sortOrder: 0,
+        startAt,
+        endAt,
+        serviceTitle: overrides.serviceTitle ?? 'РЎС‚СЂРёР¶РєР°',
+        serviceDuration: overrides.serviceDuration ?? 60,
+        listPrice: overrides.servicePrice ?? new Prisma.Decimal('50.00'),
+        chargedPrice: overrides.servicePrice ?? new Prisma.Decimal('50.00'),
+        customPrice: overrides.customPrice ?? null,
+        staffName: overrides.staffName ?? 'Anna',
+        calendarEventId: overrides.calendarEventId ?? null,
+      },
+    ],
   } as unknown as BookingWithItems;
 }
 
@@ -109,7 +117,9 @@ describe('BookingsService.completeElapsed', () => {
     db.booking.findMany.mockResolvedValue([row]);
     db.booking.updateMany.mockResolvedValue({ count: 1 });
 
-    await expect(service.completeElapsed(new Date('2026-09-24T12:00:00.000Z'))).resolves.toBe(1);
+    await expect(
+      service.completeElapsed(new Date('2026-09-24T12:00:00.000Z')),
+    ).resolves.toBe(1);
     expect(earnings.recordForCompletedBooking).toHaveBeenCalledWith({
       ...row,
       status: BookingStatus.COMPLETED,
@@ -118,10 +128,14 @@ describe('BookingsService.completeElapsed', () => {
   });
 
   it('does not overwrite a status the staff already changed', async () => {
-    db.booking.findMany.mockResolvedValue([booking({ status: BookingStatus.CONFIRMED })]);
+    db.booking.findMany.mockResolvedValue([
+      booking({ status: BookingStatus.CONFIRMED }),
+    ]);
     db.booking.updateMany.mockResolvedValue({ count: 0 });
 
-    await expect(service.completeElapsed(new Date('2026-09-24T12:00:00.000Z'))).resolves.toBe(0);
+    await expect(
+      service.completeElapsed(new Date('2026-09-24T12:00:00.000Z')),
+    ).resolves.toBe(0);
     expect(earnings.recordForCompletedBooking).not.toHaveBeenCalled();
   });
 });
@@ -158,7 +172,7 @@ describe('BookingsService.search', () => {
 
   it('filters by creation date and every text field', async () => {
     await service.search('biz', {
-      businessId: 'biz',
+      locationId: 'biz',
       page: 1,
       pageSize: 25,
       search: '  стрижка  ',
@@ -169,14 +183,27 @@ describe('BookingsService.search', () => {
     } as BookingSearchRequestDto);
 
     expect(findMany.mock.calls[0][0].where).toEqual({
-      businessId: 'biz',
+      locationId: 'biz',
       deletedAt: null,
-      AND: [{
-        OR: [
-          { bundleId: null, items: { some: { staffId: { in: ['anna', 'boris'] }, serviceId: { in: ['haircut'] } } } },
-          { bundleId: { in: ['haircut'] }, items: { some: { staffId: { in: ['anna', 'boris'] } } } },
-        ],
-      }],
+      AND: [
+        {
+          OR: [
+            {
+              bundleId: null,
+              items: {
+                some: {
+                  staffId: { in: ['anna', 'boris'] },
+                  serviceId: { in: ['haircut'] },
+                },
+              },
+            },
+            {
+              bundleId: { in: ['haircut'] },
+              items: { some: { staffId: { in: ['anna', 'boris'] } } },
+            },
+          ],
+        },
+      ],
       createdAt: {
         gte: new Date('2026-09-01T00:00:00.000Z'),
         lte: new Date('2026-09-30T23:59:59.000Z'),
@@ -186,8 +213,18 @@ describe('BookingsService.search', () => {
         { clientLastName: { contains: 'стрижка', mode: 'insensitive' } },
         { clientPhone: { contains: 'стрижка' } },
         { clientEmail: { contains: 'стрижка', mode: 'insensitive' } },
-        { items: { some: { serviceTitle: { contains: 'стрижка', mode: 'insensitive' } } } },
-        { items: { some: { staffName: { contains: 'стрижка', mode: 'insensitive' } } } },
+        {
+          items: {
+            some: {
+              serviceTitle: { contains: 'стрижка', mode: 'insensitive' },
+            },
+          },
+        },
+        {
+          items: {
+            some: { staffName: { contains: 'стрижка', mode: 'insensitive' } },
+          },
+        },
         { notes: { contains: 'стрижка', mode: 'insensitive' } },
         { internalNotes: { contains: 'стрижка', mode: 'insensitive' } },
         { cancellationReason: { contains: 'стрижка', mode: 'insensitive' } },
@@ -197,7 +234,7 @@ describe('BookingsService.search', () => {
 
   it('does not filter by staff or service when the id lists are empty', async () => {
     await service.search('biz', {
-      businessId: 'biz',
+      locationId: 'biz',
       page: 1,
       pageSize: 25,
       staffIds: [],
@@ -205,21 +242,39 @@ describe('BookingsService.search', () => {
     } as BookingSearchRequestDto);
 
     expect(findMany.mock.calls[0][0].where).toEqual({
-      businessId: 'biz',
+      locationId: 'biz',
       deletedAt: null,
     });
   });
 
   it.each([
-    [BookingSearchOrderBy.START_AT, [{ startAt: OrderDirection.ASC }, { id: OrderDirection.ASC }]],
-    [BookingSearchOrderBy.CREATED_AT, [{ createdAt: OrderDirection.ASC }, { id: OrderDirection.ASC }]],
-    [BookingSearchOrderBy.SERVICE_TITLE, [{ startAt: OrderDirection.ASC }, { id: OrderDirection.ASC }]],
-    [BookingSearchOrderBy.STAFF_NAME, [{ startAt: OrderDirection.ASC }, { id: OrderDirection.ASC }]],
-    [BookingSearchOrderBy.STATUS, [{ status: OrderDirection.ASC }, { id: OrderDirection.ASC }]],
-    [BookingSearchOrderBy.SOURCE, [{ source: OrderDirection.ASC }, { id: OrderDirection.ASC }]],
+    [
+      BookingSearchOrderBy.START_AT,
+      [{ startAt: OrderDirection.ASC }, { id: OrderDirection.ASC }],
+    ],
+    [
+      BookingSearchOrderBy.CREATED_AT,
+      [{ createdAt: OrderDirection.ASC }, { id: OrderDirection.ASC }],
+    ],
+    [
+      BookingSearchOrderBy.SERVICE_TITLE,
+      [{ startAt: OrderDirection.ASC }, { id: OrderDirection.ASC }],
+    ],
+    [
+      BookingSearchOrderBy.STAFF_NAME,
+      [{ startAt: OrderDirection.ASC }, { id: OrderDirection.ASC }],
+    ],
+    [
+      BookingSearchOrderBy.STATUS,
+      [{ status: OrderDirection.ASC }, { id: OrderDirection.ASC }],
+    ],
+    [
+      BookingSearchOrderBy.SOURCE,
+      [{ source: OrderDirection.ASC }, { id: OrderDirection.ASC }],
+    ],
   ])('orders by %s', async (orderBy, expected) => {
     await service.search('biz', {
-      businessId: 'biz',
+      locationId: 'biz',
       page: 1,
       pageSize: 25,
       orderBy,
@@ -232,7 +287,7 @@ describe('BookingsService.search', () => {
 
   it('orders client name by last name, then first name', async () => {
     await service.search('biz', {
-      businessId: 'biz',
+      locationId: 'biz',
       page: 1,
       pageSize: 25,
       orderBy: BookingSearchOrderBy.CLIENT_NAME,
@@ -254,7 +309,7 @@ describe('BookingsService.search', () => {
     count.mockResolvedValue(2);
 
     const result = await service.search('biz', {
-      businessId: 'biz',
+      locationId: 'biz',
       page: 1,
       pageSize: 10,
       search: '10%',
@@ -294,25 +349,41 @@ describe('BookingsService.listForCalendar', () => {
   it('returns visible visits and every linked block id, including cancelled', async () => {
     const rangeStart = new Date('2026-09-21T00:00:00.000Z');
     const rangeEnd = new Date('2026-09-28T00:00:00.000Z');
-    findMany.mockResolvedValue([
-      booking({ id: 'visible', calendarEventId: 'ev-1', customPrice: new Prisma.Decimal('10.00') }),
-      booking({ id: 'cancelled', status: BookingStatus.CANCELLED, calendarEventId: 'ev-2' }),
-      booking({ id: 'noshow', status: BookingStatus.NO_SHOW, calendarEventId: null }),
-    ].map((row) => ({
-      ...row.items[0],
-      booking: {
-        id: row.id,
-        clientFirstName: row.clientFirstName,
-        clientLastName: row.clientLastName,
-        status: row.status,
-      },
-    })));
+    findMany.mockResolvedValue(
+      [
+        booking({
+          id: 'visible',
+          calendarEventId: 'ev-1',
+          customPrice: new Prisma.Decimal('10.00'),
+        }),
+        booking({
+          id: 'cancelled',
+          status: BookingStatus.CANCELLED,
+          calendarEventId: 'ev-2',
+        }),
+        booking({
+          id: 'noshow',
+          status: BookingStatus.NO_SHOW,
+          calendarEventId: null,
+        }),
+      ].map((row) => ({
+        ...row.items[0],
+        booking: {
+          id: row.id,
+          clientFirstName: row.clientFirstName,
+          clientLastName: row.clientLastName,
+          status: row.status,
+        },
+      })),
+    );
 
-    const feed = await service.listForCalendar('biz', rangeStart, rangeEnd, ['anna']);
+    const feed = await service.listForCalendar('biz', rangeStart, rangeEnd, [
+      'anna',
+    ]);
 
     expect(findMany).toHaveBeenCalledWith({
       where: {
-        businessId: 'biz',
+        locationId: 'biz',
         startAt: { lt: rangeEnd },
         endAt: { gt: rangeStart },
         staffId: { in: ['anna'] },
@@ -382,83 +453,139 @@ describe('BookingsService catalog selection', () => {
   });
 
   it('places services and bundles in one category list ordered by sort order', async () => {
-    serviceCategoryFindMany.mockResolvedValue([{
-      id: 'cat',
-      name: 'Волосы',
-      description: null,
-      services: [{
-        id: 'cut',
-        categoryId: 'cat',
-        title: 'Стрижка',
+    serviceCategoryFindMany.mockResolvedValue([
+      {
+        id: 'cat',
+        name: 'Волосы',
         description: null,
-        price: new Prisma.Decimal('20.00'),
-        durationMinutes: 30,
-        sortOrder: 2,
+        services: [
+          {
+            id: 'cut',
+            categoryId: 'cat',
+            title: 'Стрижка',
+            description: null,
+            price: new Prisma.Decimal('20.00'),
+            durationMinutes: 30,
+            sortOrder: 2,
+            imageFile: null,
+          },
+        ],
+        bundles: [
+          {
+            id: 'pack',
+            categoryId: 'cat',
+            title: 'Комплекс',
+            description: null,
+            sortOrder: 1,
+            executionMode: BookingExecutionMode.SEQUENTIAL,
+            fixedPrice: new Prisma.Decimal('30.00'),
+            imageFile: null,
+            items: [
+              {
+                serviceId: 'cut',
+                service: {
+                  price: new Prisma.Decimal('20.00'),
+                  durationMinutes: 30,
+                  bufferMinutes: 0,
+                },
+              },
+            ],
+          },
+        ],
+      },
+    ]);
+    serviceFindMany.mockResolvedValue([
+      {
+        id: 'lone',
+        categoryId: null,
+        title: 'Без',
+        description: null,
+        price: new Prisma.Decimal('10.00'),
+        durationMinutes: 15,
+        sortOrder: 0,
         imageFile: null,
-      }],
-      bundles: [{
-        id: 'pack',
-        categoryId: 'cat',
-        title: 'Комплекс',
+      },
+    ]);
+    bundleFindMany.mockResolvedValue([
+      {
+        id: 'loose',
+        categoryId: null,
+        title: 'Пакет',
         description: null,
-        sortOrder: 1,
+        sortOrder: 0,
         executionMode: BookingExecutionMode.SEQUENTIAL,
-        fixedPrice: new Prisma.Decimal('30.00'),
+        fixedPrice: null,
         imageFile: null,
-        items: [{ serviceId: 'cut', service: { price: new Prisma.Decimal('20.00'), durationMinutes: 30, bufferMinutes: 0 } }],
-      }],
-    }]);
-    serviceFindMany.mockResolvedValue([{
-      id: 'lone',
-      categoryId: null,
-      title: 'Без',
-      description: null,
-      price: new Prisma.Decimal('10.00'),
-      durationMinutes: 15,
-      sortOrder: 0,
-      imageFile: null,
-    }]);
-    bundleFindMany.mockResolvedValue([{
-      id: 'loose',
-      categoryId: null,
-      title: 'Пакет',
-      description: null,
-      sortOrder: 0,
-      executionMode: BookingExecutionMode.SEQUENTIAL,
-      fixedPrice: null,
-      imageFile: null,
-      items: [{ serviceId: 'lone', service: { price: new Prisma.Decimal('10.00'), durationMinutes: 15, bufferMinutes: 0 } }],
-    }]);
+        items: [
+          {
+            serviceId: 'lone',
+            service: {
+              price: new Prisma.Decimal('10.00'),
+              durationMinutes: 15,
+              bufferMinutes: 0,
+            },
+          },
+        ],
+      },
+    ]);
     staff.listActiveWithServices.mockResolvedValue([]);
 
     const setup = await service.getBookingSetup('biz');
 
     expect(setup).not.toHaveProperty('bundles');
-    expect(setup.categories[0].services.map((item) => [item.id, item.kind])).toEqual([
+    expect(
+      setup.categories[0].services.map((item) => [item.id, item.kind]),
+    ).toEqual([
       ['pack', ServiceCatalogKind.BUNDLE],
       ['cut', ServiceCatalogKind.SERVICE],
     ]);
     expect(setup.categories[1].id).toBeNull();
-    expect(setup.categories[1].services.map((item) => item.id)).toEqual(['lone', 'loose']);
+    expect(setup.categories[1].services.map((item) => item.id)).toEqual([
+      'lone',
+      'loose',
+    ]);
   });
 
   it('offers every active service and bundle before a staff member is chosen', async () => {
     serviceFindMany.mockResolvedValue([
-      { id: 'cut', price: new Prisma.Decimal('10'), durationMinutes: 30, bufferMinutes: 0 },
-      { id: 'color', price: new Prisma.Decimal('20'), durationMinutes: 60, bufferMinutes: 0 },
+      {
+        id: 'cut',
+        price: new Prisma.Decimal('10'),
+        durationMinutes: 30,
+        bufferMinutes: 0,
+      },
+      {
+        id: 'color',
+        price: new Prisma.Decimal('20'),
+        durationMinutes: 60,
+        bufferMinutes: 0,
+      },
     ]);
     bundleFindMany.mockResolvedValue([{ id: 'pack', items: [] }]);
     staff.listActiveWithServices.mockResolvedValue([]);
 
-    const resolved = await service.resolveBookingSelection('biz', {} as BookingResolveRequestDto);
+    const resolved = await service.resolveBookingSelection(
+      'biz',
+      {} as BookingResolveRequestDto,
+    );
 
     expect(resolved.availableServiceIds).toEqual(['cut', 'color', 'pack']);
   });
 
   it('offers a bundle to a staff member only when they can perform every service in it', async () => {
     serviceFindMany.mockResolvedValue([
-      { id: 'cut', price: new Prisma.Decimal('10'), durationMinutes: 30, bufferMinutes: 0 },
-      { id: 'color', price: new Prisma.Decimal('20'), durationMinutes: 60, bufferMinutes: 0 },
+      {
+        id: 'cut',
+        price: new Prisma.Decimal('10'),
+        durationMinutes: 30,
+        bufferMinutes: 0,
+      },
+      {
+        id: 'color',
+        price: new Prisma.Decimal('20'),
+        durationMinutes: 60,
+        bufferMinutes: 0,
+      },
     ]);
     bundleFindMany.mockResolvedValue([
       { id: 'pack', items: [{ serviceId: 'cut' }] },
@@ -467,7 +594,9 @@ describe('BookingsService catalog selection', () => {
     staff.servicesPerformableBy.mockResolvedValue(['cut']);
     staff.findById.mockResolvedValue({ name: 'Anna' });
 
-    const resolved = await service.resolveBookingSelection('biz', { staffId: 'anna' } as BookingResolveRequestDto);
+    const resolved = await service.resolveBookingSelection('biz', {
+      staffId: 'anna',
+    } as BookingResolveRequestDto);
 
     expect(resolved.availableServiceIds).toEqual(['cut', 'pack']);
     expect(resolved.totalListPrice).toBe('0.00');
@@ -476,8 +605,18 @@ describe('BookingsService catalog selection', () => {
 
   it('keeps the visit price when a master is already chosen', async () => {
     serviceFindMany.mockResolvedValue([
-      { id: 'cut', price: new Prisma.Decimal('10'), durationMinutes: 30, bufferMinutes: 5 },
-      { id: 'color', price: new Prisma.Decimal('20.50'), durationMinutes: 60, bufferMinutes: 0 },
+      {
+        id: 'cut',
+        price: new Prisma.Decimal('10'),
+        durationMinutes: 30,
+        bufferMinutes: 5,
+      },
+      {
+        id: 'color',
+        price: new Prisma.Decimal('20.50'),
+        durationMinutes: 60,
+        bufferMinutes: 0,
+      },
     ]);
     bundleFindMany.mockResolvedValue([]);
     staff.servicesPerformableBy.mockResolvedValue(['cut', 'color']);
@@ -501,7 +640,11 @@ describe('BookingsService.update item prices', () => {
   const findFirst = vi.fn();
   const update = vi.fn();
   const db = { booking: { findFirst, update } };
-  const token = { sub: 'user-1', role: UserRole.ADMIN, memberships: [] } as TokenPayloadDto;
+  const token = {
+    sub: 'user-1',
+    role: UserRole.ADMIN,
+    memberships: [],
+  } as TokenPayloadDto;
   let service: BookingsService;
 
   beforeEach(async () => {
@@ -512,7 +655,12 @@ describe('BookingsService.update item prices', () => {
         { provide: DatabaseService, useValue: db },
         { provide: CalendarService, useValue: {} },
         { provide: StaffService, useValue: {} },
-        { provide: BusinessService, useValue: { getLocale: vi.fn().mockResolvedValue({ currency: 'BYN' }) } },
+        {
+          provide: BusinessService,
+          useValue: {
+            getLocale: vi.fn().mockResolvedValue({ currency: 'BYN' }),
+          },
+        },
         { provide: StaffEarningsService, useValue: {} },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
       ],
@@ -526,7 +674,7 @@ describe('BookingsService.update item prices', () => {
         {
           id: 'item-1',
           bookingId: 'booking-1',
-          businessId: 'biz',
+          locationId: 'biz',
           serviceId: 'cut',
           staffId: 'anna',
           sortOrder: 0,
@@ -543,7 +691,7 @@ describe('BookingsService.update item prices', () => {
         {
           id: 'item-2',
           bookingId: 'booking-1',
-          businessId: 'biz',
+          locationId: 'biz',
           serviceId: 'color',
           staffId: 'anna',
           sortOrder: 1,
@@ -567,20 +715,20 @@ describe('BookingsService.update item prices', () => {
     update.mockResolvedValue(current);
 
     await service.update('booking-1', token, {
-      items: [
-        { id: 'item-2', customPrice: '60.00' },
-      ],
+      items: [{ id: 'item-2', customPrice: '60.00' }],
     });
 
-    expect(update).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({
-        items: {
-          update: [
-            { where: { id: 'item-2' }, data: { customPrice: '60.00' } },
-          ],
-        },
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          items: {
+            update: [
+              { where: { id: 'item-2' }, data: { customPrice: '60.00' } },
+            ],
+          },
+        }),
       }),
-    }));
+    );
   });
 
   it('does not touch item prices when the request omits them', async () => {
@@ -595,9 +743,14 @@ describe('BookingsService.update item prices', () => {
   it('rejects a price for an item that is not on this booking', async () => {
     findFirst.mockResolvedValue(visit());
 
-    const error = await service.update('booking-1', token, {
-      items: [{ id: 'missing', customPrice: '10.00' }],
-    }).then(() => null, (caught: unknown) => caught);
+    const error = await service
+      .update('booking-1', token, {
+        items: [{ id: 'missing', customPrice: '10.00' }],
+      })
+      .then(
+        () => null,
+        (caught: unknown) => caught,
+      );
 
     expect(error).toBeInstanceOf(AppException);
     expect((error as AppException).errorCode).toBe('BOOKING_ITEM_NOT_FOUND');

@@ -12,10 +12,12 @@ import { ServiceCatalogService } from './service-catalog.service.js';
 import { ServiceBundleService } from './service-bundle.service.js';
 import { ServicesService } from './services.service.js';
 
-function serviceRow(overrides: Partial<ServiceForCatalog> = {}): ServiceForCatalog {
+function serviceRow(
+  overrides: Partial<ServiceForCatalog> = {},
+): ServiceForCatalog {
   return {
     id: 'service-1',
-    businessId: 'biz',
+    locationId: 'biz',
     categoryId: 'cat-cut',
     imageFileId: null,
     title: 'Стрижка',
@@ -34,10 +36,12 @@ function serviceRow(overrides: Partial<ServiceForCatalog> = {}): ServiceForCatal
   };
 }
 
-function bundleRow(overrides: Partial<ServiceBundleForCatalog> = {}): ServiceBundleForCatalog {
+function bundleRow(
+  overrides: Partial<ServiceBundleForCatalog> = {},
+): ServiceBundleForCatalog {
   return {
     id: 'bundle-1',
-    businessId: 'biz',
+    locationId: 'biz',
     categoryId: 'cat-color',
     imageFileId: null,
     title: 'Окрашивание+',
@@ -109,8 +113,12 @@ describe('ServiceCatalogService', () => {
     bundles.listForCatalog.mockResolvedValue([bundleRow()]);
     services.countForCatalog.mockResolvedValue(1);
     bundles.countForCatalog.mockResolvedValue(1);
-    services.countByStatusForCatalog.mockResolvedValue([{ status: ServiceStatus.ACTIVE, count: 1 }]);
-    bundles.countByStatusForCatalog.mockResolvedValue([{ status: ServiceStatus.ACTIVE, count: 1 }]);
+    services.countByStatusForCatalog.mockResolvedValue([
+      { status: ServiceStatus.ACTIVE, count: 1 },
+    ]);
+    bundles.countByStatusForCatalog.mockResolvedValue([
+      { status: ServiceStatus.ACTIVE, count: 1 },
+    ]);
   });
 
   it('returns SERVICE and BUNDLE rows together', async () => {
@@ -172,7 +180,13 @@ describe('ServiceCatalogService', () => {
 
   it('sorts mixed rows by price, duration, title and sortOrder', async () => {
     services.listForCatalog.mockResolvedValue([
-      serviceRow({ id: 's-cheap', title: 'Блонд', price: new Prisma.Decimal('10.00'), durationMinutes: 30, sortOrder: 5 }),
+      serviceRow({
+        id: 's-cheap',
+        title: 'Блонд',
+        price: new Prisma.Decimal('10.00'),
+        durationMinutes: 30,
+        sortOrder: 5,
+      }),
     ]);
     bundles.listForCatalog.mockResolvedValue([
       bundleRow({ id: 'b-expensive', title: 'Акция', sortOrder: 1 }),
@@ -180,44 +194,80 @@ describe('ServiceCatalogService', () => {
 
     const byPrice = await catalog.search(
       'biz',
-      request({ orderBy: ServiceSearchOrderBy.PRICE, orderDirection: OrderDirection.ASC }),
+      request({
+        orderBy: ServiceSearchOrderBy.PRICE,
+        orderDirection: OrderDirection.ASC,
+      }),
     );
-    expect(byPrice.items.map((item) => item.id)).toEqual(['s-cheap', 'b-expensive']);
+    expect(byPrice.items.map((item) => item.id)).toEqual([
+      's-cheap',
+      'b-expensive',
+    ]);
 
     const byDuration = await catalog.search(
       'biz',
-      request({ orderBy: ServiceSearchOrderBy.DURATION_MINUTES, orderDirection: OrderDirection.ASC }),
+      request({
+        orderBy: ServiceSearchOrderBy.DURATION_MINUTES,
+        orderDirection: OrderDirection.ASC,
+      }),
     );
-    expect(byDuration.items.map((item) => item.durationMinutes)).toEqual([30, 90]);
+    expect(byDuration.items.map((item) => item.durationMinutes)).toEqual([
+      30, 90,
+    ]);
 
     const byTitle = await catalog.search(
       'biz',
-      request({ orderBy: ServiceSearchOrderBy.TITLE, orderDirection: OrderDirection.ASC }),
+      request({
+        orderBy: ServiceSearchOrderBy.TITLE,
+        orderDirection: OrderDirection.ASC,
+      }),
     );
     expect(byTitle.items.map((item) => item.title)).toEqual(['Акция', 'Блонд']);
 
     const bySortOrder = await catalog.search(
       'biz',
-      request({ orderBy: ServiceSearchOrderBy.SORT_ORDER, orderDirection: OrderDirection.ASC }),
+      request({
+        orderBy: ServiceSearchOrderBy.SORT_ORDER,
+        orderDirection: OrderDirection.ASC,
+      }),
     );
-    expect(bySortOrder.items.map((item) => item.id)).toEqual(['b-expensive', 's-cheap']);
+    expect(bySortOrder.items.map((item) => item.id)).toEqual([
+      'b-expensive',
+      's-cheap',
+    ]);
   });
 
   it('keeps rows without a category last in both directions', async () => {
     services.listForCatalog.mockResolvedValue([
-      serviceRow({ id: 'no-cat', categoryId: null, category: null, title: 'Без категории' }),
-      serviceRow({ id: 'with-cat', categoryId: 'cat-cut', category: { name: 'Волосы' }, title: 'Стрижка' }),
+      serviceRow({
+        id: 'no-cat',
+        categoryId: null,
+        category: null,
+        title: 'Без категории',
+      }),
+      serviceRow({
+        id: 'with-cat',
+        categoryId: 'cat-cut',
+        category: { name: 'Волосы' },
+        title: 'Стрижка',
+      }),
     ]);
     bundles.listForCatalog.mockResolvedValue([]);
 
-    const asc = await catalog.search('biz', request({
-      orderBy: ServiceSearchOrderBy.CATEGORY,
-      orderDirection: OrderDirection.ASC,
-    }));
-    const desc = await catalog.search('biz', request({
-      orderBy: ServiceSearchOrderBy.CATEGORY,
-      orderDirection: OrderDirection.DESC,
-    }));
+    const asc = await catalog.search(
+      'biz',
+      request({
+        orderBy: ServiceSearchOrderBy.CATEGORY,
+        orderDirection: OrderDirection.ASC,
+      }),
+    );
+    const desc = await catalog.search(
+      'biz',
+      request({
+        orderBy: ServiceSearchOrderBy.CATEGORY,
+        orderDirection: OrderDirection.DESC,
+      }),
+    );
 
     expect(asc.items.map((item) => item.id)).toEqual(['with-cat', 'no-cat']);
     expect(desc.items.map((item) => item.id)).toEqual(['with-cat', 'no-cat']);
@@ -257,7 +307,10 @@ describe('ServiceCatalogService', () => {
   });
 
   it('maps bundle metrics and child service items into the list DTO', async () => {
-    const { items } = await catalog.search('biz', request({ kind: ServiceCatalogKind.BUNDLE }));
+    const { items } = await catalog.search(
+      'biz',
+      request({ kind: ServiceCatalogKind.BUNDLE }),
+    );
     const dto = ServiceCatalogItemDto.fromEntity(items[0]);
 
     expect(dto.price).toBe('100.00');
@@ -278,7 +331,10 @@ describe('ServiceCatalogService', () => {
     services.listForCatalog.mockResolvedValue([
       serviceRow({ _count: { staffServices: 0 }, bufferMinutes: 15 }),
     ]);
-    const { items } = await catalog.search('biz', request({ kind: ServiceCatalogKind.SERVICE }));
+    const { items } = await catalog.search(
+      'biz',
+      request({ kind: ServiceCatalogKind.SERVICE }),
+    );
     const dto = ServiceCatalogItemDto.fromEntity(items[0]);
 
     expect(dto.hasNoStaff).toBe(true);
@@ -287,12 +343,12 @@ describe('ServiceCatalogService', () => {
   });
 
   it('computes total, byStatus and byKind, ignoring the facet own filter', async () => {
-    services.countForCatalog.mockImplementation(async (_businessId, filter) => {
+    services.countForCatalog.mockImplementation(async (_locationId, filter) => {
       if (filter.status === ServiceStatus.INACTIVE) return 0;
       if (filter.status === ServiceStatus.ACTIVE) return 2;
       return 3;
     });
-    bundles.countForCatalog.mockImplementation(async (_businessId, filter) => {
+    bundles.countForCatalog.mockImplementation(async (_locationId, filter) => {
       if (filter.status === ServiceStatus.INACTIVE) return 1;
       if (filter.status === ServiceStatus.ACTIVE) return 1;
       return 2;

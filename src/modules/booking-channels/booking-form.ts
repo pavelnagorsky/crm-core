@@ -11,8 +11,11 @@ export function lineFromText(hex: string): string {
   return `rgba(${r},${g},${b},0.14)`;
 }
 
-export function toBookingFormColumns(form: BookingFormConfigDto): BookingFormColumns {
-  const custom = form.paletteId === BookingPalette.CUSTOM ? form.customPalette : null;
+export function toBookingFormColumns(
+  form: BookingFormConfigDto,
+): BookingFormColumns {
+  const custom =
+    form.paletteId === BookingPalette.CUSTOM ? form.customPalette : null;
   return {
     palette: form.paletteId,
     customBackground: custom?.background ?? null,
@@ -30,7 +33,9 @@ export function toBookingFormColumns(form: BookingFormConfigDto): BookingFormCol
   };
 }
 
-export function toBookingFormConfig(record: BookingFormColumns): BookingFormConfigDto {
+export function toBookingFormConfig(
+  record: BookingFormColumns,
+): BookingFormConfigDto {
   const dto = new BookingFormConfigDto();
   dto.paletteId = record.palette;
   dto.headline = record.headline;
@@ -54,7 +59,9 @@ export function toBookingFormConfig(record: BookingFormColumns): BookingFormConf
   return dto;
 }
 
-export function resolveBookingFormTheme(record: BookingFormColumns): BookingFormThemeDto {
+export function resolveBookingFormTheme(
+  record: BookingFormColumns,
+): BookingFormThemeDto {
   if (record.palette === BookingPalette.CUSTOM) {
     const text = requiredToken(record.customText);
     return BookingFormThemeDto.from(

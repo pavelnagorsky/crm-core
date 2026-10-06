@@ -1,5 +1,17 @@
-import { forwardRef, HttpStatus, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { CalendarEvent, CalendarEventRepeatType, CalendarEventType, Prisma, ServiceStatus } from '@prisma/client';
+import {
+  forwardRef,
+  HttpStatus,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  CalendarEvent,
+  CalendarEventRepeatType,
+  CalendarEventType,
+  Prisma,
+  ServiceStatus,
+} from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
@@ -45,7 +57,7 @@ export class CalendarService {
   ) {}
 
   async create(
-    businessId: string,
+    locationId: string,
     dto: CreateCalendarEventDto,
     actor: AuditActor,
   ): Promise<CalendarEvent[]> {
@@ -53,7 +65,7 @@ export class CalendarService {
     const events = await this.db.$transaction(
       staffIds.map((staffId) =>
         this.db.calendarEvent.create({
-          data: this.buildEventData(businessId, dto, staffId),
+          data: this.buildEventData(locationId, dto, staffId),
         }),
       ),
     );
@@ -61,7 +73,7 @@ export class CalendarService {
     for (const event of events) {
       if (!event.staffId) continue;
       const audit: AuditLogEvent = {
-        businessId,
+        locationId,
         entityType: AuditEntity.STAFF,
         entityId: event.staffId,
         eventType: AuditEvent.STAFF_BLOCK_CREATED,
@@ -82,16 +94,16 @@ export class CalendarService {
   }
 
   async update(
-    businessId: string,
+    locationId: string,
     eventId: string,
     dto: UpdateCalendarEventDto,
   ): Promise<CalendarEvent> {
-    const event = await this.findInBusiness(businessId, eventId);
+    const event = await this.findInBusiness(locationId, eventId);
     if (!dto.thisOnly) {
       return this.db.calendarEvent.update({
         where: { id: eventId },
         data: this.buildEventData(
-          event.businessId,
+          event.locationId,
           dto,
           dto.staffId !== undefined ? dto.staffId : event.staffId,
         ),
@@ -107,7 +119,7 @@ export class CalendarService {
       return tx.calendarEvent.create({
         data: {
           ...this.buildEventData(
-            event.businessId,
+            event.locationId,
             dto,
             dto.staffId !== undefined ? dto.staffId : event.staffId,
           ),
@@ -119,8 +131,12 @@ export class CalendarService {
     });
   }
 
-  async delete(businessId: string, eventId: string, dto: DeleteCalendarEventDto): Promise<void> {
-    await this.findInBusiness(businessId, eventId);
+  async delete(
+    locationId: string,
+    eventId: string,
+    dto: DeleteCalendarEventDto,
+  ): Promise<void> {
+    await this.findInBusiness(locationId, eventId);
     if (dto.thisOnly) {
       const occurrenceDate = new Date(dto.occurrenceDate!);
       await this.db.calendarEventCancelledOccurrence.upsert({
@@ -133,20 +149,23 @@ export class CalendarService {
     await this.db.calendarEvent.delete({ where: { id: eventId } });
   }
 
-  async findInBusiness(businessId: string, eventId: string): Promise<CalendarEvent> {
+  async findInBusiness(
+    locationId: string,
+    eventId: string,
+  ): Promise<CalendarEvent> {
     const event = await this.db.calendarEvent.findFirst({
-      where: { id: eventId, businessId },
+      where: { id: eventId, locationId },
     });
     if (!event) throw new NotFoundException('Calendar event not found');
     return event;
   }
 
   async moveOccurrence(
-    businessId: string,
+    locationId: string,
     eventId: string,
     dto: MoveCalendarEventDto,
   ): Promise<CalendarEvent> {
-    const event = await this.findInBusiness(businessId, eventId);
+    const event = await this.findInBusiness(locationId, eventId);
     const startDateTime = new Date(dto.startDateTime);
     const endDateTime = new Date(dto.endDateTime);
     if (!dto.thisOnly) {
@@ -164,7 +183,7 @@ export class CalendarService {
       });
       return tx.calendarEvent.create({
         data: {
-          businessId: event.businessId,
+          locationId: event.locationId,
           staffId: event.staffId,
           type: CalendarEventType.BLOCK,
           reason: event.reason,
@@ -181,15 +200,22 @@ export class CalendarService {
   }
 
   async getCalendar(
-    businessId: string,
+    locationId: string,
     dto: GetCalendarRequestDto,
   ): Promise<GetCalendarResponseDto> {
-    const { timezone, currency } = await this.businessService.getLocale(businessId);
+    const { timezone, currency } =
+      await this.businessService.getLocale(locationId);
 
     const rangeStart = TimeService.dateOnly(dto.from);
     const rangeEnd = TimeService.dateOnly(dto.to);
-    const windowStart = TimeService.localToUtc(`${dto.from}T00:00:00`, timezone);
-    const windowEnd = TimeService.localToUtc(`${TimeService.addDaysStr(dto.to, 1)}T00:00:00`, timezone);
+    const windowStart = TimeService.localToUtc(
+      `${dto.from}T00:00:00`,
+      timezone,
+    );
+    const windowEnd = TimeService.localToUtc(
+      `${TimeService.addDaysStr(dto.to, 1)}T00:00:00`,
+      timezone,
+    );
     const dates = TimeService.enumerateDates(dto.from, dto.to);
     // One day of slack on each side: event instants are UTC, the window is a business-local date.
     const queryStart = new Date(rangeStart.getTime() - 86_400_000);
@@ -198,7 +224,7 @@ export class CalendarService {
     const [shifts, events, feed] = await Promise.all([
       this.db.staffShift.findMany({
         where: {
-          staff: { businessId },
+          staff: { locationId },
           date: { gte: rangeStart, lte: rangeEnd },
           ...(dto.staffIds?.length ? { staffId: { in: dto.staffIds } } : {}),
         },
@@ -206,7 +232,7 @@ export class CalendarService {
       }),
       this.db.calendarEvent.findMany({
         where: {
-          businessId,
+          locationId,
           AND: [
             ...(dto.staffIds?.length
               ? [{ OR: [{ staffId: null }, { staffId: { in: dto.staffIds } }] }]
@@ -221,7 +247,10 @@ export class CalendarService {
                 {
                   repeatType: { not: CalendarEventRepeatType.NONE },
                   startDateTime: { lte: queryEnd },
-                  OR: [{ repeatUntil: null }, { repeatUntil: { gte: rangeStart } }],
+                  OR: [
+                    { repeatUntil: null },
+                    { repeatUntil: { gte: rangeStart } },
+                  ],
                 },
               ],
             },
@@ -229,13 +258,24 @@ export class CalendarService {
         },
         include: { cancelledOccurrences: { select: { occurrenceDate: true } } },
       }),
-      this.bookings.listForCalendar(businessId, windowStart, windowEnd, dto.staffIds),
+      this.bookings.listForCalendar(
+        locationId,
+        windowStart,
+        windowEnd,
+        dto.staffIds,
+      ),
     ]);
 
     const linkedEventIds = new Set(feed.linkedEventIds);
     const blocks = events.filter((event) => !linkedEventIds.has(event.id));
-    const staffIds = [...new Set(blocks.flatMap((event) => (event.staffId ? [event.staffId] : [])))];
-    const staffNames = staffIds.length ? await this.staff.namesByIds(staffIds) : new Map<string, string>();
+    const staffIds = [
+      ...new Set(
+        blocks.flatMap((event) => (event.staffId ? [event.staffId] : [])),
+      ),
+    ];
+    const staffNames = staffIds.length
+      ? await this.staff.namesByIds(staffIds)
+      : new Map<string, string>();
     const shiftsByDate = this.compute.groupShiftsByDate(shifts);
     const { minTime, maxTime, closedTime } =
       this.compute.computeViewAndClosedTime(dates, shiftsByDate);
@@ -245,27 +285,44 @@ export class CalendarService {
       view: { minTime, maxTime },
       closedTime,
       events: [
-        ...this.compute.expandEvents(blocks, dates, timezone, windowStart, windowEnd, staffNames),
-        ...feed.bookings.map((booking) => CalendarEventItemDto.booking(booking, timezone, currency)),
+        ...this.compute.expandEvents(
+          blocks,
+          dates,
+          timezone,
+          windowStart,
+          windowEnd,
+          staffNames,
+        ),
+        ...feed.bookings.map((booking) =>
+          CalendarEventItemDto.booking(booking, timezone, currency),
+        ),
       ],
     };
   }
 
   async getAvailableSlots(
-    businessId: string,
+    locationId: string,
     dto: AvailableSlotsRequestDto,
   ): Promise<AvailableSlotsDayDto[]> {
-    const { business, service, candidateStaff, slotItems, executionMode, candidatesByService } = await this.loadSlotCandidates(
-      businessId,
-      dto,
-    );
+    const {
+      business,
+      service,
+      candidateStaff,
+      slotItems,
+      executionMode,
+      candidatesByService,
+    } = await this.loadSlotCandidates(locationId, dto);
     if (business.bookingVisibility === BookingVisibility.PRIVATE)
-      throw new AppException(ErrorCode.BOOKING_NOT_AVAILABLE, HttpStatus.FORBIDDEN);
+      throw new AppException(
+        ErrorCode.BOOKING_NOT_AVAILABLE,
+        HttpStatus.FORBIDDEN,
+      );
     if (candidateStaff.length === 0) return [];
 
-    const { todayStr, nowMinutes, rangeStart, rangeEnd } = this.resolveBookingWindow(business);
+    const { todayStr, nowMinutes, rangeStart, rangeEnd } =
+      this.resolveBookingWindow(business);
     return this.collectSlotDays({
-      businessId,
+      locationId,
       timezone: business.timezone,
       slotIntervalMinutes: business.slotIntervalMinutes,
       service,
@@ -281,25 +338,32 @@ export class CalendarService {
   }
 
   async getManualAvailableSlots(
-    businessId: string,
+    locationId: string,
     dto: ManualAvailableSlotsRequestDto,
   ): Promise<AvailableSlotsDayDto[]> {
     const { from, to } = this.manualSlotRange(dto.from, dto.to);
-    const { business, service, candidateStaff, slotItems, executionMode, candidatesByService } = await this.loadSlotCandidates(
-      businessId,
-      dto,
-    );
+    const {
+      business,
+      service,
+      candidateStaff,
+      slotItems,
+      executionMode,
+      candidatesByService,
+    } = await this.loadSlotCandidates(locationId, dto);
     if (candidateStaff.length === 0) return [];
 
     const todayStr = TimeService.zonedDateStr(new Date(), business.timezone);
     const effectiveFrom = from < todayStr ? todayStr : from;
     if (effectiveFrom > to) return [];
     const excludedCalendarEventIds = dto.bookingId
-      ? await this.bookings.linkedCalendarEventIdsForBooking(businessId, dto.bookingId)
+      ? await this.bookings.linkedCalendarEventIdsForBooking(
+          locationId,
+          dto.bookingId,
+        )
       : [];
 
     return this.collectSlotDays({
-      businessId,
+      locationId,
       timezone: business.timezone,
       slotIntervalMinutes: business.slotIntervalMinutes,
       service,
@@ -320,7 +384,7 @@ export class CalendarService {
    * and no blocking calendar events on that slot.
    */
   async filterAvailableStaff(
-    businessId: string,
+    locationId: string,
     candidates: { id: string }[],
     dateStr: string,
     startAt: Date,
@@ -331,10 +395,12 @@ export class CalendarService {
     const date = new Date(dateStr);
 
     const [shifts, blockEvents] = await Promise.all([
-      this.db.staffShift.findMany({ where: { staffId: { in: staffIds }, date } }),
+      this.db.staffShift.findMany({
+        where: { staffId: { in: staffIds }, date },
+      }),
       this.db.calendarEvent.findMany({
         where: {
-          businessId,
+          locationId,
           OR: [{ staffId: null }, { staffId: { in: staffIds } }],
           repeatType: CalendarEventRepeatType.NONE,
           startDateTime: { lte: endAt },
@@ -346,7 +412,15 @@ export class CalendarService {
 
     const shiftsByStaff = new Map(shifts.map((s) => [s.staffId, s]));
     return candidates.filter((c) =>
-      this.isSlotFree(c.id, dateStr, startAt, endAt, shiftsByStaff.get(c.id) ?? null, blockEvents, timezone),
+      this.isSlotFree(
+        c.id,
+        dateStr,
+        startAt,
+        endAt,
+        shiftsByStaff.get(c.id) ?? null,
+        blockEvents,
+        timezone,
+      ),
     );
   }
 
@@ -369,20 +443,29 @@ export class CalendarService {
     const slotStart = TimeService.dateToMinutes(startAt, timezone);
     const slotEnd = TimeService.dateToMinutes(endAt, timezone);
 
-    if (slotStart < TimeService.timeToMinutes(shift.startTime) || slotEnd > TimeService.timeToMinutes(shift.endTime)) {
+    if (
+      slotStart < TimeService.timeToMinutes(shift.startTime) ||
+      slotEnd > TimeService.timeToMinutes(shift.endTime)
+    ) {
       return false;
     }
 
-    const blocked = this.compute.expandBlockEvents(blockEvents, [dateStr], [staffId], timezone)
-      .get(staffId)?.get(dateStr) ?? [];
+    const blocked =
+      this.compute
+        .expandBlockEvents(blockEvents, [dateStr], [staffId], timezone)
+        .get(staffId)
+        ?.get(dateStr) ?? [];
 
     return !blocked.some((b) => slotStart < b.end && slotEnd > b.start);
   }
 
-  private async loadSlotCandidates(businessId: string, dto: AvailableSlotsRequestDto) {
+  private async loadSlotCandidates(
+    locationId: string,
+    dto: AvailableSlotsRequestDto,
+  ) {
     const [business, selection] = await Promise.all([
-      this.db.business.findUnique({
-        where: { id: businessId },
+      this.db.location.findUnique({
+        where: { id: locationId },
         select: {
           timezone: true,
           advanceBookingWindowDays: true,
@@ -391,14 +474,17 @@ export class CalendarService {
           bookingVisibility: true,
         },
       }),
-      this.resolveSlotSelection(businessId, dto),
+      this.resolveSlotSelection(locationId, dto),
     ]);
 
-    if (!business) throw new NotFoundException('Business not found');
+    if (!business) throw new NotFoundException('Location not found');
     return { business, ...selection };
   }
 
-  private async resolveSlotSelection(businessId: string, dto: AvailableSlotsRequestDto): Promise<{
+  private async resolveSlotSelection(
+    locationId: string,
+    dto: AvailableSlotsRequestDto,
+  ): Promise<{
     service: { durationMinutes: number; bufferMinutes: number };
     candidateStaff: CalendarSlotCandidate[];
     slotItems: CalendarSlotItem[];
@@ -406,20 +492,32 @@ export class CalendarService {
     candidatesByService: Map<string, CalendarSlotCandidate[]>;
   }> {
     if (dto.bundleId && (dto.serviceIds?.length || dto.serviceId)) {
-      throw new AppException(ErrorCode.BOOKING_SELECTION_CONFLICT, HttpStatus.BAD_REQUEST);
+      throw new AppException(
+        ErrorCode.BOOKING_SELECTION_CONFLICT,
+        HttpStatus.BAD_REQUEST,
+      );
     }
     if (dto.bundleId) {
       const bundle = await this.db.serviceBundle.findFirst({
-        where: { id: dto.bundleId, businessId, status: ServiceStatus.ACTIVE },
-        include: { items: { orderBy: { sortOrder: 'asc' }, include: { service: true } } },
+        where: { id: dto.bundleId, locationId, status: ServiceStatus.ACTIVE },
+        include: {
+          items: { orderBy: { sortOrder: 'asc' }, include: { service: true } },
+        },
       });
       if (!bundle) throw new NotFoundException('Service bundle not found');
       const services = bundle.items.map((item) => item.service);
-      const candidatesByService = await this.candidatesByService(businessId, services.map((service) => service.id), dto.staffId);
+      const candidatesByService = await this.candidatesByService(
+        locationId,
+        services.map((service) => service.id),
+        dto.staffId,
+      );
       const candidateStaff = this.uniqueCandidates(candidatesByService);
       return {
         service: this.slotServiceDuration(
-          services.map((service) => ({ durationMinutes: service.durationMinutes, bufferMinutes: service.bufferMinutes })),
+          services.map((service) => ({
+            durationMinutes: service.durationMinutes,
+            bufferMinutes: service.bufferMinutes,
+          })),
           bundle.executionMode,
         ),
         candidateStaff,
@@ -432,17 +530,31 @@ export class CalendarService {
       };
     }
 
-    const serviceIds = dto.serviceIds?.length ? dto.serviceIds : dto.serviceId ? [dto.serviceId] : [];
-    if (serviceIds.length === 0) throw new NotFoundException('Service not found');
+    const serviceIds = dto.serviceIds?.length
+      ? dto.serviceIds
+      : dto.serviceId
+        ? [dto.serviceId]
+        : [];
+    if (serviceIds.length === 0)
+      throw new NotFoundException('Service not found');
     const uniqueServiceIds = [...new Set(serviceIds)];
     const services = await this.db.service.findMany({
-      where: { id: { in: uniqueServiceIds }, businessId, status: ServiceStatus.ACTIVE },
+      where: {
+        id: { in: uniqueServiceIds },
+        locationId,
+        status: ServiceStatus.ACTIVE,
+      },
       select: { id: true, durationMinutes: true, bufferMinutes: true },
     });
-    if (services.length !== uniqueServiceIds.length) throw new NotFoundException('Service not found');
+    if (services.length !== uniqueServiceIds.length)
+      throw new NotFoundException('Service not found');
     const byId = new Map(services.map((service) => [service.id, service]));
     const ordered = serviceIds.map((serviceId) => byId.get(serviceId)!);
-    const candidatesByService = await this.candidatesByService(businessId, serviceIds, dto.staffId);
+    const candidatesByService = await this.candidatesByService(
+      locationId,
+      serviceIds,
+      dto.staffId,
+    );
     const staff = this.uniqueCandidates(candidatesByService);
     return {
       service: this.slotServiceDuration(ordered, 'SEQUENTIAL'),
@@ -457,18 +569,23 @@ export class CalendarService {
   }
 
   private async candidatesByService(
-    businessId: string,
+    locationId: string,
     serviceIds: string[],
     staffId?: string,
   ): Promise<Map<string, CalendarSlotCandidate[]>> {
     const map = new Map<string, CalendarSlotCandidate[]>();
-    for (const serviceId of [...new Set(serviceIds)]) {
-      map.set(serviceId, await this.staff.resolveStaffForService(businessId, serviceId, staffId));
+    for (const serviceId of new Set(serviceIds)) {
+      map.set(
+        serviceId,
+        await this.staff.resolveStaffForService(locationId, serviceId, staffId),
+      );
     }
     return map;
   }
 
-  private uniqueCandidates(candidatesByService: Map<string, CalendarSlotCandidate[]>): CalendarSlotCandidate[] {
+  private uniqueCandidates(
+    candidatesByService: Map<string, CalendarSlotCandidate[]>,
+  ): CalendarSlotCandidate[] {
     const byId = new Map<string, CalendarSlotCandidate>();
     for (const candidates of candidatesByService.values()) {
       for (const candidate of candidates) byId.set(candidate.id, candidate);
@@ -480,24 +597,44 @@ export class CalendarService {
     services: { durationMinutes: number; bufferMinutes: number }[],
     executionMode: string,
   ): { durationMinutes: number; bufferMinutes: number } {
-    const minutes = executionMode === 'PARALLEL'
-      ? Math.max(...services.map((service) => service.durationMinutes + service.bufferMinutes), 0)
-      : services.reduce((sum, service) => sum + service.durationMinutes + service.bufferMinutes, 0);
+    const minutes =
+      executionMode === 'PARALLEL'
+        ? Math.max(
+            ...services.map(
+              (service) => service.durationMinutes + service.bufferMinutes,
+            ),
+            0,
+          )
+        : services.reduce(
+            (sum, service) =>
+              sum + service.durationMinutes + service.bufferMinutes,
+            0,
+          );
     return { durationMinutes: minutes, bufferMinutes: 0 };
   }
 
-  private manualSlotRange(fromRaw: string, toRaw: string): { from: string; to: string } {
+  private manualSlotRange(
+    fromRaw: string,
+    toRaw: string,
+  ): { from: string; to: string } {
     const from = fromRaw.slice(0, 10);
     const to = toRaw.slice(0, 10);
-    const span = (TimeService.dateOnly(to).getTime() - TimeService.dateOnly(from).getTime()) / 86_400_000 + 1;
+    const span =
+      (TimeService.dateOnly(to).getTime() -
+        TimeService.dateOnly(from).getTime()) /
+        86_400_000 +
+      1;
     if (span > MANUAL_AVAILABLE_SLOTS_MAX_DAYS) {
-      throw new AppException(ErrorCode.BOOKING_SLOT_RANGE_TOO_LONG, HttpStatus.BAD_REQUEST);
+      throw new AppException(
+        ErrorCode.BOOKING_SLOT_RANGE_TOO_LONG,
+        HttpStatus.BAD_REQUEST,
+      );
     }
     return { from, to };
   }
 
   private async collectSlotDays(input: {
-    businessId: string;
+    locationId: string;
     timezone: string;
     slotIntervalMinutes: number;
     service: { durationMinutes: number; bufferMinutes: number };
@@ -513,14 +650,16 @@ export class CalendarService {
   }): Promise<AvailableSlotsDayDto[]> {
     const staffIds = input.candidateStaff.map((staff) => staff.id);
     const [shifts, blockEvents] = await this.fetchSlotData(
-      input.businessId,
+      input.locationId,
       staffIds,
       input.rangeStart,
       input.rangeEnd,
       input.excludedCalendarEventIds ?? [],
     );
 
-    const dates = [...new Set(shifts.map((shift) => TimeService.dateOnlyStr(shift.date)))].sort();
+    const dates = [
+      ...new Set(shifts.map((shift) => TimeService.dateOnlyStr(shift.date))),
+    ].sort();
     const shiftsByStaffDate = this.compute.groupShiftsByStaffDate(shifts);
     const blockedByStaffDate = this.compute.expandBlockEvents(
       blockEvents,
@@ -528,32 +667,42 @@ export class CalendarService {
       staffIds,
       input.timezone,
     );
-    const slotDuration = input.service.durationMinutes + input.service.bufferMinutes;
+    const slotDuration =
+      input.service.durationMinutes + input.service.bufferMinutes;
 
     return dates.flatMap((date) => {
-      const earliestMinute = date === input.todayStr ? input.earliestMinuteToday : 0;
-      const slots = input.slotItems.length === 1
-        ? this.compute.collectSlotsForDate(
-            date,
-            input.candidateStaff,
-            shiftsByStaffDate,
-            blockedByStaffDate,
-            earliestMinute,
-            slotDuration,
-            input.slotIntervalMinutes,
-          )
-        : this.compute.collectMultiServiceSlotsForDate(
-            date,
-            input.slotItems,
-            input.executionMode,
-            input.candidatesByService,
-            shiftsByStaffDate,
-            blockedByStaffDate,
-            earliestMinute,
-            input.slotIntervalMinutes,
-          );
+      const earliestMinute =
+        date === input.todayStr ? input.earliestMinuteToday : 0;
+      const slots =
+        input.slotItems.length === 1
+          ? this.compute.collectSlotsForDate(
+              date,
+              input.candidateStaff,
+              shiftsByStaffDate,
+              blockedByStaffDate,
+              earliestMinute,
+              slotDuration,
+              input.slotIntervalMinutes,
+            )
+          : this.compute.collectMultiServiceSlotsForDate(
+              date,
+              input.slotItems,
+              input.executionMode,
+              input.candidatesByService,
+              shiftsByStaffDate,
+              blockedByStaffDate,
+              earliestMinute,
+              input.slotIntervalMinutes,
+            );
       return slots.length
-        ? [{ date, slots: slots.map((start) => ({ time: TimeService.minutesToHHmm(start) })) }]
+        ? [
+            {
+              date,
+              slots: slots.map((start) => ({
+                time: TimeService.minutesToHHmm(start),
+              })),
+            },
+          ]
         : [];
     });
   }
@@ -564,7 +713,10 @@ export class CalendarService {
   }) {
     const nowParts = TimeService.toZonedParts(new Date(), business.timezone);
     const todayStr = TimeService.zonedDateStr(new Date(), business.timezone);
-    const endStr = TimeService.addDaysStr(todayStr, business.advanceBookingWindowDays - 1);
+    const endStr = TimeService.addDaysStr(
+      todayStr,
+      business.advanceBookingWindowDays - 1,
+    );
     return {
       todayStr,
       nowMinutes: nowParts.hour * 60 + nowParts.minute,
@@ -574,7 +726,7 @@ export class CalendarService {
   }
 
   private fetchSlotData(
-    businessId: string,
+    locationId: string,
     staffIds: string[],
     rangeStart: Date,
     rangeEnd: Date,
@@ -589,9 +741,11 @@ export class CalendarService {
       }),
       this.db.calendarEvent.findMany({
         where: {
-          businessId,
+          locationId,
           AND: [
-            ...(excludedCalendarEventIds.length ? [{ id: { notIn: excludedCalendarEventIds } }] : []),
+            ...(excludedCalendarEventIds.length
+              ? [{ id: { notIn: excludedCalendarEventIds } }]
+              : []),
             { OR: [{ staffId: null }, { staffId: { in: staffIds } }] },
             {
               OR: [
@@ -617,12 +771,12 @@ export class CalendarService {
   }
 
   private buildEventData(
-    businessId: string,
+    locationId: string,
     dto: CreateCalendarEventDto | UpdateCalendarEventDto,
     staffId?: string | null,
   ): Prisma.CalendarEventUncheckedCreateInput {
     return {
-      businessId,
+      locationId,
       staffId: staffId ?? null,
       type: CalendarEventType.BLOCK,
       reason: dto.reason ?? null,

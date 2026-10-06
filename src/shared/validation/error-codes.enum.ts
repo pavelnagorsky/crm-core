@@ -46,6 +46,13 @@ export const ErrorCode = {
   // user
   USER_NOT_FOUND: { code: 'USER_NOT_FOUND', message: 'User not found' },
 
+  // brand / locations
+  LOCATION_ANCHORS_IMMUTABLE: {
+    code: 'LOCATION_ANCHORS_IMMUTABLE',
+    message:
+      'Country, currency, and timezone cannot be changed after location creation',
+  },
+
   // services
   CATEGORY_NAME_EXISTS: {
     code: 'CATEGORY_NAME_EXISTS',

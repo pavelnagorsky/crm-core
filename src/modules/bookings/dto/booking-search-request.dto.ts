@@ -1,6 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsArray, IsDateString, IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import {
+  IsArray,
+  IsDateString,
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+} from 'class-validator';
 import { PaginationRequestDto } from '../../../shared/dto/pagination-request.dto.js';
 import { catalogItemIdsDescription } from '../catalog-item-filter.js';
 import { BookingSearchOrderBy } from '../enums/booking-search-order-by.enum.js';
@@ -8,19 +16,22 @@ import { BookingStatus } from '../enums/booking-status.enum.js';
 
 export function toUuidArray(value: unknown): string[] | undefined {
   if (value === undefined || value === null || value === '') return undefined;
-  const items = (Array.isArray(value) ? value : [value]).filter((item) => item !== '' && item != null);
+  const items = (Array.isArray(value) ? value : [value]).filter(
+    (item) => item !== '' && item != null,
+  );
   return items.length ? items : undefined;
 }
 
 export class BookingSearchRequestDto extends PaginationRequestDto<BookingSearchOrderBy> {
   @ApiProperty({ type: String, format: 'uuid' })
   @IsUUID()
-  businessId: string;
+  locationId: string;
 
   @ApiProperty({
     type: String,
     required: false,
-    description: 'Client name, phone, email, service title, staff name, notes, internal notes, cancellation reason',
+    description:
+      'Client name, phone, email, service title, staff name, notes, internal notes, cancellation reason',
   })
   @IsOptional()
   @IsString()
@@ -36,7 +47,8 @@ export class BookingSearchRequestDto extends PaginationRequestDto<BookingSearchO
     type: [String],
     format: 'uuid',
     required: false,
-    description: 'Filter by staff. Repeat the key: ?staffIds=UUID1&staffIds=UUID2. A single value is accepted as a one-element array.',
+    description:
+      'Filter by staff. Repeat the key: ?staffIds=UUID1&staffIds=UUID2. A single value is accepted as a one-element array.',
   })
   @IsOptional()
   @Transform(({ value }) => toUuidArray(value))

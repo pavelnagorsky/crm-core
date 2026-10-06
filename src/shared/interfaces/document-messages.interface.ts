@@ -1,6 +1,7 @@
 export interface DocumentMessages {
   common: {
     business: string;
+    location: string;
     period: string;
     status: string;
     currency: string;

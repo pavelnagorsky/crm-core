@@ -28,7 +28,9 @@ export type ServiceBundleAuditSource = {
   items: { service: { title: string } }[];
 };
 
-export function toServiceBundleAuditShape(bundle: ServiceBundleAuditSource): ServiceBundleAuditShape {
+export function toServiceBundleAuditShape(
+  bundle: ServiceBundleAuditSource,
+): ServiceBundleAuditShape {
   return {
     title: bundle.title,
     description: bundle.description,
@@ -43,15 +45,20 @@ export function toServiceBundleAuditShape(bundle: ServiceBundleAuditSource): Ser
   };
 }
 
-export const SERVICE_BUNDLE_AUDIT_FIELDS: FieldDescriptor<ServiceBundleAuditShape>[] = [
-  { key: 'title' },
-  { key: 'description' },
-  { key: 'categoryName' },
-  { key: 'imageName' },
-  { key: 'executionMode', i18n: 'executionMode' },
-  { key: 'pricingMode', i18n: 'bundlePricingMode' },
-  { key: 'fixedPrice', format: (v) => (v == null ? '—' : MoneyService.format(v as Prisma.Decimal)) },
-  { key: 'status' },
-  { key: 'sortOrder' },
-  { key: 'items' },
-];
+export const SERVICE_BUNDLE_AUDIT_FIELDS: FieldDescriptor<ServiceBundleAuditShape>[] =
+  [
+    { key: 'title' },
+    { key: 'description' },
+    { key: 'categoryName' },
+    { key: 'imageName' },
+    { key: 'executionMode', i18n: 'executionMode' },
+    { key: 'pricingMode', i18n: 'bundlePricingMode' },
+    {
+      key: 'fixedPrice',
+      format: (v) =>
+        v == null ? '—' : MoneyService.format(v as Prisma.Decimal),
+    },
+    { key: 'status' },
+    { key: 'sortOrder' },
+    { key: 'items' },
+  ];

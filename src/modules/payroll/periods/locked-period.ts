@@ -6,10 +6,15 @@ export const LOCKED_PAYROLL_STATUSES: PayrollPeriodStatus[] = [
   PayrollPeriodStatus.PAID,
 ];
 
-export function lockedPeriodWhere(businessId: string, earnedOn?: Date): Prisma.PayrollPeriodWhereInput {
+export function lockedPeriodWhere(
+  locationId: string,
+  earnedOn?: Date,
+): Prisma.PayrollPeriodWhereInput {
   return {
-    businessId,
+    locationId,
     status: { in: LOCKED_PAYROLL_STATUSES },
-    ...(earnedOn ? { startDate: { lte: earnedOn }, endDate: { gte: earnedOn } } : {}),
+    ...(earnedOn
+      ? { startDate: { lte: earnedOn }, endDate: { gte: earnedOn } }
+      : {}),
   };
 }

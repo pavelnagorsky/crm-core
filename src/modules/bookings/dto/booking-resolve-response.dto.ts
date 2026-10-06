@@ -8,7 +8,8 @@ export class BookingResolveResponseDto {
   @ApiProperty({
     type: String,
     isArray: true,
-    description: 'Service and bundle ids available for this selection. Without a staff member this is every active service and bundle. With a staff member, a service is included when they can perform it, and a bundle when they can perform every service in it.',
+    description:
+      'Service and bundle ids available for this selection. Without a staff member this is every active service and bundle. With a staff member, a service is included when they can perform it, and a bundle when they can perform every service in it.',
   })
   availableServiceIds: string[];
 

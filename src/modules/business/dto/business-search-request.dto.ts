@@ -1,5 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsDateString, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
+import {
+  IsDateString,
+  IsEnum,
+  IsOptional,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 import { OrderDirection } from '../../../shared/enums/order-direction.enum.js';
 import { BusinessSearchOrderBy } from '../enums/search-order-by.enum.js';
 
@@ -10,12 +16,20 @@ export class BusinessSearchRequestDto {
   @MaxLength(255)
   search?: string;
 
-  @ApiProperty({ type: String, required: false, description: 'Filter by createdAt >= date (ISO 8601)' })
+  @ApiProperty({
+    type: String,
+    required: false,
+    description: 'Filter by createdAt >= date (ISO 8601)',
+  })
   @IsOptional()
   @IsDateString()
   createdFrom?: string;
 
-  @ApiProperty({ type: String, required: false, description: 'Filter by createdAt <= date (ISO 8601)' })
+  @ApiProperty({
+    type: String,
+    required: false,
+    description: 'Filter by createdAt <= date (ISO 8601)',
+  })
   @IsOptional()
   @IsDateString()
   createdTo?: string;

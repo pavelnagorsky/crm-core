@@ -7,7 +7,7 @@ export class StaffWidgetsRequestDto {
   @ApiProperty({ type: String, format: 'uuid' })
   @Type(() => String)
   @IsUUID()
-  businessId: string;
+  locationId: string;
 
   @ApiProperty({ enum: StaffWidgetKey, isArray: true })
   @Transform(({ value }) => {

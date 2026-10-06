@@ -2,7 +2,9 @@ import { CalendarEventItemDto } from './calendar-event-item.dto.js';
 import { MoneyService } from '../../../shared/money/money.service.js';
 import { CalendarBookingView } from '../interfaces/calendar-booking-view.interface.js';
 
-function booking(overrides: Partial<CalendarBookingView> = {}): CalendarBookingView {
+function booking(
+  overrides: Partial<CalendarBookingView> = {},
+): CalendarBookingView {
   return {
     id: 'booking-1',
     staffId: 'staff-1',
@@ -20,7 +22,11 @@ function booking(overrides: Partial<CalendarBookingView> = {}): CalendarBookingV
 
 describe('CalendarEventItemDto.booking', () => {
   it('puts the service on the first line and the client on the second', () => {
-    const item = CalendarEventItemDto.booking(booking({ customPrice: '90.00' }), 'Europe/Moscow', 'RUB');
+    const item = CalendarEventItemDto.booking(
+      booking({ customPrice: '90.00' }),
+      'Europe/Moscow',
+      'RUB',
+    );
 
     expect(item.title).toBe('Стрижка');
     expect(item.subtitle).toBe('Петров Иван');
@@ -40,7 +46,11 @@ describe('CalendarEventItemDto.booking', () => {
 
   it('drops the subtitle when it repeats the title', () => {
     const item = CalendarEventItemDto.booking(
-      booking({ clientLastName: 'Стрижка', clientFirstName: '', serviceTitle: 'Стрижка' }),
+      booking({
+        clientLastName: 'Стрижка',
+        clientFirstName: '',
+        serviceTitle: 'Стрижка',
+      }),
       'UTC',
       'RUB',
     );

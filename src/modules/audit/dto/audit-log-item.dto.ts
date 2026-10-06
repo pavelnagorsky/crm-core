@@ -29,7 +29,11 @@ export class AuditLogItemDto {
   @ApiProperty()
   occurredAt: Date;
 
-  static fromEntity(log: AuditLog, html: string, eventTypeTitle: string): AuditLogItemDto {
+  static fromEntity(
+    log: AuditLog,
+    html: string,
+    eventTypeTitle: string,
+  ): AuditLogItemDto {
     const dto = new AuditLogItemDto();
     dto.id = log.id;
     dto.eventType = log.eventType as AuditEvent;

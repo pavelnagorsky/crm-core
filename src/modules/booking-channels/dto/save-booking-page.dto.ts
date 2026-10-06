@@ -1,6 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsNotEmpty, IsString, IsUUID, Matches, MaxLength, ValidateIf, ValidateNested } from 'class-validator';
+import {
+  IsNotEmpty,
+  IsString,
+  IsUUID,
+  Matches,
+  MaxLength,
+  ValidateIf,
+  ValidateNested,
+} from 'class-validator';
 import regularExpressions from '../../../shared/regular-expressions.js';
 import { Trim, TrimLower } from '../decorators/trim.decorator.js';
 import { BookingFormConfigDto } from './booking-form-config.dto.js';
@@ -17,7 +25,9 @@ export class SaveBookingPageDto {
   @TrimLower()
   @IsString()
   @MaxLength(48)
-  @Matches(regularExpressions.bookingPageSlug, { message: 'slug must be lowercase letters, digits, and single hyphens' })
+  @Matches(regularExpressions.bookingPageSlug, {
+    message: 'slug must be lowercase letters, digits, and single hyphens',
+  })
   slug: string;
 
   @ApiProperty({ type: String, maxLength: 120 })

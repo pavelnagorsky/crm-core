@@ -18,7 +18,14 @@ export class TimeService {
   static toZonedParts(
     date: Date,
     timezone: string,
-  ): { year: number; month: number; day: number; hour: number; minute: number; second: number } {
+  ): {
+    year: number;
+    month: number;
+    day: number;
+    hour: number;
+    minute: number;
+    second: number;
+  } {
     const fmt = new Intl.DateTimeFormat('en-US', {
       timeZone: timezone,
       year: 'numeric',
@@ -58,7 +65,9 @@ export class TimeService {
     const [hour, minute, second] = timePart.split(':').map(Number);
 
     // Initial UTC guess: treat the local time as if it were UTC
-    const utcGuess = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
+    const utcGuess = new Date(
+      Date.UTC(year, month - 1, day, hour, minute, second),
+    );
 
     // Find what wall-clock time that UTC instant maps to in the target timezone
     const zonedParts = TimeService.toZonedParts(utcGuess, timezone);
@@ -82,7 +91,12 @@ export class TimeService {
    * in the target timezone. Out-of-range day/month components (e.g. day=32, day=-1) are
    * normalized via Date.UTC arithmetic before being re-anchored in the timezone.
    */
-  static zonedDayStart(year: number, month: number, day: number, timezone: string): Date {
+  static zonedDayStart(
+    year: number,
+    month: number,
+    day: number,
+    timezone: string,
+  ): Date {
     const normalized = new Date(Date.UTC(year, month - 1, day));
     const local = `${pad(normalized.getUTCFullYear(), 4)}-${pad(normalized.getUTCMonth() + 1, 2)}-${pad(normalized.getUTCDate(), 2)}T00:00:00`;
     return TimeService.localToUtc(local, timezone);
@@ -112,7 +126,13 @@ export class TimeService {
    * Returns the UTC instant of HH:00 on the given calendar day in the target timezone.
    * Handles out-of-range hour (e.g. 24, -1) and day via Date.UTC normalization.
    */
-  static zonedHourStart(year: number, month: number, day: number, hour: number, timezone: string): Date {
+  static zonedHourStart(
+    year: number,
+    month: number,
+    day: number,
+    hour: number,
+    timezone: string,
+  ): Date {
     const normalized = new Date(Date.UTC(year, month - 1, day, hour));
     const local = `${pad(normalized.getUTCFullYear(), 4)}-${pad(normalized.getUTCMonth() + 1, 2)}-${pad(normalized.getUTCDate(), 2)}T${pad(normalized.getUTCHours(), 2)}:00:00`;
     return TimeService.localToUtc(local, timezone);
@@ -157,14 +177,18 @@ export class TimeService {
     const result: string[] = [];
     for (let ms = Date.UTC(fy, fm - 1, fd); ms <= end; ms += 86_400_000) {
       const d = new Date(ms);
-      result.push(`${pad(d.getUTCFullYear(), 4)}-${pad(d.getUTCMonth() + 1, 2)}-${pad(d.getUTCDate(), 2)}`);
+      result.push(
+        `${pad(d.getUTCFullYear(), 4)}-${pad(d.getUTCMonth() + 1, 2)}-${pad(d.getUTCDate(), 2)}`,
+      );
     }
     return result;
   }
 
   /** Calendar length of the UTC month for a "@db.Date" value. */
   static daysInUtcMonth(date: Date): number {
-    return getDaysInMonth(new Date(date.getUTCFullYear(), date.getUTCMonth(), 1));
+    return getDaysInMonth(
+      new Date(date.getUTCFullYear(), date.getUTCMonth(), 1),
+    );
   }
 
   /** Adds N days to a "YYYY-MM-DD" string, calendar-only (no TZ involved). */

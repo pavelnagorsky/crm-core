@@ -34,7 +34,11 @@ export class ServicesAnalyticsRequestDto extends DashboardRangeDto {
   @IsUUID()
   categoryId?: string;
 
-  @ApiProperty({ enum: ServiceStatus, enumName: 'ServiceStatus', required: false })
+  @ApiProperty({
+    enum: ServiceStatus,
+    enumName: 'ServiceStatus',
+    required: false,
+  })
   @IsOptional()
   @IsEnum(ServiceStatus)
   status?: ServiceStatus;

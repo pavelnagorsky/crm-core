@@ -11,9 +11,13 @@ export enum PayrollPeriodSearchOrderBy {
 export class PayrollPeriodSearchRequestDto extends PaginationRequestDto<PayrollPeriodSearchOrderBy> {
   @ApiProperty({ type: String, format: 'uuid' })
   @IsUUID()
-  businessId: string;
+  locationId: string;
 
-  @ApiProperty({ enum: PayrollPeriodStatus, enumName: 'PayrollPeriodStatus', required: false })
+  @ApiProperty({
+    enum: PayrollPeriodStatus,
+    enumName: 'PayrollPeriodStatus',
+    required: false,
+  })
   @IsOptional()
   @IsEnum(PayrollPeriodStatus)
   status?: PayrollPeriodStatus;

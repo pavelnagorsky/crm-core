@@ -6,7 +6,8 @@ export class ServiceCommissionRateDto {
   @ApiProperty({
     type: String,
     format: 'uuid',
-    description: 'Service id. This rate overrides the plan serviceCommissionPercent for that service. Commission is calculated per booking item, so a bundle has no rate of its own.',
+    description:
+      'Service id. This rate overrides the plan serviceCommissionPercent for that service. Commission is calculated per booking item, so a bundle has no rate of its own.',
   })
   @IsUUID()
   serviceId: string;

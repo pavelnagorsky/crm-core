@@ -46,12 +46,20 @@ export class CreateBusinessDto {
   @IsIanaTimezone()
   timezone: string;
 
-  @ApiProperty({ type: String, description: 'ISO 4217 currency code. Set on create and cannot be changed later.' })
+  @ApiProperty({
+    type: String,
+    description:
+      'ISO 4217 currency code. Set on create and cannot be changed later.',
+  })
   @IsString()
   @MaxLength(3)
   currency: string;
 
-  @ApiProperty({ enum: BookingVisibility, default: BookingVisibility.PUBLIC, required: false })
+  @ApiProperty({
+    enum: BookingVisibility,
+    default: BookingVisibility.PUBLIC,
+    required: false,
+  })
   @IsOptional()
   @IsEnum(BookingVisibility)
   bookingVisibility?: BookingVisibility;

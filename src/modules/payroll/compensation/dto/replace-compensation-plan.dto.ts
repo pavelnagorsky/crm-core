@@ -1,6 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsArray, IsDateString, IsEnum, IsOptional, IsString, MaxLength, ValidateNested } from 'class-validator';
+import {
+  IsArray,
+  IsDateString,
+  IsEnum,
+  IsOptional,
+  IsString,
+  MaxLength,
+  ValidateNested,
+} from 'class-validator';
 import { IsOptionalPrice } from '../../../../shared/decorators/is-price.decorator.js';
 import { IsOptionalPercent } from '../../../../shared/decorators/is-percent.decorator.js';
 import { CompensationSalaryMode } from '../enums/compensation-salary-mode.enum.js';
@@ -23,18 +31,31 @@ export class ReplaceCompensationPlanDto {
   @IsOptionalPercent()
   productCommissionPercent?: string;
 
-  @ApiProperty({ enum: CompensationSalaryMode, enumName: 'CompensationSalaryMode', required: false })
+  @ApiProperty({
+    enum: CompensationSalaryMode,
+    enumName: 'CompensationSalaryMode',
+    required: false,
+  })
   @IsOptional()
   @IsEnum(CompensationSalaryMode)
   salaryMode?: CompensationSalaryMode;
 
-  @ApiProperty({ type: String, required: false, nullable: true, maxLength: 1000 })
+  @ApiProperty({
+    type: String,
+    required: false,
+    nullable: true,
+    maxLength: 1000,
+  })
   @IsOptional()
   @IsString()
   @MaxLength(1000)
   note?: string;
 
-  @ApiProperty({ type: () => ServiceCommissionRateDto, isArray: true, required: false })
+  @ApiProperty({
+    type: () => ServiceCommissionRateDto,
+    isArray: true,
+    required: false,
+  })
   @IsOptional()
   @IsArray()
   @ValidateNested({ each: true })

@@ -19,12 +19,17 @@ export function normalizeAllowedDomain(raw: string): string | null {
     if (at >= 0) value = value.slice(at + 1);
     if (value.startsWith('[')) return null;
     const colon = value.lastIndexOf(':');
-    if (colon > 0 && isDigits(value.slice(colon + 1))) value = value.slice(0, colon);
+    if (colon > 0 && isDigits(value.slice(colon + 1)))
+      value = value.slice(0, colon);
   }
 
   if (value.startsWith('www.')) value = value.slice(4);
   if (value.endsWith('.')) value = value.slice(0, -1);
-  if (regularExpressions.hostname.test(value) || regularExpressions.ipv4.test(value)) return value;
+  if (
+    regularExpressions.hostname.test(value) ||
+    regularExpressions.ipv4.test(value)
+  )
+    return value;
   return null;
 }
 
@@ -42,7 +47,10 @@ export function normalizeAllowedDomains(values: string[]): string[] | null {
   return result;
 }
 
-export function isDomainAllowed(allowed: string[], origin: string | undefined): boolean {
+export function isDomainAllowed(
+  allowed: string[],
+  origin: string | undefined,
+): boolean {
   if (allowed.length === 0) return true;
   const host = hostFromRequestOrigin(origin);
   if (!host) return false;

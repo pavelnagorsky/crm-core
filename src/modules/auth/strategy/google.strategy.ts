@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
 import { Strategy } from 'passport-custom';
@@ -11,7 +15,10 @@ import { OAuthResponseDto } from '../dto/oauth-response.dto.js';
 import { OAuthProviderEnum } from '../enums/oauth-provider.enum.js';
 
 @Injectable()
-export class GoogleOAuthStrategy extends PassportStrategy(Strategy, 'google-oauth') {
+export class GoogleOAuthStrategy extends PassportStrategy(
+  Strategy,
+  'google-oauth',
+) {
   private readonly client: OAuth2Client;
 
   constructor(private readonly config: ConfigService) {
@@ -27,8 +34,14 @@ export class GoogleOAuthStrategy extends PassportStrategy(Strategy, 'google-oaut
       if (errors.length) throw new BadRequestException();
 
       const cfg = this.config.get<IGoogleCloudConfig>('googleCloud')!;
-      const { tokens } = await this.client.getToken({ code: dto.authCode, redirect_uri: 'postmessage' });
-      const ticket = await this.client.verifyIdToken({ idToken: tokens.id_token!, audience: cfg.clientId });
+      const { tokens } = await this.client.getToken({
+        code: dto.authCode,
+        redirect_uri: 'postmessage',
+      });
+      const ticket = await this.client.verifyIdToken({
+        idToken: tokens.id_token!,
+        audience: cfg.clientId,
+      });
       const payload = ticket.getPayload()!;
 
       return new OAuthResponseDto({

@@ -3,7 +3,10 @@ import { DeliveryStrategy } from '../enums/delivery-strategy.enum.js';
 import { HasEmailChannel } from '../interfaces/has-email-channel.interface.js';
 import { ChannelPayload } from '../interfaces/channel-payload.interface.js';
 
-export class StaffInvitationNotification extends AbstractNotification implements HasEmailChannel {
+export class StaffInvitationNotification
+  extends AbstractNotification
+  implements HasEmailChannel
+{
   readonly strategy = DeliveryStrategy.BEST_EFFORT;
   readonly emailTemplate = 'staff-invitation' as const;
 
@@ -19,7 +22,11 @@ export class StaffInvitationNotification extends AbstractNotification implements
   toEmail(): ChannelPayload {
     return {
       to: this.email,
-      data: { staffName: this.staffName, businessName: this.businessName, invitationLink: this.invitationLink },
+      data: {
+        staffName: this.staffName,
+        businessName: this.businessName,
+        invitationLink: this.invitationLink,
+      },
     };
   }
 }

@@ -7,7 +7,10 @@ import { BookingChannelStatus } from './enums/booking-channel-status.enum.js';
 import { SaveBookingWidgetDto } from './dto/save-booking-widget.dto.js';
 import { isDomainAllowed, normalizeAllowedDomains } from './allowed-domains.js';
 import { toBookingFormColumns } from './booking-form.js';
-import { BookingChannelPublishService, publishedAtFor } from './booking-channel-publish.service.js';
+import {
+  BookingChannelPublishService,
+  publishedAtFor,
+} from './booking-channel-publish.service.js';
 import { rethrowPrisma } from './rethrow-prisma.js';
 
 @Injectable()
@@ -19,92 +22,154 @@ export class BookingWidgetsService {
     private readonly publishService: BookingChannelPublishService,
   ) {}
 
-  async list(businessId: string): Promise<BookingWidget[]> {
+  async list(locationId: string): Promise<BookingWidget[]> {
     return this.db.bookingWidget.findMany({
-      where: { businessId },
+      where: { locationId },
       orderBy: { updatedAt: 'desc' },
     });
   }
 
-  async findInBusiness(businessId: string, widgetId: string): Promise<BookingWidget> {
-    const widget = await this.db.bookingWidget.findFirst({ where: { id: widgetId, businessId } });
-    if (!widget) throw new AppException(ErrorCode.BOOKING_WIDGET_NOT_FOUND, HttpStatus.NOT_FOUND);
+  async findInBusiness(
+    locationId: string,
+    widgetId: string,
+  ): Promise<BookingWidget> {
+    const widget = await this.db.bookingWidget.findFirst({
+      where: { id: widgetId, locationId },
+    });
+    if (!widget)
+      throw new AppException(
+        ErrorCode.BOOKING_WIDGET_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
     return widget;
   }
 
-  async create(businessId: string, dto: SaveBookingWidgetDto): Promise<BookingWidget> {
+  async create(
+    locationId: string,
+    dto: SaveBookingWidgetDto,
+  ): Promise<BookingWidget> {
     const allowedDomains = this.domains(dto.allowedDomains);
-    await this.assertTitleAvailable(businessId, dto.title);
+    await this.assertTitleAvailable(locationId, dto.title);
     try {
       const widget = await this.db.bookingWidget.create({
-        data: { businessId, ...this.content(dto, allowedDomains) },
+        data: { locationId, ...this.content(dto, allowedDomains) },
       });
-      this.logger.log(`booking widget created: id=${widget.id} businessId=${businessId}`);
+      this.logger.log(
+        `booking widget created: id=${widget.id} locationId=${locationId}`,
+      );
       return widget;
     } catch (error: unknown) {
-      rethrowPrisma(error, ErrorCode.BOOKING_WIDGET_TITLE_EXISTS, ErrorCode.BOOKING_WIDGET_NOT_FOUND);
+      rethrowPrisma(
+        error,
+        ErrorCode.BOOKING_WIDGET_TITLE_EXISTS,
+        ErrorCode.BOOKING_WIDGET_NOT_FOUND,
+      );
     }
   }
 
-  async update(businessId: string, widgetId: string, dto: SaveBookingWidgetDto): Promise<BookingWidget> {
-    await this.findInBusiness(businessId, widgetId);
+  async update(
+    locationId: string,
+    widgetId: string,
+    dto: SaveBookingWidgetDto,
+  ): Promise<BookingWidget> {
+    await this.findInBusiness(locationId, widgetId);
     const allowedDomains = this.domains(dto.allowedDomains);
-    await this.assertTitleAvailable(businessId, dto.title, widgetId);
+    await this.assertTitleAvailable(locationId, dto.title, widgetId);
     try {
       const widget = await this.db.bookingWidget.update({
         where: { id: widgetId },
         data: this.content(dto, allowedDomains),
       });
-      this.logger.log(`booking widget updated: id=${widgetId} businessId=${businessId}`);
+      this.logger.log(
+        `booking widget updated: id=${widgetId} locationId=${locationId}`,
+      );
       return widget;
     } catch (error: unknown) {
-      rethrowPrisma(error, ErrorCode.BOOKING_WIDGET_TITLE_EXISTS, ErrorCode.BOOKING_WIDGET_NOT_FOUND);
+      rethrowPrisma(
+        error,
+        ErrorCode.BOOKING_WIDGET_TITLE_EXISTS,
+        ErrorCode.BOOKING_WIDGET_NOT_FOUND,
+      );
     }
   }
 
-  async changeStatus(businessId: string, widgetId: string, status: BookingChannelStatus): Promise<BookingWidget> {
-    const widget = await this.findInBusiness(businessId, widgetId);
-    await this.publishService.assertTransition(businessId, widget.status, status);
+  async changeStatus(
+    locationId: string,
+    widgetId: string,
+    status: BookingChannelStatus,
+  ): Promise<BookingWidget> {
+    const widget = await this.findInBusiness(locationId, widgetId);
+    await this.publishService.assertTransition(
+      locationId,
+      widget.status,
+      status,
+    );
     const updated = await this.db.bookingWidget.update({
       where: { id: widgetId },
       data: { status, publishedAt: publishedAtFor(status) },
     });
-    this.logger.log(`booking widget status: id=${widgetId} businessId=${businessId} status=${status}`);
+    this.logger.log(
+      `booking widget status: id=${widgetId} locationId=${locationId} status=${status}`,
+    );
     return updated;
   }
 
-  async delete(businessId: string, widgetId: string): Promise<void> {
-    await this.findInBusiness(businessId, widgetId);
+  async delete(locationId: string, widgetId: string): Promise<void> {
+    await this.findInBusiness(locationId, widgetId);
     await this.db.bookingWidget.delete({ where: { id: widgetId } });
-    this.logger.log(`booking widget deleted: id=${widgetId} businessId=${businessId}`);
+    this.logger.log(
+      `booking widget deleted: id=${widgetId} locationId=${locationId}`,
+    );
   }
 
-  async getPublished(widgetId: string, origin?: string): Promise<BookingWidget> {
+  async getPublished(
+    widgetId: string,
+    origin?: string,
+  ): Promise<BookingWidget> {
     const widget = await this.db.bookingWidget.findFirst({
       where: { id: widgetId, status: BookingChannelStatus.PUBLISHED },
     });
-    if (!widget) throw new AppException(ErrorCode.BOOKING_WIDGET_NOT_FOUND, HttpStatus.NOT_FOUND);
+    if (!widget)
+      throw new AppException(
+        ErrorCode.BOOKING_WIDGET_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
     if (!isDomainAllowed(widget.allowedDomains, origin)) {
-      throw new AppException(ErrorCode.WIDGET_DOMAIN_NOT_ALLOWED, HttpStatus.FORBIDDEN);
+      throw new AppException(
+        ErrorCode.WIDGET_DOMAIN_NOT_ALLOWED,
+        HttpStatus.FORBIDDEN,
+      );
     }
     return widget;
   }
 
-  private async assertTitleAvailable(businessId: string, title: string, widgetId?: string): Promise<void> {
+  private async assertTitleAvailable(
+    locationId: string,
+    title: string,
+    widgetId?: string,
+  ): Promise<void> {
     const existing = await this.db.bookingWidget.findFirst({
       where: {
-        businessId,
+        locationId,
         titleKey: title.trim().toLowerCase(),
         ...(widgetId ? { NOT: { id: widgetId } } : {}),
       },
       select: { id: true },
     });
-    if (existing) throw new AppException(ErrorCode.BOOKING_WIDGET_TITLE_EXISTS, HttpStatus.CONFLICT);
+    if (existing)
+      throw new AppException(
+        ErrorCode.BOOKING_WIDGET_TITLE_EXISTS,
+        HttpStatus.CONFLICT,
+      );
   }
 
   private domains(values: string[]): string[] {
     const normalized = normalizeAllowedDomains(values);
-    if (!normalized) throw new AppException(ErrorCode.VALIDATION_ERROR, HttpStatus.BAD_REQUEST);
+    if (!normalized)
+      throw new AppException(
+        ErrorCode.VALIDATION_ERROR,
+        HttpStatus.BAD_REQUEST,
+      );
     return normalized;
   }
 

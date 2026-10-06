@@ -33,7 +33,12 @@ export class UpdateStaffDto {
   @MaxLength(250)
   roleTitle?: string;
 
-  @ApiProperty({ type: String, maxLength: 2000, required: false, nullable: true })
+  @ApiProperty({
+    type: String,
+    maxLength: 2000,
+    required: false,
+    nullable: true,
+  })
   @IsOptional()
   @IsString()
   @MaxLength(2000)
@@ -69,7 +74,12 @@ export class UpdateStaffDto {
   @IsEnum(StaffStatus)
   status?: StaffStatus;
 
-  @ApiProperty({ enum: StaffEmploymentType, enumName: 'StaffEmploymentType', required: false, nullable: true })
+  @ApiProperty({
+    enum: StaffEmploymentType,
+    enumName: 'StaffEmploymentType',
+    required: false,
+    nullable: true,
+  })
   @IsOptional()
   @IsEnum(StaffEmploymentType)
   employmentType?: StaffEmploymentType;
@@ -85,12 +95,22 @@ export class UpdateStaffDto {
   @MaxLength(30)
   employeeNumber?: string;
 
-  @ApiProperty({ enum: StaffPayoutMethod, enumName: 'StaffPayoutMethod', required: false, nullable: true })
+  @ApiProperty({
+    enum: StaffPayoutMethod,
+    enumName: 'StaffPayoutMethod',
+    required: false,
+    nullable: true,
+  })
   @IsOptional()
   @IsEnum(StaffPayoutMethod)
   payoutMethod?: StaffPayoutMethod;
 
-  @ApiProperty({ type: String, required: false, nullable: true, maxLength: 250 })
+  @ApiProperty({
+    type: String,
+    required: false,
+    nullable: true,
+    maxLength: 250,
+  })
   @IsOptional()
   @IsString()
   @MaxLength(250)

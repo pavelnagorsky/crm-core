@@ -21,7 +21,16 @@ import { BookingChannelsModule } from '../booking-channels/booking-channels.modu
 @Module({
   // Booking create and reschedule use CalendarService; the calendar view reads bookings back.
   // Public booking creation attributes the row to a page or widget owned by BookingChannelsModule.
-  imports: [PassportModule, BusinessModule, forwardRef(() => CalendarModule), ClientsModule, StaffModule, PayrollModule, I18nModule, forwardRef(() => BookingChannelsModule)],
+  imports: [
+    PassportModule,
+    BusinessModule,
+    forwardRef(() => CalendarModule),
+    ClientsModule,
+    StaffModule,
+    PayrollModule,
+    I18nModule,
+    forwardRef(() => BookingChannelsModule),
+  ],
   controllers: [BookingsController],
   providers: [
     BookingsService,

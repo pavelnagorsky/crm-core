@@ -22,8 +22,13 @@ function seriesUpdate(thisOnly: unknown, occurrenceDate?: unknown) {
 
 describe('calendar series occurrenceDate', () => {
   it('does not require a date when deleting the whole series', async () => {
-    const omitted = plainToInstance(DeleteCalendarEventDto, { thisOnly: 'false' });
-    const empty = plainToInstance(DeleteCalendarEventDto, { thisOnly: 'false', occurrenceDate: '' });
+    const omitted = plainToInstance(DeleteCalendarEventDto, {
+      thisOnly: 'false',
+    });
+    const empty = plainToInstance(DeleteCalendarEventDto, {
+      thisOnly: 'false',
+      occurrenceDate: '',
+    });
 
     expect(omitted.thisOnly).toBe(false);
     expect(await fields(omitted)).toEqual([]);

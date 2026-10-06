@@ -29,10 +29,18 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const ctx = `${req.method} ${req.url}`;
 
     if (exception instanceof AppException) {
-      this.logger.warn(`[${ctx}] AppException ${exception.errorCode} (${exception.getStatus()})`);
+      this.logger.warn(
+        `[${ctx}] AppException ${exception.errorCode} (${exception.getStatus()})`,
+      );
       res
         .status(exception.getStatus())
-        .json(BaseResponseDto.failure(exception.errorCode, exception.message, exception.payload));
+        .json(
+          BaseResponseDto.failure(
+            exception.errorCode,
+            exception.message,
+            exception.payload,
+          ),
+        );
       return;
     }
 
@@ -40,7 +48,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       const status = exception.getStatus();
       const code = HTTP_CODE_MAP[status] ?? ErrorCode.INTERNAL_ERROR;
       const body = exception.getResponse();
-      const message = typeof body === 'string' ? body : (body as any)?.message ?? exception.message;
+      const message =
+        typeof body === 'string'
+          ? body
+          : ((body as any)?.message ?? exception.message);
       if (status >= 500) {
         this.logger.error(`[${ctx}] HttpException ${status}: ${message}`);
       }
@@ -54,6 +65,11 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     );
     res
       .status(HttpStatus.INTERNAL_SERVER_ERROR)
-      .json(BaseResponseDto.failure(ErrorCode.INTERNAL_ERROR.code, ErrorCode.INTERNAL_ERROR.message));
+      .json(
+        BaseResponseDto.failure(
+          ErrorCode.INTERNAL_ERROR.code,
+          ErrorCode.INTERNAL_ERROR.message,
+        ),
+      );
   }
 }

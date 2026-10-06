@@ -8,13 +8,19 @@ export class PublicBookingWidgetDetailsDto {
   @ApiProperty({ type: String })
   id: string;
 
-  @ApiProperty({ enum: BookingWidgetPlacement, enumName: 'BookingWidgetPlacement' })
+  @ApiProperty({
+    enum: BookingWidgetPlacement,
+    enumName: 'BookingWidgetPlacement',
+  })
   placement: BookingWidgetPlacement;
 
   @ApiProperty({ enum: BookingWidgetTrigger, enumName: 'BookingWidgetTrigger' })
   trigger: BookingWidgetTrigger;
 
-  @ApiProperty({ enum: BookingWidgetButtonPosition, enumName: 'BookingWidgetButtonPosition' })
+  @ApiProperty({
+    enum: BookingWidgetButtonPosition,
+    enumName: 'BookingWidgetButtonPosition',
+  })
   buttonPosition: BookingWidgetButtonPosition;
 
   static from(widget: BookingWidget): PublicBookingWidgetDetailsDto {

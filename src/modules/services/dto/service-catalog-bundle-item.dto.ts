@@ -27,15 +27,21 @@ export class ServiceCatalogBundleItemDto extends ServiceCatalogItemBaseDto {
   @ApiProperty({ type: String, isArray: true })
   itemTitles: string[];
 
-  @ApiProperty({ type: () => ServiceCatalogBundleServiceItemDto, isArray: true })
+  @ApiProperty({
+    type: () => ServiceCatalogBundleServiceItemDto,
+    isArray: true,
+  })
   items: ServiceCatalogBundleServiceItemDto[];
 
-  static fromEntity(item: ServiceCatalogBundleItem): ServiceCatalogBundleItemDto {
+  static fromEntity(
+    item: ServiceCatalogBundleItem,
+  ): ServiceCatalogBundleItemDto {
     const dto = new ServiceCatalogBundleItemDto();
     ServiceCatalogItemBaseDto.assign(dto, item);
     dto.executionMode = item.executionMode;
     dto.pricingMode = item.pricingMode;
-    dto.fixedPrice = item.fixedPrice == null ? null : MoneyService.format(item.fixedPrice);
+    dto.fixedPrice =
+      item.fixedPrice == null ? null : MoneyService.format(item.fixedPrice);
     dto.itemsCount = item.itemsCount;
     dto.itemTitles = item.itemTitles;
     dto.items = item.items.map(ServiceCatalogBundleServiceItemDto.fromEntity);

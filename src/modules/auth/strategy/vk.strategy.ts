@@ -1,4 +1,8 @@
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
@@ -65,7 +69,8 @@ export class VkOAuthStrategy extends PassportStrategy(Strategy, 'vk-oauth') {
           { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
         ),
       );
-      if (!profile.user?.email) throw new BadRequestException('No user email from VK');
+      if (!profile.user?.email)
+        throw new BadRequestException('No user email from VK');
 
       return new OAuthResponseDto({
         providerId: String(tokens.user_id),

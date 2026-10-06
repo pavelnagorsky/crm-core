@@ -9,6 +9,11 @@ export class WidgetSeriesDto {
   @ApiProperty({ type: () => WidgetSeriesPointDto, isArray: true })
   points: WidgetSeriesPointDto[];
 
-  @ApiProperty({ type: () => WidgetSeriesPointDto, isArray: true, required: false, description: 'Previous-period series, positionally aligned with points[]' })
+  @ApiProperty({
+    type: () => WidgetSeriesPointDto,
+    isArray: true,
+    required: false,
+    description: 'Previous-period series, positionally aligned with points[]',
+  })
   comparisonPoints?: WidgetSeriesPointDto[];
 }

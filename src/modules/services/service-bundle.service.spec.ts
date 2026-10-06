@@ -17,14 +17,18 @@ describe('ServiceBundleService', () => {
     await service.listForCatalog('business-1', { search: '  комплекс  ' });
 
     expect(findMany.mock.calls[0][0].where).toEqual({
-      businessId: 'business-1',
+      locationId: 'business-1',
       OR: [
         { title: { contains: 'комплекс', mode: 'insensitive' } },
         { description: { contains: 'комплекс', mode: 'insensitive' } },
       ],
     });
-    expect(findMany.mock.calls[0][0].include.category).toEqual({ select: { name: true } });
-    expect(findMany.mock.calls[0][0].include.items.include.service.select).toEqual({
+    expect(findMany.mock.calls[0][0].include.category).toEqual({
+      select: { name: true },
+    });
+    expect(
+      findMany.mock.calls[0][0].include.items.include.service.select,
+    ).toEqual({
       title: true,
       price: true,
       durationMinutes: true,

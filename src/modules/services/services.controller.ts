@@ -33,7 +33,7 @@ import { ServiceResponseDto } from './dto/service-response.dto.js';
 import { CreateServiceBundleDto } from './dto/create-service-bundle.dto.js';
 import { UpdateServiceBundleDto } from './dto/update-service-bundle.dto.js';
 import { ServiceBundleResponseDto } from './dto/service-bundle-response.dto.js';
-import { RBAC } from '../business/decorators/rbac.decorator.js';
+import { LocationRBAC } from '../auth/decorators/location-rbac.decorator.js';
 import {
   ApiResponse,
   ApiResponseArray,
@@ -52,7 +52,7 @@ import { ServiceCatalogCountsRequestDto } from './dto/service-catalog-counts-req
 import { ServiceCatalogCountsResponseDto } from './dto/service-catalog-counts-response.dto.js';
 
 @ApiTags('Services')
-@Controller('businesses/:businessId')
+@Controller('locations/:locationId')
 export class ServicesController {
   constructor(
     private readonly servicesService: ServicesService,
@@ -64,29 +64,29 @@ export class ServicesController {
 
   @ApiOperation({ summary: 'Create a service category' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
-  @RBAC(BusinessRole.OWNER)
+  @LocationRBAC(BusinessRole.OWNER)
   @Post('service-categories')
   async createCategory(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Body() dto: CreateServiceCategoryDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<{ id: string }>> {
     const category = await this.servicesService.createCategory(
-      businessId,
+      locationId,
       dto,
-      auditActorFromToken(tokenPayload, businessId),
+      auditActorFromToken(tokenPayload, locationId),
     );
     return BaseResponseDto.success({ id: category.id });
   }
 
   @ApiOperation({ summary: 'List service categories for a business' })
   @ApiOkResponse({ type: ApiResponseArray(ServiceCategoryResponseDto) })
-  @RBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
   @Get('service-categories')
   async listCategories(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
   ): Promise<BaseResponseDto<ServiceCategoryResponseDto[]>> {
-    const categories = await this.servicesService.listCategories(businessId);
+    const categories = await this.servicesService.listCategories(locationId);
     return BaseResponseDto.success(
       categories.map(ServiceCategoryResponseDto.fromEntity),
     );
@@ -96,19 +96,19 @@ export class ServicesController {
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Service category not found' })
   @ApiConflictResponse({ description: 'Category name already exists' })
-  @RBAC(BusinessRole.OWNER)
+  @LocationRBAC(BusinessRole.OWNER)
   @Put('service-categories/:categoryId')
   async updateCategory(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('categoryId', ParseUUIDPipe) categoryId: string,
     @Body() dto: UpdateServiceCategoryDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<{ id: string }>> {
     const category = await this.servicesService.updateCategory(
-      businessId,
+      locationId,
       categoryId,
       dto,
-      auditActorFromToken(tokenPayload, businessId),
+      auditActorFromToken(tokenPayload, locationId),
     );
     return BaseResponseDto.success({ id: category.id });
   }
@@ -116,18 +116,18 @@ export class ServicesController {
   @ApiOperation({ summary: 'Delete a service category' })
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Service category not found' })
-  @RBAC(BusinessRole.OWNER)
+  @LocationRBAC(BusinessRole.OWNER)
   @Delete('service-categories/:categoryId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteCategory(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('categoryId', ParseUUIDPipe) categoryId: string,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<void> {
     await this.servicesService.deleteCategory(
-      businessId,
+      locationId,
       categoryId,
-      auditActorFromToken(tokenPayload, businessId),
+      auditActorFromToken(tokenPayload, locationId),
     );
   }
 
@@ -135,17 +135,17 @@ export class ServicesController {
 
   @ApiOperation({ summary: 'Create a service' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
-  @RBAC(BusinessRole.OWNER)
+  @LocationRBAC(BusinessRole.OWNER)
   @Post('services')
   async create(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Body() dto: CreateServiceDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<{ id: string }>> {
     const service = await this.servicesService.create(
-      businessId,
+      locationId,
       dto,
-      auditActorFromToken(tokenPayload, businessId),
+      auditActorFromToken(tokenPayload, locationId),
     );
     return BaseResponseDto.success({ id: service.id });
   }
@@ -153,19 +153,19 @@ export class ServicesController {
   @ApiOperation({ summary: 'Update a service' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Service not found' })
-  @RBAC(BusinessRole.OWNER)
+  @LocationRBAC(BusinessRole.OWNER)
   @Put('services/:id')
   async update(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateServiceDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<{ id: string }>> {
     const service = await this.servicesService.update(
-      businessId,
+      locationId,
       id,
       dto,
-      auditActorFromToken(tokenPayload, businessId),
+      auditActorFromToken(tokenPayload, locationId),
     );
     return BaseResponseDto.success({ id: service.id });
   }
@@ -174,25 +174,30 @@ export class ServicesController {
 
   @ApiOperation({ summary: 'Get unified service catalog counts' })
   @ApiOkResponse({ type: ApiResponse(ServiceCatalogCountsResponseDto) })
-  @RBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
   @Get('service-catalog/counts')
   async getCatalogCounts(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Query() dto: ServiceCatalogCountsRequestDto,
   ): Promise<BaseResponseDto<ServiceCatalogCountsResponseDto>> {
-    const counts = await this.serviceCatalog.getCounts(businessId, dto);
-    return BaseResponseDto.success(ServiceCatalogCountsResponseDto.fromCounts(counts));
+    const counts = await this.serviceCatalog.getCounts(locationId, dto);
+    return BaseResponseDto.success(
+      ServiceCatalogCountsResponseDto.fromCounts(counts),
+    );
   }
 
   @ApiOperation({ summary: 'Search the unified service catalog' })
   @ApiOkResponse({ type: ApiResponse(ServiceCatalogSearchResponseDto) })
-  @RBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
   @Get('service-catalog')
   async searchCatalog(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Query() dto: ServiceCatalogSearchRequestDto,
   ): Promise<BaseResponseDto<ServiceCatalogSearchResponseDto>> {
-    const { items, totalItems } = await this.serviceCatalog.search(businessId, dto);
+    const { items, totalItems } = await this.serviceCatalog.search(
+      locationId,
+      dto,
+    );
     return BaseResponseDto.success(
       new ServiceCatalogSearchResponseDto(
         items.map(ServiceCatalogItemDto.fromEntity),
@@ -206,17 +211,17 @@ export class ServicesController {
 
   @ApiOperation({ summary: 'Create a service bundle' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
-  @RBAC(BusinessRole.OWNER)
+  @LocationRBAC(BusinessRole.OWNER)
   @Post('service-bundles')
   async createBundle(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Body() dto: CreateServiceBundleDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<{ id: string }>> {
     const bundle = await this.serviceBundles.create(
-      businessId,
+      locationId,
       dto,
-      auditActorFromToken(tokenPayload, businessId),
+      auditActorFromToken(tokenPayload, locationId),
     );
     return BaseResponseDto.success({ id: bundle.id });
   }
@@ -224,7 +229,7 @@ export class ServicesController {
   @ApiOperation({ summary: 'Get service bundle by ID' })
   @ApiOkResponse({ type: ApiResponse(ServiceBundleResponseDto) })
   @ApiNotFoundResponse({ description: 'Service bundle not found' })
-  @RBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
   @Get('service-bundles/:id')
   async findBundleById(
     @Param('id', ParseUUIDPipe) id: string,
@@ -236,19 +241,19 @@ export class ServicesController {
   @ApiOperation({ summary: 'Update a service bundle' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Service bundle not found' })
-  @RBAC(BusinessRole.OWNER)
+  @LocationRBAC(BusinessRole.OWNER)
   @Put('service-bundles/:id')
   async updateBundle(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateServiceBundleDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<{ id: string }>> {
     const bundle = await this.serviceBundles.update(
-      businessId,
+      locationId,
       id,
       dto,
-      auditActorFromToken(tokenPayload, businessId),
+      auditActorFromToken(tokenPayload, locationId),
     );
     return BaseResponseDto.success({ id: bundle.id });
   }
@@ -257,20 +262,20 @@ export class ServicesController {
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Service bundle not found' })
   @ApiConflictResponse({ description: 'Bundle already has this status' })
-  @RBAC(BusinessRole.OWNER)
+  @LocationRBAC(BusinessRole.OWNER)
   @HttpCode(HttpStatus.NO_CONTENT)
   @Patch('service-bundles/:id/status')
   async updateBundleStatus(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateServiceStatusDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<void> {
     await this.serviceBundles.changeStatus(
-      businessId,
+      locationId,
       id,
       dto.status,
-      auditActorFromToken(tokenPayload, businessId),
+      auditActorFromToken(tokenPayload, locationId),
     );
   }
 
@@ -278,25 +283,25 @@ export class ServicesController {
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Service bundle not found' })
   @ApiConflictResponse({ description: 'Bundle is used in bookings' })
-  @RBAC(BusinessRole.OWNER)
+  @LocationRBAC(BusinessRole.OWNER)
   @Delete('service-bundles/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteBundle(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<void> {
     await this.serviceBundles.delete(
-      businessId,
+      locationId,
       id,
-      auditActorFromToken(tokenPayload, businessId),
+      auditActorFromToken(tokenPayload, locationId),
     );
   }
 
   @ApiOperation({ summary: 'Get service by ID' })
   @ApiOkResponse({ type: ApiResponse(ServiceResponseDto) })
   @ApiNotFoundResponse({ description: 'Service not found' })
-  @RBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
   @Get('services/:id')
   async findById(
     @Param('id', ParseUUIDPipe) id: string,
@@ -309,39 +314,41 @@ export class ServicesController {
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Service not found' })
   @ApiConflictResponse({ description: 'Service already has this status' })
-  @RBAC(BusinessRole.OWNER)
+  @LocationRBAC(BusinessRole.OWNER)
   @HttpCode(HttpStatus.NO_CONTENT)
   @Patch('services/:id/status')
   async updateStatus(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateServiceStatusDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<void> {
     await this.servicesService.changeStatus(
-      businessId,
+      locationId,
       id,
       dto.status,
-      auditActorFromToken(tokenPayload, businessId),
+      auditActorFromToken(tokenPayload, locationId),
     );
   }
 
   @ApiOperation({ summary: 'Delete a service' })
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Service not found' })
-  @ApiConflictResponse({ description: 'Service is used in bookings or compensation plans' })
-  @RBAC(BusinessRole.OWNER)
+  @ApiConflictResponse({
+    description: 'Service is used in bookings or compensation plans',
+  })
+  @LocationRBAC(BusinessRole.OWNER)
   @Delete('services/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<void> {
     await this.servicesService.delete(
-      businessId,
+      locationId,
       id,
-      auditActorFromToken(tokenPayload, businessId),
+      auditActorFromToken(tokenPayload, locationId),
     );
   }
 }

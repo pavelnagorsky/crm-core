@@ -1,5 +1,10 @@
-import { PayrollPeriodStatus, Prisma, type PayrollPeriod, type PayrollResult } from '@prisma/client';
-import { BusinessService } from '../../business/business.service.js';
+import {
+  PayrollPeriodStatus,
+  Prisma,
+  type PayrollPeriod,
+  type PayrollResult,
+} from '@prisma/client';
+import { LocationService } from '../../location/location.service.js';
 import { LocaleService } from '../../../shared/i18n/locale.service.js';
 import { StaffEarningsService } from '../earnings/staff-earnings.service.js';
 import { PayrollPeriodWithResults } from '../periods/interfaces/payroll-period-with-results.interface.js';
@@ -34,14 +39,13 @@ function result(
   staffName: string,
   parts: Partial<Record<(typeof FUND_FIELDS)[number], string>> = {},
 ): PayrollResult {
-  const amounts = Object.fromEntries(FUND_FIELDS.map((field) => [field, parts[field] ?? '0'])) as Record<
-    (typeof FUND_FIELDS)[number],
-    string
-  >;
+  const amounts = Object.fromEntries(
+    FUND_FIELDS.map((field) => [field, parts[field] ?? '0']),
+  ) as Record<(typeof FUND_FIELDS)[number], string>;
   return {
     id,
     periodId: 'period-1',
-    businessId: 'biz',
+    locationId: 'biz',
     staffId: id,
     staffName,
     roleTitle: null,
@@ -58,16 +62,22 @@ function result(
     bonusTotal: new Prisma.Decimal(amounts.bonusTotal),
     deductionTotal: new Prisma.Decimal(amounts.deductionTotal),
     correctionTotal: new Prisma.Decimal(amounts.correctionTotal),
-    totalAmount: FUND_FIELDS.reduce((acc, field) => acc.plus(amounts[field]), MoneyService.decimal(0)),
+    totalAmount: FUND_FIELDS.reduce(
+      (acc, field) => acc.plus(amounts[field]),
+      MoneyService.decimal(0),
+    ),
     earningsCount: 0,
     createdAt: new Date('2026-09-30T12:00:00.000Z'),
   };
 }
 
-function period(status: PayrollPeriodStatus, results: PayrollResult[]): PayrollPeriodWithResults {
+function period(
+  status: PayrollPeriodStatus,
+  results: PayrollResult[],
+): PayrollPeriodWithResults {
   const base: PayrollPeriod = {
     id: 'period-1',
-    businessId: 'biz',
+    locationId: 'biz',
     name: 'September',
     startDate: new Date('2026-09-01T00:00:00.000Z'),
     endDate: new Date('2026-09-30T00:00:00.000Z'),
@@ -86,23 +96,35 @@ function period(status: PayrollPeriodStatus, results: PayrollResult[]): PayrollP
   return { ...base, results };
 }
 
-function serviceFor(...periods: PayrollPeriodWithResults[]): PayrollReportService {
+function serviceFor(
+  ...periods: PayrollPeriodWithResults[]
+): PayrollReportService {
   const findById = vi.fn();
   for (const item of periods) findById.mockResolvedValueOnce(item);
   return new PayrollReportService(
     { findById } as unknown as PayrollService,
-    { listByResultIds: vi.fn().mockResolvedValue([]) } as unknown as StaffEarningsService,
-    { findById: vi.fn().mockResolvedValue({ name: 'Studio' }) } as unknown as BusinessService,
+    {
+      listByResultIds: vi.fn().mockResolvedValue([]),
+    } as unknown as StaffEarningsService,
+    {
+      findById: vi.fn().mockResolvedValue({ name: 'Studio' }),
+    } as unknown as LocationService,
     { get: vi.fn() } as unknown as LocaleService,
   );
 }
 
 function expectFundInvariant(report: PayrollReportResponseDto): void {
   for (const field of FUND_FIELDS) {
-    const fromLines = report.vedomost.reduce((acc, line) => acc.plus(line[field]), MoneyService.decimal(0));
+    const fromLines = report.vedomost.reduce(
+      (acc, line) => acc.plus(line[field]),
+      MoneyService.decimal(0),
+    );
     expect(report.totals[field]).toBe(MoneyService.format(fromLines));
   }
-  const fundSum = FUND_FIELDS.reduce((acc, field) => acc.plus(report.totals[field]), MoneyService.decimal(0));
+  const fundSum = FUND_FIELDS.reduce(
+    (acc, field) => acc.plus(report.totals[field]),
+    MoneyService.decimal(0),
+  );
   expect(MoneyService.format(fundSum)).toBe(report.grandTotal);
   expect(report.staffCount).toBe(report.vedomost.length);
 }
@@ -123,18 +145,25 @@ const MIXED = [
 
 describe('PayrollReportService fund totals', () => {
   it('returns zero fund totals for a calculated period with no rows', async () => {
-    const report = await serviceFor(period(PayrollPeriodStatus.CALCULATED, [])).build('period-1');
+    const report = await serviceFor(
+      period(PayrollPeriodStatus.CALCULATED, []),
+    ).build('period-1');
 
     expect(report.currency).toBe('RUB');
     expect(report.grandTotal).toBe('0.00');
     expect(report.staffCount).toBe(0);
     expect(report.totals).toEqual(ZERO_TOTALS);
-    expect(report.attention).toEqual({ staffWithDeductions: 0, staffWithCorrections: 0 });
+    expect(report.attention).toEqual({
+      staffWithDeductions: 0,
+      staffWithCorrections: 0,
+    });
     expectFundInvariant(report);
   });
 
   it('sums each vedomost column and keeps deduction and correction signs', async () => {
-    const report = await serviceFor(period(PayrollPeriodStatus.CALCULATED, MIXED)).build('period-1');
+    const report = await serviceFor(
+      period(PayrollPeriodStatus.CALCULATED, MIXED),
+    ).build('period-1');
 
     expect(report.totals).toEqual({
       fixedSalaryTotal: '40000.00',
@@ -145,7 +174,10 @@ describe('PayrollReportService fund totals', () => {
       deductionTotal: '-480.00',
       correctionTotal: '4.75',
     });
-    expect(report.attention).toEqual({ staffWithDeductions: 2, staffWithCorrections: 2 });
+    expect(report.attention).toEqual({
+      staffWithDeductions: 2,
+      staffWithCorrections: 2,
+    });
     expect(report.grandTotal).toBe('50275.25');
     expectFundInvariant(report);
   });
@@ -168,8 +200,15 @@ describe('PayrollReportService fund totals', () => {
     const paid = await reports.build('period-1');
 
     expect(before.grandTotal).toBe('50275.25');
-    expect(after.totals).toEqual({ ...ZERO_TOTALS, fixedSalaryTotal: '100.00', deductionTotal: '-5.00' });
-    expect(after.attention).toEqual({ staffWithDeductions: 1, staffWithCorrections: 0 });
+    expect(after.totals).toEqual({
+      ...ZERO_TOTALS,
+      fixedSalaryTotal: '100.00',
+      deductionTotal: '-5.00',
+    });
+    expect(after.attention).toEqual({
+      staffWithDeductions: 1,
+      staffWithCorrections: 0,
+    });
     expect(after.grandTotal).toBe('95.00');
     expect(after.staffCount).toBe(1);
     expectFundInvariant(after);

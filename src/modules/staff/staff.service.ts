@@ -59,8 +59,11 @@ export class StaffService {
     private readonly config: ConfigService,
   ) {}
 
-  listInBusiness(businessId: string): Promise<Staff[]> {
-    return this.db.staff.findMany({ where: { businessId }, orderBy: { name: 'asc' } });
+  listInBusiness(locationId: string): Promise<Staff[]> {
+    return this.db.staff.findMany({
+      where: { locationId },
+      orderBy: { name: 'asc' },
+    });
   }
 
   async namesByIds(ids: string[]): Promise<Map<string, string>> {
@@ -72,31 +75,38 @@ export class StaffService {
     return new Map(rows.map((row) => [row.id, row.name]));
   }
 
-  listShiftsInRange(businessId: string, from: Date, to: Date): Promise<StaffShift[]> {
+  listShiftsInRange(
+    locationId: string,
+    from: Date,
+    to: Date,
+  ): Promise<StaffShift[]> {
     return this.db.staffShift.findMany({
-      where: { staff: { businessId }, date: { gte: from, lte: to } },
+      where: { staff: { locationId }, date: { gte: from, lte: to } },
       orderBy: { date: 'asc' },
     });
   }
 
   listActiveWithServices(
-    businessId: string,
+    locationId: string,
   ): Promise<(StaffWithAvatar & { staffServices: { serviceId: string }[] })[]> {
     return this.db.staff.findMany({
-      where: { businessId, status: StaffStatus.ACTIVE },
+      where: { locationId, status: StaffStatus.ACTIVE },
       orderBy: { name: 'asc' },
-      include: { avatarFile: true, staffServices: { select: { serviceId: true } } },
+      include: {
+        avatarFile: true,
+        staffServices: { select: { serviceId: true } },
+      },
     });
   }
 
   async create(
-    businessId: string,
+    locationId: string,
     dto: CreateStaffDto,
     actor: AuditActor,
   ): Promise<StaffWithAvatar> {
     const staff = await this.db.staff.create({
       data: {
-        businessId,
+        locationId,
         name: dto.name,
         roleTitle: dto.roleTitle ?? null,
         description: this.normalizeDescription(dto.description) ?? null,
@@ -115,7 +125,7 @@ export class StaffService {
       include: { avatarFile: true },
     });
     const event: AuditLogEvent = {
-      businessId,
+      locationId,
       entityType: AuditEntity.STAFF,
       entityId: staff.id,
       eventType: AuditEvent.STAFF_CREATED,
@@ -129,14 +139,19 @@ export class StaffService {
   }
 
   async update(
-    businessId: string,
+    locationId: string,
     staffId: string,
     dto: UpdateStaffDto,
     actor: AuditActor,
   ): Promise<StaffWithAvatar> {
-    const old = await this.findInBusiness(businessId, staffId);
+    const old = await this.findInBusiness(locationId, staffId);
     if (dto.status !== undefined && dto.status !== old.status) {
-      await this.changeStatus(businessId, staffId, { status: dto.status }, actor);
+      await this.changeStatus(
+        locationId,
+        staffId,
+        { status: dto.status },
+        actor,
+      );
     }
     const staff = await this.db.staff.update({
       where: { id: staffId },
@@ -166,7 +181,7 @@ export class StaffService {
     );
     if (changes.length > 0) {
       const event: AuditLogEvent = {
-        businessId,
+        locationId,
         entityType: AuditEntity.STAFF,
         entityId: staffId,
         eventType: AuditEvent.STAFF_UPDATED,
@@ -181,7 +196,10 @@ export class StaffService {
   }
 
   async findById(staffId: string): Promise<StaffWithAvatar> {
-    const staff = await this.db.staff.findUnique({ where: { id: staffId }, include: { avatarFile: true } });
+    const staff = await this.db.staff.findUnique({
+      where: { id: staffId },
+      include: { avatarFile: true },
+    });
     if (!staff) throw new NotFoundException('Staff member not found');
     return staff;
   }
@@ -195,40 +213,49 @@ export class StaffService {
     return staff;
   }
 
-  private normalizeDescription(value: string | null | undefined): string | null | undefined {
+  private normalizeDescription(
+    value: string | null | undefined,
+  ): string | null | undefined {
     if (value == null) return value;
     const html = sanitizeRichHtml(value);
     if (!html) return null;
     if (html.length > STAFF_DESCRIPTION_MAX_LENGTH) {
-      throw new AppException(ErrorCode.VALIDATION_ERROR, HttpStatus.BAD_REQUEST);
+      throw new AppException(
+        ErrorCode.VALIDATION_ERROR,
+        HttpStatus.BAD_REQUEST,
+      );
     }
     return html;
   }
 
   private async findInBusiness(
-    businessId: string,
+    locationId: string,
     staffId: string,
   ): Promise<StaffWithAvatar> {
     const staff = await this.db.staff.findFirst({
-      where: { id: staffId, businessId },
+      where: { id: staffId, locationId },
       include: { avatarFile: true },
     });
     if (!staff) throw new NotFoundException('Staff member not found');
     return staff;
   }
 
-  private buildWhere(businessId: string, filter: StaffFilterDto): Prisma.StaffWhereInput {
-    const where: Prisma.StaffWhereInput = { businessId };
-    if (filter.search) where.name = { contains: filter.search, mode: 'insensitive' };
+  private buildWhere(
+    locationId: string,
+    filter: StaffFilterDto,
+  ): Prisma.StaffWhereInput {
+    const where: Prisma.StaffWhereInput = { locationId };
+    if (filter.search)
+      where.name = { contains: filter.search, mode: 'insensitive' };
     if (filter.status !== undefined) where.status = filter.status;
     return where;
   }
 
   async search(
-    businessId: string,
+    locationId: string,
     dto: StaffSearchRequestDto,
   ): Promise<PaginatedResult<StaffWithServiceCount>> {
-    const where = this.buildWhere(businessId, dto);
+    const where = this.buildWhere(locationId, dto);
 
     const direction = dto.orderDirection ?? OrderDirection.DESC;
     const orderBy: Prisma.StaffOrderByWithRelationInput = {
@@ -254,7 +281,7 @@ export class StaffService {
   }
 
   resolveStaffForService(
-    businessId: string,
+    locationId: string,
     serviceId: string,
     staffId?: string,
   ): Promise<{ id: string }[]> {
@@ -262,7 +289,7 @@ export class StaffService {
       return this.db.staff.findMany({
         where: {
           id: staffId,
-          businessId,
+          locationId,
           status: StaffStatus.ACTIVE,
           staffServices: { some: { serviceId } },
         },
@@ -271,7 +298,7 @@ export class StaffService {
     }
     return this.db.staff.findMany({
       where: {
-        businessId,
+        locationId,
         status: StaffStatus.ACTIVE,
         staffServices: { some: { serviceId } },
       },
@@ -280,15 +307,19 @@ export class StaffService {
   }
 
   async resolveStaffingForServices(
-    businessId: string,
+    locationId: string,
     serviceIds: string[],
-  ): Promise<{ coverableBySingle: { id: string; name: string }[]; requiresMultiple: boolean }> {
+  ): Promise<{
+    coverableBySingle: { id: string; name: string }[];
+    requiresMultiple: boolean;
+  }> {
     const uniqueServiceIds = [...new Set(serviceIds)];
-    if (uniqueServiceIds.length === 0) return { coverableBySingle: [], requiresMultiple: false };
+    if (uniqueServiceIds.length === 0)
+      return { coverableBySingle: [], requiresMultiple: false };
 
     const staff = await this.db.staff.findMany({
       where: {
-        businessId,
+        locationId,
         status: StaffStatus.ACTIVE,
         staffServices: { some: { serviceId: { in: uniqueServiceIds } } },
       },
@@ -302,57 +333,77 @@ export class StaffService {
 
     const coverableBySingle = staff
       .filter((member) => {
-        const performed = new Set(member.staffServices.map((service) => service.serviceId));
+        const performed = new Set(
+          member.staffServices.map((service) => service.serviceId),
+        );
         return uniqueServiceIds.every((serviceId) => performed.has(serviceId));
       })
       .map((member) => ({ id: member.id, name: member.name }));
 
-    return { coverableBySingle, requiresMultiple: coverableBySingle.length === 0 };
+    return {
+      coverableBySingle,
+      requiresMultiple: coverableBySingle.length === 0,
+    };
   }
 
-  async servicesPerformableBy(businessId: string, staffId: string): Promise<string[]> {
+  async servicesPerformableBy(
+    locationId: string,
+    staffId: string,
+  ): Promise<string[]> {
     const staff = await this.db.staff.findFirst({
-      where: { id: staffId, businessId, status: StaffStatus.ACTIVE },
+      where: { id: staffId, locationId, status: StaffStatus.ACTIVE },
       select: { staffServices: { select: { serviceId: true } } },
     });
     return staff?.staffServices.map((service) => service.serviceId) ?? [];
   }
 
   async changeStatus(
-    businessId: string,
+    locationId: string,
     staffId: string,
     dto: ChangeStaffStatusDto,
     actor: AuditActor,
   ): Promise<void> {
-    const staff = await this.findInBusiness(businessId, staffId);
+    const staff = await this.findInBusiness(locationId, staffId);
     if (staff.status === dto.status)
-      throw new AppException(ErrorCode.STAFF_STATUS_ALREADY_SET, HttpStatus.CONFLICT);
+      throw new AppException(
+        ErrorCode.STAFF_STATUS_ALREADY_SET,
+        HttpStatus.CONFLICT,
+      );
 
     const now = new Date();
     await this.db.$transaction(async (tx) => {
-      await tx.staff.update({ where: { id: staffId }, data: { status: dto.status } });
+      await tx.staff.update({
+        where: { id: staffId },
+        data: { status: dto.status },
+      });
       if (dto.status === StaffStatus.INACTIVE) {
-        await tx.staffShift.deleteMany({ where: { staffId, date: { gte: now } } });
+        await tx.staffShift.deleteMany({
+          where: { staffId, date: { gte: now } },
+        });
       }
     });
 
     const event: AuditLogEvent = {
-      businessId,
+      locationId,
       entityType: AuditEntity.STAFF,
       entityId: staffId,
       eventType: AuditEvent.STAFF_UPDATED,
       actionType: AuditActionType.MODIFY,
       occurredAt: now,
       actor,
-      payload: { changes: [{ field: 'status', from: staff.status, to: dto.status }] },
+      payload: {
+        changes: [{ field: 'status', from: staff.status, to: dto.status }],
+      },
     };
     this.eventEmitter.emit(AUDIT_EVENT, event);
   }
 
-  async delete(businessId: string, staffId: string): Promise<void> {
-    await this.findInBusiness(businessId, staffId);
+  async delete(locationId: string, staffId: string): Promise<void> {
+    await this.findInBusiness(locationId, staffId);
 
-    const bookingCount = await this.db.bookingItem.count({ where: { staffId } });
+    const bookingCount = await this.db.bookingItem.count({
+      where: { staffId },
+    });
     if (bookingCount > 0)
       throw new AppException(ErrorCode.STAFF_HAS_BOOKINGS, HttpStatus.CONFLICT);
 
@@ -360,16 +411,21 @@ export class StaffService {
       await this.db.staff.delete({ where: { id: staffId } });
     } catch (e: any) {
       if (e?.code === PrismaErrorCode.FOREIGN_KEY_VIOLATION) {
-        throw new AppException(ErrorCode.STAFF_HAS_EARNINGS, HttpStatus.CONFLICT);
+        throw new AppException(
+          ErrorCode.STAFF_HAS_EARNINGS,
+          HttpStatus.CONFLICT,
+        );
       }
       throw e;
     }
   }
 
-  async getStatusCounts(businessId: string): Promise<StaffStatusCountResponseDto[]> {
+  async getStatusCounts(
+    locationId: string,
+  ): Promise<StaffStatusCountResponseDto[]> {
     const rows = await this.db.staff.groupBy({
       by: ['status'],
-      where: { businessId },
+      where: { locationId },
       _count: { _all: true },
     });
     return rows.map((r) => {
@@ -422,7 +478,7 @@ export class StaffService {
     });
 
     const event: AuditLogEvent = {
-      businessId: staff.businessId,
+      locationId: staff.locationId,
       entityType: AuditEntity.STAFF,
       entityId: staffId,
       eventType: AuditEvent.STAFF_SHIFTS_UPDATED,
@@ -460,7 +516,7 @@ export class StaffService {
     await this.db.staffInvitation.create({
       data: {
         staffId,
-        businessId: staff.businessId,
+        locationId: staff.locationId,
         tokenHash,
         expiresAt: new Date(dto.expiresAt),
       },
@@ -468,11 +524,11 @@ export class StaffService {
 
     if (dto.email) {
       const cfg = this.config.get<IFrontendConfig>('frontend')!;
-      const business = await this.db.business.findFirst({
-        where: { id: staff.businessId },
-        select: { name: true },
+      const location = await this.db.location.findFirst({
+        where: { id: staff.locationId },
+        select: { brand: { select: { name: true } } },
       });
-      const businessName = business?.name ?? '';
+      const businessName = location?.brand.name ?? '';
       this.eventEmitter.emit(
         NOTIFICATION_EVENT,
         new StaffInvitationNotification(
@@ -517,10 +573,10 @@ export class StaffService {
 
     return this.db.$transaction(async (tx) => {
       try {
-        await tx.membership.create({
+        await tx.locationMembership.create({
           data: {
             userId,
-            businessId: invitation.businessId,
+            locationId: invitation.locationId,
             role: BusinessRole.STAFF,
           },
         });
@@ -556,4 +612,3 @@ function parseTime(hhmm: string): Date {
   d.setUTCHours(h, m, 0, 0);
   return d;
 }
-

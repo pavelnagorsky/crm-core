@@ -10,7 +10,11 @@ export class ClientImportResponseDto {
   @ApiProperty({ type: Number })
   errorCount: number;
 
-  constructor(successCount: number, duplicateCount: number, errorCount: number) {
+  constructor(
+    successCount: number,
+    duplicateCount: number,
+    errorCount: number,
+  ) {
     this.successCount = successCount;
     this.duplicateCount = duplicateCount;
     this.errorCount = errorCount;

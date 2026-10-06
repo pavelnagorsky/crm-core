@@ -10,7 +10,7 @@ export class ServiceResponseDto {
   id: string;
 
   @ApiProperty({ type: String })
-  businessId: string;
+  locationId: string;
 
   @ApiProperty({ type: String, nullable: true })
   categoryId: string | null;
@@ -51,7 +51,7 @@ export class ServiceResponseDto {
   static fromEntity(service: ServiceWithStaffCount): ServiceResponseDto {
     const dto = new ServiceResponseDto();
     dto.id = service.id;
-    dto.businessId = service.businessId;
+    dto.locationId = service.locationId;
     dto.categoryId = service.categoryId;
     dto.image = service.imageFile
       ? FileResponseDto.fromEntity(service.imageFile)

@@ -8,7 +8,9 @@ export function canonicalPhone(value: string): string {
   if (!digits) return '';
   if (digits.startsWith('00')) digits = digits.slice(2);
   if (!digits) return '';
-  if (digits.length === 11 && digits.startsWith('80')) return `+375${digits.slice(2)}`;
-  if (digits.length === 11 && digits.startsWith('8')) return `+7${digits.slice(1)}`;
+  if (digits.length === 11 && digits.startsWith('80'))
+    return `+375${digits.slice(2)}`;
+  if (digits.length === 11 && digits.startsWith('8'))
+    return `+7${digits.slice(1)}`;
   return `+${digits}`;
 }

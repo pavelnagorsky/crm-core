@@ -1,6 +1,13 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { PayrollPeriod, PayrollPeriodStatus, PayrollResult, Prisma, Staff, StaffEarning } from '@prisma/client';
+import {
+  PayrollPeriod,
+  PayrollPeriodStatus,
+  PayrollResult,
+  Prisma,
+  Staff,
+  StaffEarning,
+} from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
 import { stableOrderBy } from '../../../shared/database/stable-order-by.js';
@@ -15,12 +22,15 @@ import { AuditEvent } from '../../audit/enums/audit-event.enum.js';
 import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../../audit/interfaces/audit-log-event.interface.js';
 import { AuditPayload } from '../../audit/interfaces/audit-payload.interface.js';
-import { BusinessService } from '../../business/business.service.js';
+import { LocationService } from '../../location/location.service.js';
 import { StaffService } from '../../staff/staff.service.js';
 import { TimeService } from '../../time/time.service.js';
 import { CreatePayrollCorrectionDto } from './dto/create-payroll-correction.dto.js';
 import { CreatePayrollPeriodDto } from './dto/create-payroll-period.dto.js';
-import { PayrollPeriodSearchOrderBy, PayrollPeriodSearchRequestDto } from './dto/payroll-period-search-request.dto.js';
+import {
+  PayrollPeriodSearchOrderBy,
+  PayrollPeriodSearchRequestDto,
+} from './dto/payroll-period-search-request.dto.js';
 import { PayrollPeriodWithResults } from './interfaces/payroll-period-with-results.interface.js';
 import { PayrollComputeService } from './payroll-compute.service.js';
 import { StaffCompensationService } from '../compensation/staff-compensation.service.js';
@@ -28,7 +38,10 @@ import { StaffEarningsService } from '../earnings/staff-earnings.service.js';
 import { MoneyService } from '../../../shared/money/money.service.js';
 import { lockedPeriodWhere } from './locked-period.js';
 
-const EDITABLE_STATUSES: PayrollPeriodStatus[] = [PayrollPeriodStatus.DRAFT, PayrollPeriodStatus.CALCULATED];
+const EDITABLE_STATUSES: PayrollPeriodStatus[] = [
+  PayrollPeriodStatus.DRAFT,
+  PayrollPeriodStatus.CALCULATED,
+];
 
 @Injectable()
 export class PayrollService {
@@ -38,30 +51,41 @@ export class PayrollService {
     private readonly compensation: StaffCompensationService,
     private readonly compute: PayrollComputeService,
     private readonly staffService: StaffService,
-    private readonly businessService: BusinessService,
+    private readonly locationService: LocationService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
-  async create(dto: CreatePayrollPeriodDto, actor: AuditActor): Promise<PayrollPeriodWithResults> {
+  async create(
+    dto: CreatePayrollPeriodDto,
+    actor: AuditActor,
+  ): Promise<PayrollPeriodWithResults> {
     const startDate = TimeService.dateOnly(dto.startDate);
     const endDate = TimeService.dateOnly(dto.endDate);
-    if (endDate < startDate) throw new AppException(ErrorCode.PAYROLL_PERIOD_DATES_INVALID, HttpStatus.BAD_REQUEST);
+    if (endDate < startDate)
+      throw new AppException(
+        ErrorCode.PAYROLL_PERIOD_DATES_INVALID,
+        HttpStatus.BAD_REQUEST,
+      );
 
     const overlap = await this.db.payrollPeriod.findFirst({
       where: {
-        businessId: dto.businessId,
+        locationId: dto.locationId,
         startDate: { lte: endDate },
         endDate: { gte: startDate },
       },
     });
-    if (overlap) throw new AppException(ErrorCode.PAYROLL_PERIOD_OVERLAP, HttpStatus.CONFLICT);
+    if (overlap)
+      throw new AppException(
+        ErrorCode.PAYROLL_PERIOD_OVERLAP,
+        HttpStatus.CONFLICT,
+      );
 
-    const { currency } = await this.businessService.getLocale(dto.businessId);
+    const { currency } = await this.locationService.getLocale(dto.locationId);
 
     try {
       const period = await this.db.payrollPeriod.create({
         data: {
-          businessId: dto.businessId,
+          locationId: dto.locationId,
           name: dto.name ?? null,
           startDate,
           endDate,
@@ -69,21 +93,34 @@ export class PayrollService {
         },
         include: { results: true },
       });
-      this.emitPayrollAudit(dto.businessId, period.id, AuditEvent.PAYROLL_PERIOD_CREATED, AuditActionType.CREATE, actor, {
-        startDate: dto.startDate,
-        endDate: dto.endDate,
-      });
+      this.emitPayrollAudit(
+        dto.locationId,
+        period.id,
+        AuditEvent.PAYROLL_PERIOD_CREATED,
+        AuditActionType.CREATE,
+        actor,
+        {
+          startDate: dto.startDate,
+          endDate: dto.endDate,
+        },
+      );
       return period;
     } catch (e: any) {
       if (e?.code === PrismaErrorCode.UNIQUE_CONSTRAINT_VIOLATION) {
-        throw new AppException(ErrorCode.PAYROLL_PERIOD_OVERLAP, HttpStatus.CONFLICT);
+        throw new AppException(
+          ErrorCode.PAYROLL_PERIOD_OVERLAP,
+          HttpStatus.CONFLICT,
+        );
       }
       throw e;
     }
   }
 
-  async search(businessId: string, dto: PayrollPeriodSearchRequestDto): Promise<PaginatedResult<PayrollPeriodWithResults>> {
-    const where: Prisma.PayrollPeriodWhereInput = { businessId };
+  async search(
+    locationId: string,
+    dto: PayrollPeriodSearchRequestDto,
+  ): Promise<PaginatedResult<PayrollPeriodWithResults>> {
+    const where: Prisma.PayrollPeriodWhereInput = { locationId };
     if (dto.status) where.status = dto.status;
 
     const direction = dto.orderDirection ?? OrderDirection.DESC;
@@ -95,7 +132,9 @@ export class PayrollService {
       where,
       orderBy: stableOrderBy(orderBy, direction),
       include: { results: { orderBy: { staffName: 'asc' as const } } },
-      ...(!dto.isExport ? { skip: (dto.page - 1) * dto.pageSize, take: dto.pageSize } : {}),
+      ...(!dto.isExport
+        ? { skip: (dto.page - 1) * dto.pageSize, take: dto.pageSize }
+        : {}),
     };
 
     const [items, totalItems] = await this.db.$transaction([
@@ -105,19 +144,23 @@ export class PayrollService {
     return { items, totalItems };
   }
 
-  async getStatusCounts(businessId: string): Promise<{ status: PayrollPeriodStatus; count: number }[]> {
+  async getStatusCounts(
+    locationId: string,
+  ): Promise<{ status: PayrollPeriodStatus; count: number }[]> {
     const rows = await this.db.payrollPeriod.groupBy({
       by: ['status'],
-      where: { businessId },
+      where: { locationId },
       _count: { _all: true },
     });
     return rows.map((r) => ({ status: r.status, count: r._count._all }));
   }
 
   /** Date ranges where a new earning is rejected. Same filter as `assertDateUnlocked`. */
-  async listLockedRanges(businessId: string): Promise<{ startDate: Date; endDate: Date }[]> {
+  async listLockedRanges(
+    locationId: string,
+  ): Promise<{ startDate: Date; endDate: Date }[]> {
     return this.db.payrollPeriod.findMany({
-      where: lockedPeriodWhere(businessId),
+      where: lockedPeriodWhere(locationId),
       select: { startDate: true, endDate: true },
       orderBy: { startDate: 'asc' },
     });
@@ -128,133 +171,219 @@ export class PayrollService {
       where: { id: periodId },
       include: { results: { orderBy: { staffName: 'asc' } } },
     });
-    if (!period) throw new AppException(ErrorCode.PAYROLL_PERIOD_NOT_FOUND, HttpStatus.NOT_FOUND);
+    if (!period)
+      throw new AppException(
+        ErrorCode.PAYROLL_PERIOD_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
     return period;
   }
 
   async delete(periodId: string, actor: AuditActor): Promise<void> {
     const period = await this.findById(periodId);
     if (!EDITABLE_STATUSES.includes(period.status)) {
-      throw new AppException(ErrorCode.PAYROLL_PERIOD_INVALID_STATUS, HttpStatus.CONFLICT);
+      throw new AppException(
+        ErrorCode.PAYROLL_PERIOD_INVALID_STATUS,
+        HttpStatus.CONFLICT,
+      );
     }
     await this.db.$transaction(async (tx) => {
       await this.earnings.detachPeriodEarnings(periodId, tx);
-      await this.earnings.deleteDraftPeriodComponents(period.businessId, periodId, period.startDate, period.endDate, tx);
+      await this.earnings.deleteDraftPeriodComponents(
+        period.locationId,
+        periodId,
+        period.startDate,
+        period.endDate,
+        tx,
+      );
       await tx.payrollPeriod.delete({ where: { id: periodId } });
     });
-    this.emitPayrollAudit(period.businessId, periodId, AuditEvent.PAYROLL_PERIOD_DELETED, AuditActionType.DELETE, actor, {});
+    this.emitPayrollAudit(
+      period.locationId,
+      periodId,
+      AuditEvent.PAYROLL_PERIOD_DELETED,
+      AuditActionType.DELETE,
+      actor,
+      {},
+    );
   }
 
-  async calculate(periodId: string, actor: AuditActor): Promise<PayrollPeriodWithResults> {
+  async calculate(
+    periodId: string,
+    actor: AuditActor,
+  ): Promise<PayrollPeriodWithResults> {
     const period = await this.findById(periodId);
     if (!EDITABLE_STATUSES.includes(period.status)) {
-      throw new AppException(ErrorCode.PAYROLL_PERIOD_INVALID_STATUS, HttpStatus.CONFLICT);
+      throw new AppException(
+        ErrorCode.PAYROLL_PERIOD_INVALID_STATUS,
+        HttpStatus.CONFLICT,
+      );
     }
 
-    const staff = await this.staffService.listInBusiness(period.businessId);
+    const staff = await this.staffService.listInBusiness(period.locationId);
     const staffById = new Map(staff.map((s) => [s.id, s]));
     const [shifts, plans] = await Promise.all([
-      this.staffService.listShiftsInRange(period.businessId, period.startDate, period.endDate),
+      this.staffService.listShiftsInRange(
+        period.locationId,
+        period.startDate,
+        period.endDate,
+      ),
       this.compensation.listOverlapping(
         staff.map((s) => s.id),
         period.startDate,
         period.endDate,
       ),
     ]);
-    const dates = TimeService.enumerateDates(TimeService.dateOnlyStr(period.startDate), TimeService.dateOnlyStr(period.endDate));
+    const dates = TimeService.enumerateDates(
+      TimeService.dateOnlyStr(period.startDate),
+      TimeService.dateOnlyStr(period.endDate),
+    );
 
-    const updated = await this.db.$transaction(async (tx) => {
-      await this.earnings.detachPeriodEarnings(periodId, tx);
-      await this.earnings.deleteDraftPeriodComponents(period.businessId, periodId, period.startDate, period.endDate, tx);
-      await tx.payrollResult.deleteMany({ where: { periodId } });
-
-      for (const shift of shifts) {
-        const plan = this.compute.planOnDate(
-          plans.filter((p) => p.staffId === shift.staffId),
-          shift.date,
-        );
-        await this.earnings.materializeHourly(period.businessId, period.currency, shift, plan ?? null, tx);
-      }
-
-      let unpaid = this.compute.matchingCurrency(
-        await this.earnings.listUnpaidThrough(period.businessId, period.endDate, tx),
-        period.currency,
-      );
-      const unpaidByStaff = this.compute.groupByStaff(unpaid);
-      const salaryStaffIds = new Set(plans.filter((p) => p.fixedSalaryAmount !== null).map((p) => p.staffId));
-
-      for (const staffId of salaryStaffIds) {
-        const proration = this.compute.prorateSalary(
-          plans.filter((p) => p.staffId === staffId && p.fixedSalaryAmount !== null),
-          dates,
-        );
-        const amount = this.compute.salaryAmount(
-          proration,
-          this.compute.inDateRange(unpaidByStaff.get(staffId) ?? [], period.startDate, period.endDate),
-        );
-        if (amount.lte(0)) continue;
-
-        await this.earnings.materializeSalary(
-          {
-            businessId: period.businessId,
-            staffId,
-            periodId,
-            earnedOn: period.endDate,
-            currency: period.currency,
-            amount,
-            rateAmount: proration.lastSalary,
-            quantity: MoneyService.decimal(proration.daysCovered),
-            planId: proration.planId,
-          },
+    const updated = await this.db.$transaction(
+      async (tx) => {
+        await this.earnings.detachPeriodEarnings(periodId, tx);
+        await this.earnings.deleteDraftPeriodComponents(
+          period.locationId,
+          periodId,
+          period.startDate,
+          period.endDate,
           tx,
         );
-      }
+        await tx.payrollResult.deleteMany({ where: { periodId } });
 
-      unpaid = this.compute.matchingCurrency(
-        await this.earnings.listUnpaidThrough(period.businessId, period.endDate, tx),
-        period.currency,
-      );
+        for (const shift of shifts) {
+          const plan = this.compute.planOnDate(
+            plans.filter((p) => p.staffId === shift.staffId),
+            shift.date,
+          );
+          await this.earnings.materializeHourly(
+            period.locationId,
+            period.currency,
+            shift,
+            plan ?? null,
+            tx,
+          );
+        }
 
-      for (const [staffId, rows] of this.compute.groupByStaff(unpaid)) {
-        const member = staffById.get(staffId);
-        if (!member || rows.length === 0) continue;
-        const totals = this.compute.totalsFrom(rows);
-        const result = await tx.payrollResult.create({
+        let unpaid = this.compute.matchingCurrency(
+          await this.earnings.listUnpaidThrough(
+            period.locationId,
+            period.endDate,
+            tx,
+          ),
+          period.currency,
+        );
+        const unpaidByStaff = this.compute.groupByStaff(unpaid);
+        const salaryStaffIds = new Set(
+          plans
+            .filter((p) => p.fixedSalaryAmount !== null)
+            .map((p) => p.staffId),
+        );
+
+        for (const staffId of salaryStaffIds) {
+          const proration = this.compute.prorateSalary(
+            plans.filter(
+              (p) => p.staffId === staffId && p.fixedSalaryAmount !== null,
+            ),
+            dates,
+          );
+          const amount = this.compute.salaryAmount(
+            proration,
+            this.compute.inDateRange(
+              unpaidByStaff.get(staffId) ?? [],
+              period.startDate,
+              period.endDate,
+            ),
+          );
+          if (amount.lte(0)) continue;
+
+          await this.earnings.materializeSalary(
+            {
+              locationId: period.locationId,
+              staffId,
+              periodId,
+              earnedOn: period.endDate,
+              currency: period.currency,
+              amount,
+              rateAmount: proration.lastSalary,
+              quantity: MoneyService.decimal(proration.daysCovered),
+              planId: proration.planId,
+            },
+            tx,
+          );
+        }
+
+        unpaid = this.compute.matchingCurrency(
+          await this.earnings.listUnpaidThrough(
+            period.locationId,
+            period.endDate,
+            tx,
+          ),
+          period.currency,
+        );
+
+        for (const [staffId, rows] of this.compute.groupByStaff(unpaid)) {
+          const member = staffById.get(staffId);
+          if (!member || rows.length === 0) continue;
+          const totals = this.compute.totalsFrom(rows);
+          const result = await tx.payrollResult.create({
+            data: {
+              periodId,
+              locationId: period.locationId,
+              staffId,
+              staffName: member.name,
+              roleTitle: member.roleTitle,
+              taxId: member.taxId,
+              employeeNumber: member.employeeNumber,
+              employmentType: member.employmentType,
+              payoutMethod: member.payoutMethod,
+              payoutNote: member.payoutNote,
+              currency: period.currency,
+              ...totals,
+            },
+          });
+          await this.earnings.attachToResult(
+            rows.map((r) => r.id),
+            result.id,
+            tx,
+          );
+        }
+
+        return tx.payrollPeriod.update({
+          where: { id: periodId },
           data: {
-            periodId,
-            businessId: period.businessId,
-            staffId,
-            staffName: member.name,
-            roleTitle: member.roleTitle,
-            taxId: member.taxId,
-            employeeNumber: member.employeeNumber,
-            employmentType: member.employmentType,
-            payoutMethod: member.payoutMethod,
-            payoutNote: member.payoutNote,
-            currency: period.currency,
-            ...totals,
+            status: PayrollPeriodStatus.CALCULATED,
+            calculatedAt: new Date(),
           },
+          include: { results: { orderBy: { staffName: 'asc' } } },
         });
-        await this.earnings.attachToResult(rows.map((r) => r.id), result.id, tx);
-      }
+      },
+      { timeout: 30_000 },
+    );
 
-      return tx.payrollPeriod.update({
-        where: { id: periodId },
-        data: { status: PayrollPeriodStatus.CALCULATED, calculatedAt: new Date() },
-        include: { results: { orderBy: { staffName: 'asc' } } },
-      });
-    }, { timeout: 30_000 });
-
-    this.emitPayrollAudit(period.businessId, periodId, AuditEvent.PAYROLL_CALCULATED, AuditActionType.ACTION, actor, {
-      staffCount: updated.results.length,
-    });
+    this.emitPayrollAudit(
+      period.locationId,
+      periodId,
+      AuditEvent.PAYROLL_CALCULATED,
+      AuditActionType.ACTION,
+      actor,
+      {
+        staffCount: updated.results.length,
+      },
+    );
     return updated;
   }
 
-  async approve(periodId: string, actor: AuditActor): Promise<PayrollPeriodWithResults> {
+  async approve(
+    periodId: string,
+    actor: AuditActor,
+  ): Promise<PayrollPeriodWithResults> {
     const period = await this.findById(periodId);
     if (period.status !== PayrollPeriodStatus.CALCULATED) {
-      throw new AppException(ErrorCode.PAYROLL_PERIOD_INVALID_STATUS, HttpStatus.CONFLICT);
+      throw new AppException(
+        ErrorCode.PAYROLL_PERIOD_INVALID_STATUS,
+        HttpStatus.CONFLICT,
+      );
     }
     const updated = await this.db.payrollPeriod.update({
       where: { id: periodId },
@@ -266,14 +395,27 @@ export class PayrollService {
       },
       include: { results: { orderBy: { staffName: 'asc' } } },
     });
-    this.emitPayrollAudit(period.businessId, periodId, AuditEvent.PAYROLL_APPROVED, AuditActionType.ACTION, actor, {});
+    this.emitPayrollAudit(
+      period.locationId,
+      periodId,
+      AuditEvent.PAYROLL_APPROVED,
+      AuditActionType.ACTION,
+      actor,
+      {},
+    );
     return updated;
   }
 
-  async pay(periodId: string, actor: AuditActor): Promise<PayrollPeriodWithResults> {
+  async pay(
+    periodId: string,
+    actor: AuditActor,
+  ): Promise<PayrollPeriodWithResults> {
     const period = await this.findById(periodId);
     if (period.status !== PayrollPeriodStatus.APPROVED) {
-      throw new AppException(ErrorCode.PAYROLL_PERIOD_INVALID_STATUS, HttpStatus.CONFLICT);
+      throw new AppException(
+        ErrorCode.PAYROLL_PERIOD_INVALID_STATUS,
+        HttpStatus.CONFLICT,
+      );
     }
     const updated = await this.db.payrollPeriod.update({
       where: { id: periodId },
@@ -285,33 +427,63 @@ export class PayrollService {
       },
       include: { results: { orderBy: { staffName: 'asc' } } },
     });
-    this.emitPayrollAudit(period.businessId, periodId, AuditEvent.PAYROLL_PAID, AuditActionType.ACTION, actor, {});
+    this.emitPayrollAudit(
+      period.locationId,
+      periodId,
+      AuditEvent.PAYROLL_PAID,
+      AuditActionType.ACTION,
+      actor,
+      {},
+    );
     return updated;
   }
 
-  async correct(resultId: string, dto: CreatePayrollCorrectionDto, actor: AuditActor): Promise<StaffEarning> {
+  async correct(
+    resultId: string,
+    dto: CreatePayrollCorrectionDto,
+    actor: AuditActor,
+  ): Promise<StaffEarning> {
     const result = await this.db.payrollResult.findUnique({
       where: { id: resultId },
       include: { period: true },
     });
-    if (!result) throw new AppException(ErrorCode.PAYROLL_RESULT_NOT_FOUND, HttpStatus.NOT_FOUND);
+    if (!result)
+      throw new AppException(
+        ErrorCode.PAYROLL_RESULT_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
     if (
       result.period.status !== PayrollPeriodStatus.APPROVED &&
       result.period.status !== PayrollPeriodStatus.PAID
     ) {
-      throw new AppException(ErrorCode.PAYROLL_CORRECTION_NOT_ALLOWED, HttpStatus.CONFLICT);
+      throw new AppException(
+        ErrorCode.PAYROLL_CORRECTION_NOT_ALLOWED,
+        HttpStatus.CONFLICT,
+      );
     }
 
     const amount = MoneyService.decimal(dto.amount);
-    if (amount.isZero()) throw new AppException(ErrorCode.STAFF_EARNING_AMOUNT_INVALID, HttpStatus.BAD_REQUEST);
+    if (amount.isZero())
+      throw new AppException(
+        ErrorCode.STAFF_EARNING_AMOUNT_INVALID,
+        HttpStatus.BAD_REQUEST,
+      );
 
-    const { timezone } = await this.businessService.getLocale(result.businessId);
+    const { timezone } = await this.locationService.getLocale(
+      result.locationId,
+    );
     const today = TimeService.zonedDateStr(new Date(), timezone);
-    const afterPeriod = TimeService.addDaysStr(TimeService.dateOnlyStr(result.period.endDate), 1);
-    const earnedOn = today > TimeService.dateOnlyStr(result.period.endDate) ? TimeService.dateOnly(today) : TimeService.dateOnly(afterPeriod);
+    const afterPeriod = TimeService.addDaysStr(
+      TimeService.dateOnlyStr(result.period.endDate),
+      1,
+    );
+    const earnedOn =
+      today > TimeService.dateOnlyStr(result.period.endDate)
+        ? TimeService.dateOnly(today)
+        : TimeService.dateOnly(afterPeriod);
 
     return this.earnings.createPeriodCorrection({
-      businessId: result.businessId,
+      locationId: result.locationId,
       staffId: result.staffId,
       resultId: result.id,
       amount,
@@ -322,17 +494,23 @@ export class PayrollService {
     });
   }
 
-  async findResultById(resultId: string): Promise<PayrollResult & { period: PayrollPeriod; staff: Staff }> {
+  async findResultById(
+    resultId: string,
+  ): Promise<PayrollResult & { period: PayrollPeriod; staff: Staff }> {
     const result = await this.db.payrollResult.findUnique({
       where: { id: resultId },
       include: { period: true, staff: true },
     });
-    if (!result) throw new AppException(ErrorCode.PAYROLL_RESULT_NOT_FOUND, HttpStatus.NOT_FOUND);
+    if (!result)
+      throw new AppException(
+        ErrorCode.PAYROLL_RESULT_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
     return result;
   }
 
   private emitPayrollAudit(
-    businessId: string,
+    locationId: string,
     entityId: string,
     eventType: AuditEvent,
     actionType: AuditActionType,
@@ -340,7 +518,7 @@ export class PayrollService {
     payload: AuditPayload,
   ): void {
     const event: AuditLogEvent = {
-      businessId,
+      locationId,
       entityType: AuditEntity.PAYROLL,
       entityId,
       eventType,

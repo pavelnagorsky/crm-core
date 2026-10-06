@@ -26,7 +26,10 @@ import { FilesService } from './files.service.js';
 import { RBAC } from '../business/decorators/rbac.decorator.js';
 import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
-import { BaseResponseDto, ApiResponse } from '../../shared/dto/base-response.dto.js';
+import {
+  BaseResponseDto,
+  ApiResponse,
+} from '../../shared/dto/base-response.dto.js';
 import { UploadFileResponseDto } from './dto/upload-file-response.dto.js';
 
 @ApiTags('Files')

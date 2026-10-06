@@ -8,7 +8,10 @@ import { BookingClientTokenPayloadDto } from '../dto/booking-client-token-payloa
 export const BOOKING_CLIENT_JWT_STRATEGY = 'booking-client-jwt';
 
 @Injectable()
-export class JwtBookingClientStrategy extends PassportStrategy(Strategy, BOOKING_CLIENT_JWT_STRATEGY) {
+export class JwtBookingClientStrategy extends PassportStrategy(
+  Strategy,
+  BOOKING_CLIENT_JWT_STRATEGY,
+) {
   constructor(config: ConfigService) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
@@ -17,7 +20,9 @@ export class JwtBookingClientStrategy extends PassportStrategy(Strategy, BOOKING
     });
   }
 
-  validate(payload: BookingClientTokenPayloadDto): BookingClientTokenPayloadDto {
+  validate(
+    payload: BookingClientTokenPayloadDto,
+  ): BookingClientTokenPayloadDto {
     return payload;
   }
 }

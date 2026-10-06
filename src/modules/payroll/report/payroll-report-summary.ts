@@ -26,16 +26,24 @@ export function summarizePayrollReport(lines: readonly FundLine[]) {
       sums[field] = sums[field].plus(line[field]);
     }
     grand = grand.plus(line.totalAmount);
-    if (!MoneyService.decimal(line.deductionTotal).isZero()) staffWithDeductions += 1;
-    if (!MoneyService.decimal(line.correctionTotal).isZero()) staffWithCorrections += 1;
+    if (!MoneyService.decimal(line.deductionTotal).isZero())
+      staffWithDeductions += 1;
+    if (!MoneyService.decimal(line.correctionTotal).isZero())
+      staffWithCorrections += 1;
   }
 
   const totals = new PayrollReportTotalsDto();
-  for (const field of Object.keys(sums) as FundField[]) totals[field] = MoneyService.format(sums[field]);
+  for (const field of Object.keys(sums) as FundField[])
+    totals[field] = MoneyService.format(sums[field]);
 
   const attention = new PayrollReportAttentionDto();
   attention.staffWithDeductions = staffWithDeductions;
   attention.staffWithCorrections = staffWithCorrections;
 
-  return { totals, attention, grandTotal: MoneyService.format(grand), staffCount: lines.length };
+  return {
+    totals,
+    attention,
+    grandTotal: MoneyService.format(grand),
+    staffCount: lines.length,
+  };
 }

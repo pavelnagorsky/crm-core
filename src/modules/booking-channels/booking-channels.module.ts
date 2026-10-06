@@ -20,7 +20,11 @@ import { BookingChannelAttributionService } from './booking-channel-attribution.
     // checks that the attributed page or widget belongs to the business.
     forwardRef(() => BookingsModule),
   ],
-  controllers: [BookingPagesController, BookingWidgetsController, PublicBookingChannelsController],
+  controllers: [
+    BookingPagesController,
+    BookingWidgetsController,
+    PublicBookingChannelsController,
+  ],
   providers: [
     BookingPagesService,
     BookingWidgetsService,

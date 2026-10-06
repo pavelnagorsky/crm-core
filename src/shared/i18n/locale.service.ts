@@ -15,7 +15,10 @@ export class LocaleService implements OnModuleInit {
     for (const file of readdirSync(dir)) {
       if (!file.endsWith('.json')) continue;
       const lang = file.slice(0, -'.json'.length);
-      this.locales.set(lang, JSON.parse(readFileSync(join(dir, file), 'utf-8')) as I18nLocale);
+      this.locales.set(
+        lang,
+        JSON.parse(readFileSync(join(dir, file), 'utf-8')) as I18nLocale,
+      );
     }
     if (!this.locales.has(DEFAULT_LANG)) {
       throw new Error(`Default locale "${DEFAULT_LANG}" is missing`);

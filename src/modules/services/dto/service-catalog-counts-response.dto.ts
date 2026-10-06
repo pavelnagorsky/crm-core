@@ -13,7 +13,9 @@ export class ServiceCatalogCountsResponseDto {
   @ApiProperty({ type: () => ServiceCatalogKindCountDto, isArray: true })
   byKind: ServiceCatalogKindCountDto[];
 
-  static fromCounts(counts: ServiceCatalogCounts): ServiceCatalogCountsResponseDto {
+  static fromCounts(
+    counts: ServiceCatalogCounts,
+  ): ServiceCatalogCountsResponseDto {
     const dto = new ServiceCatalogCountsResponseDto();
     dto.total = counts.total;
     dto.byStatus = counts.byStatus.map((row) => {

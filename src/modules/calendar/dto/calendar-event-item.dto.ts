@@ -7,13 +7,21 @@ import { CalendarBookingView } from '../interfaces/calendar-booking-view.interfa
 const FALLBACK_TITLE = 'Событие';
 
 export class CalendarEventItemDto {
-  @ApiProperty({ type: String, description: 'Card key in this response. A block occurrence is {eventId}:{date}.' })
+  @ApiProperty({
+    type: String,
+    description:
+      'Card key in this response. A block occurrence is {eventId}:{date}.',
+  })
   id: string;
 
   @ApiProperty({ enum: CalendarEventType })
   type: CalendarEventType;
 
-  @ApiProperty({ type: String, nullable: true, description: 'Id for GET by id. Null when that endpoint does not exist.' })
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'Id for GET by id. Null when that endpoint does not exist.',
+  })
   entityId: string | null;
 
   @ApiProperty({ type: String, nullable: true })
@@ -31,7 +39,10 @@ export class CalendarEventItemDto {
   @ApiProperty({ type: String, nullable: true })
   caption: string | null;
 
-  @ApiProperty({ type: String, description: 'YYYY-MM-DD in the business timezone' })
+  @ApiProperty({
+    type: String,
+    description: 'YYYY-MM-DD in the business timezone',
+  })
   date: string;
 
   @ApiProperty({ type: String, description: 'HH:mm in the business timezone' })
@@ -76,7 +87,11 @@ export class CalendarEventItemDto {
     return dto;
   }
 
-  static booking(booking: CalendarBookingView, timezone: string, currency: string): CalendarEventItemDto {
+  static booking(
+    booking: CalendarBookingView,
+    timezone: string,
+    currency: string,
+  ): CalendarEventItemDto {
     const name = `${booking.clientLastName} ${booking.clientFirstName}`.trim();
     const serviceTitle = booking.serviceTitle.trim();
     const title = serviceTitle || name || FALLBACK_TITLE;
@@ -90,7 +105,10 @@ export class CalendarEventItemDto {
     dto.staffName = booking.staffName;
     dto.title = title;
     dto.subtitle = name && name !== title ? name : null;
-    dto.caption = MoneyService.formatCurrency(booking.customPrice ?? booking.servicePrice, currency);
+    dto.caption = MoneyService.formatCurrency(
+      booking.customPrice ?? booking.servicePrice,
+      currency,
+    );
     dto.date = TimeService.zonedDateStr(booking.startAt, timezone);
     dto.startTime = TimeService.minutesToHHmm(start.hour * 60 + start.minute);
     dto.endTime = TimeService.minutesToHHmm(end.hour * 60 + end.minute);

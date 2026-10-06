@@ -8,7 +8,10 @@ import { CookiesEnum } from '../enums/cookies.enum.js';
 import { TokenPayloadDto } from '../dto/token-payload.dto.js';
 
 @Injectable()
-export class JwtRefreshStrategy extends PassportStrategy(Strategy, 'refresh-jwt') {
+export class JwtRefreshStrategy extends PassportStrategy(
+  Strategy,
+  'refresh-jwt',
+) {
   constructor(config: ConfigService) {
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
@@ -20,7 +23,10 @@ export class JwtRefreshStrategy extends PassportStrategy(Strategy, 'refresh-jwt'
     });
   }
 
-  validate(req: Request, payload: TokenPayloadDto): TokenPayloadDto & { refreshToken: string } {
+  validate(
+    req: Request,
+    payload: TokenPayloadDto,
+  ): TokenPayloadDto & { refreshToken: string } {
     const refreshToken = req.cookies?.[CookiesEnum.REFRESH_TOKEN];
     if (!refreshToken) throw new UnauthorizedException();
     return Object.assign(payload, { refreshToken });

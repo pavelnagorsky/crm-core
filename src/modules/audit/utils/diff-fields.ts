@@ -16,12 +16,20 @@ const defaultFormat = (v: unknown): string => {
   return String(v);
 };
 
-export function diffFields<T>(old: T, updated: T, fields: FieldDescriptor<T>[]): AuditFieldChange[] {
+export function diffFields<T>(
+  old: T,
+  updated: T,
+  fields: FieldDescriptor<T>[],
+): AuditFieldChange[] {
   const changes: AuditFieldChange[] = [];
   for (const { key, format } of fields) {
     if (String(old[key] ?? '') !== String(updated[key] ?? '')) {
       const fmt = format ?? defaultFormat;
-      changes.push({ field: String(key), from: fmt(old[key]), to: fmt(updated[key]) });
+      changes.push({
+        field: String(key),
+        from: fmt(old[key]),
+        to: fmt(updated[key]),
+      });
     }
   }
   return changes;

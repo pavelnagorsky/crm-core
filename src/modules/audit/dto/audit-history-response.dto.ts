@@ -6,7 +6,12 @@ export class AuditHistoryResponseDto extends PaginationResponseDto {
   @ApiProperty({ type: () => AuditLogItemDto, isArray: true })
   items: AuditLogItemDto[];
 
-  constructor(items: AuditLogItemDto[], page: number, pageSize: number, totalItems: number) {
+  constructor(
+    items: AuditLogItemDto[],
+    page: number,
+    pageSize: number,
+    totalItems: number,
+  ) {
     super(page, pageSize, totalItems);
     this.items = items;
   }

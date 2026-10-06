@@ -7,7 +7,12 @@ export class ManualBookingItemDto {
   @IsUUID()
   serviceId: string;
 
-  @ApiProperty({ type: String, format: 'uuid', required: false, nullable: true })
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    required: false,
+    nullable: true,
+  })
   @IsOptional()
   @IsUUID()
   staffId?: string;

@@ -10,7 +10,12 @@ const publicCors: CorsOptions = {
 };
 
 export function isPublicApiPath(path: string): boolean {
-  return path === '/public' || path.startsWith('/public/') || path.endsWith('/public') || path.includes('/public/');
+  return (
+    path === '/public' ||
+    path.startsWith('/public/') ||
+    path.endsWith('/public') ||
+    path.includes('/public/')
+  );
 }
 
 export function corsFor(path: string): CorsOptions {

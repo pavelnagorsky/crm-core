@@ -27,14 +27,16 @@ export class DashboardMetricFactory {
     const prev = input.previousValue;
     metric.previousValue = this.round(prev, input.unit);
     metric.deltaAbs = this.round(input.value - prev, input.unit);
-    metric.deltaPct = prev === 0 ? null : +(((input.value - prev) / prev) * 100).toFixed(1);
+    metric.deltaPct =
+      prev === 0 ? null : +(((input.value - prev) / prev) * 100).toFixed(1);
     metric.growth = this.growth(metric.deltaAbs, metric.deltaPct);
     return metric;
   }
 
   private growth(deltaAbs: number, deltaPct: number | null): MetricGrowth {
     if (deltaAbs === 0) return MetricGrowth.SAME;
-    if (deltaPct !== null && Math.abs(deltaPct) < GROWTH_EPSILON_PCT) return MetricGrowth.SAME;
+    if (deltaPct !== null && Math.abs(deltaPct) < GROWTH_EPSILON_PCT)
+      return MetricGrowth.SAME;
     return deltaAbs > 0 ? MetricGrowth.UP : MetricGrowth.DOWN;
   }
 

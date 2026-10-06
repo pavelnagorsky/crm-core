@@ -20,7 +20,11 @@ describe('classifySlug', () => {
     expect(classifySlug('app')).toBe(SlugAvailabilityReason.RESERVED);
     expect(classifySlug('auth')).toBe(SlugAvailabilityReason.RESERVED);
     expect(classifySlug('b')).toBe(SlugAvailabilityReason.RESERVED);
-    expect(classifySlug('privacy-policy')).toBe(SlugAvailabilityReason.RESERVED);
-    expect(classifySlug('terms-of-service')).toBe(SlugAvailabilityReason.RESERVED);
+    expect(classifySlug('privacy-policy')).toBe(
+      SlugAvailabilityReason.RESERVED,
+    );
+    expect(classifySlug('terms-of-service')).toBe(
+      SlugAvailabilityReason.RESERVED,
+    );
   });
 });

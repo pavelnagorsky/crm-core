@@ -1,5 +1,9 @@
 import { BookingStatus } from './enums/booking-status.enum.js';
-import { isAutoCompletable, reminderWindow, REMINDER_LEAD_MS } from './booking-cron.rules.js';
+import {
+  isAutoCompletable,
+  reminderWindow,
+  REMINDER_LEAD_MS,
+} from './booking-cron.rules.js';
 
 describe('booking-cron.rules', () => {
   const now = new Date('2026-09-24T12:00:00.000Z');
@@ -17,7 +21,9 @@ describe('booking-cron.rules', () => {
 
     expect(isAutoCompletable(BookingStatus.CONFIRMED, ended, now)).toBe(true);
     expect(isAutoCompletable(BookingStatus.PENDING, ended, now)).toBe(true);
-    expect(isAutoCompletable(BookingStatus.CONFIRMED, upcoming, now)).toBe(false);
+    expect(isAutoCompletable(BookingStatus.CONFIRMED, upcoming, now)).toBe(
+      false,
+    );
     expect(isAutoCompletable(BookingStatus.COMPLETED, ended, now)).toBe(false);
     expect(isAutoCompletable(BookingStatus.NO_SHOW, ended, now)).toBe(false);
     expect(isAutoCompletable(BookingStatus.CANCELLED, ended, now)).toBe(false);

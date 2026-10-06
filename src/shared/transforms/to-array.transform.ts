@@ -5,7 +5,9 @@ export const ToArray = () =>
     if (value === undefined || value === null || value === '') return undefined;
 
     const items = Array.isArray(value) ? value : [value];
-    const nonEmptyItems = items.filter((item) => item !== undefined && item !== null && item !== '');
+    const nonEmptyItems = items.filter(
+      (item) => item !== undefined && item !== null && item !== '',
+    );
 
     return nonEmptyItems.length ? nonEmptyItems : undefined;
   });

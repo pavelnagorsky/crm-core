@@ -6,7 +6,10 @@ import { IJwtConfig } from '../../../config/configuration.js';
 import { TokenPayloadDto } from '../dto/token-payload.dto.js';
 
 @Injectable()
-export class JwtAccessStrategy extends PassportStrategy(Strategy, 'access-jwt') {
+export class JwtAccessStrategy extends PassportStrategy(
+  Strategy,
+  'access-jwt',
+) {
   constructor(config: ConfigService) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),

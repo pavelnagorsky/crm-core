@@ -5,7 +5,11 @@ import { StaffEarningType } from '../enums/staff-earning-type.enum.js';
 import { StaffEarningSearchOrderBy } from './staff-earning-search-request.dto.js';
 
 export class StaffEarningsByStaffRequestDto extends PaginationRequestDto<StaffEarningSearchOrderBy> {
-  @ApiProperty({ enum: StaffEarningType, enumName: 'StaffEarningType', required: false })
+  @ApiProperty({
+    enum: StaffEarningType,
+    enumName: 'StaffEarningType',
+    required: false,
+  })
   @IsOptional()
   @IsEnum(StaffEarningType)
   type?: StaffEarningType;

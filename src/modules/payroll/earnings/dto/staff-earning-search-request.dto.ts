@@ -11,14 +11,18 @@ export enum StaffEarningSearchOrderBy {
 export class StaffEarningSearchRequestDto extends PaginationRequestDto<StaffEarningSearchOrderBy> {
   @ApiProperty({ type: String, format: 'uuid' })
   @IsUUID()
-  businessId: string;
+  locationId: string;
 
   @ApiProperty({ type: String, format: 'uuid', required: false })
   @IsOptional()
   @IsUUID()
   staffId?: string;
 
-  @ApiProperty({ enum: StaffEarningType, enumName: 'StaffEarningType', required: false })
+  @ApiProperty({
+    enum: StaffEarningType,
+    enumName: 'StaffEarningType',
+    required: false,
+  })
   @IsOptional()
   @IsEnum(StaffEarningType)
   type?: StaffEarningType;

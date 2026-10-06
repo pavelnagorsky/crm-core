@@ -1,12 +1,16 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { CalendarEventType, CalendarEventRepeatType, CalendarEvent } from '@prisma/client';
+import {
+  CalendarEventType,
+  CalendarEventRepeatType,
+  CalendarEvent,
+} from '@prisma/client';
 
 export class CalendarEventResponseDto {
   @ApiProperty({ type: String })
   id: string;
 
   @ApiProperty({ type: String })
-  businessId: string;
+  locationId: string;
 
   @ApiProperty({ type: String, nullable: true })
   staffId: string | null;
@@ -41,7 +45,7 @@ export class CalendarEventResponseDto {
   static fromEntity(event: CalendarEvent): CalendarEventResponseDto {
     const dto = new CalendarEventResponseDto();
     dto.id = event.id;
-    dto.businessId = event.businessId;
+    dto.locationId = event.locationId;
     dto.staffId = event.staffId;
     dto.type = event.type;
     dto.reason = event.reason;
@@ -51,7 +55,9 @@ export class CalendarEventResponseDto {
     dto.startDateTime = event.startDateTime.toISOString();
     dto.endDateTime = event.endDateTime.toISOString();
     dto.daysMask = event.daysMask;
-    dto.repeatUntil = event.repeatUntil ? event.repeatUntil.toISOString().slice(0, 10) : null;
+    dto.repeatUntil = event.repeatUntil
+      ? event.repeatUntil.toISOString().slice(0, 10)
+      : null;
     return dto;
   }
 }

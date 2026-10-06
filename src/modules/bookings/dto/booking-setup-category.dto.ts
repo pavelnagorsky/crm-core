@@ -1,5 +1,11 @@
 import { ApiExtraModels, ApiProperty, getSchemaPath } from '@nestjs/swagger';
-import { File, Service, ServiceBundle, ServiceBundleItem, ServiceCategory } from '@prisma/client';
+import {
+  File,
+  Service,
+  ServiceBundle,
+  ServiceBundleItem,
+  ServiceCategory,
+} from '@prisma/client';
 import { BookingSetupBundleDto } from './booking-setup-bundle.dto.js';
 import { BookingSetupServiceDto } from './booking-setup-service.dto.js';
 
@@ -40,7 +46,10 @@ export class BookingSetupCategoryDto {
   services: Array<BookingSetupServiceDto | BookingSetupBundleDto>;
 
   static fromEntity(
-    category: ServiceCategory & { services: ServiceWithImage[]; bundles: BundleWithItems[] },
+    category: ServiceCategory & {
+      services: ServiceWithImage[];
+      bundles: BundleWithItems[];
+    },
   ): BookingSetupCategoryDto {
     return BookingSetupCategoryDto.build(
       category.id,
@@ -51,7 +60,10 @@ export class BookingSetupCategoryDto {
     );
   }
 
-  static uncategorized(services: ServiceWithImage[], bundles: BundleWithItems[]): BookingSetupCategoryDto {
+  static uncategorized(
+    services: ServiceWithImage[],
+    bundles: BundleWithItems[],
+  ): BookingSetupCategoryDto {
     return BookingSetupCategoryDto.build(null, null, null, services, bundles);
   }
 
@@ -88,9 +100,12 @@ export class BookingSetupCategoryDto {
         item: BookingSetupBundleDto.fromEntity(bundle),
       })),
     ]
-      .sort((left, right) => left.sortOrder - right.sortOrder
-        || left.title.localeCompare(right.title, 'ru')
-        || left.id.localeCompare(right.id))
+      .sort(
+        (left, right) =>
+          left.sortOrder - right.sortOrder ||
+          left.title.localeCompare(right.title, 'ru') ||
+          left.id.localeCompare(right.id),
+      )
       .map((entry) => entry.item);
   }
 }

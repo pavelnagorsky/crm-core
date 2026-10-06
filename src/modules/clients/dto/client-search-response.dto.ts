@@ -6,7 +6,13 @@ export class ClientSearchResponseDto extends PaginationResponseDto {
   @ApiProperty({ type: () => ClientResponseDto, isArray: true })
   items: ClientResponseDto[];
 
-  constructor(items: ClientResponseDto[], page: number, pageSize: number, totalItems: number, isExport = false) {
+  constructor(
+    items: ClientResponseDto[],
+    page: number,
+    pageSize: number,
+    totalItems: number,
+    isExport = false,
+  ) {
     super(page, pageSize, totalItems, isExport);
     this.items = items;
   }

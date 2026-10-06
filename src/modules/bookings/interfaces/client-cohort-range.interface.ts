@@ -1,5 +1,5 @@
 export interface ClientCohortRange {
-  businessId: string;
+  brandId: string;
   from: Date;
   to: Date;
 }

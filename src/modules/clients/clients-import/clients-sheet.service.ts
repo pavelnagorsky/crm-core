@@ -5,9 +5,15 @@ import { canonicalPhone } from '../../../shared/phone/canonical-phone.js';
 import regularExpressions from '../../../shared/regular-expressions.js';
 import { XlsxCells } from '../../../shared/xlsx/interfaces/xlsx-cells.interface.js';
 import { XlsxService } from '../../../shared/xlsx/xlsx.service.js';
-import { CLIENT_IMPORT_MAX_BYTES, CLIENT_IMPORT_MAX_ROWS } from './clients-import.constants.js';
+import {
+  CLIENT_IMPORT_MAX_BYTES,
+  CLIENT_IMPORT_MAX_ROWS,
+} from './clients-import.constants.js';
 import { ClientImportFileReason } from './enums/client-import-file-reason.enum.js';
-import { CLIENT_SHEET_COLUMNS, ClientSheetColumn } from './enums/client-sheet-column.enum.js';
+import {
+  CLIENT_SHEET_COLUMNS,
+  ClientSheetColumn,
+} from './enums/client-sheet-column.enum.js';
 import { ClientImportRow } from './interfaces/client-import-row.interface.js';
 import { ClientImportUpload } from './interfaces/client-import-upload.interface.js';
 import { ClientSheetReadResult } from './interfaces/client-sheet-read-result.interface.js';
@@ -29,7 +35,12 @@ const HEADER_ALIASES: Record<ClientSheetColumn, readonly string[]> = {
   [ClientSheetColumn.LAST_NAME]: ['фамилия', 'lastname', 'last name'],
   [ClientSheetColumn.PHONE]: ['телефон', 'phone', 'тел'],
   [ClientSheetColumn.EMAIL]: ['email', 'e-mail', 'почта'],
-  [ClientSheetColumn.BIRTH_DATE]: ['дата рождения', 'birthdate', 'birth date', 'др'],
+  [ClientSheetColumn.BIRTH_DATE]: [
+    'дата рождения',
+    'birthdate',
+    'birth date',
+    'др',
+  ],
   [ClientSheetColumn.GENDER]: ['пол', 'gender'],
   [ClientSheetColumn.NOTES]: ['заметки', 'notes', 'примечание', 'комментарий'],
 };
@@ -51,7 +62,9 @@ type SheetCells = Record<ClientSheetColumn, string>;
 
 @Injectable()
 export class ClientsSheetService {
-  async read(file: ClientImportUpload | undefined): Promise<ClientSheetReadResult> {
+  async read(
+    file: ClientImportUpload | undefined,
+  ): Promise<ClientSheetReadResult> {
     const fileReason = this.fileReason(file);
     if (fileReason) return { ok: false, reason: fileReason };
     if (!file) return { ok: false, reason: ClientImportFileReason.MISSING };
@@ -62,23 +75,36 @@ export class ClientsSheetService {
     return { ok: true, ...this.validate(parsed.cells) };
   }
 
-  private fileReason(file: ClientImportUpload | undefined): ClientImportFileReason | null {
+  private fileReason(
+    file: ClientImportUpload | undefined,
+  ): ClientImportFileReason | null {
     if (!file || file.size === 0) return ClientImportFileReason.MISSING;
-    if (file.size > CLIENT_IMPORT_MAX_BYTES) return ClientImportFileReason.TOO_LARGE;
-    if (!XlsxService.isXlsx(file)) return ClientImportFileReason.UNSUPPORTED_TYPE;
+    if (file.size > CLIENT_IMPORT_MAX_BYTES)
+      return ClientImportFileReason.TOO_LARGE;
+    if (!XlsxService.isXlsx(file))
+      return ClientImportFileReason.UNSUPPORTED_TYPE;
     return null;
   }
 
   private async parse(
     buffer: Buffer,
-  ): Promise<{ ok: true; cells: SheetCells[] } | Extract<ClientSheetReadResult, { ok: false }>> {
+  ): Promise<
+    | { ok: true; cells: SheetCells[] }
+    | Extract<ClientSheetReadResult, { ok: false }>
+  > {
     const grid = await XlsxService.read(buffer);
     if (!grid) return { ok: false, reason: ClientImportFileReason.CORRUPT };
 
     const columns = this.mapHeaderColumns(grid.row(1));
-    const missingColumns = REQUIRED_COLUMNS.filter((key) => columns[key] == null);
+    const missingColumns = REQUIRED_COLUMNS.filter(
+      (key) => columns[key] == null,
+    );
     if (missingColumns.length > 0) {
-      return { ok: false, reason: ClientImportFileReason.MISSING_COLUMNS, missingColumns };
+      return {
+        ok: false,
+        reason: ClientImportFileReason.MISSING_COLUMNS,
+        missingColumns,
+      };
     }
 
     const cells: SheetCells[] = [];
@@ -91,11 +117,16 @@ export class ClientsSheetService {
       }
     }
 
-    if (cells.length === 0) return { ok: false, reason: ClientImportFileReason.EMPTY };
+    if (cells.length === 0)
+      return { ok: false, reason: ClientImportFileReason.EMPTY };
     return { ok: true, cells };
   }
 
-  private validate(rawRows: SheetCells[]): { rows: ClientImportRow[]; invalidCount: number; duplicateCount: number } {
+  private validate(rawRows: SheetCells[]): {
+    rows: ClientImportRow[];
+    invalidCount: number;
+    duplicateCount: number;
+  } {
     const byPhone = new Map<string, ClientImportRow>();
     let invalidCount = 0;
     let duplicateCount = 0;
@@ -118,7 +149,10 @@ export class ClientsSheetService {
     return { rows: [...byPhone.values()], invalidCount, duplicateCount };
   }
 
-  private mergeSameClient(current: ClientImportRow, next: ClientImportRow): ClientImportRow {
+  private mergeSameClient(
+    current: ClientImportRow,
+    next: ClientImportRow,
+  ): ClientImportRow {
     return {
       firstName: current.firstName,
       lastName: current.lastName,
@@ -154,10 +188,13 @@ export class ClientsSheetService {
     return { firstName, lastName, phone, email, birthDate, gender, notes };
   }
 
-  private mapHeaderColumns(headerRow: XlsxCells): Partial<Record<ClientSheetColumn, number>> {
+  private mapHeaderColumns(
+    headerRow: XlsxCells,
+  ): Partial<Record<ClientSheetColumn, number>> {
     const aliases = new Map<string, ClientSheetColumn>();
     for (const key of CLIENT_SHEET_COLUMNS) {
-      for (const alias of HEADER_ALIASES[key]) aliases.set(this.normalizeHeader(alias), key);
+      for (const alias of HEADER_ALIASES[key])
+        aliases.set(this.normalizeHeader(alias), key);
     }
 
     const columns: Partial<Record<ClientSheetColumn, number>> = {};
@@ -168,7 +205,10 @@ export class ClientsSheetService {
     return columns;
   }
 
-  private readRow(row: XlsxCells, columns: Partial<Record<ClientSheetColumn, number>>): SheetCells {
+  private readRow(
+    row: XlsxCells,
+    columns: Partial<Record<ClientSheetColumn, number>>,
+  ): SheetCells {
     const cells = {} as SheetCells;
     for (const key of CLIENT_SHEET_COLUMNS) {
       const col = columns[key];
@@ -186,7 +226,8 @@ export class ClientsSheetService {
     const parsed = value.includes('.')
       ? parse(value, 'dd.MM.yyyy', new Date())
       : parse(value, 'yyyy-MM-dd', new Date());
-    if (!isValid(parsed) || parsed.getFullYear() < BIRTH_YEAR_MIN) return undefined;
+    if (!isValid(parsed) || parsed.getFullYear() < BIRTH_YEAR_MIN)
+      return undefined;
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     if (parsed > today) return undefined;

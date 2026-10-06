@@ -1,9 +1,13 @@
 import { Transform } from 'class-transformer';
 
 export function Trim(): PropertyDecorator {
-  return Transform(({ value }) => (typeof value === 'string' ? value.trim() : value));
+  return Transform(({ value }) =>
+    typeof value === 'string' ? value.trim() : value,
+  );
 }
 
 export function TrimLower(): PropertyDecorator {
-  return Transform(({ value }) => (typeof value === 'string' ? value.trim().toLowerCase() : value));
+  return Transform(({ value }) =>
+    typeof value === 'string' ? value.trim().toLowerCase() : value,
+  );
 }

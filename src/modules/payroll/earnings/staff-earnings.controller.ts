@@ -1,11 +1,29 @@
-import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Query } from '@nestjs/common';
-import { ApiCreatedResponse, ApiNotFoundResponse, ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+} from '@nestjs/common';
+import {
+  ApiCreatedResponse,
+  ApiNotFoundResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { BusinessRole } from '@prisma/client';
 import { Auth } from '../../auth/decorators/auth.decorator.js';
 import { TokenPayload } from '../../auth/decorators/token-payload.decorator.js';
-import { TokenPayloadDto, assertBusinessRole } from '../../auth/dto/token-payload.dto.js';
+import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
+import { assertLocationRole } from '../../auth/guards/assert-location-role.js';
 import { auditActorFromToken } from '../../audit/utils/audit-actor-from-token.js';
-import { ApiResponse, BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
+import {
+  ApiResponse,
+  BaseResponseDto,
+} from '../../../shared/dto/base-response.dto.js';
 import { StaffService } from '../../staff/staff.service.js';
 import { CreateManualEarningDto } from './dto/create-manual-earning.dto.js';
 import { RecordProductSaleDto } from './dto/record-product-sale.dto.js';
@@ -31,8 +49,16 @@ export class StaffEarningsController {
     @Query() dto: StaffEarningSearchRequestDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<StaffEarningSearchResponseDto>> {
-    assertBusinessRole(tokenPayload, dto.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
-    const { items, totalItems } = await this.earnings.search(dto.businessId, dto);
+    assertLocationRole(
+      tokenPayload,
+      dto.locationId,
+      BusinessRole.OWNER,
+      BusinessRole.STAFF,
+    );
+    const { items, totalItems } = await this.earnings.search(
+      dto.locationId,
+      dto,
+    );
     return BaseResponseDto.success(
       new StaffEarningSearchResponseDto(
         items.map(StaffEarningResponseDto.fromEntity),
@@ -54,10 +80,15 @@ export class StaffEarningsController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<StaffEarningSearchResponseDto>> {
     const staff = await this.staffService.findById(id);
-    assertBusinessRole(tokenPayload, staff.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
-    const { items, totalItems } = await this.earnings.search(staff.businessId, {
+    assertLocationRole(
+      tokenPayload,
+      staff.locationId,
+      BusinessRole.OWNER,
+      BusinessRole.STAFF,
+    );
+    const { items, totalItems } = await this.earnings.search(staff.locationId, {
       ...dto,
-      businessId: staff.businessId,
+      locationId: staff.locationId,
       staffId: id,
     } as StaffEarningSearchRequestDto);
     return BaseResponseDto.success(
@@ -82,8 +113,12 @@ export class StaffEarningsController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<StaffEarningResponseDto>> {
     const staff = await this.staffService.findById(id);
-    assertBusinessRole(tokenPayload, staff.businessId, BusinessRole.OWNER);
-    const earning = await this.earnings.createManual(id, dto, auditActorFromToken(tokenPayload, staff.businessId));
+    assertLocationRole(tokenPayload, staff.locationId, BusinessRole.OWNER);
+    const earning = await this.earnings.createManual(
+      id,
+      dto,
+      auditActorFromToken(tokenPayload, staff.locationId),
+    );
     return BaseResponseDto.success(StaffEarningResponseDto.fromEntity(earning));
   }
 
@@ -95,11 +130,11 @@ export class StaffEarningsController {
     @Body() dto: RecordProductSaleDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<StaffEarningResponseDto>> {
-    assertBusinessRole(tokenPayload, dto.businessId, BusinessRole.OWNER);
+    assertLocationRole(tokenPayload, dto.locationId, BusinessRole.OWNER);
     const earning = await this.earnings.recordProductSale(
-      dto.businessId,
+      dto.locationId,
       dto,
-      auditActorFromToken(tokenPayload, dto.businessId),
+      auditActorFromToken(tokenPayload, dto.locationId),
     );
     return BaseResponseDto.success(StaffEarningResponseDto.fromEntity(earning));
   }

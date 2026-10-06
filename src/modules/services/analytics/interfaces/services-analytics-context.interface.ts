@@ -4,7 +4,7 @@ import { SeriesRow } from '../../../bookings/interfaces/series-row.interface.js'
 import { ResolvedRange } from '../../../dashboard/interfaces/resolved-range.interface.js';
 
 export interface ServicesAnalyticsContext {
-  businessId: string;
+  locationId: string;
   range: ResolvedRange;
   // Undefined means no service filter. An empty array means a filter was applied and matched no services.
   serviceIds: string[] | undefined;

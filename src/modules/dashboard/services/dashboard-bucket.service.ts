@@ -11,7 +11,10 @@ export class DashboardBucketService {
   }
 
   previousPeriodDto(range: ResolvedRange): WidgetPeriodDto {
-    return { from: range.previousFrom.toISOString(), to: range.previousTo.toISOString() };
+    return {
+      from: range.previousFrom.toISOString(),
+      to: range.previousTo.toISOString(),
+    };
   }
 
   /**
@@ -20,10 +23,20 @@ export class DashboardBucketService {
    * sees "one bucket per calendar day/week/month" regardless of DST shifts.
    */
   bucketStarts(range: ResolvedRange): Date[] {
-    return this.bucketStartsForBounds(range.from, range.to, range.granularity, range.timezone);
+    return this.bucketStartsForBounds(
+      range.from,
+      range.to,
+      range.granularity,
+      range.timezone,
+    );
   }
 
-  bucketStartsForBounds(from: Date, to: Date, granularity: SeriesGranularity, timezone: string): Date[] {
+  bucketStartsForBounds(
+    from: Date,
+    to: Date,
+    granularity: SeriesGranularity,
+    timezone: string,
+  ): Date[] {
     const buckets: Date[] = [];
     let cursor = this.truncate(from, granularity, timezone);
     while (cursor < to) {
@@ -33,29 +46,52 @@ export class DashboardBucketService {
     return buckets;
   }
 
-  private truncate(date: Date, granularity: SeriesGranularity, timezone: string): Date {
+  private truncate(
+    date: Date,
+    granularity: SeriesGranularity,
+    timezone: string,
+  ): Date {
     const p = TimeService.toZonedParts(date, timezone);
     switch (granularity) {
       case SeriesGranularity.HOUR:
-        return TimeService.zonedHourStart(p.year, p.month, p.day, p.hour, timezone);
+        return TimeService.zonedHourStart(
+          p.year,
+          p.month,
+          p.day,
+          p.hour,
+          timezone,
+        );
       case SeriesGranularity.DAY:
         return TimeService.zonedDayStart(p.year, p.month, p.day, timezone);
       case SeriesGranularity.WEEK: {
         // ISO week starts on Monday.
         const dow = TimeService.isoWeekday(p.year, p.month, p.day);
-        return TimeService.zonedDayStart(p.year, p.month, p.day - (dow - 1), timezone);
+        return TimeService.zonedDayStart(
+          p.year,
+          p.month,
+          p.day - (dow - 1),
+          timezone,
+        );
       }
       case SeriesGranularity.MONTH:
         return TimeService.zonedDayStart(p.year, p.month, 1, timezone);
     }
   }
 
-  private advance(date: Date, granularity: SeriesGranularity, timezone: string): Date {
+  private advance(
+    date: Date,
+    granularity: SeriesGranularity,
+    timezone: string,
+  ): Date {
     switch (granularity) {
       case SeriesGranularity.HOUR:
         // Fixed +1h in UTC then re-truncate in TZ; on DST days this naturally produces
         // 23 or 25 wall-clock buckets, which is the correct calendar behaviour.
-        return this.truncate(new Date(date.getTime() + 3_600_000), granularity, timezone);
+        return this.truncate(
+          new Date(date.getTime() + 3_600_000),
+          granularity,
+          timezone,
+        );
       case SeriesGranularity.DAY:
         return TimeService.addDaysInTz(date, 1, timezone);
       case SeriesGranularity.WEEK:

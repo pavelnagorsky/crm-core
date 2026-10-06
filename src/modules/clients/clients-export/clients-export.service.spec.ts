@@ -32,7 +32,7 @@ function collect(stream: PassThrough): Promise<Buffer> {
 function client(overrides: Partial<Client> = {}): Client {
   return {
     id: 'client-1',
-    businessId: 'business-1',
+    brandId: 'business-1',
     userId: null,
     firstName: 'Анна',
     lastName: 'Иванова',
@@ -64,24 +64,35 @@ describe('ClientsExportService', () => {
   beforeEach(() => {
     clients.search.mockReset();
     locale.get.mockReset();
-    locale.get.mockReturnValue({ documents: { clients: labels } } as ReturnType<LocaleService['get']>);
+    locale.get.mockReturnValue({ documents: { clients: labels } } as ReturnType<
+      LocaleService['get']
+    >);
   });
 
   it('exports every client matching the table search and order as xlsx', async () => {
     clients.search.mockResolvedValue({
-      items: [client(), client({ id: 'client-2', gender: 'OTHER', email: null, birthDate: null, notes: null })],
+      items: [
+        client(),
+        client({
+          id: 'client-2',
+          gender: 'OTHER',
+          email: null,
+          birthDate: null,
+          notes: null,
+        }),
+      ],
       totalItems: 2,
     });
 
     const file = await service.stream('business-1', {
-      businessId: 'business-1',
+      brandId: 'business-1',
       search: 'анна',
       orderBy: ClientSearchOrderBy.LAST_NAME,
       orderDirection: OrderDirection.ASC,
     });
 
     expect(clients.search).toHaveBeenCalledWith('business-1', {
-      businessId: 'business-1',
+      brandId: 'business-1',
       search: 'анна',
       orderBy: ClientSearchOrderBy.LAST_NAME,
       orderDirection: OrderDirection.ASC,

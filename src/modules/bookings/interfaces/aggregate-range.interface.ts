@@ -1,5 +1,5 @@
 export interface AggregateRange {
-  businessId: string;
+  locationId: string;
   from: Date;
   to: Date;
   staffId?: string;

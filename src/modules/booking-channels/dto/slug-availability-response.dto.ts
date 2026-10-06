@@ -6,7 +6,11 @@ export class SlugAvailabilityResponseDto {
   @ApiProperty({ type: Boolean })
   isAvailable: boolean;
 
-  @ApiProperty({ enum: SlugAvailabilityReason, enumName: 'SlugAvailabilityReason', nullable: true })
+  @ApiProperty({
+    enum: SlugAvailabilityReason,
+    enumName: 'SlugAvailabilityReason',
+    nullable: true,
+  })
   reason: SlugAvailabilityReason | null;
 
   static from(result: SlugAvailability): SlugAvailabilityResponseDto {

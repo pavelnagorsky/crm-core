@@ -19,7 +19,13 @@ const DATE_FNS_LOCALES: Record<string, object> = {
 
 const SUPPORTED_LANGS = ['ru'] as const;
 
-const MONEY_FIELDS = new Set(['price', 'customPrice', 'fixedPrice', 'fixedSalaryAmount', 'hourlyRate']);
+const MONEY_FIELDS = new Set([
+  'price',
+  'customPrice',
+  'fixedPrice',
+  'fixedSalaryAmount',
+  'hourlyRate',
+]);
 
 @Injectable()
 export class AuditRendererService implements OnModuleInit {
@@ -52,7 +58,9 @@ export class AuditRendererService implements OnModuleInit {
     );
 
     for (const lang of SUPPORTED_LANGS) {
-      const locale = JSON.parse(readFileSync(join(i18nDir, `${lang}.json`), 'utf-8')) as I18nLocale;
+      const locale = JSON.parse(
+        readFileSync(join(i18nDir, `${lang}.json`), 'utf-8'),
+      ) as I18nLocale;
       this.assertEventTitles(locale, lang);
       this.locales.set(lang, locale);
 
@@ -99,7 +107,9 @@ export class AuditRendererService implements OnModuleInit {
 
   private registerHelpers() {
     this.hbs.registerHelper('eq', (a: unknown, b: unknown) => a === b);
-    this.hbs.registerHelper('or', (...rawArgs: unknown[]) => rawArgs.slice(0, -1).some((value) => value === true));
+    this.hbs.registerHelper('or', (...rawArgs: unknown[]) =>
+      rawArgs.slice(0, -1).some((value) => value === true),
+    );
 
     // All helpers read locale/lang from @root so they work correctly inside {{#each}} blocks
     this.hbs.registerHelper('t', (...rawArgs: unknown[]) => {
@@ -116,7 +126,8 @@ export class AuditRendererService implements OnModuleInit {
       const field = String(rawArgs[0] ?? '');
       const value = rawArgs[1] == null ? '' : String(rawArgs[1]);
       if (!value || value === '—') return '—';
-      const locale = opts.data?.root?.locale as Record<string, unknown> | undefined;
+      const locale = opts.data?.root?.locale as
+        Record<string, unknown> | undefined;
       const dictionaryName = AUDIT_FIELD_I18N[field];
       const dictionary = dictionaryName ? locale?.[dictionaryName] : undefined;
       if (dictionary && typeof dictionary === 'object') {
@@ -125,10 +136,17 @@ export class AuditRendererService implements OnModuleInit {
       }
       const type = AUDIT_FIELD_TYPES[field];
       const formatted = type
-        ? this.formatDate(value, type === 'datetime' ? 'd MMM yyyy, HH:mm' : 'd MMM yyyy', opts.data?.root?.lang ?? 'ru')
+        ? this.formatDate(
+            value,
+            type === 'datetime' ? 'd MMM yyyy, HH:mm' : 'd MMM yyyy',
+            opts.data?.root?.lang ?? 'ru',
+          )
         : value;
-      const currency = (opts.data?.root?.payload as { currency?: string } | undefined)?.currency;
-      if (currency && MONEY_FIELDS.has(field)) return `${formatted} ${currency}`;
+      const currency = (
+        opts.data?.root?.payload as { currency?: string } | undefined
+      )?.currency;
+      if (currency && MONEY_FIELDS.has(field))
+        return `${formatted} ${currency}`;
       return formatted;
     });
 

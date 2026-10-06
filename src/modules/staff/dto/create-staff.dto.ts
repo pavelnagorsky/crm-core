@@ -17,7 +17,7 @@ import { StaffPayoutMethod } from '../enums/staff-payout-method.enum.js';
 export class CreateStaffDto {
   @ApiProperty({ type: String, format: 'uuid' })
   @IsUUID()
-  businessId: string;
+  locationId: string;
 
   @ApiProperty({ type: String, maxLength: 250 })
   @IsString()
@@ -35,7 +35,12 @@ export class CreateStaffDto {
   @MaxLength(250)
   roleTitle?: string;
 
-  @ApiProperty({ type: String, maxLength: 2000, required: false, nullable: true })
+  @ApiProperty({
+    type: String,
+    maxLength: 2000,
+    required: false,
+    nullable: true,
+  })
   @IsOptional()
   @IsString()
   @MaxLength(2000)
@@ -58,19 +63,30 @@ export class CreateStaffDto {
   @ApiProperty({
     type: [String],
     required: false,
-    description: 'Ids of services this staff member can perform. A bundle can be booked with them when they can perform every service in that bundle. Bundle ids are not accepted.',
+    description:
+      'Ids of services this staff member can perform. A bundle can be booked with them when they can perform every service in that bundle. Bundle ids are not accepted.',
   })
   @IsOptional()
   @IsArray()
   @IsUUID('all', { each: true })
   serviceIds?: string[];
 
-  @ApiProperty({ enum: StaffEmploymentType, enumName: 'StaffEmploymentType', required: false, nullable: true })
+  @ApiProperty({
+    enum: StaffEmploymentType,
+    enumName: 'StaffEmploymentType',
+    required: false,
+    nullable: true,
+  })
   @IsOptional()
   @IsEnum(StaffEmploymentType)
   employmentType?: StaffEmploymentType;
 
-  @ApiProperty({ type: String, required: false, nullable: true, example: '7701234567' })
+  @ApiProperty({
+    type: String,
+    required: false,
+    nullable: true,
+    example: '7701234567',
+  })
   @IsOptional()
   @Matches(regularExpressions.taxId)
   taxId?: string;
@@ -81,12 +97,22 @@ export class CreateStaffDto {
   @MaxLength(30)
   employeeNumber?: string;
 
-  @ApiProperty({ enum: StaffPayoutMethod, enumName: 'StaffPayoutMethod', required: false, nullable: true })
+  @ApiProperty({
+    enum: StaffPayoutMethod,
+    enumName: 'StaffPayoutMethod',
+    required: false,
+    nullable: true,
+  })
   @IsOptional()
   @IsEnum(StaffPayoutMethod)
   payoutMethod?: StaffPayoutMethod;
 
-  @ApiProperty({ type: String, required: false, nullable: true, maxLength: 250 })
+  @ApiProperty({
+    type: String,
+    required: false,
+    nullable: true,
+    maxLength: 250,
+  })
   @IsOptional()
   @IsString()
   @MaxLength(250)

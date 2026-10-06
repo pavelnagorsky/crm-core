@@ -12,7 +12,10 @@ export class AuditHistoryRequestDto extends PaginationRequestDto {
   @IsEnum(AuditEntity)
   entityType: AuditEntity;
 
-  @ApiPropertyOptional({ description: 'Locale for rendered HTML (e.g. "ru")', default: 'ru' })
+  @ApiPropertyOptional({
+    description: 'Locale for rendered HTML (e.g. "ru")',
+    default: 'ru',
+  })
   @IsOptional()
   @IsString()
   lang?: string = 'ru';

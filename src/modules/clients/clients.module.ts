@@ -11,7 +11,13 @@ import { I18nModule } from '../../shared/i18n/i18n.module.js';
 @Module({
   imports: [BusinessModule, I18nModule],
   controllers: [ClientsController],
-  providers: [ClientsService, ClientsSheetService, ClientsImportService, ClientImportFileInterceptor, ClientsExportService],
+  providers: [
+    ClientsService,
+    ClientsSheetService,
+    ClientsImportService,
+    ClientImportFileInterceptor,
+    ClientsExportService,
+  ],
   exports: [ClientsService],
 })
 export class ClientsModule {}

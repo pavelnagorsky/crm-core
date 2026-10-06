@@ -32,11 +32,11 @@ export class StaffKpiController {
   ): Promise<BaseResponseDto<StaffWidgetsResponseDto>> {
     assertBusinessRole(
       tokenPayload,
-      dto.businessId,
+      dto.locationId,
       BusinessRole.OWNER,
       BusinessRole.STAFF,
     );
-    const cards = await this.staffKpiService.getWidgets(dto.businessId, dto);
+    const cards = await this.staffKpiService.getWidgets(dto.locationId, dto);
     return BaseResponseDto.success(new StaffWidgetsResponseDto(cards));
   }
 }

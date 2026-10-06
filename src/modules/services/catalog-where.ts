@@ -1,9 +1,9 @@
 import { ServiceFilter } from './interfaces/service-filter.interface.js';
 
-export function catalogWhere(businessId: string, filter: ServiceFilter) {
+export function catalogWhere(locationId: string, filter: ServiceFilter) {
   const search = filter.search?.trim();
   return {
-    businessId,
+    locationId,
     ...(search
       ? {
           OR: [
@@ -12,7 +12,9 @@ export function catalogWhere(businessId: string, filter: ServiceFilter) {
           ],
         }
       : {}),
-    ...(filter.categoryId !== undefined ? { categoryId: filter.categoryId } : {}),
+    ...(filter.categoryId !== undefined
+      ? { categoryId: filter.categoryId }
+      : {}),
     ...(filter.status !== undefined ? { status: filter.status } : {}),
   };
 }

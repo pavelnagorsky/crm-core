@@ -8,8 +8,14 @@ describe('TimeService date-only helpers', () => {
   });
 
   it('uses calendar days of the UTC month', () => {
-    expect(TimeService.daysInUtcMonth(TimeService.dateOnly('2026-02-01'))).toBe(28);
-    expect(TimeService.daysInUtcMonth(TimeService.dateOnly('2026-09-30'))).toBe(30);
-    expect(TimeService.daysInUtcMonth(TimeService.dateOnly('2026-01-31'))).toBe(31);
+    expect(TimeService.daysInUtcMonth(TimeService.dateOnly('2026-02-01'))).toBe(
+      28,
+    );
+    expect(TimeService.daysInUtcMonth(TimeService.dateOnly('2026-09-30'))).toBe(
+      30,
+    );
+    expect(TimeService.daysInUtcMonth(TimeService.dateOnly('2026-01-31'))).toBe(
+      31,
+    );
   });
 });

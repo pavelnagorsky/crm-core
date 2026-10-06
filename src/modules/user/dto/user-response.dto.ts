@@ -1,10 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { BusinessRole, Membership, User, UserRole } from '@prisma/client';
+import { BrandMembership, BusinessRole, User, UserRole } from '@prisma/client';
 import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
 
 export class MembershipResponseDto {
   @ApiProperty({ type: String })
-  businessId: string;
+  brandId: string;
 
   @ApiProperty({ enum: BusinessRole })
   role: BusinessRole;
@@ -45,9 +45,12 @@ export class UserResponseDto {
   role: UserRole;
 
   @ApiProperty({ type: () => MembershipResponseDto, isArray: true })
-  memberships: MembershipResponseDto[];
+  brandMemberships: MembershipResponseDto[];
 
-  static fromEntity(user: User & { memberships: Membership[] }, payload: TokenPayloadDto): UserResponseDto {
+  static fromEntity(
+    user: User & { brandMemberships: BrandMembership[] },
+    payload: TokenPayloadDto,
+  ): UserResponseDto {
     const dto = new UserResponseDto();
     dto.id = user.id;
     dto.firstName = user.firstName;
@@ -60,9 +63,9 @@ export class UserResponseDto {
     dto.createdAt = user.createdAt;
     dto.updatedAt = user.updatedAt;
     dto.role = payload.role;
-    dto.memberships = user.memberships.map((m: Membership) => {
+    dto.brandMemberships = user.brandMemberships.map((m: BrandMembership) => {
       const membership = new MembershipResponseDto();
-      membership.businessId = m.businessId;
+      membership.brandId = m.brandId;
       membership.role = m.role;
       return membership;
     });

@@ -53,6 +53,9 @@ describe('StaffService.search', () => {
     });
     const responses = items.map(StaffResponseDto.fromEntity);
     expect(responses.map((item) => item.hasNoServices)).toEqual([false, true]);
-    expect(responses.map((item) => item.serviceIds)).toEqual([['service-1'], []]);
+    expect(responses.map((item) => item.serviceIds)).toEqual([
+      ['service-1'],
+      [],
+    ]);
   });
 });

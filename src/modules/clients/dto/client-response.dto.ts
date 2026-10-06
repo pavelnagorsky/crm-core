@@ -6,7 +6,7 @@ export class ClientResponseDto {
   id: string;
 
   @ApiProperty({ type: String })
-  businessId: string;
+  brandId: string;
 
   @ApiProperty({ type: String, nullable: true })
   userId: string | null;
@@ -47,7 +47,7 @@ export class ClientResponseDto {
   static fromEntity(client: Client): ClientResponseDto {
     const dto = new ClientResponseDto();
     dto.id = client.id;
-    dto.businessId = client.businessId;
+    dto.brandId = client.brandId;
     dto.userId = client.userId;
     dto.firstName = client.firstName;
     dto.lastName = client.lastName;

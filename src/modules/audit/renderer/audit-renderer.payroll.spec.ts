@@ -3,7 +3,9 @@ import { AuditEntity } from '../enums/audit-entity.enum.js';
 import { AuditEvent } from '../enums/audit-event.enum.js';
 import { AuditRendererService } from './audit-renderer.service.js';
 
-function log(partial: Pick<AuditLog, 'entityType' | 'eventType' | 'payload'>): AuditLog {
+function log(
+  partial: Pick<AuditLog, 'entityType' | 'eventType' | 'payload'>,
+): AuditLog {
   return partial as AuditLog;
 }
 
@@ -16,7 +18,12 @@ describe('AuditRendererService payroll labels', () => {
       log({
         entityType: AuditEntity.STAFF,
         eventType: AuditEvent.STAFF_EARNING_ADDED,
-        payload: { type: 'CORRECTION', amount: '-10.00', currency: 'RUB', reason: 'ошибка' },
+        payload: {
+          type: 'CORRECTION',
+          amount: '-10.00',
+          currency: 'RUB',
+          reason: 'ошибка',
+        },
       }),
     );
 
@@ -93,7 +100,9 @@ describe('AuditRendererService payroll labels', () => {
       }),
     );
 
-    expect(html).toBe('<p>Изменён рабочий график в диапазоне 2026-10-01 — 2026-10-31</p>');
+    expect(html).toBe(
+      '<p>Изменён рабочий график в диапазоне 2026-10-01 — 2026-10-31</p>',
+    );
   });
 
   it('describes a staff block', () => {

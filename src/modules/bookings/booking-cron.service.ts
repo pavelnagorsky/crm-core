@@ -6,7 +6,10 @@ import { NOTIFICATION_EVENT } from '../notifications/notifications.service.js';
 import { BookingReminderNotification } from '../notifications/notifications/booking-reminder.notification.js';
 import { BusinessService } from '../business/business.service.js';
 import { BookingsService } from './bookings.service.js';
-import { AUTO_COMPLETABLE_STATUSES, reminderWindow } from './booking-cron.rules.js';
+import {
+  AUTO_COMPLETABLE_STATUSES,
+  reminderWindow,
+} from './booking-cron.rules.js';
 
 @Injectable()
 export class BookingCronService {
@@ -39,8 +42,8 @@ export class BookingCronService {
 
     this.logger.log(`Sending reminders for ${bookings.length} booking(s)`);
 
-    const businessIds = [...new Set(bookings.map((b) => b.businessId))];
-    const locales = await this.businessService.getLocalesByIds(businessIds);
+    const locationIds = [...new Set(bookings.map((b) => b.locationId))];
+    const locales = await this.businessService.getLocalesByIds(locationIds);
 
     await Promise.all(
       bookings.map(async (booking) => {
@@ -51,11 +54,15 @@ export class BookingCronService {
             clientFirstName: booking.clientFirstName,
             clientLastName: booking.clientLastName,
             clientEmail: booking.clientEmail!,
-            serviceTitle: booking.items.map((item) => item.serviceTitle).join(', '),
-            staffName: [...new Set(booking.items.map((item) => item.staffName))].join(', '),
+            serviceTitle: booking.items
+              .map((item) => item.serviceTitle)
+              .join(', '),
+            staffName: [
+              ...new Set(booking.items.map((item) => item.staffName)),
+            ].join(', '),
             startAt: booking.startAt,
             endAt: booking.endAt,
-            timezone: locales.get(booking.businessId)?.timezone ?? 'UTC',
+            timezone: locales.get(booking.locationId)?.timezone ?? 'UTC',
           }),
         );
         await this.db.booking.update({
@@ -69,6 +76,7 @@ export class BookingCronService {
   @Cron(CronExpression.EVERY_10_MINUTES)
   async completeElapsed(): Promise<void> {
     const count = await this.bookings.completeElapsed();
-    if (count > 0) this.logger.log(`Auto-completed ${count} elapsed booking(s)`);
+    if (count > 0)
+      this.logger.log(`Auto-completed ${count} elapsed booking(s)`);
   }
 }

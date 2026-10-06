@@ -2,11 +2,14 @@ import { CalendarBookingFeed } from './interfaces/calendar-booking-feed.interfac
 
 export abstract class CalendarBookingReader {
   abstract listForCalendar(
-    businessId: string,
+    locationId: string,
     rangeStart: Date,
     rangeEnd: Date,
     staffIds?: string[],
   ): Promise<CalendarBookingFeed>;
 
-  abstract linkedCalendarEventIdsForBooking(businessId: string, bookingId: string): Promise<string[]>;
+  abstract linkedCalendarEventIdsForBooking(
+    locationId: string,
+    bookingId: string,
+  ): Promise<string[]>;
 }

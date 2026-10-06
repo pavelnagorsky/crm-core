@@ -1,0 +1,13 @@
+{{#if (eq eventType "LOCATION_CREATED")}}
+{{payload.name}}
+{{/if}}
+{{#if (eq eventType "LOCATION_UPDATED")}}
+<ul>
+  {{#each payload.changes}}
+  <li>{{t "fields" ../entityType this.field}}: <s>{{formatValue this.field this.from}}</s> -> {{formatValue this.field this.to}}</li>
+  {{/each}}
+</ul>
+{{/if}}
+{{#if (eq eventType "LOCATION_DELETED")}}
+{{payload.name}}
+{{/if}}

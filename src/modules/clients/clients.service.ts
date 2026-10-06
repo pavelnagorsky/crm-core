@@ -33,40 +33,60 @@ export class ClientsService {
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
-  async create(businessId: string, dto: CreateClientDto, actor: AuditActor): Promise<Client> {
+  async create(
+    brandId: string,
+    dto: CreateClientDto,
+    actor: AuditActor,
+  ): Promise<Client> {
     let client: Client;
     try {
-      client = await this.db.client.create({ data: { businessId, ...this.buildClientFields(dto) } });
+      client = await this.db.client.create({
+        data: { brandId, ...this.buildClientFields(dto) },
+      });
     } catch (e: any) {
       if (e?.code === PrismaErrorCode.UNIQUE_CONSTRAINT_VIOLATION) {
-        throw new AppException(ErrorCode.CLIENT_PHONE_EXISTS, HttpStatus.CONFLICT);
+        throw new AppException(
+          ErrorCode.CLIENT_PHONE_EXISTS,
+          HttpStatus.CONFLICT,
+        );
       }
       throw e;
     }
-    this.emitCreated(businessId, client, actor);
+    this.emitCreated(brandId, client, actor);
     return client;
   }
 
-  async update(businessId: string, clientId: string, dto: UpdateClientDto, actor: AuditActor): Promise<Client> {
-    const old = await this.findInBusiness(businessId, clientId);
+  async update(
+    brandId: string,
+    clientId: string,
+    dto: UpdateClientDto,
+    actor: AuditActor,
+  ): Promise<Client> {
+    const old = await this.findInBusiness(brandId, clientId);
     let client: Client;
     try {
-      client = await this.db.client.update({ where: { id: clientId }, data: this.buildClientFields(dto) });
+      client = await this.db.client.update({
+        where: { id: clientId },
+        data: this.buildClientFields(dto),
+      });
     } catch (e: any) {
       if (e?.code === PrismaErrorCode.UNIQUE_CONSTRAINT_VIOLATION) {
-        throw new AppException(ErrorCode.CLIENT_PHONE_EXISTS, HttpStatus.CONFLICT);
+        throw new AppException(
+          ErrorCode.CLIENT_PHONE_EXISTS,
+          HttpStatus.CONFLICT,
+        );
       }
       throw e;
     }
     const changes = diffFields(old, client, CLIENT_AUDIT_FIELDS);
     if (changes.length > 0) {
       const event: AuditLogEvent = {
-        businessId,
+        brandId,
         entityType: AuditEntity.CLIENT,
         entityId: clientId,
         eventType: AuditEvent.CLIENT_UPDATED,
         actionType: AuditActionType.MODIFY,
-      occurredAt: new Date(),
+        occurredAt: new Date(),
         actor,
         payload: { changes },
       };
@@ -75,8 +95,13 @@ export class ClientsService {
     return client;
   }
 
-  async setBan(businessId: string, clientId: string, dto: SetClientBanDto, actor: AuditActor): Promise<void> {
-    const old = await this.findInBusiness(businessId, clientId);
+  async setBan(
+    brandId: string,
+    clientId: string,
+    dto: SetClientBanDto,
+    actor: AuditActor,
+  ): Promise<void> {
+    const old = await this.findInBusiness(brandId, clientId);
     const banReason = dto.banned ? (dto.reason ?? '').trim() : null;
     if (dto.banned && !banReason) {
       throw new AppException(ErrorCode.BAD_REQUEST, HttpStatus.BAD_REQUEST);
@@ -85,7 +110,10 @@ export class ClientsService {
     const now = new Date();
     const bannedAt = dto.banned ? (old.bannedAt ?? now) : null;
     if ((old.bannedAt !== null) === dto.banned && old.banReason === banReason) {
-      throw new AppException(ErrorCode.CLIENT_BAN_ALREADY_SET, HttpStatus.CONFLICT);
+      throw new AppException(
+        ErrorCode.CLIENT_BAN_ALREADY_SET,
+        HttpStatus.CONFLICT,
+      );
     }
 
     const client = await this.db.client.update({
@@ -96,7 +124,7 @@ export class ClientsService {
     if (changes.length === 0) return;
 
     const event: AuditLogEvent = {
-      businessId,
+      brandId,
       entityType: AuditEntity.CLIENT,
       entityId: clientId,
       eventType: AuditEvent.CLIENT_UPDATED,
@@ -114,28 +142,36 @@ export class ClientsService {
     return client;
   }
 
-  private async findInBusiness(businessId: string, clientId: string): Promise<Client> {
-    const client = await this.db.client.findFirst({ where: { id: clientId, businessId } });
+  private async findInBusiness(
+    brandId: string,
+    clientId: string,
+  ): Promise<Client> {
+    const client = await this.db.client.findFirst({
+      where: { id: clientId, brandId },
+    });
     if (!client) throw new NotFoundException('Client not found');
     return client;
   }
 
   resolveForBooking(
-    businessId: string,
+    brandId: string,
     phone: string,
     firstName: string,
     lastName: string,
     email?: string,
   ): Promise<Client> {
     return this.db.client.upsert({
-      where: { businessId_phone: { businessId, phone } },
+      where: { brandId_phone: { brandId, phone } },
       update: {},
-      create: { businessId, firstName, lastName, phone, email: email ?? null },
+      create: { brandId, firstName, lastName, phone, email: email ?? null },
     });
   }
 
-  async search(businessId: string, dto: ClientSearchRequestDto): Promise<PaginatedResult<Client>> {
-    const where: Prisma.ClientWhereInput = { businessId };
+  async search(
+    brandId: string,
+    dto: ClientSearchRequestDto,
+  ): Promise<PaginatedResult<Client>> {
+    const where: Prisma.ClientWhereInput = { brandId };
 
     const search = dto.search?.trim();
     if (search) {
@@ -157,7 +193,10 @@ export class ClientsService {
       [dto.orderBy ?? ClientSearchOrderBy.CREATED_AT]: direction,
     };
 
-    const findArgs: Prisma.ClientFindManyArgs = { where, orderBy: stableOrderBy(orderBy, direction) };
+    const findArgs: Prisma.ClientFindManyArgs = {
+      where,
+      orderBy: stableOrderBy(orderBy, direction),
+    };
     if (!dto.isExport) {
       findArgs.skip = (dto.page - 1) * dto.pageSize;
       findArgs.take = dto.pageSize;
@@ -171,13 +210,19 @@ export class ClientsService {
     return { items, totalItems };
   }
 
-  async findExistingPhones(businessId: string, phones: string[]): Promise<Set<string>> {
+  async findExistingPhones(
+    brandId: string,
+    phones: string[],
+  ): Promise<Set<string>> {
     const existing = new Set<string>();
     if (phones.length === 0) return existing;
 
     for (let offset = 0; offset < phones.length; offset += PHONE_LOOKUP_CHUNK) {
       const found = await this.db.client.findMany({
-        where: { businessId, phone: { in: phones.slice(offset, offset + PHONE_LOOKUP_CHUNK) } },
+        where: {
+          brandId,
+          phone: { in: phones.slice(offset, offset + PHONE_LOOKUP_CHUNK) },
+        },
         select: { phone: true },
       });
       for (const client of found) existing.add(client.phone);
@@ -186,19 +231,25 @@ export class ClientsService {
     return existing;
   }
 
-  async insertImported(businessId: string, rows: ClientImportRow[], actor: AuditActor): Promise<number> {
+  async insertImported(
+    brandId: string,
+    rows: ClientImportRow[],
+    actor: AuditActor,
+  ): Promise<number> {
     let inserted = 0;
     const occurredAt = new Date();
 
     for (let offset = 0; offset < rows.length; offset += IMPORT_INSERT_CHUNK) {
       const created = await this.db.client.createManyAndReturn({
         data: rows.slice(offset, offset + IMPORT_INSERT_CHUNK).map((row) => ({
-          businessId,
+          brandId,
           firstName: row.firstName,
           lastName: row.lastName,
           phone: row.phone,
           email: row.email,
-          birthDate: row.birthDate ? new Date(`${row.birthDate}T00:00:00.000Z`) : null,
+          birthDate: row.birthDate
+            ? new Date(`${row.birthDate}T00:00:00.000Z`)
+            : null,
           gender: row.gender,
           notes: row.notes,
         })),
@@ -206,27 +257,31 @@ export class ClientsService {
         select: { id: true, firstName: true, lastName: true, phone: true },
       });
       inserted += created.length;
-      for (const client of created) this.emitCreated(businessId, client, actor, occurredAt);
+      for (const client of created)
+        this.emitCreated(brandId, client, actor, occurredAt);
     }
 
     return inserted;
   }
 
   private emitCreated(
-    businessId: string,
+    brandId: string,
     client: Pick<Client, 'id' | 'firstName' | 'lastName' | 'phone'>,
     actor: AuditActor,
     occurredAt = new Date(),
   ): void {
     const event: AuditLogEvent = {
-      businessId,
+      brandId,
       entityType: AuditEntity.CLIENT,
       entityId: client.id,
       eventType: AuditEvent.CLIENT_CREATED,
       actionType: AuditActionType.CREATE,
       occurredAt,
       actor,
-      payload: { fullName: `${client.firstName} ${client.lastName}`, phone: client.phone },
+      payload: {
+        fullName: `${client.firstName} ${client.lastName}`,
+        phone: client.phone,
+      },
     };
     this.eventEmitter.emit(AUDIT_EVENT, event);
   }
@@ -242,5 +297,4 @@ export class ClientsService {
       notes: dto.notes ?? null,
     };
   }
-
 }

@@ -269,7 +269,7 @@ export class BookingsAggregatesService {
       }>
     >(
       Prisma.sql`
-        ${this.completedVisitsCte(range.businessId, range.to)}
+        ${this.completedVisitsCte(range.brandId, range.to)}
         SELECT ${this.cohortAggregates()}
         FROM visits
         WHERE "startAt" >= ${range.from}::timestamptz AT TIME ZONE 'UTC'
@@ -291,7 +291,7 @@ export class BookingsAggregatesService {
       }>
     >(
       Prisma.sql`
-        ${this.completedVisitsCte(range.businessId, range.to)}
+        ${this.completedVisitsCte(range.brandId, range.to)}
         SELECT
           ${this.bucketExpr(range.granularity, range.timezone, 'v')} AS bucket,
           ${this.cohortAggregates()}
@@ -315,7 +315,7 @@ export class BookingsAggregatesService {
    * visit and `asOf`. Comparisons match `matchesRecencyBound`.
    */
   async clientRecency(
-    businessId: string,
+    brandId: string,
     asOf: Date,
     timezone: string,
   ): Promise<ClientRecencyRow[]> {
@@ -334,8 +334,9 @@ export class BookingsAggregatesService {
             COUNT(*)::bigint AS visits,
             COALESCE(SUM(item_totals.revenue), 0) AS revenue
           FROM "Booking" b
-          ${this.itemTotalsJoin({ businessId, from: new Date(0), to: asOf })}
-          WHERE b."businessId" = ${businessId}
+          JOIN "Client" c ON c."id" = b."clientId"
+          ${this.bookingItemTotalsJoin()}
+          WHERE c."brandId" = ${brandId}
             AND b."deletedAt" IS NULL
             AND b."status"::text = ${BookingStatus.COMPLETED}
             AND b."startAt" < ${asOf}::timestamptz AT TIME ZONE 'UTC'
@@ -434,7 +435,7 @@ export class BookingsAggregatesService {
     statuses?: BookingStatus[],
   ): Prisma.BookingWhereInput {
     const where: Prisma.BookingWhereInput = {
-      businessId: range.businessId,
+      locationId: range.locationId,
       deletedAt: null,
       startAt: { gte: range.from, lt: range.to },
     };
@@ -458,7 +459,7 @@ export class BookingsAggregatesService {
     // `timestamp` explicitly so the comparison stays on the indexed column and doesn't
     // depend on session TIMEZONE (Prisma binds Date as timestamptz).
     const parts: Prisma.Sql[] = [
-      Prisma.sql`b."businessId" = ${range.businessId}`,
+      Prisma.sql`b."locationId" = ${range.locationId}`,
       Prisma.sql`b."deletedAt" IS NULL`,
       Prisma.sql`b."startAt" >= ${range.from}::timestamptz AT TIME ZONE 'UTC'`,
       Prisma.sql`b."startAt" <  ${range.to}::timestamptz AT TIME ZONE 'UTC'`,
@@ -574,7 +575,7 @@ export class BookingsAggregatesService {
     `;
   }
 
-  private completedVisitsCte(businessId: string, before: Date): Prisma.Sql {
+  private completedVisitsCte(brandId: string, before: Date): Prisma.Sql {
     return Prisma.sql`
       WITH visits AS (
         SELECT
@@ -583,12 +584,25 @@ export class BookingsAggregatesService {
           item_totals.revenue AS revenue,
           ROW_NUMBER() OVER (PARTITION BY b."clientId" ORDER BY b."startAt" ASC, b."id" ASC) AS visit_rank
         FROM "Booking" b
-        ${this.itemTotalsJoin({ businessId, from: new Date(0), to: before })}
-        WHERE b."businessId" = ${businessId}
+        JOIN "Client" c ON c."id" = b."clientId"
+        ${this.bookingItemTotalsJoin()}
+        WHERE c."brandId" = ${brandId}
           AND b."deletedAt" IS NULL
           AND b."status"::text = ${BookingStatus.COMPLETED}
           AND b."startAt" < ${before}::timestamptz AT TIME ZONE 'UTC'
       )
+    `;
+  }
+
+  private bookingItemTotalsJoin(): Prisma.Sql {
+    return Prisma.sql`
+      LEFT JOIN LATERAL (
+        SELECT
+          COALESCE(SUM(COALESCE(i."customPrice", i."chargedPrice")), 0) AS revenue,
+          COALESCE(SUM(i."serviceDuration"), 0)::bigint AS duration
+        FROM "BookingItem" i
+        WHERE i."bookingId" = b."id"
+      ) item_totals ON TRUE
     `;
   }
 

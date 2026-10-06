@@ -10,7 +10,11 @@ export class PayrollPeriodEarningsRequestDto extends PaginationRequestDto<StaffE
   @IsUUID()
   staffId?: string;
 
-  @ApiProperty({ enum: StaffEarningType, enumName: 'StaffEarningType', required: false })
+  @ApiProperty({
+    enum: StaffEarningType,
+    enumName: 'StaffEarningType',
+    required: false,
+  })
   @IsOptional()
   @IsEnum(StaffEarningType)
   type?: StaffEarningType;

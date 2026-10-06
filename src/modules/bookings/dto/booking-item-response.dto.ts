@@ -48,7 +48,8 @@ export class BookingItemResponseDto {
     dto.serviceDuration = item.serviceDuration;
     dto.listPrice = MoneyService.format(item.listPrice);
     dto.chargedPrice = MoneyService.format(item.chargedPrice);
-    dto.customPrice = item.customPrice == null ? null : MoneyService.format(item.customPrice);
+    dto.customPrice =
+      item.customPrice == null ? null : MoneyService.format(item.customPrice);
     dto.staffId = item.staffId;
     dto.staffName = item.staffName;
     dto.startAt = item.startAt;

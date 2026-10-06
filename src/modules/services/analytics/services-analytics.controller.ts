@@ -4,23 +4,26 @@ import { BusinessRole } from '@prisma/client';
 import { ServicesAnalyticsService } from './services-analytics.service.js';
 import { ServicesAnalyticsRequestDto } from './dto/services-analytics-request.dto.js';
 import { ServicesAnalyticsResponseDto } from './dto/services-analytics-response.dto.js';
-import { RBAC } from '../../business/decorators/rbac.decorator.js';
-import { ApiResponse, BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
+import { LocationRBAC } from '../../auth/decorators/location-rbac.decorator.js';
+import {
+  ApiResponse,
+  BaseResponseDto,
+} from '../../../shared/dto/base-response.dto.js';
 
 @ApiTags('Services')
-@Controller('businesses/:businessId')
+@Controller('locations/:locationId')
 export class ServicesAnalyticsController {
   constructor(private readonly analyticsService: ServicesAnalyticsService) {}
 
   @ApiOperation({ summary: 'Fetch analytics widgets for the services page' })
   @ApiOkResponse({ type: ApiResponse(ServicesAnalyticsResponseDto) })
-  @RBAC(BusinessRole.OWNER)
+  @LocationRBAC(BusinessRole.OWNER)
   @Post('services/analytics')
   async analytics(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Body() dto: ServicesAnalyticsRequestDto,
   ): Promise<BaseResponseDto<ServicesAnalyticsResponseDto>> {
-    const widgets = await this.analyticsService.getWidgets(businessId, dto);
+    const widgets = await this.analyticsService.getWidgets(locationId, dto);
     return BaseResponseDto.success(new ServicesAnalyticsResponseDto(widgets));
   }
 }

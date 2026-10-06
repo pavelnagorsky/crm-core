@@ -8,6 +8,8 @@ import { DatabaseModule } from './database/database.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { NotificationsModule } from './modules/notifications/notifications.module.js';
 import { BusinessModule } from './modules/business/business.module.js';
+import { BrandModule } from './modules/brand/brand.module.js';
+import { LocationModule } from './modules/location/location.module.js';
 import { StaffModule } from './modules/staff/staff.module.js';
 import { ServicesModule } from './modules/services/services.module.js';
 import { ServicesAnalyticsModule } from './modules/services/analytics/services-analytics.module.js';
@@ -39,6 +41,8 @@ import { PayrollModule } from './modules/payroll/payroll.module.js';
     DatabaseModule,
     NotificationsModule,
     AuthModule,
+    BrandModule,
+    LocationModule,
     BusinessModule,
     StaffModule,
     ServicesModule,

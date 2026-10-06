@@ -1,5 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import {
+  IsEnum,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+} from 'class-validator';
 import { PaginationRequestDto } from '../../../shared/dto/pagination-request.dto.js';
 import { ServiceCatalogKind } from '../enums/service-catalog-kind.enum.js';
 import { ServiceSearchOrderBy } from '../enums/service-search-order-by.enum.js';
@@ -21,12 +27,20 @@ export class ServiceCatalogSearchRequestDto extends PaginationRequestDto<Service
   @IsUUID()
   categoryId?: string;
 
-  @ApiProperty({ enum: ServiceStatus, enumName: 'ServiceStatus', required: false })
+  @ApiProperty({
+    enum: ServiceStatus,
+    enumName: 'ServiceStatus',
+    required: false,
+  })
   @IsOptional()
   @IsEnum(ServiceStatus)
   status?: ServiceStatus;
 
-  @ApiProperty({ enum: ServiceSearchOrderBy, enumName: 'ServiceSearchOrderBy', required: false })
+  @ApiProperty({
+    enum: ServiceSearchOrderBy,
+    enumName: 'ServiceSearchOrderBy',
+    required: false,
+  })
   @IsOptional()
   @IsEnum(ServiceSearchOrderBy)
   declare orderBy?: ServiceSearchOrderBy;

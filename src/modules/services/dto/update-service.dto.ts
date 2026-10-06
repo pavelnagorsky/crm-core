@@ -1,5 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsInt, IsOptional, IsString, IsUUID, MaxLength, Min } from 'class-validator';
+import {
+  IsInt,
+  IsOptional,
+  IsString,
+  IsUUID,
+  MaxLength,
+  Min,
+} from 'class-validator';
 import { IsOptionalPrice } from '../../../shared/decorators/is-price.decorator.js';
 
 export class UpdateServiceDto {
@@ -9,7 +16,12 @@ export class UpdateServiceDto {
   @MaxLength(150)
   title?: string;
 
-  @ApiProperty({ type: String, maxLength: 2000, required: false, nullable: true })
+  @ApiProperty({
+    type: String,
+    maxLength: 2000,
+    required: false,
+    nullable: true,
+  })
   @IsOptional()
   @IsString()
   @MaxLength(2000)

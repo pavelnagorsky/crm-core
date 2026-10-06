@@ -9,13 +9,25 @@ export function assertCompensationVersionStart(
 ): void {
   if (!latest) return;
   if (latest.effectiveFrom >= effectiveFrom) {
-    throw new AppException(ErrorCode.COMPENSATION_PLAN_EFFECTIVE_FROM_INVALID, HttpStatus.CONFLICT);
+    throw new AppException(
+      ErrorCode.COMPENSATION_PLAN_EFFECTIVE_FROM_INVALID,
+      HttpStatus.CONFLICT,
+    );
   }
   if (latest.effectiveTo !== null && latest.effectiveTo >= effectiveFrom) {
-    throw new AppException(ErrorCode.COMPENSATION_PLAN_EFFECTIVE_FROM_INVALID, HttpStatus.CONFLICT);
+    throw new AppException(
+      ErrorCode.COMPENSATION_PLAN_EFFECTIVE_FROM_INVALID,
+      HttpStatus.CONFLICT,
+    );
   }
 }
 
-export function planCoversDate(plan: CompensationVersionSpan, day: Date): boolean {
-  return plan.effectiveFrom <= day && (plan.effectiveTo === null || plan.effectiveTo >= day);
+export function planCoversDate(
+  plan: CompensationVersionSpan,
+  day: Date,
+): boolean {
+  return (
+    plan.effectiveFrom <= day &&
+    (plan.effectiveTo === null || plan.effectiveTo >= day)
+  );
 }

@@ -45,7 +45,9 @@ export function ApiResponse<T>(ValueType: new (...args: any[]) => T) {
     @ApiProperty({ type: () => ValueType, nullable: true })
     declare responseValue: T | null;
   }
-  Object.defineProperty(TypedResponse, 'name', { value: `${ValueType.name}Response` });
+  Object.defineProperty(TypedResponse, 'name', {
+    value: `${ValueType.name}Response`,
+  });
   return TypedResponse;
 }
 
@@ -54,6 +56,8 @@ export function ApiResponseArray<T>(ValueType: new (...args: any[]) => T) {
     @ApiProperty({ type: () => ValueType, isArray: true, nullable: true })
     declare responseValue: T[] | null;
   }
-  Object.defineProperty(TypedResponse, 'name', { value: `${ValueType.name}ArrayResponse` });
+  Object.defineProperty(TypedResponse, 'name', {
+    value: `${ValueType.name}ArrayResponse`,
+  });
   return TypedResponse;
 }

@@ -1,6 +1,21 @@
 import { createHash } from 'crypto';
-import { forwardRef, HttpStatus, Inject, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { Booking, BusinessRole, CalendarEventRepeatType, CalendarEventType, CancelledBy, Prisma, ServiceStatus } from '@prisma/client';
+import {
+  forwardRef,
+  HttpStatus,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import {
+  Booking,
+  BusinessRole,
+  CalendarEventRepeatType,
+  CalendarEventType,
+  CancelledBy,
+  Prisma,
+  ServiceStatus,
+} from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
@@ -44,7 +59,10 @@ import { AuditActorRole } from '../audit/enums/audit-actor-role.enum.js';
 import { AuditFieldChange } from '../audit/interfaces/audit-payload.interface.js';
 import { diffFields } from '../audit/utils/diff-fields.js';
 import { BOOKING_AUDIT_FIELDS } from '../audit/fields/booking.fields.js';
-import { TokenPayloadDto, assertBusinessRole } from '../auth/dto/token-payload.dto.js';
+import {
+  TokenPayloadDto,
+  assertBusinessRole,
+} from '../auth/dto/token-payload.dto.js';
 import { NOTIFICATION_EVENT } from '../notifications/notifications.service.js';
 import { BookingStatusChangedNotification } from '../notifications/notifications/booking-status-changed.notification.js';
 import { BookingWithItems } from './interfaces/booking-with-items.interface.js';
@@ -74,7 +92,7 @@ export class BookingsService implements CalendarBookingReader {
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
-  async getBookingSetup(businessId: string): Promise<BookingSetupResponseDto> {
+  async getBookingSetup(locationId: string): Promise<BookingSetupResponseDto> {
     const activeBundleInclude = {
       imageFile: true,
       items: {
@@ -83,31 +101,51 @@ export class BookingsService implements CalendarBookingReader {
       },
     };
 
-    const [[categories, uncategorizedServices, uncategorizedBundles], staff] = await Promise.all([
-      this.db.$transaction([
-        this.db.serviceCategory.findMany({
-          where: { businessId },
-          orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-          include: {
-            services: { where: { status: ServiceStatus.ACTIVE }, include: { imageFile: true } },
-            bundles: { where: { status: ServiceStatus.ACTIVE }, include: activeBundleInclude },
-          },
-        }),
-        this.db.service.findMany({
-          where: { businessId, categoryId: null, status: ServiceStatus.ACTIVE },
-          include: { imageFile: true },
-        }),
-        this.db.serviceBundle.findMany({
-          where: { businessId, categoryId: null, status: ServiceStatus.ACTIVE },
-          include: activeBundleInclude,
-        }),
-      ]),
-      this.staffService.listActiveWithServices(businessId),
-    ]);
+    const [[categories, uncategorizedServices, uncategorizedBundles], staff] =
+      await Promise.all([
+        this.db.$transaction([
+          this.db.serviceCategory.findMany({
+            where: { locationId },
+            orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+            include: {
+              services: {
+                where: { status: ServiceStatus.ACTIVE },
+                include: { imageFile: true },
+              },
+              bundles: {
+                where: { status: ServiceStatus.ACTIVE },
+                include: activeBundleInclude,
+              },
+            },
+          }),
+          this.db.service.findMany({
+            where: {
+              locationId,
+              categoryId: null,
+              status: ServiceStatus.ACTIVE,
+            },
+            include: { imageFile: true },
+          }),
+          this.db.serviceBundle.findMany({
+            where: {
+              locationId,
+              categoryId: null,
+              status: ServiceStatus.ACTIVE,
+            },
+            include: activeBundleInclude,
+          }),
+        ]),
+        this.staffService.listActiveWithServices(locationId),
+      ]);
 
     const result = categories.map(BookingSetupCategoryDto.fromEntity);
     if (uncategorizedServices.length || uncategorizedBundles.length) {
-      result.push(BookingSetupCategoryDto.uncategorized(uncategorizedServices, uncategorizedBundles));
+      result.push(
+        BookingSetupCategoryDto.uncategorized(
+          uncategorizedServices,
+          uncategorizedBundles,
+        ),
+      );
     }
 
     return {
@@ -117,30 +155,50 @@ export class BookingsService implements CalendarBookingReader {
   }
 
   async resolveBookingSelection(
-    businessId: string,
+    locationId: string,
     dto: BookingResolveRequestDto,
   ): Promise<BookingResolveResponseDto> {
     if (dto.bundleId && dto.serviceIds?.length) {
-      throw new AppException(ErrorCode.BOOKING_SELECTION_CONFLICT, HttpStatus.BAD_REQUEST);
+      throw new AppException(
+        ErrorCode.BOOKING_SELECTION_CONFLICT,
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     const [services, bundles] = await Promise.all([
       this.db.service.findMany({
-        where: { businessId, status: ServiceStatus.ACTIVE },
-        select: { id: true, price: true, durationMinutes: true, bufferMinutes: true },
+        where: { locationId, status: ServiceStatus.ACTIVE },
+        select: {
+          id: true,
+          price: true,
+          durationMinutes: true,
+          bufferMinutes: true,
+        },
       }),
       this.db.serviceBundle.findMany({
-        where: { businessId, status: ServiceStatus.ACTIVE },
-        include: { items: { orderBy: { sortOrder: 'asc' }, include: { service: true } } },
+        where: { locationId, status: ServiceStatus.ACTIVE },
+        include: {
+          items: { orderBy: { sortOrder: 'asc' }, include: { service: true } },
+        },
       }),
     ]);
-    const serviceById = new Map(services.map((service) => [service.id, service]));
+    const serviceById = new Map(
+      services.map((service) => [service.id, service]),
+    );
 
-    const bundle = dto.bundleId ? bundles.find((item) => item.id === dto.bundleId) : undefined;
+    const bundle = dto.bundleId
+      ? bundles.find((item) => item.id === dto.bundleId)
+      : undefined;
     const selected = dto.bundleId
       ? bundle?.items.map((item) => item.service)
-      : dto.serviceIds?.map((id) => serviceById.get(id)).filter((service): service is NonNullable<typeof service> => !!service);
-    const executionMode = (bundle?.executionMode as BookingExecutionMode | undefined) ?? BookingExecutionMode.SEQUENTIAL;
+      : dto.serviceIds
+          ?.map((id) => serviceById.get(id))
+          .filter(
+            (service): service is NonNullable<typeof service> => !!service,
+          );
+    const executionMode =
+      (bundle?.executionMode as BookingExecutionMode | undefined) ??
+      BookingExecutionMode.SEQUENTIAL;
 
     // A chosen master narrows the catalog. It must not wipe the visit total:
     // price and duration still come from the selected services or bundle.
@@ -149,19 +207,29 @@ export class BookingsService implements CalendarBookingReader {
       ...bundles.map((item) => item.id),
     ];
     if (dto.staffId) {
-      const performable = new Set(await this.staffService.servicesPerformableBy(businessId, dto.staffId));
+      const performable = new Set(
+        await this.staffService.servicesPerformableBy(locationId, dto.staffId),
+      );
       availableServiceIds = services
         .filter((service) => performable.has(service.id))
         .map((service) => service.id);
       for (const item of bundles) {
-        if (item.items.every((entry) => performable.has(entry.serviceId))) availableServiceIds.push(item.id);
+        if (item.items.every((entry) => performable.has(entry.serviceId)))
+          availableServiceIds.push(item.id);
       }
     }
 
     if (!selected?.length) {
       const availableStaff = dto.staffId
-        ? [{ id: dto.staffId, name: (await this.staffService.findById(dto.staffId)).name }]
-        : (await this.staffService.listActiveWithServices(businessId)).map((staff) => ({ id: staff.id, name: staff.name }));
+        ? [
+            {
+              id: dto.staffId,
+              name: (await this.staffService.findById(dto.staffId)).name,
+            },
+          ]
+        : (await this.staffService.listActiveWithServices(locationId)).map(
+            (staff) => ({ id: staff.id, name: staff.name }),
+          );
       return {
         availableServiceIds,
         availableStaff,
@@ -173,12 +241,15 @@ export class BookingsService implements CalendarBookingReader {
     }
 
     const staffing = await this.staffService.resolveStaffingForServices(
-      businessId,
+      locationId,
       selected.map((service) => service.id),
     );
     const totalListPrice = bundle
       ? BundleMetrics.price(bundle)
-      : selected.reduce((sum, service) => sum.plus(service.price), new Prisma.Decimal(0));
+      : selected.reduce(
+          (sum, service) => sum.plus(service.price),
+          new Prisma.Decimal(0),
+        );
     const totalDuration = BundleMetrics.durationMinutes({
       executionMode,
       items: selected.map((service) => ({ service })),
@@ -187,33 +258,48 @@ export class BookingsService implements CalendarBookingReader {
     return {
       availableServiceIds,
       availableStaff: staffing.coverableBySingle,
-      staffSelection: staffing.coverableBySingle.length ? StaffSelectionMode.SINGLE : StaffSelectionMode.NONE,
+      staffSelection: staffing.coverableBySingle.length
+        ? StaffSelectionMode.SINGLE
+        : StaffSelectionMode.NONE,
       executionMode,
       totalDuration,
       totalListPrice: MoneyService.format(totalListPrice),
     };
   }
 
-  async update(bookingId: string, tokenPayload: TokenPayloadDto, dto: UpdateBookingDto): Promise<BookingWithItems> {
+  async update(
+    bookingId: string,
+    tokenPayload: TokenPayloadDto,
+    dto: UpdateBookingDto,
+  ): Promise<BookingWithItems> {
     const old = await this.findById(bookingId);
-    assertBusinessRole(tokenPayload, old.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
-    const { businessId } = old;
-    const actor = auditActorFromToken(tokenPayload, businessId);
+    assertBusinessRole(
+      tokenPayload,
+      old.locationId,
+      BusinessRole.OWNER,
+      BusinessRole.STAFF,
+    );
+    const { locationId } = old;
+    const actor = auditActorFromToken(tokenPayload, locationId);
 
     const slotChanging = dto.startAt !== undefined || dto.staffId !== undefined;
     const pricePatches = this.pricePatches(old, dto);
 
     const updated = slotChanging
-      ? await this.updateWithSlotReschedule(old, businessId, dto, pricePatches)
+      ? await this.updateWithSlotReschedule(old, locationId, dto, pricePatches)
       : await this.db.booking.update({
           where: { id: bookingId },
           data: {
             clientFirstName: dto.firstName ?? old.clientFirstName,
             clientLastName: dto.lastName ?? old.clientLastName,
             clientPhone: dto.phone ?? old.clientPhone,
-            clientEmail: dto.email !== undefined ? (dto.email ?? null) : old.clientEmail,
+            clientEmail:
+              dto.email !== undefined ? (dto.email ?? null) : old.clientEmail,
             notes: dto.notes !== undefined ? (dto.notes ?? null) : undefined,
-            internalNotes: dto.internalNotes !== undefined ? (dto.internalNotes ?? null) : undefined,
+            internalNotes:
+              dto.internalNotes !== undefined
+                ? (dto.internalNotes ?? null)
+                : undefined,
             ...this.itemPriceWrite(pricePatches),
           },
           include: bookingWithItemsInclude,
@@ -221,18 +307,25 @@ export class BookingsService implements CalendarBookingReader {
 
     const changes = [
       ...diffFields(old, updated, BOOKING_AUDIT_FIELDS),
-      ...this.itemValueChanges(old, updated, 'staffName', (item) => item.staffName),
-      ...this.itemValueChanges(old, updated, 'customPrice', (item) => (
-        item.customPrice == null ? null : MoneyService.format(item.customPrice)
-      )),
+      ...this.itemValueChanges(
+        old,
+        updated,
+        'staffName',
+        (item) => item.staffName,
+      ),
+      ...this.itemValueChanges(old, updated, 'customPrice', (item) =>
+        item.customPrice == null ? null : MoneyService.format(item.customPrice),
+      ),
     ];
     if (changes.length > 0) {
       const currency = changes.some((change) => change.field === 'customPrice')
-        ? (await this.businessService.getLocale(businessId)).currency
+        ? (await this.businessService.getLocale(locationId)).currency
         : undefined;
-      this.logger.log(`booking updated: id=${bookingId} businessId=${businessId} fields=${changes.map((change) => change.field).join(',')}`);
+      this.logger.log(
+        `booking updated: id=${bookingId} locationId=${locationId} fields=${changes.map((change) => change.field).join(',')}`,
+      );
       this.emitAudit({
-        businessId,
+        locationId,
         entityId: bookingId,
         eventType: AuditEvent.BOOKING_UPDATED,
         actionType: AuditActionType.MODIFY,
@@ -244,34 +337,71 @@ export class BookingsService implements CalendarBookingReader {
     return updated;
   }
 
-  async updateStatus(bookingId: string, tokenPayload: TokenPayloadDto, dto: UpdateBookingStatusDto): Promise<BookingWithItems> {
+  async updateStatus(
+    bookingId: string,
+    tokenPayload: TokenPayloadDto,
+    dto: UpdateBookingStatusDto,
+  ): Promise<BookingWithItems> {
     const old = await this.findById(bookingId);
-    assertBusinessRole(tokenPayload, old.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
-    const reversesCommission = old.status === BookingStatus.COMPLETED && dto.status !== BookingStatus.COMPLETED;
-    const reversalReason = reversesCommission ? this.optionalReason(dto.reason) : null;
-    const updated = await this.db.booking.update({ where: { id: bookingId }, data: { status: dto.status }, include: bookingWithItemsInclude });
-    const actor = auditActorFromToken(tokenPayload, old.businessId);
-    if (dto.status === BookingStatus.COMPLETED && old.status !== BookingStatus.COMPLETED) {
+    assertBusinessRole(
+      tokenPayload,
+      old.locationId,
+      BusinessRole.OWNER,
+      BusinessRole.STAFF,
+    );
+    const reversesCommission =
+      old.status === BookingStatus.COMPLETED &&
+      dto.status !== BookingStatus.COMPLETED;
+    const reversalReason = reversesCommission
+      ? this.optionalReason(dto.reason)
+      : null;
+    const updated = await this.db.booking.update({
+      where: { id: bookingId },
+      data: { status: dto.status },
+      include: bookingWithItemsInclude,
+    });
+    const actor = auditActorFromToken(tokenPayload, old.locationId);
+    if (
+      dto.status === BookingStatus.COMPLETED &&
+      old.status !== BookingStatus.COMPLETED
+    ) {
       await this.staffEarnings.recordForCompletedBooking(updated);
     } else if (reversesCommission) {
-      await this.staffEarnings.reverseForBooking(updated, reversalReason, actor);
+      await this.staffEarnings.reverseForBooking(
+        updated,
+        reversalReason,
+        actor,
+      );
     }
-    this.logger.log(`booking status: id=${bookingId} businessId=${old.businessId} from=${old.status} to=${dto.status}`);
+    this.logger.log(
+      `booking status: id=${bookingId} locationId=${old.locationId} from=${old.status} to=${dto.status}`,
+    );
     this.emitAudit({
-      businessId: old.businessId,
+      locationId: old.locationId,
       entityId: bookingId,
       eventType: AuditEvent.BOOKING_STATUS_CHANGED,
       actionType: AuditActionType.MODIFY,
       actor,
-      payload: { from: old.status, to: dto.status, ...(reversalReason ? { reason: reversalReason } : {}) },
+      payload: {
+        from: old.status,
+        to: dto.status,
+        ...(reversalReason ? { reason: reversalReason } : {}),
+      },
     });
     if (dto.status === BookingStatus.CONFIRMED && old.clientEmail) {
-      const { timezone } = await this.businessService.getLocale(old.businessId);
-      this.eventEmitter.emit(NOTIFICATION_EVENT, new BookingStatusChangedNotification(
-        { ...this.notificationData(old), clientEmail: old.clientEmail, timezone },
-        'CONFIRMED',
-        undefined,
-      ));
+      const { timezone } = await this.businessService.getLocale(old.locationId);
+      this.eventEmitter.emit(
+        NOTIFICATION_EVENT,
+        new BookingStatusChangedNotification(
+          {
+            ...this.notificationData(old),
+            clientEmail: old.clientEmail,
+            timezone,
+          },
+          'CONFIRMED',
+          undefined,
+        ),
+      );
     }
     return updated;
   }
@@ -303,7 +433,7 @@ export class BookingsService implements CalendarBookingReader {
       const updated = { ...booking, status: BookingStatus.COMPLETED };
       await this.staffEarnings.recordForCompletedBooking(updated);
       this.emitAudit({
-        businessId: booking.businessId,
+        locationId: booking.locationId,
         entityId: booking.id,
         eventType: AuditEvent.BOOKING_STATUS_CHANGED,
         actionType: AuditActionType.MODIFY,
@@ -317,14 +447,14 @@ export class BookingsService implements CalendarBookingReader {
   }
 
   async listForCalendar(
-    businessId: string,
+    locationId: string,
     rangeStart: Date,
     rangeEnd: Date,
     staffIds?: string[],
   ): Promise<CalendarBookingFeed> {
     const rows = await this.db.bookingItem.findMany({
       where: {
-        businessId,
+        locationId,
         startAt: { lt: rangeEnd },
         endAt: { gt: rangeStart },
         ...(staffIds?.length ? { staffId: { in: staffIds } } : {}),
@@ -353,19 +483,26 @@ export class BookingsService implements CalendarBookingReader {
     });
 
     return {
-      bookings: rows.filter((row) => CALENDAR_VISIBLE_STATUSES.has(row.booking.status)).map((row) => ({
-        id: row.booking.id,
-        staffId: row.staffId,
-        staffName: row.staffName,
-        clientFirstName: row.booking.clientFirstName,
-        clientLastName: row.booking.clientLastName,
-        serviceTitle: row.serviceTitle,
-        servicePrice: MoneyService.format(row.chargedPrice),
-        customPrice: row.customPrice == null ? null : MoneyService.format(row.customPrice),
-        startAt: row.startAt,
-        endAt: row.endAt,
-      })),
-      linkedEventIds: rows.flatMap((row) => (row.calendarEventId ? [row.calendarEventId] : [])),
+      bookings: rows
+        .filter((row) => CALENDAR_VISIBLE_STATUSES.has(row.booking.status))
+        .map((row) => ({
+          id: row.booking.id,
+          staffId: row.staffId,
+          staffName: row.staffName,
+          clientFirstName: row.booking.clientFirstName,
+          clientLastName: row.booking.clientLastName,
+          serviceTitle: row.serviceTitle,
+          servicePrice: MoneyService.format(row.chargedPrice),
+          customPrice:
+            row.customPrice == null
+              ? null
+              : MoneyService.format(row.customPrice),
+          startAt: row.startAt,
+          endAt: row.endAt,
+        })),
+      linkedEventIds: rows.flatMap((row) =>
+        row.calendarEventId ? [row.calendarEventId] : [],
+      ),
     };
   }
 
@@ -378,17 +515,25 @@ export class BookingsService implements CalendarBookingReader {
     return booking;
   }
 
-  async linkedCalendarEventIdsForBooking(businessId: string, bookingId: string): Promise<string[]> {
+  async linkedCalendarEventIdsForBooking(
+    locationId: string,
+    bookingId: string,
+  ): Promise<string[]> {
     const booking = await this.db.booking.findFirst({
-      where: { id: bookingId, businessId, deletedAt: null },
+      where: { id: bookingId, locationId, deletedAt: null },
       select: { items: { select: { calendarEventId: true } } },
     });
     if (!booking) throw new NotFoundException('Booking not found');
-    return booking.items.flatMap((item) => (item.calendarEventId ? [item.calendarEventId] : []));
+    return booking.items.flatMap((item) =>
+      item.calendarEventId ? [item.calendarEventId] : [],
+    );
   }
 
-  async search(businessId: string, dto: BookingSearchRequestDto): Promise<PaginatedResult<BookingWithItems>> {
-    const where = this.buildSearchWhere(businessId, dto);
+  async search(
+    locationId: string,
+    dto: BookingSearchRequestDto,
+  ): Promise<PaginatedResult<BookingWithItems>> {
+    const where = this.buildSearchWhere(locationId, dto);
     const direction = dto.orderDirection ?? OrderDirection.DESC;
     const orderBy = dto.orderBy ?? BookingSearchOrderBy.START_AT;
 
@@ -426,22 +571,36 @@ export class BookingsService implements CalendarBookingReader {
     return undefined;
   }
 
-  private buildSearchWhere(businessId: string, dto: BookingSearchRequestDto): Prisma.BookingWhereInput {
-    const where: Prisma.BookingWhereInput = { businessId, deletedAt: null };
+  private buildSearchWhere(
+    locationId: string,
+    dto: BookingSearchRequestDto,
+  ): Prisma.BookingWhereInput {
+    const where: Prisma.BookingWhereInput = { locationId, deletedAt: null };
 
     if (dto.status) where.status = dto.status;
     if (dto.clientId) where.clientId = dto.clientId;
-    const catalogFilter = this.catalogStaffFilter(dto.staffIds, dto.catalogItemIds);
+    const catalogFilter = this.catalogStaffFilter(
+      dto.staffIds,
+      dto.catalogItemIds,
+    );
     if (catalogFilter) where.AND = [catalogFilter];
     if (dto.startFrom || dto.startTo) {
       where.startAt = {};
-      if (dto.startFrom) (where.startAt as Prisma.DateTimeFilter).gte = new Date(dto.startFrom);
-      if (dto.startTo) (where.startAt as Prisma.DateTimeFilter).lte = new Date(dto.startTo);
+      if (dto.startFrom)
+        (where.startAt as Prisma.DateTimeFilter).gte = new Date(dto.startFrom);
+      if (dto.startTo)
+        (where.startAt as Prisma.DateTimeFilter).lte = new Date(dto.startTo);
     }
     if (dto.createdFrom || dto.createdTo) {
       where.createdAt = {};
-      if (dto.createdFrom) (where.createdAt as Prisma.DateTimeFilter).gte = new Date(dto.createdFrom);
-      if (dto.createdTo) (where.createdAt as Prisma.DateTimeFilter).lte = new Date(dto.createdTo);
+      if (dto.createdFrom)
+        (where.createdAt as Prisma.DateTimeFilter).gte = new Date(
+          dto.createdFrom,
+        );
+      if (dto.createdTo)
+        (where.createdAt as Prisma.DateTimeFilter).lte = new Date(
+          dto.createdTo,
+        );
     }
     const search = dto.search?.trim();
     if (search) {
@@ -450,8 +609,16 @@ export class BookingsService implements CalendarBookingReader {
         { clientLastName: { contains: search, mode: 'insensitive' } },
         { clientPhone: { contains: search } },
         { clientEmail: { contains: search, mode: 'insensitive' } },
-        { items: { some: { serviceTitle: { contains: search, mode: 'insensitive' } } } },
-        { items: { some: { staffName: { contains: search, mode: 'insensitive' } } } },
+        {
+          items: {
+            some: { serviceTitle: { contains: search, mode: 'insensitive' } },
+          },
+        },
+        {
+          items: {
+            some: { staffName: { contains: search, mode: 'insensitive' } },
+          },
+        },
         { notes: { contains: search, mode: 'insensitive' } },
         { internalNotes: { contains: search, mode: 'insensitive' } },
         { cancellationReason: { contains: search, mode: 'insensitive' } },
@@ -464,7 +631,9 @@ export class BookingsService implements CalendarBookingReader {
   private searchOrderBy(
     orderBy: BookingSearchOrderBy,
     direction: OrderDirection,
-  ): Prisma.BookingOrderByWithRelationInput | Prisma.BookingOrderByWithRelationInput[] {
+  ):
+    | Prisma.BookingOrderByWithRelationInput
+    | Prisma.BookingOrderByWithRelationInput[] {
     switch (orderBy) {
       case BookingSearchOrderBy.CLIENT_NAME:
         return [{ clientLastName: direction }, { clientFirstName: direction }];
@@ -484,7 +653,9 @@ export class BookingsService implements CalendarBookingReader {
         throw new Error('Price sort is applied in SQL');
       default: {
         const unexpected: never = orderBy;
-        throw new Error(`Unhandled booking search order: ${String(unexpected)}`);
+        throw new Error(
+          `Unhandled booking search order: ${String(unexpected)}`,
+        );
       }
     }
   }
@@ -511,38 +682,83 @@ export class BookingsService implements CalendarBookingReader {
     return { items, totalItems };
   }
 
-  async cancel(bookingId: string, tokenPayload: TokenPayloadDto, cancelledBy: CancelledBy, dto: CancelBookingDto): Promise<Booking> {
+  async cancel(
+    bookingId: string,
+    tokenPayload: TokenPayloadDto,
+    cancelledBy: CancelledBy,
+    dto: CancelBookingDto,
+  ): Promise<Booking> {
     const booking = await this.findById(bookingId);
-    assertBusinessRole(tokenPayload, booking.businessId, BusinessRole.OWNER, BusinessRole.STAFF);
-    return this.executeCancellation(booking, cancelledBy, dto.reason, auditActorFromToken(tokenPayload, booking.businessId));
+    assertBusinessRole(
+      tokenPayload,
+      booking.locationId,
+      BusinessRole.OWNER,
+      BusinessRole.STAFF,
+    );
+    return this.executeCancellation(
+      booking,
+      cancelledBy,
+      dto.reason,
+      auditActorFromToken(tokenPayload, booking.locationId),
+    );
   }
 
-  async cancelByClient(bookingId: string, dto: CancelBookingDto): Promise<Booking> {
+  async cancelByClient(
+    bookingId: string,
+    dto: CancelBookingDto,
+  ): Promise<Booking> {
     const booking = await this.findById(bookingId);
-    const actor: AuditActor = { name: `${booking.clientFirstName} ${booking.clientLastName}`, role: AuditActorRole.CLIENT };
-    return this.executeCancellation(booking, CancelledBy.CLIENT, dto.reason, actor);
+    const actor: AuditActor = {
+      name: `${booking.clientFirstName} ${booking.clientLastName}`,
+      role: AuditActorRole.CLIENT,
+    };
+    return this.executeCancellation(
+      booking,
+      CancelledBy.CLIENT,
+      dto.reason,
+      actor,
+    );
   }
 
-  async delete(bookingId: string, tokenPayload: TokenPayloadDto): Promise<void> {
+  async delete(
+    bookingId: string,
+    tokenPayload: TokenPayloadDto,
+  ): Promise<void> {
     const booking = await this.findById(bookingId);
-    assertBusinessRole(tokenPayload, booking.businessId, BusinessRole.OWNER);
-    const actor = auditActorFromToken(tokenPayload, booking.businessId);
+    assertBusinessRole(tokenPayload, booking.locationId, BusinessRole.OWNER);
+    const actor = auditActorFromToken(tokenPayload, booking.locationId);
     await this.db.$transaction([
-      this.db.booking.update({ where: { id: booking.id }, data: { deletedAt: new Date() } }),
-      ...booking.items
-        .flatMap((item) => item.calendarEventId ? [this.db.calendarEvent.delete({ where: { id: item.calendarEventId } })] : []),
+      this.db.booking.update({
+        where: { id: booking.id },
+        data: { deletedAt: new Date() },
+      }),
+      ...booking.items.flatMap((item) =>
+        item.calendarEventId
+          ? [
+              this.db.calendarEvent.delete({
+                where: { id: item.calendarEventId },
+              }),
+            ]
+          : [],
+      ),
     ]);
     if (booking.status === BookingStatus.COMPLETED) {
       await this.staffEarnings.reverseForBooking(booking, null, actor);
     }
-    this.logger.log(`booking deleted: id=${booking.id} businessId=${booking.businessId}`);
+    this.logger.log(
+      `booking deleted: id=${booking.id} locationId=${booking.locationId}`,
+    );
     this.emitAudit({
-      businessId: booking.businessId,
+      locationId: booking.locationId,
       entityId: booking.id,
       eventType: AuditEvent.BOOKING_DELETED,
       actionType: AuditActionType.DELETE,
       actor,
-      payload: { serviceTitles: booking.items.map((item) => item.serviceTitle).join(', ') },
+      payload: {
+        serviceTitles: booking.items
+          .map((item) => item.serviceTitle)
+          .join(', '),
+      },
     });
   }
 
@@ -553,9 +769,17 @@ export class BookingsService implements CalendarBookingReader {
     return text || null;
   }
 
-  private async executeCancellation(booking: BookingWithItems, cancelledBy: CancelledBy, reason: string | undefined, actor: AuditActor): Promise<BookingWithItems> {
+  private async executeCancellation(
+    booking: BookingWithItems,
+    cancelledBy: CancelledBy,
+    reason: string | undefined,
+    actor: AuditActor,
+  ): Promise<BookingWithItems> {
     if (booking.status === BookingStatus.CANCELLED) {
-      throw new AppException(ErrorCode.BOOKING_ALREADY_CANCELLED, HttpStatus.CONFLICT);
+      throw new AppException(
+        ErrorCode.BOOKING_ALREADY_CANCELLED,
+        HttpStatus.CONFLICT,
+      );
     }
     const storedReason = this.optionalReason(reason);
     const updated = await this.db.booking.update({
@@ -571,9 +795,11 @@ export class BookingsService implements CalendarBookingReader {
     if (booking.status === BookingStatus.COMPLETED) {
       await this.staffEarnings.reverseForBooking(updated, storedReason, actor);
     }
-    this.logger.log(`booking cancelled: id=${booking.id} businessId=${booking.businessId} cancelledBy=${cancelledBy}`);
+    this.logger.log(
+      `booking cancelled: id=${booking.id} locationId=${booking.locationId} cancelledBy=${cancelledBy}`,
+    );
     this.emitAudit({
-      businessId: booking.businessId,
+      locationId: booking.locationId,
       entityId: booking.id,
       eventType: AuditEvent.BOOKING_CANCELLED,
       actionType: AuditActionType.MODIFY,
@@ -581,49 +807,87 @@ export class BookingsService implements CalendarBookingReader {
       payload: { cancelledBy, reason: storedReason ?? undefined },
     });
     if (booking.clientEmail && cancelledBy === CancelledBy.STAFF) {
-      const { timezone } = await this.businessService.getLocale(booking.businessId);
-      this.eventEmitter.emit(NOTIFICATION_EVENT, new BookingStatusChangedNotification(
-        { ...this.notificationData(booking), clientEmail: booking.clientEmail, timezone },
-        'CANCELLED',
-        storedReason ?? undefined,
-      ));
+      const { timezone } = await this.businessService.getLocale(
+        booking.locationId,
+      );
+      this.eventEmitter.emit(
+        NOTIFICATION_EVENT,
+        new BookingStatusChangedNotification(
+          {
+            ...this.notificationData(booking),
+            clientEmail: booking.clientEmail,
+            timezone,
+          },
+          'CANCELLED',
+          storedReason ?? undefined,
+        ),
+      );
     }
     return updated;
   }
 
   private async updateWithSlotReschedule(
     old: BookingWithItems,
-    businessId: string,
+    locationId: string,
     dto: UpdateBookingDto,
     pricePatches: UpdateBookingItemPriceDto[],
   ): Promise<BookingWithItems> {
-    const business = await this.db.business.findUnique({
-      where: { id: businessId },
+    const business = await this.db.location.findUnique({
+      where: { id: locationId },
       select: { timezone: true },
     });
-    if (!business) throw new AppException(ErrorCode.BOOKING_BUSINESS_NOT_FOUND, HttpStatus.NOT_FOUND);
-    if (old.items.length === 0) throw new AppException(ErrorCode.BOOKING_SERVICE_NOT_FOUND, HttpStatus.NOT_FOUND);
+    if (!business)
+      throw new AppException(
+        ErrorCode.BOOKING_BUSINESS_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
+    if (old.items.length === 0)
+      throw new AppException(
+        ErrorCode.BOOKING_SERVICE_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
 
-    const newStartAt = dto.startAt ? TimeService.localToUtc(dto.startAt, business.timezone) : old.startAt;
+    const newStartAt = dto.startAt
+      ? TimeService.localToUtc(dto.startAt, business.timezone)
+      : old.startAt;
     const deltaMs = newStartAt.getTime() - old.startAt.getTime();
     const targetStaffId = dto.staffId;
-    const targetStaff = targetStaffId ? await this.staffService.findById(targetStaffId) : null;
+    const targetStaff = targetStaffId
+      ? await this.staffService.findById(targetStaffId)
+      : null;
 
-    const movedItems = await Promise.all(old.items.map(async (item) => {
-      const staffId = targetStaffId ?? item.staffId;
-      if (targetStaffId) {
-        const candidates = await this.staffService.resolveStaffForService(businessId, item.serviceId, targetStaffId);
-        if (candidates.length === 0) throw new AppException(ErrorCode.BOOKING_STAFF_NOT_FOUND, HttpStatus.NOT_FOUND);
-      }
-      return {
-        ...item,
-        staffId,
-        staffName: targetStaff?.name ?? item.staffName,
-        startAt: new Date(item.startAt.getTime() + deltaMs),
-        endAt: new Date(item.endAt.getTime() + deltaMs),
-      };
-    }));
-    const lockKeys = [...new Set(movedItems.map((item) => `${item.staffId}:${TimeService.zonedDateStr(item.startAt, business.timezone)}`))]
+    const movedItems = await Promise.all(
+      old.items.map(async (item) => {
+        const staffId = targetStaffId ?? item.staffId;
+        if (targetStaffId) {
+          const candidates = await this.staffService.resolveStaffForService(
+            locationId,
+            item.serviceId,
+            targetStaffId,
+          );
+          if (candidates.length === 0)
+            throw new AppException(
+              ErrorCode.BOOKING_STAFF_NOT_FOUND,
+              HttpStatus.NOT_FOUND,
+            );
+        }
+        return {
+          ...item,
+          staffId,
+          staffName: targetStaff?.name ?? item.staffName,
+          startAt: new Date(item.startAt.getTime() + deltaMs),
+          endAt: new Date(item.endAt.getTime() + deltaMs),
+        };
+      }),
+    );
+    const lockKeys = [
+      ...new Set(
+        movedItems.map(
+          (item) =>
+            `${item.staffId}:${TimeService.zonedDateStr(item.startAt, business.timezone)}`,
+        ),
+      ),
+    ]
       .map((key) => {
         const [staffId, dateStr] = key.split(':');
         return this.buildLockKey(staffId, dateStr);
@@ -636,25 +900,49 @@ export class BookingsService implements CalendarBookingReader {
       }
 
       for (const item of movedItems) {
-        const dateStr = TimeService.zonedDateStr(item.startAt, business.timezone);
+        const dateStr = TimeService.zonedDateStr(
+          item.startAt,
+          business.timezone,
+        );
         const [shift, blockEvents] = await Promise.all([
-          tx.staffShift.findFirst({ where: { staffId: item.staffId, date: new Date(dateStr) } }),
+          tx.staffShift.findFirst({
+            where: { staffId: item.staffId, date: new Date(dateStr) },
+          }),
           tx.calendarEvent.findMany({
             where: {
-              businessId,
+              locationId,
               OR: [{ staffId: null }, { staffId: item.staffId }],
               repeatType: CalendarEventRepeatType.NONE,
               startDateTime: { lte: item.endAt },
               endDateTime: { gte: item.startAt },
-              NOT: item.calendarEventId ? { id: item.calendarEventId } : undefined,
+              NOT: item.calendarEventId
+                ? { id: item.calendarEventId }
+                : undefined,
             },
-            include: { cancelledOccurrences: { select: { occurrenceDate: true } } },
+            include: {
+              cancelledOccurrences: { select: { occurrenceDate: true } },
+            },
           }),
         ]);
 
-        if (!this.calendarService.isSlotFree(item.staffId, dateStr, item.startAt, item.endAt, shift, blockEvents, business.timezone)) {
-          this.logger.warn(`slot unavailable on update: bookingId=${old.id} staffId=${item.staffId} startAt=${item.startAt.toISOString()}`);
-          throw new AppException(ErrorCode.BOOKING_SLOT_UNAVAILABLE, HttpStatus.CONFLICT);
+        if (
+          !this.calendarService.isSlotFree(
+            item.staffId,
+            dateStr,
+            item.startAt,
+            item.endAt,
+            shift,
+            blockEvents,
+            business.timezone,
+          )
+        ) {
+          this.logger.warn(
+            `slot unavailable on update: bookingId=${old.id} staffId=${item.staffId} startAt=${item.startAt.toISOString()}`,
+          );
+          throw new AppException(
+            ErrorCode.BOOKING_SLOT_UNAVAILABLE,
+            HttpStatus.CONFLICT,
+          );
         }
       }
 
@@ -663,12 +951,16 @@ export class BookingsService implements CalendarBookingReader {
         if (calendarEventId) {
           await tx.calendarEvent.update({
             where: { id: calendarEventId },
-            data: { staffId: item.staffId, startDateTime: item.startAt, endDateTime: item.endAt },
+            data: {
+              staffId: item.staffId,
+              startDateTime: item.startAt,
+              endDateTime: item.endAt,
+            },
           });
         } else {
           const event = await tx.calendarEvent.create({
             data: {
-              businessId,
+              locationId,
               staffId: item.staffId,
               type: CalendarEventType.BOOKING,
               repeatType: CalendarEventRepeatType.NONE,
@@ -693,14 +985,22 @@ export class BookingsService implements CalendarBookingReader {
       return tx.booking.update({
         where: { id: old.id },
         data: {
-          startAt: new Date(Math.min(...movedItems.map((item) => item.startAt.getTime()))),
-          endAt: new Date(Math.max(...movedItems.map((item) => item.endAt.getTime()))),
+          startAt: new Date(
+            Math.min(...movedItems.map((item) => item.startAt.getTime())),
+          ),
+          endAt: new Date(
+            Math.max(...movedItems.map((item) => item.endAt.getTime())),
+          ),
           clientFirstName: dto.firstName ?? old.clientFirstName,
           clientLastName: dto.lastName ?? old.clientLastName,
           clientPhone: dto.phone ?? old.clientPhone,
-          clientEmail: dto.email !== undefined ? (dto.email ?? null) : old.clientEmail,
+          clientEmail:
+            dto.email !== undefined ? (dto.email ?? null) : old.clientEmail,
           notes: dto.notes !== undefined ? (dto.notes ?? null) : undefined,
-          internalNotes: dto.internalNotes !== undefined ? (dto.internalNotes ?? null) : undefined,
+          internalNotes:
+            dto.internalNotes !== undefined
+              ? (dto.internalNotes ?? null)
+              : undefined,
           ...this.itemPriceWrite(pricePatches),
         },
         include: bookingWithItemsInclude,
@@ -709,7 +1009,7 @@ export class BookingsService implements CalendarBookingReader {
   }
 
   private emitAudit(params: {
-    businessId: string;
+    locationId: string;
     entityId: string;
     eventType: AuditEvent;
     actionType: AuditActionType;
@@ -717,7 +1017,7 @@ export class BookingsService implements CalendarBookingReader {
     payload: Record<string, unknown>;
   }): void {
     const event: AuditLogEvent = {
-      businessId: params.businessId,
+      locationId: params.locationId,
       entityType: AuditEntity.BOOKING,
       entityId: params.entityId,
       eventType: params.eventType,
@@ -729,19 +1029,27 @@ export class BookingsService implements CalendarBookingReader {
     this.eventEmitter.emit(AUDIT_EVENT, event);
   }
 
-  private pricePatches(old: BookingWithItems, dto: UpdateBookingDto): UpdateBookingItemPriceDto[] {
+  private pricePatches(
+    old: BookingWithItems,
+    dto: UpdateBookingDto,
+  ): UpdateBookingItemPriceDto[] {
     const patches = dto.items ?? [];
     if (patches.length === 0) return [];
     const known = new Set(old.items.map((item) => item.id));
     for (const patch of patches) {
       if (!known.has(patch.id)) {
-        throw new AppException(ErrorCode.BOOKING_ITEM_NOT_FOUND, HttpStatus.NOT_FOUND);
+        throw new AppException(
+          ErrorCode.BOOKING_ITEM_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
       }
     }
     return patches;
   }
 
-  private itemPriceWrite(patches: UpdateBookingItemPriceDto[]): { items?: Prisma.BookingUpdateInput['items'] } {
+  private itemPriceWrite(patches: UpdateBookingItemPriceDto[]): {
+    items?: Prisma.BookingUpdateInput['items'];
+  } {
     if (patches.length === 0) return {};
     return {
       items: {
@@ -798,19 +1106,26 @@ export class BookingsService implements CalendarBookingReader {
       clientFirstName: booking.clientFirstName,
       clientLastName: booking.clientLastName,
       serviceTitle: booking.items.map((item) => item.serviceTitle).join(', '),
-      staffName: [...new Set(booking.items.map((item) => item.staffName))].join(', '),
+      staffName: [...new Set(booking.items.map((item) => item.staffName))].join(
+        ', ',
+      ),
       startAt: booking.startAt,
       endAt: booking.endAt,
     };
   }
 
-  async getStatusCounts(businessId: string): Promise<{ status: BookingStatus; count: number }[]> {
+  async getStatusCounts(
+    locationId: string,
+  ): Promise<{ status: BookingStatus; count: number }[]> {
     const rows = await this.db.booking.groupBy({
       by: ['status'],
-      where: { businessId },
+      where: { locationId },
       _count: { _all: true },
     });
-    return rows.map((r) => ({ status: r.status as BookingStatus, count: r._count._all }));
+    return rows.map((r) => ({
+      status: r.status as BookingStatus,
+      count: r._count._all,
+    }));
   }
 
   private buildLockKey(staffId: string, dateStr: string): bigint {
