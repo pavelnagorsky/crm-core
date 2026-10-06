@@ -9,7 +9,7 @@ import {
 import { DatabaseService } from '../../database/database.service.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { MoneyService } from '../../shared/money/money.service.js';
-import { BusinessService } from '../business/business.service.js';
+import { LocationService } from '../location/location.service.js';
 import { BookingVisibility } from '../business/enums/booking-visibility.enum.js';
 import { StaffService } from '../staff/staff.service.js';
 import { TimeService } from '../time/time.service.js';
@@ -77,7 +77,7 @@ describe('CalendarService.update', () => {
         CalendarService,
         { provide: DatabaseService, useValue: db },
         { provide: StaffService, useValue: {} },
-        { provide: BusinessService, useValue: {} },
+        { provide: LocationService, useValue: {} },
         { provide: CalendarBookingReader, useValue: {} },
         { provide: CalendarComputeService, useValue: {} },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
@@ -155,7 +155,7 @@ describe('CalendarService.moveOccurrence', () => {
         CalendarService,
         { provide: DatabaseService, useValue: db },
         { provide: StaffService, useValue: {} },
-        { provide: BusinessService, useValue: {} },
+        { provide: LocationService, useValue: {} },
         { provide: CalendarBookingReader, useValue: {} },
         { provide: CalendarComputeService, useValue: {} },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
@@ -288,7 +288,7 @@ describe('CalendarService.getManualAvailableSlots', () => {
         CalendarService,
         { provide: DatabaseService, useValue: db },
         { provide: StaffService, useValue: staff },
-        { provide: BusinessService, useValue: {} },
+        { provide: LocationService, useValue: {} },
         { provide: CalendarBookingReader, useValue: bookings },
         { provide: CalendarComputeService, useValue: compute },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
@@ -436,7 +436,7 @@ describe('CalendarService.getCalendar', () => {
         CalendarComputeService,
         { provide: DatabaseService, useValue: db },
         { provide: StaffService, useValue: staff },
-        { provide: BusinessService, useValue: business },
+        { provide: LocationService, useValue: business },
         { provide: CalendarBookingReader, useValue: bookings },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
       ],

@@ -24,7 +24,7 @@ import { AuditEntity } from '../audit/enums/audit-entity.enum.js';
 import { AuditEvent } from '../audit/enums/audit-event.enum.js';
 import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
 import { TimeService } from '../time/time.service.js';
-import { BusinessService } from '../business/business.service.js';
+import { LocationService } from '../location/location.service.js';
 import { StaffService } from '../staff/staff.service.js';
 import { CalendarBookingReader } from './calendar-booking-reader.js';
 import { CalendarComputeService } from './calendar-compute.service.js';
@@ -49,7 +49,7 @@ export class CalendarService {
   constructor(
     private readonly db: DatabaseService,
     private readonly staff: StaffService,
-    private readonly businessService: BusinessService,
+    private readonly locationService: LocationService,
     @Inject(forwardRef(() => CalendarBookingReader))
     private readonly bookings: CalendarBookingReader,
     private readonly compute: CalendarComputeService,
@@ -204,7 +204,7 @@ export class CalendarService {
     dto: GetCalendarRequestDto,
   ): Promise<GetCalendarResponseDto> {
     const { timezone, currency } =
-      await this.businessService.getLocale(locationId);
+      await this.locationService.getLocale(locationId);
 
     const rangeStart = TimeService.dateOnly(dto.from);
     const rangeEnd = TimeService.dateOnly(dto.to);
