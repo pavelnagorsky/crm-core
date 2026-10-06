@@ -15,10 +15,6 @@ import { StaffEmploymentType } from '../enums/staff-employment-type.enum.js';
 import { StaffPayoutMethod } from '../enums/staff-payout-method.enum.js';
 
 export class CreateStaffDto {
-  @ApiProperty({ type: String, format: 'uuid' })
-  @IsUUID()
-  locationId: string;
-
   @ApiProperty({ type: String, maxLength: 250 })
   @IsString()
   @MaxLength(250)

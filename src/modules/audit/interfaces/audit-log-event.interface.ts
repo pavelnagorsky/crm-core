@@ -7,7 +7,6 @@ import { AuditPayload } from './audit-payload.interface.js';
 export interface AuditLogEvent {
   brandId?: string;
   locationId?: string | null;
-  businessId?: string;
   entityType: AuditEntity;
   entityId: string;
   eventType: AuditEvent;

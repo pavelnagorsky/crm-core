@@ -59,10 +59,8 @@ import { AuditActorRole } from '../audit/enums/audit-actor-role.enum.js';
 import { AuditFieldChange } from '../audit/interfaces/audit-payload.interface.js';
 import { diffFields } from '../audit/utils/diff-fields.js';
 import { BOOKING_AUDIT_FIELDS } from '../audit/fields/booking.fields.js';
-import {
-  TokenPayloadDto,
-  assertBusinessRole,
-} from '../auth/dto/token-payload.dto.js';
+import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
+import { assertLocationRole } from '../auth/guards/assert-location-role.js';
 import { NOTIFICATION_EVENT } from '../notifications/notifications.service.js';
 import { BookingStatusChangedNotification } from '../notifications/notifications/booking-status-changed.notification.js';
 import { BookingWithItems } from './interfaces/booking-with-items.interface.js';
@@ -273,7 +271,7 @@ export class BookingsService implements CalendarBookingReader {
     dto: UpdateBookingDto,
   ): Promise<BookingWithItems> {
     const old = await this.findById(bookingId);
-    assertBusinessRole(
+    assertLocationRole(
       tokenPayload,
       old.locationId,
       BusinessRole.OWNER,
@@ -343,7 +341,7 @@ export class BookingsService implements CalendarBookingReader {
     dto: UpdateBookingStatusDto,
   ): Promise<BookingWithItems> {
     const old = await this.findById(bookingId);
-    assertBusinessRole(
+    assertLocationRole(
       tokenPayload,
       old.locationId,
       BusinessRole.OWNER,
@@ -689,7 +687,7 @@ export class BookingsService implements CalendarBookingReader {
     dto: CancelBookingDto,
   ): Promise<Booking> {
     const booking = await this.findById(bookingId);
-    assertBusinessRole(
+    assertLocationRole(
       tokenPayload,
       booking.locationId,
       BusinessRole.OWNER,
@@ -725,7 +723,7 @@ export class BookingsService implements CalendarBookingReader {
     tokenPayload: TokenPayloadDto,
   ): Promise<void> {
     const booking = await this.findById(bookingId);
-    assertBusinessRole(tokenPayload, booking.locationId, BusinessRole.OWNER);
+    assertLocationRole(tokenPayload, booking.locationId, BusinessRole.OWNER);
     const actor = auditActorFromToken(tokenPayload, booking.locationId);
     await this.db.$transaction([
       this.db.booking.update({

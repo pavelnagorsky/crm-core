@@ -37,7 +37,6 @@ import { SetClientBanDto } from './dto/set-client-ban.dto.js';
 import { ClientResponseDto } from './dto/client-response.dto.js';
 import { ClientSearchRequestDto } from './dto/client-search-request.dto.js';
 import { ClientSearchResponseDto } from './dto/client-search-response.dto.js';
-import { ClientImportRequestDto } from './clients-import/dto/client-import-request.dto.js';
 import { ClientImportResponseDto } from './clients-import/dto/client-import-response.dto.js';
 import { ClientsImportService } from './clients-import/clients-import.service.js';
 import { ClientImportFile } from './clients-import/decorators/client-import-upload.decorator.js';
@@ -51,14 +50,12 @@ import {
 } from '../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
 import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
-import {
-  TokenPayloadDto,
-  assertBusinessRole,
-} from '../auth/dto/token-payload.dto.js';
+import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
+import { assertBrandRole } from '../auth/guards/assert-brand-role.js';
 import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
 
 @ApiTags('Clients')
-@Controller('clients')
+@Controller('brands/:brandId/clients')
 export class ClientsController {
   constructor(
     private readonly clientsService: ClientsService,
@@ -72,14 +69,15 @@ export class ClientsController {
   @Auth()
   @Post()
   async create(
+    @Param('brandId', ParseUUIDPipe) brandId: string,
     @Body() dto: CreateClientDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    assertBusinessRole(tokenPayload, dto.brandId, BusinessRole.OWNER);
+    assertBrandRole(tokenPayload, brandId, BusinessRole.OWNER);
     const client = await this.clientsService.create(
-      dto.brandId,
+      brandId,
       dto,
-      auditActorFromToken(tokenPayload, dto.brandId),
+      auditActorFromToken(tokenPayload, brandId),
     );
     return BaseResponseDto.success({ id: client.id });
   }
@@ -89,10 +87,9 @@ export class ClientsController {
   @ApiBody({
     schema: {
       type: 'object',
-      required: ['file', 'brandId'],
+      required: ['file'],
       properties: {
         file: { type: 'string', format: 'binary' },
-        brandId: { type: 'string', format: 'uuid' },
       },
     },
   })
@@ -111,15 +108,15 @@ export class ClientsController {
   @ClientImportFile()
   @Post('import')
   async import(
+    @Param('brandId', ParseUUIDPipe) brandId: string,
     @UploadedFile() file: Express.Multer.File | undefined,
-    @Body() dto: ClientImportRequestDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<ClientImportResponseDto>> {
-    assertBusinessRole(tokenPayload, dto.brandId, BusinessRole.OWNER);
+    assertBrandRole(tokenPayload, brandId, BusinessRole.OWNER);
     const result = await this.clientsImportService.import(
-      dto.brandId,
+      brandId,
       file,
-      auditActorFromToken(tokenPayload, dto.brandId),
+      auditActorFromToken(tokenPayload, brandId),
     );
     return BaseResponseDto.success(
       new ClientImportResponseDto(
@@ -137,17 +134,17 @@ export class ClientsController {
   @Auth()
   @Put(':id')
   async update(
+    @Param('brandId', ParseUUIDPipe) brandId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateClientDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    const client = await this.clientsService.findById(id);
-    assertBusinessRole(tokenPayload, client.brandId, BusinessRole.OWNER);
+    assertBrandRole(tokenPayload, brandId, BusinessRole.OWNER);
     const updated = await this.clientsService.update(
-      client.brandId,
+      brandId,
       id,
       dto,
-      auditActorFromToken(tokenPayload, client.brandId),
+      auditActorFromToken(tokenPayload, brandId),
     );
     return BaseResponseDto.success({ id: updated.id });
   }
@@ -160,17 +157,17 @@ export class ClientsController {
   @Patch(':id/ban')
   @HttpCode(HttpStatus.NO_CONTENT)
   async setBan(
+    @Param('brandId', ParseUUIDPipe) brandId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: SetClientBanDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<void> {
-    const client = await this.clientsService.findById(id);
-    assertBusinessRole(tokenPayload, client.brandId, BusinessRole.OWNER);
+    assertBrandRole(tokenPayload, brandId, BusinessRole.OWNER);
     await this.clientsService.setBan(
-      client.brandId,
+      brandId,
       id,
       dto,
-      auditActorFromToken(tokenPayload, client.brandId),
+      auditActorFromToken(tokenPayload, brandId),
     );
   }
 
@@ -180,19 +177,20 @@ export class ClientsController {
   @Auth()
   @Get('export')
   async export(
+    @Param('brandId', ParseUUIDPipe) brandId: string,
     @Query() dto: ClientExportRequestDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
     @Res({ passthrough: true })
     res: { setHeader: (name: string, value: string) => void },
   ): Promise<StreamableFile> {
-    assertBusinessRole(
+    assertBrandRole(
       tokenPayload,
-      dto.brandId,
+      brandId,
       BusinessRole.OWNER,
       BusinessRole.STAFF,
     );
     const { stream, filename } = await this.clientsExportService.stream(
-      dto.brandId,
+      brandId,
       dto,
     );
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -205,16 +203,17 @@ export class ClientsController {
   @Auth()
   @Get(':id')
   async findById(
+    @Param('brandId', ParseUUIDPipe) brandId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<ClientResponseDto>> {
-    const client = await this.clientsService.findById(id);
-    assertBusinessRole(
+    assertBrandRole(
       tokenPayload,
-      client.brandId,
+      brandId,
       BusinessRole.OWNER,
       BusinessRole.STAFF,
     );
+    const client = await this.clientsService.findInBrand(brandId, id);
     return BaseResponseDto.success(ClientResponseDto.fromEntity(client));
   }
 
@@ -223,19 +222,17 @@ export class ClientsController {
   @Auth()
   @Get()
   async search(
+    @Param('brandId', ParseUUIDPipe) brandId: string,
     @Query() dto: ClientSearchRequestDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<ClientSearchResponseDto>> {
-    assertBusinessRole(
+    assertBrandRole(
       tokenPayload,
-      dto.brandId,
+      brandId,
       BusinessRole.OWNER,
       BusinessRole.STAFF,
     );
-    const { items, totalItems } = await this.clientsService.search(
-      dto.brandId,
-      dto,
-    );
+    const { items, totalItems } = await this.clientsService.search(brandId, dto);
     return BaseResponseDto.success(
       new ClientSearchResponseDto(
         items.map(ClientResponseDto.fromEntity),

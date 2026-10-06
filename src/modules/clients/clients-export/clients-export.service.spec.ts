@@ -85,14 +85,12 @@ describe('ClientsExportService', () => {
     });
 
     const file = await service.stream('business-1', {
-      brandId: 'business-1',
       search: 'анна',
       orderBy: ClientSearchOrderBy.LAST_NAME,
       orderDirection: OrderDirection.ASC,
     });
 
     expect(clients.search).toHaveBeenCalledWith('business-1', {
-      brandId: 'business-1',
       search: 'анна',
       orderBy: ClientSearchOrderBy.LAST_NAME,
       orderDirection: OrderDirection.ASC,

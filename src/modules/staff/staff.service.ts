@@ -144,7 +144,7 @@ export class StaffService {
     dto: UpdateStaffDto,
     actor: AuditActor,
   ): Promise<StaffWithAvatar> {
-    const old = await this.findInBusiness(locationId, staffId);
+    const old = await this.findInLocation(locationId, staffId);
     if (dto.status !== undefined && dto.status !== old.status) {
       await this.changeStatus(
         locationId,
@@ -213,6 +213,18 @@ export class StaffService {
     return staff;
   }
 
+  async findWithServiceCountInLocation(
+    locationId: string,
+    staffId: string,
+  ): Promise<StaffWithServiceCount> {
+    const staff = await this.db.staff.findFirst({
+      where: { id: staffId, locationId },
+      include: staffViewInclude,
+    });
+    if (!staff) throw new NotFoundException('Staff member not found');
+    return staff;
+  }
+
   private normalizeDescription(
     value: string | null | undefined,
   ): string | null | undefined {
@@ -228,7 +240,7 @@ export class StaffService {
     return html;
   }
 
-  private async findInBusiness(
+  private async findInLocation(
     locationId: string,
     staffId: string,
   ): Promise<StaffWithAvatar> {
@@ -363,7 +375,7 @@ export class StaffService {
     dto: ChangeStaffStatusDto,
     actor: AuditActor,
   ): Promise<void> {
-    const staff = await this.findInBusiness(locationId, staffId);
+    const staff = await this.findInLocation(locationId, staffId);
     if (staff.status === dto.status)
       throw new AppException(
         ErrorCode.STAFF_STATUS_ALREADY_SET,
@@ -399,7 +411,7 @@ export class StaffService {
   }
 
   async delete(locationId: string, staffId: string): Promise<void> {
-    await this.findInBusiness(locationId, staffId);
+    await this.findInLocation(locationId, staffId);
 
     const bookingCount = await this.db.bookingItem.count({
       where: { staffId },
@@ -436,7 +448,12 @@ export class StaffService {
     });
   }
 
-  getShifts(staffId: string, dto: GetShiftsRequestDto): Promise<StaffShift[]> {
+  async getShifts(
+    locationId: string,
+    staffId: string,
+    dto: GetShiftsRequestDto,
+  ): Promise<StaffShift[]> {
+    await this.findInLocation(locationId, staffId);
     return this.db.staffShift.findMany({
       where: {
         staffId,
@@ -447,11 +464,12 @@ export class StaffService {
   }
 
   async replaceShifts(
+    locationId: string,
     staffId: string,
     dto: ReplaceShiftsRequestDto,
     actor: AuditActor,
   ): Promise<StaffShift[]> {
-    const staff = await this.findById(staffId);
+    const staff = await this.findInLocation(locationId, staffId);
     const from = new Date(dto.from);
     const to = new Date(dto.to);
 
@@ -492,10 +510,11 @@ export class StaffService {
   }
 
   async createInvitation(
+    locationId: string,
     staffId: string,
     dto: CreateInvitationDto,
   ): Promise<{ token: string }> {
-    const staff = await this.findById(staffId);
+    const staff = await this.findInLocation(locationId, staffId);
 
     if (staff.userId) {
       throw new AppException(

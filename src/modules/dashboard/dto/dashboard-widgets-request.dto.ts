@@ -19,10 +19,6 @@ import { DashboardRangeDto } from './dashboard-range.dto.js';
 import { DashboardWidgetKey } from '../enums/dashboard-widget-key.enum.js';
 
 export class DashboardWidgetsRequestDto extends DashboardRangeDto {
-  @ApiProperty({ type: String, format: 'uuid' })
-  @IsUUID()
-  locationId: string;
-
   @ApiProperty({ enum: DashboardWidgetKey, isArray: true })
   @IsArray()
   @ArrayNotEmpty()

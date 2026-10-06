@@ -74,7 +74,7 @@ export class BookingWidgetsController {
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('widgetId', ParseUUIDPipe) widgetId: string,
   ): Promise<BaseResponseDto<BookingWidgetResponseDto>> {
-    const widget = await this.widgets.findInBusiness(locationId, widgetId);
+    const widget = await this.widgets.findInLocation(locationId, widgetId);
     return BaseResponseDto.success(BookingWidgetResponseDto.fromEntity(widget));
   }
 

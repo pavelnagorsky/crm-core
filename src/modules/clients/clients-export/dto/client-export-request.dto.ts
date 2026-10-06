@@ -1,19 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {
-  IsEnum,
-  IsOptional,
-  IsString,
-  IsUUID,
-  MaxLength,
-} from 'class-validator';
+import { IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 import { OrderDirection } from '../../../../shared/enums/order-direction.enum.js';
 import { ClientSearchOrderBy } from '../../enums/client-search-order-by.enum.js';
 
 export class ClientExportRequestDto {
-  @ApiProperty({ type: String, format: 'uuid' })
-  @IsUUID()
-  brandId: string;
-
   @ApiProperty({ type: String, required: false })
   @IsOptional()
   @IsString()

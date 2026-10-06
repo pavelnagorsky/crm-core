@@ -55,9 +55,12 @@ export class DashboardService {
     private readonly buckets: DashboardBucketService,
   ) {}
 
-  async getWidgets(dto: DashboardWidgetsRequestDto): Promise<WidgetDto[]> {
-    const range = await this.rangeService.resolve(dto.locationId, dto);
-    const ctx: WidgetContext = { dto, range };
+  async getWidgets(
+    locationId: string,
+    dto: DashboardWidgetsRequestDto,
+  ): Promise<WidgetDto[]> {
+    const range = await this.rangeService.resolve(locationId, dto);
+    const ctx: WidgetContext = { locationId, dto, range };
     return Promise.all(dto.keys.map((key) => this.buildWidget(key, ctx)));
   }
 
@@ -431,7 +434,7 @@ export class DashboardService {
 
   private rangeFor(ctx: WidgetContext, from: Date, to: Date): AggregateRange {
     return {
-      locationId: ctx.dto.locationId,
+      locationId: ctx.locationId,
       from,
       to,
       staffId: ctx.dto.staffId,

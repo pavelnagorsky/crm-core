@@ -11,5 +11,3 @@ export class TokenPayloadDto {
   locationMemberships: LocationMembershipPayloadDto[];
   tokenEpoch: number;
 }
-
-export { assertBrandRole as assertBusinessRole } from '../guards/assert-brand-role.js';

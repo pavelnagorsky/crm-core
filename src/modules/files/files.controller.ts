@@ -23,7 +23,7 @@ import {
 } from '@nestjs/swagger';
 import { BusinessRole } from '@prisma/client';
 import { FilesService } from './files.service.js';
-import { RBAC } from '../business/decorators/rbac.decorator.js';
+import { LocationRBAC } from '../auth/decorators/location-rbac.decorator.js';
 import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 import {
@@ -33,12 +33,12 @@ import {
 import { UploadFileResponseDto } from './dto/upload-file-response.dto.js';
 
 @ApiTags('Files')
-@Controller('businesses/:businessId/files')
+@Controller('locations/:locationId/files')
 export class FilesController {
   constructor(private readonly filesService: FilesService) {}
 
   @Post()
-  @RBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
   @ApiOperation({ summary: 'Upload a file to Google Cloud Storage' })
   @ApiConsumes('multipart/form-data')
@@ -55,23 +55,23 @@ export class FilesController {
   @ApiPayloadTooLargeResponse({ description: 'File exceeds 15 MB limit' })
   @ApiUnprocessableEntityResponse({ description: 'File extension is blocked' })
   async upload(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @UploadedFile() file: Express.Multer.File,
     @TokenPayload() payload: TokenPayloadDto,
   ): Promise<BaseResponseDto<UploadFileResponseDto>> {
-    const saved = await this.filesService.upload(file, payload.sub, businessId);
+    const saved = await this.filesService.upload(file, payload.sub, locationId);
     return BaseResponseDto.success(UploadFileResponseDto.fromEntity(saved));
   }
 
   @Delete(':fileId')
-  @RBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a file' })
   @ApiNoContentResponse({ description: 'File deleted' })
   async delete(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('fileId', ParseUUIDPipe) fileId: string,
   ): Promise<void> {
-    await this.filesService.delete(fileId, businessId);
+    await this.filesService.delete(fileId, locationId);
   }
 }

@@ -1,4 +1,4 @@
-import { Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { BusinessRole } from '@prisma/client';
 import { DashboardService } from './dashboard.service.js';
@@ -14,7 +14,7 @@ import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 import { assertLocationRole } from '../auth/guards/assert-location-role.js';
 
 @ApiTags('Dashboard')
-@Controller('dashboard')
+@Controller('locations/:locationId/dashboard')
 export class DashboardController {
   constructor(private readonly dashboardService: DashboardService) {}
 
@@ -23,11 +23,12 @@ export class DashboardController {
   @Auth()
   @Post('widgets')
   async getWidgets(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Body() dto: DashboardWidgetsRequestDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<DashboardWidgetsResponseDto>> {
-    assertLocationRole(tokenPayload, dto.locationId, BusinessRole.OWNER);
-    const widgets = await this.dashboardService.getWidgets(dto);
+    assertLocationRole(tokenPayload, locationId, BusinessRole.OWNER);
+    const widgets = await this.dashboardService.getWidgets(locationId, dto);
     return BaseResponseDto.success(new DashboardWidgetsResponseDto(widgets));
   }
 }

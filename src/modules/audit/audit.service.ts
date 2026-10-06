@@ -21,7 +21,7 @@ export class AuditService {
 
   @OnEvent(AUDIT_EVENT)
   async handleAuditEvent(event: AuditLogEvent): Promise<void> {
-    const brandId = event.brandId ?? event.businessId;
+    const brandId = event.brandId ?? (await this.resolveBrandId(event));
     if (!brandId) {
       this.logger.error('Failed to persist audit log: missing brandId');
       return;
@@ -51,12 +51,55 @@ export class AuditService {
     }
   }
 
-  async getHistory(
+  private async resolveBrandId(event: AuditLogEvent): Promise<string | null> {
+    if (!event.locationId) return null;
+    const location = await this.db.location.findUnique({
+      where: { id: event.locationId },
+      select: { brandId: true },
+    });
+    return location?.brandId ?? null;
+  }
+
+  async getBrandHistory(
     brandId: string,
     dto: AuditHistoryRequestDto,
   ): Promise<PaginatedResult<AuditLogItemDto>> {
     const where = {
       brandId,
+      entityType: dto.entityType,
+      entityId: dto.entityId,
+    };
+
+    const [logs, totalItems] = await this.db.$transaction([
+      this.db.auditLog.findMany({
+        where,
+        orderBy: stableOrderBy(
+          { occurredAt: OrderDirection.DESC },
+          OrderDirection.DESC,
+        ),
+        skip: (dto.page - 1) * dto.pageSize,
+        take: dto.pageSize,
+      }),
+      this.db.auditLog.count({ where }),
+    ]);
+
+    const items = logs.map((log) =>
+      AuditLogItemDto.fromEntity(
+        log,
+        this.renderer.render(log, dto.lang),
+        this.renderer.eventTitle(log.eventType, dto.lang),
+      ),
+    );
+
+    return { items, totalItems };
+  }
+
+  async getLocationHistory(
+    locationId: string,
+    dto: AuditHistoryRequestDto,
+  ): Promise<PaginatedResult<AuditLogItemDto>> {
+    const where = {
+      locationId,
       entityType: dto.entityType,
       entityId: dto.entityId,
     };

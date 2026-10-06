@@ -95,7 +95,7 @@ export class BookingPagesController {
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('pageId', ParseUUIDPipe) pageId: string,
   ): Promise<BaseResponseDto<BookingPageResponseDto>> {
-    const page = await this.pages.findInBusiness(locationId, pageId);
+    const page = await this.pages.findInLocation(locationId, pageId);
     return BaseResponseDto.success(BookingPageResponseDto.fromEntity(page));
   }
 

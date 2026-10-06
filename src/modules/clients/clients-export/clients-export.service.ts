@@ -44,7 +44,6 @@ export class ClientsExportService {
       { header: text.notes, key: 'notes', width: 40 },
     ];
     const { items } = await this.clientsService.search(brandId, {
-      brandId,
       search: dto.search,
       orderBy: dto.orderBy,
       orderDirection: dto.orderDirection,

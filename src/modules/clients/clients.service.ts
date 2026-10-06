@@ -62,7 +62,7 @@ export class ClientsService {
     dto: UpdateClientDto,
     actor: AuditActor,
   ): Promise<Client> {
-    const old = await this.findInBusiness(brandId, clientId);
+    const old = await this.findInBrand(brandId, clientId);
     let client: Client;
     try {
       client = await this.db.client.update({
@@ -101,7 +101,7 @@ export class ClientsService {
     dto: SetClientBanDto,
     actor: AuditActor,
   ): Promise<void> {
-    const old = await this.findInBusiness(brandId, clientId);
+    const old = await this.findInBrand(brandId, clientId);
     const banReason = dto.banned ? (dto.reason ?? '').trim() : null;
     if (dto.banned && !banReason) {
       throw new AppException(ErrorCode.BAD_REQUEST, HttpStatus.BAD_REQUEST);
@@ -142,10 +142,7 @@ export class ClientsService {
     return client;
   }
 
-  private async findInBusiness(
-    brandId: string,
-    clientId: string,
-  ): Promise<Client> {
+  async findInBrand(brandId: string, clientId: string): Promise<Client> {
     const client = await this.db.client.findFirst({
       where: { id: clientId, brandId },
     });

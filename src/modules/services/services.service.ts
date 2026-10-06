@@ -253,7 +253,7 @@ export class ServicesService {
     dto: UpdateServiceDto,
     actor: AuditActor,
   ): Promise<ServiceWithImage> {
-    const old = await this.findInBusiness(locationId, serviceId);
+    const old = await this.findInLocation(locationId, serviceId);
     const service = await this.db.service.update({
       where: { id: serviceId },
       data: {
@@ -304,7 +304,7 @@ export class ServicesService {
     return service;
   }
 
-  private async findInBusiness(locationId: string, serviceId: string) {
+  private async findInLocation(locationId: string, serviceId: string) {
     const service = await this.db.service.findFirst({
       where: { id: serviceId, locationId },
       include: serviceAuditInclude,
@@ -395,7 +395,7 @@ export class ServicesService {
     status: ServiceStatus,
     actor: AuditActor,
   ): Promise<void> {
-    const service = await this.findInBusiness(locationId, serviceId);
+    const service = await this.findInLocation(locationId, serviceId);
     if (service.status === status) {
       throw new AppException(
         ErrorCode.SERVICE_STATUS_ALREADY_SET,
@@ -429,7 +429,7 @@ export class ServicesService {
     serviceId: string,
     actor: AuditActor,
   ): Promise<void> {
-    const service = await this.findInBusiness(locationId, serviceId);
+    const service = await this.findInLocation(locationId, serviceId);
     try {
       await this.db.service.delete({ where: { id: serviceId } });
     } catch (e: any) {

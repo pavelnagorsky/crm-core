@@ -61,10 +61,8 @@ import {
 } from '../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
 import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
-import {
-  TokenPayloadDto,
-  assertBusinessRole,
-} from '../auth/dto/token-payload.dto.js';
+import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
+import { assertLocationRole } from '../auth/guards/assert-location-role.js';
 import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
 import { clientIp, requestOrigin } from '../../shared/http/request-context.js';
 
@@ -177,7 +175,7 @@ export class BookingsController {
     @Body() dto: ManualCreateBookingDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    assertBusinessRole(
+    assertLocationRole(
       tokenPayload,
       dto.locationId,
       BusinessRole.OWNER,
@@ -199,7 +197,7 @@ export class BookingsController {
     @Query('locationId', ParseUUIDPipe) locationId: string,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<BookingStatusCountResponseDto[]>> {
-    assertBusinessRole(
+    assertLocationRole(
       tokenPayload,
       locationId,
       BusinessRole.OWNER,
@@ -222,7 +220,7 @@ export class BookingsController {
     @Res({ passthrough: true })
     res: { setHeader: (name: string, value: string) => void },
   ): Promise<StreamableFile> {
-    assertBusinessRole(
+    assertLocationRole(
       tokenPayload,
       dto.locationId,
       BusinessRole.OWNER,
@@ -246,7 +244,7 @@ export class BookingsController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<BookingResponseDto>> {
     const booking = await this.bookingsService.findById(id);
-    assertBusinessRole(
+    assertLocationRole(
       tokenPayload,
       booking.locationId,
       BusinessRole.OWNER,
@@ -263,7 +261,7 @@ export class BookingsController {
     @Query() dto: BookingSearchRequestDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<BookingSearchResponseDto>> {
-    assertBusinessRole(
+    assertLocationRole(
       tokenPayload,
       dto.locationId,
       BusinessRole.OWNER,
@@ -327,7 +325,7 @@ export class BookingsController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<ClientLinkResponseDto>> {
     const booking = await this.bookingsService.findById(id);
-    assertBusinessRole(
+    assertLocationRole(
       tokenPayload,
       booking.locationId,
       BusinessRole.OWNER,

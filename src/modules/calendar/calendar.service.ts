@@ -98,7 +98,7 @@ export class CalendarService {
     eventId: string,
     dto: UpdateCalendarEventDto,
   ): Promise<CalendarEvent> {
-    const event = await this.findInBusiness(locationId, eventId);
+    const event = await this.findInLocation(locationId, eventId);
     if (!dto.thisOnly) {
       return this.db.calendarEvent.update({
         where: { id: eventId },
@@ -136,7 +136,7 @@ export class CalendarService {
     eventId: string,
     dto: DeleteCalendarEventDto,
   ): Promise<void> {
-    await this.findInBusiness(locationId, eventId);
+    await this.findInLocation(locationId, eventId);
     if (dto.thisOnly) {
       const occurrenceDate = new Date(dto.occurrenceDate!);
       await this.db.calendarEventCancelledOccurrence.upsert({
@@ -149,7 +149,7 @@ export class CalendarService {
     await this.db.calendarEvent.delete({ where: { id: eventId } });
   }
 
-  async findInBusiness(
+  async findInLocation(
     locationId: string,
     eventId: string,
   ): Promise<CalendarEvent> {
@@ -165,7 +165,7 @@ export class CalendarService {
     eventId: string,
     dto: MoveCalendarEventDto,
   ): Promise<CalendarEvent> {
-    const event = await this.findInBusiness(locationId, eventId);
+    const event = await this.findInLocation(locationId, eventId);
     const startDateTime = new Date(dto.startDateTime);
     const endDateTime = new Date(dto.endDateTime);
     if (!dto.thisOnly) {

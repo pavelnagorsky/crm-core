@@ -29,7 +29,7 @@ export class BookingWidgetsService {
     });
   }
 
-  async findInBusiness(
+  async findInLocation(
     locationId: string,
     widgetId: string,
   ): Promise<BookingWidget> {
@@ -72,7 +72,7 @@ export class BookingWidgetsService {
     widgetId: string,
     dto: SaveBookingWidgetDto,
   ): Promise<BookingWidget> {
-    await this.findInBusiness(locationId, widgetId);
+    await this.findInLocation(locationId, widgetId);
     const allowedDomains = this.domains(dto.allowedDomains);
     await this.assertTitleAvailable(locationId, dto.title, widgetId);
     try {
@@ -98,7 +98,7 @@ export class BookingWidgetsService {
     widgetId: string,
     status: BookingChannelStatus,
   ): Promise<BookingWidget> {
-    const widget = await this.findInBusiness(locationId, widgetId);
+    const widget = await this.findInLocation(locationId, widgetId);
     await this.publishService.assertTransition(
       locationId,
       widget.status,
@@ -115,7 +115,7 @@ export class BookingWidgetsService {
   }
 
   async delete(locationId: string, widgetId: string): Promise<void> {
-    await this.findInBusiness(locationId, widgetId);
+    await this.findInLocation(locationId, widgetId);
     await this.db.bookingWidget.delete({ where: { id: widgetId } });
     this.logger.log(
       `booking widget deleted: id=${widgetId} locationId=${locationId}`,

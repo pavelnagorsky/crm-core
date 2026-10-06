@@ -32,7 +32,7 @@ export class FilesService implements OnModuleInit {
   async upload(
     file: Express.Multer.File,
     userId: string,
-    businessId: string,
+    locationId: string,
   ): Promise<File> {
     if (file.size > MAX_FILE_SIZE_BYTES) {
       throw new AppException(
@@ -58,7 +58,7 @@ export class FilesService implements OnModuleInit {
       );
     }
 
-    const storageKey = `businesses/${businessId}/files/${randomUUID()}.${ext}`;
+    const storageKey = `locations/${locationId}/files/${randomUUID()}.${ext}`;
 
     try {
       const bucket = this.storage.bucket(this.bucketName);
@@ -89,16 +89,16 @@ export class FilesService implements OnModuleInit {
     });
   }
 
-  async findInBusiness(businessId: string, fileId: string): Promise<File> {
+  async findInLocation(locationId: string, fileId: string): Promise<File> {
     const file = await this.db.file.findUnique({ where: { id: fileId } });
-    if (!file || !file.storageKey.startsWith(`businesses/${businessId}/`)) {
+    if (!file || !file.storageKey.startsWith(`locations/${locationId}/`)) {
       throw new AppException(ErrorCode.FILE_NOT_FOUND, HttpStatus.NOT_FOUND);
     }
     return file;
   }
 
-  async delete(fileId: string, businessId: string): Promise<void> {
-    const file = await this.findInBusiness(businessId, fileId);
+  async delete(fileId: string, locationId: string): Promise<void> {
+    const file = await this.findInLocation(locationId, fileId);
 
     try {
       await this.storage.bucket(this.bucketName).file(file.storageKey).delete();

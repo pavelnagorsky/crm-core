@@ -113,7 +113,7 @@ export class CalendarController {
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('eventId', ParseUUIDPipe) eventId: string,
   ): Promise<BaseResponseDto<CalendarEventResponseDto>> {
-    const event = await this.calendarService.findInBusiness(
+    const event = await this.calendarService.findInLocation(
       locationId,
       eventId,
     );

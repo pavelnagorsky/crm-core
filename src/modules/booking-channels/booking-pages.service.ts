@@ -47,7 +47,7 @@ export class BookingPagesService {
     });
   }
 
-  async findInBusiness(
+  async findInLocation(
     locationId: string,
     pageId: string,
   ): Promise<BookingPageWithCover> {
@@ -116,7 +116,7 @@ export class BookingPagesService {
     pageId: string,
     dto: SaveBookingPageDto,
   ): Promise<BookingPageWithCover> {
-    await this.findInBusiness(locationId, pageId);
+    await this.findInLocation(locationId, pageId);
     await this.assertSlugAvailable(locationId, dto.slug, pageId);
     const coverFileId = await this.resolveCover(locationId, dto.coverFileId);
     try {
@@ -143,7 +143,7 @@ export class BookingPagesService {
     pageId: string,
     status: BookingChannelStatus,
   ): Promise<BookingPageWithCover> {
-    const page = await this.findInBusiness(locationId, pageId);
+    const page = await this.findInLocation(locationId, pageId);
     await this.publishService.assertTransition(locationId, page.status, status);
     const updated = await this.db.bookingPage.update({
       where: { id: pageId },
@@ -157,7 +157,7 @@ export class BookingPagesService {
   }
 
   async delete(locationId: string, pageId: string): Promise<void> {
-    await this.findInBusiness(locationId, pageId);
+    await this.findInLocation(locationId, pageId);
     await this.db.bookingPage.delete({ where: { id: pageId } });
     this.logger.log(
       `booking page deleted: id=${pageId} locationId=${locationId}`,
@@ -221,7 +221,7 @@ export class BookingPagesService {
     fileId: string | null,
   ): Promise<string | null> {
     if (!fileId) return null;
-    const file = await this.filesService.findInBusiness(locationId, fileId);
+    const file = await this.filesService.findInLocation(locationId, fileId);
     if (!COVER_MIME_TYPES.has(file.mimeType)) {
       throw new AppException(
         ErrorCode.BOOKING_PAGE_COVER_INVALID,

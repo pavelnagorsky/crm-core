@@ -5,13 +5,13 @@ import {
   ApiResponse,
   BaseResponseDto,
 } from '../../../shared/dto/base-response.dto.js';
-import { RBAC } from '../../business/decorators/rbac.decorator.js';
+import { BrandRBAC } from '../../auth/decorators/brand-rbac.decorator.js';
 import { ClientsAnalyticsService } from './clients-analytics.service.js';
 import { ClientsAnalyticsRequestDto } from './dto/clients-analytics-request.dto.js';
 import { ClientsAnalyticsResponseDto } from './dto/clients-analytics-response.dto.js';
 
 @ApiTags('Clients')
-@Controller('businesses/:brandId')
+@Controller('brands/:brandId/clients')
 export class ClientsAnalyticsController {
   constructor(private readonly analyticsService: ClientsAnalyticsService) {}
 
@@ -21,8 +21,8 @@ export class ClientsAnalyticsController {
       'New clients and revenue per client are metric cards with a sparkline. Repeat visit share is a new/returning series whose metric is the returning percentage. Dormant clients is a recency breakdown whose metric counts clients silent for 60 days or more.',
   })
   @ApiOkResponse({ type: ApiResponse(ClientsAnalyticsResponseDto) })
-  @RBAC(BusinessRole.OWNER)
-  @Post('clients/analytics')
+  @BrandRBAC(BusinessRole.OWNER)
+  @Post('analytics')
   async analytics(
     @Param('brandId', ParseUUIDPipe) brandId: string,
     @Body() dto: ClientsAnalyticsRequestDto,

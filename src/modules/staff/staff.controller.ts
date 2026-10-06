@@ -52,14 +52,12 @@ import {
 } from '../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
 import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
-import {
-  TokenPayloadDto,
-  assertBusinessRole,
-} from '../auth/dto/token-payload.dto.js';
+import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
+import { assertLocationRole } from '../auth/guards/assert-location-role.js';
 import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
 
 @ApiTags('Staff')
-@Controller('staff')
+@Controller()
 export class StaffController {
   constructor(
     private readonly staffService: StaffService,
@@ -69,16 +67,17 @@ export class StaffController {
   @ApiOperation({ summary: 'Create a staff member' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
   @Auth()
-  @Post()
+  @Post('locations/:locationId/staff')
   async create(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Body() dto: CreateStaffDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    assertBusinessRole(tokenPayload, dto.locationId, BusinessRole.OWNER);
+    assertLocationRole(tokenPayload, locationId, BusinessRole.OWNER);
     const staff = await this.staffService.create(
-      dto.locationId,
+      locationId,
       dto,
-      auditActorFromToken(tokenPayload, dto.locationId),
+      auditActorFromToken(tokenPayload, locationId),
     );
     return BaseResponseDto.success({ id: staff.id });
   }
@@ -87,19 +86,19 @@ export class StaffController {
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Staff member not found' })
   @Auth()
-  @Put(':id')
+  @Put('locations/:locationId/staff/:id')
   async update(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateStaffDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    const staff = await this.staffService.findById(id);
-    assertBusinessRole(tokenPayload, staff.locationId, BusinessRole.OWNER);
+    assertLocationRole(tokenPayload, locationId, BusinessRole.OWNER);
     const updated = await this.staffService.update(
-      staff.locationId,
+      locationId,
       id,
       dto,
-      auditActorFromToken(tokenPayload, staff.locationId),
+      auditActorFromToken(tokenPayload, locationId),
     );
     return BaseResponseDto.success({ id: updated.id });
   }
@@ -107,12 +106,12 @@ export class StaffController {
   @ApiOperation({ summary: 'Get staff count per status' })
   @ApiOkResponse({ type: ApiResponseArray(StaffStatusCountResponseDto) })
   @Auth()
-  @Get('status-counts')
+  @Get('locations/:locationId/staff/status-counts')
   async getStatusCounts(
-    @Query('locationId', ParseUUIDPipe) locationId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<StaffStatusCountResponseDto[]>> {
-    assertBusinessRole(
+    assertLocationRole(
       tokenPayload,
       locationId,
       BusinessRole.OWNER,
@@ -126,20 +125,21 @@ export class StaffController {
   @ApiProduces(XlsxService.mimeType)
   @ApiOkResponse({ description: 'File stream' })
   @Auth()
-  @Get('export')
+  @Get('locations/:locationId/staff/export')
   async export(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Query() dto: StaffExportRequestDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
     @Res({ passthrough: true }) res: any,
   ): Promise<StreamableFile> {
-    assertBusinessRole(
+    assertLocationRole(
       tokenPayload,
-      dto.locationId,
+      locationId,
       BusinessRole.OWNER,
       BusinessRole.STAFF,
     );
     const { stream, filename } = await this.staffExportService.stream(
-      dto.locationId,
+      locationId,
       dto,
     );
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -150,17 +150,21 @@ export class StaffController {
   @ApiOkResponse({ type: ApiResponse(StaffResponseDto) })
   @ApiNotFoundResponse({ description: 'Staff member not found' })
   @Auth()
-  @Get(':id')
+  @Get('locations/:locationId/staff/:id')
   async findById(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<StaffResponseDto>> {
-    const staff = await this.staffService.findWithServiceCount(id);
-    assertBusinessRole(
+    assertLocationRole(
       tokenPayload,
-      staff.locationId,
+      locationId,
       BusinessRole.OWNER,
       BusinessRole.STAFF,
+    );
+    const staff = await this.staffService.findWithServiceCountInLocation(
+      locationId,
+      id,
     );
     return BaseResponseDto.success(StaffResponseDto.fromEntity(staff));
   }
@@ -168,19 +172,20 @@ export class StaffController {
   @ApiOperation({ summary: 'Search staff members' })
   @ApiOkResponse({ type: ApiResponse(StaffSearchResponseDto) })
   @Auth()
-  @Get()
+  @Get('locations/:locationId/staff')
   async search(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Query() dto: StaffSearchRequestDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<StaffSearchResponseDto>> {
-    assertBusinessRole(
+    assertLocationRole(
       tokenPayload,
-      dto.locationId,
+      locationId,
       BusinessRole.OWNER,
       BusinessRole.STAFF,
     );
     const { items, totalItems } = await this.staffService.search(
-      dto.locationId,
+      locationId,
       dto,
     );
     return BaseResponseDto.success(
@@ -199,20 +204,20 @@ export class StaffController {
   @ApiNotFoundResponse({ description: 'Staff member not found' })
   @ApiConflictResponse({ description: 'Staff member already has this status' })
   @Auth()
-  @Patch(':id/status')
+  @Patch('locations/:locationId/staff/:id/status')
   @HttpCode(HttpStatus.NO_CONTENT)
   async changeStatus(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ChangeStaffStatusDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<void> {
-    const staff = await this.staffService.findById(id);
-    assertBusinessRole(tokenPayload, staff.locationId, BusinessRole.OWNER);
+    assertLocationRole(tokenPayload, locationId, BusinessRole.OWNER);
     await this.staffService.changeStatus(
-      staff.locationId,
+      locationId,
       id,
       dto,
-      auditActorFromToken(tokenPayload, staff.locationId),
+      auditActorFromToken(tokenPayload, locationId),
     );
   }
 
@@ -221,15 +226,15 @@ export class StaffController {
   @ApiNotFoundResponse({ description: 'Staff member not found' })
   @ApiConflictResponse({ description: 'Staff member has associated bookings' })
   @Auth()
-  @Delete(':id')
+  @Delete('locations/:locationId/staff/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<void> {
-    const staff = await this.staffService.findById(id);
-    assertBusinessRole(tokenPayload, staff.locationId, BusinessRole.OWNER);
-    await this.staffService.delete(staff.locationId, id);
+    assertLocationRole(tokenPayload, locationId, BusinessRole.OWNER);
+    await this.staffService.delete(locationId, id);
   }
 
   @ApiOperation({
@@ -238,20 +243,20 @@ export class StaffController {
   @ApiOkResponse({ type: ApiResponse(ShiftsResponseDto) })
   @ApiNotFoundResponse({ description: 'Staff member not found' })
   @Auth()
-  @Get(':id/shifts')
+  @Get('locations/:locationId/staff/:id/shifts')
   async getShifts(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Query() dto: GetShiftsRequestDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<ShiftsResponseDto>> {
-    const staff = await this.staffService.findById(id);
-    assertBusinessRole(
+    assertLocationRole(
       tokenPayload,
-      staff.locationId,
+      locationId,
       BusinessRole.OWNER,
       BusinessRole.STAFF,
     );
-    const shifts = await this.staffService.getShifts(id, dto);
+    const shifts = await this.staffService.getShifts(locationId, id, dto);
     return BaseResponseDto.success(
       new ShiftsResponseDto(
         dto.from,
@@ -267,18 +272,19 @@ export class StaffController {
   @ApiOkResponse({ type: ApiResponse(ShiftsResponseDto) })
   @ApiNotFoundResponse({ description: 'Staff member not found' })
   @Auth()
-  @Put(':id/shifts')
+  @Put('locations/:locationId/staff/:id/shifts')
   async replaceShifts(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ReplaceShiftsRequestDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<ShiftsResponseDto>> {
-    const staff = await this.staffService.findById(id);
-    assertBusinessRole(tokenPayload, staff.locationId, BusinessRole.OWNER);
+    assertLocationRole(tokenPayload, locationId, BusinessRole.OWNER);
     const shifts = await this.staffService.replaceShifts(
+      locationId,
       id,
       dto,
-      auditActorFromToken(tokenPayload, staff.locationId),
+      auditActorFromToken(tokenPayload, locationId),
     );
     return BaseResponseDto.success(
       new ShiftsResponseDto(
@@ -298,15 +304,19 @@ export class StaffController {
     description: 'Staff member is already linked to a user account',
   })
   @Auth()
-  @Post(':id/invitations')
+  @Post('locations/:locationId/staff/:id/invitations')
   async createInvitation(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateInvitationDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<InvitationResponseDto>> {
-    const staff = await this.staffService.findById(id);
-    assertBusinessRole(tokenPayload, staff.locationId, BusinessRole.OWNER);
-    const result = await this.staffService.createInvitation(id, dto);
+    assertLocationRole(tokenPayload, locationId, BusinessRole.OWNER);
+    const result = await this.staffService.createInvitation(
+      locationId,
+      id,
+      dto,
+    );
     return BaseResponseDto.success(result);
   }
 
@@ -316,7 +326,7 @@ export class StaffController {
   @ApiGoneResponse({ description: 'Invitation has expired' })
   @ApiConflictResponse({ description: 'Already a member of this business' })
   @Auth()
-  @Post('invitations/accept')
+  @Post('staff/invitations/accept')
   async acceptInvitation(
     @Body() dto: AcceptInvitationDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,

@@ -4,7 +4,8 @@ import { BusinessRole } from '@prisma/client';
 import { AuditService } from './audit.service.js';
 import { AuditHistoryRequestDto } from './dto/audit-history-request.dto.js';
 import { AuditHistoryResponseDto } from './dto/audit-history-response.dto.js';
-import { RBAC } from '../business/decorators/rbac.decorator.js';
+import { BrandRBAC } from '../auth/decorators/brand-rbac.decorator.js';
+import { LocationRBAC } from '../auth/decorators/location-rbac.decorator.js';
 import {
   ApiResponse,
   BaseResponseDto,
@@ -17,14 +18,31 @@ export class AuditController {
 
   @ApiOperation({ summary: 'Get audit history for an entity' })
   @ApiOkResponse({ type: ApiResponse(AuditHistoryResponseDto) })
-  @RBAC(BusinessRole.OWNER, BusinessRole.STAFF)
-  @Get('businesses/:businessId/audit')
-  async getHistory(
-    @Param('businessId', ParseUUIDPipe) businessId: string,
+  @BrandRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @Get('brands/:brandId/audit')
+  async getBrandHistory(
+    @Param('brandId', ParseUUIDPipe) brandId: string,
     @Query() dto: AuditHistoryRequestDto,
   ): Promise<BaseResponseDto<AuditHistoryResponseDto>> {
-    const { items, totalItems } = await this.auditService.getHistory(
-      businessId,
+    const { items, totalItems } = await this.auditService.getBrandHistory(
+      brandId,
+      dto,
+    );
+    return BaseResponseDto.success(
+      new AuditHistoryResponseDto(items, dto.page, dto.pageSize, totalItems),
+    );
+  }
+
+  @ApiOperation({ summary: 'Get location audit history for an entity' })
+  @ApiOkResponse({ type: ApiResponse(AuditHistoryResponseDto) })
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @Get('locations/:locationId/audit')
+  async getLocationHistory(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Query() dto: AuditHistoryRequestDto,
+  ): Promise<BaseResponseDto<AuditHistoryResponseDto>> {
+    const { items, totalItems } = await this.auditService.getLocationHistory(
+      locationId,
       dto,
     );
     return BaseResponseDto.success(

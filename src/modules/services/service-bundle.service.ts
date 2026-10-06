@@ -129,7 +129,7 @@ export class ServiceBundleService {
     dto: UpdateServiceBundleDto,
     actor: AuditActor,
   ): Promise<ServiceBundleView> {
-    const old = await this.findInBusiness(locationId, bundleId);
+    const old = await this.findInLocation(locationId, bundleId);
     if (dto.items)
       await this.assertBundleValid(locationId, {
         ...old,
@@ -243,7 +243,7 @@ export class ServiceBundleService {
     status: ServiceStatus,
     actor: AuditActor,
   ): Promise<void> {
-    const bundle = await this.findInBusiness(locationId, bundleId);
+    const bundle = await this.findInLocation(locationId, bundleId);
     if (bundle.status === status)
       throw new AppException(
         ErrorCode.SERVICE_STATUS_ALREADY_SET,
@@ -276,7 +276,7 @@ export class ServiceBundleService {
     bundleId: string,
     actor: AuditActor,
   ): Promise<void> {
-    const bundle = await this.findInBusiness(locationId, bundleId);
+    const bundle = await this.findInLocation(locationId, bundleId);
     try {
       await this.db.serviceBundle.delete({ where: { id: bundleId } });
     } catch (e: any) {
@@ -301,7 +301,7 @@ export class ServiceBundleService {
     this.eventEmitter.emit(AUDIT_EVENT, event);
   }
 
-  private async findInBusiness(
+  private async findInLocation(
     locationId: string,
     bundleId: string,
   ): Promise<ServiceBundleView> {

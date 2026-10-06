@@ -1,4 +1,4 @@
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { BusinessRole } from '@prisma/client';
 import { StaffKpiService } from './staff-kpi.service.js';
@@ -10,13 +10,11 @@ import {
   BaseResponseDto,
 } from '../../../shared/dto/base-response.dto.js';
 import { TokenPayload } from '../../auth/decorators/token-payload.decorator.js';
-import {
-  TokenPayloadDto,
-  assertBusinessRole,
-} from '../../auth/dto/token-payload.dto.js';
+import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
+import { assertLocationRole } from '../../auth/guards/assert-location-role.js';
 
 @ApiTags('Staff')
-@Controller('staff')
+@Controller('locations/:locationId/staff')
 export class StaffKpiController {
   constructor(private readonly staffKpiService: StaffKpiService) {}
 
@@ -27,16 +25,17 @@ export class StaffKpiController {
   @Auth()
   @Get('widgets')
   async getWidgets(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Query() dto: StaffWidgetsRequestDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<StaffWidgetsResponseDto>> {
-    assertBusinessRole(
+    assertLocationRole(
       tokenPayload,
-      dto.locationId,
+      locationId,
       BusinessRole.OWNER,
       BusinessRole.STAFF,
     );
-    const cards = await this.staffKpiService.getWidgets(dto.locationId, dto);
+    const cards = await this.staffKpiService.getWidgets(locationId, dto);
     return BaseResponseDto.success(new StaffWidgetsResponseDto(cards));
   }
 }
