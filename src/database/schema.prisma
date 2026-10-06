@@ -41,6 +41,26 @@ enum BookingVisibility {
   PRIVATE
 }
 
+enum BusinessType {
+  BARBERSHOP
+  HAIR_SALON
+  NAIL_SALON
+  BEAUTY_SALON
+  SPA
+  MASSAGE
+  COSMETOLOGY
+  TATTOO_PIERCING
+  BROWS_LASHES
+  MEDICAL_CLINIC
+  FITNESS
+  YOGA_STUDIO
+  AUTO_SERVICE
+  PET_GROOMING
+  EDUCATION
+  PHOTO_STUDIO
+  OTHER
+}
+
 enum BookingStatus {
   PENDING
   CONFIRMED
@@ -109,10 +129,11 @@ enum BookingWidgetButtonPosition {
 
 enum AuditEntity {
   BOOKING
+  BRAND
   CLIENT
+  LOCATION
   STAFF
   SERVICE
-  BUSINESS
   PAYROLL
 }
 
@@ -143,7 +164,10 @@ enum AuditEvent {
   SERVICE_BUNDLE_CREATED
   SERVICE_BUNDLE_UPDATED
   SERVICE_BUNDLE_DELETED
-  BUSINESS_UPDATED
+  BRAND_UPDATED
+  LOCATION_CREATED
+  LOCATION_UPDATED
+  LOCATION_DELETED
   PAYROLL_PERIOD_CREATED
   PAYROLL_PERIOD_DELETED
   PAYROLL_CALCULATED
@@ -225,21 +249,22 @@ enum CompensationSalaryMode {
 // ─── Models ──────────────────────────────────────────────────────────────────
 
 model User {
-  id                       String         @id @default(uuid())
-  role                     UserRole       @default(USER)
-  firstName                String?        @db.VarChar(100)
-  lastName                 String?        @db.VarChar(100)
-  phone                    String?        @unique @db.VarChar(30)
-  email                    String?        @unique @db.VarChar(254)
+  id                       String               @id @default(uuid())
+  role                     UserRole             @default(USER)
+  firstName                String?              @db.VarChar(100)
+  lastName                 String?              @db.VarChar(100)
+  phone                    String?              @unique @db.VarChar(30)
+  email                    String?              @unique @db.VarChar(254)
   passwordHash             String?
   phoneVerifiedAt          DateTime?
   emailVerifiedAt          DateTime?
-  isMarketingEmailsEnabled Boolean        @default(true)
-  createdAt                DateTime       @default(now())
-  updatedAt                DateTime       @updatedAt
+  isMarketingEmailsEnabled Boolean              @default(true)
+  createdAt                DateTime             @default(now())
+  updatedAt                DateTime             @updatedAt
   refreshTokens            RefreshToken[]
   passwordResetCode        PasswordResetCode?
-  memberships              Membership[]
+  brandMemberships         BrandMembership[]
+  locationMemberships      LocationMembership[]
   clients                  Client[]
   staffProfiles            Staff[]
   files                    File[]
@@ -261,129 +286,162 @@ model PasswordResetCode {
   expiresAt DateTime
   createdAt DateTime @default(now())
 
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
-model Business {
-  id                            String              @id @default(uuid())
-  name                          String              @db.VarChar(255)
-  logoFileId                    String?
-  advanceBookingWindowDays      Int                 @default(60)
-  slotIntervalMinutes           Int                 @default(30)
-  minimumBookingNoticeMinutes   Int                 @default(0)
-  timezone                      String              @default("UTC") @db.VarChar(64)
-  currency                      String              @default("USD") @db.VarChar(3)
-  bookingVisibility             BookingVisibility   @default(PUBLIC)
-  isBookingConfirmationRequired Boolean             @default(false)
-  createdAt                     DateTime            @default(now())
-  updatedAt                     DateTime            @updatedAt
-  logoFile                      File?               @relation(fields: [logoFileId], references: [id], onDelete: SetNull)
-  memberships                   Membership[]
-  clients                       Client[]
-  serviceCategories             ServiceCategory[]
-  services                      Service[]
-  staff                         Staff[]
-  staffInvitations              StaffInvitation[]
-  calendarEvents                CalendarEvent[]
-  bookings                      Booking[]
-  compensationPlans             StaffCompensationPlan[]
-  staffEarnings                 StaffEarning[]
-  payrollPeriods                PayrollPeriod[]
-  payrollResults                PayrollResult[]
-  bookingPages                  BookingPage[]
-  bookingWidgets                BookingWidget[]
-  serviceBundles                ServiceBundle[]
-  bookingItems                  BookingItem[]
+model Brand {
+  id               String            @id @default(uuid())
+  name             String            @db.VarChar(255)
+  logoFileId       String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  logoFile         File?             @relation(fields: [logoFileId], references: [id], onDelete: SetNull)
+  brandMemberships BrandMembership[]
+  clients          Client[]
+  locations        Location[]
 }
 
-model Membership {
+model Location {
+  id                            String            @id @default(uuid())
+  brandId                       String
+  name                          String            @db.VarChar(255)
+  countryCode                   String            @db.VarChar(2)
+  currency                      String            @db.VarChar(3)
+  timezone                      String            @db.VarChar(64)
+  businessType                  BusinessType?
+  city                          String?           @db.VarChar(120)
+  addressLine                   String?           @db.VarChar(255)
+  advanceBookingWindowDays      Int               @default(60)
+  slotIntervalMinutes           Int               @default(30)
+  minimumBookingNoticeMinutes   Int               @default(0)
+  bookingVisibility             BookingVisibility @default(PUBLIC)
+  isBookingConfirmationRequired Boolean           @default(false)
+  createdAt                     DateTime          @default(now())
+  updatedAt                     DateTime          @updatedAt
+
+  brand               Brand                   @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  locationMemberships LocationMembership[]
+  serviceCategories   ServiceCategory[]
+  services            Service[]
+  staff               Staff[]
+  staffInvitations    StaffInvitation[]
+  calendarEvents      CalendarEvent[]
+  bookings            Booking[]
+  compensationPlans   StaffCompensationPlan[]
+  staffEarnings       StaffEarning[]
+  payrollPeriods      PayrollPeriod[]
+  payrollResults      PayrollResult[]
+  bookingPages        BookingPage[]
+  bookingWidgets      BookingWidget[]
+  serviceBundles      ServiceBundle[]
+  bookingItems        BookingItem[]
+
+  @@index([brandId])
+}
+
+model BrandMembership {
+  id        String       @id @default(uuid())
+  userId    String
+  brandId   String
+  role      BusinessRole
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, brandId])
+  @@index([brandId])
+}
+
+model LocationMembership {
   id         String       @id @default(uuid())
   userId     String
-  businessId String
+  locationId String
   role       BusinessRole
   createdAt  DateTime     @default(now())
   updatedAt  DateTime     @updatedAt
 
-  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  business   Business     @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, businessId])
-  @@index([businessId])
+  @@unique([userId, locationId])
+  @@index([locationId])
 }
 
 model Client {
-  id         String   @id @default(uuid())
-  businessId String
-  userId     String?
+  id      String  @id @default(uuid())
+  brandId String
+  userId  String?
 
-  firstName  String    @db.VarChar(100)
-  lastName   String    @db.VarChar(100)
-  phone      String    @db.VarChar(30)
-  email      String?   @db.VarChar(254)
-  birthDate  DateTime? @db.Date
-  gender     String?   @db.VarChar(20)
-  notes      String?   @db.VarChar(1000)
-  bannedAt   DateTime?
-  banReason  String?   @db.VarChar(500)
+  firstName String    @db.VarChar(100)
+  lastName  String    @db.VarChar(100)
+  phone     String    @db.VarChar(30)
+  email     String?   @db.VarChar(254)
+  birthDate DateTime? @db.Date
+  gender    String?   @db.VarChar(20)
+  notes     String?   @db.VarChar(1000)
+  bannedAt  DateTime?
+  banReason String?   @db.VarChar(500)
 
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  bookings   Booking[]
+  brand    Brand     @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  user     User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  bookings Booking[]
 
-  @@unique([businessId, phone])
-  @@index([businessId])
+  @@unique([brandId, phone])
+  @@index([brandId])
   @@index([userId])
 }
 
 model ServiceCategory {
   id          String   @id @default(uuid())
-  businessId  String
+  locationId  String
   name        String   @db.VarChar(255)
   description String?  @db.VarChar(500)
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
 
-  business   Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  services   Service[]
-  bundles    ServiceBundle[]
+  location Location        @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  services Service[]
+  bundles  ServiceBundle[]
 
-  @@unique([businessId, name])
-  @@index([businessId])
+  @@unique([locationId, name])
+  @@index([locationId])
 }
 
 model Service {
-  id              String   @id @default(uuid())
-  businessId      String
+  id              String        @id @default(uuid())
+  locationId      String
   categoryId      String?
   imageFileId     String?
-  title           String   @db.VarChar(150)
-  description     String?  @db.VarChar(2000)
-  price           Decimal  @db.Decimal(10, 2)
+  title           String        @db.VarChar(150)
+  description     String?       @db.VarChar(2000)
+  price           Decimal       @db.Decimal(10, 2)
   durationMinutes Int
-  bufferMinutes   Int      @default(0)
+  bufferMinutes   Int           @default(0)
   status          ServiceStatus @default(ACTIVE)
-  sortOrder       Int      @default(0)
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  sortOrder       Int           @default(0)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
 
-  business         Business                      @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  category         ServiceCategory?              @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  imageFile        File?                         @relation(fields: [imageFileId], references: [id], onDelete: SetNull)
-  staffServices    StaffService[]
-  bookingItems     BookingItem[]
-  bundleItems      ServiceBundleItem[]
-  commissionRates  StaffCompensationServiceRate[]
+  location        Location                       @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  category        ServiceCategory?               @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  imageFile       File?                          @relation(fields: [imageFileId], references: [id], onDelete: SetNull)
+  staffServices   StaffService[]
+  bookingItems    BookingItem[]
+  bundleItems     ServiceBundleItem[]
+  commissionRates StaffCompensationServiceRate[]
 
-  @@index([businessId])
+  @@index([locationId])
   @@index([categoryId])
 }
 
 model ServiceBundle {
   id            String               @id @default(uuid())
-  businessId    String
+  locationId    String
   categoryId    String?
   imageFileId   String?
   title         String               @db.VarChar(150)
@@ -396,13 +454,13 @@ model ServiceBundle {
   createdAt     DateTime             @default(now())
   updatedAt     DateTime             @updatedAt
 
-  business  Business            @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  location  Location            @relation(fields: [locationId], references: [id], onDelete: Cascade)
   category  ServiceCategory?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
   imageFile File?               @relation(fields: [imageFileId], references: [id], onDelete: SetNull)
   items     ServiceBundleItem[]
   bookings  Booking[]
 
-  @@index([businessId])
+  @@index([locationId])
   @@index([categoryId])
 }
 
@@ -421,37 +479,37 @@ model ServiceBundleItem {
 }
 
 model Staff {
-  id           String   @id @default(uuid())
-  businessId   String
-  userId       String?
-  avatarFileId String?
-  name         String   @db.VarChar(250)
-  phone        String?  @db.VarChar(30)
-  email        String?  @db.VarChar(254)
-  roleTitle        String?              @db.VarChar(250)
-  description      String?              @db.VarChar(2000)
-  status           StaffStatus          @default(ACTIVE)
-  employmentType   StaffEmploymentType?
-  taxId            String?              @db.VarChar(20)
-  employeeNumber   String?              @db.VarChar(30)
-  payoutMethod     StaffPayoutMethod?
-  payoutNote       String?              @db.VarChar(250)
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
+  id             String               @id @default(uuid())
+  locationId     String
+  userId         String?
+  avatarFileId   String?
+  name           String               @db.VarChar(250)
+  phone          String?              @db.VarChar(30)
+  email          String?              @db.VarChar(254)
+  roleTitle      String?              @db.VarChar(250)
+  description    String?              @db.VarChar(2000)
+  status         StaffStatus          @default(ACTIVE)
+  employmentType StaffEmploymentType?
+  taxId          String?              @db.VarChar(20)
+  employeeNumber String?              @db.VarChar(30)
+  payoutMethod   StaffPayoutMethod?
+  payoutNote     String?              @db.VarChar(250)
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
 
-  business      Business          @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  user          User?             @relation(fields: [userId], references: [id], onDelete: SetNull)
-  avatarFile    File?             @relation(fields: [avatarFileId], references: [id], onDelete: SetNull)
-  staffServices StaffService[]
-  invitations   StaffInvitation[]
-  shifts        StaffShift[]
-  calendarEvents CalendarEvent[]
-  bookingItems  BookingItem[]
+  location          Location                @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  user              User?                   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  avatarFile        File?                   @relation(fields: [avatarFileId], references: [id], onDelete: SetNull)
+  staffServices     StaffService[]
+  invitations       StaffInvitation[]
+  shifts            StaffShift[]
+  calendarEvents    CalendarEvent[]
+  bookingItems      BookingItem[]
   compensationPlans StaffCompensationPlan[]
   earnings          StaffEarning[]
   payrollResults    PayrollResult[]
 
-  @@index([businessId])
+  @@index([locationId])
 }
 
 model File {
@@ -464,12 +522,12 @@ model File {
   fileSizeBytes Int
   createdAt     DateTime @default(now())
 
-  user              User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  staffAvatars      Staff[]
-  businessLogos     Business[]
-  serviceImages     Service[]
+  user                User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  staffAvatars        Staff[]
+  brandLogos          Brand[]
+  serviceImages       Service[]
   serviceBundleImages ServiceBundle[]
-  bookingPageCovers BookingPage[]
+  bookingPageCovers   BookingPage[]
 
   @@index([userId])
 }
@@ -477,7 +535,7 @@ model File {
 model StaffInvitation {
   id         String                @id @default(uuid())
   staffId    String
-  businessId String
+  locationId String
   tokenHash  String                @unique @db.VarChar(255)
   status     StaffInvitationStatus @default(PENDING)
   expiresAt  DateTime
@@ -486,10 +544,10 @@ model StaffInvitation {
   updatedAt  DateTime              @updatedAt
 
   staff    Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
-  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
 
   @@index([staffId])
-  @@index([businessId])
+  @@index([locationId])
   @@index([status])
   @@index([expiresAt])
 }
@@ -515,8 +573,8 @@ model StaffShift {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  staff     Staff          @relation(fields: [staffId], references: [id], onDelete: Cascade)
-  earnings  StaffEarning[]
+  staff    Staff          @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  earnings StaffEarning[]
 
   @@unique([staffId, date])
   @@index([staffId, date])
@@ -524,7 +582,7 @@ model StaffShift {
 
 model CalendarEvent {
   id            String                  @id @default(uuid())
-  businessId    String
+  locationId    String
   staffId       String?
   type          CalendarEventType       @default(BLOCK)
   reason        String?                 @db.VarChar(100)
@@ -538,41 +596,41 @@ model CalendarEvent {
   createdAt     DateTime                @default(now())
   updatedAt     DateTime                @updatedAt
 
-  business             Business                         @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  staff                Staff?                           @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  location             Location                           @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  staff                Staff?                             @relation(fields: [staffId], references: [id], onDelete: Cascade)
   cancelledOccurrences CalendarEventCancelledOccurrence[]
   bookingItem          BookingItem?
 
-  @@index([businessId])
-  @@index([businessId, staffId])
-  @@index([businessId, repeatType, startDateTime])
+  @@index([locationId])
+  @@index([locationId, staffId])
+  @@index([locationId, repeatType, startDateTime])
 }
 
 model CalendarEventCancelledOccurrence {
-  id             String        @id @default(uuid())
+  id             String   @id @default(uuid())
   eventId        String
-  occurrenceDate DateTime      @db.Date
-  createdAt      DateTime      @default(now())
+  occurrenceDate DateTime @db.Date
+  createdAt      DateTime @default(now())
 
-  event          CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  event CalendarEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
 
   @@unique([eventId, occurrenceDate])
   @@index([eventId])
 }
 
 model Booking {
-  id         String @id @default(uuid())
+  id String @id @default(uuid())
 
-  businessId String
+  locationId String
   clientId   String
 
-  startAt    DateTime
-  endAt      DateTime
+  startAt       DateTime
+  endAt         DateTime
   executionMode BookingExecutionMode @default(SEQUENTIAL)
-  bundleId   String?
+  bundleId      String?
 
-  status     BookingStatus @default(CONFIRMED)
-  source     BookingSource
+  status BookingStatus @default(CONFIRMED)
+  source BookingSource
 
   bookingPageId   String?
   bookingWidgetId String?
@@ -585,7 +643,7 @@ model Booking {
   notes         String? @db.VarChar(1000)
   internalNotes String? @db.VarChar(2000)
 
-  cancellationReason String?     @db.VarChar(1000)
+  cancellationReason String?      @db.VarChar(1000)
   cancelledBy        CancelledBy?
   cancelledAt        DateTime?
 
@@ -595,15 +653,15 @@ model Booking {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  business      Business       @relation(fields: [businessId],     references: [id], onDelete: Cascade)
-  client        Client         @relation(fields: [clientId],        references: [id], onDelete: Restrict)
+  location      Location       @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  client        Client         @relation(fields: [clientId], references: [id], onDelete: Restrict)
   bundle        ServiceBundle? @relation(fields: [bundleId], references: [id], onDelete: SetNull)
   items         BookingItem[]
   earnings      StaffEarning[]
   bookingPage   BookingPage?   @relation(fields: [bookingPageId], references: [id], onDelete: SetNull)
   bookingWidget BookingWidget? @relation(fields: [bookingWidgetId], references: [id], onDelete: SetNull)
 
-  @@index([businessId, deletedAt, startAt])
+  @@index([locationId, deletedAt, startAt])
   @@index([clientId, deletedAt, startAt])
   @@index([status])
   @@index([bundleId])
@@ -614,7 +672,7 @@ model Booking {
 model BookingItem {
   id              String   @id @default(uuid())
   bookingId       String
-  businessId      String
+  locationId      String
   serviceId       String
   staffId         String
   sortOrder       Int      @default(0)
@@ -629,21 +687,21 @@ model BookingItem {
   calendarEventId String?  @unique
 
   booking       Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  business      Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  location      Location       @relation(fields: [locationId], references: [id], onDelete: Cascade)
   service       Service        @relation(fields: [serviceId], references: [id], onDelete: Restrict)
   staff         Staff          @relation(fields: [staffId], references: [id], onDelete: Restrict)
   calendarEvent CalendarEvent? @relation(fields: [calendarEventId], references: [id], onDelete: SetNull)
   earnings      StaffEarning[]
 
   @@index([bookingId])
-  @@index([businessId])
+  @@index([locationId])
   @@index([staffId, startAt])
   @@index([serviceId])
 }
 
 model BookingPage {
   id              String               @id @default(uuid())
-  businessId      String
+  locationId      String
   title           String               @db.VarChar(80)
   slug            String               @unique @db.VarChar(48)
   status          BookingChannelStatus @default(DRAFT)
@@ -671,23 +729,23 @@ model BookingPage {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  business Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
-  coverFile File?    @relation(fields: [coverFileId], references: [id], onDelete: SetNull)
-  bookings Booking[]
+  location  Location  @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  coverFile File?     @relation(fields: [coverFileId], references: [id], onDelete: SetNull)
+  bookings  Booking[]
 
-  @@index([businessId, updatedAt])
+  @@index([locationId, updatedAt])
 }
 
 model BookingWidget {
-  id              String                     @id @default(uuid())
-  businessId      String
-  title           String                     @db.VarChar(80)
-  titleKey        String                     @db.VarChar(80)
-  status          BookingChannelStatus       @default(DRAFT)
-  placement       BookingWidgetPlacement
-  trigger         BookingWidgetTrigger
-  buttonPosition  BookingWidgetButtonPosition
-  allowedDomains  String[]                   @default([])
+  id             String                      @id @default(uuid())
+  locationId     String
+  title          String                      @db.VarChar(80)
+  titleKey       String                      @db.VarChar(80)
+  status         BookingChannelStatus        @default(DRAFT)
+  placement      BookingWidgetPlacement
+  trigger        BookingWidgetTrigger
+  buttonPosition BookingWidgetButtonPosition
+  allowedDomains String[]                    @default([])
 
   palette           BookingPalette
   customBackground  String?        @db.VarChar(7)
@@ -707,16 +765,17 @@ model BookingWidget {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  business Business  @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  location Location  @relation(fields: [locationId], references: [id], onDelete: Cascade)
   bookings Booking[]
 
-  @@unique([businessId, titleKey])
-  @@index([businessId, updatedAt])
+  @@unique([locationId, titleKey])
+  @@index([locationId, updatedAt])
 }
 
 model AuditLog {
   id         String          @id @default(uuid())
-  businessId String
+  brandId    String
+  locationId String?
   entityType AuditEntity
   entityId   String
   eventType  AuditEvent
@@ -728,13 +787,15 @@ model AuditLog {
   payload    Json
   createdAt  DateTime        @default(now())
 
-  @@index([businessId, entityType, entityId])
-  @@index([businessId, entityType, entityId, createdAt])
+  @@index([brandId, entityType, entityId])
+  @@index([brandId, entityType, entityId, createdAt])
+  @@index([locationId, entityType, entityId])
+  @@index([locationId, entityType, entityId, createdAt])
 }
 
 model StaffCompensationPlan {
   id                       String                 @id @default(uuid())
-  businessId               String
+  locationId               String
   staffId                  String
   effectiveFrom            DateTime               @db.Date
   effectiveTo              DateTime?              @db.Date
@@ -746,13 +807,13 @@ model StaffCompensationPlan {
   note                     String?                @db.VarChar(1000)
   createdAt                DateTime               @default(now())
 
-  business     Business                       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  location     Location                       @relation(fields: [locationId], references: [id], onDelete: Cascade)
   staff        Staff                          @relation(fields: [staffId], references: [id], onDelete: Cascade)
   serviceRates StaffCompensationServiceRate[]
   earnings     StaffEarning[]
 
   @@unique([staffId, effectiveFrom])
-  @@index([businessId])
+  @@index([locationId])
   @@index([staffId, effectiveFrom, effectiveTo])
 }
 
@@ -772,7 +833,7 @@ model StaffCompensationServiceRate {
 
 model StaffEarning {
   id                      String             @id @default(uuid())
-  businessId              String
+  locationId              String
   staffId                 String
   type                    StaffEarningType
   source                  StaffEarningSource
@@ -798,7 +859,7 @@ model StaffEarning {
   payrollResultId         String?
   createdAt               DateTime           @default(now())
 
-  business              Business               @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  location              Location               @relation(fields: [locationId], references: [id], onDelete: Cascade)
   staff                 Staff                  @relation(fields: [staffId], references: [id], onDelete: Restrict)
   compensationPlan      StaffCompensationPlan? @relation(fields: [compensationPlanId], references: [id], onDelete: SetNull)
   booking               Booking?               @relation(fields: [bookingId], references: [id], onDelete: SetNull)
@@ -809,9 +870,9 @@ model StaffEarning {
   correctsPayrollResult PayrollResult?         @relation("PayrollCorrections", fields: [correctsPayrollResultId], references: [id], onDelete: SetNull)
   payrollResult         PayrollResult?         @relation("PayrollResultEarnings", fields: [payrollResultId], references: [id], onDelete: SetNull)
 
-  @@unique([businessId, idempotencyKey])
-  @@index([businessId, staffId, earnedOn])
-  @@index([businessId, earnedOn])
+  @@unique([locationId, idempotencyKey])
+  @@index([locationId, staffId, earnedOn])
+  @@index([locationId, earnedOn])
   @@index([bookingId])
   @@index([bookingItemId])
   @@index([shiftId])
@@ -820,7 +881,7 @@ model StaffEarning {
 
 model PayrollPeriod {
   id             String              @id @default(uuid())
-  businessId     String
+  locationId     String
   name           String?             @db.VarChar(255)
   startDate      DateTime            @db.Date
   endDate        DateTime            @db.Date
@@ -836,44 +897,44 @@ model PayrollPeriod {
   createdAt      DateTime            @default(now())
   updatedAt      DateTime            @updatedAt
 
-  business Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  location Location        @relation(fields: [locationId], references: [id], onDelete: Cascade)
   results  PayrollResult[]
 
-  @@unique([businessId, startDate, endDate])
-  @@index([businessId, status])
+  @@unique([locationId, startDate, endDate])
+  @@index([locationId, status])
 }
 
 model PayrollResult {
-  id                      String               @id @default(uuid())
-  periodId                String
-  businessId              String
-  staffId                 String
-  staffName               String               @db.VarChar(250)
-  roleTitle               String?              @db.VarChar(250)
-  taxId                   String?              @db.VarChar(20)
-  employeeNumber          String?              @db.VarChar(30)
-  employmentType          StaffEmploymentType?
-  payoutMethod            StaffPayoutMethod?
-  payoutNote              String?              @db.VarChar(250)
-  currency                String               @db.VarChar(3)
-  fixedSalaryTotal        Decimal              @db.Decimal(12, 2)
-  hourlyTotal             Decimal              @db.Decimal(12, 2)
-  serviceCommissionTotal  Decimal              @db.Decimal(12, 2)
-  productCommissionTotal  Decimal              @db.Decimal(12, 2)
-  bonusTotal              Decimal              @db.Decimal(12, 2)
-  deductionTotal          Decimal              @db.Decimal(12, 2)
-  correctionTotal         Decimal              @db.Decimal(12, 2)
-  totalAmount             Decimal              @db.Decimal(12, 2)
-  earningsCount           Int
-  createdAt               DateTime             @default(now())
+  id                     String               @id @default(uuid())
+  periodId               String
+  locationId             String
+  staffId                String
+  staffName              String               @db.VarChar(250)
+  roleTitle              String?              @db.VarChar(250)
+  taxId                  String?              @db.VarChar(20)
+  employeeNumber         String?              @db.VarChar(30)
+  employmentType         StaffEmploymentType?
+  payoutMethod           StaffPayoutMethod?
+  payoutNote             String?              @db.VarChar(250)
+  currency               String               @db.VarChar(3)
+  fixedSalaryTotal       Decimal              @db.Decimal(12, 2)
+  hourlyTotal            Decimal              @db.Decimal(12, 2)
+  serviceCommissionTotal Decimal              @db.Decimal(12, 2)
+  productCommissionTotal Decimal              @db.Decimal(12, 2)
+  bonusTotal             Decimal              @db.Decimal(12, 2)
+  deductionTotal         Decimal              @db.Decimal(12, 2)
+  correctionTotal        Decimal              @db.Decimal(12, 2)
+  totalAmount            Decimal              @db.Decimal(12, 2)
+  earningsCount          Int
+  createdAt              DateTime             @default(now())
 
   period      PayrollPeriod  @relation(fields: [periodId], references: [id], onDelete: Cascade)
-  business    Business       @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  location    Location       @relation(fields: [locationId], references: [id], onDelete: Cascade)
   staff       Staff          @relation(fields: [staffId], references: [id], onDelete: Restrict)
   earnings    StaffEarning[] @relation("PayrollResultEarnings")
   corrections StaffEarning[] @relation("PayrollCorrections")
 
   @@unique([periodId, staffId])
-  @@index([businessId])
+  @@index([locationId])
   @@index([staffId])
 }

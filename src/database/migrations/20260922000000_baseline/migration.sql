@@ -1,6 +1,3 @@
-◇ injected env (26) from .env // tip: ⌘ suppress logs { quiet: true }
-Loaded Prisma config from prisma.config.ts.
-
 -- CreateSchema
 CREATE SCHEMA IF NOT EXISTS "public";
 
