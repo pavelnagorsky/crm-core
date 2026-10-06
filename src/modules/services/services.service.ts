@@ -32,7 +32,7 @@ import {
   toServiceAuditShape,
 } from '../audit/fields/service.fields.js';
 import { SERVICE_CATEGORY_AUDIT_FIELDS } from '../audit/fields/service-category.fields.js';
-import { BusinessService } from '../business/business.service.js';
+import { LocationService } from '../location/location.service.js';
 import { ServiceWithImage } from './interfaces/service-with-image.interface.js';
 import { ServiceWithStaffCount } from './interfaces/service-with-staff-count.interface.js';
 import { catalogWhere } from './catalog-where.js';
@@ -62,7 +62,7 @@ export class ServicesService {
   constructor(
     private readonly db: DatabaseService,
     private readonly eventEmitter: EventEmitter2,
-    private readonly businessService: BusinessService,
+    private readonly locationService: LocationService,
   ) {}
 
   // ─── Service Categories ──────────────────────────────────────────────────────
@@ -218,7 +218,7 @@ export class ServicesService {
       },
       include: serviceAuditInclude,
     });
-    const { currency } = await this.businessService.getLocale(locationId);
+    const { currency } = await this.locationService.getLocale(locationId);
     this.logger.log(
       `service created: id=${service.id} locationId=${locationId}`,
     );
@@ -275,7 +275,7 @@ export class ServicesService {
     );
     if (changes.length > 0) {
       const currency = changes.some((change) => change.field === 'price')
-        ? (await this.businessService.getLocale(locationId)).currency
+        ? (await this.locationService.getLocale(locationId)).currency
         : undefined;
       this.logger.log(
         `service updated: id=${serviceId} locationId=${locationId} fields=${changes.map((change) => change.field).join(',')}`,

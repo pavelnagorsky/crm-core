@@ -1,14 +1,14 @@
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ServicesService } from './services.service.js';
 import { ServiceResponseDto } from './dto/service-response.dto.js';
-import { BusinessService } from '../business/business.service.js';
+import { LocationService } from '../location/location.service.js';
 
 describe('ServicesService.findIdsByFilter', () => {
   const findMany = vi.fn();
   const service = new ServicesService(
     { service: { findMany } } as never,
     { emit: vi.fn() } as unknown as EventEmitter2,
-    {} as BusinessService,
+    {} as LocationService,
   );
 
   beforeEach(() => {
@@ -67,7 +67,7 @@ describe('ServicesService.listForCatalog', () => {
   const service = new ServicesService(
     { service: { findMany } } as never,
     { emit: vi.fn() } as unknown as EventEmitter2,
-    {} as BusinessService,
+    {} as LocationService,
   );
 
   beforeEach(() => {

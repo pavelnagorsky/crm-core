@@ -23,7 +23,7 @@ import {
 import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js';
 import { diffFields } from '../audit/utils/diff-fields.js';
-import { BusinessService } from '../business/business.service.js';
+import { LocationService } from '../location/location.service.js';
 import { CreateServiceBundleDto } from './dto/create-service-bundle.dto.js';
 import { UpdateServiceBundleDto } from './dto/update-service-bundle.dto.js';
 import { BundlePricingMode } from './enums/bundle-pricing-mode.enum.js';
@@ -64,7 +64,7 @@ export class ServiceBundleService {
   constructor(
     private readonly db: DatabaseService,
     private readonly eventEmitter: EventEmitter2,
-    private readonly businessService: BusinessService,
+    private readonly locationService: LocationService,
   ) {}
 
   async create(
@@ -100,7 +100,7 @@ export class ServiceBundleService {
     const currency =
       bundle.fixedPrice == null
         ? undefined
-        : (await this.businessService.getLocale(locationId)).currency;
+        : (await this.locationService.getLocale(locationId)).currency;
     const event: AuditLogEvent = {
       locationId,
       entityType: AuditEntity.SERVICE,
@@ -177,7 +177,7 @@ export class ServiceBundleService {
     );
     if (changes.length > 0) {
       const currency = changes.some((change) => change.field === 'fixedPrice')
-        ? (await this.businessService.getLocale(locationId)).currency
+        ? (await this.locationService.getLocale(locationId)).currency
         : undefined;
       this.logger.log(
         `service bundle updated: id=${bundleId} locationId=${locationId} fields=${changes.map((change) => change.field).join(',')}`,

@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
-import { BusinessModule } from '../business/business.module.js';
+import { LocationModule } from '../location/location.module.js';
 import { ServicesService } from './services.service.js';
 import { ServicesController } from './services.controller.js';
 import { ServiceBundleService } from './service-bundle.service.js';
 import { ServiceCatalogService } from './service-catalog.service.js';
 
 @Module({
-  imports: [BusinessModule],
+  imports: [LocationModule],
   controllers: [ServicesController],
   providers: [ServicesService, ServiceBundleService, ServiceCatalogService],
   exports: [ServicesService],
