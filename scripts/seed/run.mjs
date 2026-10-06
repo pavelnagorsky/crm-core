@@ -1,7 +1,10 @@
 import { createPrismaClient } from './lib/db.mjs';
-import { seed as hairSalonSeed, meta as hairSalonMeta } from './seeds/hair-salon.mjs';
+import {
+  seed as hairSalonSeed,
+  meta as hairSalonMeta,
+} from './seeds/hair-salon.mjs';
 
-// Registry of available seeds. Add new business-type seeds here.
+// Registry of available seeds. Add new demo seeds here.
 const SEEDS = {
   'hair-salon': { run: hairSalonSeed, meta: hairSalonMeta },
 };
@@ -34,7 +37,9 @@ async function main() {
   try {
     await prisma.$connect();
     await entry.run(prisma);
-    console.log(`\n✔ Seed "${name}" completed in ${((Date.now() - startedAt) / 1000).toFixed(1)}s`);
+    console.log(
+      `\n✔ Seed "${name}" completed in ${((Date.now() - startedAt) / 1000).toFixed(1)}s`,
+    );
   } catch (err) {
     console.error(`\nx Seed "${name}" failed:`);
     console.error(err);
