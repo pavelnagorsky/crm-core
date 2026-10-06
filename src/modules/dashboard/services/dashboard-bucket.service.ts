@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { TimeService } from '../../time/time.service.js';
+import { TimeService } from '../../../shared/time/time.service.js';
 import { SeriesGranularity } from '../enums/series-granularity.enum.js';
 import { WidgetPeriodDto } from '../dto/widget-period.dto.js';
 import { ResolvedRange } from '../interfaces/resolved-range.interface.js';

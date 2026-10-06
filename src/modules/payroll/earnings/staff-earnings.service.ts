@@ -24,7 +24,7 @@ import { AuditLogEvent } from '../../audit/interfaces/audit-log-event.interface.
 import { AuditPayload } from '../../audit/interfaces/audit-payload.interface.js';
 import { LocationService } from '../../location/location.service.js';
 import { StaffService } from '../../staff/staff.service.js';
-import { TimeService } from '../../time/time.service.js';
+import { TimeService } from '../../../shared/time/time.service.js';
 import { CreateManualEarningDto } from './dto/create-manual-earning.dto.js';
 import { RecordProductSaleDto } from './dto/record-product-sale.dto.js';
 import { PayrollPeriodEarningsRequestDto } from './dto/payroll-period-earnings-request.dto.js';

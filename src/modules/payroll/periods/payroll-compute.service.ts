@@ -4,7 +4,7 @@ import {
   Prisma,
   StaffEarningType,
 } from '@prisma/client';
-import { TimeService } from '../../time/time.service.js';
+import { TimeService } from '../../../shared/time/time.service.js';
 import { EarningCalculatorService } from '../earnings/earning-calculator.service.js';
 import { planCoversDate } from '../compensation/compensation-plan.rules.js';
 import { EarningLine } from '../earnings/interfaces/earning-line.interface.js';

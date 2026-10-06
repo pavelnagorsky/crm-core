@@ -1,5 +1,5 @@
 import { registerDecorator, ValidationOptions } from 'class-validator';
-import regularExpressions from '../../../shared/regular-expressions.js';
+import regularExpressions from '../../regular-expressions.js';
 
 export function IsLocalDateTime(
   options?: ValidationOptions,

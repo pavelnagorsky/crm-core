@@ -7,7 +7,7 @@ import { CompensationPlanWithRates } from '../interfaces/compensation-plan-with-
 import { CompensationSalaryMode } from '../enums/compensation-salary-mode.enum.js';
 import { CompensationServiceRateResponseDto } from './compensation-service-rate-response.dto.js';
 import { MoneyService } from '../../../../shared/money/money.service.js';
-import { TimeService } from '../../../time/time.service.js';
+import { TimeService } from '../../../../shared/time/time.service.js';
 
 export class CompensationPlanResponseDto {
   @ApiProperty({ type: String })

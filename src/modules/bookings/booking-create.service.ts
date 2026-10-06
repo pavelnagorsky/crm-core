@@ -22,7 +22,7 @@ import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { CalendarService } from '../calendar/calendar.service.js';
 import { ClientsService } from '../clients/clients.service.js';
 import { StaffService } from '../staff/staff.service.js';
-import { TimeService } from '../time/time.service.js';
+import { TimeService } from '../../shared/time/time.service.js';
 import { CreateBookingDto } from './dto/create-booking.dto.js';
 import { ManualCreateBookingDto } from './dto/manual-create-booking.dto.js';
 import { BookingSource } from './enums/booking-source.enum.js';

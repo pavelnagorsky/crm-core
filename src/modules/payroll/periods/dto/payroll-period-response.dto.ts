@@ -2,7 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { PayrollPeriod } from '@prisma/client';
 import { PayrollPeriodStatus } from '../enums/payroll-period-status.enum.js';
 import { PayrollPeriodWithResults } from '../interfaces/payroll-period-with-results.interface.js';
-import { TimeService } from '../../../time/time.service.js';
+import { TimeService } from '../../../../shared/time/time.service.js';
 import { PayrollResultResponseDto } from './payroll-result-response.dto.js';
 
 export class PayrollPeriodResponseDto {

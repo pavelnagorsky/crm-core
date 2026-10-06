@@ -23,7 +23,7 @@ import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js'
 import { AuditEntity } from '../audit/enums/audit-entity.enum.js';
 import { AuditEvent } from '../audit/enums/audit-event.enum.js';
 import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
-import { TimeService } from '../time/time.service.js';
+import { TimeService } from '../../shared/time/time.service.js';
 import { LocationService } from '../location/location.service.js';
 import { StaffService } from '../staff/staff.service.js';
 import { CalendarBookingReader } from './calendar-booking-reader.js';

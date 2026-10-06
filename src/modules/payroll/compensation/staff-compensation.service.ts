@@ -13,7 +13,7 @@ import { AuditLogEvent } from '../../audit/interfaces/audit-log-event.interface.
 import { LocationService } from '../../location/location.service.js';
 import { ServicesService } from '../../services/services.service.js';
 import { StaffService } from '../../staff/staff.service.js';
-import { TimeService } from '../../time/time.service.js';
+import { TimeService } from '../../../shared/time/time.service.js';
 import { CompensationSalaryMode } from './enums/compensation-salary-mode.enum.js';
 import { ReplaceCompensationPlanDto } from './dto/replace-compensation-plan.dto.js';
 import { assertCompensationVersionStart } from './compensation-plan.rules.js';

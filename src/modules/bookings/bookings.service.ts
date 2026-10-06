@@ -25,7 +25,7 @@ import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { stableOrderBy } from '../../shared/database/stable-order-by.js';
 import { MoneyService } from '../../shared/money/money.service.js';
 import { BundleMetrics } from '../services/bundle-metrics.js';
-import { TimeService } from '../time/time.service.js';
+import { TimeService } from '../../shared/time/time.service.js';
 import { CalendarBookingReader } from '../calendar/calendar-booking-reader.js';
 import { CalendarBookingFeed } from '../calendar/interfaces/calendar-booking-feed.interface.js';
 import { CalendarService } from '../calendar/calendar.service.js';

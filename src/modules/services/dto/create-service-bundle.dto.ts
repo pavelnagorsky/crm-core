@@ -14,7 +14,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { IsOptionalPrice } from '../../../shared/decorators/is-price.decorator.js';
-import { MULTI_SERVICE_MAX_ITEMS } from '../../../shared/constants/multi-service.constants.js';
+import { MULTI_SERVICE_MAX_ITEMS } from '../constants/multi-service.constants.js';
 import { BookingExecutionMode } from '../../bookings/enums/booking-execution-mode.enum.js';
 import { ServiceStatus } from '../enums/service-status.enum.js';
 import { BundlePricingMode } from '../enums/bundle-pricing-mode.enum.js';

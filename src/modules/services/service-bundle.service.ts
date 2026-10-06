@@ -11,7 +11,7 @@ import { AppException } from '../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { PrismaErrorCode } from '../../shared/database/prisma-error-codes.js';
 import { MoneyService } from '../../shared/money/money.service.js';
-import { MULTI_SERVICE_MAX_ITEMS } from '../../shared/constants/multi-service.constants.js';
+import { MULTI_SERVICE_MAX_ITEMS } from './constants/multi-service.constants.js';
 import { AUDIT_EVENT } from '../audit/audit.constants.js';
 import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
 import { AuditEntity } from '../audit/enums/audit-entity.enum.js';

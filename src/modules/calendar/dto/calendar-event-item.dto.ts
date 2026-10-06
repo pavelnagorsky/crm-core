@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { CalendarEventRepeatType, CalendarEventType } from '@prisma/client';
 import { MoneyService } from '../../../shared/money/money.service.js';
-import { TimeService } from '../../time/time.service.js';
+import { TimeService } from '../../../shared/time/time.service.js';
 import { CalendarBookingView } from '../interfaces/calendar-booking-view.interface.js';
 
 const FALLBACK_TITLE = 'Событие';

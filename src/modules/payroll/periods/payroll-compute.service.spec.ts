@@ -3,7 +3,7 @@ import { EarningCalculatorService } from '../earnings/earning-calculator.service
 import { SalaryPlanSlice } from './interfaces/salary-plan-slice.interface.js';
 import { PayrollComputeService } from './payroll-compute.service.js';
 import { MoneyService } from '../../../shared/money/money.service.js';
-import { TimeService } from '../../time/time.service.js';
+import { TimeService } from '../../../shared/time/time.service.js';
 
 function earning(type: StaffEarningType, amount: string, staffId = 'anna') {
   return { staffId, type, amount, currency: 'RUB' };

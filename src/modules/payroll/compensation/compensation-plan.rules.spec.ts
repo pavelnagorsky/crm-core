@@ -1,6 +1,6 @@
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
-import { TimeService } from '../../time/time.service.js';
+import { TimeService } from '../../../shared/time/time.service.js';
 import {
   assertCompensationVersionStart,
   planCoversDate,

@@ -1,4 +1,4 @@
-import { TimeService } from '../time/time.service.js';
+import { TimeService } from '../../shared/time/time.service.js';
 import { ClientRecencyBucket } from './enums/client-recency-bucket.enum.js';
 import { ClientRecencyBound } from './interfaces/client-recency-bound.interface.js';
 

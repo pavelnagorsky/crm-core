@@ -1,4 +1,4 @@
-import { TimeService } from '../time/time.service.js';
+import { TimeService } from '../../shared/time/time.service.js';
 import {
   CLIENT_RECENCY_BOUNDS,
   DORMANT_CLIENT_MIN_DAYS,

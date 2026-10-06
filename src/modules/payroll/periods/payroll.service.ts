@@ -24,7 +24,7 @@ import { AuditLogEvent } from '../../audit/interfaces/audit-log-event.interface.
 import { AuditPayload } from '../../audit/interfaces/audit-payload.interface.js';
 import { LocationService } from '../../location/location.service.js';
 import { StaffService } from '../../staff/staff.service.js';
-import { TimeService } from '../../time/time.service.js';
+import { TimeService } from '../../../shared/time/time.service.js';
 import { CreatePayrollCorrectionDto } from './dto/create-payroll-correction.dto.js';
 import { CreatePayrollPeriodDto } from './dto/create-payroll-period.dto.js';
 import {

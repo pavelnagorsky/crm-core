@@ -10,9 +10,9 @@ import {
   MaxLength,
   Validate,
 } from 'class-validator';
-import { MULTI_SERVICE_MAX_ITEMS } from '../../../shared/constants/multi-service.constants.js';
+import { MULTI_SERVICE_MAX_ITEMS } from '../../services/constants/multi-service.constants.js';
 import { IsPhone } from '../../../shared/decorators/is-phone.decorator.js';
-import { IsLocalDateTime } from '../../time/decorators/is-local-date-time.validator.js';
+import { IsLocalDateTime } from '../../../shared/time/decorators/is-local-date-time.validator.js';
 import { AtMostOneBookingChannelConstraint } from '../decorators/at-most-one-booking-channel.constraint.js';
 
 export class CreateBookingDto {

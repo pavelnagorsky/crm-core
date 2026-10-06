@@ -12,8 +12,8 @@ import {
   MaxLength,
   ValidateNested,
 } from 'class-validator';
-import { MULTI_SERVICE_MAX_ITEMS } from '../../../shared/constants/multi-service.constants.js';
-import { IsLocalDateTime } from '../../time/decorators/is-local-date-time.validator.js';
+import { MULTI_SERVICE_MAX_ITEMS } from '../../services/constants/multi-service.constants.js';
+import { IsLocalDateTime } from '../../../shared/time/decorators/is-local-date-time.validator.js';
 import { IsPhone } from '../../../shared/decorators/is-phone.decorator.js';
 import { UpdateBookingItemPriceDto } from './update-booking-item-price.dto.js';
 

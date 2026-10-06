@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { TimeService } from '../../../time/time.service.js';
+import { TimeService } from '../../../../shared/time/time.service.js';
 
 export class LockedPayrollRangeDto {
   @ApiProperty({ type: String, example: '2026-09-01' })

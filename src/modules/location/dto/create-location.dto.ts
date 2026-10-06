@@ -9,7 +9,7 @@ import {
   MaxLength,
   Min,
 } from 'class-validator';
-import { IsIanaTimezone } from '../../time/decorators/is-iana-timezone.validator.js';
+import { IsIanaTimezone } from '../../../shared/time/decorators/is-iana-timezone.validator.js';
 
 export class CreateLocationDto {
   @ApiProperty({ type: String, maxLength: 255 })

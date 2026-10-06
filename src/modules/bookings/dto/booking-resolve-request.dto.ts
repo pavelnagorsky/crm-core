@@ -6,7 +6,7 @@ import {
   IsOptional,
   IsUUID,
 } from 'class-validator';
-import { MULTI_SERVICE_MAX_ITEMS } from '../../../shared/constants/multi-service.constants.js';
+import { MULTI_SERVICE_MAX_ITEMS } from '../../services/constants/multi-service.constants.js';
 
 export class BookingResolveRequestDto {
   @ApiProperty({

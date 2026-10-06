@@ -9,7 +9,7 @@ import {
 import { StaffEarningSource } from '../enums/staff-earning-source.enum.js';
 import { StaffEarningType } from '../enums/staff-earning-type.enum.js';
 import { MoneyService } from '../../../../shared/money/money.service.js';
-import { TimeService } from '../../../time/time.service.js';
+import { TimeService } from '../../../../shared/time/time.service.js';
 
 export class StaffEarningResponseDto {
   @ApiProperty({ type: String })

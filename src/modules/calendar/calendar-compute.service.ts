@@ -4,7 +4,7 @@ import {
   CalendarEventRepeatType,
   StaffShift,
 } from '@prisma/client';
-import { TimeService } from '../time/time.service.js';
+import { TimeService } from '../../shared/time/time.service.js';
 import { CalendarEventItemDto } from './dto/calendar-event-item.dto.js';
 import { ClosedTimeItemDto } from './dto/closed-time-item.dto.js';
 import {
