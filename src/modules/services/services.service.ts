@@ -342,7 +342,7 @@ export class ServicesService {
     return rows.map((row) => ({ status: row.status, count: row._count._all }));
   }
 
-  async assertIdsInBusiness(locationId: string, ids: string[]): Promise<void> {
+  async assertIdsInLocation(locationId: string, ids: string[]): Promise<void> {
     if (ids.length === 0) return;
     const unique = [...new Set(ids)];
     const found = await this.db.service.findMany({

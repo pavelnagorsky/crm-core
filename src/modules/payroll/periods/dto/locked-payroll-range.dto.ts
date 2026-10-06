@@ -1,12 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsUUID } from 'class-validator';
 import { TimeService } from '../../../time/time.service.js';
-
-export class LockedPayrollRangesRequestDto {
-  @ApiProperty({ type: String, format: 'uuid' })
-  @IsUUID()
-  locationId: string;
-}
 
 export class LockedPayrollRangeDto {
   @ApiProperty({ type: String, example: '2026-09-01' })

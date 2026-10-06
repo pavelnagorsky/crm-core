@@ -65,7 +65,6 @@ export class BookingsExportService {
       { header: text.createdAt, key: 'createdAt' },
     ];
     const { items } = await this.bookingsService.search(locationId, {
-      locationId,
       search: dto.search,
       status: dto.status,
       staffIds: dto.staffIds,

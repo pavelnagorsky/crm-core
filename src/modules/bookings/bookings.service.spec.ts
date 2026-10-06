@@ -714,7 +714,7 @@ describe('BookingsService.update item prices', () => {
     findFirst.mockResolvedValue(current);
     update.mockResolvedValue(current);
 
-    await service.update('booking-1', token, {
+    await service.update('biz', 'booking-1', token, {
       items: [{ id: 'item-2', customPrice: '60.00' }],
     });
 
@@ -735,7 +735,7 @@ describe('BookingsService.update item prices', () => {
     findFirst.mockResolvedValue(visit());
     update.mockResolvedValue(visit());
 
-    await service.update('booking-1', token, { notes: 'окно' });
+    await service.update('biz', 'booking-1', token, { notes: 'окно' });
 
     expect(update.mock.calls[0][0].data.items).toBeUndefined();
   });
@@ -744,7 +744,7 @@ describe('BookingsService.update item prices', () => {
     findFirst.mockResolvedValue(visit());
 
     const error = await service
-      .update('booking-1', token, {
+      .update('biz', 'booking-1', token, {
         items: [{ id: 'missing', customPrice: '10.00' }],
       })
       .then(

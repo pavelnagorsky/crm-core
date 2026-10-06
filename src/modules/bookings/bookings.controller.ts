@@ -108,19 +108,20 @@ export class BookingsController {
 
   @ApiOperation({ summary: 'Book an appointment (public / client-facing)' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
-  @ApiNotFoundResponse({ description: 'Business, service, or staff not found' })
+  @ApiNotFoundResponse({ description: 'Location, service, or staff not found' })
   @ApiForbiddenResponse({
     description:
-      'Business is closed for public booking, or this phone is banned from online booking',
+      'Location is closed for public booking, or this phone is banned from online booking',
   })
   @ApiConflictResponse({ description: 'Slot is no longer available' })
-  @Post('public/bookings')
+  @Post('public/locations/:locationId/bookings')
   async createPublic(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Body() dto: CreateBookingDto,
     @Req() req: Request,
   ): Promise<BaseResponseDto<IdResponseDto>> {
     const booking = await this.bookingCreateService.createPublicBooking(
-      dto.locationId,
+      locationId,
       dto,
       {
         ip: clientIp(req),
@@ -167,24 +168,25 @@ export class BookingsController {
 
   @ApiOperation({ summary: 'Create a booking manually (owner / staff)' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
-  @ApiNotFoundResponse({ description: 'Business, service, or staff not found' })
+  @ApiNotFoundResponse({ description: 'Location, service, or staff not found' })
   @ApiConflictResponse({ description: 'Slot is no longer available' })
   @Auth()
-  @Post('bookings/manual')
+  @Post('locations/:locationId/bookings/manual')
   async createManual(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Body() dto: ManualCreateBookingDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
     assertLocationRole(
       tokenPayload,
-      dto.locationId,
+      locationId,
       BusinessRole.OWNER,
       BusinessRole.STAFF,
     );
     const booking = await this.bookingCreateService.createManualBooking(
-      dto.locationId,
+      locationId,
       dto,
-      auditActorFromToken(tokenPayload, dto.locationId),
+      auditActorFromToken(tokenPayload, locationId),
     );
     return BaseResponseDto.success({ id: booking.id });
   }
@@ -192,9 +194,9 @@ export class BookingsController {
   @ApiOperation({ summary: 'Get booking count per status' })
   @ApiOkResponse({ type: ApiResponseArray(BookingStatusCountResponseDto) })
   @Auth()
-  @Get('bookings/status-counts')
+  @Get('locations/:locationId/bookings/status-counts')
   async getStatusCounts(
-    @Query('locationId', ParseUUIDPipe) locationId: string,
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<BookingStatusCountResponseDto[]>> {
     assertLocationRole(
@@ -213,8 +215,9 @@ export class BookingsController {
   @ApiProduces(XlsxService.mimeType)
   @ApiOkResponse({ description: 'File stream' })
   @Auth()
-  @Get('bookings/export')
+  @Get('locations/:locationId/bookings/export')
   async export(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Query() dto: BookingExportRequestDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
     @Res({ passthrough: true })
@@ -222,12 +225,12 @@ export class BookingsController {
   ): Promise<StreamableFile> {
     assertLocationRole(
       tokenPayload,
-      dto.locationId,
+      locationId,
       BusinessRole.OWNER,
       BusinessRole.STAFF,
     );
     const { stream, filename } = await this.bookingsExportService.stream(
-      dto.locationId,
+      locationId,
       dto,
     );
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -238,15 +241,19 @@ export class BookingsController {
   @ApiOkResponse({ type: ApiResponse(BookingResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking not found' })
   @Auth()
-  @Get('bookings/:id')
+  @Get('locations/:locationId/bookings/:id')
   async findById(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<BookingResponseDto>> {
-    const booking = await this.bookingsService.findById(id);
+    const booking = await this.bookingsService.findByIdInLocation(
+      locationId,
+      id,
+    );
     assertLocationRole(
       tokenPayload,
-      booking.locationId,
+      locationId,
       BusinessRole.OWNER,
       BusinessRole.STAFF,
     );
@@ -256,19 +263,20 @@ export class BookingsController {
   @ApiOperation({ summary: 'Search bookings' })
   @ApiOkResponse({ type: ApiResponse(BookingSearchResponseDto) })
   @Auth()
-  @Get('bookings')
+  @Get('locations/:locationId/bookings')
   async search(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Query() dto: BookingSearchRequestDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<BookingSearchResponseDto>> {
     assertLocationRole(
       tokenPayload,
-      dto.locationId,
+      locationId,
       BusinessRole.OWNER,
       BusinessRole.STAFF,
     );
     const { items, totalItems } = await this.bookingsService.search(
-      dto.locationId,
+      locationId,
       dto,
     );
     return BaseResponseDto.success(
@@ -287,13 +295,19 @@ export class BookingsController {
   @ApiNotFoundResponse({ description: 'Booking not found' })
   @ApiConflictResponse({ description: 'Slot is no longer available' })
   @Auth()
-  @Put('bookings/:id')
+  @Put('locations/:locationId/bookings/:id')
   async update(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateBookingDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<BookingResponseDto>> {
-    const booking = await this.bookingsService.update(id, tokenPayload, dto);
+    const booking = await this.bookingsService.update(
+      locationId,
+      id,
+      tokenPayload,
+      dto,
+    );
     return BaseResponseDto.success(BookingResponseDto.fromEntity(booking));
   }
 
@@ -301,13 +315,15 @@ export class BookingsController {
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking not found' })
   @Auth()
-  @Patch('bookings/:id/status')
+  @Patch('locations/:locationId/bookings/:id/status')
   async updateStatus(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateBookingStatusDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
     const booking = await this.bookingsService.updateStatus(
+      locationId,
       id,
       tokenPayload,
       dto,
@@ -319,15 +335,16 @@ export class BookingsController {
   @ApiOkResponse({ type: ApiResponse(ClientLinkResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking not found' })
   @Auth()
-  @Post('bookings/:id/client-token')
+  @Post('locations/:locationId/bookings/:id/client-token')
   async generateClientToken(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<ClientLinkResponseDto>> {
-    const booking = await this.bookingsService.findById(id);
+    await this.bookingsService.findByIdInLocation(locationId, id);
     assertLocationRole(
       tokenPayload,
-      booking.locationId,
+      locationId,
       BusinessRole.OWNER,
       BusinessRole.STAFF,
     );
@@ -340,13 +357,15 @@ export class BookingsController {
   @ApiNotFoundResponse({ description: 'Booking not found' })
   @ApiConflictResponse({ description: 'Booking is already cancelled' })
   @Auth()
-  @Post('bookings/:id/cancel')
+  @Post('locations/:locationId/bookings/:id/cancel')
   async cancel(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CancelBookingDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
     const booking = await this.bookingsService.cancel(
+      locationId,
       id,
       tokenPayload,
       CancelledBy.STAFF,
@@ -359,12 +378,13 @@ export class BookingsController {
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Booking not found' })
   @Auth()
-  @Delete('bookings/:id')
+  @Delete('locations/:locationId/bookings/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<void> {
-    await this.bookingsService.delete(id, tokenPayload);
+    await this.bookingsService.delete(locationId, id, tokenPayload);
   }
 }

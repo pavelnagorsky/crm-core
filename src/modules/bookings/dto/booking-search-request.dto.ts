@@ -23,10 +23,6 @@ export function toUuidArray(value: unknown): string[] | undefined {
 }
 
 export class BookingSearchRequestDto extends PaginationRequestDto<BookingSearchOrderBy> {
-  @ApiProperty({ type: String, format: 'uuid' })
-  @IsUUID()
-  locationId: string;
-
   @ApiProperty({
     type: String,
     required: false,

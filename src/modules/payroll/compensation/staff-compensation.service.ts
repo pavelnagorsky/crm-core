@@ -102,7 +102,7 @@ export class StaffCompensationService {
   ): Promise<CompensationPlanWithRates> {
     const staff = await this.staffService.findById(staffId);
     const serviceIds = (dto.serviceRates ?? []).map((rate) => rate.serviceId);
-    await this.servicesService.assertIdsInBusiness(
+    await this.servicesService.assertIdsInLocation(
       staff.locationId,
       serviceIds,
     );

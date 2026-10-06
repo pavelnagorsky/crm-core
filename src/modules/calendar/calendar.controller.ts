@@ -54,7 +54,7 @@ export class CalendarController {
       'Get available booking slots for a service within the business advance-booking window (public).',
   })
   @ApiOkResponse({ type: ApiResponseArray(AvailableSlotsDayDto) })
-  @ApiNotFoundResponse({ description: 'Business or service not found' })
+  @ApiNotFoundResponse({ description: 'Location or service not found' })
   @Get('public/available-slots')
   async getAvailableSlots(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -69,7 +69,7 @@ export class CalendarController {
       'Get available slots for manual booking (owner / staff). Same free-time rules as the public list, without online-booking visibility, minimum notice, or the advance window.',
   })
   @ApiOkResponse({ type: ApiResponseArray(AvailableSlotsDayDto) })
-  @ApiNotFoundResponse({ description: 'Business or service not found' })
+  @ApiNotFoundResponse({ description: 'Location or service not found' })
   @ApiBadRequestResponse({ description: 'Date range is longer than 62 days' })
   @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
   @Get('available-slots')

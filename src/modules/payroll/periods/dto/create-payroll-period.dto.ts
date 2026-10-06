@@ -1,17 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {
-  IsDateString,
-  IsOptional,
-  IsString,
-  IsUUID,
-  MaxLength,
-} from 'class-validator';
+import { IsDateString, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class CreatePayrollPeriodDto {
-  @ApiProperty({ type: String, format: 'uuid' })
-  @IsUUID()
-  locationId: string;
-
   @ApiProperty({ type: String, example: '2026-09-01' })
   @IsDateString()
   startDate: string;

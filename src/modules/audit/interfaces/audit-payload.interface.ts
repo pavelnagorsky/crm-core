@@ -138,9 +138,9 @@ interface ServiceDeletedPayload {
   title: string;
 }
 
-// ─── Business ───────────────────────────────────────────────────────────────
+// ─── Brand ─────────────────────────────────────────────────────────────────
 
-interface BusinessUpdatedPayload {
+interface BrandUpdatedPayload {
   changes: AuditFieldChange[];
 }
 
@@ -198,5 +198,5 @@ export type AuditPayload =
   | ServiceBundleCreatedPayload
   | ServiceBundleUpdatedPayload
   | ServiceBundleDeletedPayload
-  | BusinessUpdatedPayload
+  | BrandUpdatedPayload
   | PayrollPeriodAuditPayload;

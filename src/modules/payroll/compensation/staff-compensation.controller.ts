@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Get,
+  NotFoundException,
   Param,
   ParseUUIDPipe,
   Put,
@@ -29,7 +30,7 @@ import { ReplaceCompensationPlanDto } from './dto/replace-compensation-plan.dto.
 import { StaffCompensationService } from './staff-compensation.service.js';
 
 @ApiTags('Payroll')
-@Controller('staff')
+@Controller('locations/:locationId/staff')
 export class StaffCompensationController {
   constructor(
     private readonly compensation: StaffCompensationService,
@@ -42,13 +43,16 @@ export class StaffCompensationController {
   @Auth()
   @Get(':id/compensation/current')
   async current(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<CompensationPlanResponseDto | null>> {
     const staff = await this.staffService.findById(id);
+    if (staff.locationId !== locationId)
+      throw new NotFoundException('Staff member not found');
     assertLocationRole(
       tokenPayload,
-      staff.locationId,
+      locationId,
       BusinessRole.OWNER,
       BusinessRole.STAFF,
     );
@@ -63,13 +67,16 @@ export class StaffCompensationController {
   @Auth()
   @Get(':id/compensation')
   async history(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<CompensationPlanResponseDto[]>> {
     const staff = await this.staffService.findById(id);
+    if (staff.locationId !== locationId)
+      throw new NotFoundException('Staff member not found');
     assertLocationRole(
       tokenPayload,
-      staff.locationId,
+      locationId,
       BusinessRole.OWNER,
       BusinessRole.STAFF,
     );
@@ -88,16 +95,19 @@ export class StaffCompensationController {
   @Auth()
   @Put(':id/compensation')
   async replace(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: ReplaceCompensationPlanDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<CompensationPlanResponseDto>> {
     const staff = await this.staffService.findById(id);
-    assertLocationRole(tokenPayload, staff.locationId, BusinessRole.OWNER);
+    if (staff.locationId !== locationId)
+      throw new NotFoundException('Staff member not found');
+    assertLocationRole(tokenPayload, locationId, BusinessRole.OWNER);
     const plan = await this.compensation.replace(
       id,
       dto,
-      auditActorFromToken(tokenPayload, staff.locationId),
+      auditActorFromToken(tokenPayload, locationId),
     );
     return BaseResponseDto.success(
       CompensationPlanResponseDto.fromEntity(plan),

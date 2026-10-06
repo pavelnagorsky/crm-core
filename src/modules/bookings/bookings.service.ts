@@ -266,18 +266,24 @@ export class BookingsService implements CalendarBookingReader {
   }
 
   async update(
+    locationId: string,
     bookingId: string,
     tokenPayload: TokenPayloadDto,
     dto: UpdateBookingDto,
   ): Promise<BookingWithItems> {
-    const old = await this.findById(bookingId);
+    assertLocationRole(
+      tokenPayload,
+      locationId,
+      BusinessRole.OWNER,
+      BusinessRole.STAFF,
+    );
+    const old = await this.findByIdInLocation(locationId, bookingId);
     assertLocationRole(
       tokenPayload,
       old.locationId,
       BusinessRole.OWNER,
       BusinessRole.STAFF,
     );
-    const { locationId } = old;
     const actor = auditActorFromToken(tokenPayload, locationId);
 
     const slotChanging = dto.startAt !== undefined || dto.staffId !== undefined;
@@ -336,11 +342,18 @@ export class BookingsService implements CalendarBookingReader {
   }
 
   async updateStatus(
+    locationId: string,
     bookingId: string,
     tokenPayload: TokenPayloadDto,
     dto: UpdateBookingStatusDto,
   ): Promise<BookingWithItems> {
-    const old = await this.findById(bookingId);
+    assertLocationRole(
+      tokenPayload,
+      locationId,
+      BusinessRole.OWNER,
+      BusinessRole.STAFF,
+    );
+    const old = await this.findByIdInLocation(locationId, bookingId);
     assertLocationRole(
       tokenPayload,
       old.locationId,
@@ -507,6 +520,18 @@ export class BookingsService implements CalendarBookingReader {
   async findById(bookingId: string): Promise<BookingWithItems> {
     const booking = await this.db.booking.findFirst({
       where: { id: bookingId, deletedAt: null },
+      include: bookingWithItemsInclude,
+    });
+    if (!booking) throw new NotFoundException('Booking not found');
+    return booking;
+  }
+
+  async findByIdInLocation(
+    locationId: string,
+    bookingId: string,
+  ): Promise<BookingWithItems> {
+    const booking = await this.db.booking.findFirst({
+      where: { id: bookingId, locationId, deletedAt: null },
       include: bookingWithItemsInclude,
     });
     if (!booking) throw new NotFoundException('Booking not found');
@@ -681,12 +706,19 @@ export class BookingsService implements CalendarBookingReader {
   }
 
   async cancel(
+    locationId: string,
     bookingId: string,
     tokenPayload: TokenPayloadDto,
     cancelledBy: CancelledBy,
     dto: CancelBookingDto,
   ): Promise<Booking> {
-    const booking = await this.findById(bookingId);
+    assertLocationRole(
+      tokenPayload,
+      locationId,
+      BusinessRole.OWNER,
+      BusinessRole.STAFF,
+    );
+    const booking = await this.findByIdInLocation(locationId, bookingId);
     assertLocationRole(
       tokenPayload,
       booking.locationId,
@@ -719,10 +751,12 @@ export class BookingsService implements CalendarBookingReader {
   }
 
   async delete(
+    locationId: string,
     bookingId: string,
     tokenPayload: TokenPayloadDto,
   ): Promise<void> {
-    const booking = await this.findById(bookingId);
+    assertLocationRole(tokenPayload, locationId, BusinessRole.OWNER);
+    const booking = await this.findByIdInLocation(locationId, bookingId);
     assertLocationRole(tokenPayload, booking.locationId, BusinessRole.OWNER);
     const actor = auditActorFromToken(tokenPayload, booking.locationId);
     await this.db.$transaction([

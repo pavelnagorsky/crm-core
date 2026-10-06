@@ -59,7 +59,7 @@ export class StaffService {
     private readonly config: ConfigService,
   ) {}
 
-  listInBusiness(locationId: string): Promise<Staff[]> {
+  listInLocation(locationId: string): Promise<Staff[]> {
     return this.db.staff.findMany({
       where: { locationId },
       orderBy: { name: 'asc' },

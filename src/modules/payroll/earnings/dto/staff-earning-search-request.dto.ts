@@ -9,10 +9,6 @@ export enum StaffEarningSearchOrderBy {
 }
 
 export class StaffEarningSearchRequestDto extends PaginationRequestDto<StaffEarningSearchOrderBy> {
-  @ApiProperty({ type: String, format: 'uuid' })
-  @IsUUID()
-  locationId: string;
-
   @ApiProperty({ type: String, format: 'uuid', required: false })
   @IsOptional()
   @IsUUID()

@@ -56,6 +56,7 @@ export class PayrollService {
   ) {}
 
   async create(
+    locationId: string,
     dto: CreatePayrollPeriodDto,
     actor: AuditActor,
   ): Promise<PayrollPeriodWithResults> {
@@ -69,7 +70,7 @@ export class PayrollService {
 
     const overlap = await this.db.payrollPeriod.findFirst({
       where: {
-        locationId: dto.locationId,
+        locationId,
         startDate: { lte: endDate },
         endDate: { gte: startDate },
       },
@@ -80,12 +81,12 @@ export class PayrollService {
         HttpStatus.CONFLICT,
       );
 
-    const { currency } = await this.locationService.getLocale(dto.locationId);
+    const { currency } = await this.locationService.getLocale(locationId);
 
     try {
       const period = await this.db.payrollPeriod.create({
         data: {
-          locationId: dto.locationId,
+          locationId,
           name: dto.name ?? null,
           startDate,
           endDate,
@@ -94,7 +95,7 @@ export class PayrollService {
         include: { results: true },
       });
       this.emitPayrollAudit(
-        dto.locationId,
+        locationId,
         period.id,
         AuditEvent.PAYROLL_PERIOD_CREATED,
         AuditActionType.CREATE,
@@ -220,7 +221,7 @@ export class PayrollService {
       );
     }
 
-    const staff = await this.staffService.listInBusiness(period.locationId);
+    const staff = await this.staffService.listInLocation(period.locationId);
     const staffById = new Map(staff.map((s) => [s.id, s]));
     const [shifts, plans] = await Promise.all([
       this.staffService.listShiftsInRange(

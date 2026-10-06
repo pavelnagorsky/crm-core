@@ -24,7 +24,6 @@ import {
   ApiResponse,
   BaseResponseDto,
 } from '../../../shared/dto/base-response.dto.js';
-import { StaffService } from '../../staff/staff.service.js';
 import { CreateManualEarningDto } from './dto/create-manual-earning.dto.js';
 import { RecordProductSaleDto } from './dto/record-product-sale.dto.js';
 import { StaffEarningsByStaffRequestDto } from './dto/staff-earnings-by-staff-request.dto.js';
@@ -36,27 +35,25 @@ import { StaffEarningsService } from './staff-earnings.service.js';
 @ApiTags('Payroll')
 @Controller()
 export class StaffEarningsController {
-  constructor(
-    private readonly earnings: StaffEarningsService,
-    private readonly staffService: StaffService,
-  ) {}
+  constructor(private readonly earnings: StaffEarningsService) {}
 
   @ApiOperation({ summary: 'Search staff earnings' })
   @ApiOkResponse({ type: ApiResponse(StaffEarningSearchResponseDto) })
   @Auth()
-  @Get('payroll/earnings')
+  @Get('locations/:locationId/payroll/earnings')
   async search(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Query() dto: StaffEarningSearchRequestDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<StaffEarningSearchResponseDto>> {
     assertLocationRole(
       tokenPayload,
-      dto.locationId,
+      locationId,
       BusinessRole.OWNER,
       BusinessRole.STAFF,
     );
     const { items, totalItems } = await this.earnings.search(
-      dto.locationId,
+      locationId,
       dto,
     );
     return BaseResponseDto.success(
@@ -73,24 +70,23 @@ export class StaffEarningsController {
   @ApiOperation({ summary: 'List earnings for a staff member' })
   @ApiOkResponse({ type: ApiResponse(StaffEarningSearchResponseDto) })
   @Auth()
-  @Get('staff/:id/earnings')
+  @Get('locations/:locationId/staff/:id/earnings')
   async listForStaff(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Query() dto: StaffEarningsByStaffRequestDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<StaffEarningSearchResponseDto>> {
-    const staff = await this.staffService.findById(id);
     assertLocationRole(
       tokenPayload,
-      staff.locationId,
+      locationId,
       BusinessRole.OWNER,
       BusinessRole.STAFF,
     );
-    const { items, totalItems } = await this.earnings.search(staff.locationId, {
+    const { items, totalItems } = await this.earnings.search(locationId, {
       ...dto,
-      locationId: staff.locationId,
       staffId: id,
-    } as StaffEarningSearchRequestDto);
+    });
     return BaseResponseDto.success(
       new StaffEarningSearchResponseDto(
         items.map(StaffEarningResponseDto.fromEntity),
@@ -106,18 +102,19 @@ export class StaffEarningsController {
   @ApiCreatedResponse({ type: ApiResponse(StaffEarningResponseDto) })
   @ApiNotFoundResponse({ description: 'Staff member not found' })
   @Auth()
-  @Post('staff/:id/earnings')
+  @Post('locations/:locationId/staff/:id/earnings')
   async createManual(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateManualEarningDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<StaffEarningResponseDto>> {
-    const staff = await this.staffService.findById(id);
-    assertLocationRole(tokenPayload, staff.locationId, BusinessRole.OWNER);
+    assertLocationRole(tokenPayload, locationId, BusinessRole.OWNER);
     const earning = await this.earnings.createManual(
+      locationId,
       id,
       dto,
-      auditActorFromToken(tokenPayload, staff.locationId),
+      auditActorFromToken(tokenPayload, locationId),
     );
     return BaseResponseDto.success(StaffEarningResponseDto.fromEntity(earning));
   }
@@ -125,16 +122,17 @@ export class StaffEarningsController {
   @ApiOperation({ summary: 'Record a product sale commission (no inventory)' })
   @ApiCreatedResponse({ type: ApiResponse(StaffEarningResponseDto) })
   @Auth()
-  @Post('payroll/product-sales')
+  @Post('locations/:locationId/payroll/product-sales')
   async recordProductSale(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
     @Body() dto: RecordProductSaleDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<StaffEarningResponseDto>> {
-    assertLocationRole(tokenPayload, dto.locationId, BusinessRole.OWNER);
+    assertLocationRole(tokenPayload, locationId, BusinessRole.OWNER);
     const earning = await this.earnings.recordProductSale(
-      dto.locationId,
+      locationId,
       dto,
-      auditActorFromToken(tokenPayload, dto.locationId),
+      auditActorFromToken(tokenPayload, locationId),
     );
     return BaseResponseDto.success(StaffEarningResponseDto.fromEntity(earning));
   }

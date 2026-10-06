@@ -16,10 +16,6 @@ import { BookingSearchOrderBy } from '../../enums/booking-search-order-by.enum.j
 import { BookingStatus } from '../../enums/booking-status.enum.js';
 
 export class BookingExportRequestDto {
-  @ApiProperty({ type: String, format: 'uuid' })
-  @IsUUID()
-  locationId: string;
-
   @ApiProperty({
     type: String,
     required: false,

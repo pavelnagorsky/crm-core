@@ -148,7 +148,6 @@ describe('BookingsExportService', () => {
     });
 
     const file = await service.stream('business-1', {
-      locationId: 'business-1',
       search: 'анна',
       status: BookingStatusFilter.CONFIRMED,
       staffIds: ['staff-1'],
@@ -163,7 +162,6 @@ describe('BookingsExportService', () => {
     });
 
     expect(bookings.search).toHaveBeenCalledWith('business-1', {
-      locationId: 'business-1',
       search: 'анна',
       status: BookingStatusFilter.CONFIRMED,
       staffIds: ['staff-1'],

@@ -83,22 +83,25 @@ export class StaffEarningsService {
   }
 
   async createManual(
+    locationId: string,
     staffId: string,
     dto: CreateManualEarningDto,
     actor: AuditActor,
   ): Promise<StaffEarning> {
     const staff = await this.staffService.findById(staffId);
+    if (staff.locationId !== locationId)
+      throw new AppException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND);
     const { timezone, currency } = await this.locationService.getLocale(
-      staff.locationId,
+      locationId,
     );
     const earnedOnStr =
       dto.earnedOn ?? TimeService.zonedDateStr(new Date(), timezone);
     const earnedOn = TimeService.dateOnly(earnedOnStr);
-    await this.assertDateUnlocked(staff.locationId, earnedOn);
+    await this.assertDateUnlocked(locationId, earnedOn);
 
     const amount = this.calculator.manualAmount(dto.type, dto.amount);
     const earning = await this.insertEarning({
-      locationId: staff.locationId,
+      locationId,
       staffId,
       type: dto.type,
       source: StaffEarningSource.MANUAL,
@@ -112,7 +115,7 @@ export class StaffEarningsService {
     });
 
     this.emitEarningAudit(
-      staff.locationId,
+      locationId,
       staffId,
       AuditEvent.STAFF_EARNING_ADDED,
       actor,

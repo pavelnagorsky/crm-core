@@ -16,17 +16,13 @@ import { IsLocalDateTime } from '../../time/decorators/is-local-date-time.valida
 import { AtMostOneBookingChannelConstraint } from '../decorators/at-most-one-booking-channel.constraint.js';
 
 export class CreateBookingDto {
-  @ApiProperty({ type: String, format: 'uuid' })
-  @Validate(AtMostOneBookingChannelConstraint)
-  @IsUUID()
-  locationId: string;
-
   @ApiProperty({
     type: String,
     format: 'uuid',
     required: false,
     description: 'Published booking page that produced this booking',
   })
+  @Validate(AtMostOneBookingChannelConstraint)
   @IsOptional()
   @IsUUID()
   bookingPageId?: string;

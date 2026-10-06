@@ -3,7 +3,6 @@ import { CreateBookingDto } from './create-booking.dto.js';
 
 function booking(overrides: Partial<CreateBookingDto> = {}): CreateBookingDto {
   return Object.assign(new CreateBookingDto(), {
-    locationId: '11111111-1111-4111-8111-111111111111',
     serviceId: '22222222-2222-4222-8222-222222222222',
     startAt: '2026-09-20T10:00:00',
     firstName: 'Ann',

@@ -12,10 +12,6 @@ import { TrimString } from '../../../../shared/transforms/trim-string.transform.
 export class RecordProductSaleDto {
   @ApiProperty({ type: String, format: 'uuid' })
   @IsUUID()
-  locationId: string;
-
-  @ApiProperty({ type: String, format: 'uuid' })
-  @IsUUID()
   staffId: string;
 
   @IsPrice()

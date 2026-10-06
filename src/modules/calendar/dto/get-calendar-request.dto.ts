@@ -25,7 +25,7 @@ export class GetCalendarRequestDto {
     type: [String],
     required: false,
     description:
-      'Filter events by staff member UUIDs. Business-level events (staffId=null) are always included.',
+      'Filter events by staff member UUIDs. Location-level events (staffId=null) are always included.',
   })
   @IsOptional()
   @Transform(({ value }) => {
