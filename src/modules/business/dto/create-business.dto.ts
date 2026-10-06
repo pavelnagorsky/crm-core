@@ -23,7 +23,7 @@ export class CreateBusinessDto {
   @IsUUID()
   logoFileId?: string;
 
-  @ApiProperty({ type: Number, default: 15, required: false })
+  @ApiProperty({ type: Number, default: 60, required: false })
   @IsOptional()
   @IsInt()
   @Min(1)

@@ -173,6 +173,11 @@ export class ServiceCatalogService {
       fixedPrice: bundle.fixedPrice,
       itemsCount: bundle.items.length,
       itemTitles: bundle.items.map((item) => item.service.title),
+      items: bundle.items.map((item) => ({
+        serviceId: item.serviceId,
+        serviceTitle: item.service.title,
+        sortOrder: item.sortOrder,
+      })),
     };
   }
 

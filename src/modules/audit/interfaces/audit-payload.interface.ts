@@ -160,6 +160,7 @@ interface StaffEarningAuditPayload {
   currency: string;
   reason?: string;
   bookingId?: string;
+  bookingItemId?: string | null;
   externalId?: string;
   staffId?: string;
 }

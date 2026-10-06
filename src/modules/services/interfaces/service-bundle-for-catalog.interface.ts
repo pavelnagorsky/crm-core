@@ -4,6 +4,7 @@ export interface ServiceBundleForCatalog extends ServiceBundle {
   imageFile: File | null;
   category: { name: string } | null;
   items: Array<{
+    serviceId: string;
     sortOrder: number;
     service: {
       title: string;

@@ -5,6 +5,7 @@ import { BookingExecutionMode } from '../../bookings/enums/booking-execution-mod
 import { BundlePricingMode } from '../enums/bundle-pricing-mode.enum.js';
 import { ServiceCatalogKind } from '../enums/service-catalog-kind.enum.js';
 import { ServiceCatalogBundleItem } from '../interfaces/service-catalog-bundle-item.interface.js';
+import { ServiceCatalogBundleServiceItemDto } from './service-catalog-bundle-service-item.dto.js';
 import { ServiceCatalogItemBaseDto } from './service-catalog-item-base.dto.js';
 
 export class ServiceCatalogBundleItemDto extends ServiceCatalogItemBaseDto {
@@ -26,6 +27,9 @@ export class ServiceCatalogBundleItemDto extends ServiceCatalogItemBaseDto {
   @ApiProperty({ type: String, isArray: true })
   itemTitles: string[];
 
+  @ApiProperty({ type: () => ServiceCatalogBundleServiceItemDto, isArray: true })
+  items: ServiceCatalogBundleServiceItemDto[];
+
   static fromEntity(item: ServiceCatalogBundleItem): ServiceCatalogBundleItemDto {
     const dto = new ServiceCatalogBundleItemDto();
     ServiceCatalogItemBaseDto.assign(dto, item);
@@ -34,6 +38,7 @@ export class ServiceCatalogBundleItemDto extends ServiceCatalogItemBaseDto {
     dto.fixedPrice = item.fixedPrice == null ? null : MoneyService.format(item.fixedPrice);
     dto.itemsCount = item.itemsCount;
     dto.itemTitles = item.itemTitles;
+    dto.items = item.items.map(ServiceCatalogBundleServiceItemDto.fromEntity);
     return dto;
   }
 }

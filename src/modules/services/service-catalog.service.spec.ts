@@ -53,6 +53,7 @@ function bundleRow(overrides: Partial<ServiceBundleForCatalog> = {}): ServiceBun
     category: { name: 'Цвет' },
     items: [
       {
+        serviceId: 'color',
         sortOrder: 0,
         service: {
           title: 'Окрашивание',
@@ -62,6 +63,7 @@ function bundleRow(overrides: Partial<ServiceBundleForCatalog> = {}): ServiceBun
         },
       },
       {
+        serviceId: 'style',
         sortOrder: 1,
         service: {
           title: 'Укладка',
@@ -254,13 +256,17 @@ describe('ServiceCatalogService', () => {
     expect(page2.items.map((item) => item.id)).toEqual(['b-1']);
   });
 
-  it('maps bundle metrics without loading full items into the list DTO', async () => {
+  it('maps bundle metrics and child service items into the list DTO', async () => {
     const { items } = await catalog.search('biz', request({ kind: ServiceCatalogKind.BUNDLE }));
     const dto = ServiceCatalogItemDto.fromEntity(items[0]);
 
     expect(dto.price).toBe('100.00');
     expect(dto.durationMinutes).toBe(90);
     expect(dto.itemsCount).toBe(2);
+    expect(dto.items).toEqual([
+      { serviceId: 'color', serviceTitle: 'Окрашивание', sortOrder: 0 },
+      { serviceId: 'style', serviceTitle: 'Укладка', sortOrder: 1 },
+    ]);
     expect(dto.itemTitles).toEqual(['Окрашивание', 'Укладка']);
     expect(dto.executionMode).toBe(BookingExecutionMode.SEQUENTIAL);
     expect(dto.pricingMode).toBe(BundlePricingMode.SUM);

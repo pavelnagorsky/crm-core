@@ -268,7 +268,7 @@ model Business {
   id                            String              @id @default(uuid())
   name                          String              @db.VarChar(255)
   logoFileId                    String?
-  advanceBookingWindowDays      Int                 @default(15)
+  advanceBookingWindowDays      Int                 @default(60)
   slotIntervalMinutes           Int                 @default(30)
   minimumBookingNoticeMinutes   Int                 @default(0)
   timezone                      String              @default("UTC") @db.VarChar(64)
