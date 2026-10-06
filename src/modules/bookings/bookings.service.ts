@@ -31,7 +31,7 @@ import { CalendarBookingFeed } from '../calendar/interfaces/calendar-booking-fee
 import { CalendarService } from '../calendar/calendar.service.js';
 import { StaffService } from '../staff/staff.service.js';
 import { StaffEarningsService } from '../payroll/earnings/staff-earnings.service.js';
-import { BusinessService } from '../business/business.service.js';
+import { LocationService } from '../location/location.service.js';
 import { BookingSetupCategoryDto } from './dto/booking-setup-category.dto.js';
 import { BookingSetupResponseDto } from './dto/booking-setup-response.dto.js';
 import { BookingSetupStaffDto } from './dto/booking-setup-staff.dto.js';
@@ -85,7 +85,7 @@ export class BookingsService implements CalendarBookingReader {
     @Inject(forwardRef(() => CalendarService))
     private readonly calendarService: CalendarService,
     private readonly staffService: StaffService,
-    private readonly businessService: BusinessService,
+    private readonly locationService: LocationService,
     private readonly staffEarnings: StaffEarningsService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
@@ -317,7 +317,7 @@ export class BookingsService implements CalendarBookingReader {
     ];
     if (changes.length > 0) {
       const currency = changes.some((change) => change.field === 'customPrice')
-        ? (await this.businessService.getLocale(locationId)).currency
+        ? (await this.locationService.getLocale(locationId)).currency
         : undefined;
       this.logger.log(
         `booking updated: id=${bookingId} locationId=${locationId} fields=${changes.map((change) => change.field).join(',')}`,
@@ -387,7 +387,7 @@ export class BookingsService implements CalendarBookingReader {
       },
     });
     if (dto.status === BookingStatus.CONFIRMED && old.clientEmail) {
-      const { timezone } = await this.businessService.getLocale(old.locationId);
+      const { timezone } = await this.locationService.getLocale(old.locationId);
       this.eventEmitter.emit(
         NOTIFICATION_EVENT,
         new BookingStatusChangedNotification(
@@ -805,7 +805,7 @@ export class BookingsService implements CalendarBookingReader {
       payload: { cancelledBy, reason: storedReason ?? undefined },
     });
     if (booking.clientEmail && cancelledBy === CancelledBy.STAFF) {
-      const { timezone } = await this.businessService.getLocale(
+      const { timezone } = await this.locationService.getLocale(
         booking.locationId,
       );
       this.eventEmitter.emit(

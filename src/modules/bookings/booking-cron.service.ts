@@ -4,7 +4,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
 import { NOTIFICATION_EVENT } from '../notifications/notifications.service.js';
 import { BookingReminderNotification } from '../notifications/notifications/booking-reminder.notification.js';
-import { BusinessService } from '../business/business.service.js';
+import { LocationService } from '../location/location.service.js';
 import { BookingsService } from './bookings.service.js';
 import {
   AUTO_COMPLETABLE_STATUSES,
@@ -19,7 +19,7 @@ export class BookingCronService {
     private readonly db: DatabaseService,
     private readonly bookings: BookingsService,
     private readonly eventEmitter: EventEmitter2,
-    private readonly businessService: BusinessService,
+    private readonly locationService: LocationService,
   ) {}
 
   @Cron(CronExpression.EVERY_HOUR)
@@ -43,7 +43,7 @@ export class BookingCronService {
     this.logger.log(`Sending reminders for ${bookings.length} booking(s)`);
 
     const locationIds = [...new Set(bookings.map((b) => b.locationId))];
-    const locales = await this.businessService.getLocalesByIds(locationIds);
+    const locales = await this.locationService.getLocalesByIds(locationIds);
 
     await Promise.all(
       bookings.map(async (booking) => {

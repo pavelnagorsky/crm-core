@@ -10,7 +10,7 @@ import {
 import { DatabaseService } from '../../database/database.service.js';
 import { CalendarService } from '../calendar/calendar.service.js';
 import { StaffService } from '../staff/staff.service.js';
-import { BusinessService } from '../business/business.service.js';
+import { LocationService } from '../location/location.service.js';
 import { StaffEarningsService } from '../payroll/earnings/staff-earnings.service.js';
 import { BookingsService } from './bookings.service.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
@@ -104,7 +104,7 @@ describe('BookingsService.completeElapsed', () => {
         { provide: DatabaseService, useValue: db },
         { provide: CalendarService, useValue: {} },
         { provide: StaffService, useValue: {} },
-        { provide: BusinessService, useValue: {} },
+        { provide: LocationService, useValue: {} },
         { provide: StaffEarningsService, useValue: earnings },
         { provide: EventEmitter2, useValue: emitter },
       ],
@@ -162,7 +162,7 @@ describe('BookingsService.search', () => {
         { provide: DatabaseService, useValue: db },
         { provide: CalendarService, useValue: {} },
         { provide: StaffService, useValue: {} },
-        { provide: BusinessService, useValue: {} },
+        { provide: LocationService, useValue: {} },
         { provide: StaffEarningsService, useValue: {} },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
       ],
@@ -338,7 +338,7 @@ describe('BookingsService.listForCalendar', () => {
         { provide: DatabaseService, useValue: db },
         { provide: CalendarService, useValue: {} },
         { provide: StaffService, useValue: {} },
-        { provide: BusinessService, useValue: {} },
+        { provide: LocationService, useValue: {} },
         { provide: StaffEarningsService, useValue: {} },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
       ],
@@ -444,7 +444,7 @@ describe('BookingsService catalog selection', () => {
         { provide: DatabaseService, useValue: db },
         { provide: CalendarService, useValue: {} },
         { provide: StaffService, useValue: staff },
-        { provide: BusinessService, useValue: {} },
+        { provide: LocationService, useValue: {} },
         { provide: StaffEarningsService, useValue: {} },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
       ],
@@ -656,7 +656,7 @@ describe('BookingsService.update item prices', () => {
         { provide: CalendarService, useValue: {} },
         { provide: StaffService, useValue: {} },
         {
-          provide: BusinessService,
+          provide: LocationService,
           useValue: {
             getLocale: vi.fn().mockResolvedValue({ currency: 'BYN' }),
           },

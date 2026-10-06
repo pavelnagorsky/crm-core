@@ -2,7 +2,7 @@ import { Test } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { BookingStatus } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
-import { BusinessService } from '../business/business.service.js';
+import { LocationService } from '../location/location.service.js';
 import { BookingCronService } from './booking-cron.service.js';
 import { BookingsService } from './bookings.service.js';
 
@@ -31,7 +31,7 @@ describe('BookingCronService.sendReminders', () => {
         { provide: DatabaseService, useValue: db },
         { provide: BookingsService, useValue: bookings },
         { provide: EventEmitter2, useValue: emitter },
-        { provide: BusinessService, useValue: business },
+        { provide: LocationService, useValue: business },
       ],
     }).compile();
     service = module.get(BookingCronService);

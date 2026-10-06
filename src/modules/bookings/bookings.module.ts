@@ -11,7 +11,7 @@ import { PublicBookingRateLimiter } from './public-booking-rate-limiter.js';
 import { I18nModule } from '../../shared/i18n/i18n.module.js';
 import { JwtBookingClientStrategy } from './strategy/jwt-booking-client.strategy.js';
 import { CalendarBookingReader } from '../calendar/calendar-booking-reader.js';
-import { BusinessModule } from '../business/business.module.js';
+import { LocationModule } from '../location/location.module.js';
 import { CalendarModule } from '../calendar/calendar.module.js';
 import { ClientsModule } from '../clients/clients.module.js';
 import { StaffModule } from '../staff/staff.module.js';
@@ -23,7 +23,7 @@ import { BookingChannelsModule } from '../booking-channels/booking-channels.modu
   // Public booking creation attributes the row to a page or widget owned by BookingChannelsModule.
   imports: [
     PassportModule,
-    BusinessModule,
+    LocationModule,
     forwardRef(() => CalendarModule),
     ClientsModule,
     StaffModule,
