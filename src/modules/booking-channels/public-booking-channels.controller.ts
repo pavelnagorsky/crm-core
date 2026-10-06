@@ -20,8 +20,8 @@ import {
   BaseResponseDto,
 } from '../../shared/dto/base-response.dto.js';
 import { requestOrigin } from '../../shared/http/request-context.js';
-import { BusinessService } from '../business/business.service.js';
 import { BookingsService } from '../bookings/bookings.service.js';
+import { LocationService } from '../location/location.service.js';
 import { BookingPagesService } from './booking-pages.service.js';
 import { BookingWidgetsService } from './booking-widgets.service.js';
 import { PublicBookingPageResponseDto } from './dto/public-booking-page-response.dto.js';
@@ -33,7 +33,7 @@ export class PublicBookingChannelsController {
   constructor(
     private readonly pages: BookingPagesService,
     private readonly widgets: BookingWidgetsService,
-    private readonly businessService: BusinessService,
+    private readonly locationService: LocationService,
     @Inject(forwardRef(() => BookingsService))
     private readonly bookingsService: BookingsService,
   ) {}
@@ -46,12 +46,12 @@ export class PublicBookingChannelsController {
     @Param('slug') slug: string,
   ): Promise<BaseResponseDto<PublicBookingPageResponseDto>> {
     const page = await this.pages.getPublishedBySlug(slug);
-    const [business, setup] = await Promise.all([
-      this.businessService.findById(page.locationId),
+    const [location, setup] = await Promise.all([
+      this.locationService.findPublicProfile(page.locationId),
       this.bookingsService.getBookingSetup(page.locationId),
     ]);
     return BaseResponseDto.success(
-      PublicBookingPageResponseDto.from(page, business, setup),
+      PublicBookingPageResponseDto.from(page, location, setup),
     );
   }
 
@@ -72,12 +72,12 @@ export class PublicBookingChannelsController {
       widgetId,
       requestOrigin(req),
     );
-    const [business, setup] = await Promise.all([
-      this.businessService.findById(widget.locationId),
+    const [location, setup] = await Promise.all([
+      this.locationService.findPublicProfile(widget.locationId),
       this.bookingsService.getBookingSetup(widget.locationId),
     ]);
     return BaseResponseDto.success(
-      PublicBookingWidgetResponseDto.from(widget, business, setup),
+      PublicBookingWidgetResponseDto.from(widget, location, setup),
     );
   }
 }

@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { BookingWidget } from '@prisma/client';
-import { BusinessWithLogo } from '../../business/interfaces/business-with-logo.interface.js';
-import { BusinessPublicResponseDto } from '../../business/dto/business-public-response.dto.js';
+import { LocationPublicProfile } from '../../location/interfaces/location-public-profile.interface.js';
+import { LocationPublicResponseDto } from '../../location/dto/location-public-response.dto.js';
 import { BookingSetupResponseDto } from '../../bookings/dto/booking-setup-response.dto.js';
 import {
   resolveBookingFormTheme,
@@ -18,8 +18,8 @@ export class PublicBookingWidgetResponseDto {
   @ApiProperty({ type: () => BookingFormThemeDto })
   theme: BookingFormThemeDto;
 
-  @ApiProperty({ type: () => BusinessPublicResponseDto })
-  business: BusinessPublicResponseDto;
+  @ApiProperty({ type: () => LocationPublicResponseDto })
+  location: LocationPublicResponseDto;
 
   @ApiProperty({ type: () => BookingSetupResponseDto })
   setup: BookingSetupResponseDto;
@@ -29,13 +29,13 @@ export class PublicBookingWidgetResponseDto {
 
   static from(
     widget: BookingWidget,
-    business: BusinessWithLogo,
+    location: LocationPublicProfile,
     setup: BookingSetupResponseDto,
   ): PublicBookingWidgetResponseDto {
     const dto = new PublicBookingWidgetResponseDto();
     dto.config = toBookingFormConfig(widget);
     dto.theme = resolveBookingFormTheme(widget);
-    dto.business = BusinessPublicResponseDto.fromEntity(business);
+    dto.location = LocationPublicResponseDto.fromEntity(location);
     dto.setup = setup;
     dto.widget = PublicBookingWidgetDetailsDto.from(widget);
     return dto;

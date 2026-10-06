@@ -10,7 +10,7 @@ import { DatabaseService } from '../../database/database.service.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { MoneyService } from '../../shared/money/money.service.js';
 import { LocationService } from '../location/location.service.js';
-import { BookingVisibility } from '../business/enums/booking-visibility.enum.js';
+import { BookingVisibility } from '@prisma/client';
 import { StaffService } from '../staff/staff.service.js';
 import { TimeService } from '../time/time.service.js';
 import { CalendarBookingReader } from './calendar-booking-reader.js';

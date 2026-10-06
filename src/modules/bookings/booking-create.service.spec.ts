@@ -2,7 +2,7 @@ import { HttpStatus } from '@nestjs/common';
 import { CalendarEventRepeatType, CalendarEventType } from '@prisma/client';
 import { BookingCreateService } from './booking-create.service.js';
 import { CreateBookingDto } from './dto/create-booking.dto.js';
-import { BookingVisibility } from '../business/enums/booking-visibility.enum.js';
+import { BookingVisibility } from '@prisma/client';
 import { AuditActorRole } from '../audit/enums/audit-actor-role.enum.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { BookingStatus } from './enums/booking-status.enum.js';

@@ -1,6 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { BookingVisibility } from '../business/enums/booking-visibility.enum.js';
-import { BusinessService } from '../business/business.service.js';
+import { BookingVisibility } from '@prisma/client';
+import { LocationService } from '../location/location.service.js';
 import { ServicesService } from '../services/services.service.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
@@ -13,7 +13,7 @@ export function publishedAtFor(status: BookingChannelStatus): Date | null {
 @Injectable()
 export class BookingChannelPublishService {
   constructor(
-    private readonly businessService: BusinessService,
+    private readonly locationService: LocationService,
     private readonly servicesService: ServicesService,
   ) {}
 
@@ -33,8 +33,8 @@ export class BookingChannelPublishService {
   }
 
   private async assertCanPublish(locationId: string): Promise<void> {
-    const business = await this.businessService.findById(locationId);
-    if (business.bookingVisibility === BookingVisibility.PRIVATE) {
+    const location = await this.locationService.findById(locationId);
+    if (location.bookingVisibility === BookingVisibility.PRIVATE) {
       throw new AppException(
         ErrorCode.BOOKING_CHANNEL_CLOSED,
         HttpStatus.CONFLICT,

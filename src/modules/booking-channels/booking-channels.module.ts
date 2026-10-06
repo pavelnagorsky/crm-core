@@ -1,5 +1,5 @@
 import { forwardRef, Module } from '@nestjs/common';
-import { BusinessModule } from '../business/business.module.js';
+import { LocationModule } from '../location/location.module.js';
 import { ServicesModule } from '../services/services.module.js';
 import { FilesModule } from '../files/files.module.js';
 import { BookingsModule } from '../bookings/bookings.module.js';
@@ -13,7 +13,7 @@ import { BookingChannelAttributionService } from './booking-channel-attribution.
 
 @Module({
   imports: [
-    BusinessModule,
+    LocationModule,
     ServicesModule,
     FilesModule,
     // Public channel responses inline booking setup, and public booking creation

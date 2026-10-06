@@ -13,6 +13,7 @@ import { TokenEpochRegistryService } from '../auth/token-epoch-registry.service.
 import { BrandService } from '../brand/brand.service.js';
 import { CreateLocationDto } from './dto/create-location.dto.js';
 import { UpdateLocationDto } from './dto/update-location.dto.js';
+import { LocationPublicProfile } from './interfaces/location-public-profile.interface.js';
 
 @Injectable()
 export class LocationService {
@@ -43,6 +44,15 @@ export class LocationService {
   async findById(locationId: string): Promise<Location> {
     const location = await this.db.location.findUnique({
       where: { id: locationId },
+    });
+    if (!location) throw new NotFoundException('Location not found');
+    return location;
+  }
+
+  async findPublicProfile(locationId: string): Promise<LocationPublicProfile> {
+    const location = await this.db.location.findUnique({
+      where: { id: locationId },
+      include: { brand: { include: { logoFile: true } } },
     });
     if (!location) throw new NotFoundException('Location not found');
     return location;

@@ -8,13 +8,13 @@ import {
 } from '@nestjs/common';
 import {
   BookingExecutionMode as PrismaBookingExecutionMode,
+  BookingVisibility,
   CalendarEventRepeatType,
   CalendarEventType,
   Prisma,
   ServiceStatus,
 } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { BookingVisibility } from '../business/enums/booking-visibility.enum.js';
 import { DatabaseService } from '../../database/database.service.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { MoneyService } from '../../shared/money/money.service.js';

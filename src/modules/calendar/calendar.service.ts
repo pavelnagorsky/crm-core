@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import {
+  BookingVisibility,
   CalendarEvent,
   CalendarEventRepeatType,
   CalendarEventType,
@@ -15,7 +16,6 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
-import { BookingVisibility } from '../business/enums/booking-visibility.enum.js';
 import { DatabaseService } from '../../database/database.service.js';
 import { AUDIT_EVENT } from '../audit/audit.constants.js';
 import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
