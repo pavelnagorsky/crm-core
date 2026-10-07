@@ -22,16 +22,6 @@ export class CreateOrderDto {
   })
   @IsOptional()
   @IsUUID()
-  bookingId?: string | null;
-
-  @ApiProperty({
-    type: String,
-    format: 'uuid',
-    required: false,
-    nullable: true,
-  })
-  @IsOptional()
-  @IsUUID()
   clientId?: string | null;
 
   @ApiProperty({ type: String, format: 'date-time', required: false })

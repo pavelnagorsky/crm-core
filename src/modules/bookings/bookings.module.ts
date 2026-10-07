@@ -17,6 +17,7 @@ import { ClientsModule } from '../clients/clients.module.js';
 import { StaffModule } from '../staff/staff.module.js';
 import { PayrollModule } from '../payroll/payroll.module.js';
 import { ServicesModule } from '../services/services.module.js';
+import { OrdersModule } from '../orders/orders.module.js';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { ServicesModule } from '../services/services.module.js';
     StaffModule,
     PayrollModule,
     ServicesModule,
+    OrdersModule,
     I18nModule,
   ],
   controllers: [BookingsController],

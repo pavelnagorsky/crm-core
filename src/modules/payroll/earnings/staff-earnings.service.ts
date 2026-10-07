@@ -38,6 +38,7 @@ import { StaffCompensationService } from '../compensation/staff-compensation.ser
 import { MoneyService } from '../../../shared/money/money.service.js';
 import { lockedPeriodWhere } from '../periods/locked-period.js';
 import { BookingWithItems } from '../../bookings/interfaces/booking-with-items.interface.js';
+import { OrderWithItems } from '../../orders/interfaces/order-with-items.interface.js';
 import { ProductOrderCommissionLine } from './interfaces/product-order-commission-line.interface.js';
 
 @Injectable()
@@ -54,8 +55,9 @@ export class StaffEarningsService {
   async recordForCompletedBooking(
     booking: BookingWithItems,
     tx: Prisma.TransactionClient,
+    order?: OrderWithItems,
   ): Promise<StaffEarning[]> {
-    return this.createBookingCommission(booking, tx);
+    return this.createBookingCommission(booking, tx, order);
   }
 
   async reverseForBooking(
@@ -71,6 +73,7 @@ export class StaffEarningsService {
     booking: BookingWithItems,
     actor: AuditActor,
     tx: Prisma.TransactionClient,
+    order?: OrderWithItems,
   ): Promise<StaffEarning[]> {
     const { timezone, currency } = await this.locationService.getLocale(
       booking.locationId,
@@ -80,6 +83,7 @@ export class StaffEarningsService {
     );
     const corrections: StaffEarning[] = [];
     let dateChecked = false;
+    const orderItemByBookingItemId = this.orderItemByBookingItemId(order);
 
     for (const item of booking.items) {
       const existing = await tx.staffEarning.findMany({
@@ -151,6 +155,8 @@ export class StaffEarningsService {
                 staffId === item.staffId ? (plan?.id ?? null) : null,
               bookingId: booking.id,
               bookingItemId: item.id,
+              orderId: order?.id,
+              orderItemId: orderItemByBookingItemId.get(item.id),
             },
             tx,
           ),
@@ -639,6 +645,7 @@ export class StaffEarningsService {
   private async createBookingCommission(
     booking: BookingWithItems,
     tx: Prisma.TransactionClient,
+    order?: OrderWithItems,
   ): Promise<StaffEarning[]> {
     const { timezone, currency } = await this.locationService.getLocale(
       booking.locationId,
@@ -648,6 +655,7 @@ export class StaffEarningsService {
     );
     const earnings: StaffEarning[] = [];
     let dateChecked = false;
+    const orderItemByBookingItemId = this.orderItemByBookingItemId(order);
     for (const item of booking.items) {
       const plan = await this.compensation.resolveForDate(
         item.staffId,
@@ -686,6 +694,8 @@ export class StaffEarningsService {
             compensationPlanId: plan.id,
             bookingId: booking.id,
             bookingItemId: item.id,
+            orderId: order?.id,
+            orderItemId: orderItemByBookingItemId.get(item.id),
           },
           tx,
         ),
@@ -764,6 +774,16 @@ export class StaffEarningsService {
       }
     }
     return reversals;
+  }
+
+  private orderItemByBookingItemId(
+    order: OrderWithItems | undefined,
+  ): Map<string, string> {
+    return new Map(
+      order?.items.flatMap((item) =>
+        item.bookingItemId ? [[item.bookingItemId, item.id]] : [],
+      ) ?? [],
+    );
   }
 
   private async assertDateUnlocked(

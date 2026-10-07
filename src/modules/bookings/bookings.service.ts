@@ -22,6 +22,7 @@ import { CalendarService } from '../calendar/calendar.service.js';
 import { StaffService } from '../staff/staff.service.js';
 import { StaffEarningsService } from '../payroll/earnings/staff-earnings.service.js';
 import { LocationService } from '../location/location.service.js';
+import { OrdersService } from '../orders/orders.service.js';
 import { BookingSetupCategoryDto } from './dto/booking-setup-category.dto.js';
 import { BookingSetupResponseDto } from './dto/booking-setup-response.dto.js';
 import { BookingSetupStaffDto } from './dto/booking-setup-staff.dto.js';
@@ -78,6 +79,7 @@ export class BookingsService implements CalendarBookingReader {
     private readonly locationService: LocationService,
     private readonly serviceCatalog: ServiceCatalogService,
     private readonly staffEarnings: StaffEarningsService,
+    private readonly orders: OrdersService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -264,7 +266,13 @@ export class BookingsService implements CalendarBookingReader {
     ) {
       updated = await this.db.$transaction(async (tx) => {
         const result = await tx.booking.update(updateArgs);
-        await this.staffEarnings.syncForCompletedBooking(result, actor, tx);
+        const order = await this.orders.syncCompletedBooking(result, actor, tx);
+        await this.staffEarnings.syncForCompletedBooking(
+          result,
+          actor,
+          tx,
+          order,
+        );
         return result;
       });
     } else {
@@ -341,8 +349,10 @@ export class BookingsService implements CalendarBookingReader {
         dto.status === BookingStatus.COMPLETED &&
         old.status !== BookingStatus.COMPLETED
       ) {
-        await this.staffEarnings.recordForCompletedBooking(result, tx);
+        const order = await this.orders.syncCompletedBooking(result, actor, tx);
+        await this.staffEarnings.recordForCompletedBooking(result, tx, order);
       } else if (reversesCommission) {
+        await this.orders.reverseCompletedBookingServices(result, tx);
         await this.staffEarnings.reverseForBooking(
           result,
           reversalReason,
@@ -410,7 +420,12 @@ export class BookingsService implements CalendarBookingReader {
           data: { status: BookingStatus.COMPLETED },
         });
         if (count === 0) return false;
-        await this.staffEarnings.recordForCompletedBooking(updated, tx);
+        const order = await this.orders.syncCompletedBooking(
+          updated,
+          actor,
+          tx,
+        );
+        await this.staffEarnings.recordForCompletedBooking(updated, tx, order);
         return true;
       });
       if (!didComplete) continue;
@@ -744,6 +759,7 @@ export class BookingsService implements CalendarBookingReader {
         tx,
       );
       if (booking.status === BookingStatus.COMPLETED) {
+        await this.orders.reverseCompletedBookingServices(booking, tx);
         await this.staffEarnings.reverseForBooking(booking, null, actor, tx);
       }
     });
@@ -796,6 +812,7 @@ export class BookingsService implements CalendarBookingReader {
         include: bookingWithItemsInclude,
       });
       if (booking.status === BookingStatus.COMPLETED) {
+        await this.orders.reverseCompletedBookingServices(result, tx);
         await this.staffEarnings.reverseForBooking(
           result,
           storedReason,
@@ -991,7 +1008,17 @@ export class BookingsService implements CalendarBookingReader {
         include: bookingWithItemsInclude,
       });
       if (old.status === BookingStatus.COMPLETED) {
-        await this.staffEarnings.syncForCompletedBooking(updated, actor, tx);
+        const order = await this.orders.syncCompletedBooking(
+          updated,
+          actor,
+          tx,
+        );
+        await this.staffEarnings.syncForCompletedBooking(
+          updated,
+          actor,
+          tx,
+          order,
+        );
       }
       return updated;
     });

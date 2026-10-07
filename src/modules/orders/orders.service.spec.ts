@@ -77,17 +77,27 @@ function setup() {
     $queryRaw: vi.fn().mockResolvedValue([]),
     order: {
       findFirst: vi.fn(),
+      findUnique: vi.fn(),
+      upsert: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
     },
-    orderItem: { deleteMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
+    orderItem: {
+      create: vi.fn(),
+      deleteMany: vi.fn(),
+      update: vi.fn(),
+      updateMany: vi.fn(),
+    },
   };
   const db = {
     order: {
       create: vi.fn(),
       findFirst: vi.fn(),
+      findUnique: vi.fn(),
       findMany: vi.fn(),
       count: vi.fn(),
+      update: vi.fn(),
+      upsert: vi.fn(),
     },
     $transaction: vi.fn((callback: (value: typeof tx) => unknown) =>
       callback(tx),
@@ -100,7 +110,6 @@ function setup() {
     recordForProductOrder: vi.fn(),
     reverseForProductOrder: vi.fn(),
   };
-  const bookings = { findByIdInLocation: vi.fn() };
   const clients = { findInBrand: vi.fn() };
   const locations = {
     findById: vi.fn().mockResolvedValue({
@@ -116,7 +125,6 @@ function setup() {
     inventory as never,
     staff as never,
     earnings as never,
-    bookings as never,
     clients as never,
     locations as never,
     new OrderComputeService(),
@@ -130,6 +138,7 @@ function setup() {
     inventory,
     earnings,
     events,
+    locations,
   };
 }
 
@@ -255,5 +264,84 @@ describe('OrdersService', () => {
     expect(inventory.postSale).not.toHaveBeenCalled();
     expect(earnings.recordForProductOrder).not.toHaveBeenCalled();
     expect(events.emit).not.toHaveBeenCalled();
+  });
+
+  it('creates confirmed service lines when a booking is completed', async () => {
+    const { service, tx } = setup();
+    const activeOrder = order(OrderStatus.ACTIVE);
+    const orderWithoutItems = {
+      ...activeOrder,
+      bookingId: 'booking-1',
+      items: [],
+    };
+    const orderWithService = {
+      ...activeOrder,
+      bookingId: 'booking-1',
+      items: [
+        {
+          ...activeOrder.items[0],
+          id: 'service-item-1',
+          type: OrderItemType.SERVICE,
+          bookingItemId: 'booking-item-1',
+          status: OrderItemStatus.CONFIRMED,
+          catalogItemId: 'service-1',
+          productLocationId: null,
+          title: 'Haircut',
+          sellerStaffId: 'staff-1',
+          sellerName: 'Anna',
+        },
+      ],
+    };
+    tx.order.findUnique.mockResolvedValueOnce(orderWithoutItems);
+    tx.order.findFirst.mockResolvedValueOnce(orderWithService);
+    tx.order.update.mockResolvedValue(orderWithService);
+
+    const result = await service.syncCompletedBooking(
+      {
+        id: 'booking-1',
+        locationId: 'location-1',
+        clientId: 'client-1',
+        clientFirstName: 'Ann',
+        clientLastName: 'Client',
+        clientPhone: '+79000000000',
+        endAt: new Date('2026-10-01T11:00:00.000Z'),
+        items: [
+          {
+            id: 'booking-item-1',
+            serviceId: 'service-1',
+            serviceTitle: 'Haircut',
+            chargedPrice: new Prisma.Decimal(50),
+            customPrice: null,
+            staffId: 'staff-1',
+            staffName: 'Anna',
+            endAt: new Date('2026-10-01T11:00:00.000Z'),
+          },
+        ],
+      } as never,
+      owner,
+      tx as never,
+    );
+
+    expect(tx.order.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { bookingId: 'booking-1' } }),
+    );
+    expect(tx.orderItem.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          orderId: 'order-1',
+          type: OrderItemType.SERVICE,
+          bookingItemId: 'booking-item-1',
+          status: OrderItemStatus.CONFIRMED,
+        }),
+      }),
+    );
+    expect(tx.order.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          totalAmount: expect.objectContaining({}),
+        }),
+      }),
+    );
+    expect(result.items[0].bookingItemId).toBe('booking-item-1');
   });
 });

@@ -24,7 +24,7 @@ import { AuditEntity } from '../audit/enums/audit-entity.enum.js';
 import { AuditEvent } from '../audit/enums/audit-event.enum.js';
 import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js';
-import { BookingsService } from '../bookings/bookings.service.js';
+import { BookingWithItems } from '../bookings/interfaces/booking-with-items.interface.js';
 import { ClientsService } from '../clients/clients.service.js';
 import { InventoryService } from '../inventory/inventory.service.js';
 import { InventorySaleLine } from '../inventory/interfaces/inventory-sale-line.interface.js';
@@ -56,7 +56,6 @@ export class OrdersService {
     private readonly inventory: InventoryService,
     private readonly staff: StaffService,
     private readonly earnings: StaffEarningsService,
-    private readonly bookings: BookingsService,
     private readonly clients: ClientsService,
     private readonly locations: LocationService,
     private readonly compute: OrderComputeService,
@@ -149,6 +148,115 @@ export class OrdersService {
     });
     if (!order) throw new NotFoundException('Order not found');
     return order;
+  }
+
+  async syncCompletedBooking(
+    booking: BookingWithItems,
+    actor: AuditActor,
+    tx: Prisma.TransactionClient,
+  ): Promise<OrderWithItems> {
+    const location = await this.locations.findById(booking.locationId);
+    await tx.order.upsert({
+      where: { bookingId: booking.id },
+      update: {
+        clientId: booking.clientId,
+        clientName: this.clientName(
+          booking.clientFirstName,
+          booking.clientLastName,
+        ),
+        clientPhone: booking.clientPhone,
+        occurredAt: booking.endAt,
+      },
+      create: {
+        locationId: booking.locationId,
+        bookingId: booking.id,
+        clientId: booking.clientId,
+        clientName: this.clientName(
+          booking.clientFirstName,
+          booking.clientLastName,
+        ),
+        clientPhone: booking.clientPhone,
+        currency: location.currency,
+        occurredAt: booking.endAt,
+        createdById: actor.id ?? null,
+        createdByName: actor.name,
+      },
+    });
+
+    const order = await this.findByBookingInTransaction(
+      tx,
+      booking.locationId,
+      booking.id,
+    );
+    const existingByBookingItem = new Map(
+      order.items
+        .filter((item) => item.type === OrderItemType.SERVICE)
+        .map((item) => [item.bookingItemId, item]),
+    );
+
+    for (const item of booking.items) {
+      const existing = existingByBookingItem.get(item.id);
+      if (existing?.status === OrderItemStatus.CONFIRMED) continue;
+      const price = this.compute.priceLine(
+        new Prisma.Decimal(1),
+        item.chargedPrice,
+        item.customPrice,
+      );
+      const confirmedAt = new Date();
+      const data = {
+        type: OrderItemType.SERVICE,
+        bookingItemId: item.id,
+        status: OrderItemStatus.CONFIRMED,
+        catalogItemId: item.serviceId,
+        title: item.serviceTitle,
+        quantity: new Prisma.Decimal(1),
+        listUnitPrice: price.listUnitPrice,
+        customUnitPrice: price.customUnitPrice,
+        unitPrice: price.unitPrice,
+        lineSubtotal: price.lineSubtotal,
+        discountTotal: price.discountTotal,
+        lineTotal: price.lineTotal,
+        sellerStaffId: item.staffId,
+        sellerName: item.staffName,
+        confirmedAt,
+        occurredAt: item.endAt,
+      };
+      if (existing) {
+        await tx.orderItem.update({
+          where: { id: existing.id },
+          data,
+        });
+      } else {
+        await tx.orderItem.create({
+          data: {
+            ...data,
+            orderId: order.id,
+          },
+        });
+      }
+    }
+
+    return this.refreshTotals(tx, booking.locationId, order.id);
+  }
+
+  async reverseCompletedBookingServices(
+    booking: BookingWithItems,
+    tx: Prisma.TransactionClient,
+  ): Promise<OrderWithItems | null> {
+    const order = await tx.order.findUnique({
+      where: { bookingId: booking.id },
+      include: orderInclude,
+    });
+    if (!order || order.locationId !== booking.locationId) return null;
+    await tx.orderItem.updateMany({
+      where: {
+        orderId: order.id,
+        type: OrderItemType.SERVICE,
+        status: OrderItemStatus.CONFIRMED,
+      },
+      data: { status: OrderItemStatus.REVERSED },
+    });
+    return this.refreshTotals(tx, booking.locationId, order.id);
   }
 
   async search(
@@ -518,16 +626,7 @@ export class OrdersService {
         HttpStatus.BAD_REQUEST,
       );
     }
-    const booking = dto.bookingId
-      ? await this.bookings.findByIdInLocation(locationId, dto.bookingId)
-      : null;
-    const clientId = dto.clientId ?? booking?.clientId ?? null;
-    if (booking && dto.clientId && dto.clientId !== booking.clientId) {
-      throw new AppException(
-        ErrorCode.ORDER_CLIENT_BOOKING_MISMATCH,
-        HttpStatus.BAD_REQUEST,
-      );
-    }
+    const clientId = dto.clientId ?? null;
     const client = clientId
       ? await this.clients.findInBrand(location.brandId, clientId)
       : null;
@@ -583,7 +682,7 @@ export class OrdersService {
     );
     return {
       location,
-      bookingId: booking?.id ?? null,
+      bookingId: null,
       clientId,
       clientName: client
         ? `${client.firstName} ${client.lastName}`.trim()
@@ -667,6 +766,32 @@ export class OrdersService {
     }
   }
 
+  private async refreshTotals(
+    tx: Prisma.TransactionClient,
+    locationId: string,
+    orderId: string,
+  ): Promise<OrderWithItems> {
+    const order = await this.findInTransaction(tx, locationId, orderId);
+    const totals = this.compute.totals(
+      order.items
+        .filter((item) => item.status !== OrderItemStatus.REVERSED)
+        .map((item) => ({
+          listUnitPrice: item.listUnitPrice,
+          listLineTotal: item.quantity.mul(item.listUnitPrice),
+          customUnitPrice: item.customUnitPrice,
+          unitPrice: item.unitPrice,
+          lineSubtotal: item.lineSubtotal,
+          discountTotal: item.discountTotal,
+          lineTotal: item.lineTotal,
+        })),
+    );
+    return tx.order.update({
+      where: { id: orderId },
+      data: totals,
+      include: orderInclude,
+    });
+  }
+
   private inTransaction<T>(
     operation: (tx: Prisma.TransactionClient) => Promise<T>,
   ): Promise<T> {
@@ -696,6 +821,25 @@ export class OrdersService {
     });
     if (!order) throw new NotFoundException('Order not found');
     return order;
+  }
+
+  private async findByBookingInTransaction(
+    tx: Prisma.TransactionClient,
+    locationId: string,
+    bookingId: string,
+  ): Promise<OrderWithItems> {
+    const order = await tx.order.findUnique({
+      where: { bookingId },
+      include: orderInclude,
+    });
+    if (!order || order.locationId !== locationId) {
+      throw new NotFoundException('Order not found');
+    }
+    return order;
+  }
+
+  private clientName(firstName: string, lastName: string): string {
+    return `${firstName} ${lastName}`.trim();
   }
 
   private emit(

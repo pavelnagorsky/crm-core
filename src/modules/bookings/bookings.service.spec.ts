@@ -12,6 +12,7 @@ import { CalendarService } from '../calendar/calendar.service.js';
 import { StaffService } from '../staff/staff.service.js';
 import { LocationService } from '../location/location.service.js';
 import { StaffEarningsService } from '../payroll/earnings/staff-earnings.service.js';
+import { OrdersService } from '../orders/orders.service.js';
 import { BookingsService } from './bookings.service.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { BookingResolveRequestDto } from './dto/booking-resolve-request.dto.js';
@@ -96,6 +97,10 @@ describe('BookingsService.completeElapsed', () => {
   const earnings = {
     recordForCompletedBooking: vi.fn(),
   };
+  const order = { id: 'order-1', items: [] };
+  const orders = {
+    syncCompletedBooking: vi.fn().mockResolvedValue(order),
+  };
   const emitter = { emit: vi.fn() };
 
   let service: BookingsService;
@@ -111,6 +116,7 @@ describe('BookingsService.completeElapsed', () => {
         { provide: LocationService, useValue: {} },
         { provide: ServiceCatalogService, useValue: serviceCatalog },
         { provide: StaffEarningsService, useValue: earnings },
+        { provide: OrdersService, useValue: orders },
         { provide: EventEmitter2, useValue: emitter },
       ],
     }).compile();
@@ -131,6 +137,7 @@ describe('BookingsService.completeElapsed', () => {
         status: BookingStatus.COMPLETED,
       },
       db,
+      order,
     );
     expect(emitter.emit).toHaveBeenCalled();
   });
@@ -173,6 +180,7 @@ describe('BookingsService.search', () => {
         { provide: LocationService, useValue: {} },
         { provide: ServiceCatalogService, useValue: serviceCatalog },
         { provide: StaffEarningsService, useValue: {} },
+        { provide: OrdersService, useValue: {} },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
       ],
     }).compile();
@@ -350,6 +358,7 @@ describe('BookingsService.listForCalendar', () => {
         { provide: LocationService, useValue: {} },
         { provide: ServiceCatalogService, useValue: serviceCatalog },
         { provide: StaffEarningsService, useValue: {} },
+        { provide: OrdersService, useValue: {} },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
       ],
     }).compile();
@@ -462,6 +471,7 @@ describe('BookingsService catalog selection', () => {
         { provide: LocationService, useValue: {} },
         { provide: ServiceCatalogService, useValue: serviceCatalog },
         { provide: StaffEarningsService, useValue: {} },
+        { provide: OrdersService, useValue: {} },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
       ],
     }).compile();
@@ -679,6 +689,12 @@ describe('BookingsService.update item prices', () => {
         },
         { provide: ServiceCatalogService, useValue: serviceCatalog },
         { provide: StaffEarningsService, useValue: {} },
+        {
+          provide: OrdersService,
+          useValue: {
+            syncCompletedBooking: vi.fn(),
+          },
+        },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
       ],
     }).compile();

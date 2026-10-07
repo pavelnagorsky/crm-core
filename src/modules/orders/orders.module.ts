@@ -1,5 +1,4 @@
 import { Module } from '@nestjs/common';
-import { BookingsModule } from '../bookings/bookings.module.js';
 import { ClientsModule } from '../clients/clients.module.js';
 import { InventoryModule } from '../inventory/inventory.module.js';
 import { LocationModule } from '../location/location.module.js';
@@ -18,11 +17,10 @@ import { OrdersService } from './orders.service.js';
     InventoryModule,
     StaffModule,
     PayrollModule,
-    BookingsModule,
     ClientsModule,
   ],
   controllers: [OrdersController],
   providers: [OrdersService, OrderComputeService, OrdersAggregatesService],
-  exports: [OrdersAggregatesService],
+  exports: [OrdersService, OrdersAggregatesService],
 })
 export class OrdersModule {}
