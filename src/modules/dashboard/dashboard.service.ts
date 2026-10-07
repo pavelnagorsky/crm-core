@@ -5,6 +5,10 @@ import { BookingsAggregatesService } from '../bookings/bookings-aggregates.servi
 import { AggregateRange } from '../bookings/interfaces/aggregate-range.interface.js';
 import { AggregateSnapshot } from '../bookings/interfaces/aggregate-snapshot.interface.js';
 import { SeriesRow } from '../bookings/interfaces/series-row.interface.js';
+import { OrdersAnalyticsService } from '../orders/analytics/orders-analytics.service.js';
+import { ProductSalesRange } from '../orders/analytics/interfaces/product-sales-range.interface.js';
+import { ProductSalesSeriesRow } from '../orders/analytics/interfaces/product-sales-series-row.interface.js';
+import { ProductSalesSnapshot } from '../orders/analytics/interfaces/product-sales-snapshot.interface.js';
 import { DashboardWidgetsRequestDto } from './dto/dashboard-widgets-request.dto.js';
 import { WidgetBreakdownItemDto } from './dto/widget-breakdown-item.dto.js';
 import { WidgetDto } from './dto/widget.dto.js';
@@ -50,6 +54,7 @@ export class DashboardService {
   constructor(
     private readonly rangeService: DashboardRangeService,
     private readonly bookingsAggregates: BookingsAggregatesService,
+    private readonly ordersAnalytics: OrdersAnalyticsService,
     private readonly metricFactory: DashboardMetricFactory,
     private readonly seriesFactory: DashboardSeriesFactory,
     private readonly buckets: DashboardBucketService,
@@ -153,15 +158,21 @@ export class DashboardService {
     ctx: WidgetContext,
     statuses: BookingStatus[],
   ): Promise<WidgetDto> {
-    const [snap, prevSnap, sparkRows] = await Promise.all([
-      this.bookingsAggregates.snapshot(this.currentRange(ctx)),
-      this.previousSnapshot(ctx),
-      this.currentSeries(ctx, statuses),
-    ]);
-    const value = chartMoney(sumRevenue(snap, statuses));
-    const previousValue = prevSnap
-      ? chartMoney(sumRevenue(prevSnap, statuses))
-      : undefined;
+    const [snap, prevSnap, orderSnap, prevOrderSnap, sparkRows] =
+      await Promise.all([
+        this.bookingsAggregates.snapshot(this.currentRange(ctx)),
+        this.previousSnapshot(ctx),
+        this.ordersAnalytics.productSalesSnapshot(this.productRange(ctx)),
+        this.previousProductSnapshot(ctx),
+        this.revenueSeriesRows(ctx, statuses, false),
+      ]);
+    const value = chartMoney(
+      sumRevenue(snap, statuses).plus(orderSnap.revenue),
+    );
+    const previousValue =
+      prevSnap && prevOrderSnap
+        ? chartMoney(sumRevenue(prevSnap, statuses).plus(prevOrderSnap.revenue))
+        : undefined;
     return this.metricWidget(
       key,
       ctx,
@@ -180,20 +191,40 @@ export class DashboardService {
     key: DashboardWidgetKey,
     ctx: WidgetContext,
   ): Promise<WidgetDto> {
-    const [snap, prevSnap] = await Promise.all([
+    const [
+      snap,
+      prevSnap,
+      orderSnap,
+      prevOrderSnap,
+      completedBookingIds,
+      previousCompletedBookingIds,
+    ] = await Promise.all([
       this.bookingsAggregates.snapshot(this.currentRange(ctx)),
       this.previousSnapshot(ctx),
+      this.ordersAnalytics.productSalesSnapshot(this.productRange(ctx)),
+      this.previousProductSnapshot(ctx),
+      this.bookingsAggregates.completedBookingIds(this.currentRange(ctx)),
+      ctx.range.compareWithPrevious
+        ? this.bookingsAggregates.completedBookingIds(this.previousRange(ctx))
+        : Promise.resolve([]),
     ]);
-    const currCount = sumCount(snap, REVENUE_STATUSES);
-    const currRev = sumRevenue(snap, REVENUE_STATUSES);
+    const currCount = commercialEventCount(completedBookingIds, orderSnap);
+    const currRev = sumRevenue(snap, [BookingStatus.COMPLETED]).plus(
+      orderSnap.revenue,
+    );
     const value =
       currCount > 0
         ? chartMoney(MoneyService.quantize(currRev.div(currCount)))
         : 0;
     let previousValue: number | undefined;
-    if (prevSnap) {
-      const prevCount = sumCount(prevSnap, REVENUE_STATUSES);
-      const prevRev = sumRevenue(prevSnap, REVENUE_STATUSES);
+    if (prevSnap && prevOrderSnap) {
+      const prevCount = commercialEventCount(
+        previousCompletedBookingIds,
+        prevOrderSnap,
+      );
+      const prevRev = sumRevenue(prevSnap, [BookingStatus.COMPLETED]).plus(
+        prevOrderSnap.revenue,
+      );
       previousValue =
         prevCount > 0
           ? chartMoney(MoneyService.quantize(prevRev.div(prevCount)))
@@ -217,8 +248,8 @@ export class DashboardService {
     ctx: WidgetContext,
   ): Promise<WidgetDto> {
     const [currRows, prevRows] = await Promise.all([
-      this.currentSeries(ctx, REVENUE_STATUSES),
-      this.previousSeries(ctx, REVENUE_STATUSES),
+      this.revenueSeriesRows(ctx, REVENUE_STATUSES, false),
+      this.revenueSeriesRows(ctx, REVENUE_STATUSES, true),
     ]);
     return {
       key,
@@ -389,25 +420,45 @@ export class DashboardService {
     // Revenue uses confirmed + completed; secondary count uses completed only. Two queries
     // instead of one because the row sets partition differently by status.
     const range = this.currentRange(ctx);
-    const [revenueRows, completedRows] = await Promise.all([
+    const [revenueRows, completedRows, productRows] = await Promise.all([
       this.bookingsAggregates.countByStaff(range, REVENUE_STATUSES),
       this.bookingsAggregates.countByStaff(range, [BookingStatus.COMPLETED]),
+      this.ordersAnalytics.productSalesByStaff(this.productRange(ctx)),
     ]);
     const completedById = new Map(
       completedRows.map((r) => [r.staffId, r.count]),
     );
+    const byStaff = new Map(
+      revenueRows.map((row) => [
+        row.staffId,
+        { ...row, activityCount: completedById.get(row.staffId) ?? 0 },
+      ]),
+    );
+    for (const row of productRows) {
+      const current = byStaff.get(row.staffId);
+      byStaff.set(row.staffId, {
+        staffId: row.staffId,
+        staffName: row.staffName,
+        count: current?.count ?? 0,
+        revenue: (current?.revenue ?? MoneyService.decimal(0)).plus(
+          row.revenue,
+        ),
+        activityCount: (current?.activityCount ?? 0) + row.orderCount,
+      });
+    }
 
-    const total = chartMoney(sumDecimals(revenueRows.map((r) => r.revenue)));
+    const mergedRows = [...byStaff.values()];
+    const total = chartMoney(sumDecimals(mergedRows.map((r) => r.revenue)));
     const topN = ctx.dto.topN ?? DEFAULT_TOP_N;
 
-    const items: WidgetBreakdownItemDto[] = revenueRows
+    const items: WidgetBreakdownItemDto[] = mergedRows
       .map((r) => {
         const value = chartMoney(r.revenue);
         return {
           id: r.staffId,
           label: r.staffName,
           value,
-          secondaryValue: completedById.get(r.staffId) ?? 0,
+          secondaryValue: r.activityCount,
           sharePct: pct(value, total),
         };
       })
@@ -448,6 +499,64 @@ export class DashboardService {
   ): Promise<AggregateSnapshot | undefined> {
     if (!ctx.range.compareWithPrevious) return Promise.resolve(undefined);
     return this.bookingsAggregates.snapshot(this.previousRange(ctx));
+  }
+
+  private productRange(ctx: WidgetContext): ProductSalesRange {
+    return this.productRangeFor(ctx, ctx.range.from, ctx.range.to);
+  }
+
+  private previousProductRange(ctx: WidgetContext): ProductSalesRange {
+    return this.productRangeFor(
+      ctx,
+      ctx.range.previousFrom,
+      ctx.range.previousTo,
+    );
+  }
+
+  private productRangeFor(
+    ctx: WidgetContext,
+    from: Date,
+    to: Date,
+  ): ProductSalesRange {
+    return {
+      locationId: ctx.locationId,
+      from,
+      to,
+      staffId: ctx.dto.staffId,
+      catalogItemId: ctx.dto.catalogItemId,
+      categoryId: ctx.dto.categoryId,
+    };
+  }
+
+  private previousProductSnapshot(
+    ctx: WidgetContext,
+  ): Promise<ProductSalesSnapshot | undefined> {
+    if (!ctx.range.compareWithPrevious) return Promise.resolve(undefined);
+    return this.ordersAnalytics.productSalesSnapshot(
+      this.previousProductRange(ctx),
+    );
+  }
+
+  private async revenueSeriesRows(
+    ctx: WidgetContext,
+    statuses: BookingStatus[],
+    previous: boolean,
+  ): Promise<SeriesRow[]> {
+    if (previous && !ctx.range.compareWithPrevious) return [];
+    const productRange = previous
+      ? this.previousProductRange(ctx)
+      : this.productRange(ctx);
+    const [bookingRows, productRows] = await Promise.all([
+      previous
+        ? this.previousSeries(ctx, statuses)
+        : this.currentSeries(ctx, statuses),
+      this.ordersAnalytics.productSalesSeries({
+        ...productRange,
+        granularity: ctx.range.granularity,
+        timezone: ctx.range.timezone,
+      }),
+    ]);
+    return mergeRevenueSeries(bookingRows, productRows);
   }
 
   private currentSeries(
@@ -551,6 +660,54 @@ function sumDecimals(values: Prisma.Decimal[]): Prisma.Decimal {
   let sum = MoneyService.decimal(0);
   for (const v of values) sum = sum.plus(v);
   return sum;
+}
+
+function commercialEventCount(
+  completedBookingIds: string[],
+  productSales: ProductSalesSnapshot,
+): number {
+  const bookingIds = new Set(completedBookingIds);
+  let count = bookingIds.size + productSales.standaloneOrderCount;
+  for (const bookingId of productSales.linkedBookingIds) {
+    if (!bookingIds.has(bookingId)) count += 1;
+  }
+  return count;
+}
+
+function mergeRevenueSeries(
+  bookingRows: SeriesRow[],
+  productRows: ProductSalesSeriesRow[],
+): SeriesRow[] {
+  const byBucket = new Map<number, SeriesRow>();
+  for (const row of bookingRows) {
+    const key = row.bucket.getTime();
+    const existing = byBucket.get(key);
+    if (existing) {
+      existing.revenue = existing.revenue.plus(row.revenue);
+      existing.count += row.count;
+      existing.duration += row.duration;
+    } else {
+      byBucket.set(key, { ...row, status: null });
+    }
+  }
+  for (const row of productRows) {
+    const key = row.bucket.getTime();
+    const existing = byBucket.get(key);
+    if (existing) {
+      existing.revenue = existing.revenue.plus(row.revenue);
+    } else {
+      byBucket.set(key, {
+        bucket: row.bucket,
+        status: null,
+        count: 0,
+        revenue: row.revenue,
+        duration: 0,
+      });
+    }
+  }
+  return [...byBucket.values()].sort(
+    (left, right) => left.bucket.getTime() - right.bucket.getTime(),
+  );
 }
 
 function sourceLabel(s: BookingSource): string {

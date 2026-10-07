@@ -7,9 +7,10 @@ import { DashboardRangeService } from './services/dashboard-range.service.js';
 import { DashboardSeriesFactory } from './services/dashboard-series.factory.js';
 import { BookingsModule } from '../bookings/bookings.module.js';
 import { LocationModule } from '../location/location.module.js';
+import { OrdersModule } from '../orders/orders.module.js';
 
 @Module({
-  imports: [BookingsModule, LocationModule],
+  imports: [BookingsModule, LocationModule, OrdersModule],
   controllers: [DashboardController],
   providers: [
     DashboardService,

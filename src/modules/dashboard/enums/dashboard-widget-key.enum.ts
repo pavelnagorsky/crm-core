@@ -1,28 +1,28 @@
 export enum DashboardWidgetKey {
   /**
-   * Big number: money from confirmed and completed bookings in the period.
-   * Cancelled, pending, and no-shows are not included. Currency is `meta.currency`.
+   * Big number: money from confirmed and completed bookings plus posted product orders.
+   * Voided orders and other booking statuses are not included. Currency is `meta.currency`.
    * `metric.spark` is a thin line of that money per day or week. More is better.
    */
   REVENUE_TOTAL = 'REVENUE_TOTAL',
 
   /**
-   * Big number: money from completed bookings only. Confirmed visits that have not
-   * happened yet are left out. Currency is `meta.currency`.
+   * Big number: actual money from completed bookings and posted product orders.
+   * Confirmed visits that have not happened yet are left out. Currency is `meta.currency`.
    * `metric.spark` is a thin line of that money per day or week. More is better.
    */
   REVENUE_COMPLETED = 'REVENUE_COMPLETED',
 
   /**
-   * A line chart of money from confirmed and completed bookings, one point per day or week.
+   * A line chart of money from confirmed/completed bookings and posted product orders.
    * Each point's value is `revenue`. `comparisonPoints` is the previous period, aligned by
    * index, not by date. There is no separate big number. Currency is `meta.currency`.
    */
   REVENUE_SERIES = 'REVENUE_SERIES',
 
   /**
-   * Big number: average money per confirmed or completed booking. This is the average
-   * ticket, one visit at a time. Currency is `meta.currency`. There is no sparkline.
+   * Big number: actual revenue per commercial event. A completed booking and any linked
+   * product orders count once; a standalone posted order counts once. Currency is `meta.currency`.
    */
   AVG_TICKET = 'AVG_TICKET',
 
@@ -93,8 +93,9 @@ export enum DashboardWidgetKey {
   BOOKINGS_HEATMAP = 'BOOKINGS_HEATMAP',
 
   /**
-   * Bars of revenue per staff member, tallest first. `value` is the revenue from confirmed
-   * and completed bookings in the period; `secondaryValue` is the count of completed bookings.
+   * Bars of revenue per staff member, tallest first. `value` includes attributed revenue from
+   * confirmed/completed services and posted product sales. `secondaryValue` is completed
+   * service lines plus product orders.
    * `sharePct` is the staff member's share of `breakdown.total`. Limited to `topN` (default 5).
    * No comparison with the previous period.
    */

@@ -10,10 +10,11 @@ import { MetricGrowth } from '../../dashboard/enums/metric-growth.enum.js';
 import { MetricUnit } from '../../dashboard/enums/metric-unit.enum.js';
 import { SeriesGranularity } from '../../dashboard/enums/series-granularity.enum.js';
 import { WidgetKind } from '../../dashboard/enums/widget-kind.enum.js';
-import { ResolvedRange } from '../../dashboard/interfaces/resolved-range.interface.js';
+import { ResolvedBrandRange } from '../../dashboard/interfaces/resolved-brand-range.interface.js';
 import { DashboardBucketService } from '../../dashboard/services/dashboard-bucket.service.js';
 import { DashboardMetricFactory } from '../../dashboard/services/dashboard-metric.factory.js';
 import { DashboardRangeService } from '../../dashboard/services/dashboard-range.service.js';
+import { OrdersAnalyticsService } from '../../orders/analytics/orders-analytics.service.js';
 import { ClientsAnalyticsService } from './clients-analytics.service.js';
 import { ClientsAnalyticsRequestDto } from './dto/clients-analytics-request.dto.js';
 import { ClientsAnalyticsWidgetKey } from './enums/clients-analytics-widget-key.enum.js';
@@ -63,11 +64,17 @@ describe('ClientsAnalyticsService', () => {
     clientCohortSummary: vi.fn(),
     clientCohortSeries: vi.fn(),
     clientRecency: vi.fn(),
+    clientRevenue: vi.fn(),
+    clientRevenueSeries: vi.fn(),
   };
-  const rangeService = { resolve: vi.fn() };
+  const ordersAnalytics = {
+    clientRevenue: vi.fn(),
+    clientRevenueSeries: vi.fn(),
+  };
+  const rangeService = { resolveForBrand: vi.fn() };
   const bucketService = new DashboardBucketService();
 
-  let range: ResolvedRange;
+  let range: ResolvedBrandRange;
   let service: ClientsAnalyticsService;
 
   beforeEach(() => {
@@ -81,13 +88,19 @@ describe('ClientsAnalyticsService', () => {
       timezone: 'UTC',
       currency: 'USD',
       compareWithPrevious: true,
+      locationIds: ['location-1'],
     };
-    rangeService.resolve.mockResolvedValue(range);
+    rangeService.resolveForBrand.mockResolvedValue(range);
     aggregates.clientCohortSummary.mockResolvedValue(summary());
     aggregates.clientCohortSeries.mockResolvedValue([]);
     aggregates.clientRecency.mockResolvedValue([]);
+    aggregates.clientRevenue.mockResolvedValue([]);
+    aggregates.clientRevenueSeries.mockResolvedValue([]);
+    ordersAnalytics.clientRevenue.mockResolvedValue([]);
+    ordersAnalytics.clientRevenueSeries.mockResolvedValue([]);
     service = new ClientsAnalyticsService(
       aggregates as unknown as BookingsAggregatesService,
+      ordersAnalytics as unknown as OrdersAnalyticsService,
       rangeService as unknown as DashboardRangeService,
       new DashboardMetricFactory(),
       bucketService,
@@ -265,6 +278,29 @@ describe('ClientsAnalyticsService', () => {
         revenue: new Prisma.Decimal('4.00'),
       }),
     ]);
+    aggregates.clientRevenue
+      .mockResolvedValueOnce([
+        { clientId: 'client-1', revenue: MoneyService.decimal('6.00') },
+        { clientId: 'client-2', revenue: MoneyService.decimal('4.00') },
+      ])
+      .mockResolvedValueOnce([]);
+    aggregates.clientRevenueSeries.mockResolvedValueOnce([
+      {
+        bucket: new Date('2026-09-01T00:00:00.000Z'),
+        clientId: 'client-1',
+        revenue: MoneyService.decimal('3.00'),
+      },
+      {
+        bucket: new Date('2026-09-01T00:00:00.000Z'),
+        clientId: 'client-2',
+        revenue: MoneyService.decimal('3.00'),
+      },
+      {
+        bucket: new Date('2026-09-02T00:00:00.000Z'),
+        clientId: 'client-1',
+        revenue: MoneyService.decimal('4.00'),
+      },
+    ]);
 
     const [widget] = await widgets([
       ClientsAnalyticsWidgetKey.REVENUE_PER_CLIENT,
@@ -287,6 +323,11 @@ describe('ClientsAnalyticsService', () => {
         revenue: new Prisma.Decimal('10.00'),
       }),
     );
+    aggregates.clientRevenue.mockResolvedValueOnce([
+      { clientId: 'client-1', revenue: MoneyService.decimal('3.34') },
+      { clientId: 'client-2', revenue: MoneyService.decimal('3.33') },
+      { clientId: 'client-3', revenue: MoneyService.decimal('3.33') },
+    ]);
     const [uneven] = await widgets([
       ClientsAnalyticsWidgetKey.REVENUE_PER_CLIENT,
     ]);
@@ -297,6 +338,26 @@ describe('ClientsAnalyticsService', () => {
       ClientsAnalyticsWidgetKey.REVENUE_PER_CLIENT,
     ]);
     expect(empty.metric?.value).toBe(0);
+  });
+
+  it('merges service and product revenue by client without double-counting the client', async () => {
+    aggregates.clientRevenue
+      .mockResolvedValueOnce([
+        { clientId: 'shared', revenue: MoneyService.decimal('100.00') },
+      ])
+      .mockResolvedValueOnce([]);
+    ordersAnalytics.clientRevenue
+      .mockResolvedValueOnce([
+        { clientId: 'shared', revenue: MoneyService.decimal('25.00') },
+        { clientId: 'product-only', revenue: MoneyService.decimal('75.00') },
+      ])
+      .mockResolvedValueOnce([]);
+
+    const [widget] = await widgets([
+      ClientsAnalyticsWidgetKey.REVENUE_PER_CLIENT,
+    ]);
+
+    expect(widget.metric?.value).toBe(100);
   });
 
   it('skips the previous period when comparison is off', async () => {
@@ -334,7 +395,7 @@ describe('ClientsAnalyticsService', () => {
 
     for (const key of Object.values(ClientsAnalyticsWidgetKey)) {
       vi.clearAllMocks();
-      rangeService.resolve.mockResolvedValue(range);
+      rangeService.resolveForBrand.mockResolvedValue(range);
       aggregates.clientCohortSummary.mockResolvedValue(summary());
       aggregates.clientCohortSeries.mockResolvedValue([]);
       aggregates.clientRecency.mockResolvedValue([]);

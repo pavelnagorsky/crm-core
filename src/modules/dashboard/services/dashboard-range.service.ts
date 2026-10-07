@@ -6,6 +6,7 @@ import { TimeService } from '../../../shared/time/time.service.js';
 import { DashboardRangeDto } from '../dto/dashboard-range.dto.js';
 import { DashboardPeriod } from '../enums/dashboard-period.enum.js';
 import { SeriesGranularity } from '../enums/series-granularity.enum.js';
+import { ResolvedBrandRange } from '../interfaces/resolved-brand-range.interface.js';
 import { ResolvedRange } from '../interfaces/resolved-range.interface.js';
 
 @Injectable()
@@ -17,10 +18,51 @@ export class DashboardRangeService {
     dto: DashboardRangeDto,
   ): Promise<ResolvedRange> {
     const locale = await this.locationService.getLocale(locationId);
+    return this.resolveWithLocale(dto, locale.timezone, locale.currency);
+  }
+
+  async resolveForBrand(
+    brandId: string,
+    dto: DashboardRangeDto,
+  ): Promise<ResolvedBrandRange> {
+    const locations = await this.locationService.listByBrand(brandId);
+    if (locations.length === 0) {
+      throw new AppException(
+        ErrorCode.ANALYTICS_BRAND_HAS_NO_LOCATIONS,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const currencies = new Set(locations.map((location) => location.currency));
+    const timezones = new Set(locations.map((location) => location.timezone));
+    const requestedTimezone =
+      dto.timezone && TimeService.isValidIanaTimezone(dto.timezone)
+        ? dto.timezone
+        : undefined;
+    if (currencies.size > 1 || (!requestedTimezone && timezones.size > 1)) {
+      throw new AppException(
+        ErrorCode.ANALYTICS_MIXED_LOCATION_LOCALES,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return {
+      ...this.resolveWithLocale(
+        dto,
+        requestedTimezone ?? locations[0].timezone,
+        locations[0].currency,
+      ),
+      locationIds: locations.map((location) => location.id),
+    };
+  }
+
+  private resolveWithLocale(
+    dto: DashboardRangeDto,
+    defaultTimezone: string,
+    currency: string,
+  ): ResolvedRange {
     const timezone =
       dto.timezone && TimeService.isValidIanaTimezone(dto.timezone)
         ? dto.timezone
-        : locale.timezone;
+        : defaultTimezone;
 
     const { from, to } = this.resolvePeriodBounds(dto, timezone);
     const granularity =
@@ -34,7 +76,7 @@ export class DashboardRangeService {
       previousTo,
       granularity,
       timezone,
-      currency: locale.currency,
+      currency,
       compareWithPrevious: dto.compareWithPrevious ?? true,
     };
   }

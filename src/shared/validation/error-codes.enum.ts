@@ -456,4 +456,13 @@ export const ErrorCode = {
     code: 'DASHBOARD_CUSTOM_RANGE_INVALID',
     message: 'Invalid dashboard date range',
   },
+  ANALYTICS_BRAND_HAS_NO_LOCATIONS: {
+    code: 'ANALYTICS_BRAND_HAS_NO_LOCATIONS',
+    message: 'Brand analytics requires at least one location',
+  },
+  ANALYTICS_MIXED_LOCATION_LOCALES: {
+    code: 'ANALYTICS_MIXED_LOCATION_LOCALES',
+    message:
+      'Brand analytics requires one currency and an explicit timezone for mixed-timezone locations',
+  },
 } as const satisfies Record<string, ErrorCodeEntry>;

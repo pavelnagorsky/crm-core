@@ -16,6 +16,9 @@ export class OrderItemResponseDto {
   @ApiProperty({ type: String, nullable: true })
   catalogItemId: string | null;
 
+  @ApiProperty({ type: String, nullable: true })
+  categoryId: string | null;
+
   @ApiProperty({ type: String })
   title: string;
 

@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { MoneyService } from '../../../shared/money/money.service.js';
+import { ClientRevenueBucket } from '../../../shared/interfaces/client-revenue-bucket.interface.js';
+import { ClientRevenue } from '../../../shared/interfaces/client-revenue.interface.js';
 import { BookingsAggregatesService } from '../../bookings/bookings-aggregates.service.js';
 import {
   CLIENT_RECENCY_BOUNDS,
@@ -20,6 +22,7 @@ import { ResolvedRange } from '../../dashboard/interfaces/resolved-range.interfa
 import { DashboardBucketService } from '../../dashboard/services/dashboard-bucket.service.js';
 import { DashboardMetricFactory } from '../../dashboard/services/dashboard-metric.factory.js';
 import { DashboardRangeService } from '../../dashboard/services/dashboard-range.service.js';
+import { OrdersAnalyticsService } from '../../orders/analytics/orders-analytics.service.js';
 import { ClientsAnalyticsRequestDto } from './dto/clients-analytics-request.dto.js';
 import { ClientsAnalyticsWidgetKey } from './enums/clients-analytics-widget-key.enum.js';
 import { ClientAnalyticsContext } from './interfaces/client-analytics-context.interface.js';
@@ -43,6 +46,7 @@ const RECENCY_LABEL: Record<ClientRecencyBucket, string> = {
 export class ClientsAnalyticsService {
   constructor(
     private readonly aggregates: BookingsAggregatesService,
+    private readonly ordersAnalytics: OrdersAnalyticsService,
     private readonly rangeService: DashboardRangeService,
     private readonly metricFactory: DashboardMetricFactory,
     private readonly buckets: DashboardBucketService,
@@ -191,10 +195,13 @@ export class ClientsAnalyticsService {
     brandId: string,
     dto: ClientsAnalyticsRequestDto,
   ): Promise<ClientAnalyticsContext> {
-    const range = await this.rangeService.resolve(brandId, dto);
+    const range = await this.rangeService.resolveForBrand(brandId, dto);
     const needsCohort = dto.keys.some((key) => COHORT_WIDGETS.has(key));
     const needsRecency = dto.keys.includes(
       ClientsAnalyticsWidgetKey.DORMANT_CLIENTS,
+    );
+    const needsRevenue = dto.keys.includes(
+      ClientsAnalyticsWidgetKey.REVENUE_PER_CLIENT,
     );
     const compare = range.compareWithPrevious;
 
@@ -205,7 +212,7 @@ export class ClientsAnalyticsService {
       to: range.previousTo,
     };
 
-    const [
+    let [
       currentCohort,
       previousCohort,
       currentSeries,
@@ -244,6 +251,84 @@ export class ClientsAnalyticsService {
           )
         : undefined,
     ]);
+
+    if (needsRevenue) {
+      const currentClientRange = {
+        locationIds: range.locationIds,
+        from: range.from,
+        to: range.to,
+      };
+      const previousClientRange = {
+        locationIds: range.locationIds,
+        from: range.previousFrom,
+        to: range.previousTo,
+      };
+      const [
+        bookingCurrent,
+        orderCurrent,
+        bookingPrevious,
+        orderPrevious,
+        bookingCurrentSeries,
+        orderCurrentSeries,
+        bookingPreviousSeries,
+        orderPreviousSeries,
+      ] = await Promise.all([
+        this.aggregates.clientRevenue(currentClientRange),
+        this.ordersAnalytics.clientRevenue(currentClientRange),
+        compare
+          ? this.aggregates.clientRevenue(previousClientRange)
+          : Promise.resolve([]),
+        compare
+          ? this.ordersAnalytics.clientRevenue(previousClientRange)
+          : Promise.resolve([]),
+        this.aggregates.clientRevenueSeries({
+          ...currentClientRange,
+          granularity: range.granularity,
+          timezone: range.timezone,
+        }),
+        this.ordersAnalytics.clientRevenueSeries({
+          ...currentClientRange,
+          granularity: range.granularity,
+          timezone: range.timezone,
+        }),
+        compare
+          ? this.aggregates.clientRevenueSeries({
+              ...previousClientRange,
+              granularity: range.granularity,
+              timezone: range.timezone,
+            })
+          : Promise.resolve([]),
+        compare
+          ? this.ordersAnalytics.clientRevenueSeries({
+              ...previousClientRange,
+              granularity: range.granularity,
+              timezone: range.timezone,
+            })
+          : Promise.resolve([]),
+      ]);
+      currentCohort = mergeClientRevenueSummary(
+        currentCohort,
+        bookingCurrent,
+        orderCurrent,
+      );
+      currentSeries = mergeClientRevenueSeries(
+        currentSeries,
+        bookingCurrentSeries,
+        orderCurrentSeries,
+      );
+      if (compare) {
+        previousCohort = mergeClientRevenueSummary(
+          previousCohort,
+          bookingPrevious,
+          orderPrevious,
+        );
+        previousSeries = mergeClientRevenueSeries(
+          previousSeries,
+          bookingPreviousSeries,
+          orderPreviousSeries,
+        );
+      }
+    }
 
     return {
       range,
@@ -368,4 +453,66 @@ function indexByBucket(
   rows: ClientCohortBucket[],
 ): Map<number, ClientCohortBucket> {
   return new Map(rows.map((row) => [row.bucket.getTime(), row]));
+}
+
+function mergeClientRevenueSummary(
+  base: ClientCohortSummary | undefined,
+  bookingRows: ClientRevenue[],
+  orderRows: ClientRevenue[],
+): ClientCohortSummary | undefined {
+  if (!base) return undefined;
+  const byClient = new Map<string, Prisma.Decimal>();
+  for (const row of [...bookingRows, ...orderRows]) {
+    byClient.set(
+      row.clientId,
+      (byClient.get(row.clientId) ?? MoneyService.decimal(0)).plus(row.revenue),
+    );
+  }
+  return {
+    ...base,
+    activeClients: byClient.size,
+    revenue: sumMoney(byClient.values()),
+  };
+}
+
+function mergeClientRevenueSeries(
+  base: ClientCohortBucket[],
+  bookingRows: ClientRevenueBucket[],
+  orderRows: ClientRevenueBucket[],
+): ClientCohortBucket[] {
+  const byBucketClient = new Map<number, Map<string, Prisma.Decimal>>();
+  for (const row of [...bookingRows, ...orderRows]) {
+    const key = row.bucket.getTime();
+    const clients =
+      byBucketClient.get(key) ?? new Map<string, Prisma.Decimal>();
+    clients.set(
+      row.clientId,
+      (clients.get(row.clientId) ?? MoneyService.decimal(0)).plus(row.revenue),
+    );
+    byBucketClient.set(key, clients);
+  }
+  const baseByBucket = indexByBucket(base);
+  const bucketKeys = new Set([
+    ...baseByBucket.keys(),
+    ...byBucketClient.keys(),
+  ]);
+  return [...bucketKeys]
+    .sort((a, b) => a - b)
+    .map((key) => {
+      const existing = baseByBucket.get(key);
+      const clients = byBucketClient.get(key) ?? new Map();
+      return {
+        bucket: new Date(key),
+        newVisits: existing?.newVisits ?? 0,
+        returningVisits: existing?.returningVisits ?? 0,
+        activeClients: clients.size,
+        revenue: sumMoney(clients.values()),
+      };
+    });
+}
+
+function sumMoney(values: Iterable<Prisma.Decimal>): Prisma.Decimal {
+  let total = MoneyService.decimal(0);
+  for (const value of values) total = total.plus(value);
+  return total;
 }

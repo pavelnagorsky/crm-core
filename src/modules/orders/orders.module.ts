@@ -6,6 +6,7 @@ import { LocationModule } from '../location/location.module.js';
 import { PayrollModule } from '../payroll/payroll.module.js';
 import { ProductsModule } from '../products/products.module.js';
 import { StaffModule } from '../staff/staff.module.js';
+import { OrdersAnalyticsService } from './analytics/orders-analytics.service.js';
 import { OrderComputeService } from './order-compute.service.js';
 import { OrdersController } from './orders.controller.js';
 import { OrdersService } from './orders.service.js';
@@ -21,6 +22,7 @@ import { OrdersService } from './orders.service.js';
     ClientsModule,
   ],
   controllers: [OrdersController],
-  providers: [OrdersService, OrderComputeService],
+  providers: [OrdersService, OrderComputeService, OrdersAnalyticsService],
+  exports: [OrdersAnalyticsService],
 })
 export class OrdersModule {}

@@ -199,3 +199,49 @@ describe('DashboardRangeService rolling month periods', () => {
     );
   });
 });
+
+describe('DashboardRangeService brand scope', () => {
+  it('returns all location ids when brand locales are compatible', async () => {
+    const locationService = {
+      listByBrand: vi.fn().mockResolvedValue([
+        { id: 'location-1', timezone: 'Europe/Minsk', currency: 'BYN' },
+        { id: 'location-2', timezone: 'Europe/Minsk', currency: 'BYN' },
+      ]),
+    } as unknown as LocationService;
+    const resolved = await new DashboardRangeService(
+      locationService,
+    ).resolveForBrand('brand-1', range({ period: DashboardPeriod.LAST_7D }));
+
+    expect(resolved.locationIds).toEqual(['location-1', 'location-2']);
+    expect(resolved.timezone).toBe('Europe/Minsk');
+    expect(resolved.currency).toBe('BYN');
+  });
+
+  it('requires an explicit timezone for a multi-timezone brand', async () => {
+    const locationService = {
+      listByBrand: vi.fn().mockResolvedValue([
+        { id: 'location-1', timezone: 'Europe/Minsk', currency: 'USD' },
+        { id: 'location-2', timezone: 'Europe/Warsaw', currency: 'USD' },
+      ]),
+    } as unknown as LocationService;
+    const dashboardRange = new DashboardRangeService(locationService);
+
+    await expect(
+      dashboardRange.resolveForBrand(
+        'brand-1',
+        range({ period: DashboardPeriod.LAST_7D }),
+      ),
+    ).rejects.toMatchObject({
+      errorCode: 'ANALYTICS_MIXED_LOCATION_LOCALES',
+    });
+
+    const resolved = await dashboardRange.resolveForBrand(
+      'brand-1',
+      range({
+        period: DashboardPeriod.LAST_7D,
+        timezone: 'UTC',
+      }),
+    );
+    expect(resolved.timezone).toBe('UTC');
+  });
+});

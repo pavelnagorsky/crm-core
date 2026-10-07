@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { BookingStatus, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
 import { MoneyService } from '../../shared/money/money.service.js';
+import { ClientRevenueBucket } from '../../shared/interfaces/client-revenue-bucket.interface.js';
+import { ClientRevenue } from '../../shared/interfaces/client-revenue.interface.js';
 import { SeriesGranularity } from '../dashboard/enums/series-granularity.enum.js';
 import {
   CLIENT_RECENCY_BOUNDS,
@@ -21,6 +23,8 @@ import { ClientCohortSeriesRange } from './interfaces/client-cohort-series-range
 import { ClientCohortSummary } from './interfaces/client-cohort-summary.interface.js';
 import { ClientRecencyBound } from './interfaces/client-recency-bound.interface.js';
 import { ClientRecencyRow } from './interfaces/client-recency-row.interface.js';
+import { ClientRevenueRange } from './interfaces/client-revenue-range.interface.js';
+import { ClientRevenueSeriesRange } from './interfaces/client-revenue-series-range.interface.js';
 import { HeatmapCell } from './interfaces/heatmap-cell.interface.js';
 import { OccupancyBookedHours } from './interfaces/occupancy-booked-hours.interface.js';
 import { SeriesRow } from './interfaces/series-row.interface.js';
@@ -306,6 +310,70 @@ export class BookingsAggregatesService {
       newVisits: Number(row.newVisits),
       returningVisits: Number(row.returningVisits),
       activeClients: Number(row.activeClients),
+      revenue: MoneyService.decimal(row.revenue),
+    }));
+  }
+
+  async completedBookingIds(range: AggregateRange): Promise<string[]> {
+    const rows = await this.db.$queryRaw<Array<{ id: string }>>(
+      Prisma.sql`
+        SELECT b."id"
+        FROM "Booking" b
+        WHERE ${this.whereClause(range, [BookingStatus.COMPLETED])}
+      `,
+    );
+    return rows.map((row) => row.id);
+  }
+
+  async clientRevenue(range: ClientRevenueRange): Promise<ClientRevenue[]> {
+    if (range.locationIds.length === 0) return [];
+    const rows = await this.db.$queryRaw<
+      Array<{ clientId: string; revenue: string }>
+    >(
+      Prisma.sql`
+        SELECT b."clientId" AS "clientId",
+               COALESCE(SUM(item_totals.revenue), 0)::text AS revenue
+        FROM "Booking" b
+        ${this.bookingItemTotalsJoin()}
+        WHERE b."locationId" IN (${Prisma.join(range.locationIds.map((id) => Prisma.sql`${id}`))})
+          AND b."deletedAt" IS NULL
+          AND b."status"::text = ${BookingStatus.COMPLETED}
+          AND b."startAt" >= ${range.from}::timestamptz AT TIME ZONE 'UTC'
+          AND b."startAt" < ${range.to}::timestamptz AT TIME ZONE 'UTC'
+        GROUP BY b."clientId"
+      `,
+    );
+    return rows.map((row) => ({
+      clientId: row.clientId,
+      revenue: MoneyService.decimal(row.revenue),
+    }));
+  }
+
+  async clientRevenueSeries(
+    range: ClientRevenueSeriesRange,
+  ): Promise<ClientRevenueBucket[]> {
+    if (range.locationIds.length === 0) return [];
+    const rows = await this.db.$queryRaw<
+      Array<{ bucket: Date; clientId: string; revenue: string }>
+    >(
+      Prisma.sql`
+        SELECT ${this.bucketExpr(range.granularity, range.timezone)} AS bucket,
+               b."clientId" AS "clientId",
+               COALESCE(SUM(item_totals.revenue), 0)::text AS revenue
+        FROM "Booking" b
+        ${this.bookingItemTotalsJoin()}
+        WHERE b."locationId" IN (${Prisma.join(range.locationIds.map((id) => Prisma.sql`${id}`))})
+          AND b."deletedAt" IS NULL
+          AND b."status"::text = ${BookingStatus.COMPLETED}
+          AND b."startAt" >= ${range.from}::timestamptz AT TIME ZONE 'UTC'
+          AND b."startAt" < ${range.to}::timestamptz AT TIME ZONE 'UTC'
+        GROUP BY bucket, b."clientId"
+        ORDER BY bucket ASC
+      `,
+    );
+    return rows.map((row) => ({
+      bucket: new Date(row.bucket),
+      clientId: row.clientId,
       revenue: MoneyService.decimal(row.revenue),
     }));
   }

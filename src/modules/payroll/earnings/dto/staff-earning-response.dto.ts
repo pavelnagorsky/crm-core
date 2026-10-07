@@ -58,6 +58,12 @@ export class StaffEarningResponseDto {
   bookingId: string | null;
 
   @ApiProperty({ type: String, nullable: true })
+  orderId: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  orderItemId: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
   shiftId: string | null;
 
   @ApiProperty({ type: String, nullable: true })
@@ -102,6 +108,8 @@ export class StaffEarningResponseDto {
     dto.reason = earning.reason;
     dto.actorName = earning.actorName;
     dto.bookingId = earning.bookingId;
+    dto.orderId = earning.orderId;
+    dto.orderItemId = earning.orderItemId;
     dto.shiftId = earning.shiftId;
     dto.externalId = earning.externalId;
     dto.reversesEarningId = earning.reversesEarningId;

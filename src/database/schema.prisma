@@ -624,6 +624,7 @@ model OrderItem {
   orderId           String
   type              OrderItemType
   catalogItemId     String?
+  categoryId        String?
   productLocationId String?
   title             String        @db.VarChar(150)
   sku               String?       @db.VarChar(80)
@@ -651,6 +652,7 @@ model OrderItem {
   @@index([productLocationId])
   @@index([sellerStaffId])
   @@index([type, catalogItemId])
+  @@index([type, categoryId])
 }
 
 model BrandMembership {

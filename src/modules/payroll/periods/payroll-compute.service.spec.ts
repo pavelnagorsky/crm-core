@@ -116,15 +116,18 @@ describe('PayrollComputeService', () => {
     const totals = compute.totalsFrom([
       earning(StaffEarningType.SERVICE_COMMISSION, '20.00'),
       earning(StaffEarningType.CORRECTION, '-20.00'),
+      earning(StaffEarningType.PRODUCT_COMMISSION, '12.00'),
+      earning(StaffEarningType.CORRECTION, '-12.00'),
       earning(StaffEarningType.BONUS, '5.00'),
       earning(StaffEarningType.DEDUCTION, '-2.00'),
     ]);
     expect(MoneyService.format(totals.serviceCommissionTotal)).toBe('20.00');
-    expect(MoneyService.format(totals.correctionTotal)).toBe('-20.00');
+    expect(MoneyService.format(totals.productCommissionTotal)).toBe('12.00');
+    expect(MoneyService.format(totals.correctionTotal)).toBe('-32.00');
     expect(MoneyService.format(totals.bonusTotal)).toBe('5.00');
     expect(MoneyService.format(totals.deductionTotal)).toBe('-2.00');
     expect(MoneyService.format(totals.totalAmount)).toBe('3.00');
-    expect(totals.earningsCount).toBe(4);
+    expect(totals.earningsCount).toBe(6);
   });
 
   it('does not count a reversed commission toward the guaranteed floor', () => {

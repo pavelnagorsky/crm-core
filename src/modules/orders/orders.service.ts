@@ -515,6 +515,7 @@ export class OrdersService {
         return {
           type: OrderItemType.PRODUCT,
           catalogItemId: product.productId,
+          categoryId: product.product.categoryId,
           productLocationId: product.id,
           title: product.product.name,
           sku: product.product.sku,
