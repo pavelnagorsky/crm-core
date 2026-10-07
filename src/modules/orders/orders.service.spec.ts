@@ -1,5 +1,6 @@
 import {
   AuditActorRole,
+  OrderItemStatus,
   OrderItemType,
   OrderStatus,
   Prisma,
@@ -7,14 +8,16 @@ import {
   ProductUnit,
 } from '@prisma/client';
 import { ForbiddenException } from '@nestjs/common';
-import { OrderTargetStatus } from './enums/order-target-status.enum.js';
 import { OrderComputeService } from './order-compute.service.js';
 import { OrdersService } from './orders.service.js';
 
 const owner = { id: 'owner-1', name: 'Owner', role: AuditActorRole.OWNER };
 const employee = { id: 'staff-1', name: 'Staff', role: AuditActorRole.STAFF };
 
-function order(status: OrderStatus) {
+function order(
+  status: OrderStatus,
+  itemStatus: OrderItemStatus = OrderItemStatus.DRAFT,
+) {
   const now = new Date('2026-10-01T10:00:00.000Z');
   return {
     id: 'order-1',
@@ -33,7 +36,6 @@ function order(status: OrderStatus) {
     note: null,
     createdById: 'owner-1',
     createdByName: 'Owner',
-    postedAt: status === OrderStatus.POSTED ? now : null,
     voidedAt: null,
     voidReason: null,
     createdAt: now,
@@ -43,7 +45,10 @@ function order(status: OrderStatus) {
         id: 'item-1',
         orderId: 'order-1',
         type: OrderItemType.PRODUCT,
+        bookingItemId: null,
+        status: itemStatus,
         catalogItemId: 'product-1',
+        categoryId: null,
         productLocationId: 'product-location-1',
         title: 'Shampoo',
         sku: 'SKU-1',
@@ -59,6 +64,8 @@ function order(status: OrderStatus) {
         lineCostSnapshot: null,
         sellerStaffId: null,
         sellerName: null,
+        confirmedAt: itemStatus === OrderItemStatus.CONFIRMED ? now : null,
+        occurredAt: itemStatus === OrderItemStatus.CONFIRMED ? now : null,
         createdAt: now,
       },
     ],
@@ -73,7 +80,7 @@ function setup() {
       update: vi.fn(),
       delete: vi.fn(),
     },
-    orderItem: { deleteMany: vi.fn(), update: vi.fn() },
+    orderItem: { deleteMany: vi.fn(), update: vi.fn(), updateMany: vi.fn() },
   };
   const db = {
     order: {
@@ -160,7 +167,7 @@ describe('OrdersService', () => {
   it('keeps owner custom price separate from discounts', async () => {
     const { service, db, products } = setup();
     products.resolveForSale.mockResolvedValue([product()]);
-    db.order.create.mockResolvedValue(order(OrderStatus.OPEN));
+    db.order.create.mockResolvedValue(order(OrderStatus.ACTIVE));
 
     await service.create(
       'location-1',
@@ -212,8 +219,8 @@ describe('OrdersService', () => {
 
   it('preserves an owner custom price when staff replaces an open order', async () => {
     const { service, tx, products } = setup();
-    tx.order.findFirst.mockResolvedValue(order(OrderStatus.OPEN));
-    tx.order.update.mockResolvedValue(order(OrderStatus.OPEN));
+    tx.order.findFirst.mockResolvedValue(order(OrderStatus.ACTIVE));
+    tx.order.update.mockResolvedValue(order(OrderStatus.ACTIVE));
     products.resolveForSale.mockResolvedValue([product()]);
 
     await service.update(
@@ -231,19 +238,20 @@ describe('OrdersService', () => {
     expect(item.lineTotal.toFixed(2)).toBe('30.00');
   });
 
-  it('makes repeated posting idempotent across stock and payroll', async () => {
+  it('makes repeated item confirmation idempotent across stock and payroll', async () => {
     const { service, tx, inventory, earnings, events } = setup();
-    tx.order.findFirst.mockResolvedValue(order(OrderStatus.POSTED));
+    tx.order.findFirst.mockResolvedValue(
+      order(OrderStatus.ACTIVE, OrderItemStatus.CONFIRMED),
+    );
 
-    const result = await service.changeStatus(
+    const result = await service.confirmItem(
       'location-1',
       'order-1',
-      OrderTargetStatus.POSTED,
-      undefined,
+      'item-1',
       owner,
     );
 
-    expect(result.status).toBe(OrderStatus.POSTED);
+    expect(result.items[0].status).toBe(OrderItemStatus.CONFIRMED);
     expect(inventory.postSale).not.toHaveBeenCalled();
     expect(earnings.recordForProductOrder).not.toHaveBeenCalled();
     expect(events.emit).not.toHaveBeenCalled();

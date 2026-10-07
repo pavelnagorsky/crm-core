@@ -408,9 +408,17 @@ export const ErrorCode = {
   },
 
   // orders
-  ORDER_NOT_OPEN: {
-    code: 'ORDER_NOT_OPEN',
-    message: 'Only an open order can be changed or deleted',
+  ORDER_NOT_ACTIVE: {
+    code: 'ORDER_NOT_ACTIVE',
+    message: 'Only an active order can be changed',
+  },
+  ORDER_ITEM_NOT_FOUND: {
+    code: 'ORDER_ITEM_NOT_FOUND',
+    message: 'Order item not found',
+  },
+  ORDER_ITEM_NOT_DRAFT: {
+    code: 'ORDER_ITEM_NOT_DRAFT',
+    message: 'Only a draft order item can be confirmed or changed',
   },
   ORDER_STATUS_INVALID: {
     code: 'ORDER_STATUS_INVALID',

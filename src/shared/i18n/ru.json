@@ -112,7 +112,7 @@
     "INVENTORY_DOCUMENT_VOIDED": "Складской документ отменён",
     "ORDER_CREATED": "Заказ создан",
     "ORDER_UPDATED": "Заказ изменён",
-    "ORDER_POSTED": "Заказ проведён",
+    "ORDER_ITEM_CONFIRMED": "Позиция заказа подтверждена",
     "ORDER_VOIDED": "Заказ отменён",
     "ORDER_DELETED": "Заказ удалён"
   },

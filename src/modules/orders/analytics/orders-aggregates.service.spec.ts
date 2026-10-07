@@ -1,4 +1,9 @@
-import { OrderItemType, OrderStatus, Prisma } from '@prisma/client';
+import {
+  OrderItemStatus,
+  OrderItemType,
+  OrderStatus,
+  Prisma,
+} from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { BookingsAggregatesService } from '../../bookings/bookings-aggregates.service.js';
 import { OrdersAggregatesService } from './orders-aggregates.service.js';
@@ -19,7 +24,7 @@ describe('OrdersAggregatesService', () => {
 
   beforeEach(() => vi.clearAllMocks());
 
-  it('reads only posted product lines and applies snapshot filters', async () => {
+  it('reads only confirmed product lines and applies snapshot filters', async () => {
     db.$queryRaw.mockResolvedValue([
       {
         revenue: '42.50',
@@ -52,7 +57,8 @@ describe('OrdersAggregatesService', () => {
       }),
       expect.anything(),
     );
-    expect(query.values).toContain(OrderStatus.POSTED);
+    expect(query.values).toContain(OrderStatus.ACTIVE);
+    expect(query.values).toContain(OrderItemStatus.CONFIRMED);
     expect(query.values).toContain(OrderItemType.PRODUCT);
     expect(result.revenue.toFixed(2)).toBe('42.50');
     expect(result.standaloneOrderCount).toBe(2);

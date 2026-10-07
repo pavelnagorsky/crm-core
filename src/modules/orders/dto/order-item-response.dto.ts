@@ -4,6 +4,7 @@ import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
 import { MoneyService } from '../../../shared/money/money.service.js';
 import { QuantityService } from '../../../shared/quantity/quantity.service.js';
 import { ProductUnit } from '../../products/enums/product-unit.enum.js';
+import { OrderItemStatus } from '../enums/order-item-status.enum.js';
 import { OrderItemType } from '../enums/order-item-type.enum.js';
 
 export class OrderItemResponseDto {
@@ -12,6 +13,12 @@ export class OrderItemResponseDto {
 
   @ApiProperty({ enum: OrderItemType, enumName: 'OrderItemType' })
   type: OrderItemType;
+
+  @ApiProperty({ enum: OrderItemStatus, enumName: 'OrderItemStatus' })
+  status: OrderItemStatus;
+
+  @ApiProperty({ type: String, format: 'uuid', nullable: true })
+  bookingItemId: string | null;
 
   @ApiProperty({ type: String, format: 'uuid', nullable: true })
   catalogItemId: string | null;
@@ -60,6 +67,12 @@ export class OrderItemResponseDto {
 
   @ApiProperty({ type: String, nullable: true })
   sellerName: string | null;
+
+  @ApiProperty({ type: Date, nullable: true })
+  confirmedAt: Date | null;
+
+  @ApiProperty({ type: Date, nullable: true })
+  occurredAt: Date | null;
 
   static fromEntity(entity: OrderItem): OrderItemResponseDto {
     return Object.assign(new OrderItemResponseDto(), entity, {

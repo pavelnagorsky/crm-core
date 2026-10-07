@@ -1,5 +1,10 @@
 import { Injectable } from '@nestjs/common';
-import { OrderItemType, OrderStatus, Prisma } from '@prisma/client';
+import {
+  OrderItemStatus,
+  OrderItemType,
+  OrderStatus,
+  Prisma,
+} from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { MoneyService } from '../../../shared/money/money.service.js';
 import { BookingsAggregatesService } from '../../bookings/bookings-aggregates.service.js';
@@ -64,17 +69,19 @@ export class OrdersAggregatesService {
     const bucket = this.bucketExpr(
       range.granularity,
       range.timezone,
-      'o."occurredAt"',
+      'i."occurredAt"',
     );
     const rows = await this.db.$queryRaw<
       Array<{ bucket: Date; revenue: string }>
     >(
       Prisma.sql`
         SELECT ${bucket} AS bucket,
-               COALESCE(SUM(item_totals.revenue), 0)::text AS revenue
+               COALESCE(SUM(i."lineTotal"), 0)::text AS revenue
         FROM "Order" o
-        ${this.productItemTotalsJoin(range)}
-        WHERE ${this.productSalesWhere(range)}
+        JOIN "OrderItem" i ON i."orderId" = o."id"
+        WHERE ${this.baseOrderWhere(range.locationId)}
+          AND i."type"::text = ${OrderItemType.PRODUCT}
+          AND ${this.productItemScope(range, 'i')}
         GROUP BY bucket
         ORDER BY bucket ASC
       `,
@@ -103,7 +110,7 @@ export class OrdersAggregatesService {
                COALESCE(SUM(i."lineTotal"), 0)::text AS revenue
         FROM "Order" o
         JOIN "OrderItem" i ON i."orderId" = o."id"
-        WHERE ${this.baseOrderWhere(range.locationId, range.from, range.to)}
+        WHERE ${this.baseOrderWhere(range.locationId)}
           AND i."type"::text = ${OrderItemType.PRODUCT}
           AND i."sellerStaffId" IS NOT NULL
           AND ${this.productItemScope(range, 'i')}
@@ -138,7 +145,7 @@ export class OrdersAggregatesService {
                  WHERE o."clientId" IN (${bookingClientIds})
                )::bigint AS "sharedClients"
         FROM "Order" o
-        ${this.allProductItemTotalsJoin()}
+        ${this.allProductItemTotalsJoin(range)}
         WHERE ${this.clientSalesWhere(range)}
       `,
     );
@@ -154,7 +161,7 @@ export class OrdersAggregatesService {
     const bucket = this.bucketExpr(
       range.granularity,
       range.timezone,
-      'o."occurredAt"',
+      'i."occurredAt"',
     );
     const rows = await this.db.$queryRaw<
       Array<{
@@ -169,7 +176,7 @@ export class OrdersAggregatesService {
           ${bookingClientsByBucket}
         )
         SELECT ${bucket} AS bucket,
-               COALESCE(SUM(item_totals.revenue), 0)::text AS revenue,
+               COALESCE(SUM(i."lineTotal"), 0)::text AS revenue,
                COUNT(DISTINCT o."clientId")::bigint AS "activeClients",
                COUNT(DISTINCT o."clientId") FILTER (
                  WHERE EXISTS (
@@ -180,8 +187,16 @@ export class OrdersAggregatesService {
                  )
                )::bigint AS "sharedClients"
         FROM "Order" o
-        ${this.allProductItemTotalsJoin()}
+        JOIN "OrderItem" i ON i."orderId" = o."id"
         WHERE ${this.clientSalesWhere(range)}
+          AND i."type"::text = ${OrderItemType.PRODUCT}
+          AND ${this.productItemScope(
+            {
+              from: range.from,
+              to: range.to,
+            },
+            'i',
+          )}
         GROUP BY 1
         ORDER BY 1 ASC
       `,
@@ -207,7 +222,7 @@ export class OrdersAggregatesService {
 
   private productSalesWhere(range: ProductSalesRange): Prisma.Sql {
     return Prisma.sql`
-      ${this.baseOrderWhere(range.locationId, range.from, range.to)}
+      ${this.baseOrderWhere(range.locationId)}
       AND EXISTS (
         SELECT 1
         FROM "OrderItem" scoped_item
@@ -218,26 +233,29 @@ export class OrdersAggregatesService {
     `;
   }
 
-  private baseOrderWhere(locationId: string, from: Date, to: Date): Prisma.Sql {
+  private baseOrderWhere(locationId: string): Prisma.Sql {
     return Prisma.sql`
       o."locationId" = ${locationId}
-      AND o."status"::text = ${OrderStatus.POSTED}
-      AND o."occurredAt" >= ${from}::timestamptz AT TIME ZONE 'UTC'
-      AND o."occurredAt" < ${to}::timestamptz AT TIME ZONE 'UTC'
+      AND o."status"::text = ${OrderStatus.ACTIVE}
     `;
   }
 
   private clientSalesWhere(range: ClientSalesRange): Prisma.Sql {
     return Prisma.sql`
       o."locationId" IN (${Prisma.join(range.locationIds.map((id) => Prisma.sql`${id}`))})
-      AND o."status"::text = ${OrderStatus.POSTED}
+      AND o."status"::text = ${OrderStatus.ACTIVE}
       AND o."clientId" IS NOT NULL
-      AND o."occurredAt" >= ${range.from}::timestamptz AT TIME ZONE 'UTC'
-      AND o."occurredAt" < ${range.to}::timestamptz AT TIME ZONE 'UTC'
       AND EXISTS (
         SELECT 1 FROM "OrderItem" product_item
         WHERE product_item."orderId" = o."id"
           AND product_item."type"::text = ${OrderItemType.PRODUCT}
+          AND ${this.productItemScope(
+            {
+              from: range.from,
+              to: range.to,
+            },
+            'product_item',
+          )}
       )
     `;
   }
@@ -254,25 +272,44 @@ export class OrdersAggregatesService {
     `;
   }
 
-  private allProductItemTotalsJoin(): Prisma.Sql {
+  private allProductItemTotalsJoin(range: ClientSalesRange): Prisma.Sql {
     return Prisma.sql`
       LEFT JOIN LATERAL (
         SELECT COALESCE(SUM(i."lineTotal"), 0) AS revenue
         FROM "OrderItem" i
         WHERE i."orderId" = o."id"
           AND i."type"::text = ${OrderItemType.PRODUCT}
+          AND ${this.productItemScope(
+            {
+              from: range.from,
+              to: range.to,
+            },
+            'i',
+          )}
       ) item_totals ON TRUE
     `;
   }
 
   private productItemScope(
-    range: ProductSalesRange,
-    alias: 'i' | 'scoped_item',
+    range: Pick<ProductSalesRange, 'from' | 'to'> &
+      Partial<
+        Pick<ProductSalesRange, 'staffId' | 'catalogItemId' | 'categoryId'>
+      >,
+    alias: 'i' | 'scoped_item' | 'product_item',
   ): Prisma.Sql {
     const parts: Prisma.Sql[] = [];
     const staff = Prisma.raw(`${alias}."sellerStaffId"`);
     const catalogItem = Prisma.raw(`${alias}."catalogItemId"`);
     const category = Prisma.raw(`${alias}."categoryId"`);
+    const status = Prisma.raw(`${alias}."status"`);
+    const occurredAt = Prisma.raw(`${alias}."occurredAt"`);
+    parts.push(Prisma.sql`${status}::text = ${OrderItemStatus.CONFIRMED}`);
+    parts.push(
+      Prisma.sql`${occurredAt} >= ${range.from}::timestamptz AT TIME ZONE 'UTC'`,
+    );
+    parts.push(
+      Prisma.sql`${occurredAt} < ${range.to}::timestamptz AT TIME ZONE 'UTC'`,
+    );
     if (range.staffId) parts.push(Prisma.sql`${staff} = ${range.staffId}`);
     if (range.catalogItemId) {
       parts.push(Prisma.sql`${catalogItem} = ${range.catalogItemId}`);
@@ -286,7 +323,7 @@ export class OrdersAggregatesService {
   private bucketExpr(
     granularity: SeriesGranularity,
     timezone: string,
-    column: 'o."occurredAt"',
+    column: 'o."occurredAt"' | 'i."occurredAt"',
   ): Prisma.Sql {
     const unit = Prisma.raw(`'${this.pgTruncUnit(granularity)}'`);
     const source = Prisma.raw(column);

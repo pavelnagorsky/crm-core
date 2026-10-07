@@ -43,7 +43,7 @@ import { OrdersService } from './orders.service.js';
 export class OrdersController {
   constructor(private readonly orders: OrdersService) {}
 
-  @ApiOperation({ summary: 'Create an open internal product order' })
+  @ApiOperation({ summary: 'Create an active product order with draft items' })
   @ApiCreatedResponse({ type: ApiResponse(OrderResponseDto) })
   @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Post()
@@ -96,7 +96,7 @@ export class OrdersController {
     );
   }
 
-  @ApiOperation({ summary: 'Replace an open internal order' })
+  @ApiOperation({ summary: 'Replace draft items in an active order' })
   @ApiOkResponse({ type: ApiResponse(OrderResponseDto) })
   @ApiConflictResponse({ description: 'Order is immutable' })
   @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
@@ -116,7 +116,7 @@ export class OrdersController {
     return BaseResponseDto.success(OrderResponseDto.fromEntity(order));
   }
 
-  @ApiOperation({ summary: 'Post or void an internal order' })
+  @ApiOperation({ summary: 'Void an internal order' })
   @ApiOkResponse({ type: ApiResponse(OrderResponseDto) })
   @ApiConflictResponse({ description: 'Order status transition rejected' })
   @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
@@ -137,7 +137,27 @@ export class OrdersController {
     return BaseResponseDto.success(OrderResponseDto.fromEntity(order));
   }
 
-  @ApiOperation({ summary: 'Delete an open internal order' })
+  @ApiOperation({ summary: 'Confirm a draft order item' })
+  @ApiOkResponse({ type: ApiResponse(OrderResponseDto) })
+  @ApiConflictResponse({ description: 'Order item cannot be confirmed' })
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Patch(':orderId/items/:orderItemId/confirm')
+  async confirmItem(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Param('orderId', ParseUUIDPipe) orderId: string,
+    @Param('orderItemId', ParseUUIDPipe) orderItemId: string,
+    @TokenPayload() token: TokenPayloadDto,
+  ): Promise<BaseResponseDto<OrderResponseDto>> {
+    const order = await this.orders.confirmItem(
+      locationId,
+      orderId,
+      orderItemId,
+      auditActorFromToken(token, locationId),
+    );
+    return BaseResponseDto.success(OrderResponseDto.fromEntity(order));
+  }
+
+  @ApiOperation({ summary: 'Delete an active draft order' })
   @ApiNoContentResponse()
   @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Delete(':orderId')

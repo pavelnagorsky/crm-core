@@ -7,6 +7,7 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   AuditActorRole,
+  OrderItemStatus,
   OrderItemType,
   OrderStatus,
   Prisma,
@@ -106,7 +107,8 @@ export class OrdersService {
     const result = await this.inTransaction(async (tx) => {
       await this.lockOrder(tx, orderId);
       const locked = await this.findInTransaction(tx, locationId, orderId);
-      this.assertOpen(locked.status);
+      this.assertActive(locked.status);
+      this.assertDraftItems(locked);
       const draft = await this.resolveDraft(locationId, dto, actor, locked, tx);
       await tx.orderItem.deleteMany({ where: { orderId } });
       const order = await tx.order.update({
@@ -200,32 +202,57 @@ export class OrdersService {
   async changeStatus(
     locationId: string,
     orderId: string,
-    status: OrderTargetStatus,
+    _status: OrderTargetStatus,
     reason: string | undefined,
     actor: AuditActor,
   ): Promise<OrderWithItems> {
-    if (status === OrderTargetStatus.VOIDED && !this.canSetCustomPrice(actor)) {
-      throw new ForbiddenException('Only an owner can void a posted order');
+    if (!this.canSetCustomPrice(actor)) {
+      throw new ForbiddenException('Only an owner can void an order');
     }
     const location = await this.locations.findById(locationId);
-    const transition =
-      status === OrderTargetStatus.POSTED
-        ? await this.post(locationId, orderId)
-        : await this.void(locationId, orderId, reason, actor);
+    const transition = await this.void(locationId, orderId, reason, actor);
     if (transition.changed) {
       this.emit(
         location.brandId,
         locationId,
         orderId,
-        status === OrderTargetStatus.POSTED
-          ? AuditEvent.ORDER_POSTED
-          : AuditEvent.ORDER_VOIDED,
+        AuditEvent.ORDER_VOIDED,
         AuditActionType.ACTION,
         actor,
         {
           totalAmount: transition.order.totalAmount.toFixed(2),
           currency: transition.order.currency,
           reason: transition.order.voidReason,
+        },
+      );
+    }
+    return transition.order;
+  }
+
+  async confirmItem(
+    locationId: string,
+    orderId: string,
+    orderItemId: string,
+    actor: AuditActor,
+  ): Promise<OrderWithItems> {
+    const location = await this.locations.findById(locationId);
+    const transition = await this.confirmProductItem(
+      locationId,
+      orderId,
+      orderItemId,
+    );
+    if (transition.changed) {
+      this.emit(
+        location.brandId,
+        locationId,
+        orderId,
+        AuditEvent.ORDER_ITEM_CONFIRMED,
+        AuditActionType.ACTION,
+        actor,
+        {
+          orderItemId,
+          totalAmount: transition.order.totalAmount.toFixed(2),
+          currency: transition.order.currency,
         },
       );
     }
@@ -241,7 +268,8 @@ export class OrdersService {
     const deleted = await this.inTransaction(async (tx) => {
       await this.lockOrder(tx, orderId);
       const order = await this.findInTransaction(tx, locationId, orderId);
-      this.assertOpen(order.status);
+      this.assertActive(order.status);
+      this.assertDraftItems(order);
       await tx.order.delete({ where: { id: orderId } });
       return order;
     });
@@ -259,18 +287,36 @@ export class OrdersService {
     );
   }
 
-  private async post(
+  private async confirmProductItem(
     locationId: string,
     orderId: string,
+    orderItemId: string,
   ): Promise<OrderTransition> {
     return this.inTransaction(async (tx) => {
       await this.lockOrder(tx, orderId);
       const order = await this.findInTransaction(tx, locationId, orderId);
-      if (order.status === OrderStatus.POSTED) {
+      this.assertActive(order.status);
+      const item = order.items.find((row) => row.id === orderItemId);
+      if (!item) {
+        throw new AppException(
+          ErrorCode.ORDER_ITEM_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
+      }
+      if (item.status === OrderItemStatus.CONFIRMED) {
         return { order, changed: false };
       }
-      this.assertOpen(order.status);
-      const productIds = order.items.map((item) => item.catalogItemId!);
+      if (
+        item.status !== OrderItemStatus.DRAFT ||
+        item.type !== OrderItemType.PRODUCT ||
+        !item.catalogItemId
+      ) {
+        throw new AppException(
+          ErrorCode.ORDER_ITEM_NOT_DRAFT,
+          HttpStatus.CONFLICT,
+        );
+      }
+      const productIds = [item.catalogItemId];
       const products = await this.products.resolveForSale(
         locationId,
         productIds,
@@ -284,26 +330,20 @@ export class OrdersService {
       }
       const sellers = await this.staff.resolveForProductSale(
         locationId,
-        order.items.flatMap((item) =>
-          item.sellerStaffId ? [item.sellerStaffId] : [],
-        ),
+        item.sellerStaffId ? [item.sellerStaffId] : [],
         tx,
       );
       const sellerIds = new Set(sellers.map((seller) => seller.id));
-      if (
-        order.items.some(
-          (item) => item.sellerStaffId && !sellerIds.has(item.sellerStaffId),
-        )
-      ) {
+      if (item.sellerStaffId && !sellerIds.has(item.sellerStaffId)) {
         throw new AppException(
           ErrorCode.ORDER_SELLER_INVALID,
           HttpStatus.CONFLICT,
         );
       }
       const byProduct = new Map(products.map((row) => [row.productId, row]));
-      const saleLines: InventorySaleLine[] = order.items.map((item) => {
-        const product = byProduct.get(item.catalogItemId!)!;
-        return {
+      const product = byProduct.get(item.catalogItemId)!;
+      const saleLines: InventorySaleLine[] = [
+        {
           orderItemId: item.id,
           productLocationId: product.id,
           productId: product.productId,
@@ -312,12 +352,13 @@ export class OrdersService {
           productUnit: product.product.unit,
           quantity: item.quantity.toString(),
           trackInventory: product.trackInventory,
-        };
-      });
+        },
+      ];
+      const occurredAt = new Date();
       const costs = await this.inventory.postSale(
         locationId,
         orderId,
-        order.occurredAt,
+        occurredAt,
         saleLines,
         tx,
       );
@@ -331,14 +372,14 @@ export class OrdersService {
         });
       }
       const commissionLines: ProductOrderCommissionLine[] = order.items.flatMap(
-        (item) =>
-          item.sellerStaffId
+        (row) =>
+          row.id === item.id && row.sellerStaffId
             ? [
                 {
-                  orderItemId: item.id,
-                  staffId: item.sellerStaffId,
-                  amount: item.lineTotal,
-                  description: item.title,
+                  orderItemId: row.id,
+                  staffId: row.sellerStaffId,
+                  amount: row.lineTotal,
+                  description: row.title,
                 },
               ]
             : [],
@@ -346,17 +387,23 @@ export class OrdersService {
       await this.earnings.recordForProductOrder(
         locationId,
         orderId,
-        order.occurredAt,
+        occurredAt,
         order.currency,
         commissionLines,
         tx,
       );
-      const posted = await tx.order.update({
-        where: { id: orderId },
-        data: { status: OrderStatus.POSTED, postedAt: new Date() },
-        include: orderInclude,
+      await tx.orderItem.update({
+        where: { id: item.id },
+        data: {
+          status: OrderItemStatus.CONFIRMED,
+          confirmedAt: occurredAt,
+          occurredAt,
+        },
       });
-      return { order: posted, changed: true };
+      return {
+        order: await this.findInTransaction(tx, locationId, orderId),
+        changed: true,
+      };
     });
   }
 
@@ -379,12 +426,7 @@ export class OrdersService {
       if (order.status === OrderStatus.VOIDED) {
         return { order, changed: false };
       }
-      if (order.status !== OrderStatus.POSTED) {
-        throw new AppException(
-          ErrorCode.ORDER_STATUS_INVALID,
-          HttpStatus.CONFLICT,
-        );
-      }
+      this.assertActive(order.status);
       await this.earnings.reverseForProductOrder(
         locationId,
         orderId,
@@ -393,6 +435,13 @@ export class OrdersService {
         tx,
       );
       await this.inventory.reverseSale(locationId, orderId, new Date(), tx);
+      await tx.orderItem.updateMany({
+        where: {
+          orderId,
+          status: { not: OrderItemStatus.REVERSED },
+        },
+        data: { status: OrderItemStatus.REVERSED },
+      });
       const voided = await tx.order.update({
         where: { id: orderId },
         data: {
@@ -603,9 +652,18 @@ export class OrdersService {
     );
   }
 
-  private assertOpen(status: OrderStatus): void {
-    if (status !== OrderStatus.OPEN) {
-      throw new AppException(ErrorCode.ORDER_NOT_OPEN, HttpStatus.CONFLICT);
+  private assertActive(status: OrderStatus): void {
+    if (status !== OrderStatus.ACTIVE) {
+      throw new AppException(ErrorCode.ORDER_NOT_ACTIVE, HttpStatus.CONFLICT);
+    }
+  }
+
+  private assertDraftItems(order: OrderWithItems): void {
+    if (order.items.some((item) => item.status !== OrderItemStatus.DRAFT)) {
+      throw new AppException(
+        ErrorCode.ORDER_ITEM_NOT_DRAFT,
+        HttpStatus.CONFLICT,
+      );
     }
   }
 

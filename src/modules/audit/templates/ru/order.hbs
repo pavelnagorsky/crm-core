@@ -1,9 +1,11 @@
 <p>
-  {{#if (eq eventType "ORDER_CREATED")}}Создан заказ{{/if}}
-  {{#if (eq eventType "ORDER_UPDATED")}}Изменён заказ{{/if}}
-  {{#if (eq eventType "ORDER_POSTED")}}Проведён заказ{{/if}}
-  {{#if (eq eventType "ORDER_VOIDED")}}Отменён заказ{{/if}}
-  {{#if (eq eventType "ORDER_DELETED")}}Удалён заказ{{/if}}
-  {{#if payload.totalAmount}}: {{payload.totalAmount}} {{payload.currency}}{{/if}}
+  {{#if (eq eventType 'ORDER_CREATED')}}Создан заказ{{/if}}
+  {{#if (eq eventType 'ORDER_UPDATED')}}Изменён заказ{{/if}}
+  {{#if (eq eventType 'ORDER_ITEM_CONFIRMED')}}Позиция заказа подтверждена{{/if}}
+  {{#if (eq eventType 'ORDER_VOIDED')}}Отменён заказ{{/if}}
+  {{#if (eq eventType 'ORDER_DELETED')}}Удалён заказ{{/if}}
+  {{#if payload.totalAmount}}:
+    {{payload.totalAmount}}
+    {{payload.currency}}{{/if}}
   {{#if payload.reason}}. Причина: {{payload.reason}}{{/if}}
 </p>

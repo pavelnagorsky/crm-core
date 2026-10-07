@@ -52,9 +52,6 @@ export class OrderResponseDto {
   createdByName: string;
 
   @ApiProperty({ type: Date, nullable: true })
-  postedAt: Date | null;
-
-  @ApiProperty({ type: Date, nullable: true })
   voidedAt: Date | null;
 
   @ApiProperty({ type: String, nullable: true })

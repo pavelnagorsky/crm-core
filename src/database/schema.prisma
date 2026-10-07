@@ -191,7 +191,7 @@ enum AuditEvent {
   INVENTORY_DOCUMENT_VOIDED
   ORDER_CREATED
   ORDER_UPDATED
-  ORDER_POSTED
+  ORDER_ITEM_CONFIRMED
   ORDER_VOIDED
   ORDER_DELETED
 }
@@ -262,8 +262,7 @@ enum InventoryMovementType {
 }
 
 enum OrderStatus {
-  OPEN
-  POSTED
+  ACTIVE
   VOIDED
 }
 
@@ -272,6 +271,12 @@ enum OrderItemType {
   SERVICE
   BUNDLE
   CUSTOM
+}
+
+enum OrderItemStatus {
+  DRAFT
+  CONFIRMED
+  REVERSED
 }
 
 enum StaffEarningType {
@@ -589,12 +594,12 @@ model InventoryMovement {
 model Order {
   id              String      @id @default(uuid())
   locationId      String
-  bookingId       String?
+  bookingId       String?     @unique
   clientId        String?
   clientName      String?     @db.VarChar(201)
   clientPhone     String?     @db.VarChar(30)
   currency        String      @db.VarChar(3)
-  status          OrderStatus @default(OPEN)
+  status          OrderStatus @default(ACTIVE)
   occurredAt      DateTime
   listTotalAmount Decimal     @default(0) @db.Decimal(12, 2)
   subtotalAmount  Decimal     @default(0) @db.Decimal(12, 2)
@@ -603,7 +608,6 @@ model Order {
   note            String?     @db.VarChar(1000)
   createdById     String?
   createdByName   String      @db.VarChar(300)
-  postedAt        DateTime?
   voidedAt        DateTime?
   voidReason      String?     @db.VarChar(500)
   createdAt       DateTime    @default(now())
@@ -618,44 +622,50 @@ model Order {
 
   @@index([locationId, occurredAt])
   @@index([locationId, status])
-  @@index([bookingId])
   @@index([clientId, occurredAt])
 }
 
 model OrderItem {
-  id                String        @id @default(uuid())
+  id                String          @id @default(uuid())
   orderId           String
   type              OrderItemType
+  bookingItemId     String?
+  status            OrderItemStatus @default(DRAFT)
   catalogItemId     String?
   categoryId        String?
   productLocationId String?
-  title             String        @db.VarChar(150)
-  sku               String?       @db.VarChar(80)
+  title             String          @db.VarChar(150)
+  sku               String?         @db.VarChar(80)
   unit              ProductUnit?
-  quantity          Decimal       @db.Decimal(14, 3)
-  listUnitPrice     Decimal       @db.Decimal(10, 2)
-  customUnitPrice   Decimal?      @db.Decimal(10, 2)
-  unitPrice         Decimal       @db.Decimal(10, 2)
-  lineSubtotal      Decimal       @db.Decimal(12, 2)
-  discountTotal     Decimal       @default(0) @db.Decimal(12, 2)
-  lineTotal         Decimal       @db.Decimal(12, 2)
-  unitCostSnapshot  Decimal?      @db.Decimal(12, 2)
-  lineCostSnapshot  Decimal?      @db.Decimal(14, 2)
+  quantity          Decimal         @db.Decimal(14, 3)
+  listUnitPrice     Decimal         @db.Decimal(10, 2)
+  customUnitPrice   Decimal?        @db.Decimal(10, 2)
+  unitPrice         Decimal         @db.Decimal(10, 2)
+  lineSubtotal      Decimal         @db.Decimal(12, 2)
+  discountTotal     Decimal         @default(0) @db.Decimal(12, 2)
+  lineTotal         Decimal         @db.Decimal(12, 2)
+  unitCostSnapshot  Decimal?        @db.Decimal(12, 2)
+  lineCostSnapshot  Decimal?        @db.Decimal(14, 2)
   sellerStaffId     String?
-  sellerName        String?       @db.VarChar(250)
-  createdAt         DateTime      @default(now())
+  sellerName        String?         @db.VarChar(250)
+  confirmedAt       DateTime?
+  occurredAt        DateTime?
+  createdAt         DateTime        @default(now())
 
   order           Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  bookingItem     BookingItem?        @relation(fields: [bookingItemId], references: [id], onDelete: SetNull)
   productLocation ProductLocation?    @relation(fields: [productLocationId], references: [id], onDelete: Restrict)
   seller          Staff?              @relation(fields: [sellerStaffId], references: [id], onDelete: SetNull)
   movements       InventoryMovement[]
   earnings        StaffEarning[]
 
   @@index([orderId])
+  @@index([bookingItemId])
   @@index([productLocationId])
   @@index([sellerStaffId])
   @@index([type, catalogItemId])
   @@index([type, categoryId])
+  @@index([status, occurredAt])
 }
 
 model BrandMembership {
@@ -1015,6 +1025,7 @@ model BookingItem {
   staff         Staff          @relation(fields: [staffId], references: [id], onDelete: Restrict)
   calendarEvent CalendarEvent? @relation(fields: [calendarEventId], references: [id], onDelete: SetNull)
   earnings      StaffEarning[]
+  orderItems    OrderItem[]
 
   @@index([bookingId])
   @@index([locationId])
