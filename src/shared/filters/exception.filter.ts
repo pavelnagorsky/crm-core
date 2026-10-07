@@ -46,7 +46,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     if (exception instanceof HttpException) {
       const status = exception.getStatus();
-      const code = HTTP_CODE_MAP[status] ?? ErrorCode.INTERNAL_ERROR;
+      const code = HTTP_CODE_MAP[status] ?? ErrorCode.INTERNAL_ERROR.code;
       const body = exception.getResponse();
       const message =
         typeof body === 'string'
