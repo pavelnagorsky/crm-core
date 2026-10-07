@@ -105,7 +105,11 @@
     "PRODUCT_CATEGORY_CREATED": "Категория товаров создана",
     "PRODUCT_CATEGORY_UPDATED": "Категория товаров изменена",
     "PRODUCT_CATEGORY_DELETED": "Категория товаров удалена",
-    "PRODUCT_LOCATION_UPDATED": "Настройки товара в локации изменены"
+    "PRODUCT_LOCATION_UPDATED": "Настройки товара в локации изменены",
+    "INVENTORY_DOCUMENT_CREATED": "Складской документ создан",
+    "INVENTORY_DOCUMENT_UPDATED": "Складской документ изменён",
+    "INVENTORY_DOCUMENT_POSTED": "Складской документ проведён",
+    "INVENTORY_DOCUMENT_VOIDED": "Складской документ отменён"
   },
   "actorRole": {
     "CLIENT": "клиент",

@@ -136,6 +136,7 @@ enum AuditEntity {
   SERVICE
   PAYROLL
   PRODUCT
+  INVENTORY
 }
 
 enum AuditEvent {
@@ -182,6 +183,10 @@ enum AuditEvent {
   PRODUCT_CATEGORY_UPDATED
   PRODUCT_CATEGORY_DELETED
   PRODUCT_LOCATION_UPDATED
+  INVENTORY_DOCUMENT_CREATED
+  INVENTORY_DOCUMENT_UPDATED
+  INVENTORY_DOCUMENT_POSTED
+  INVENTORY_DOCUMENT_VOIDED
 }
 
 enum AuditActorRole {
@@ -221,6 +226,32 @@ enum ProductUnit {
   KILOGRAM
   MILLILITER
   LITER
+}
+
+enum InventoryDocumentType {
+  RECEIPT
+  WRITE_OFF
+  ADJUSTMENT
+  STOCKTAKE
+  TRANSFER
+}
+
+enum InventoryDocumentStatus {
+  OPEN
+  POSTED
+  VOIDED
+}
+
+enum InventoryMovementType {
+  RECEIPT
+  WRITE_OFF
+  ADJUSTMENT
+  STOCKTAKE
+  TRANSFER_OUT
+  TRANSFER_IN
+  SALE
+  SALE_REVERSAL
+  REVERSAL
 }
 
 enum StaffEarningType {
@@ -342,23 +373,26 @@ model Location {
   createdAt                     DateTime          @default(now())
   updatedAt                     DateTime          @updatedAt
 
-  brand               Brand                   @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  locationMemberships LocationMembership[]
-  serviceCategories   ServiceCategory[]
-  services            Service[]
-  staff               Staff[]
-  staffInvitations    StaffInvitation[]
-  calendarEvents      CalendarEvent[]
-  bookings            Booking[]
-  compensationPlans   StaffCompensationPlan[]
-  staffEarnings       StaffEarning[]
-  payrollPeriods      PayrollPeriod[]
-  payrollResults      PayrollResult[]
-  bookingPages        BookingPage[]
-  bookingWidgets      BookingWidget[]
-  serviceBundles      ServiceBundle[]
-  bookingItems        BookingItem[]
-  productLocations    ProductLocation[]
+  brand                      Brand                   @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  locationMemberships        LocationMembership[]
+  serviceCategories          ServiceCategory[]
+  services                   Service[]
+  staff                      Staff[]
+  staffInvitations           StaffInvitation[]
+  calendarEvents             CalendarEvent[]
+  bookings                   Booking[]
+  compensationPlans          StaffCompensationPlan[]
+  staffEarnings              StaffEarning[]
+  payrollPeriods             PayrollPeriod[]
+  payrollResults             PayrollResult[]
+  bookingPages               BookingPage[]
+  bookingWidgets             BookingWidget[]
+  serviceBundles             ServiceBundle[]
+  bookingItems               BookingItem[]
+  productLocations           ProductLocation[]
+  inventoryDocuments         InventoryDocument[]     @relation("InventoryDocumentSource")
+  incomingInventoryTransfers InventoryDocument[]     @relation("InventoryDocumentDestination")
+  inventoryMovements         InventoryMovement[]
 
   @@index([brandId])
 }
@@ -415,12 +449,111 @@ model ProductLocation {
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
 
-  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  product                Product                 @relation(fields: [productId], references: [id], onDelete: Cascade)
+  location               Location                @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  inventoryBalance       InventoryBalance?
+  inventoryDocumentItems InventoryDocumentItem[]
+  inventoryMovements     InventoryMovement[]
 
   @@unique([productId, locationId])
   @@index([locationId, status])
   @@index([locationId, trackInventory])
+}
+
+model InventoryBalance {
+  id                String   @id @default(uuid())
+  productLocationId String   @unique
+  quantityOnHand    Decimal  @default(0) @db.Decimal(14, 3)
+  averageUnitCost   Decimal  @default(0) @db.Decimal(12, 2)
+  updatedAt         DateTime @updatedAt
+
+  productLocation ProductLocation @relation(fields: [productLocationId], references: [id], onDelete: Restrict)
+
+  @@index([updatedAt])
+}
+
+model InventoryDocument {
+  id                    String                  @id @default(uuid())
+  locationId            String
+  destinationLocationId String?
+  type                  InventoryDocumentType
+  status                InventoryDocumentStatus @default(OPEN)
+  occurredAt            DateTime
+  reference             String?                 @db.VarChar(100)
+  supplierName          String?                 @db.VarChar(200)
+  reason                String?                 @db.VarChar(500)
+  note                  String?                 @db.VarChar(1000)
+  createdById           String?
+  createdByName         String                  @db.VarChar(300)
+  postedAt              DateTime?
+  voidedAt              DateTime?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+
+  location            Location                @relation("InventoryDocumentSource", fields: [locationId], references: [id], onDelete: Restrict)
+  destinationLocation Location?               @relation("InventoryDocumentDestination", fields: [destinationLocationId], references: [id], onDelete: Restrict)
+  items               InventoryDocumentItem[]
+  movements           InventoryMovement[]
+
+  @@index([locationId, occurredAt])
+  @@index([locationId, status])
+  @@index([destinationLocationId, occurredAt])
+}
+
+model InventoryDocumentItem {
+  id                String      @id @default(uuid())
+  documentId        String
+  productLocationId String
+  productId         String
+  productName       String      @db.VarChar(150)
+  productSku        String?     @db.VarChar(80)
+  productUnit       ProductUnit
+  quantity          Decimal     @db.Decimal(14, 3)
+  unitCost          Decimal?    @db.Decimal(12, 2)
+  createdAt         DateTime    @default(now())
+
+  document        InventoryDocument   @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  productLocation ProductLocation     @relation(fields: [productLocationId], references: [id], onDelete: Restrict)
+  movements       InventoryMovement[]
+
+  @@unique([documentId, productLocationId])
+  @@index([productLocationId])
+  @@index([productId])
+}
+
+model InventoryMovement {
+  id                    String                @id @default(uuid())
+  locationId            String
+  productLocationId     String
+  documentId            String?
+  documentItemId        String?
+  type                  InventoryMovementType
+  productId             String
+  productName           String                @db.VarChar(150)
+  productSku            String?               @db.VarChar(80)
+  quantityDelta         Decimal               @db.Decimal(14, 3)
+  quantityBefore        Decimal               @db.Decimal(14, 3)
+  quantityAfter         Decimal               @db.Decimal(14, 3)
+  averageUnitCostBefore Decimal               @db.Decimal(12, 2)
+  averageUnitCostAfter  Decimal               @db.Decimal(12, 2)
+  unitCost              Decimal               @db.Decimal(12, 2)
+  totalCost             Decimal               @db.Decimal(14, 2)
+  occurredAt            DateTime
+  idempotencyKey        String
+  reversedMovementId    String?               @unique
+  createdAt             DateTime              @default(now())
+
+  location         Location               @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  productLocation  ProductLocation        @relation(fields: [productLocationId], references: [id], onDelete: Restrict)
+  document         InventoryDocument?     @relation(fields: [documentId], references: [id], onDelete: Restrict)
+  documentItem     InventoryDocumentItem? @relation(fields: [documentItemId], references: [id], onDelete: Restrict)
+  reversedMovement InventoryMovement?     @relation("InventoryMovementReversal", fields: [reversedMovementId], references: [id], onDelete: Restrict)
+  reversedBy       InventoryMovement?     @relation("InventoryMovementReversal")
+
+  @@unique([locationId, idempotencyKey])
+  @@index([productLocationId, occurredAt])
+  @@index([locationId, occurredAt])
+  @@index([documentId])
 }
 
 model BrandMembership {

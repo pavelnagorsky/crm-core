@@ -313,6 +313,12 @@ export class ProductsService {
     const old = await this.db.productLocation.findUnique({
       where: { productId_locationId: { productId, locationId } },
     });
+    if (old?.trackInventory && !dto.trackInventory) {
+      throw new AppException(
+        ErrorCode.PRODUCT_INVENTORY_TRACKING_IMMUTABLE,
+        HttpStatus.CONFLICT,
+      );
+    }
     const row = await this.db.productLocation.upsert({
       where: { productId_locationId: { productId, locationId } },
       create: {
@@ -442,6 +448,29 @@ export class ProductsService {
       this.db.productLocation.count({ where }),
     ]);
     return { items: items as LocationProductView[], totalItems };
+  }
+
+  listTrackedForInventory(locationId: string): Promise<LocationProductView[]> {
+    return this.db.productLocation.findMany({
+      where: { locationId, trackInventory: true },
+      include: locationProductInclude,
+      orderBy: [{ product: { name: 'asc' } }, { id: 'asc' }],
+    }) as Promise<LocationProductView[]>;
+  }
+
+  resolveForInventory(
+    locationId: string,
+    productIds: string[],
+  ): Promise<LocationProductView[]> {
+    return this.db.productLocation.findMany({
+      where: {
+        locationId,
+        productId: { in: productIds },
+        trackInventory: true,
+      },
+      include: locationProductInclude,
+      orderBy: { id: 'asc' },
+    }) as Promise<LocationProductView[]>;
   }
 
   private locationOrder(

@@ -1,0 +1,8 @@
+<p>
+  {{#if (eq eventType "INVENTORY_DOCUMENT_CREATED")}}Создан складской документ{{/if}}
+  {{#if (eq eventType "INVENTORY_DOCUMENT_UPDATED")}}Изменён складской документ{{/if}}
+  {{#if (eq eventType "INVENTORY_DOCUMENT_POSTED")}}Проведён складской документ{{/if}}
+  {{#if (eq eventType "INVENTORY_DOCUMENT_VOIDED")}}Отменён складской документ{{/if}}
+  {{#if payload.type}}: {{payload.type}}{{/if}}
+  {{#if payload.itemCount}}, позиций: {{payload.itemCount}}{{/if}}
+</p>

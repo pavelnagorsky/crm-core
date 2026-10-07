@@ -155,6 +155,37 @@ describe('ProductsService', () => {
     );
   });
 
+  it('does not allow inventory tracking to be disabled after activation', async () => {
+    const { db, locations, service } = setup();
+    locations.findById.mockResolvedValue({
+      id: 'location-1',
+      brandId: 'brand-1',
+    });
+    db.product.findFirst.mockResolvedValue({
+      id: 'product-1',
+      brandId: 'brand-1',
+      name: 'Shampoo',
+      locations: [],
+      category: null,
+      imageFile: null,
+    });
+    db.productLocation.findUnique.mockResolvedValue({ trackInventory: true });
+
+    await expect(
+      service.upsertLocation(
+        'location-1',
+        'product-1',
+        {
+          retailPrice: '10.00',
+          status: ProductStatus.ACTIVE,
+          trackInventory: false,
+        },
+        actor,
+      ),
+    ).rejects.toBeInstanceOf(AppException);
+    expect(db.productLocation.upsert).not.toHaveBeenCalled();
+  });
+
   it('rejects a no-op status transition', async () => {
     const { db, service } = setup();
     db.product.findFirst.mockResolvedValue({

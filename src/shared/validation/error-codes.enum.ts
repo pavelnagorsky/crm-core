@@ -356,6 +356,56 @@ export const ErrorCode = {
     message:
       'Product cannot be deleted because it is used by stock or sales records',
   },
+  PRODUCT_INVENTORY_TRACKING_IMMUTABLE: {
+    code: 'PRODUCT_INVENTORY_TRACKING_IMMUTABLE',
+    message:
+      'Inventory tracking cannot be disabled after it has been enabled for a location',
+  },
+
+  // inventory
+  INVENTORY_PRODUCT_NOT_CONFIGURED: {
+    code: 'INVENTORY_PRODUCT_NOT_CONFIGURED',
+    message:
+      'One or more products are not configured for inventory in this location',
+  },
+  INVENTORY_DOCUMENT_NOT_OPEN: {
+    code: 'INVENTORY_DOCUMENT_NOT_OPEN',
+    message: 'Only an open inventory document can be changed or posted',
+  },
+  INVENTORY_DOCUMENT_INVALID: {
+    code: 'INVENTORY_DOCUMENT_INVALID',
+    message: 'Inventory document items are invalid for this operation type',
+  },
+  INVENTORY_INSUFFICIENT_STOCK: {
+    code: 'INVENTORY_INSUFFICIENT_STOCK',
+    message: 'Inventory operation would make stock negative',
+  },
+  INVENTORY_REVERSAL_NOT_ALLOWED: {
+    code: 'INVENTORY_REVERSAL_NOT_ALLOWED',
+    message:
+      'Inventory document cannot be reversed after later stock movements',
+  },
+  INVENTORY_DESTINATION_INVALID: {
+    code: 'INVENTORY_DESTINATION_INVALID',
+    message:
+      'Inventory transfer destination must be another location in the same brand',
+  },
+  INVENTORY_UNIT_COST_REQUIRED: {
+    code: 'INVENTORY_UNIT_COST_REQUIRED',
+    message: 'Unit cost is required when inventory value increases',
+  },
+  INVENTORY_REASON_REQUIRED: {
+    code: 'INVENTORY_REASON_REQUIRED',
+    message: 'A reason is required for this inventory operation',
+  },
+  INVENTORY_DUPLICATE_PRODUCT: {
+    code: 'INVENTORY_DUPLICATE_PRODUCT',
+    message: 'A product can appear only once in an inventory document',
+  },
+  INVENTORY_FUTURE_DATE: {
+    code: 'INVENTORY_FUTURE_DATE',
+    message: 'Inventory operation date cannot be in the future',
+  },
 
   // dashboard
   DASHBOARD_CUSTOM_RANGE_REQUIRED: {
