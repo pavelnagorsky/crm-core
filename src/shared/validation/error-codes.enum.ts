@@ -334,6 +334,29 @@ export const ErrorCode = {
     message: 'Staff member has no product commission for this date',
   },
 
+  // products
+  PRODUCT_CATEGORY_NAME_EXISTS: {
+    code: 'PRODUCT_CATEGORY_NAME_EXISTS',
+    message: 'Product category name already exists in this brand',
+  },
+  PRODUCT_SKU_EXISTS: {
+    code: 'PRODUCT_SKU_EXISTS',
+    message: 'Product SKU already exists in this brand',
+  },
+  PRODUCT_BARCODE_EXISTS: {
+    code: 'PRODUCT_BARCODE_EXISTS',
+    message: 'Product barcode already exists in this brand',
+  },
+  PRODUCT_STATUS_ALREADY_SET: {
+    code: 'PRODUCT_STATUS_ALREADY_SET',
+    message: 'Product already has this status',
+  },
+  PRODUCT_IN_USE: {
+    code: 'PRODUCT_IN_USE',
+    message:
+      'Product cannot be deleted because it is used by stock or sales records',
+  },
+
   // dashboard
   DASHBOARD_CUSTOM_RANGE_REQUIRED: {
     code: 'DASHBOARD_CUSTOM_RANGE_REQUIRED',

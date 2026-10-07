@@ -14,6 +14,10 @@ const regularExpressions = {
   moneyAmount: /^\d+\.\d{2}$/,
   // Signed money after canonicalization to 2 decimal places
   signedAmount: /^-?\d+\.\d{2}$/,
+  // Non-negative stock quantity with up to 3 decimal places
+  quantity: /^\d+\.\d{3}$/,
+  // Signed stock quantity with up to 3 decimal places
+  signedQuantity: /^-?\d+\.\d{3}$/,
   // Percent 0–100 with up to 2 decimal places
   percent: /^(100(?:\.0{1,2})?|\d{1,2}(?:\.\d{1,2})?)$/,
   // Public booking page slug: lowercase segments separated by single hyphens

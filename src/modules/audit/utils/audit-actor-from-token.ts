@@ -5,7 +5,7 @@ import { AuditActorRole } from '../enums/audit-actor-role.enum.js';
 
 export function auditActorFromToken(
   payload: TokenPayloadDto,
-  brandId: string,
+  scopeId: string,
 ): AuditActor {
   const name =
     [payload.firstName, payload.lastName].filter(Boolean).join(' ') ||
@@ -15,9 +15,13 @@ export function auditActorFromToken(
     return { id: payload.sub, name, role: AuditActorRole.SUPPORT };
   }
 
-  const membership = payload.brandMemberships.find(
-    (m) => m.brandId === brandId,
+  const locationMembership = payload.locationMemberships.find(
+    (membership) => membership.locationId === scopeId,
   );
+  const brandId = locationMembership?.brandId ?? scopeId;
+  const membership =
+    payload.brandMemberships.find((item) => item.brandId === brandId) ??
+    locationMembership;
   const role =
     membership?.role === BusinessRole.OWNER
       ? AuditActorRole.OWNER

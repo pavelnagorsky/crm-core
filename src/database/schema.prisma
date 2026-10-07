@@ -135,6 +135,7 @@ enum AuditEntity {
   STAFF
   SERVICE
   PAYROLL
+  PRODUCT
 }
 
 enum AuditEvent {
@@ -174,6 +175,13 @@ enum AuditEvent {
   PAYROLL_APPROVED
   PAYROLL_PAID
   PAYROLL_CORRECTED
+  PRODUCT_CREATED
+  PRODUCT_UPDATED
+  PRODUCT_DELETED
+  PRODUCT_CATEGORY_CREATED
+  PRODUCT_CATEGORY_UPDATED
+  PRODUCT_CATEGORY_DELETED
+  PRODUCT_LOCATION_UPDATED
 }
 
 enum AuditActorRole {
@@ -200,6 +208,19 @@ enum StaffStatus {
 enum ServiceStatus {
   ACTIVE
   INACTIVE
+}
+
+enum ProductStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ProductUnit {
+  PIECE
+  GRAM
+  KILOGRAM
+  MILLILITER
+  LITER
 }
 
 enum StaffEarningType {
@@ -290,15 +311,17 @@ model PasswordResetCode {
 }
 
 model Brand {
-  id               String            @id @default(uuid())
-  name             String            @db.VarChar(255)
-  logoFileId       String?
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
-  logoFile         File?             @relation(fields: [logoFileId], references: [id], onDelete: SetNull)
-  brandMemberships BrandMembership[]
-  clients          Client[]
-  locations        Location[]
+  id                String            @id @default(uuid())
+  name              String            @db.VarChar(255)
+  logoFileId        String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  logoFile          File?             @relation(fields: [logoFileId], references: [id], onDelete: SetNull)
+  brandMemberships  BrandMembership[]
+  clients           Client[]
+  locations         Location[]
+  productCategories ProductCategory[]
+  products          Product[]
 }
 
 model Location {
@@ -335,8 +358,69 @@ model Location {
   bookingWidgets      BookingWidget[]
   serviceBundles      ServiceBundle[]
   bookingItems        BookingItem[]
+  productLocations    ProductLocation[]
 
   @@index([brandId])
+}
+
+model ProductCategory {
+  id          String   @id @default(uuid())
+  brandId     String
+  name        String   @db.VarChar(150)
+  description String?  @db.VarChar(500)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  brand    Brand     @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  products Product[]
+
+  @@unique([brandId, name])
+  @@index([brandId, sortOrder])
+}
+
+model Product {
+  id          String        @id @default(uuid())
+  brandId     String
+  categoryId  String?
+  imageFileId String?
+  name        String        @db.VarChar(150)
+  description String?       @db.VarChar(2000)
+  sku         String?       @db.VarChar(80)
+  barcode     String?       @db.VarChar(80)
+  unit        ProductUnit   @default(PIECE)
+  status      ProductStatus @default(ACTIVE)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  brand     Brand             @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  category  ProductCategory?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  imageFile File?             @relation(fields: [imageFileId], references: [id], onDelete: SetNull)
+  locations ProductLocation[]
+
+  @@unique([brandId, sku])
+  @@unique([brandId, barcode])
+  @@index([brandId, status])
+  @@index([categoryId])
+}
+
+model ProductLocation {
+  id             String        @id @default(uuid())
+  productId      String
+  locationId     String
+  retailPrice    Decimal       @db.Decimal(10, 2)
+  status         ProductStatus @default(ACTIVE)
+  trackInventory Boolean       @default(true)
+  reorderLevel   Decimal       @default(0) @db.Decimal(14, 3)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  product  Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, locationId])
+  @@index([locationId, status])
+  @@index([locationId, trackInventory])
 }
 
 model BrandMembership {
@@ -527,6 +611,7 @@ model File {
   brandLogos          Brand[]
   serviceImages       Service[]
   serviceBundleImages ServiceBundle[]
+  productImages       Product[]
   bookingPageCovers   BookingPage[]
 
   @@index([userId])

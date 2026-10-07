@@ -1,0 +1,23 @@
+{{#if (eq eventType "PRODUCT_CREATED")}}
+<p>{{payload.name}}{{#if payload.sku}}, SKU {{payload.sku}}{{/if}}{{#if payload.barcode}}, {{payload.barcode}}{{/if}}</p>
+{{/if}}
+
+{{#if (or (eq eventType "PRODUCT_UPDATED") (eq eventType "PRODUCT_CATEGORY_UPDATED") (eq eventType "PRODUCT_LOCATION_UPDATED"))}}
+<ul>
+  {{#each payload.changes}}
+  <li>{{t "fields" ../entityType this.field}}: <s>{{formatValue this.field this.from}}</s> -> {{formatValue this.field this.to}}</li>
+  {{/each}}
+</ul>
+{{/if}}
+
+{{#if (eq eventType "PRODUCT_DELETED")}}
+<p>{{payload.name}}</p>
+{{/if}}
+
+{{#if (eq eventType "PRODUCT_CATEGORY_CREATED")}}
+<p>{{payload.name}}{{#if payload.description}}: {{payload.description}}{{/if}}</p>
+{{/if}}
+
+{{#if (eq eventType "PRODUCT_CATEGORY_DELETED")}}
+<p>{{payload.name}}</p>
+{{/if}}

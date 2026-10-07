@@ -23,6 +23,7 @@ const MONEY_FIELDS = new Set([
   'price',
   'customPrice',
   'fixedPrice',
+  'retailPrice',
   'fixedSalaryAmount',
   'hourlyRate',
 ]);

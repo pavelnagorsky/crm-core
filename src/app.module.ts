@@ -23,6 +23,7 @@ import { HealthModule } from './modules/health/health.module.js';
 import { FilesModule } from './modules/files/files.module.js';
 import { DashboardModule } from './modules/dashboard/dashboard.module.js';
 import { PayrollModule } from './modules/payroll/payroll.module.js';
+import { ProductsModule } from './modules/products/products.module.js';
 
 @Module({
   imports: [
@@ -56,6 +57,7 @@ import { PayrollModule } from './modules/payroll/payroll.module.js';
     FilesModule,
     DashboardModule,
     PayrollModule,
+    ProductsModule,
   ],
 })
 export class AppModule {}

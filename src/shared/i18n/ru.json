@@ -98,7 +98,14 @@
     "PAYROLL_CALCULATED": "Зарплата рассчитана",
     "PAYROLL_APPROVED": "Период зарплаты утверждён",
     "PAYROLL_PAID": "Зарплата выплачена",
-    "PAYROLL_CORRECTED": "Корректировка зарплаты"
+    "PAYROLL_CORRECTED": "Корректировка зарплаты",
+    "PRODUCT_CREATED": "Товар создан",
+    "PRODUCT_UPDATED": "Товар изменён",
+    "PRODUCT_DELETED": "Товар удалён",
+    "PRODUCT_CATEGORY_CREATED": "Категория товаров создана",
+    "PRODUCT_CATEGORY_UPDATED": "Категория товаров изменена",
+    "PRODUCT_CATEGORY_DELETED": "Категория товаров удалена",
+    "PRODUCT_LOCATION_UPDATED": "Настройки товара в локации изменены"
   },
   "actorRole": {
     "CLIENT": "клиент",
@@ -127,6 +134,13 @@
   "serviceStatus": {
     "ACTIVE": "Активна",
     "INACTIVE": "Неактивна"
+  },
+  "productUnit": {
+    "PIECE": "Штука",
+    "GRAM": "Грамм",
+    "KILOGRAM": "Килограмм",
+    "MILLILITER": "Миллилитр",
+    "LITER": "Литр"
   },
   "executionMode": {
     "SEQUENTIAL": "По очереди",
@@ -322,6 +336,20 @@
       "pricingMode": "Расчёт цены",
       "fixedPrice": "Фиксированная цена",
       "items": "Состав"
+    },
+    "PRODUCT": {
+      "name": "Название",
+      "description": "Описание",
+      "sku": "SKU",
+      "barcode": "Штрихкод",
+      "unit": "Единица измерения",
+      "status": "Статус",
+      "categoryId": "Категория",
+      "imageFileId": "Изображение",
+      "retailPrice": "Цена продажи",
+      "trackInventory": "Складской учёт",
+      "reorderLevel": "Минимальный остаток",
+      "sortOrder": "Порядок"
     },
     "BUSINESS": {
       "name": "Название",
