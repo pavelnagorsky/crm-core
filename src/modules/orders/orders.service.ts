@@ -404,6 +404,47 @@ export class OrdersService {
     return transition.order;
   }
 
+  async reverseItem(
+    locationId: string,
+    orderId: string,
+    orderItemId: string,
+    rawReason: string,
+    actor: AuditActor,
+  ): Promise<OrderWithItems> {
+    const reason = rawReason.trim();
+    if (!reason) {
+      throw new AppException(
+        ErrorCode.ORDER_VOID_REASON_REQUIRED,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const location = await this.locations.findById(locationId);
+    const transition = await this.reverseProductItem(
+      locationId,
+      orderId,
+      orderItemId,
+      reason,
+      actor,
+    );
+    if (transition.changed) {
+      this.emit(
+        location.brandId,
+        locationId,
+        orderId,
+        AuditEvent.ORDER_ITEM_REVERSED,
+        AuditActionType.ACTION,
+        actor,
+        {
+          orderItemId,
+          reason,
+          totalAmount: transition.order.totalAmount.toFixed(2),
+          currency: transition.order.currency,
+        },
+      );
+    }
+    return transition.order;
+  }
+
   async delete(
     locationId: string,
     orderId: string,
@@ -597,6 +638,62 @@ export class OrdersService {
         include: orderInclude,
       });
       return { order: voided, changed: true };
+    });
+  }
+
+  private async reverseProductItem(
+    locationId: string,
+    orderId: string,
+    orderItemId: string,
+    reason: string,
+    actor: AuditActor,
+  ): Promise<OrderTransition> {
+    return this.inTransaction(async (tx) => {
+      await this.lockOrder(tx, orderId);
+      const order = await this.findInTransaction(tx, locationId, orderId);
+      this.assertActive(order.status);
+      const item = order.items.find((row) => row.id === orderItemId);
+      if (!item) {
+        throw new AppException(
+          ErrorCode.ORDER_ITEM_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
+      }
+      if (item.status === OrderItemStatus.REVERSED) {
+        return { order, changed: false };
+      }
+      if (
+        item.status !== OrderItemStatus.CONFIRMED ||
+        item.type !== OrderItemType.PRODUCT
+      ) {
+        throw new AppException(
+          ErrorCode.ORDER_STATUS_INVALID,
+          HttpStatus.CONFLICT,
+        );
+      }
+      await this.earnings.reverseForProductOrderItem(
+        locationId,
+        orderId,
+        orderItemId,
+        reason,
+        actor,
+        tx,
+      );
+      await this.inventory.reverseSaleItem(
+        locationId,
+        orderId,
+        orderItemId,
+        new Date(),
+        tx,
+      );
+      await tx.orderItem.update({
+        where: { id: orderItemId },
+        data: { status: OrderItemStatus.REVERSED },
+      });
+      return {
+        order: await this.refreshTotals(tx, locationId, orderId),
+        changed: true,
+      };
     });
   }
 

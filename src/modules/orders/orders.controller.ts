@@ -34,6 +34,7 @@ import { CreateOrderDto } from './dto/create-order.dto.js';
 import { OrderResponseDto } from './dto/order-response.dto.js';
 import { OrderSearchRequestDto } from './dto/order-search-request.dto.js';
 import { OrderSearchResponseDto } from './dto/order-search-response.dto.js';
+import { ReverseOrderItemDto } from './dto/reverse-order-item.dto.js';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto.js';
 import { UpdateOrderDto } from './dto/update-order.dto.js';
 import { OrdersService } from './orders.service.js';
@@ -152,6 +153,28 @@ export class OrdersController {
       locationId,
       orderId,
       orderItemId,
+      auditActorFromToken(token, locationId),
+    );
+    return BaseResponseDto.success(OrderResponseDto.fromEntity(order));
+  }
+
+  @ApiOperation({ summary: 'Reverse a confirmed order item' })
+  @ApiOkResponse({ type: ApiResponse(OrderResponseDto) })
+  @ApiConflictResponse({ description: 'Order item cannot be reversed' })
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Patch(':orderId/items/:orderItemId/reverse')
+  async reverseItem(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Param('orderId', ParseUUIDPipe) orderId: string,
+    @Param('orderItemId', ParseUUIDPipe) orderItemId: string,
+    @Body() dto: ReverseOrderItemDto,
+    @TokenPayload() token: TokenPayloadDto,
+  ): Promise<BaseResponseDto<OrderResponseDto>> {
+    const order = await this.orders.reverseItem(
+      locationId,
+      orderId,
+      orderItemId,
+      dto.reason,
       auditActorFromToken(token, locationId),
     );
     return BaseResponseDto.success(OrderResponseDto.fromEntity(order));

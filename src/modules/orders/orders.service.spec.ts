@@ -104,11 +104,16 @@ function setup() {
     ),
   };
   const products = { resolveForSale: vi.fn() };
-  const inventory = { postSale: vi.fn(), reverseSale: vi.fn() };
+  const inventory = {
+    postSale: vi.fn(),
+    reverseSale: vi.fn(),
+    reverseSaleItem: vi.fn(),
+  };
   const staff = { resolveForProductSale: vi.fn().mockResolvedValue([]) };
   const earnings = {
     recordForProductOrder: vi.fn(),
     reverseForProductOrder: vi.fn(),
+    reverseForProductOrderItem: vi.fn(),
   };
   const clients = { findInBrand: vi.fn() };
   const locations = {
@@ -343,5 +348,62 @@ describe('OrdersService', () => {
       }),
     );
     expect(result.items[0].bookingItemId).toBe('booking-item-1');
+  });
+
+  it('reverses a confirmed product item without voiding the whole order', async () => {
+    const { service, tx, inventory, earnings } = setup();
+    tx.order.findFirst
+      .mockResolvedValueOnce(
+        order(OrderStatus.ACTIVE, OrderItemStatus.CONFIRMED),
+      )
+      .mockResolvedValueOnce({
+        ...order(OrderStatus.ACTIVE),
+        items: [
+          {
+            ...order(OrderStatus.ACTIVE).items[0],
+            status: OrderItemStatus.REVERSED,
+          },
+        ],
+      });
+    tx.order.update.mockResolvedValue({
+      ...order(OrderStatus.ACTIVE),
+      items: [
+        {
+          ...order(OrderStatus.ACTIVE).items[0],
+          status: OrderItemStatus.REVERSED,
+        },
+      ],
+    });
+
+    const result = await service.reverseItem(
+      'location-1',
+      'order-1',
+      'item-1',
+      'returned',
+      owner,
+    );
+
+    expect(earnings.reverseForProductOrderItem).toHaveBeenCalledWith(
+      'location-1',
+      'order-1',
+      'item-1',
+      'returned',
+      owner,
+      tx,
+    );
+    expect(inventory.reverseSaleItem).toHaveBeenCalledWith(
+      'location-1',
+      'order-1',
+      'item-1',
+      expect.any(Date),
+      tx,
+    );
+    expect(tx.orderItem.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'item-1' },
+        data: { status: OrderItemStatus.REVERSED },
+      }),
+    );
+    expect(result.items[0].status).toBe(OrderItemStatus.REVERSED);
   });
 });

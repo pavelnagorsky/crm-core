@@ -335,54 +335,31 @@ export class StaffEarningsService {
     actor: AuditActor,
     tx: Prisma.TransactionClient,
   ): Promise<StaffEarning[]> {
-    const originals = await tx.staffEarning.findMany({
-      where: {
-        locationId,
-        orderId,
-        type: StaffEarningType.PRODUCT_COMMISSION,
-        source: StaffEarningSource.PRODUCT_SALE,
-      },
-    });
-    const reversals: StaffEarning[] = [];
-    for (const original of originals) {
-      const existing = await tx.staffEarning.findUnique({
-        where: { reversesEarningId: original.id },
-      });
-      if (existing) {
-        reversals.push(existing);
-        continue;
-      }
-      await this.assertDateUnlocked(locationId, original.earnedOn, tx);
-      reversals.push(
-        await this.insertEarning(
-          {
-            locationId,
-            staffId: original.staffId,
-            type: StaffEarningType.CORRECTION,
-            source: StaffEarningSource.PRODUCT_SALE,
-            earnedOn: original.earnedOn,
-            amount: original.amount.neg(),
-            currency: original.currency,
-            baseAmount: original.baseAmount,
-            ratePercent: original.ratePercent,
-            description: original.description,
-            reason,
-            actorId: actor.id ?? null,
-            actorName: actor.name,
-            idempotencyKey: this.idempotencyKey({
-              kind: 'orderItemReversal',
-              orderItemId: original.orderItemId!,
-            }),
-            compensationPlanId: original.compensationPlanId,
-            orderId,
-            orderItemId: original.orderItemId,
-            reversesEarningId: original.id,
-          },
-          tx,
-        ),
-      );
-    }
-    return reversals;
+    return this.reverseProductOrderEarnings(
+      locationId,
+      orderId,
+      reason,
+      actor,
+      tx,
+    );
+  }
+
+  async reverseForProductOrderItem(
+    locationId: string,
+    orderId: string,
+    orderItemId: string,
+    reason: string,
+    actor: AuditActor,
+    tx: Prisma.TransactionClient,
+  ): Promise<StaffEarning[]> {
+    return this.reverseProductOrderEarnings(
+      locationId,
+      orderId,
+      reason,
+      actor,
+      tx,
+      orderItemId,
+    );
   }
 
   async materializeHourly(
@@ -772,6 +749,65 @@ export class StaffEarningsService {
           },
         );
       }
+    }
+    return reversals;
+  }
+
+  private async reverseProductOrderEarnings(
+    locationId: string,
+    orderId: string,
+    reason: string,
+    actor: AuditActor,
+    tx: Prisma.TransactionClient,
+    orderItemId?: string,
+  ): Promise<StaffEarning[]> {
+    const originals = await tx.staffEarning.findMany({
+      where: {
+        locationId,
+        orderId,
+        orderItemId,
+        type: StaffEarningType.PRODUCT_COMMISSION,
+        source: StaffEarningSource.PRODUCT_SALE,
+      },
+    });
+    const reversals: StaffEarning[] = [];
+    for (const original of originals) {
+      const existing = await tx.staffEarning.findUnique({
+        where: { reversesEarningId: original.id },
+      });
+      if (existing) {
+        reversals.push(existing);
+        continue;
+      }
+      await this.assertDateUnlocked(locationId, original.earnedOn, tx);
+      reversals.push(
+        await this.insertEarning(
+          {
+            locationId,
+            staffId: original.staffId,
+            type: StaffEarningType.CORRECTION,
+            source: StaffEarningSource.PRODUCT_SALE,
+            earnedOn: original.earnedOn,
+            amount: original.amount.neg(),
+            currency: original.currency,
+            baseAmount: original.baseAmount,
+            ratePercent: original.ratePercent,
+            description: original.description,
+            reason,
+            actorId: actor.id ?? null,
+            actorName: actor.name,
+            idempotencyKey: this.idempotencyKey({
+              kind: 'orderItemReversal',
+              orderItemId: original.orderItemId!,
+            }),
+            compensationPlanId: original.compensationPlanId,
+            orderId,
+            orderItemId: original.orderItemId,
+            reversesEarningId: original.id,
+          },
+          tx,
+        ),
+      );
     }
     return reversals;
   }

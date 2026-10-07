@@ -395,8 +395,39 @@ export class InventoryService {
     occurredAt: Date,
     tx: Prisma.TransactionClient,
   ): Promise<void> {
+    await this.reverseSaleMovements(locationId, orderId, occurredAt, tx);
+  }
+
+  async reverseSaleItem(
+    locationId: string,
+    orderId: string,
+    orderItemId: string,
+    occurredAt: Date,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    await this.reverseSaleMovements(
+      locationId,
+      orderId,
+      occurredAt,
+      tx,
+      orderItemId,
+    );
+  }
+
+  private async reverseSaleMovements(
+    locationId: string,
+    orderId: string,
+    occurredAt: Date,
+    tx: Prisma.TransactionClient,
+    orderItemId?: string,
+  ): Promise<void> {
     const originals = await tx.inventoryMovement.findMany({
-      where: { locationId, orderId, type: InventoryMovementType.SALE },
+      where: {
+        locationId,
+        orderId,
+        orderItemId,
+        type: InventoryMovementType.SALE,
+      },
       orderBy: { productLocationId: 'asc' },
     });
     if (originals.length === 0) return;

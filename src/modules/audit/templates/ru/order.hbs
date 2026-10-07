@@ -2,6 +2,7 @@
   {{#if (eq eventType 'ORDER_CREATED')}}Создан заказ{{/if}}
   {{#if (eq eventType 'ORDER_UPDATED')}}Изменён заказ{{/if}}
   {{#if (eq eventType 'ORDER_ITEM_CONFIRMED')}}Позиция заказа подтверждена{{/if}}
+  {{#if (eq eventType 'ORDER_ITEM_REVERSED')}}Позиция заказа сторнирована{{/if}}
   {{#if (eq eventType 'ORDER_VOIDED')}}Отменён заказ{{/if}}
   {{#if (eq eventType 'ORDER_DELETED')}}Удалён заказ{{/if}}
   {{#if payload.totalAmount}}:
