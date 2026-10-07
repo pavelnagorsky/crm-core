@@ -88,7 +88,8 @@ describe('BookingsService.completeElapsed', () => {
       findMany: vi.fn(),
       updateMany: vi.fn(),
     },
-  };
+  } as any;
+  db.$transaction = vi.fn((callback) => callback(db));
   const earnings = {
     recordForCompletedBooking: vi.fn(),
   };
@@ -120,10 +121,13 @@ describe('BookingsService.completeElapsed', () => {
     await expect(
       service.completeElapsed(new Date('2026-09-24T12:00:00.000Z')),
     ).resolves.toBe(1);
-    expect(earnings.recordForCompletedBooking).toHaveBeenCalledWith({
-      ...row,
-      status: BookingStatus.COMPLETED,
-    });
+    expect(earnings.recordForCompletedBooking).toHaveBeenCalledWith(
+      {
+        ...row,
+        status: BookingStatus.COMPLETED,
+      },
+      db,
+    );
     expect(emitter.emit).toHaveBeenCalled();
   });
 

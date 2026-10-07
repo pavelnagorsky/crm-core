@@ -289,25 +289,44 @@ export class BookingsService implements CalendarBookingReader {
     const slotChanging = dto.startAt !== undefined || dto.staffId !== undefined;
     const pricePatches = this.pricePatches(old, dto);
 
-    const updated = slotChanging
-      ? await this.updateWithSlotReschedule(old, locationId, dto, pricePatches)
-      : await this.db.booking.update({
-          where: { id: bookingId },
-          data: {
-            clientFirstName: dto.firstName ?? old.clientFirstName,
-            clientLastName: dto.lastName ?? old.clientLastName,
-            clientPhone: dto.phone ?? old.clientPhone,
-            clientEmail:
-              dto.email !== undefined ? (dto.email ?? null) : old.clientEmail,
-            notes: dto.notes !== undefined ? (dto.notes ?? null) : undefined,
-            internalNotes:
-              dto.internalNotes !== undefined
-                ? (dto.internalNotes ?? null)
-                : undefined,
-            ...this.itemPriceWrite(pricePatches),
-          },
-          include: bookingWithItemsInclude,
-        });
+    const updateArgs = {
+      where: { id: bookingId },
+      data: {
+        clientFirstName: dto.firstName ?? old.clientFirstName,
+        clientLastName: dto.lastName ?? old.clientLastName,
+        clientPhone: dto.phone ?? old.clientPhone,
+        clientEmail:
+          dto.email !== undefined ? (dto.email ?? null) : old.clientEmail,
+        notes: dto.notes !== undefined ? (dto.notes ?? null) : undefined,
+        internalNotes:
+          dto.internalNotes !== undefined
+            ? (dto.internalNotes ?? null)
+            : undefined,
+        ...this.itemPriceWrite(pricePatches),
+      },
+      include: bookingWithItemsInclude,
+    } satisfies Prisma.BookingUpdateArgs;
+    let updated: BookingWithItems;
+    if (slotChanging) {
+      updated = await this.updateWithSlotReschedule(
+        old,
+        locationId,
+        dto,
+        pricePatches,
+        actor,
+      );
+    } else if (
+      old.status === BookingStatus.COMPLETED &&
+      pricePatches.length > 0
+    ) {
+      updated = await this.db.$transaction(async (tx) => {
+        const result = await tx.booking.update(updateArgs);
+        await this.staffEarnings.syncForCompletedBooking(result, actor, tx);
+        return result;
+      });
+    } else {
+      updated = await this.db.booking.update(updateArgs);
+    }
 
     const changes = [
       ...diffFields(old, updated, BOOKING_AUDIT_FIELDS),
@@ -366,24 +385,28 @@ export class BookingsService implements CalendarBookingReader {
     const reversalReason = reversesCommission
       ? this.optionalReason(dto.reason)
       : null;
-    const updated = await this.db.booking.update({
-      where: { id: bookingId },
-      data: { status: dto.status },
-      include: bookingWithItemsInclude,
-    });
     const actor = auditActorFromToken(tokenPayload, old.locationId);
-    if (
-      dto.status === BookingStatus.COMPLETED &&
-      old.status !== BookingStatus.COMPLETED
-    ) {
-      await this.staffEarnings.recordForCompletedBooking(updated);
-    } else if (reversesCommission) {
-      await this.staffEarnings.reverseForBooking(
-        updated,
-        reversalReason,
-        actor,
-      );
-    }
+    const updated = await this.db.$transaction(async (tx) => {
+      const result = await tx.booking.update({
+        where: { id: bookingId },
+        data: { status: dto.status },
+        include: bookingWithItemsInclude,
+      });
+      if (
+        dto.status === BookingStatus.COMPLETED &&
+        old.status !== BookingStatus.COMPLETED
+      ) {
+        await this.staffEarnings.recordForCompletedBooking(result, tx);
+      } else if (reversesCommission) {
+        await this.staffEarnings.reverseForBooking(
+          result,
+          reversalReason,
+          actor,
+          tx,
+        );
+      }
+      return result;
+    });
     this.logger.log(
       `booking status: id=${bookingId} locationId=${old.locationId} from=${old.status} to=${dto.status}`,
     );
@@ -431,18 +454,21 @@ export class BookingsService implements CalendarBookingReader {
     const actor: AuditActor = { name: 'System', role: AuditActorRole.SYSTEM };
 
     for (const booking of due) {
-      const { count } = await this.db.booking.updateMany({
-        where: {
-          id: booking.id,
-          status: { in: [...AUTO_COMPLETABLE_STATUSES] },
-          deletedAt: null,
-        },
-        data: { status: BookingStatus.COMPLETED },
-      });
-      if (count === 0) continue;
-
       const updated = { ...booking, status: BookingStatus.COMPLETED };
-      await this.staffEarnings.recordForCompletedBooking(updated);
+      const didComplete = await this.db.$transaction(async (tx) => {
+        const { count } = await tx.booking.updateMany({
+          where: {
+            id: booking.id,
+            status: { in: [...AUTO_COMPLETABLE_STATUSES] },
+            deletedAt: null,
+          },
+          data: { status: BookingStatus.COMPLETED },
+        });
+        if (count === 0) return false;
+        await this.staffEarnings.recordForCompletedBooking(updated, tx);
+        return true;
+      });
+      if (!didComplete) continue;
       this.emitAudit({
         locationId: booking.locationId,
         entityId: booking.id,
@@ -759,24 +785,26 @@ export class BookingsService implements CalendarBookingReader {
     const booking = await this.findByIdInLocation(locationId, bookingId);
     assertLocationRole(tokenPayload, booking.locationId, BusinessRole.OWNER);
     const actor = auditActorFromToken(tokenPayload, booking.locationId);
-    await this.db.$transaction([
-      this.db.booking.update({
+    await this.db.$transaction(async (tx) => {
+      await tx.booking.update({
         where: { id: booking.id },
         data: { deletedAt: new Date() },
-      }),
-      ...booking.items.flatMap((item) =>
-        item.calendarEventId
-          ? [
-              this.db.calendarEvent.delete({
-                where: { id: item.calendarEventId },
-              }),
-            ]
-          : [],
-      ),
-    ]);
-    if (booking.status === BookingStatus.COMPLETED) {
-      await this.staffEarnings.reverseForBooking(booking, null, actor);
-    }
+      });
+      await Promise.all(
+        booking.items.flatMap((item) =>
+          item.calendarEventId
+            ? [
+                tx.calendarEvent.delete({
+                  where: { id: item.calendarEventId },
+                }),
+              ]
+            : [],
+        ),
+      );
+      if (booking.status === BookingStatus.COMPLETED) {
+        await this.staffEarnings.reverseForBooking(booking, null, actor, tx);
+      }
+    });
     this.logger.log(
       `booking deleted: id=${booking.id} locationId=${booking.locationId}`,
     );
@@ -814,19 +842,27 @@ export class BookingsService implements CalendarBookingReader {
       );
     }
     const storedReason = this.optionalReason(reason);
-    const updated = await this.db.booking.update({
-      where: { id: booking.id },
-      data: {
-        status: BookingStatus.CANCELLED,
-        cancelledBy,
-        cancelledAt: new Date(),
-        cancellationReason: storedReason,
-      },
-      include: bookingWithItemsInclude,
+    const updated = await this.db.$transaction(async (tx) => {
+      const result = await tx.booking.update({
+        where: { id: booking.id },
+        data: {
+          status: BookingStatus.CANCELLED,
+          cancelledBy,
+          cancelledAt: new Date(),
+          cancellationReason: storedReason,
+        },
+        include: bookingWithItemsInclude,
+      });
+      if (booking.status === BookingStatus.COMPLETED) {
+        await this.staffEarnings.reverseForBooking(
+          result,
+          storedReason,
+          actor,
+          tx,
+        );
+      }
+      return result;
     });
-    if (booking.status === BookingStatus.COMPLETED) {
-      await this.staffEarnings.reverseForBooking(updated, storedReason, actor);
-    }
     this.logger.log(
       `booking cancelled: id=${booking.id} locationId=${booking.locationId} cancelledBy=${cancelledBy}`,
     );
@@ -863,6 +899,7 @@ export class BookingsService implements CalendarBookingReader {
     locationId: string,
     dto: UpdateBookingDto,
     pricePatches: UpdateBookingItemPriceDto[],
+    actor: AuditActor,
   ): Promise<BookingWithItems> {
     const business = await this.db.location.findUnique({
       where: { id: locationId },
@@ -1014,7 +1051,7 @@ export class BookingsService implements CalendarBookingReader {
         });
       }
 
-      return tx.booking.update({
+      const updated = await tx.booking.update({
         where: { id: old.id },
         data: {
           startAt: new Date(
@@ -1037,6 +1074,10 @@ export class BookingsService implements CalendarBookingReader {
         },
         include: bookingWithItemsInclude,
       });
+      if (old.status === BookingStatus.COMPLETED) {
+        await this.staffEarnings.syncForCompletedBooking(updated, actor, tx);
+      }
+      return updated;
     });
   }
 

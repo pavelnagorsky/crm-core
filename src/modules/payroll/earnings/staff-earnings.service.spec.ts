@@ -82,6 +82,7 @@ describe('StaffEarningsService', () => {
       findMany: vi.fn(),
       count: vi.fn(),
     },
+    payrollPeriod: { findFirst: vi.fn() },
   };
   const compensation = {
     resolveForDate: vi.fn(),
@@ -111,9 +112,9 @@ describe('StaffEarningsService', () => {
 
   it('skips a completed booking when payroll is not configured', async () => {
     compensation.resolveForDate.mockResolvedValue(null);
-    await expect(service.recordForCompletedBooking(booking())).resolves.toEqual(
-      [],
-    );
+    await expect(
+      service.recordForCompletedBooking(booking(), db as never),
+    ).resolves.toEqual([]);
     expect(db.staffEarning.create).not.toHaveBeenCalled();
   });
 
@@ -136,6 +137,7 @@ describe('StaffEarningsService', () => {
           },
         ],
       }),
+      db as never,
     );
 
     expect(created[0].amount.toString()).toBe('20');
@@ -150,11 +152,11 @@ describe('StaffEarningsService', () => {
     });
   });
 
-  it('does not fail the booking flow when earning persistence throws', async () => {
+  it('propagates earning persistence failures to the booking transaction', async () => {
     compensation.resolveForDate.mockRejectedValue(new Error('db down'));
-    await expect(service.recordForCompletedBooking(booking())).resolves.toEqual(
-      [],
-    );
+    await expect(
+      service.recordForCompletedBooking(booking(), db as never),
+    ).rejects.toThrow('db down');
   });
 
   it('reuses an existing reversal instead of inserting a second one', async () => {
@@ -180,6 +182,49 @@ describe('StaffEarningsService', () => {
     );
     expect(reversal).toEqual([{ id: 'rev-1' }]);
     expect(db.staffEarning.create).not.toHaveBeenCalled();
+  });
+
+  it('adds only the delta when a completed booking price changes', async () => {
+    const tx = {
+      payrollPeriod: { findFirst: vi.fn().mockResolvedValue(null) },
+      staffEarning: {
+        findMany: vi
+          .fn()
+          .mockResolvedValue([
+            { staffId: 'anna', amount: new Prisma.Decimal('20.00') },
+          ]),
+        create: vi.fn(({ data }) =>
+          Promise.resolve({ id: 'adjustment-1', ...data }),
+        ),
+        findUnique: vi.fn(),
+      },
+    };
+    compensation.resolveForDate.mockResolvedValue({
+      id: 'plan-1',
+    } as CompensationPlanWithRates);
+    compensation.resolveServicePercent.mockReturnValue('40');
+
+    const corrections = await service.syncForCompletedBooking(
+      booking({
+        items: [
+          {
+            ...booking().items[0],
+            customPrice: new Prisma.Decimal('75.00'),
+          },
+        ],
+      }),
+      { name: 'Owner' },
+      tx as never,
+    );
+
+    expect(corrections[0].amount.toFixed(2)).toBe('10.00');
+    expect(tx.staffEarning.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        type: 'CORRECTION',
+        bookingItemId: 'booking-item-1',
+        amount: expect.anything(),
+      }),
+    });
   });
 
   it('materializes product commission from a final order line amount', async () => {
