@@ -56,6 +56,8 @@ import { NOTIFICATION_EVENT } from '../notifications/notifications.service.js';
 import { BookingStatusChangedNotification } from '../notifications/notifications/booking-status-changed.notification.js';
 import { BookingWithItems } from './interfaces/booking-with-items.interface.js';
 import { ServiceCatalogService } from '../services/service-catalog.service.js';
+import { OrderProductItemDto } from '../orders/dto/order-product-item.dto.js';
+import { OrderWithItems } from '../orders/interfaces/order-with-items.interface.js';
 
 const CALENDAR_VISIBLE_STATUSES: ReadonlySet<string> = new Set([
   BookingStatus.PENDING,
@@ -393,6 +395,33 @@ export class BookingsService implements CalendarBookingReader {
       );
     }
     return updated;
+  }
+
+  async addProduct(
+    locationId: string,
+    bookingId: string,
+    tokenPayload: TokenPayloadDto,
+    dto: OrderProductItemDto,
+  ): Promise<OrderWithItems> {
+    assertLocationRole(
+      tokenPayload,
+      locationId,
+      BusinessRole.OWNER,
+      BusinessRole.MANAGER,
+      BusinessRole.STAFF,
+    );
+    const booking = await this.findByIdInLocation(locationId, bookingId);
+    assertLocationRole(
+      tokenPayload,
+      booking.locationId,
+      BusinessRole.OWNER,
+      BusinessRole.MANAGER,
+      BusinessRole.STAFF,
+    );
+    const actor = auditActorFromToken(tokenPayload, booking.locationId);
+    return this.db.$transaction((tx) =>
+      this.orders.addDraftProductToBookingOrder(booking, dto, actor, tx),
+    );
   }
 
   async completeElapsed(now = new Date()): Promise<number> {

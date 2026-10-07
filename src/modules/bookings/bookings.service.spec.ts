@@ -790,3 +790,57 @@ describe('BookingsService.update item prices', () => {
     expect(update).not.toHaveBeenCalled();
   });
 });
+
+describe('BookingsService.addProduct', () => {
+  const bookingRow = booking();
+  const db = {
+    booking: {
+      findFirst: vi.fn(),
+    },
+    $transaction: vi.fn((callback) => callback(db)),
+  };
+  const token = {
+    sub: 'user-1',
+    role: UserRole.ADMIN,
+    memberships: [],
+  } as TokenPayloadDto;
+  const orders = {
+    addDraftProductToBookingOrder: vi.fn().mockResolvedValue({
+      id: 'order-1',
+      items: [],
+    }),
+  };
+  let service: BookingsService;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    db.booking.findFirst.mockResolvedValue(bookingRow);
+    const module = await Test.createTestingModule({
+      providers: [
+        BookingsService,
+        { provide: DatabaseService, useValue: db },
+        { provide: CalendarService, useValue: {} },
+        { provide: StaffService, useValue: {} },
+        { provide: LocationService, useValue: {} },
+        { provide: ServiceCatalogService, useValue: serviceCatalog },
+        { provide: StaffEarningsService, useValue: {} },
+        { provide: OrdersService, useValue: orders },
+        { provide: EventEmitter2, useValue: { emit: vi.fn() } },
+      ],
+    }).compile();
+    service = module.get(BookingsService);
+  });
+
+  it('adds a draft product to the booking order without changing booking status', async () => {
+    const dto = { productId: 'product-1', quantity: '1.000' };
+
+    await service.addProduct('biz', 'booking-1', token, dto);
+
+    expect(orders.addDraftProductToBookingOrder).toHaveBeenCalledWith(
+      bookingRow,
+      dto,
+      expect.objectContaining({ name: expect.any(String) }),
+      db,
+    );
+  });
+});
