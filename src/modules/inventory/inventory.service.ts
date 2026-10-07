@@ -36,6 +36,8 @@ import { InventorySearchOrderBy } from './enums/inventory-search-order-by.enum.j
 import { InventoryBalanceView } from './interfaces/inventory-balance-view.interface.js';
 import { InventoryDocumentTransition } from './interfaces/inventory-document-transition.interface.js';
 import { InventoryDocumentWithItems } from './interfaces/inventory-document-with-items.interface.js';
+import { InventorySaleCost } from './interfaces/inventory-sale-cost.interface.js';
+import { InventorySaleLine } from './interfaces/inventory-sale-line.interface.js';
 import { InventoryComputeService } from './inventory-compute.service.js';
 
 const documentInclude = {
@@ -105,7 +107,7 @@ export class InventoryService {
       location.brandId,
       dto,
     );
-    const document = await this.db.$transaction(async (tx) => {
+    const document = await this.inTransaction(async (tx) => {
       await this.lockDocument(tx, documentId);
       const old = await this.findDocumentInTransaction(
         tx,
@@ -314,11 +316,151 @@ export class InventoryService {
     return { items, totalItems };
   }
 
+  async postSale(
+    locationId: string,
+    orderId: string,
+    occurredAt: Date,
+    lines: InventorySaleLine[],
+    tx: Prisma.TransactionClient,
+  ): Promise<InventorySaleCost[]> {
+    const tracked = lines.filter((line) => line.trackInventory);
+    const costs = new Map<string, InventorySaleCost>(
+      lines.map((line) => [
+        line.orderItemId,
+        { orderItemId: line.orderItemId, unitCost: null, lineCost: null },
+      ]),
+    );
+    if (tracked.length === 0) return [...costs.values()];
+    const balances = await this.lockBalances(
+      tx,
+      tracked.map((line) => line.productLocationId),
+    );
+    for (const line of tracked) {
+      const balance = balances.get(line.productLocationId)!;
+      const quantity = new Prisma.Decimal(line.quantity);
+      const quantityAfter = balance.quantityOnHand.minus(quantity);
+      if (quantityAfter.isNegative()) {
+        throw new AppException(
+          ErrorCode.INVENTORY_INSUFFICIENT_STOCK,
+          HttpStatus.CONFLICT,
+        );
+      }
+      const unitCost = balance.averageUnitCost;
+      const lineCost = MoneyService.quantize(quantity.mul(unitCost));
+      const averageUnitCostAfter = quantityAfter.isZero()
+        ? new Prisma.Decimal(0)
+        : unitCost;
+      await tx.inventoryBalance.update({
+        where: { id: balance.id },
+        data: {
+          quantityOnHand: quantityAfter,
+          averageUnitCost: averageUnitCostAfter,
+        },
+      });
+      await tx.inventoryMovement.create({
+        data: {
+          locationId,
+          productLocationId: line.productLocationId,
+          orderId,
+          orderItemId: line.orderItemId,
+          type: InventoryMovementType.SALE,
+          productId: line.productId,
+          productName: line.productName,
+          productSku: line.productSku,
+          quantityDelta: quantity.neg(),
+          quantityBefore: balance.quantityOnHand,
+          quantityAfter,
+          averageUnitCostBefore: balance.averageUnitCost,
+          averageUnitCostAfter,
+          unitCost,
+          totalCost: lineCost.neg(),
+          occurredAt,
+          idempotencyKey: `order:${orderId}:item:${line.orderItemId}:sale`,
+        },
+      });
+      balance.quantityOnHand = quantityAfter;
+      balance.averageUnitCost = averageUnitCostAfter;
+      costs.set(line.orderItemId, {
+        orderItemId: line.orderItemId,
+        unitCost,
+        lineCost,
+      });
+    }
+    return [...costs.values()];
+  }
+
+  async reverseSale(
+    locationId: string,
+    orderId: string,
+    occurredAt: Date,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    const originals = await tx.inventoryMovement.findMany({
+      where: { locationId, orderId, type: InventoryMovementType.SALE },
+      orderBy: { productLocationId: 'asc' },
+    });
+    if (originals.length === 0) return;
+    const existing = await tx.inventoryMovement.findMany({
+      where: { reversedMovementId: { in: originals.map((row) => row.id) } },
+      select: { reversedMovementId: true },
+    });
+    const reversedIds = new Set(existing.map((row) => row.reversedMovementId));
+    const pending = originals.filter((row) => !reversedIds.has(row.id));
+    if (pending.length === 0) return;
+    const balances = await this.lockBalances(
+      tx,
+      pending.map((row) => row.productLocationId),
+    );
+    for (const movement of pending) {
+      const balance = balances.get(movement.productLocationId)!;
+      const quantity = movement.quantityDelta.neg();
+      const next = this.compute.nextState(
+        {
+          quantity: balance.quantityOnHand,
+          averageUnitCost: balance.averageUnitCost,
+        },
+        quantity,
+        movement.unitCost,
+      );
+      await tx.inventoryBalance.update({
+        where: { id: balance.id },
+        data: {
+          quantityOnHand: next.quantity,
+          averageUnitCost: next.averageUnitCost,
+        },
+      });
+      await tx.inventoryMovement.create({
+        data: {
+          locationId,
+          productLocationId: movement.productLocationId,
+          orderId,
+          orderItemId: movement.orderItemId,
+          type: InventoryMovementType.SALE_REVERSAL,
+          productId: movement.productId,
+          productName: movement.productName,
+          productSku: movement.productSku,
+          quantityDelta: quantity,
+          quantityBefore: balance.quantityOnHand,
+          quantityAfter: next.quantity,
+          averageUnitCostBefore: balance.averageUnitCost,
+          averageUnitCostAfter: next.averageUnitCost,
+          unitCost: movement.unitCost,
+          totalCost: MoneyService.quantize(quantity.mul(movement.unitCost)),
+          occurredAt,
+          idempotencyKey: `order:${orderId}:item:${movement.orderItemId}:sale-reversal`,
+          reversedMovementId: movement.id,
+        },
+      });
+      balance.quantityOnHand = next.quantity;
+      balance.averageUnitCost = next.averageUnitCost;
+    }
+  }
+
   private async postDocument(
     locationId: string,
     documentId: string,
   ): Promise<InventoryDocumentTransition> {
-    return this.db.$transaction(async (tx) => {
+    return this.inTransaction(async (tx) => {
       await this.lockDocument(tx, documentId);
       const document = await this.findDocumentInTransaction(
         tx,
@@ -402,7 +544,7 @@ export class InventoryService {
     locationId: string,
     documentId: string,
   ): Promise<InventoryDocumentTransition> {
-    return this.db.$transaction(async (tx) => {
+    return this.inTransaction(async (tx) => {
       await this.lockDocument(tx, documentId);
       const document = await this.findDocumentInTransaction(
         tx,
@@ -815,6 +957,15 @@ export class InventoryService {
         HttpStatus.CONFLICT,
       );
     }
+  }
+
+  private inTransaction<T>(
+    operation: (tx: Prisma.TransactionClient) => Promise<T>,
+  ): Promise<T> {
+    return this.db.$transaction(operation, {
+      maxWait: 5_000,
+      timeout: 30_000,
+    });
   }
 
   private invalidDocument(): never {

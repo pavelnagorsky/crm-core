@@ -1,6 +1,7 @@
 import {
   InventoryDocumentStatus,
   InventoryDocumentType,
+  InventoryMovementType,
   Prisma,
   ProductUnit,
 } from '@prisma/client';
@@ -125,5 +126,57 @@ describe('InventoryService', () => {
     expect(tx.inventoryBalance.upsert).toHaveBeenCalledOnce();
     expect(tx.inventoryBalance.update).not.toHaveBeenCalled();
     expect(tx.inventoryMovement.create).not.toHaveBeenCalled();
+  });
+
+  it('posts a tracked sale with a frozen weighted-average cost', async () => {
+    const { service, tx } = setup(InventoryDocumentStatus.OPEN);
+    tx.$queryRaw.mockResolvedValueOnce([
+      {
+        id: 'balance-1',
+        productLocationId: 'product-location-1',
+        quantityOnHand: new Prisma.Decimal(5),
+        averageUnitCost: new Prisma.Decimal('7.50'),
+        updatedAt: new Date(),
+      },
+    ]);
+    tx.inventoryBalance.update.mockResolvedValue({});
+    tx.inventoryMovement.create.mockResolvedValue({});
+
+    const [cost] = await service.postSale(
+      'location-1',
+      'order-1',
+      new Date('2026-10-01T10:00:00.000Z'),
+      [
+        {
+          orderItemId: 'order-item-1',
+          productLocationId: 'product-location-1',
+          productId: 'product-1',
+          productName: 'Shampoo',
+          productSku: 'SKU-1',
+          productUnit: ProductUnit.PIECE,
+          quantity: '2.000',
+          trackInventory: true,
+        },
+      ],
+      tx as never,
+    );
+
+    expect(cost.unitCost?.toFixed(2)).toBe('7.50');
+    expect(cost.lineCost?.toFixed(2)).toBe('15.00');
+    expect(tx.inventoryBalance.update).toHaveBeenCalledWith({
+      where: { id: 'balance-1' },
+      data: {
+        quantityOnHand: expect.objectContaining({}),
+        averageUnitCost: expect.objectContaining({}),
+      },
+    });
+    expect(tx.inventoryMovement.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        orderId: 'order-1',
+        orderItemId: 'order-item-1',
+        type: InventoryMovementType.SALE,
+        idempotencyKey: 'order:order-1:item:order-item-1:sale',
+      }),
+    });
   });
 });

@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
+  ArrayMaxSize,
   IsArray,
   IsDateString,
   IsEnum,
@@ -83,6 +84,7 @@ export class CreateInventoryDocumentDto {
   @ApiProperty({ type: () => InventoryDocumentItemDto, isArray: true })
   @IsArray()
   @ArrayMinSize(1)
+  @ArrayMaxSize(500)
   @ValidateNested({ each: true })
   @Type(() => InventoryDocumentItemDto)
   items: InventoryDocumentItemDto[];

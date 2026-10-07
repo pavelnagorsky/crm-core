@@ -66,6 +66,22 @@ export class StaffService {
     });
   }
 
+  resolveForProductSale(
+    locationId: string,
+    staffIds: string[],
+    tx?: Prisma.TransactionClient,
+  ): Promise<Staff[]> {
+    if (staffIds.length === 0) return Promise.resolve([]);
+    return (tx ?? this.db).staff.findMany({
+      where: {
+        id: { in: staffIds },
+        locationId,
+        status: StaffStatus.ACTIVE,
+      },
+      orderBy: { id: 'asc' },
+    });
+  }
+
   async namesByIds(ids: string[]): Promise<Map<string, string>> {
     if (ids.length === 0) return new Map();
     const rows = await this.db.staff.findMany({

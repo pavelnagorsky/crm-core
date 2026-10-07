@@ -1,5 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
@@ -52,9 +53,10 @@ export class StaffCompensationService {
   async resolveForDate(
     staffId: string,
     onDate: Date,
+    tx?: Prisma.TransactionClient,
   ): Promise<CompensationPlanWithRates | null> {
     const day = TimeService.dateOnly(TimeService.dateOnlyStr(onDate));
-    return this.db.staffCompensationPlan.findFirst({
+    return (tx ?? this.db).staffCompensationPlan.findFirst({
       where: {
         staffId,
         effectiveFrom: { lte: day },

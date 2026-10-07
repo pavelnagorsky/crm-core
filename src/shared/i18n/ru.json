@@ -109,7 +109,12 @@
     "INVENTORY_DOCUMENT_CREATED": "Складской документ создан",
     "INVENTORY_DOCUMENT_UPDATED": "Складской документ изменён",
     "INVENTORY_DOCUMENT_POSTED": "Складской документ проведён",
-    "INVENTORY_DOCUMENT_VOIDED": "Складской документ отменён"
+    "INVENTORY_DOCUMENT_VOIDED": "Складской документ отменён",
+    "ORDER_CREATED": "Заказ создан",
+    "ORDER_UPDATED": "Заказ изменён",
+    "ORDER_POSTED": "Заказ проведён",
+    "ORDER_VOIDED": "Заказ отменён",
+    "ORDER_DELETED": "Заказ удалён"
   },
   "actorRole": {
     "CLIENT": "клиент",

@@ -473,6 +473,23 @@ export class ProductsService {
     }) as Promise<LocationProductView[]>;
   }
 
+  resolveForSale(
+    locationId: string,
+    productIds: string[],
+    tx?: Prisma.TransactionClient,
+  ): Promise<LocationProductView[]> {
+    return (tx ?? this.db).productLocation.findMany({
+      where: {
+        locationId,
+        productId: { in: productIds },
+        status: ProductStatus.ACTIVE,
+        product: { status: ProductStatus.ACTIVE },
+      },
+      include: locationProductInclude,
+      orderBy: { id: 'asc' },
+    }) as Promise<LocationProductView[]>;
+  }
+
   private locationOrder(
     field: ProductLocationSearchOrderBy,
     direction: OrderDirection,

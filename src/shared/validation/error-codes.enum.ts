@@ -407,6 +407,46 @@ export const ErrorCode = {
     message: 'Inventory operation date cannot be in the future',
   },
 
+  // orders
+  ORDER_NOT_OPEN: {
+    code: 'ORDER_NOT_OPEN',
+    message: 'Only an open order can be changed or deleted',
+  },
+  ORDER_STATUS_INVALID: {
+    code: 'ORDER_STATUS_INVALID',
+    message: 'Order is not in a valid status for this action',
+  },
+  ORDER_PRODUCT_NOT_SELLABLE: {
+    code: 'ORDER_PRODUCT_NOT_SELLABLE',
+    message:
+      'One or more products are no longer available for sale in this location',
+  },
+  ORDER_SELLER_INVALID: {
+    code: 'ORDER_SELLER_INVALID',
+    message:
+      'One or more sellers are not active staff members in this location',
+  },
+  ORDER_CLIENT_BOOKING_MISMATCH: {
+    code: 'ORDER_CLIENT_BOOKING_MISMATCH',
+    message: 'Order client does not match the linked booking client',
+  },
+  ORDER_DUPLICATE_PRODUCT: {
+    code: 'ORDER_DUPLICATE_PRODUCT',
+    message: 'A product can appear only once in this order',
+  },
+  ORDER_QUANTITY_INVALID: {
+    code: 'ORDER_QUANTITY_INVALID',
+    message: 'Order item quantity must be greater than zero',
+  },
+  ORDER_VOID_REASON_REQUIRED: {
+    code: 'ORDER_VOID_REASON_REQUIRED',
+    message: 'A reason is required to void a posted order',
+  },
+  ORDER_FUTURE_DATE: {
+    code: 'ORDER_FUTURE_DATE',
+    message: 'Order date cannot be in the future',
+  },
+
   // dashboard
   DASHBOARD_CUSTOM_RANGE_REQUIRED: {
     code: 'DASHBOARD_CUSTOM_RANGE_REQUIRED',

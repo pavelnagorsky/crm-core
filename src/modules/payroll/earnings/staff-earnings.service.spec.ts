@@ -182,6 +182,76 @@ describe('StaffEarningsService', () => {
     expect(db.staffEarning.create).not.toHaveBeenCalled();
   });
 
+  it('materializes product commission from a final order line amount', async () => {
+    const tx = {
+      payrollPeriod: { findFirst: vi.fn().mockResolvedValue(null) },
+      staffEarning: {
+        create: vi.fn(({ data }) =>
+          Promise.resolve({ id: 'earning-1', ...data }),
+        ),
+        findUnique: vi.fn(),
+      },
+      staffCompensationPlan: { findFirst: vi.fn() },
+    };
+    compensation.resolveForDate.mockResolvedValue({
+      id: 'plan-1',
+      productCommissionPercent: new Prisma.Decimal(10),
+    } as CompensationPlanWithRates);
+
+    const [earning] = await service.recordForProductOrder(
+      'biz',
+      'order-1',
+      new Date('2026-09-15T10:00:00.000Z'),
+      'RUB',
+      [
+        {
+          orderItemId: 'order-item-1',
+          staffId: 'anna',
+          amount: new Prisma.Decimal(80),
+          description: 'Shampoo',
+        },
+      ],
+      tx as never,
+    );
+
+    expect(earning.amount.toFixed(2)).toBe('8.00');
+    expect(tx.staffEarning.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        orderId: 'order-1',
+        orderItemId: 'order-item-1',
+        baseAmount: expect.anything(),
+        idempotencyKey: 'order-item:order-item-1:PRODUCT_COMMISSION',
+      }),
+    });
+  });
+
+  it('does not consult payroll locks when an order creates no commission', async () => {
+    const tx = {
+      payrollPeriod: { findFirst: vi.fn() },
+      staffEarning: { create: vi.fn(), findUnique: vi.fn() },
+    };
+    compensation.resolveForDate.mockResolvedValue(null);
+
+    await expect(
+      service.recordForProductOrder(
+        'biz',
+        'order-1',
+        new Date('2026-09-15T10:00:00.000Z'),
+        'RUB',
+        [
+          {
+            orderItemId: 'order-item-1',
+            staffId: 'anna',
+            amount: new Prisma.Decimal(80),
+            description: 'Shampoo',
+          },
+        ],
+        tx as never,
+      ),
+    ).resolves.toEqual([]);
+    expect(tx.payrollPeriod.findFirst).not.toHaveBeenCalled();
+  });
+
   it('offsets the second earnings page by a full page and breaks date ties by id', async () => {
     db.staffEarning.findMany.mockResolvedValue([]);
     db.staffEarning.count.mockResolvedValue(40);

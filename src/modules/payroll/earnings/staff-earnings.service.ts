@@ -38,6 +38,7 @@ import { StaffCompensationService } from '../compensation/staff-compensation.ser
 import { MoneyService } from '../../../shared/money/money.service.js';
 import { lockedPeriodWhere } from '../periods/locked-period.js';
 import { BookingWithItems } from '../../bookings/interfaces/booking-with-items.interface.js';
+import { ProductOrderCommissionLine } from './interfaces/product-order-commission-line.interface.js';
 
 @Injectable()
 export class StaffEarningsService {
@@ -91,9 +92,8 @@ export class StaffEarningsService {
     const staff = await this.staffService.findById(staffId);
     if (staff.locationId !== locationId)
       throw new AppException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND);
-    const { timezone, currency } = await this.locationService.getLocale(
-      locationId,
-    );
+    const { timezone, currency } =
+      await this.locationService.getLocale(locationId);
     const earnedOnStr =
       dto.earnedOn ?? TimeService.zonedDateStr(new Date(), timezone);
     const earnedOn = TimeService.dateOnly(earnedOnStr);
@@ -185,6 +185,121 @@ export class StaffEarningsService {
       },
     );
     return earning;
+  }
+
+  async recordForProductOrder(
+    locationId: string,
+    orderId: string,
+    occurredAt: Date,
+    currency: string,
+    lines: ProductOrderCommissionLine[],
+    tx: Prisma.TransactionClient,
+  ): Promise<StaffEarning[]> {
+    if (lines.length === 0) return [];
+    const { timezone } = await this.locationService.getLocale(locationId);
+    const earnedOn = TimeService.dateOnly(
+      TimeService.zonedDateStr(occurredAt, timezone),
+    );
+    const earnings: StaffEarning[] = [];
+    let dateChecked = false;
+    for (const line of lines) {
+      const plan = await this.compensation.resolveForDate(
+        line.staffId,
+        earnedOn,
+        tx,
+      );
+      if (!plan || plan.productCommissionPercent == null) continue;
+      if (!dateChecked) {
+        await this.assertDateUnlocked(locationId, earnedOn, tx);
+        dateChecked = true;
+      }
+      const amount = this.calculator.commission(
+        line.amount,
+        plan.productCommissionPercent,
+      );
+      earnings.push(
+        await this.insertEarning(
+          {
+            locationId,
+            staffId: line.staffId,
+            type: StaffEarningType.PRODUCT_COMMISSION,
+            source: StaffEarningSource.PRODUCT_SALE,
+            earnedOn,
+            amount,
+            currency,
+            baseAmount: line.amount,
+            ratePercent: plan.productCommissionPercent,
+            description: line.description,
+            idempotencyKey: this.idempotencyKey({
+              kind: 'orderItem',
+              orderItemId: line.orderItemId,
+            }),
+            compensationPlanId: plan.id,
+            orderId,
+            orderItemId: line.orderItemId,
+          },
+          tx,
+        ),
+      );
+    }
+    return earnings;
+  }
+
+  async reverseForProductOrder(
+    locationId: string,
+    orderId: string,
+    reason: string,
+    actor: AuditActor,
+    tx: Prisma.TransactionClient,
+  ): Promise<StaffEarning[]> {
+    const originals = await tx.staffEarning.findMany({
+      where: {
+        locationId,
+        orderId,
+        type: StaffEarningType.PRODUCT_COMMISSION,
+        source: StaffEarningSource.PRODUCT_SALE,
+      },
+    });
+    const reversals: StaffEarning[] = [];
+    for (const original of originals) {
+      const existing = await tx.staffEarning.findUnique({
+        where: { reversesEarningId: original.id },
+      });
+      if (existing) {
+        reversals.push(existing);
+        continue;
+      }
+      await this.assertDateUnlocked(locationId, original.earnedOn, tx);
+      reversals.push(
+        await this.insertEarning(
+          {
+            locationId,
+            staffId: original.staffId,
+            type: StaffEarningType.CORRECTION,
+            source: StaffEarningSource.PRODUCT_SALE,
+            earnedOn: original.earnedOn,
+            amount: original.amount.neg(),
+            currency: original.currency,
+            baseAmount: original.baseAmount,
+            ratePercent: original.ratePercent,
+            description: original.description,
+            reason,
+            actorId: actor.id ?? null,
+            actorName: actor.name,
+            idempotencyKey: this.idempotencyKey({
+              kind: 'orderItemReversal',
+              orderItemId: original.orderItemId!,
+            }),
+            compensationPlanId: original.compensationPlanId,
+            orderId,
+            orderItemId: original.orderItemId,
+            reversesEarningId: original.id,
+          },
+          tx,
+        ),
+      );
+    }
+    return reversals;
   }
 
   async materializeHourly(
@@ -561,8 +676,9 @@ export class StaffEarningsService {
   private async assertDateUnlocked(
     locationId: string,
     earnedOn: Date,
+    tx?: Prisma.TransactionClient,
   ): Promise<void> {
-    const locked = await this.db.payrollPeriod.findFirst({
+    const locked = await this.store(tx).payrollPeriod.findFirst({
       where: lockedPeriodWhere(locationId, earnedOn),
       select: { id: true },
     });
@@ -586,7 +702,9 @@ export class StaffEarningsService {
       | { kind: 'salaryPeriod'; periodId: string }
       | { kind: 'correction'; resultId: string }
       | { kind: 'bookingItem'; bookingItemId: string }
-      | { kind: 'bookingItemReversal'; bookingItemId: string },
+      | { kind: 'bookingItemReversal'; bookingItemId: string }
+      | { kind: 'orderItem'; orderItemId: string }
+      | { kind: 'orderItemReversal'; orderItemId: string },
   ): string {
     switch (input.kind) {
       case 'manual':
@@ -605,6 +723,10 @@ export class StaffEarningsService {
         return `booking-item:${input.bookingItemId}:${StaffEarningType.SERVICE_COMMISSION}`;
       case 'bookingItemReversal':
         return `booking-item:${input.bookingItemId}:${StaffEarningType.SERVICE_COMMISSION}:reversal`;
+      case 'orderItem':
+        return `order-item:${input.orderItemId}:${StaffEarningType.PRODUCT_COMMISSION}`;
+      case 'orderItemReversal':
+        return `order-item:${input.orderItemId}:${StaffEarningType.PRODUCT_COMMISSION}:reversal`;
     }
   }
 
