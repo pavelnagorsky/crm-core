@@ -43,7 +43,7 @@ export class BookingPagesController {
 
   @ApiOperation({ summary: 'Check whether a booking page slug can be used' })
   @ApiOkResponse({ type: ApiResponse(SlugAvailabilityResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Get('slug-availability')
   async checkSlug(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -59,7 +59,7 @@ export class BookingPagesController {
 
   @ApiOperation({ summary: 'List booking pages' })
   @ApiOkResponse({ type: ApiResponseArray(BookingPageResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Get()
   async list(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -89,7 +89,7 @@ export class BookingPagesController {
   @ApiOperation({ summary: 'Get a booking page' })
   @ApiOkResponse({ type: ApiResponse(BookingPageResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking page not found' })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Get(':pageId')
   async findById(
     @Param('locationId', ParseUUIDPipe) locationId: string,

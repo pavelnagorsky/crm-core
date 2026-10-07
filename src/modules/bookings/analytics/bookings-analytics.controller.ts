@@ -17,7 +17,7 @@ export class BookingsAnalyticsController {
 
   @ApiOperation({ summary: 'Fetch analytics widgets for the bookings page' })
   @ApiOkResponse({ type: ApiResponse(BookingsAnalyticsResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Post('bookings/analytics')
   async analytics(
     @Param('locationId', ParseUUIDPipe) locationId: string,

@@ -56,6 +56,17 @@ describe('BrandRbacGuard', () => {
 
     expect(guard.canActivate(context(user, { brandId: 'brand-1' }))).toBe(true);
   });
+
+  it('allows a manager when the role is explicitly listed', () => {
+    const guard = new BrandRbacGuard(
+      reflector(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF),
+    );
+    const user = payload({
+      brandMemberships: [{ brandId: 'brand-1', role: BusinessRole.MANAGER }],
+    });
+
+    expect(guard.canActivate(context(user, { brandId: 'brand-1' }))).toBe(true);
+  });
 });
 
 describe('LocationRbacGuard', () => {
@@ -74,6 +85,42 @@ describe('LocationRbacGuard', () => {
     expect(guard.canActivate(context(user, { locationId: 'location-1' }))).toBe(
       true,
     );
+  });
+
+  it('allows a manager when the role is explicitly listed', () => {
+    const guard = new LocationRbacGuard(
+      reflector(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF),
+    );
+    const user = payload({
+      locationMemberships: [
+        {
+          locationId: 'location-1',
+          brandId: 'brand-1',
+          role: BusinessRole.MANAGER,
+        },
+      ],
+    });
+
+    expect(guard.canActivate(context(user, { locationId: 'location-1' }))).toBe(
+      true,
+    );
+  });
+
+  it('denies a manager when only staff is listed', () => {
+    const guard = new LocationRbacGuard(reflector(BusinessRole.STAFF));
+    const user = payload({
+      locationMemberships: [
+        {
+          locationId: 'location-1',
+          brandId: 'brand-1',
+          role: BusinessRole.MANAGER,
+        },
+      ],
+    });
+
+    expect(() =>
+      guard.canActivate(context(user, { locationId: 'location-1' })),
+    ).toThrow(ForbiddenException);
   });
 
   it('allows a brand member through a known location mapping', () => {

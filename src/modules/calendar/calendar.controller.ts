@@ -75,7 +75,7 @@ export class CalendarController {
   @ApiOkResponse({ type: ApiResponseArray(AvailableSlotsDayDto) })
   @ApiNotFoundResponse({ description: 'Location or service not found' })
   @ApiBadRequestResponse({ description: 'Date range is longer than 62 days' })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Get('available-slots')
   async getManualAvailableSlots(
     @Param('locationId', ParseUUIDPipe) locationId: string,

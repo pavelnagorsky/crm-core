@@ -78,7 +78,7 @@ export class BrandController {
   @ApiOperation({ summary: 'Get brand details' })
   @ApiOkResponse({ type: ApiResponse(BrandResponseDto) })
   @ApiNotFoundResponse({ description: 'Brand not found' })
-  @BrandRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @BrandRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Get(':brandId')
   async findById(
     @Param('brandId', ParseUUIDPipe) brandId: string,

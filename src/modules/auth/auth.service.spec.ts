@@ -2,7 +2,7 @@ import { createHash } from 'crypto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { User, UserRole } from '@prisma/client';
+import { BusinessRole, User, UserRole } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
 import { UserService } from '../user/user.service.js';
 import { TokenEpochRegistryService } from './token-epoch-registry.service.js';
@@ -31,6 +31,7 @@ describe('AuthService refresh token storage', () => {
   const db = {
     brandMembership: { findMany: vi.fn().mockResolvedValue([]) },
     locationMembership: { findMany: vi.fn().mockResolvedValue([]) },
+    location: { findMany: vi.fn().mockResolvedValue([]) },
     refreshToken: {
       create: vi.fn(),
       findMany: vi.fn().mockResolvedValue([]),
@@ -73,6 +74,9 @@ describe('AuthService refresh token storage', () => {
     vi.clearAllMocks();
     db.refreshToken.findMany.mockResolvedValue([]);
     db.refreshToken.deleteMany.mockResolvedValue({ count: 0 });
+    db.brandMembership.findMany.mockResolvedValue([]);
+    db.locationMembership.findMany.mockResolvedValue([]);
+    db.location.findMany.mockResolvedValue([]);
   });
 
   it('stores only a SHA-256 hash and gives every refresh JWT a jti', async () => {
@@ -101,6 +105,43 @@ describe('AuthService refresh token storage', () => {
     expect(db.refreshToken.create.mock.calls[0][0].data).not.toHaveProperty(
       'token',
     );
+  });
+
+  it('embeds inherited brand location access in the access token', async () => {
+    db.brandMembership.findMany.mockResolvedValue([
+      { brandId: 'brand-1', role: BusinessRole.OWNER },
+    ]);
+    db.location.findMany.mockResolvedValue([
+      { id: 'location-1', brandId: 'brand-1' },
+      { id: 'location-2', brandId: 'brand-1' },
+    ]);
+
+    await service.handleOAuth(
+      {
+        email: user.email!,
+        providerType: 'GOOGLE',
+      } as never,
+      'browser',
+    );
+
+    const accessSignCall = jwt.signAsync.mock.calls.find(
+      ([, options]) => options.secret === 'access-secret',
+    );
+    expect(accessSignCall?.[0]).toMatchObject({
+      brandMemberships: [{ brandId: 'brand-1', role: BusinessRole.OWNER }],
+      locationMemberships: [
+        {
+          locationId: 'location-1',
+          brandId: 'brand-1',
+          role: BusinessRole.OWNER,
+        },
+        {
+          locationId: 'location-2',
+          brandId: 'brand-1',
+          role: BusinessRole.OWNER,
+        },
+      ],
+    });
   });
 
   it('hashes the cookie value when logging out', async () => {

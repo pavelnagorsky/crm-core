@@ -15,6 +15,7 @@ enum UserRole {
 
 enum BusinessRole {
   OWNER
+  MANAGER
   STAFF
 }
 

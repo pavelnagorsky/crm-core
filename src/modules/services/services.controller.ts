@@ -81,7 +81,7 @@ export class ServicesController {
 
   @ApiOperation({ summary: 'List service categories for a business' })
   @ApiOkResponse({ type: ApiResponseArray(ServiceCategoryResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Get('service-categories')
   async listCategories(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -174,7 +174,7 @@ export class ServicesController {
 
   @ApiOperation({ summary: 'Get unified service catalog counts' })
   @ApiOkResponse({ type: ApiResponse(ServiceCatalogCountsResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Get('service-catalog/counts')
   async getCatalogCounts(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -188,7 +188,7 @@ export class ServicesController {
 
   @ApiOperation({ summary: 'Search the unified service catalog' })
   @ApiOkResponse({ type: ApiResponse(ServiceCatalogSearchResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Get('service-catalog')
   async searchCatalog(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -229,7 +229,7 @@ export class ServicesController {
   @ApiOperation({ summary: 'Get service bundle by ID' })
   @ApiOkResponse({ type: ApiResponse(ServiceBundleResponseDto) })
   @ApiNotFoundResponse({ description: 'Service bundle not found' })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Get('service-bundles/:id')
   async findBundleById(
     @Param('id', ParseUUIDPipe) id: string,
@@ -301,7 +301,7 @@ export class ServicesController {
   @ApiOperation({ summary: 'Get service by ID' })
   @ApiOkResponse({ type: ApiResponse(ServiceResponseDto) })
   @ApiNotFoundResponse({ description: 'Service not found' })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Get('services/:id')
   async findById(
     @Param('id', ParseUUIDPipe) id: string,

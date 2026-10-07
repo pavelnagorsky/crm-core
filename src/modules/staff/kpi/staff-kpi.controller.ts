@@ -33,6 +33,7 @@ export class StaffKpiController {
       tokenPayload,
       locationId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
     const cards = await this.staffKpiService.getWidgets(locationId, dto);

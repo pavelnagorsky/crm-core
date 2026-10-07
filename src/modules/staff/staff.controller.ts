@@ -115,6 +115,7 @@ export class StaffController {
       tokenPayload,
       locationId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
     const counts = await this.staffService.getStatusCounts(locationId);
@@ -136,6 +137,7 @@ export class StaffController {
       tokenPayload,
       locationId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
     const { stream, filename } = await this.staffExportService.stream(
@@ -160,6 +162,7 @@ export class StaffController {
       tokenPayload,
       locationId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
     const staff = await this.staffService.findWithServiceCountInLocation(
@@ -182,6 +185,7 @@ export class StaffController {
       tokenPayload,
       locationId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
     const { items, totalItems } = await this.staffService.search(
@@ -254,6 +258,7 @@ export class StaffController {
       tokenPayload,
       locationId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
     const shifts = await this.staffService.getShifts(locationId, id, dto);

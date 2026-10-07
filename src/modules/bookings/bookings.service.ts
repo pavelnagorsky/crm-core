@@ -216,6 +216,7 @@ export class BookingsService implements CalendarBookingReader {
       tokenPayload,
       locationId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
     const old = await this.findByIdInLocation(locationId, bookingId);
@@ -223,6 +224,7 @@ export class BookingsService implements CalendarBookingReader {
       tokenPayload,
       old.locationId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
     const actor = auditActorFromToken(tokenPayload, locationId);
@@ -311,6 +313,7 @@ export class BookingsService implements CalendarBookingReader {
       tokenPayload,
       locationId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
     const old = await this.findByIdInLocation(locationId, bookingId);
@@ -318,6 +321,7 @@ export class BookingsService implements CalendarBookingReader {
       tokenPayload,
       old.locationId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
     const reversesCommission =
@@ -683,6 +687,7 @@ export class BookingsService implements CalendarBookingReader {
       tokenPayload,
       locationId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
     const booking = await this.findByIdInLocation(locationId, bookingId);
@@ -690,6 +695,7 @@ export class BookingsService implements CalendarBookingReader {
       tokenPayload,
       booking.locationId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
     return this.executeCancellation(

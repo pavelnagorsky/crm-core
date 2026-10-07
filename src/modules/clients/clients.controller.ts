@@ -187,6 +187,7 @@ export class ClientsController {
       tokenPayload,
       brandId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
     const { stream, filename } = await this.clientsExportService.stream(
@@ -211,6 +212,7 @@ export class ClientsController {
       tokenPayload,
       brandId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
     const client = await this.clientsService.findInBrand(brandId, id);
@@ -230,9 +232,13 @@ export class ClientsController {
       tokenPayload,
       brandId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
-    const { items, totalItems } = await this.clientsService.search(brandId, dto);
+    const { items, totalItems } = await this.clientsService.search(
+      brandId,
+      dto,
+    );
     return BaseResponseDto.success(
       new ClientSearchResponseDto(
         items.map(ClientResponseDto.fromEntity),

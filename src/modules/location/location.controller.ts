@@ -50,7 +50,7 @@ export class LocationController {
 
   @ApiOperation({ summary: 'List brand locations' })
   @ApiOkResponse({ type: ApiResponseArray(LocationResponseDto) })
-  @BrandRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @BrandRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Get('brands/:brandId/locations')
   async listByBrand(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -63,7 +63,7 @@ export class LocationController {
 
   @ApiOperation({ summary: 'Get location details' })
   @ApiOkResponse({ type: ApiResponse(LocationResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Get('locations/:locationId')
   async findById(
     @Param('locationId', ParseUUIDPipe) locationId: string,

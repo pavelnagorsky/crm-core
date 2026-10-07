@@ -47,7 +47,7 @@ export class InventoryController {
 
   @ApiOperation({ summary: 'Search current inventory balances' })
   @ApiOkResponse({ type: ApiResponse(InventorySearchResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Get()
   async search(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -70,7 +70,7 @@ export class InventoryController {
 
   @ApiOperation({ summary: 'Search inventory movements for a product' })
   @ApiOkResponse({ type: ApiResponse(InventoryMovementSearchResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Get(':productId/movements')
   async searchMovements(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -114,7 +114,7 @@ export class InventoryController {
 
   @ApiOperation({ summary: 'Search inventory documents' })
   @ApiOkResponse({ type: ApiResponse(InventoryDocumentSearchResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Get('documents')
   async searchDocuments(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -138,7 +138,7 @@ export class InventoryController {
   @ApiOperation({ summary: 'Get an inventory document' })
   @ApiOkResponse({ type: ApiResponse(InventoryDocumentResponseDto) })
   @ApiNotFoundResponse({ description: 'Inventory document not found' })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Get('documents/:documentId')
   async findDocument(
     @Param('locationId', ParseUUIDPipe) locationId: string,

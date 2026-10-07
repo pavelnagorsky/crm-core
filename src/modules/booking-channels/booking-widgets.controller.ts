@@ -39,7 +39,7 @@ export class BookingWidgetsController {
 
   @ApiOperation({ summary: 'List booking widgets' })
   @ApiOkResponse({ type: ApiResponseArray(BookingWidgetResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Get()
   async list(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -68,7 +68,7 @@ export class BookingWidgetsController {
   @ApiOperation({ summary: 'Get a booking widget' })
   @ApiOkResponse({ type: ApiResponse(BookingWidgetResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking widget not found' })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Get(':widgetId')
   async findById(
     @Param('locationId', ParseUUIDPipe) locationId: string,

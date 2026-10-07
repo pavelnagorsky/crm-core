@@ -1,14 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { BrandMembership, BusinessRole, User, UserRole } from '@prisma/client';
-import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
-
-export class MembershipResponseDto {
-  @ApiProperty({ type: String })
-  brandId: string;
-
-  @ApiProperty({ enum: BusinessRole })
-  role: BusinessRole;
-}
+import { UserRole } from '@prisma/client';
+import { UserAccessSource } from '../enums/user-access-source.enum.js';
+import { UserWithAccessMemberships } from '../interfaces/user-with-access-memberships.interface.js';
+import { UserAccessDto } from './user-access.dto.js';
 
 export class UserResponseDto {
   @ApiProperty({ type: String })
@@ -44,13 +38,10 @@ export class UserResponseDto {
   @ApiProperty({ enum: UserRole })
   role: UserRole;
 
-  @ApiProperty({ type: () => MembershipResponseDto, isArray: true })
-  brandMemberships: MembershipResponseDto[];
+  @ApiProperty({ type: () => UserAccessDto, isArray: true })
+  access: UserAccessDto[];
 
-  static fromEntity(
-    user: User & { brandMemberships: BrandMembership[] },
-    payload: TokenPayloadDto,
-  ): UserResponseDto {
+  static fromEntity(user: UserWithAccessMemberships): UserResponseDto {
     const dto = new UserResponseDto();
     dto.id = user.id;
     dto.firstName = user.firstName;
@@ -62,13 +53,42 @@ export class UserResponseDto {
     dto.isMarketingEmailsEnabled = user.isMarketingEmailsEnabled;
     dto.createdAt = user.createdAt;
     dto.updatedAt = user.updatedAt;
-    dto.role = payload.role;
-    dto.brandMemberships = user.brandMemberships.map((m: BrandMembership) => {
-      const membership = new MembershipResponseDto();
-      membership.brandId = m.brandId;
-      membership.role = m.role;
-      return membership;
-    });
+    dto.role = user.role;
+    dto.access = UserResponseDto.accessFromEntity(user);
     return dto;
+  }
+
+  private static accessFromEntity(
+    user: UserWithAccessMemberships,
+  ): UserAccessDto[] {
+    const access: UserAccessDto[] = [];
+
+    for (const membership of user.brandMemberships) {
+      access.push(UserAccessDto.brand(membership.brandId, membership.role));
+
+      for (const location of membership.brand.locations) {
+        access.push(
+          UserAccessDto.location(
+            membership.brandId,
+            location.id,
+            membership.role,
+            UserAccessSource.INHERITED_BRAND,
+          ),
+        );
+      }
+    }
+
+    for (const membership of user.locationMemberships) {
+      access.push(
+        UserAccessDto.location(
+          membership.location.brandId,
+          membership.locationId,
+          membership.role,
+          UserAccessSource.DIRECT,
+        ),
+      );
+    }
+
+    return access;
   }
 }

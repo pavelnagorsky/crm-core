@@ -1,8 +1,9 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { BrandMembership, Prisma, User } from '@prisma/client';
+import { Prisma, User } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
+import { UserWithAccessMemberships } from './interfaces/user-with-access-memberships.interface.js';
 
 @Injectable()
 export class UserService {
@@ -17,10 +18,25 @@ export class UserService {
 
   async findByIdWithMemberships(
     id: string,
-  ): Promise<User & { brandMemberships: BrandMembership[] }> {
+  ): Promise<UserWithAccessMemberships> {
     const user = await this.db.user.findUnique({
       where: { id },
-      include: { brandMemberships: true },
+      include: {
+        brandMemberships: {
+          include: {
+            brand: {
+              select: {
+                locations: { select: { id: true } },
+              },
+            },
+          },
+        },
+        locationMemberships: {
+          include: {
+            location: { select: { brandId: true } },
+          },
+        },
+      },
     });
     if (!user)
       throw new AppException(ErrorCode.USER_NOT_FOUND, HttpStatus.NOT_FOUND);

@@ -151,6 +151,7 @@ export class BookingsController {
       tokenPayload,
       locationId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
     const booking = await this.bookingCreateService.createManualBooking(
@@ -173,6 +174,7 @@ export class BookingsController {
       tokenPayload,
       locationId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
     const counts = await this.bookingsService.getStatusCounts(locationId);
@@ -197,6 +199,7 @@ export class BookingsController {
       tokenPayload,
       locationId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
     const { stream, filename } = await this.bookingsExportService.stream(
@@ -225,6 +228,7 @@ export class BookingsController {
       tokenPayload,
       locationId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
     return BaseResponseDto.success(BookingResponseDto.fromEntity(booking));
@@ -243,6 +247,7 @@ export class BookingsController {
       tokenPayload,
       locationId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
     const { items, totalItems } = await this.bookingsService.search(
@@ -316,6 +321,7 @@ export class BookingsController {
       tokenPayload,
       locationId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
     const token = this.bookingClientService.generateClientToken(id);

@@ -45,7 +45,7 @@ export class OrdersController {
 
   @ApiOperation({ summary: 'Create an open internal product order' })
   @ApiCreatedResponse({ type: ApiResponse(OrderResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Post()
   async create(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -62,7 +62,7 @@ export class OrdersController {
 
   @ApiOperation({ summary: 'Search internal orders' })
   @ApiOkResponse({ type: ApiResponse(OrderSearchResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Get()
   async search(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -83,7 +83,7 @@ export class OrdersController {
   @ApiOperation({ summary: 'Get an internal order' })
   @ApiOkResponse({ type: ApiResponse(OrderResponseDto) })
   @ApiNotFoundResponse({ description: 'Order not found' })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Get(':orderId')
   async findById(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -99,7 +99,7 @@ export class OrdersController {
   @ApiOperation({ summary: 'Replace an open internal order' })
   @ApiOkResponse({ type: ApiResponse(OrderResponseDto) })
   @ApiConflictResponse({ description: 'Order is immutable' })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Put(':orderId')
   async update(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -119,7 +119,7 @@ export class OrdersController {
   @ApiOperation({ summary: 'Post or void an internal order' })
   @ApiOkResponse({ type: ApiResponse(OrderResponseDto) })
   @ApiConflictResponse({ description: 'Order status transition rejected' })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Patch(':orderId/status')
   async changeStatus(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -139,7 +139,7 @@ export class OrdersController {
 
   @ApiOperation({ summary: 'Delete an open internal order' })
   @ApiNoContentResponse()
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Delete(':orderId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(

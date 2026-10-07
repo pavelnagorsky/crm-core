@@ -92,6 +92,7 @@ export class PayrollController {
       tokenPayload,
       locationId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
     const ranges = await this.payroll.listLockedRanges(locationId);
@@ -113,12 +114,10 @@ export class PayrollController {
       tokenPayload,
       locationId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
-    const { items, totalItems } = await this.payroll.search(
-      locationId,
-      dto,
-    );
+    const { items, totalItems } = await this.payroll.search(locationId, dto);
     return BaseResponseDto.success(
       new PayrollPeriodSearchResponseDto(
         items.map((item) => PayrollPeriodResponseDto.fromEntity(item)),
@@ -144,6 +143,7 @@ export class PayrollController {
       tokenPayload,
       locationId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
     const counts = await this.payroll.getStatusCounts(locationId);
@@ -170,6 +170,7 @@ export class PayrollController {
       tokenPayload,
       period.locationId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
     return BaseResponseDto.success(PayrollPeriodResponseDto.fromEntity(period));
@@ -190,6 +191,7 @@ export class PayrollController {
       tokenPayload,
       period.locationId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
     return BaseResponseDto.success(await this.reports.build(id));
@@ -211,6 +213,7 @@ export class PayrollController {
       tokenPayload,
       period.locationId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
     const { items, totalItems } = await this.earnings.searchByPeriod(id, dto);
@@ -242,6 +245,7 @@ export class PayrollController {
       tokenPayload,
       period.locationId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
     const { stream, filename } = await this.reports.exportVedomost(id);
@@ -266,6 +270,7 @@ export class PayrollController {
       tokenPayload,
       period.locationId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
     const { stream, filename } = await this.reports.exportPayslips(id);

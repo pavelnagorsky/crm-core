@@ -73,7 +73,7 @@ export class ProductsController {
 
   @ApiOperation({ summary: 'List product categories' })
   @ApiOkResponse({ type: ApiResponseArray(ProductCategoryResponseDto) })
-  @BrandRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @BrandRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Get('brands/:brandId/product-categories')
   async listCategories(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -141,7 +141,7 @@ export class ProductsController {
 
   @ApiOperation({ summary: 'Search brand products' })
   @ApiOkResponse({ type: ApiResponse(ProductSearchResponseDto) })
-  @BrandRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @BrandRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Get('brands/:brandId/products')
   async search(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -162,7 +162,7 @@ export class ProductsController {
   @ApiOperation({ summary: 'Get product details' })
   @ApiOkResponse({ type: ApiResponse(ProductResponseDto) })
   @ApiNotFoundResponse({ description: 'Product not found' })
-  @BrandRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @BrandRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Get('brands/:brandId/products/:productId')
   async findById(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -253,7 +253,7 @@ export class ProductsController {
 
   @ApiOperation({ summary: 'Search products enabled for a location' })
   @ApiOkResponse({ type: ApiResponse(LocationProductSearchResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Get('locations/:locationId/products')
   async searchLocation(
     @Param('locationId', ParseUUIDPipe) locationId: string,

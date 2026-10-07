@@ -50,12 +50,10 @@ export class StaffEarningsController {
       tokenPayload,
       locationId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
-    const { items, totalItems } = await this.earnings.search(
-      locationId,
-      dto,
-    );
+    const { items, totalItems } = await this.earnings.search(locationId, dto);
     return BaseResponseDto.success(
       new StaffEarningSearchResponseDto(
         items.map(StaffEarningResponseDto.fromEntity),
@@ -81,6 +79,7 @@ export class StaffEarningsController {
       tokenPayload,
       locationId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
     const { items, totalItems } = await this.earnings.search(locationId, {

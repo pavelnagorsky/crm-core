@@ -54,6 +54,7 @@ export class StaffCompensationController {
       tokenPayload,
       locationId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
     const plan = await this.compensation.findCurrent(id);
@@ -78,6 +79,7 @@ export class StaffCompensationController {
       tokenPayload,
       locationId,
       BusinessRole.OWNER,
+      BusinessRole.MANAGER,
       BusinessRole.STAFF,
     );
     const plans = await this.compensation.listHistory(id);

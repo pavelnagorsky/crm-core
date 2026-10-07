@@ -11,20 +11,21 @@ export function assertLocationRole(
 ): void {
   if (payload.role === UserRole.ADMIN) return;
 
-  const locationMembership = payload.locationMemberships?.find(
+  const locationMemberships = payload.locationMemberships?.filter(
     (item) => item.locationId === locationId,
   );
-  if (!locationMembership) {
+  if (!locationMemberships?.length) {
     throw new AppException(ErrorCode.TOKEN_PAYLOAD_STALE, HttpStatus.CONFLICT, {
       action: 'REFRESH_ACCESS_TOKEN',
       reason: 'LOCATION_MAPPING_MISSING',
     });
   }
 
-  if (roles.includes(locationMembership.role)) return;
+  if (locationMemberships.some((membership) => roles.includes(membership.role)))
+    return;
 
   const brandMembership = payload.brandMemberships?.find(
-    (item) => item.brandId === locationMembership.brandId,
+    (item) => item.brandId === locationMemberships[0].brandId,
   );
   if (brandMembership && roles.includes(brandMembership.role)) return;
 

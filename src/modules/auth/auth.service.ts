@@ -321,13 +321,32 @@ export class AuthService {
         }),
         this.tokenEpochRegistry.get(user.id),
       ]);
-    const locationMemberships = locationMembershipRows.map(
-      ({ location, ...membership }) => ({
+    const brandLocations =
+      brandMemberships.length === 0
+        ? []
+        : await this.db.location.findMany({
+            where: {
+              brandId: { in: brandMemberships.map((item) => item.brandId) },
+            },
+            select: { id: true, brandId: true },
+          });
+    const locationMemberships = [
+      ...brandLocations.map((location) => {
+        const brandMembership = brandMemberships.find(
+          (item) => item.brandId === location.brandId,
+        )!;
+        return {
+          locationId: location.id,
+          brandId: location.brandId,
+          role: brandMembership.role,
+        };
+      }),
+      ...locationMembershipRows.map(({ location, ...membership }) => ({
         locationId: membership.locationId,
         brandId: location.brandId,
         role: membership.role,
-      }),
-    );
+      })),
+    ];
     // firstName/lastName are embedded for audit display; can be stale until the user re-logs in — accepted trade-off.
     return this.sign(
       {

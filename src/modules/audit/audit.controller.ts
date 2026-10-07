@@ -18,7 +18,7 @@ export class AuditController {
 
   @ApiOperation({ summary: 'Get audit history for an entity' })
   @ApiOkResponse({ type: ApiResponse(AuditHistoryResponseDto) })
-  @BrandRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @BrandRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Get('brands/:brandId/audit')
   async getBrandHistory(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -35,7 +35,7 @@ export class AuditController {
 
   @ApiOperation({ summary: 'Get location audit history for an entity' })
   @ApiOkResponse({ type: ApiResponse(AuditHistoryResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.STAFF)
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Get('locations/:locationId/audit')
   async getLocationHistory(
     @Param('locationId', ParseUUIDPipe) locationId: string,
