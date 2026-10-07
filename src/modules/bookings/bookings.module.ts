@@ -16,6 +16,7 @@ import { CalendarModule } from '../calendar/calendar.module.js';
 import { ClientsModule } from '../clients/clients.module.js';
 import { StaffModule } from '../staff/staff.module.js';
 import { PayrollModule } from '../payroll/payroll.module.js';
+import { ServicesModule } from '../services/services.module.js';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { PayrollModule } from '../payroll/payroll.module.js';
     ClientsModule,
     StaffModule,
     PayrollModule,
+    ServicesModule,
     I18nModule,
   ],
   controllers: [BookingsController],

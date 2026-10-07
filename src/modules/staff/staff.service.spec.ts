@@ -14,6 +14,7 @@ describe('StaffService.search', () => {
     } as never,
     { emit: vi.fn() } as unknown as EventEmitter2,
     {} as ConfigService,
+    {} as never,
   );
 
   beforeEach(() => {

@@ -304,6 +304,37 @@ export class ServicesService {
     return service;
   }
 
+  listActiveForBooking(locationId: string): Promise<ServiceWithImage[]> {
+    return this.db.service.findMany({
+      where: { locationId, status: ServiceStatus.ACTIVE },
+      include: { imageFile: true },
+      orderBy: [{ sortOrder: 'asc' }, { title: 'asc' }],
+    });
+  }
+
+  async resolveActiveForBooking(
+    locationId: string,
+    serviceIds: string[],
+  ): Promise<ServiceWithImage[]> {
+    const uniqueIds = [...new Set(serviceIds)];
+    const services = await this.db.service.findMany({
+      where: {
+        id: { in: uniqueIds },
+        locationId,
+        status: ServiceStatus.ACTIVE,
+      },
+      include: { imageFile: true },
+    });
+    if (services.length !== uniqueIds.length) {
+      throw new AppException(
+        ErrorCode.BOOKING_SERVICE_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    const byId = new Map(services.map((service) => [service.id, service]));
+    return serviceIds.map((serviceId) => byId.get(serviceId)!);
+  }
+
   private async findInLocation(locationId: string, serviceId: string) {
     const service = await this.db.service.findFirst({
       where: { id: serviceId, locationId },

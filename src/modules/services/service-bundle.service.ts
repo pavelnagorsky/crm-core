@@ -206,6 +206,26 @@ export class ServiceBundleService {
     return bundle;
   }
 
+  listActiveForBooking(locationId: string): Promise<ServiceBundleView[]> {
+    return this.db.serviceBundle.findMany({
+      where: { locationId, status: ServiceStatus.ACTIVE },
+      include: serviceBundleInclude,
+      orderBy: [{ sortOrder: 'asc' }, { title: 'asc' }],
+    });
+  }
+
+  async resolveActiveForBooking(
+    locationId: string,
+    bundleId: string,
+  ): Promise<ServiceBundleView> {
+    const bundle = await this.db.serviceBundle.findFirst({
+      where: { id: bundleId, locationId, status: ServiceStatus.ACTIVE },
+      include: serviceBundleInclude,
+    });
+    if (!bundle) throw new NotFoundException('Service bundle not found');
+    return bundle;
+  }
+
   async listForCatalog(
     locationId: string,
     filter: ServiceFilter,

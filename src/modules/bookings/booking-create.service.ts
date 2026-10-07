@@ -3,8 +3,6 @@ import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import {
   BookingExecutionMode as PrismaBookingExecutionMode,
   BookingVisibility,
-  CalendarEventRepeatType,
-  CalendarEventType,
   Prisma,
   ServiceStatus,
 } from '@prisma/client';
@@ -186,21 +184,19 @@ export class BookingCreateService {
           business.timezone,
         );
         const [shift, blockEvents] = await Promise.all([
-          tx.staffShift.findFirst({
-            where: { staffId: item.staffId, date: new Date(dateStr) },
-          }),
-          tx.calendarEvent.findMany({
-            where: {
-              locationId,
-              OR: [{ staffId: null }, { staffId: item.staffId }],
-              repeatType: CalendarEventRepeatType.NONE,
-              startDateTime: { lte: item.endAt },
-              endDateTime: { gte: item.startAt },
-            },
-            include: {
-              cancelledOccurrences: { select: { occurrenceDate: true } },
-            },
-          }),
+          this.staffService.findShiftForDate(
+            item.staffId,
+            new Date(dateStr),
+            tx,
+          ),
+          this.calendarService.listBlockingEvents(
+            locationId,
+            [item.staffId],
+            item.startAt,
+            item.endAt,
+            [],
+            tx,
+          ),
         ]);
 
         // Re-check inside the transaction using tx-fetched data; this must run under the
@@ -228,16 +224,15 @@ export class BookingCreateService {
 
       const createdItems = [];
       for (const item of items) {
-        const calendarEvent = await tx.calendarEvent.create({
-          data: {
+        const calendarEvent = await this.calendarService.createBookingEvent(
+          {
             locationId,
             staffId: item.staffId,
-            type: CalendarEventType.BOOKING,
-            repeatType: CalendarEventRepeatType.NONE,
-            startDateTime: item.startAt,
-            endDateTime: item.endAt,
+            startAt: item.startAt,
+            endAt: item.endAt,
           },
-        });
+          tx,
+        );
         createdItems.push({ ...item, calendarEventId: calendarEvent.id });
       }
 

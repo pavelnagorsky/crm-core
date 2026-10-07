@@ -41,11 +41,15 @@ import { ManualAvailableSlotsRequestDto } from './dto/manual-available-slots-req
 import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
+import { CalendarViewService } from './calendar-view.service.js';
 
 @ApiTags('Calendar')
 @Controller('locations/:locationId/calendar')
 export class CalendarController {
-  constructor(private readonly calendarService: CalendarService) {}
+  constructor(
+    private readonly calendarService: CalendarService,
+    private readonly calendarView: CalendarViewService,
+  ) {}
 
   // ─── Public ──────────────────────────────────────────────────────────────────
 
@@ -77,7 +81,7 @@ export class CalendarController {
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Query() dto: ManualAvailableSlotsRequestDto,
   ): Promise<BaseResponseDto<AvailableSlotsDayDto[]>> {
-    const days = await this.calendarService.getManualAvailableSlots(
+    const days = await this.calendarView.getManualAvailableSlots(
       locationId,
       dto,
     );
@@ -97,7 +101,7 @@ export class CalendarController {
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Query() dto: GetCalendarRequestDto,
   ): Promise<BaseResponseDto<GetCalendarResponseDto>> {
-    const result = await this.calendarService.getCalendar(locationId, dto);
+    const result = await this.calendarView.getCalendar(locationId, dto);
     return BaseResponseDto.success(result);
   }
 

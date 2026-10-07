@@ -42,6 +42,7 @@ import { ConfigService } from '@nestjs/config';
 import { StaffWithAvatar } from './interfaces/staff-with-avatar.interface.js';
 import { StaffWithServiceCount } from './interfaces/staff-with-service-count.interface.js';
 import { sanitizeRichHtml } from '../../shared/html/sanitize-rich-html.js';
+import { LocationService } from '../location/location.service.js';
 
 const STAFF_DESCRIPTION_MAX_LENGTH = 2_000;
 
@@ -57,6 +58,7 @@ export class StaffService {
     private readonly db: DatabaseService,
     private readonly eventEmitter: EventEmitter2,
     private readonly config: ConfigService,
+    private readonly locationService: LocationService,
   ) {}
 
   listInLocation(locationId: string): Promise<Staff[]> {
@@ -95,11 +97,38 @@ export class StaffService {
     locationId: string,
     from: Date,
     to: Date,
+    staffIds?: string[],
+    tx?: Prisma.TransactionClient,
   ): Promise<StaffShift[]> {
-    return this.db.staffShift.findMany({
-      where: { staff: { locationId }, date: { gte: from, lte: to } },
+    return (tx ?? this.db).staffShift.findMany({
+      where: {
+        staff: { locationId },
+        date: { gte: from, lte: to },
+        ...(staffIds?.length ? { staffId: { in: staffIds } } : {}),
+      },
       orderBy: { date: 'asc' },
     });
+  }
+
+  listShiftsForStaff(
+    staffIds: string[],
+    from: Date,
+    to: Date,
+    tx?: Prisma.TransactionClient,
+  ): Promise<StaffShift[]> {
+    if (staffIds.length === 0) return Promise.resolve([]);
+    return (tx ?? this.db).staffShift.findMany({
+      where: { staffId: { in: staffIds }, date: { gte: from, lte: to } },
+      orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
+    });
+  }
+
+  findShiftForDate(
+    staffId: string,
+    date: Date,
+    tx?: Prisma.TransactionClient,
+  ): Promise<StaffShift | null> {
+    return (tx ?? this.db).staffShift.findFirst({ where: { staffId, date } });
   }
 
   listActiveWithServices(
@@ -429,18 +458,15 @@ export class StaffService {
   async delete(locationId: string, staffId: string): Promise<void> {
     await this.findInLocation(locationId, staffId);
 
-    const bookingCount = await this.db.bookingItem.count({
-      where: { staffId },
-    });
-    if (bookingCount > 0)
-      throw new AppException(ErrorCode.STAFF_HAS_BOOKINGS, HttpStatus.CONFLICT);
-
     try {
       await this.db.staff.delete({ where: { id: staffId } });
     } catch (e: any) {
       if (e?.code === PrismaErrorCode.FOREIGN_KEY_VIOLATION) {
+        const constraint = String(e?.meta?.constraint ?? '');
         throw new AppException(
-          ErrorCode.STAFF_HAS_EARNINGS,
+          constraint.includes('StaffEarning')
+            ? ErrorCode.STAFF_HAS_EARNINGS
+            : ErrorCode.STAFF_HAS_BOOKINGS,
           HttpStatus.CONFLICT,
         );
       }
@@ -559,11 +585,10 @@ export class StaffService {
 
     if (dto.email) {
       const cfg = this.config.get<IFrontendConfig>('frontend')!;
-      const location = await this.db.location.findFirst({
-        where: { id: staff.locationId },
-        select: { brand: { select: { name: true } } },
-      });
-      const businessName = location?.brand.name ?? '';
+      const location = await this.locationService.findPublicProfile(
+        staff.locationId,
+      );
+      const businessName = location.brand.name;
       this.eventEmitter.emit(
         NOTIFICATION_EVENT,
         new StaffInvitationNotification(

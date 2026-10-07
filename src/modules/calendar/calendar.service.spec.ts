@@ -13,10 +13,12 @@ import { LocationService } from '../location/location.service.js';
 import { BookingVisibility } from '@prisma/client';
 import { StaffService } from '../staff/staff.service.js';
 import { TimeService } from '../../shared/time/time.service.js';
-import { CalendarBookingReader } from './calendar-booking-reader.js';
 import { CalendarComputeService } from './calendar-compute.service.js';
 import { CalendarService } from './calendar.service.js';
 import { UpdateCalendarEventDto } from './dto/update-calendar-event.dto.js';
+import { GetCalendarRequestDto } from './dto/get-calendar-request.dto.js';
+import { ServicesService } from '../services/services.service.js';
+import { ServiceBundleService } from '../services/service-bundle.service.js';
 
 function seriesEvent(): CalendarEvent {
   return {
@@ -78,7 +80,8 @@ describe('CalendarService.update', () => {
         { provide: DatabaseService, useValue: db },
         { provide: StaffService, useValue: {} },
         { provide: LocationService, useValue: {} },
-        { provide: CalendarBookingReader, useValue: {} },
+        { provide: ServicesService, useValue: {} },
+        { provide: ServiceBundleService, useValue: {} },
         { provide: CalendarComputeService, useValue: {} },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
       ],
@@ -156,7 +159,8 @@ describe('CalendarService.moveOccurrence', () => {
         { provide: DatabaseService, useValue: db },
         { provide: StaffService, useValue: {} },
         { provide: LocationService, useValue: {} },
-        { provide: CalendarBookingReader, useValue: {} },
+        { provide: ServicesService, useValue: {} },
+        { provide: ServiceBundleService, useValue: {} },
         { provide: CalendarComputeService, useValue: {} },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
       ],
@@ -247,8 +251,18 @@ describe('CalendarService.getManualAvailableSlots', () => {
     staffShift: { findMany: vi.fn() },
     calendarEvent: { findMany: vi.fn() },
   };
-  const staff = { resolveStaffForService: vi.fn() };
-  const bookings = { linkedCalendarEventIdsForBooking: vi.fn() };
+  const staff = {
+    resolveStaffForService: vi.fn(),
+    listShiftsForStaff: vi.fn((staffIds, from, to) =>
+      db.staffShift.findMany({
+        where: { staffId: { in: staffIds }, date: { gte: from, lte: to } },
+      }),
+    ),
+  };
+  const location = { findById: vi.fn(() => db.location.findUnique()) };
+  const services = {
+    resolveActiveForBooking: vi.fn(() => db.service.findMany()),
+  };
   const compute = {
     groupShiftsByStaffDate: vi.fn().mockReturnValue(new Map()),
     expandBlockEvents: vi.fn().mockReturnValue(new Map()),
@@ -278,7 +292,6 @@ describe('CalendarService.getManualAvailableSlots', () => {
       { staffId: 'staff-1', date: new Date('2026-09-28T00:00:00.000Z') },
     ]);
     db.calendarEvent.findMany.mockResolvedValue([]);
-    bookings.linkedCalendarEventIdsForBooking.mockResolvedValue([]);
     compute.groupShiftsByStaffDate.mockReturnValue(new Map());
     compute.expandBlockEvents.mockReturnValue(new Map());
     compute.collectSlotsForDate.mockReturnValue([9 * 60]);
@@ -288,8 +301,9 @@ describe('CalendarService.getManualAvailableSlots', () => {
         CalendarService,
         { provide: DatabaseService, useValue: db },
         { provide: StaffService, useValue: staff },
-        { provide: LocationService, useValue: {} },
-        { provide: CalendarBookingReader, useValue: bookings },
+        { provide: LocationService, useValue: location },
+        { provide: ServicesService, useValue: services },
+        { provide: ServiceBundleService, useValue: {} },
         { provide: CalendarComputeService, useValue: compute },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
       ],
@@ -330,21 +344,15 @@ describe('CalendarService.getManualAvailableSlots', () => {
   });
 
   it('excludes the edited booking calendar events from manual slot blocking', async () => {
-    bookings.linkedCalendarEventIdsForBooking.mockResolvedValue([
-      'event-1',
-      'event-2',
-    ]);
-
-    await service.getManualAvailableSlots('biz', {
-      serviceId: 'service-1',
-      from: '2026-09-01',
-      to: '2026-09-30',
-      bookingId: '28ea07df-62d3-4738-93b3-1560a3517213',
-    });
-
-    expect(bookings.linkedCalendarEventIdsForBooking).toHaveBeenCalledWith(
+    await service.getManualAvailableSlots(
       'biz',
-      '28ea07df-62d3-4738-93b3-1560a3517213',
+      {
+        serviceId: 'service-1',
+        from: '2026-09-01',
+        to: '2026-09-30',
+        bookingId: '28ea07df-62d3-4738-93b3-1560a3517213',
+      },
+      ['event-1', 'event-2'],
     );
     expect(db.calendarEvent.findMany).toHaveBeenCalledWith({
       where: expect.objectContaining({
@@ -388,7 +396,19 @@ describe('CalendarService.getCalendar', () => {
   };
   const business = { getLocale: vi.fn() };
   const bookings = { listForCalendar: vi.fn() };
-  const staff = { namesByIds: vi.fn() };
+  const staff = {
+    namesByIds: vi.fn(),
+    listShiftsInRange: vi.fn((locationId, from, to, staffIds) =>
+      db.staffShift.findMany({
+        where: {
+          staff: { locationId },
+          date: { gte: from, lte: to },
+          ...(staffIds?.length ? { staffId: { in: staffIds } } : {}),
+        },
+        orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
+      }),
+    ),
+  };
 
   let service: CalendarService;
 
@@ -418,6 +438,20 @@ describe('CalendarService.getCalendar', () => {
     } as CalendarEvent & { cancelledOccurrences: { occurrenceDate: Date }[] };
   }
 
+  async function getCalendar(dto: GetCalendarRequestDto) {
+    const timezone = 'Europe/Moscow';
+    const feed = await bookings.listForCalendar(
+      'biz',
+      TimeService.localToUtc(`${dto.from}T00:00:00`, timezone),
+      TimeService.localToUtc(
+        `${TimeService.addDaysStr(dto.to, 1)}T00:00:00`,
+        timezone,
+      ),
+      dto.staffIds,
+    );
+    return service.getCalendar('biz', dto, feed);
+  }
+
   beforeEach(async () => {
     vi.clearAllMocks();
     db.staffShift.findMany.mockResolvedValue([]);
@@ -437,7 +471,8 @@ describe('CalendarService.getCalendar', () => {
         { provide: DatabaseService, useValue: db },
         { provide: StaffService, useValue: staff },
         { provide: LocationService, useValue: business },
-        { provide: CalendarBookingReader, useValue: bookings },
+        { provide: ServicesService, useValue: {} },
+        { provide: ServiceBundleService, useValue: {} },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
       ],
     }).compile();
@@ -467,7 +502,7 @@ describe('CalendarService.getCalendar', () => {
       ),
     ]);
 
-    const result = await service.getCalendar('biz', {
+    const result = await getCalendar({
       from: '2026-09-21',
       to: '2026-09-27',
     });
@@ -545,7 +580,7 @@ describe('CalendarService.getCalendar', () => {
     ]);
     staff.namesByIds.mockResolvedValue(new Map([['staff-1', 'Анна']]));
 
-    const result = await service.getCalendar('biz', {
+    const result = await getCalendar({
       from: '2026-09-21',
       to: '2026-09-27',
     });
@@ -599,7 +634,7 @@ describe('CalendarService.getCalendar', () => {
       linkedEventIds: ['shadow'],
     });
 
-    const result = await service.getCalendar('biz', {
+    const result = await getCalendar({
       from: '2026-09-21',
       to: '2026-09-27',
       staffIds: ['staff-1'],
@@ -643,7 +678,7 @@ describe('CalendarService.getCalendar', () => {
       linkedEventIds: ['shadow'],
     });
 
-    const result = await service.getCalendar('biz', {
+    const result = await getCalendar({
       from: '2026-09-21',
       to: '2026-09-27',
     });

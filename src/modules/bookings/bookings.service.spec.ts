@@ -22,6 +22,9 @@ import { ServiceCatalogKind } from '../services/enums/service-catalog-kind.enum.
 import { BookingWithItems } from './interfaces/booking-with-items.interface.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
+import { ServiceCatalogService } from '../services/service-catalog.service.js';
+
+const serviceCatalog = { loadForBooking: vi.fn() };
 
 function booking(
   overrides: Partial<Booking> & Partial<BookingWithItems> = {},
@@ -106,6 +109,7 @@ describe('BookingsService.completeElapsed', () => {
         { provide: CalendarService, useValue: {} },
         { provide: StaffService, useValue: {} },
         { provide: LocationService, useValue: {} },
+        { provide: ServiceCatalogService, useValue: serviceCatalog },
         { provide: StaffEarningsService, useValue: earnings },
         { provide: EventEmitter2, useValue: emitter },
       ],
@@ -167,6 +171,7 @@ describe('BookingsService.search', () => {
         { provide: CalendarService, useValue: {} },
         { provide: StaffService, useValue: {} },
         { provide: LocationService, useValue: {} },
+        { provide: ServiceCatalogService, useValue: serviceCatalog },
         { provide: StaffEarningsService, useValue: {} },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
       ],
@@ -343,6 +348,7 @@ describe('BookingsService.listForCalendar', () => {
         { provide: CalendarService, useValue: {} },
         { provide: StaffService, useValue: {} },
         { provide: LocationService, useValue: {} },
+        { provide: ServiceCatalogService, useValue: serviceCatalog },
         { provide: StaffEarningsService, useValue: {} },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
       ],
@@ -442,6 +448,11 @@ describe('BookingsService catalog selection', () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    serviceCatalog.loadForBooking.mockImplementation(async () => ({
+      categories: await serviceCategoryFindMany(),
+      services: await serviceFindMany(),
+      bundles: await bundleFindMany(),
+    }));
     const module = await Test.createTestingModule({
       providers: [
         BookingsService,
@@ -449,6 +460,7 @@ describe('BookingsService catalog selection', () => {
         { provide: CalendarService, useValue: {} },
         { provide: StaffService, useValue: staff },
         { provide: LocationService, useValue: {} },
+        { provide: ServiceCatalogService, useValue: serviceCatalog },
         { provide: StaffEarningsService, useValue: {} },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
       ],
@@ -665,6 +677,7 @@ describe('BookingsService.update item prices', () => {
             getLocale: vi.fn().mockResolvedValue({ currency: 'BYN' }),
           },
         },
+        { provide: ServiceCatalogService, useValue: serviceCatalog },
         { provide: StaffEarningsService, useValue: {} },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
       ],

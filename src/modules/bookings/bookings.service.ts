@@ -1,21 +1,11 @@
 import { createHash } from 'crypto';
 import {
-  forwardRef,
   HttpStatus,
-  Inject,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import {
-  Booking,
-  BusinessRole,
-  CalendarEventRepeatType,
-  CalendarEventType,
-  CancelledBy,
-  Prisma,
-  ServiceStatus,
-} from '@prisma/client';
+import { Booking, BusinessRole, CancelledBy, Prisma } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
@@ -64,6 +54,7 @@ import { assertLocationRole } from '../auth/guards/assert-location-role.js';
 import { NOTIFICATION_EVENT } from '../notifications/notifications.service.js';
 import { BookingStatusChangedNotification } from '../notifications/notifications/booking-status-changed.notification.js';
 import { BookingWithItems } from './interfaces/booking-with-items.interface.js';
+import { ServiceCatalogService } from '../services/service-catalog.service.js';
 
 const CALENDAR_VISIBLE_STATUSES: ReadonlySet<string> = new Set([
   BookingStatus.PENDING,
@@ -82,61 +73,26 @@ export class BookingsService implements CalendarBookingReader {
 
   constructor(
     private readonly db: DatabaseService,
-    @Inject(forwardRef(() => CalendarService))
     private readonly calendarService: CalendarService,
     private readonly staffService: StaffService,
     private readonly locationService: LocationService,
+    private readonly serviceCatalog: ServiceCatalogService,
     private readonly staffEarnings: StaffEarningsService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async getBookingSetup(locationId: string): Promise<BookingSetupResponseDto> {
-    const activeBundleInclude = {
-      imageFile: true,
-      items: {
-        orderBy: { sortOrder: 'asc' as const },
-        include: { service: true },
-      },
-    };
-
-    const [[categories, uncategorizedServices, uncategorizedBundles], staff] =
-      await Promise.all([
-        this.db.$transaction([
-          this.db.serviceCategory.findMany({
-            where: { locationId },
-            orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
-            include: {
-              services: {
-                where: { status: ServiceStatus.ACTIVE },
-                include: { imageFile: true },
-              },
-              bundles: {
-                where: { status: ServiceStatus.ACTIVE },
-                include: activeBundleInclude,
-              },
-            },
-          }),
-          this.db.service.findMany({
-            where: {
-              locationId,
-              categoryId: null,
-              status: ServiceStatus.ACTIVE,
-            },
-            include: { imageFile: true },
-          }),
-          this.db.serviceBundle.findMany({
-            where: {
-              locationId,
-              categoryId: null,
-              status: ServiceStatus.ACTIVE,
-            },
-            include: activeBundleInclude,
-          }),
-        ]),
-        this.staffService.listActiveWithServices(locationId),
-      ]);
-
-    const result = categories.map(BookingSetupCategoryDto.fromEntity);
+    const [catalog, staff] = await Promise.all([
+      this.serviceCatalog.loadForBooking(locationId),
+      this.staffService.listActiveWithServices(locationId),
+    ]);
+    const uncategorizedServices = catalog.services.filter(
+      (service) => service.categoryId === null,
+    );
+    const uncategorizedBundles = catalog.bundles.filter(
+      (bundle) => bundle.categoryId === null,
+    );
+    const result = catalog.categories.map(BookingSetupCategoryDto.fromEntity);
     if (uncategorizedServices.length || uncategorizedBundles.length) {
       result.push(
         BookingSetupCategoryDto.uncategorized(
@@ -163,23 +119,8 @@ export class BookingsService implements CalendarBookingReader {
       );
     }
 
-    const [services, bundles] = await Promise.all([
-      this.db.service.findMany({
-        where: { locationId, status: ServiceStatus.ACTIVE },
-        select: {
-          id: true,
-          price: true,
-          durationMinutes: true,
-          bufferMinutes: true,
-        },
-      }),
-      this.db.serviceBundle.findMany({
-        where: { locationId, status: ServiceStatus.ACTIVE },
-        include: {
-          items: { orderBy: { sortOrder: 'asc' }, include: { service: true } },
-        },
-      }),
-    ]);
+    const { services, bundles } =
+      await this.serviceCatalog.loadForBooking(locationId);
     const serviceById = new Map(
       services.map((service) => [service.id, service]),
     );
@@ -790,16 +731,11 @@ export class BookingsService implements CalendarBookingReader {
         where: { id: booking.id },
         data: { deletedAt: new Date() },
       });
-      await Promise.all(
+      await this.calendarService.deleteBookingEvents(
         booking.items.flatMap((item) =>
-          item.calendarEventId
-            ? [
-                tx.calendarEvent.delete({
-                  where: { id: item.calendarEventId },
-                }),
-              ]
-            : [],
+          item.calendarEventId ? [item.calendarEventId] : [],
         ),
+        tx,
       );
       if (booking.status === BookingStatus.COMPLETED) {
         await this.staffEarnings.reverseForBooking(booking, null, actor, tx);
@@ -901,15 +837,7 @@ export class BookingsService implements CalendarBookingReader {
     pricePatches: UpdateBookingItemPriceDto[],
     actor: AuditActor,
   ): Promise<BookingWithItems> {
-    const business = await this.db.location.findUnique({
-      where: { id: locationId },
-      select: { timezone: true },
-    });
-    if (!business)
-      throw new AppException(
-        ErrorCode.BOOKING_BUSINESS_NOT_FOUND,
-        HttpStatus.NOT_FOUND,
-      );
+    const business = await this.locationService.findById(locationId);
     if (old.items.length === 0)
       throw new AppException(
         ErrorCode.BOOKING_SERVICE_NOT_FOUND,
@@ -974,24 +902,19 @@ export class BookingsService implements CalendarBookingReader {
           business.timezone,
         );
         const [shift, blockEvents] = await Promise.all([
-          tx.staffShift.findFirst({
-            where: { staffId: item.staffId, date: new Date(dateStr) },
-          }),
-          tx.calendarEvent.findMany({
-            where: {
-              locationId,
-              OR: [{ staffId: null }, { staffId: item.staffId }],
-              repeatType: CalendarEventRepeatType.NONE,
-              startDateTime: { lte: item.endAt },
-              endDateTime: { gte: item.startAt },
-              NOT: item.calendarEventId
-                ? { id: item.calendarEventId }
-                : undefined,
-            },
-            include: {
-              cancelledOccurrences: { select: { occurrenceDate: true } },
-            },
-          }),
+          this.staffService.findShiftForDate(
+            item.staffId,
+            new Date(dateStr),
+            tx,
+          ),
+          this.calendarService.listBlockingEvents(
+            locationId,
+            [item.staffId],
+            item.startAt,
+            item.endAt,
+            item.calendarEventId ? [item.calendarEventId] : [],
+            tx,
+          ),
         ]);
 
         if (
@@ -1016,29 +939,16 @@ export class BookingsService implements CalendarBookingReader {
       }
 
       for (const item of movedItems) {
-        let calendarEventId = item.calendarEventId;
-        if (calendarEventId) {
-          await tx.calendarEvent.update({
-            where: { id: calendarEventId },
-            data: {
-              staffId: item.staffId,
-              startDateTime: item.startAt,
-              endDateTime: item.endAt,
-            },
-          });
-        } else {
-          const event = await tx.calendarEvent.create({
-            data: {
-              locationId,
-              staffId: item.staffId,
-              type: CalendarEventType.BOOKING,
-              repeatType: CalendarEventRepeatType.NONE,
-              startDateTime: item.startAt,
-              endDateTime: item.endAt,
-            },
-          });
-          calendarEventId = event.id;
-        }
+        const calendarEvent = await this.calendarService.saveBookingEvent(
+          {
+            eventId: item.calendarEventId,
+            locationId,
+            staffId: item.staffId,
+            startAt: item.startAt,
+            endAt: item.endAt,
+          },
+          tx,
+        );
         await tx.bookingItem.update({
           where: { id: item.id },
           data: {
@@ -1046,7 +956,7 @@ export class BookingsService implements CalendarBookingReader {
             staffName: item.staffName,
             startAt: item.startAt,
             endAt: item.endAt,
-            calendarEventId,
+            calendarEventId: calendarEvent.id,
           },
         });
       }

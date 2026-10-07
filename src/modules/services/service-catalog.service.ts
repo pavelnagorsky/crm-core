@@ -19,6 +19,7 @@ import { ServiceForCatalog } from './interfaces/service-for-catalog.interface.js
 import { ServiceStatusCount } from './interfaces/service-status-count.interface.js';
 import { ServiceBundleService } from './service-bundle.service.js';
 import { ServicesService } from './services.service.js';
+import { BookingServiceCatalog } from './interfaces/booking-service-catalog.interface.js';
 
 const CATALOG_STATUSES = [ServiceStatus.ACTIVE, ServiceStatus.INACTIVE];
 
@@ -28,6 +29,25 @@ export class ServiceCatalogService {
     private readonly services: ServicesService,
     private readonly bundles: ServiceBundleService,
   ) {}
+
+  async loadForBooking(locationId: string): Promise<BookingServiceCatalog> {
+    const [categories, services, bundles] = await Promise.all([
+      this.services.listCategories(locationId),
+      this.services.listActiveForBooking(locationId),
+      this.bundles.listActiveForBooking(locationId),
+    ]);
+    return {
+      categories: categories.map((category) => ({
+        ...category,
+        services: services.filter(
+          (service) => service.categoryId === category.id,
+        ),
+        bundles: bundles.filter((bundle) => bundle.categoryId === category.id),
+      })),
+      services,
+      bundles,
+    };
+  }
 
   async search(
     locationId: string,

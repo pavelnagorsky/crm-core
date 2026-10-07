@@ -7,9 +7,10 @@ import { StaffKpiController } from './kpi/staff-kpi.controller.js';
 import { StaffKpiService } from './kpi/staff-kpi.service.js';
 import { ServicesModule } from '../services/services.module.js';
 import { I18nModule } from '../../shared/i18n/i18n.module.js';
+import { LocationModule } from '../location/location.module.js';
 
 @Module({
-  imports: [ServicesModule, I18nModule],
+  imports: [ServicesModule, LocationModule, I18nModule],
   controllers: [StaffKpiController, StaffController],
   providers: [
     StaffService,

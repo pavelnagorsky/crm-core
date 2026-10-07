@@ -152,9 +152,28 @@ describe('BookingCreateService calendar link', () => {
     const calendar = {
       filterAvailableStaff: vi.fn().mockResolvedValue([{ id: 'staff-1' }]),
       isSlotFree: vi.fn().mockReturnValue(true),
+      listBlockingEvents: vi.fn(
+        (_locationId, _staffIds, _startAt, _endAt, _excluded, tx) =>
+          tx.calendarEvent.findMany(),
+      ),
+      createBookingEvent: vi.fn((input, tx) =>
+        tx.calendarEvent.create({
+          data: {
+            locationId: input.locationId,
+            staffId: input.staffId,
+            type: CalendarEventType.BOOKING,
+            repeatType: CalendarEventRepeatType.NONE,
+            startDateTime: input.startAt,
+            endDateTime: input.endAt,
+          },
+        }),
+      ),
     };
     const staff = {
       resolveStaffForService: vi.fn().mockResolvedValue([{ id: 'staff-1' }]),
+      findShiftForDate: vi.fn((_staffId, _date, tx) =>
+        tx.staffShift.findFirst(),
+      ),
       findById: vi.fn().mockResolvedValue({ id: 'staff-1', name: 'Мария' }),
     };
     const tx = {
@@ -286,9 +305,28 @@ describe('BookingCreateService manual item prices', () => {
     const calendar = {
       filterAvailableStaff: vi.fn().mockResolvedValue([{ id: 'staff-1' }]),
       isSlotFree: vi.fn().mockReturnValue(true),
+      listBlockingEvents: vi.fn(
+        (_locationId, _staffIds, _startAt, _endAt, _excluded, tx) =>
+          tx.calendarEvent.findMany(),
+      ),
+      createBookingEvent: vi.fn((input, tx) =>
+        tx.calendarEvent.create({
+          data: {
+            locationId: input.locationId,
+            staffId: input.staffId,
+            type: CalendarEventType.BOOKING,
+            repeatType: CalendarEventRepeatType.NONE,
+            startDateTime: input.startAt,
+            endDateTime: input.endAt,
+          },
+        }),
+      ),
     };
     const staff = {
       resolveStaffForService: vi.fn().mockResolvedValue([{ id: 'staff-1' }]),
+      findShiftForDate: vi.fn((_staffId, _date, tx) =>
+        tx.staffShift.findFirst(),
+      ),
       findById: vi.fn().mockResolvedValue({ id: 'staff-1', name: 'Мария' }),
     };
     const tx = {

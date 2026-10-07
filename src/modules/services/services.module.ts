@@ -9,6 +9,6 @@ import { ServiceCatalogService } from './service-catalog.service.js';
   imports: [LocationModule],
   controllers: [ServicesController],
   providers: [ServicesService, ServiceBundleService, ServiceCatalogService],
-  exports: [ServicesService],
+  exports: [ServicesService, ServiceBundleService, ServiceCatalogService],
 })
 export class ServicesModule {}
