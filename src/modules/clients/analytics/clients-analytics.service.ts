@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { MoneyService } from '../../../shared/money/money.service.js';
-import { ClientRevenueBucket } from '../../../shared/interfaces/client-revenue-bucket.interface.js';
-import { ClientRevenue } from '../../../shared/interfaces/client-revenue.interface.js';
+import { ClientRevenueBucketTotals } from '../../../shared/interfaces/client-revenue-bucket-totals.interface.js';
+import { ClientRevenueTotals } from '../../../shared/interfaces/client-revenue-totals.interface.js';
 import { BookingsAggregatesService } from '../../bookings/bookings-aggregates.service.js';
 import {
   CLIENT_RECENCY_BOUNDS,
@@ -22,7 +22,9 @@ import { ResolvedRange } from '../../dashboard/interfaces/resolved-range.interfa
 import { DashboardBucketService } from '../../dashboard/services/dashboard-bucket.service.js';
 import { DashboardMetricFactory } from '../../dashboard/services/dashboard-metric.factory.js';
 import { DashboardRangeService } from '../../dashboard/services/dashboard-range.service.js';
-import { OrdersAnalyticsService } from '../../orders/analytics/orders-analytics.service.js';
+import { OrderClientRevenueBucket } from '../../orders/analytics/interfaces/order-client-revenue-bucket.interface.js';
+import { OrderClientRevenueTotals } from '../../orders/analytics/interfaces/order-client-revenue-totals.interface.js';
+import { OrdersAggregatesService } from '../../orders/analytics/orders-aggregates.service.js';
 import { ClientsAnalyticsRequestDto } from './dto/clients-analytics-request.dto.js';
 import { ClientsAnalyticsWidgetKey } from './enums/clients-analytics-widget-key.enum.js';
 import { ClientAnalyticsContext } from './interfaces/client-analytics-context.interface.js';
@@ -46,7 +48,7 @@ const RECENCY_LABEL: Record<ClientRecencyBucket, string> = {
 export class ClientsAnalyticsService {
   constructor(
     private readonly aggregates: BookingsAggregatesService,
-    private readonly ordersAnalytics: OrdersAnalyticsService,
+    private readonly ordersAggregates: OrdersAggregatesService,
     private readonly rangeService: DashboardRangeService,
     private readonly metricFactory: DashboardMetricFactory,
     private readonly buckets: DashboardBucketService,
@@ -212,45 +214,39 @@ export class ClientsAnalyticsService {
       to: range.previousTo,
     };
 
-    let [
-      currentCohort,
-      previousCohort,
-      currentSeries,
-      previousSeries,
-      currentRecency,
-      previousRecency,
-    ] = await Promise.all([
-      needsCohort
-        ? this.aggregates.clientCohortSummary(currentRange)
-        : undefined,
-      needsCohort && compare
-        ? this.aggregates.clientCohortSummary(previousRange)
-        : undefined,
-      needsCohort
-        ? this.aggregates.clientCohortSeries({
-            ...currentRange,
-            granularity: range.granularity,
-            timezone: range.timezone,
-          })
-        : [],
-      needsCohort && compare
-        ? this.aggregates.clientCohortSeries({
-            ...previousRange,
-            granularity: range.granularity,
-            timezone: range.timezone,
-          })
-        : [],
-      needsRecency
-        ? this.aggregates.clientRecency(brandId, range.to, range.timezone)
-        : [],
-      needsRecency && compare
-        ? this.aggregates.clientRecency(
-            brandId,
-            range.previousTo,
-            range.timezone,
-          )
-        : undefined,
-    ]);
+    const currentCohortRange = {
+      ...currentRange,
+      granularity: range.granularity,
+      timezone: range.timezone,
+    };
+    const previousCohortRange = {
+      ...previousRange,
+      granularity: range.granularity,
+      timezone: range.timezone,
+    };
+    const [currentReport, previousReport, currentRecency, previousRecency] =
+      await Promise.all([
+        needsCohort
+          ? this.aggregates.clientCohort(currentCohortRange)
+          : undefined,
+        needsCohort && compare
+          ? this.aggregates.clientCohort(previousCohortRange)
+          : undefined,
+        needsRecency
+          ? this.aggregates.clientRecency(brandId, range.to, range.timezone)
+          : [],
+        needsRecency && compare
+          ? this.aggregates.clientRecency(
+              brandId,
+              range.previousTo,
+              range.timezone,
+            )
+          : undefined,
+      ]);
+    let currentCohort = currentReport?.summary;
+    let previousCohort = previousReport?.summary;
+    let currentSeries = currentReport?.series ?? [];
+    let previousSeries = previousReport?.series ?? [];
 
     if (needsRevenue) {
       const currentClientRange = {
@@ -263,6 +259,18 @@ export class ClientsAnalyticsService {
         from: range.previousFrom,
         to: range.previousTo,
       };
+      const currentSeriesRange = {
+        ...currentClientRange,
+        granularity: range.granularity,
+        timezone: range.timezone,
+      };
+      const previousSeriesRange = {
+        ...previousClientRange,
+        granularity: range.granularity,
+        timezone: range.timezone,
+      };
+      const emptyBookingRevenue = emptyClientRevenue();
+      const emptyOrderRevenue = emptyOrderClientRevenue();
       const [
         bookingCurrent,
         orderCurrent,
@@ -274,36 +282,20 @@ export class ClientsAnalyticsService {
         orderPreviousSeries,
       ] = await Promise.all([
         this.aggregates.clientRevenue(currentClientRange),
-        this.ordersAnalytics.clientRevenue(currentClientRange),
+        this.ordersAggregates.clientRevenue(currentClientRange),
         compare
           ? this.aggregates.clientRevenue(previousClientRange)
+          : Promise.resolve(emptyBookingRevenue),
+        compare
+          ? this.ordersAggregates.clientRevenue(previousClientRange)
+          : Promise.resolve(emptyOrderRevenue),
+        this.aggregates.clientRevenueSeries(currentSeriesRange),
+        this.ordersAggregates.clientRevenueSeries(currentSeriesRange),
+        compare
+          ? this.aggregates.clientRevenueSeries(previousSeriesRange)
           : Promise.resolve([]),
         compare
-          ? this.ordersAnalytics.clientRevenue(previousClientRange)
-          : Promise.resolve([]),
-        this.aggregates.clientRevenueSeries({
-          ...currentClientRange,
-          granularity: range.granularity,
-          timezone: range.timezone,
-        }),
-        this.ordersAnalytics.clientRevenueSeries({
-          ...currentClientRange,
-          granularity: range.granularity,
-          timezone: range.timezone,
-        }),
-        compare
-          ? this.aggregates.clientRevenueSeries({
-              ...previousClientRange,
-              granularity: range.granularity,
-              timezone: range.timezone,
-            })
-          : Promise.resolve([]),
-        compare
-          ? this.ordersAnalytics.clientRevenueSeries({
-              ...previousClientRange,
-              granularity: range.granularity,
-              timezone: range.timezone,
-            })
+          ? this.ordersAggregates.clientRevenueSeries(previousSeriesRange)
           : Promise.resolve([]),
       ]);
       currentCohort = mergeClientRevenueSummary(
@@ -457,62 +449,64 @@ function indexByBucket(
 
 function mergeClientRevenueSummary(
   base: ClientCohortSummary | undefined,
-  bookingRows: ClientRevenue[],
-  orderRows: ClientRevenue[],
+  booking: ClientRevenueTotals,
+  order: OrderClientRevenueTotals,
 ): ClientCohortSummary | undefined {
   if (!base) return undefined;
-  const byClient = new Map<string, Prisma.Decimal>();
-  for (const row of [...bookingRows, ...orderRows]) {
-    byClient.set(
-      row.clientId,
-      (byClient.get(row.clientId) ?? MoneyService.decimal(0)).plus(row.revenue),
-    );
-  }
   return {
     ...base,
-    activeClients: byClient.size,
-    revenue: sumMoney(byClient.values()),
+    activeClients:
+      booking.activeClients + order.activeClients - order.sharedClients,
+    revenue: booking.revenue.plus(order.revenue),
   };
 }
 
 function mergeClientRevenueSeries(
   base: ClientCohortBucket[],
-  bookingRows: ClientRevenueBucket[],
-  orderRows: ClientRevenueBucket[],
+  bookingRows: ClientRevenueBucketTotals[],
+  orderRows: OrderClientRevenueBucket[],
 ): ClientCohortBucket[] {
-  const byBucketClient = new Map<number, Map<string, Prisma.Decimal>>();
-  for (const row of [...bookingRows, ...orderRows]) {
-    const key = row.bucket.getTime();
-    const clients =
-      byBucketClient.get(key) ?? new Map<string, Prisma.Decimal>();
-    clients.set(
-      row.clientId,
-      (clients.get(row.clientId) ?? MoneyService.decimal(0)).plus(row.revenue),
-    );
-    byBucketClient.set(key, clients);
-  }
+  const bookingByBucket = indexRevenue(bookingRows);
+  const orderByBucket = indexRevenue(orderRows);
   const baseByBucket = indexByBucket(base);
   const bucketKeys = new Set([
     ...baseByBucket.keys(),
-    ...byBucketClient.keys(),
+    ...bookingByBucket.keys(),
+    ...orderByBucket.keys(),
   ]);
   return [...bucketKeys]
     .sort((a, b) => a - b)
     .map((key) => {
       const existing = baseByBucket.get(key);
-      const clients = byBucketClient.get(key) ?? new Map();
+      const booking = bookingByBucket.get(key);
+      const order = orderByBucket.get(key);
       return {
         bucket: new Date(key),
         newVisits: existing?.newVisits ?? 0,
         returningVisits: existing?.returningVisits ?? 0,
-        activeClients: clients.size,
-        revenue: sumMoney(clients.values()),
+        activeClients:
+          (booking?.activeClients ?? 0) +
+          (order?.activeClients ?? 0) -
+          (order?.sharedClients ?? 0),
+        revenue: (booking?.revenue ?? MoneyService.decimal(0)).plus(
+          order?.revenue ?? MoneyService.decimal(0),
+        ),
       };
     });
 }
 
-function sumMoney(values: Iterable<Prisma.Decimal>): Prisma.Decimal {
-  let total = MoneyService.decimal(0);
-  for (const value of values) total = total.plus(value);
-  return total;
+function indexRevenue<T extends { bucket: Date }>(rows: T[]): Map<number, T> {
+  return new Map(rows.map((row) => [row.bucket.getTime(), row]));
+}
+
+function emptyClientRevenue(): ClientRevenueTotals {
+  return { revenue: MoneyService.decimal(0), activeClients: 0 };
+}
+
+function emptyOrderClientRevenue(): OrderClientRevenueTotals {
+  return {
+    revenue: MoneyService.decimal(0),
+    activeClients: 0,
+    sharedClients: 0,
+  };
 }

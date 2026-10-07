@@ -2,8 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { BookingStatus, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
 import { MoneyService } from '../../shared/money/money.service.js';
-import { ClientRevenueBucket } from '../../shared/interfaces/client-revenue-bucket.interface.js';
-import { ClientRevenue } from '../../shared/interfaces/client-revenue.interface.js';
+import { ClientRevenueBucketTotals } from '../../shared/interfaces/client-revenue-bucket-totals.interface.js';
+import { ClientRevenueTotals } from '../../shared/interfaces/client-revenue-totals.interface.js';
 import { SeriesGranularity } from '../dashboard/enums/series-granularity.enum.js';
 import {
   CLIENT_RECENCY_BOUNDS,
@@ -18,7 +18,7 @@ import { AggregateRange } from './interfaces/aggregate-range.interface.js';
 import { AggregateSeriesRange } from './interfaces/aggregate-series-range.interface.js';
 import { AggregateSnapshot } from './interfaces/aggregate-snapshot.interface.js';
 import { ClientCohortBucket } from './interfaces/client-cohort-bucket.interface.js';
-import { ClientCohortRange } from './interfaces/client-cohort-range.interface.js';
+import { ClientCohortReport } from './interfaces/client-cohort-report.interface.js';
 import { ClientCohortSeriesRange } from './interfaces/client-cohort-series-range.interface.js';
 import { ClientCohortSummary } from './interfaces/client-cohort-summary.interface.js';
 import { ClientRecencyBound } from './interfaces/client-recency-bound.interface.js';
@@ -260,34 +260,15 @@ export class BookingsAggregatesService {
    * first completed visit ever; later completed visits are "returning". Rank is computed
    * from history before `to`, then the window is applied — filtering the window first
    * would mark every client's first in-range visit as new.
+   * The grand total row is the summary and each bucket row is the series. A previous
+   * period needs its own call: visit rank is relative to that period's `to`.
    */
-  async clientCohortSummary(
-    range: ClientCohortRange,
-  ): Promise<ClientCohortSummary> {
-    const rows = await this.db.$queryRaw<
-      Array<{
-        newVisits: bigint;
-        returningVisits: bigint;
-        activeClients: bigint;
-        revenue: string;
-      }>
-    >(
-      Prisma.sql`
-        ${this.completedVisitsCte(range.brandId, range.to)}
-        SELECT ${this.cohortAggregates()}
-        FROM visits
-        WHERE "startAt" >= ${range.from}::timestamptz AT TIME ZONE 'UTC'
-      `,
-    );
-    return mapCohortSummary(rows[0]);
-  }
-
-  async clientCohortSeries(
+  async clientCohort(
     range: ClientCohortSeriesRange,
-  ): Promise<ClientCohortBucket[]> {
+  ): Promise<ClientCohortReport> {
     const rows = await this.db.$queryRaw<
       Array<{
-        bucket: Date;
+        bucket: Date | null;
         newVisits: bigint;
         returningVisits: bigint;
         activeClients: bigint;
@@ -301,81 +282,98 @@ export class BookingsAggregatesService {
           ${this.cohortAggregates()}
         FROM visits v
         WHERE v."startAt" >= ${range.from}::timestamptz AT TIME ZONE 'UTC'
-        GROUP BY bucket
-        ORDER BY bucket ASC
+        GROUP BY GROUPING SETS ((1), ())
+        ORDER BY 1 ASC NULLS FIRST
       `,
     );
-    return rows.map((row) => ({
-      bucket: new Date(row.bucket),
-      newVisits: Number(row.newVisits),
-      returningVisits: Number(row.returningVisits),
-      activeClients: Number(row.activeClients),
-      revenue: MoneyService.decimal(row.revenue),
-    }));
+    const summaryRow = rows.find((row) => row.bucket == null);
+    const series: ClientCohortBucket[] = [];
+    for (const row of rows) {
+      if (row.bucket == null) continue;
+      series.push(
+        mapCohortBucket({
+          bucket: row.bucket,
+          newVisits: row.newVisits,
+          returningVisits: row.returningVisits,
+          activeClients: row.activeClients,
+          revenue: row.revenue,
+        }),
+      );
+    }
+    return { summary: mapCohortSummary(summaryRow), series };
   }
 
-  async completedBookingIds(range: AggregateRange): Promise<string[]> {
-    const rows = await this.db.$queryRaw<Array<{ id: string }>>(
-      Prisma.sql`
-        SELECT b."id"
-        FROM "Booking" b
-        WHERE ${this.whereClause(range, [BookingStatus.COMPLETED])}
-      `,
-    );
-    return rows.map((row) => row.id);
+  /** Completed visit in `range` whose id equals `bookingId`. Embedded in the order scan. */
+  completedBookingExists(
+    range: AggregateRange,
+    bookingId: Prisma.Sql,
+  ): Prisma.Sql {
+    return Prisma.sql`EXISTS (
+      SELECT 1 FROM "Booking" b
+      WHERE b."id" = ${bookingId}
+        AND ${this.whereClause(range, [BookingStatus.COMPLETED])}
+    )`;
   }
 
-  async clientRevenue(range: ClientRevenueRange): Promise<ClientRevenue[]> {
-    if (range.locationIds.length === 0) return [];
+  async clientRevenue(range: ClientRevenueRange): Promise<ClientRevenueTotals> {
+    if (range.locationIds.length === 0) return emptyClientRevenue();
     const rows = await this.db.$queryRaw<
-      Array<{ clientId: string; revenue: string }>
+      Array<{ revenue: string; activeClients: bigint }>
     >(
       Prisma.sql`
-        SELECT b."clientId" AS "clientId",
-               COALESCE(SUM(item_totals.revenue), 0)::text AS revenue
+        SELECT COALESCE(SUM(item_totals.revenue), 0)::text AS revenue,
+               COUNT(DISTINCT b."clientId")::bigint AS "activeClients"
         FROM "Booking" b
         ${this.bookingItemTotalsJoin()}
-        WHERE b."locationId" IN (${Prisma.join(range.locationIds.map((id) => Prisma.sql`${id}`))})
-          AND b."deletedAt" IS NULL
-          AND b."status"::text = ${BookingStatus.COMPLETED}
-          AND b."startAt" >= ${range.from}::timestamptz AT TIME ZONE 'UTC'
-          AND b."startAt" < ${range.to}::timestamptz AT TIME ZONE 'UTC'
-        GROUP BY b."clientId"
+        WHERE ${this.clientRevenueWhere(range)}
       `,
     );
-    return rows.map((row) => ({
-      clientId: row.clientId,
-      revenue: MoneyService.decimal(row.revenue),
-    }));
+    return mapClientRevenueTotals(rows[0]);
   }
 
   async clientRevenueSeries(
     range: ClientRevenueSeriesRange,
-  ): Promise<ClientRevenueBucket[]> {
+  ): Promise<ClientRevenueBucketTotals[]> {
     if (range.locationIds.length === 0) return [];
     const rows = await this.db.$queryRaw<
-      Array<{ bucket: Date; clientId: string; revenue: string }>
+      Array<{ bucket: Date; revenue: string; activeClients: bigint }>
     >(
       Prisma.sql`
         SELECT ${this.bucketExpr(range.granularity, range.timezone)} AS bucket,
-               b."clientId" AS "clientId",
-               COALESCE(SUM(item_totals.revenue), 0)::text AS revenue
+               COALESCE(SUM(item_totals.revenue), 0)::text AS revenue,
+               COUNT(DISTINCT b."clientId")::bigint AS "activeClients"
         FROM "Booking" b
         ${this.bookingItemTotalsJoin()}
-        WHERE b."locationId" IN (${Prisma.join(range.locationIds.map((id) => Prisma.sql`${id}`))})
-          AND b."deletedAt" IS NULL
-          AND b."status"::text = ${BookingStatus.COMPLETED}
-          AND b."startAt" >= ${range.from}::timestamptz AT TIME ZONE 'UTC'
-          AND b."startAt" < ${range.to}::timestamptz AT TIME ZONE 'UTC'
-        GROUP BY bucket, b."clientId"
-        ORDER BY bucket ASC
+        WHERE ${this.clientRevenueWhere(range)}
+        GROUP BY 1
+        ORDER BY 1 ASC
       `,
     );
     return rows.map((row) => ({
       bucket: new Date(row.bucket),
-      clientId: row.clientId,
       revenue: MoneyService.decimal(row.revenue),
+      activeClients: Number(row.activeClients),
     }));
+  }
+
+  /** Completed-service clients in the window. Column: `clientId`. */
+  clientRevenueClientIdsSql(range: ClientRevenueRange): Prisma.Sql {
+    return Prisma.sql`
+      SELECT b."clientId" AS "clientId"
+      FROM "Booking" b
+      WHERE ${this.clientRevenueWhere(range)}
+    `;
+  }
+
+  /** Completed-service clients per bucket. Columns: `bucket`, `clientId`. */
+  clientRevenueClientsByBucketSql(range: ClientRevenueSeriesRange): Prisma.Sql {
+    return Prisma.sql`
+      SELECT ${this.bucketExpr(range.granularity, range.timezone)} AS bucket,
+             b."clientId" AS "clientId"
+      FROM "Booking" b
+      WHERE ${this.clientRevenueWhere(range)}
+      GROUP BY 1, b."clientId"
+    `;
   }
 
   /**
@@ -634,6 +632,17 @@ export class BookingsAggregatesService {
     return parts.length > 0 ? Prisma.join(parts, ' AND ') : Prisma.sql`TRUE`;
   }
 
+  private clientRevenueWhere(range: ClientRevenueRange): Prisma.Sql {
+    if (range.locationIds.length === 0) return Prisma.sql`FALSE`;
+    return Prisma.sql`
+      b."locationId" IN (${Prisma.join(range.locationIds.map((id) => Prisma.sql`${id}`))})
+      AND b."deletedAt" IS NULL
+      AND b."status"::text = ${BookingStatus.COMPLETED}
+      AND b."startAt" >= ${range.from}::timestamptz AT TIME ZONE 'UTC'
+      AND b."startAt" < ${range.to}::timestamptz AT TIME ZONE 'UTC'
+    `;
+  }
+
   private cohortAggregates(): Prisma.Sql {
     return Prisma.sql`
       COUNT(*) FILTER (WHERE visit_rank = 1)::bigint AS "newVisits",
@@ -727,6 +736,36 @@ export class BookingsAggregatesService {
       }
     }
   }
+}
+
+function mapCohortBucket(row: {
+  bucket: Date;
+  newVisits: bigint;
+  returningVisits: bigint;
+  activeClients: bigint;
+  revenue: string;
+}): ClientCohortBucket {
+  return {
+    bucket: new Date(row.bucket),
+    newVisits: Number(row.newVisits),
+    returningVisits: Number(row.returningVisits),
+    activeClients: Number(row.activeClients),
+    revenue: MoneyService.decimal(row.revenue),
+  };
+}
+
+function mapClientRevenueTotals(
+  row: { revenue: string; activeClients: bigint } | undefined,
+): ClientRevenueTotals {
+  if (!row) return emptyClientRevenue();
+  return {
+    revenue: MoneyService.decimal(row.revenue),
+    activeClients: Number(row.activeClients),
+  };
+}
+
+function emptyClientRevenue(): ClientRevenueTotals {
+  return { revenue: MoneyService.decimal(0), activeClients: 0 };
 }
 
 function mapCohortSummary(

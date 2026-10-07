@@ -2,11 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { BookingSource, BookingStatus, Prisma } from '@prisma/client';
 import { MoneyService } from '../../shared/money/money.service.js';
 import { BookingsAggregatesService } from '../bookings/bookings-aggregates.service.js';
-import { AggregateRange } from '../bookings/interfaces/aggregate-range.interface.js';
 import { AggregateSnapshot } from '../bookings/interfaces/aggregate-snapshot.interface.js';
 import { SeriesRow } from '../bookings/interfaces/series-row.interface.js';
-import { OrdersAnalyticsService } from '../orders/analytics/orders-analytics.service.js';
-import { ProductSalesRange } from '../orders/analytics/interfaces/product-sales-range.interface.js';
+import { OrdersAggregatesService } from '../orders/analytics/orders-aggregates.service.js';
 import { ProductSalesSeriesRow } from '../orders/analytics/interfaces/product-sales-series-row.interface.js';
 import { ProductSalesSnapshot } from '../orders/analytics/interfaces/product-sales-snapshot.interface.js';
 import { DashboardWidgetsRequestDto } from './dto/dashboard-widgets-request.dto.js';
@@ -17,7 +15,8 @@ import { WidgetMetricDto } from './dto/widget-metric.dto.js';
 import { DashboardWidgetKey } from './enums/dashboard-widget-key.enum.js';
 import { MetricUnit } from './enums/metric-unit.enum.js';
 import { WidgetKind } from './enums/widget-kind.enum.js';
-import { WidgetContext } from './interfaces/widget-context.interface.js';
+import { DashboardReadContext } from './interfaces/dashboard-read-context.interface.js';
+import { ResolvedRange } from './interfaces/resolved-range.interface.js';
 import { DashboardBucketService } from './services/dashboard-bucket.service.js';
 import { DashboardMetricFactory } from './services/dashboard-metric.factory.js';
 import { DashboardRangeService } from './services/dashboard-range.service.js';
@@ -49,12 +48,51 @@ const COMPLETION_DENOMINATOR: BookingStatus[] = [
 ];
 const DEFAULT_TOP_N = 5;
 
+const BOOKING_SNAPSHOT_KEYS = new Set<DashboardWidgetKey>([
+  DashboardWidgetKey.REVENUE_TOTAL,
+  DashboardWidgetKey.REVENUE_COMPLETED,
+  DashboardWidgetKey.AVG_TICKET,
+  DashboardWidgetKey.BOOKINGS_TOTAL,
+  DashboardWidgetKey.BOOKINGS_COMPLETED,
+  DashboardWidgetKey.BOOKINGS_CANCELLED,
+  DashboardWidgetKey.BOOKINGS_NO_SHOW,
+  DashboardWidgetKey.BOOKINGS_PENDING,
+  DashboardWidgetKey.CANCELLATION_RATE,
+  DashboardWidgetKey.NO_SHOW_RATE,
+  DashboardWidgetKey.COMPLETION_RATE,
+]);
+const BOOKING_SERIES_KEYS = new Set<DashboardWidgetKey>([
+  DashboardWidgetKey.REVENUE_TOTAL,
+  DashboardWidgetKey.REVENUE_COMPLETED,
+  DashboardWidgetKey.REVENUE_SERIES,
+  DashboardWidgetKey.BOOKINGS_TOTAL,
+  DashboardWidgetKey.BOOKINGS_COMPLETED,
+  DashboardWidgetKey.BOOKINGS_CANCELLED,
+  DashboardWidgetKey.BOOKINGS_NO_SHOW,
+  DashboardWidgetKey.BOOKINGS_PENDING,
+  DashboardWidgetKey.BOOKINGS_SERIES,
+]);
+const PREVIOUS_BOOKING_SERIES_KEYS = new Set<DashboardWidgetKey>([
+  DashboardWidgetKey.REVENUE_SERIES,
+  DashboardWidgetKey.BOOKINGS_SERIES,
+]);
+const PRODUCT_SNAPSHOT_KEYS = new Set<DashboardWidgetKey>([
+  DashboardWidgetKey.REVENUE_TOTAL,
+  DashboardWidgetKey.REVENUE_COMPLETED,
+  DashboardWidgetKey.AVG_TICKET,
+]);
+const PRODUCT_SERIES_KEYS = new Set<DashboardWidgetKey>([
+  DashboardWidgetKey.REVENUE_TOTAL,
+  DashboardWidgetKey.REVENUE_COMPLETED,
+  DashboardWidgetKey.REVENUE_SERIES,
+]);
+
 @Injectable()
 export class DashboardService {
   constructor(
     private readonly rangeService: DashboardRangeService,
     private readonly bookingsAggregates: BookingsAggregatesService,
-    private readonly ordersAnalytics: OrdersAnalyticsService,
+    private readonly ordersAggregates: OrdersAggregatesService,
     private readonly metricFactory: DashboardMetricFactory,
     private readonly seriesFactory: DashboardSeriesFactory,
     private readonly buckets: DashboardBucketService,
@@ -65,14 +103,14 @@ export class DashboardService {
     dto: DashboardWidgetsRequestDto,
   ): Promise<WidgetDto[]> {
     const range = await this.rangeService.resolve(locationId, dto);
-    const ctx: WidgetContext = { locationId, dto, range };
-    return Promise.all(dto.keys.map((key) => this.buildWidget(key, ctx)));
+    const ctx = await this.loadContext(locationId, dto, range);
+    return dto.keys.map((key) => this.buildWidget(key, ctx));
   }
 
   private buildWidget(
     key: DashboardWidgetKey,
-    ctx: WidgetContext,
-  ): Promise<WidgetDto> {
+    ctx: DashboardReadContext,
+  ): WidgetDto {
     switch (key) {
       case DashboardWidgetKey.REVENUE_TOTAL:
         return this.revenueMetric(key, ctx, REVENUE_STATUSES);
@@ -153,19 +191,19 @@ export class DashboardService {
 
   // ── revenue ──
 
-  private async revenueMetric(
+  private revenueMetric(
     key: DashboardWidgetKey,
-    ctx: WidgetContext,
+    ctx: DashboardReadContext,
     statuses: BookingStatus[],
-  ): Promise<WidgetDto> {
-    const [snap, prevSnap, orderSnap, prevOrderSnap, sparkRows] =
-      await Promise.all([
-        this.bookingsAggregates.snapshot(this.currentRange(ctx)),
-        this.previousSnapshot(ctx),
-        this.ordersAnalytics.productSalesSnapshot(this.productRange(ctx)),
-        this.previousProductSnapshot(ctx),
-        this.revenueSeriesRows(ctx, statuses, false),
-      ]);
+  ): WidgetDto {
+    const snap = ctx.bookingSnapshot;
+    const prevSnap = ctx.previousBookingSnapshot;
+    const orderSnap = ctx.productSnapshot;
+    const prevOrderSnap = ctx.previousProductSnapshot;
+    const sparkRows = mergeRevenueSeries(
+      collapseSeries(ctx.bookingSeries, statuses),
+      ctx.productSeries,
+    );
     const value = chartMoney(
       sumRevenue(snap, statuses).plus(orderSnap.revenue),
     );
@@ -187,28 +225,18 @@ export class DashboardService {
     );
   }
 
-  private async avgTicketMetric(
+  private avgTicketMetric(
     key: DashboardWidgetKey,
-    ctx: WidgetContext,
-  ): Promise<WidgetDto> {
-    const [
-      snap,
-      prevSnap,
+    ctx: DashboardReadContext,
+  ): WidgetDto {
+    const snap = ctx.bookingSnapshot;
+    const prevSnap = ctx.previousBookingSnapshot;
+    const orderSnap = ctx.productSnapshot;
+    const prevOrderSnap = ctx.previousProductSnapshot;
+    const currCount = commercialEventCount(
+      sumCount(snap, [BookingStatus.COMPLETED]),
       orderSnap,
-      prevOrderSnap,
-      completedBookingIds,
-      previousCompletedBookingIds,
-    ] = await Promise.all([
-      this.bookingsAggregates.snapshot(this.currentRange(ctx)),
-      this.previousSnapshot(ctx),
-      this.ordersAnalytics.productSalesSnapshot(this.productRange(ctx)),
-      this.previousProductSnapshot(ctx),
-      this.bookingsAggregates.completedBookingIds(this.currentRange(ctx)),
-      ctx.range.compareWithPrevious
-        ? this.bookingsAggregates.completedBookingIds(this.previousRange(ctx))
-        : Promise.resolve([]),
-    ]);
-    const currCount = commercialEventCount(completedBookingIds, orderSnap);
+    );
     const currRev = sumRevenue(snap, [BookingStatus.COMPLETED]).plus(
       orderSnap.revenue,
     );
@@ -219,7 +247,7 @@ export class DashboardService {
     let previousValue: number | undefined;
     if (prevSnap && prevOrderSnap) {
       const prevCount = commercialEventCount(
-        previousCompletedBookingIds,
+        sumCount(prevSnap, [BookingStatus.COMPLETED]),
         prevOrderSnap,
       );
       const prevRev = sumRevenue(prevSnap, [BookingStatus.COMPLETED]).plus(
@@ -243,14 +271,18 @@ export class DashboardService {
     );
   }
 
-  private async revenueSeries(
+  private revenueSeries(
     key: DashboardWidgetKey,
-    ctx: WidgetContext,
-  ): Promise<WidgetDto> {
-    const [currRows, prevRows] = await Promise.all([
-      this.revenueSeriesRows(ctx, REVENUE_STATUSES, false),
-      this.revenueSeriesRows(ctx, REVENUE_STATUSES, true),
-    ]);
+    ctx: DashboardReadContext,
+  ): WidgetDto {
+    const currRows = mergeRevenueSeries(
+      collapseSeries(ctx.bookingSeries, REVENUE_STATUSES),
+      ctx.productSeries,
+    );
+    const prevRows = mergeRevenueSeries(
+      collapseSeries(ctx.previousBookingSeries, REVENUE_STATUSES),
+      ctx.previousProductSeries,
+    );
     return {
       key,
       kind: WidgetKind.SERIES,
@@ -277,17 +309,15 @@ export class DashboardService {
 
   // ── bookings ──
 
-  private async bookingsCountMetric(
+  private bookingsCountMetric(
     key: DashboardWidgetKey,
-    ctx: WidgetContext,
+    ctx: DashboardReadContext,
     statuses: BookingStatus[] | undefined,
     higherIsBetter: boolean,
-  ): Promise<WidgetDto> {
-    const [snap, prevSnap, sparkRows] = await Promise.all([
-      this.bookingsAggregates.snapshot(this.currentRange(ctx)),
-      this.previousSnapshot(ctx),
-      this.currentSeries(ctx, statuses),
-    ]);
+  ): WidgetDto {
+    const snap = ctx.bookingSnapshot;
+    const prevSnap = ctx.previousBookingSnapshot;
+    const sparkRows = collapseSeries(ctx.bookingSeries, statuses);
     const value = sumCount(snap, statuses);
     const previousValue = prevSnap ? sumCount(prevSnap, statuses) : undefined;
     return this.metricWidget(
@@ -304,17 +334,15 @@ export class DashboardService {
     );
   }
 
-  private async rateMetric(
+  private rateMetric(
     key: DashboardWidgetKey,
-    ctx: WidgetContext,
+    ctx: DashboardReadContext,
     numerator: BookingStatus[],
     denominator: BookingStatus[],
     higherIsBetter: boolean,
-  ): Promise<WidgetDto> {
-    const [snap, prevSnap] = await Promise.all([
-      this.bookingsAggregates.snapshot(this.currentRange(ctx)),
-      this.previousSnapshot(ctx),
-    ]);
+  ): WidgetDto {
+    const snap = ctx.bookingSnapshot;
+    const prevSnap = ctx.previousBookingSnapshot;
     const value = ratio(sumCount(snap, numerator), sumCount(snap, denominator));
     const previousValue = prevSnap
       ? ratio(sumCount(prevSnap, numerator), sumCount(prevSnap, denominator))
@@ -332,14 +360,12 @@ export class DashboardService {
     );
   }
 
-  private async bookingsSeries(
+  private bookingsSeries(
     key: DashboardWidgetKey,
-    ctx: WidgetContext,
-  ): Promise<WidgetDto> {
-    const [currRows, prevRows] = await Promise.all([
-      this.currentSeries(ctx, undefined, true),
-      this.previousSeries(ctx, undefined, true),
-    ]);
+    ctx: DashboardReadContext,
+  ): WidgetDto {
+    const currRows = ctx.bookingSeries;
+    const prevRows = ctx.previousBookingSeries;
     const statusKey = (s: BookingStatus | null) =>
       (s ?? 'unknown').toString().toLowerCase();
     const keys = new Set<string>([
@@ -360,13 +386,11 @@ export class DashboardService {
     };
   }
 
-  private async bookingsBySource(
+  private bookingsBySource(
     key: DashboardWidgetKey,
-    ctx: WidgetContext,
-  ): Promise<WidgetDto> {
-    const rows = await this.bookingsAggregates.countBySource(
-      this.currentRange(ctx),
-    );
+    ctx: DashboardReadContext,
+  ): WidgetDto {
+    const rows = ctx.sourceRows;
     const total = rows.reduce((s, r) => s + r.count, 0);
     const items: WidgetBreakdownItemDto[] = rows
       .map((r) => ({
@@ -386,14 +410,11 @@ export class DashboardService {
 
   // ── heatmap ──
 
-  private async bookingsHeatmap(
+  private bookingsHeatmap(
     key: DashboardWidgetKey,
-    ctx: WidgetContext,
-  ): Promise<WidgetDto> {
-    const cells = await this.bookingsAggregates.heatmapByWeekdayHour(
-      this.currentRange(ctx),
-      ctx.range.timezone,
-    );
+    ctx: DashboardReadContext,
+  ): WidgetDto {
+    const cells = ctx.heatmapCells;
     // Axes are numeric identifiers, not localized strings: xLabels are hours 0..23 and yLabels
     // are ISO weekdays 1..7 (Mon..Sun). The frontend maps them to its own locale.
     const xLabels = Array.from({ length: 24 }, (_, h) => String(h));
@@ -413,18 +434,14 @@ export class DashboardService {
 
   // ── staff breakdown ──
 
-  private async revenueByStaff(
+  private revenueByStaff(
     key: DashboardWidgetKey,
-    ctx: WidgetContext,
-  ): Promise<WidgetDto> {
-    // Revenue uses confirmed + completed; secondary count uses completed only. Two queries
-    // instead of one because the row sets partition differently by status.
-    const range = this.currentRange(ctx);
-    const [revenueRows, completedRows, productRows] = await Promise.all([
-      this.bookingsAggregates.countByStaff(range, REVENUE_STATUSES),
-      this.bookingsAggregates.countByStaff(range, [BookingStatus.COMPLETED]),
-      this.ordersAnalytics.productSalesByStaff(this.productRange(ctx)),
-    ]);
+    ctx: DashboardReadContext,
+  ): WidgetDto {
+    // Revenue uses confirmed + completed; secondary count uses completed only.
+    const revenueRows = ctx.staffRevenueRows;
+    const completedRows = ctx.staffCompletedRows;
+    const productRows = ctx.productStaffRows;
     const completedById = new Map(
       completedRows.map((r) => [r.staffId, r.count]),
     );
@@ -475,126 +492,131 @@ export class DashboardService {
 
   // ── helpers ──
 
-  private currentRange(ctx: WidgetContext): AggregateRange {
-    return this.rangeFor(ctx, ctx.range.from, ctx.range.to);
-  }
-
-  private previousRange(ctx: WidgetContext): AggregateRange {
-    return this.rangeFor(ctx, ctx.range.previousFrom, ctx.range.previousTo);
-  }
-
-  private rangeFor(ctx: WidgetContext, from: Date, to: Date): AggregateRange {
-    return {
-      locationId: ctx.locationId,
-      from,
-      to,
-      staffId: ctx.dto.staffId,
-      catalogItemId: ctx.dto.catalogItemId,
-      categoryId: ctx.dto.categoryId,
-    };
-  }
-
-  private previousSnapshot(
-    ctx: WidgetContext,
-  ): Promise<AggregateSnapshot | undefined> {
-    if (!ctx.range.compareWithPrevious) return Promise.resolve(undefined);
-    return this.bookingsAggregates.snapshot(this.previousRange(ctx));
-  }
-
-  private productRange(ctx: WidgetContext): ProductSalesRange {
-    return this.productRangeFor(ctx, ctx.range.from, ctx.range.to);
-  }
-
-  private previousProductRange(ctx: WidgetContext): ProductSalesRange {
-    return this.productRangeFor(
-      ctx,
-      ctx.range.previousFrom,
-      ctx.range.previousTo,
+  private async loadContext(
+    locationId: string,
+    dto: DashboardWidgetsRequestDto,
+    range: ResolvedRange,
+  ): Promise<DashboardReadContext> {
+    const selected = new Set(dto.keys);
+    const compare = range.compareWithPrevious;
+    const needsBookingSnapshot = wants(selected, BOOKING_SNAPSHOT_KEYS);
+    const needsBookingSeries = wants(selected, BOOKING_SERIES_KEYS);
+    const needsPreviousBookingSeries =
+      compare && wants(selected, PREVIOUS_BOOKING_SERIES_KEYS);
+    const needsProductSnapshot = wants(selected, PRODUCT_SNAPSHOT_KEYS);
+    const needsProductSeries = wants(selected, PRODUCT_SERIES_KEYS);
+    const needsPreviousProductSeries =
+      compare && selected.has(DashboardWidgetKey.REVENUE_SERIES);
+    const needsStaff = selected.has(DashboardWidgetKey.REVENUE_BY_STAFF);
+    const current = windowRange(locationId, dto, range.from, range.to);
+    const previous = windowRange(
+      locationId,
+      dto,
+      range.previousFrom,
+      range.previousTo,
     );
-  }
-
-  private productRangeFor(
-    ctx: WidgetContext,
-    from: Date,
-    to: Date,
-  ): ProductSalesRange {
-    return {
-      locationId: ctx.locationId,
-      from,
-      to,
-      staffId: ctx.dto.staffId,
-      catalogItemId: ctx.dto.catalogItemId,
-      categoryId: ctx.dto.categoryId,
-    };
-  }
-
-  private previousProductSnapshot(
-    ctx: WidgetContext,
-  ): Promise<ProductSalesSnapshot | undefined> {
-    if (!ctx.range.compareWithPrevious) return Promise.resolve(undefined);
-    return this.ordersAnalytics.productSalesSnapshot(
-      this.previousProductRange(ctx),
-    );
-  }
-
-  private async revenueSeriesRows(
-    ctx: WidgetContext,
-    statuses: BookingStatus[],
-    previous: boolean,
-  ): Promise<SeriesRow[]> {
-    if (previous && !ctx.range.compareWithPrevious) return [];
-    const productRange = previous
-      ? this.previousProductRange(ctx)
-      : this.productRange(ctx);
-    const [bookingRows, productRows] = await Promise.all([
-      previous
-        ? this.previousSeries(ctx, statuses)
-        : this.currentSeries(ctx, statuses),
-      this.ordersAnalytics.productSalesSeries({
-        ...productRange,
-        granularity: ctx.range.granularity,
-        timezone: ctx.range.timezone,
-      }),
+    const [
+      bookingSnapshot,
+      previousBookingSnapshot,
+      bookingSeries,
+      previousBookingSeries,
+      productSnapshot,
+      previousProductSnapshot,
+      productSeries,
+      previousProductSeries,
+      sourceRows,
+      heatmapCells,
+      staffRevenueRows,
+      staffCompletedRows,
+      productStaffRows,
+    ] = await Promise.all([
+      needsBookingSnapshot
+        ? this.bookingsAggregates.snapshot(current)
+        : Promise.resolve(emptySnapshot()),
+      needsBookingSnapshot && compare
+        ? this.bookingsAggregates.snapshot(previous)
+        : Promise.resolve(undefined),
+      needsBookingSeries
+        ? this.bookingsAggregates.series(
+            {
+              ...current,
+              granularity: range.granularity,
+              timezone: range.timezone,
+            },
+            true,
+          )
+        : Promise.resolve([]),
+      needsPreviousBookingSeries
+        ? this.bookingsAggregates.series(
+            {
+              ...previous,
+              granularity: range.granularity,
+              timezone: range.timezone,
+            },
+            true,
+          )
+        : Promise.resolve([]),
+      needsProductSnapshot
+        ? this.ordersAggregates.productSalesSnapshot(current)
+        : Promise.resolve(emptyProductSnapshot()),
+      needsProductSnapshot && compare
+        ? this.ordersAggregates.productSalesSnapshot(previous)
+        : Promise.resolve(undefined),
+      needsProductSeries
+        ? this.ordersAggregates.productSalesSeries({
+            ...current,
+            granularity: range.granularity,
+            timezone: range.timezone,
+          })
+        : Promise.resolve([]),
+      needsPreviousProductSeries
+        ? this.ordersAggregates.productSalesSeries({
+            ...previous,
+            granularity: range.granularity,
+            timezone: range.timezone,
+          })
+        : Promise.resolve([]),
+      selected.has(DashboardWidgetKey.BOOKINGS_BY_SOURCE)
+        ? this.bookingsAggregates.countBySource(current)
+        : Promise.resolve([]),
+      selected.has(DashboardWidgetKey.BOOKINGS_HEATMAP)
+        ? this.bookingsAggregates.heatmapByWeekdayHour(current, range.timezone)
+        : Promise.resolve([]),
+      needsStaff
+        ? this.bookingsAggregates.countByStaff(current, REVENUE_STATUSES)
+        : Promise.resolve([]),
+      needsStaff
+        ? this.bookingsAggregates.countByStaff(current, [
+            BookingStatus.COMPLETED,
+          ])
+        : Promise.resolve([]),
+      needsStaff
+        ? this.ordersAggregates.productSalesByStaff(current)
+        : Promise.resolve([]),
     ]);
-    return mergeRevenueSeries(bookingRows, productRows);
-  }
-
-  private currentSeries(
-    ctx: WidgetContext,
-    statuses?: BookingStatus[],
-    includeStatus = false,
-  ): Promise<SeriesRow[]> {
-    return this.bookingsAggregates.series(
-      {
-        ...this.currentRange(ctx),
-        granularity: ctx.range.granularity,
-        timezone: ctx.range.timezone,
-        statuses,
-      },
-      includeStatus,
-    );
-  }
-
-  private previousSeries(
-    ctx: WidgetContext,
-    statuses?: BookingStatus[],
-    includeStatus = false,
-  ): Promise<SeriesRow[]> {
-    if (!ctx.range.compareWithPrevious) return Promise.resolve([]);
-    return this.bookingsAggregates.series(
-      {
-        ...this.previousRange(ctx),
-        granularity: ctx.range.granularity,
-        timezone: ctx.range.timezone,
-        statuses,
-      },
-      includeStatus,
-    );
+    return {
+      locationId,
+      dto,
+      range,
+      bookingSnapshot,
+      previousBookingSnapshot,
+      bookingSeries,
+      previousBookingSeries,
+      productSnapshot,
+      previousProductSnapshot,
+      productSeries,
+      previousProductSeries,
+      sourceRows,
+      heatmapCells,
+      staffRevenueRows,
+      staffCompletedRows,
+      productStaffRows,
+    };
   }
 
   private metricWidget(
     key: DashboardWidgetKey,
-    ctx: WidgetContext,
+    ctx: DashboardReadContext,
     input: {
       value: number;
       previousValue?: number;
@@ -613,7 +635,10 @@ export class DashboardService {
     };
   }
 
-  private buildMeta(ctx: WidgetContext, withCurrency: boolean): WidgetMetaDto {
+  private buildMeta(
+    ctx: DashboardReadContext,
+    withCurrency: boolean,
+  ): WidgetMetaDto {
     return {
       period: this.buckets.periodDto(ctx.range),
       previousPeriod: ctx.range.compareWithPrevious
@@ -622,6 +647,30 @@ export class DashboardService {
       currency: withCurrency ? ctx.range.currency : undefined,
     };
   }
+}
+
+function wants(
+  selected: ReadonlySet<DashboardWidgetKey>,
+  group: ReadonlySet<DashboardWidgetKey>,
+): boolean {
+  for (const key of group) if (selected.has(key)) return true;
+  return false;
+}
+
+function windowRange(
+  locationId: string,
+  dto: DashboardWidgetsRequestDto,
+  from: Date,
+  to: Date,
+) {
+  return {
+    locationId,
+    from,
+    to,
+    staffId: dto.staffId,
+    catalogItemId: dto.catalogItemId,
+    categoryId: dto.categoryId,
+  };
 }
 
 function sumCount(
@@ -663,15 +712,53 @@ function sumDecimals(values: Prisma.Decimal[]): Prisma.Decimal {
 }
 
 function commercialEventCount(
-  completedBookingIds: string[],
+  completedBookings: number,
   productSales: ProductSalesSnapshot,
 ): number {
-  const bookingIds = new Set(completedBookingIds);
-  let count = bookingIds.size + productSales.standaloneOrderCount;
-  for (const bookingId of productSales.linkedBookingIds) {
-    if (!bookingIds.has(bookingId)) count += 1;
+  return (
+    completedBookings +
+    productSales.standaloneOrderCount +
+    productSales.extraLinkedBookingCount
+  );
+}
+
+function collapseSeries(
+  rows: SeriesRow[],
+  statuses?: BookingStatus[],
+): SeriesRow[] {
+  const byBucket = new Map<number, SeriesRow>();
+  for (const row of rows) {
+    if (statuses && (row.status == null || !statuses.includes(row.status))) {
+      continue;
+    }
+    const key = row.bucket.getTime();
+    const existing = byBucket.get(key);
+    if (existing) {
+      existing.count += row.count;
+      existing.revenue = existing.revenue.plus(row.revenue);
+      existing.duration += row.duration;
+    } else {
+      byBucket.set(key, { ...row, status: null });
+    }
   }
-  return count;
+  return [...byBucket.values()];
+}
+
+function emptySnapshot(): AggregateSnapshot {
+  return {
+    byStatus: new Map(),
+    totalCount: 0,
+    totalRevenue: MoneyService.decimal(0),
+    totalDuration: 0,
+  };
+}
+
+function emptyProductSnapshot(): ProductSalesSnapshot {
+  return {
+    revenue: MoneyService.decimal(0),
+    standaloneOrderCount: 0,
+    extraLinkedBookingCount: 0,
+  };
 }
 
 function mergeRevenueSeries(

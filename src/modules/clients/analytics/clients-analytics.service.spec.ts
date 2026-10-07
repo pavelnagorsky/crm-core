@@ -14,7 +14,7 @@ import { ResolvedBrandRange } from '../../dashboard/interfaces/resolved-brand-ra
 import { DashboardBucketService } from '../../dashboard/services/dashboard-bucket.service.js';
 import { DashboardMetricFactory } from '../../dashboard/services/dashboard-metric.factory.js';
 import { DashboardRangeService } from '../../dashboard/services/dashboard-range.service.js';
-import { OrdersAnalyticsService } from '../../orders/analytics/orders-analytics.service.js';
+import { OrdersAggregatesService } from '../../orders/analytics/orders-aggregates.service.js';
 import { ClientsAnalyticsService } from './clients-analytics.service.js';
 import { ClientsAnalyticsRequestDto } from './dto/clients-analytics-request.dto.js';
 import { ClientsAnalyticsWidgetKey } from './enums/clients-analytics-widget-key.enum.js';
@@ -45,6 +45,22 @@ function bucket(
   };
 }
 
+function revenueTotals(activeClients: number, revenue: string) {
+  return { activeClients, revenue: MoneyService.decimal(revenue) };
+}
+
+function orderRevenue(
+  activeClients: number,
+  revenue: string,
+  sharedClients = 0,
+) {
+  return {
+    activeClients,
+    revenue: MoneyService.decimal(revenue),
+    sharedClients,
+  };
+}
+
 function recency(
   bucketKey: ClientRecencyBucket,
   clients: number,
@@ -61,13 +77,12 @@ function recency(
 
 describe('ClientsAnalyticsService', () => {
   const aggregates = {
-    clientCohortSummary: vi.fn(),
-    clientCohortSeries: vi.fn(),
+    clientCohort: vi.fn(),
     clientRecency: vi.fn(),
     clientRevenue: vi.fn(),
     clientRevenueSeries: vi.fn(),
   };
-  const ordersAnalytics = {
+  const ordersAggregates = {
     clientRevenue: vi.fn(),
     clientRevenueSeries: vi.fn(),
   };
@@ -91,16 +106,18 @@ describe('ClientsAnalyticsService', () => {
       locationIds: ['location-1'],
     };
     rangeService.resolveForBrand.mockResolvedValue(range);
-    aggregates.clientCohortSummary.mockResolvedValue(summary());
-    aggregates.clientCohortSeries.mockResolvedValue([]);
+    aggregates.clientCohort.mockResolvedValue({
+      summary: summary(),
+      series: [],
+    });
     aggregates.clientRecency.mockResolvedValue([]);
-    aggregates.clientRevenue.mockResolvedValue([]);
+    aggregates.clientRevenue.mockResolvedValue(revenueTotals(0, '0'));
     aggregates.clientRevenueSeries.mockResolvedValue([]);
-    ordersAnalytics.clientRevenue.mockResolvedValue([]);
-    ordersAnalytics.clientRevenueSeries.mockResolvedValue([]);
+    ordersAggregates.clientRevenue.mockResolvedValue(orderRevenue(0, '0'));
+    ordersAggregates.clientRevenueSeries.mockResolvedValue([]);
     service = new ClientsAnalyticsService(
       aggregates as unknown as BookingsAggregatesService,
-      ordersAnalytics as unknown as OrdersAnalyticsService,
+      ordersAggregates as unknown as OrdersAggregatesService,
       rangeService as unknown as DashboardRangeService,
       new DashboardMetricFactory(),
       bucketService,
@@ -114,12 +131,15 @@ describe('ClientsAnalyticsService', () => {
   }
 
   it('counts first completed visits and fills empty spark buckets with zeros', async () => {
-    aggregates.clientCohortSummary
-      .mockResolvedValueOnce(summary({ newVisits: 5 }))
-      .mockResolvedValueOnce(summary({ newVisits: 2 }));
-    aggregates.clientCohortSeries.mockResolvedValueOnce([
-      bucket('2026-09-02', { newVisits: 2 }),
-    ]);
+    aggregates.clientCohort
+      .mockResolvedValueOnce({
+        summary: summary({ newVisits: 5 }),
+        series: [bucket('2026-09-02', { newVisits: 2 })],
+      })
+      .mockResolvedValueOnce({
+        summary: summary({ newVisits: 2 }),
+        series: [],
+      });
 
     const [widget] = await widgets([ClientsAnalyticsWidgetKey.NEW_CLIENTS]);
 
@@ -142,16 +162,15 @@ describe('ClientsAnalyticsService', () => {
   });
 
   it('reports the returning-visit share and a stable new/returning series', async () => {
-    aggregates.clientCohortSummary
-      .mockResolvedValueOnce(summary({ newVisits: 2, returningVisits: 1 }))
-      .mockResolvedValueOnce(summary({ newVisits: 1, returningVisits: 1 }));
-    aggregates.clientCohortSeries
-      .mockResolvedValueOnce([
-        bucket('2026-09-01', { newVisits: 2, returningVisits: 1 }),
-      ])
-      .mockResolvedValueOnce([
-        bucket('2026-08-29', { newVisits: 1, returningVisits: 1 }),
-      ]);
+    aggregates.clientCohort
+      .mockResolvedValueOnce({
+        summary: summary({ newVisits: 2, returningVisits: 1 }),
+        series: [bucket('2026-09-01', { newVisits: 2, returningVisits: 1 })],
+      })
+      .mockResolvedValueOnce({
+        summary: summary({ newVisits: 1, returningVisits: 1 }),
+        series: [bucket('2026-08-29', { newVisits: 1, returningVisits: 1 })],
+      });
 
     const [widget] = await widgets([
       ClientsAnalyticsWidgetKey.REPEAT_VISIT_SHARE,
@@ -249,7 +268,7 @@ describe('ClientsAnalyticsService', () => {
       range.previousTo,
       'UTC',
     );
-    expect(aggregates.clientCohortSummary).not.toHaveBeenCalled();
+    expect(aggregates.clientCohort).not.toHaveBeenCalled();
   });
 
   it('keeps every recency bucket when nobody is silent', async () => {
@@ -262,43 +281,35 @@ describe('ClientsAnalyticsService', () => {
   });
 
   it('divides period revenue by distinct clients, not by the sum of bucket clients', async () => {
-    aggregates.clientCohortSummary.mockResolvedValueOnce(
-      summary({
+    aggregates.clientCohort.mockResolvedValueOnce({
+      summary: summary({
         activeClients: 2,
         revenue: new Prisma.Decimal('10.00'),
       }),
-    );
-    aggregates.clientCohortSeries.mockResolvedValueOnce([
-      bucket('2026-09-01', {
-        activeClients: 2,
-        revenue: new Prisma.Decimal('6.00'),
-      }),
-      bucket('2026-09-02', {
-        activeClients: 1,
-        revenue: new Prisma.Decimal('4.00'),
-      }),
-    ]);
+      series: [
+        bucket('2026-09-01', {
+          activeClients: 2,
+          revenue: new Prisma.Decimal('6.00'),
+        }),
+        bucket('2026-09-02', {
+          activeClients: 1,
+          revenue: new Prisma.Decimal('4.00'),
+        }),
+      ],
+    });
     aggregates.clientRevenue
-      .mockResolvedValueOnce([
-        { clientId: 'client-1', revenue: MoneyService.decimal('6.00') },
-        { clientId: 'client-2', revenue: MoneyService.decimal('4.00') },
-      ])
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce(revenueTotals(2, '10.00'))
+      .mockResolvedValueOnce(revenueTotals(0, '0'));
     aggregates.clientRevenueSeries.mockResolvedValueOnce([
       {
         bucket: new Date('2026-09-01T00:00:00.000Z'),
-        clientId: 'client-1',
-        revenue: MoneyService.decimal('3.00'),
-      },
-      {
-        bucket: new Date('2026-09-01T00:00:00.000Z'),
-        clientId: 'client-2',
-        revenue: MoneyService.decimal('3.00'),
+        revenue: MoneyService.decimal('6.00'),
+        activeClients: 2,
       },
       {
         bucket: new Date('2026-09-02T00:00:00.000Z'),
-        clientId: 'client-1',
         revenue: MoneyService.decimal('4.00'),
+        activeClients: 1,
       },
     ]);
 
@@ -317,23 +328,23 @@ describe('ClientsAnalyticsService', () => {
   });
 
   it('quantizes revenue per client half-up and returns zero when nobody visited', async () => {
-    aggregates.clientCohortSummary.mockResolvedValueOnce(
-      summary({
+    aggregates.clientCohort.mockResolvedValueOnce({
+      summary: summary({
         activeClients: 3,
         revenue: new Prisma.Decimal('10.00'),
       }),
-    );
-    aggregates.clientRevenue.mockResolvedValueOnce([
-      { clientId: 'client-1', revenue: MoneyService.decimal('3.34') },
-      { clientId: 'client-2', revenue: MoneyService.decimal('3.33') },
-      { clientId: 'client-3', revenue: MoneyService.decimal('3.33') },
-    ]);
+      series: [],
+    });
+    aggregates.clientRevenue.mockResolvedValueOnce(revenueTotals(3, '10.00'));
     const [uneven] = await widgets([
       ClientsAnalyticsWidgetKey.REVENUE_PER_CLIENT,
     ]);
     expect(uneven.metric?.value).toBe(3.33);
 
-    aggregates.clientCohortSummary.mockResolvedValueOnce(summary());
+    aggregates.clientCohort.mockResolvedValueOnce({
+      summary: summary(),
+      series: [],
+    });
     const [empty] = await widgets([
       ClientsAnalyticsWidgetKey.REVENUE_PER_CLIENT,
     ]);
@@ -342,16 +353,11 @@ describe('ClientsAnalyticsService', () => {
 
   it('merges service and product revenue by client without double-counting the client', async () => {
     aggregates.clientRevenue
-      .mockResolvedValueOnce([
-        { clientId: 'shared', revenue: MoneyService.decimal('100.00') },
-      ])
-      .mockResolvedValueOnce([]);
-    ordersAnalytics.clientRevenue
-      .mockResolvedValueOnce([
-        { clientId: 'shared', revenue: MoneyService.decimal('25.00') },
-        { clientId: 'product-only', revenue: MoneyService.decimal('75.00') },
-      ])
-      .mockResolvedValueOnce([]);
+      .mockResolvedValueOnce(revenueTotals(1, '100.00'))
+      .mockResolvedValueOnce(revenueTotals(0, '0'));
+    ordersAggregates.clientRevenue
+      .mockResolvedValueOnce(orderRevenue(2, '100.00', 1))
+      .mockResolvedValueOnce(orderRevenue(0, '0'));
 
     const [widget] = await widgets([
       ClientsAnalyticsWidgetKey.REVENUE_PER_CLIENT,
@@ -368,8 +374,7 @@ describe('ClientsAnalyticsService', () => {
       ClientsAnalyticsWidgetKey.DORMANT_CLIENTS,
     ]);
 
-    expect(aggregates.clientCohortSummary).toHaveBeenCalledTimes(1);
-    expect(aggregates.clientCohortSeries).toHaveBeenCalledTimes(1);
+    expect(aggregates.clientCohort).toHaveBeenCalledTimes(1);
     expect(aggregates.clientRecency).toHaveBeenCalledTimes(1);
     expect(
       result.every((widget) => widget.metric?.previousValue === undefined),
@@ -396,16 +401,17 @@ describe('ClientsAnalyticsService', () => {
     for (const key of Object.values(ClientsAnalyticsWidgetKey)) {
       vi.clearAllMocks();
       rangeService.resolveForBrand.mockResolvedValue(range);
-      aggregates.clientCohortSummary.mockResolvedValue(summary());
-      aggregates.clientCohortSeries.mockResolvedValue([]);
+      aggregates.clientCohort.mockResolvedValue({
+        summary: summary(),
+        series: [],
+      });
       aggregates.clientRecency.mockResolvedValue([]);
       await widgets([key]);
       if (key === ClientsAnalyticsWidgetKey.DORMANT_CLIENTS) {
         expect(aggregates.clientRecency).toHaveBeenCalled();
-        expect(aggregates.clientCohortSummary).not.toHaveBeenCalled();
+        expect(aggregates.clientCohort).not.toHaveBeenCalled();
       } else {
-        expect(aggregates.clientCohortSummary).toHaveBeenCalled();
-        expect(aggregates.clientCohortSeries).toHaveBeenCalled();
+        expect(aggregates.clientCohort).toHaveBeenCalled();
         expect(aggregates.clientRecency).not.toHaveBeenCalled();
       }
     }

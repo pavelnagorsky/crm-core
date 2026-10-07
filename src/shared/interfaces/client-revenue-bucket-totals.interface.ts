@@ -1,7 +1,7 @@
 import { Prisma } from '@prisma/client';
 
-export interface ClientRevenueBucket {
+export interface ClientRevenueBucketTotals {
   bucket: Date;
-  clientId: string;
   revenue: Prisma.Decimal;
+  activeClients: number;
 }

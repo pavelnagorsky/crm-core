@@ -1,12 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { OrderItemType, OrderStatus, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
-import { ClientRevenueBucket } from '../../../shared/interfaces/client-revenue-bucket.interface.js';
-import { ClientRevenue } from '../../../shared/interfaces/client-revenue.interface.js';
 import { MoneyService } from '../../../shared/money/money.service.js';
+import { BookingsAggregatesService } from '../../bookings/bookings-aggregates.service.js';
+import { AggregateRange } from '../../bookings/interfaces/aggregate-range.interface.js';
 import { SeriesGranularity } from '../../dashboard/enums/series-granularity.enum.js';
 import { ClientSalesRange } from './interfaces/client-sales-range.interface.js';
 import { ClientSalesSeriesRange } from './interfaces/client-sales-series-range.interface.js';
+import { OrderClientRevenueBucket } from './interfaces/order-client-revenue-bucket.interface.js';
+import { OrderClientRevenueTotals } from './interfaces/order-client-revenue-totals.interface.js';
 import { ProductSalesRange } from './interfaces/product-sales-range.interface.js';
 import { ProductSalesSeriesRange } from './interfaces/product-sales-series-range.interface.js';
 import { ProductSalesSeriesRow } from './interfaces/product-sales-series-row.interface.js';
@@ -14,24 +16,35 @@ import { ProductSalesSnapshot } from './interfaces/product-sales-snapshot.interf
 import { ProductSalesStaffRow } from './interfaces/product-sales-staff-row.interface.js';
 
 @Injectable()
-export class OrdersAnalyticsService {
-  constructor(private readonly db: DatabaseService) {}
+export class OrdersAggregatesService {
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly bookingsAggregates: BookingsAggregatesService,
+  ) {}
 
   async productSalesSnapshot(
     range: ProductSalesRange,
   ): Promise<ProductSalesSnapshot> {
+    const completedBookingExists =
+      this.bookingsAggregates.completedBookingExists(
+        this.bookingRange(range),
+        Prisma.sql`o."bookingId"`,
+      );
     const rows = await this.db.$queryRaw<
       Array<{
         revenue: string;
         standaloneOrderCount: bigint;
-        linkedBookingIds: string[];
+        extraLinkedBookingCount: bigint;
       }>
     >(
       Prisma.sql`
         SELECT
           COALESCE(SUM(item_totals.revenue), 0)::text AS revenue,
           COUNT(*) FILTER (WHERE o."bookingId" IS NULL)::bigint AS "standaloneOrderCount",
-          ARRAY_REMOVE(ARRAY_AGG(DISTINCT o."bookingId"), NULL) AS "linkedBookingIds"
+          COUNT(DISTINCT o."bookingId") FILTER (
+            WHERE o."bookingId" IS NOT NULL
+              AND NOT (${completedBookingExists})
+          )::bigint AS "extraLinkedBookingCount"
         FROM "Order" o
         ${this.productItemTotalsJoin(range)}
         WHERE ${this.productSalesWhere(range)}
@@ -41,7 +54,7 @@ export class OrdersAnalyticsService {
     return {
       revenue: MoneyService.decimal(row?.revenue),
       standaloneOrderCount: Number(row?.standaloneOrderCount ?? 0),
-      linkedBookingIds: row?.linkedBookingIds ?? [],
+      extraLinkedBookingCount: Number(row?.extraLinkedBookingCount ?? 0),
     };
   }
 
@@ -105,54 +118,91 @@ export class OrdersAnalyticsService {
     }));
   }
 
-  async clientRevenue(range: ClientSalesRange): Promise<ClientRevenue[]> {
-    if (range.locationIds.length === 0) return [];
+  async clientRevenue(
+    range: ClientSalesRange,
+  ): Promise<OrderClientRevenueTotals> {
+    if (range.locationIds.length === 0) return emptyOrderClientRevenue();
+    const bookingClientIds =
+      this.bookingsAggregates.clientRevenueClientIdsSql(range);
     const rows = await this.db.$queryRaw<
-      Array<{ clientId: string; revenue: string }>
+      Array<{
+        revenue: string;
+        activeClients: bigint;
+        sharedClients: bigint;
+      }>
     >(
       Prisma.sql`
-        SELECT o."clientId" AS "clientId",
-               COALESCE(SUM(item_totals.revenue), 0)::text AS revenue
+        SELECT COALESCE(SUM(item_totals.revenue), 0)::text AS revenue,
+               COUNT(DISTINCT o."clientId")::bigint AS "activeClients",
+               COUNT(DISTINCT o."clientId") FILTER (
+                 WHERE o."clientId" IN (${bookingClientIds})
+               )::bigint AS "sharedClients"
         FROM "Order" o
         ${this.allProductItemTotalsJoin()}
         WHERE ${this.clientSalesWhere(range)}
-        GROUP BY o."clientId"
       `,
     );
-    return rows.map((row) => ({
-      clientId: row.clientId,
-      revenue: MoneyService.decimal(row.revenue),
-    }));
+    return mapOrderClientRevenue(rows[0]);
   }
 
   async clientRevenueSeries(
     range: ClientSalesSeriesRange,
-  ): Promise<ClientRevenueBucket[]> {
+  ): Promise<OrderClientRevenueBucket[]> {
     if (range.locationIds.length === 0) return [];
+    const bookingClientsByBucket =
+      this.bookingsAggregates.clientRevenueClientsByBucketSql(range);
     const bucket = this.bucketExpr(
       range.granularity,
       range.timezone,
       'o."occurredAt"',
     );
     const rows = await this.db.$queryRaw<
-      Array<{ bucket: Date; clientId: string; revenue: string }>
+      Array<{
+        bucket: Date;
+        revenue: string;
+        activeClients: bigint;
+        sharedClients: bigint;
+      }>
     >(
       Prisma.sql`
+        WITH booking_clients AS (
+          ${bookingClientsByBucket}
+        )
         SELECT ${bucket} AS bucket,
-               o."clientId" AS "clientId",
-               COALESCE(SUM(item_totals.revenue), 0)::text AS revenue
+               COALESCE(SUM(item_totals.revenue), 0)::text AS revenue,
+               COUNT(DISTINCT o."clientId")::bigint AS "activeClients",
+               COUNT(DISTINCT o."clientId") FILTER (
+                 WHERE EXISTS (
+                   SELECT 1
+                   FROM booking_clients bc
+                   WHERE bc."clientId" = o."clientId"
+                     AND bc.bucket = ${bucket}
+                 )
+               )::bigint AS "sharedClients"
         FROM "Order" o
         ${this.allProductItemTotalsJoin()}
         WHERE ${this.clientSalesWhere(range)}
-        GROUP BY bucket, o."clientId"
-        ORDER BY bucket ASC
+        GROUP BY 1
+        ORDER BY 1 ASC
       `,
     );
     return rows.map((row) => ({
       bucket: new Date(row.bucket),
-      clientId: row.clientId,
       revenue: MoneyService.decimal(row.revenue),
+      activeClients: Number(row.activeClients),
+      sharedClients: Number(row.sharedClients),
     }));
+  }
+
+  private bookingRange(range: ProductSalesRange): AggregateRange {
+    return {
+      locationId: range.locationId,
+      from: range.from,
+      to: range.to,
+      staffId: range.staffId,
+      catalogItemId: range.catalogItemId,
+      categoryId: range.categoryId,
+    };
   }
 
   private productSalesWhere(range: ProductSalesRange): Prisma.Sql {
@@ -259,4 +309,25 @@ export class OrdersAnalyticsService {
       }
     }
   }
+}
+
+function mapOrderClientRevenue(
+  row:
+    | { revenue: string; activeClients: bigint; sharedClients: bigint }
+    | undefined,
+): OrderClientRevenueTotals {
+  if (!row) return emptyOrderClientRevenue();
+  return {
+    revenue: MoneyService.decimal(row.revenue),
+    activeClients: Number(row.activeClients),
+    sharedClients: Number(row.sharedClients),
+  };
+}
+
+function emptyOrderClientRevenue(): OrderClientRevenueTotals {
+  return {
+    revenue: MoneyService.decimal(0),
+    activeClients: 0,
+    sharedClients: 0,
+  };
 }

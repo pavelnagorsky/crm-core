@@ -122,7 +122,7 @@ through `StaffService`, changes stock through `InventoryService`, and records co
 
 ### Analytics
 
-`OrdersAnalyticsService` is the public read API for posted product-sale aggregates. Dashboard and client
+`OrdersAggregatesService` is the public read API for posted product-sale aggregates. Dashboard and client
 analytics combine its output with booking aggregates. Service analytics remain service-only. Inventory
 analytics come from `InventoryService`; consumers do not query its tables directly.
 
@@ -260,7 +260,7 @@ listed below so the design can be traced to its implementation.
 
 ### Phase 4 - Dashboard, analytics, and payroll integration
 
-- Add `OrdersAnalyticsService` aggregates and merge them into dashboard revenue/ticket/staff widgets.
+- Add `OrdersAggregatesService` aggregates and merge them into dashboard revenue/ticket/staff widgets.
 - Extend client revenue analytics without altering visit/retention semantics.
 - Extend payroll DTO/source links for order items and verify report totals.
 - Add cross-domain regression tests for posting and voiding.

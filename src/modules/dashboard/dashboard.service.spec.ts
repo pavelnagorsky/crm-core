@@ -2,7 +2,7 @@ import { BookingStatus } from '@prisma/client';
 import { MoneyService } from '../../shared/money/money.service.js';
 import { BookingsAggregatesService } from '../bookings/bookings-aggregates.service.js';
 import { AggregateSnapshot } from '../bookings/interfaces/aggregate-snapshot.interface.js';
-import { OrdersAnalyticsService } from '../orders/analytics/orders-analytics.service.js';
+import { OrdersAggregatesService } from '../orders/analytics/orders-aggregates.service.js';
 import { DashboardWidgetsRequestDto } from './dto/dashboard-widgets-request.dto.js';
 import { DashboardWidgetKey } from './enums/dashboard-widget-key.enum.js';
 import { SeriesGranularity } from './enums/series-granularity.enum.js';
@@ -46,13 +46,12 @@ describe('DashboardService product revenue', () => {
   const bookings = {
     snapshot: vi.fn().mockResolvedValue(bookingSnapshot()),
     series: vi.fn().mockResolvedValue([]),
-    completedBookingIds: vi.fn().mockResolvedValue(['booking-1', 'booking-2']),
   };
   const orders = {
     productSalesSnapshot: vi.fn().mockResolvedValue({
       revenue: MoneyService.decimal('25.00'),
       standaloneOrderCount: 1,
-      linkedBookingIds: ['booking-1', 'booking-3'],
+      extraLinkedBookingCount: 1,
     }),
     productSalesSeries: vi.fn().mockResolvedValue([]),
   };
@@ -62,7 +61,7 @@ describe('DashboardService product revenue', () => {
     return new DashboardService(
       rangeService as unknown as DashboardRangeService,
       bookings as unknown as BookingsAggregatesService,
-      orders as unknown as OrdersAnalyticsService,
+      orders as unknown as OrdersAggregatesService,
       new DashboardMetricFactory(),
       new DashboardSeriesFactory(buckets),
       buckets,
@@ -79,6 +78,10 @@ describe('DashboardService product revenue', () => {
 
     expect(result[0].metric?.value).toBe(175);
     expect(result[1].metric?.value).toBe(125);
+    expect(bookings.snapshot).toHaveBeenCalledTimes(1);
+    expect(bookings.series).toHaveBeenCalledTimes(1);
+    expect(orders.productSalesSnapshot).toHaveBeenCalledTimes(1);
+    expect(orders.productSalesSeries).toHaveBeenCalledTimes(1);
   });
 
   it('counts a completed booking and linked product orders as one ticket', async () => {

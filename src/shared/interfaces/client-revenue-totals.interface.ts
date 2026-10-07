@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 
-export interface ClientRevenue {
-  clientId: string;
+export interface ClientRevenueTotals {
   revenue: Prisma.Decimal;
+  activeClients: number;
 }
