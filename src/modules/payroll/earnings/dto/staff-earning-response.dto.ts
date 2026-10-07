@@ -57,10 +57,10 @@ export class StaffEarningResponseDto {
   @ApiProperty({ type: String, nullable: true })
   bookingId: string | null;
 
-  @ApiProperty({ type: String, nullable: true })
+  @ApiProperty({ type: String, format: 'uuid', nullable: true })
   orderId: string | null;
 
-  @ApiProperty({ type: String, nullable: true })
+  @ApiProperty({ type: String, format: 'uuid', nullable: true })
   orderItemId: string | null;
 
   @ApiProperty({ type: String, nullable: true })

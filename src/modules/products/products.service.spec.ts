@@ -201,4 +201,30 @@ describe('ProductsService', () => {
       service.changeStatus('brand-1', 'product-1', ProductStatus.ACTIVE, actor),
     ).rejects.toBeInstanceOf(AppException);
   });
+
+  it('returns the updated product after a status transition', async () => {
+    const { db, service } = setup();
+    const current = {
+      id: 'product-1',
+      brandId: 'brand-1',
+      status: ProductStatus.ACTIVE,
+      locations: [],
+      category: null,
+      imageFile: null,
+    };
+    db.product.findFirst.mockResolvedValue(current);
+    db.product.update.mockResolvedValue({
+      ...current,
+      status: ProductStatus.INACTIVE,
+    });
+
+    const result = await service.changeStatus(
+      'brand-1',
+      'product-1',
+      ProductStatus.INACTIVE,
+      actor,
+    );
+
+    expect(result.status).toBe(ProductStatus.INACTIVE);
+  });
 });

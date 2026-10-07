@@ -1,22 +1,10 @@
 import { Controller, Get } from '@nestjs/common';
-import {
-  ApiOkResponse,
-  ApiOperation,
-  ApiProperty,
-  ApiTags,
-} from '@nestjs/swagger';
+import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
 import {
   ApiResponse,
   BaseResponseDto,
 } from '../../shared/dto/base-response.dto.js';
-
-class HealthResponseDto {
-  @ApiProperty({ type: String, example: 'ok' })
-  status: string;
-
-  @ApiProperty({ type: String, example: '2026-09-17T10:00:00.000Z' })
-  timestamp: string;
-}
+import { HealthResponseDto } from './dto/health-response.dto.js';
 
 @ApiTags('Health')
 @Controller('health')

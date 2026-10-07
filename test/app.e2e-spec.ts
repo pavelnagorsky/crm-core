@@ -3,7 +3,7 @@ import { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import { AppModule } from './../src/app.module.js';
 
-describe('AppController (e2e)', () => {
+describe('Application smoke test (e2e)', () => {
   let app: INestApplication;
 
   beforeEach(async () => {
@@ -15,11 +15,18 @@ describe('AppController (e2e)', () => {
     await app.init();
   });
 
-  it('/ (GET)', () => {
+  it('/health (GET)', () => {
     return request(app.getHttpServer())
-      .get('/')
+      .get('/health')
       .expect(200)
-      .expect('Hello World!');
+      .expect(({ body }) => {
+        expect(body).toMatchObject({
+          isSuccess: true,
+          responseCode: 'SUCCESS',
+          responseValue: { status: 'ok' },
+        });
+        expect(body.responseValue.timestamp).toEqual(expect.any(String));
+      });
   });
 
   afterEach(async () => {

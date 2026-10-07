@@ -195,22 +195,22 @@ export class ProductsController {
   }
 
   @ApiOperation({ summary: 'Change product status' })
-  @ApiNoContentResponse()
+  @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @BrandRBAC(BusinessRole.OWNER)
   @Patch('brands/:brandId/products/:productId/status')
-  @HttpCode(HttpStatus.NO_CONTENT)
   async changeStatus(
     @Param('brandId', ParseUUIDPipe) brandId: string,
     @Param('productId', ParseUUIDPipe) productId: string,
     @Body() dto: UpdateProductStatusDto,
     @TokenPayload() token: TokenPayloadDto,
-  ): Promise<void> {
-    await this.products.changeStatus(
+  ): Promise<BaseResponseDto<IdResponseDto>> {
+    const product = await this.products.changeStatus(
       brandId,
       productId,
       dto.status,
       auditActorFromToken(token, brandId),
     );
+    return BaseResponseDto.success({ id: product.id });
   }
 
   @ApiOperation({ summary: 'Delete an unused product' })

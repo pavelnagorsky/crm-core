@@ -13,10 +13,10 @@ export class OrderItemResponseDto {
   @ApiProperty({ enum: OrderItemType, enumName: 'OrderItemType' })
   type: OrderItemType;
 
-  @ApiProperty({ type: String, nullable: true })
+  @ApiProperty({ type: String, format: 'uuid', nullable: true })
   catalogItemId: string | null;
 
-  @ApiProperty({ type: String, nullable: true })
+  @ApiProperty({ type: String, format: 'uuid', nullable: true })
   categoryId: string | null;
 
   @ApiProperty({ type: String })

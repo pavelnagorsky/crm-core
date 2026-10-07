@@ -251,7 +251,7 @@ export class ProductsService {
     productId: string,
     status: ProductStatus,
     actor: AuditActor,
-  ): Promise<void> {
+  ): Promise<Product> {
     const product = await this.findByIdInBrand(brandId, productId);
     if (product.status === status) {
       throw new AppException(
@@ -259,7 +259,7 @@ export class ProductsService {
         HttpStatus.CONFLICT,
       );
     }
-    await this.db.product.update({
+    const updated = await this.db.product.update({
       where: { id: productId },
       data: { status },
     });
@@ -273,6 +273,7 @@ export class ProductsService {
       { ...product, status },
       ['status'],
     );
+    return updated;
   }
 
   async delete(

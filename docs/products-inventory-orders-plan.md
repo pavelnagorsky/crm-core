@@ -82,18 +82,18 @@ not simulated here.
 
 The feature must answer the key operational questions:
 
-| Business question | Source |
-| --- | --- |
-| What is physically on hand now? | `InventoryBalance.quantityOnHand` |
-| What is running low? | balance compared with `ProductLocation.reorderLevel` |
-| Why did stock change? | immutable `InventoryMovement` ledger |
-| What did the current stock cost? | weighted-average `averageUnitCost` |
-| What was product COGS at sale time? | `OrderItem.unitCostSnapshot` |
-| What is current stock value? | on-hand quantity times average unit cost |
-| What was received/written off/count-adjusted? | posted inventory documents |
-| How did stock move between locations? | paired transfer movements with one document |
-| Can two users sell the last unit? | atomic conditional balance update at order posting |
-| Can a retry duplicate a movement/commission? | unique source/idempotency keys |
+| Business question                             | Source                                               |
+| --------------------------------------------- | ---------------------------------------------------- |
+| What is physically on hand now?               | `InventoryBalance.quantityOnHand`                    |
+| What is running low?                          | balance compared with `ProductLocation.reorderLevel` |
+| Why did stock change?                         | immutable `InventoryMovement` ledger                 |
+| What did the current stock cost?              | weighted-average `averageUnitCost`                   |
+| What was product COGS at sale time?           | `OrderItem.unitCostSnapshot`                         |
+| What is current stock value?                  | on-hand quantity times average unit cost             |
+| What was received/written off/count-adjusted? | posted inventory documents                           |
+| How did stock move between locations?         | paired transfer movements with one document          |
+| Can two users sell the last unit?             | atomic conditional balance update at order posting   |
+| Can a retry duplicate a movement/commission?  | unique source/idempotency keys                       |
 
 Quantity uses `Decimal(14,3)` to support pieces and fractional consumables. Money uses the existing
 `MoneyService` and two-decimal decimal columns. Negative stock is forbidden. Products with stock tracking
@@ -220,10 +220,15 @@ Regression tests must prove all combinations, especially linked versus standalon
 Every phase follows: plan check, design check, implementation, tests, review, refactor, cleanup, green build,
 green tests, lint, and one focused commit. No later phase starts on a red baseline.
 
+Implementation status: all five phases are complete. Migrations through
+`20261007200000_product_sales_analytics` are applied to the stage database. The completed phase commits are
+listed below so the design can be traced to its implementation.
+
 ### Phase 0 - Architecture document
 
 - Record business flows, UI contracts, ownership, invariants, analytics formulas, and exclusions.
 - Commit: `docs/products-inventory-orders-plan`.
+- Completed in `7d6bf5d`.
 
 ### Phase 1 - Product catalogue
 
@@ -232,6 +237,7 @@ green tests, lint, and one focused commit. No later phase starts on a red baseli
 - Use `PUT` for updates and `PATCH` only for status if a dedicated transition is exposed.
 - Add service/controller tests and verify build/test/lint.
 - Commit: `feature/product-catalog`.
+- Completed in `36981bc`.
 
 ### Phase 2 - Inventory ledger
 
@@ -240,6 +246,7 @@ green tests, lint, and one focused commit. No later phase starts on a red baseli
   history.
 - Add concurrency/idempotency/unit tests and verify build/test/lint.
 - Commit: `feature/inventory-ledger`.
+- Completed in `f0a7575`.
 
 ### Phase 3 - Internal product orders
 
@@ -249,6 +256,7 @@ green tests, lint, and one focused commit. No later phase starts on a red baseli
 - Replace no internal behavior of bookings; keep the manual product commission endpoint as compatibility API.
 - Add lifecycle, permission, concurrency, idempotency, and reversal tests.
 - Commit: `feature/internal-product-orders`.
+- Completed in `0a8ded8`.
 
 ### Phase 4 - Dashboard, analytics, and payroll integration
 
@@ -257,6 +265,7 @@ green tests, lint, and one focused commit. No later phase starts on a red baseli
 - Extend payroll DTO/source links for order items and verify report totals.
 - Add cross-domain regression tests for posting and voiding.
 - Commit: `feature/product-sales-analytics`.
+- Completed in `5df7579`.
 
 ### Phase 5 - Final review and cleanup
 
@@ -264,6 +273,7 @@ green tests, lint, and one focused commit. No later phase starts on a red baseli
 - Run Prisma validation/generation, build, all unit tests, lint, and e2e tests where infrastructure permits.
 - Remove dead code and document any deliberately deferred work.
 - Commit: `refactor/product-sales-hardening`.
+- Completed after final schema, API, ownership, audit, test, and migration review.
 
 ## 9. Deferred roadmap
 
@@ -275,4 +285,3 @@ The next commercial layer is Payments/Cash, not part of this implementation:
 - partial returns/refunds;
 - pricing pipeline with multiple ordered policies/coupons and persisted calculation trace;
 - service and bundle lines migrated into a unified posted order when the payment layer needs one bill.
-
