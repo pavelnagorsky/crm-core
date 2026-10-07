@@ -3,7 +3,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { compare, hash } from 'bcrypt';
-import { randomInt } from 'crypto';
+import { createHash, randomInt, randomUUID } from 'crypto';
 import { User } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
 import { UserService } from '../user/user.service.js';
@@ -131,7 +131,7 @@ export class AuthService {
 
   async logout(userId: string, refreshToken: string): Promise<void> {
     await this.db.refreshToken.deleteMany({
-      where: { token: refreshToken, userId },
+      where: { tokenHash: this.hashRefreshToken(refreshToken), userId },
     });
     this.logger.log(`logout: userId=${userId}`);
   }
@@ -141,14 +141,17 @@ export class AuthService {
     refreshToken: string,
     userAgent: string | null,
   ): Promise<ITokens> {
-    const stored = await this.db.refreshToken.findUnique({
-      where: { token: refreshToken },
+    const { count } = await this.db.refreshToken.deleteMany({
+      where: {
+        tokenHash: this.hashRefreshToken(refreshToken),
+        userId,
+        expiryDate: { gt: new Date() },
+      },
     });
-    if (!stored || stored.userId !== userId || stored.expiryDate < new Date()) {
+    if (count !== 1) {
       throw new AppException(ErrorCode.UNAUTHORIZED, HttpStatus.UNAUTHORIZED);
     }
 
-    await this.db.refreshToken.delete({ where: { token: refreshToken } });
     const user = await this.userService.findById(userId);
     return this.issueTokens(user, userAgent);
   }
@@ -264,7 +267,12 @@ export class AuthService {
     expiryDate.setDate(expiryDate.getDate() + REFRESH_TOKEN_TTL_DAYS);
 
     await this.db.refreshToken.create({
-      data: { userId, token, userAgent, expiryDate },
+      data: {
+        userId,
+        tokenHash: this.hashRefreshToken(token),
+        userAgent,
+        expiryDate,
+      },
     });
 
     // keep only the newest MAX_TOKENS_PER_USER, drop expired ones
@@ -339,10 +347,14 @@ export class AuthService {
   private generateRefreshToken(user: User): Promise<string> {
     const cfg = this.config.get<IJwtConfig>('jwt')!;
     return this.sign(
-      { sub: user.id },
+      { sub: user.id, jti: randomUUID() },
       cfg.refreshTokenSecret,
       jwtExpirationConfig.refreshToken,
     );
+  }
+
+  private hashRefreshToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
   }
 
   private async generateResetCode(): Promise<{

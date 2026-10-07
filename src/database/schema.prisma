@@ -343,11 +343,13 @@ model User {
 
 model RefreshToken {
   id         String   @id @default(uuid())
-  token      String   @unique @db.VarChar(512)
+  tokenHash  String   @unique @db.VarChar(64)
   userAgent  String?  @db.VarChar(512)
   expiryDate DateTime
   userId     String
   user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiryDate])
 }
 
 model PasswordResetCode {
