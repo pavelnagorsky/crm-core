@@ -514,6 +514,10 @@ async function cleanup(prisma, { brandId, locationId }) {
   // plans, and previously seeded staff.
   await prisma.payrollPeriod.deleteMany({ where: { locationId } });
   await prisma.staffEarning.deleteMany({ where: { locationId } });
+  await prisma.inventoryMovement.deleteMany({
+    where: { locationId, orderId: { not: null } },
+  });
+  await prisma.order.deleteMany({ where: { locationId } });
   await prisma.booking.deleteMany({ where: { locationId } });
   await prisma.client.deleteMany({
     where: { brandId, phone: { startsWith: SEED_PHONE_PREFIX } },
@@ -970,6 +974,7 @@ async function createBookings(prisma, ctx) {
   const stats = {
     total: 0,
     byStatus: {},
+    serviceOrderItems: 0,
     earnings: 0,
     commissionSum: decimal(0),
   };
@@ -1195,32 +1200,75 @@ async function placeBooking(prisma, p) {
   // Commission earning for completed bookings (matches StaffEarningsService.recordForCompletedBooking).
   if (
     status === 'COMPLETED' &&
-    plan &&
-    plan.serviceCommissionPercent != null &&
     bookingItem
   ) {
     const base = customPrice ?? service.price;
-    const percent = plan.serviceCommissionPercent;
-    const amount = commission(base, percent);
-    const earnedOn = dateOnly(zonedDateStr(startAt, timezone));
-    earningRows.push({
-      locationId,
-      staffId: staff.id,
-      type: 'SERVICE_COMMISSION',
-      source: 'BOOKING',
-      earnedOn,
-      amount,
-      currency,
-      baseAmount: decimal(base),
-      ratePercent: decimal(percent),
-      description: service.title,
-      idempotencyKey: `booking-item:${bookingItem.id}:SERVICE_COMMISSION`,
-      compensationPlanId: plan.id,
-      bookingId: booking.id,
-      bookingItemId: bookingItem.id,
+    const order = await prisma.order.create({
+      data: {
+        locationId,
+        bookingId: booking.id,
+        clientId: client.id,
+        clientName: `${client.firstName} ${client.lastName}`.trim(),
+        clientPhone: client.phone,
+        currency,
+        status: 'ACTIVE',
+        occurredAt: endAt,
+        listTotalAmount: service.price,
+        subtotalAmount: base,
+        discountTotal: decimal(0),
+        totalAmount: base,
+        createdByName: 'Seed',
+        items: {
+          create: {
+            type: 'SERVICE',
+            bookingItemId: bookingItem.id,
+            status: 'CONFIRMED',
+            catalogItemId: service.id,
+            title: service.title,
+            quantity: decimal(1),
+            listUnitPrice: service.price,
+            customUnitPrice: customPrice,
+            unitPrice: base,
+            lineSubtotal: base,
+            discountTotal: decimal(0),
+            lineTotal: base,
+            sellerStaffId: staff.id,
+            sellerName: staff.name,
+            confirmedAt: endAt,
+            occurredAt: endAt,
+          },
+        },
+      },
+      include: { items: true },
     });
-    stats.earnings++;
-    stats.commissionSum = stats.commissionSum.add(amount);
+    const orderItem = order.items[0];
+    stats.serviceOrderItems++;
+
+    if (plan && plan.serviceCommissionPercent != null) {
+      const percent = plan.serviceCommissionPercent;
+      const amount = commission(base, percent);
+      const earnedOn = dateOnly(zonedDateStr(startAt, timezone));
+      earningRows.push({
+        locationId,
+        staffId: staff.id,
+        type: 'SERVICE_COMMISSION',
+        source: 'BOOKING',
+        earnedOn,
+        amount,
+        currency,
+        baseAmount: decimal(base),
+        ratePercent: decimal(percent),
+        description: service.title,
+        idempotencyKey: `booking-item:${bookingItem.id}:SERVICE_COMMISSION`,
+        compensationPlanId: plan.id,
+        bookingId: booking.id,
+        bookingItemId: bookingItem.id,
+        orderId: order.id,
+        orderItemId: orderItem.id,
+      });
+      stats.earnings++;
+      stats.commissionSum = stats.commissionSum.add(amount);
+    }
   }
 }
 
@@ -1636,6 +1684,7 @@ function printSummary({
   console.log(
     `  Commission earnings: ${stats.earnings} (sum ${stats.commissionSum.toFixed(2)} ${currency})`,
   );
+  console.log(`  Service order items: ${stats.serviceOrderItems}`);
   console.log(`  Hourly earnings: ${hourlyCount}`);
   console.log(`  Payroll periods: ${payroll.length}`);
   for (const p of payroll) {
