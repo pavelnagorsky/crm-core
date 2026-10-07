@@ -1,11 +1,5 @@
 import { createHash } from 'crypto';
-import {
-  forwardRef,
-  HttpStatus,
-  Inject,
-  Injectable,
-  Logger,
-} from '@nestjs/common';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import {
   BookingExecutionMode as PrismaBookingExecutionMode,
   BookingVisibility,
@@ -28,7 +22,6 @@ import { ManualCreateBookingDto } from './dto/manual-create-booking.dto.js';
 import { BookingSource } from './enums/booking-source.enum.js';
 import { BookingStatus } from './enums/booking-status.enum.js';
 import { isSelfBookingBlocked } from './client-ban.rules.js';
-import { BookingChannelAttributionService } from '../booking-channels/booking-channel-attribution.service.js';
 import { BookingAttribution } from './interfaces/booking-attribution.interface.js';
 import { PublicBookingRequestContext } from './interfaces/public-booking-request-context.interface.js';
 import { PublicBookingRateLimiter } from './public-booking-rate-limiter.js';
@@ -53,29 +46,25 @@ export class BookingCreateService {
 
   constructor(
     private readonly db: DatabaseService,
-    @Inject(forwardRef(() => CalendarService))
     private readonly calendarService: CalendarService,
     private readonly clientsService: ClientsService,
     private readonly staffService: StaffService,
     private readonly eventEmitter: EventEmitter2,
     private readonly bookingClientService: BookingClientService,
-    @Inject(forwardRef(() => BookingChannelAttributionService))
-    private readonly attribution: BookingChannelAttributionService,
     private readonly rateLimiter: PublicBookingRateLimiter,
   ) {}
 
   async createPublicBooking(
     locationId: string,
     dto: CreateBookingDto,
+    attribution: BookingAttribution = {
+      source: BookingSource.PUBLIC_PAGE,
+      bookingPageId: null,
+      bookingWidgetId: null,
+    },
     context: PublicBookingRequestContext = { ip: 'unknown' },
   ): Promise<BookingWithItems> {
     this.rateLimiter.assertAllowed(dto.phone, context.ip);
-    const attribution = await this.attribution.resolve(
-      locationId,
-      dto.bookingPageId,
-      dto.bookingWidgetId,
-      context.origin,
-    );
     const { booking, timezone, currency, bundleTitle } = await this.create(
       locationId,
       attribution,

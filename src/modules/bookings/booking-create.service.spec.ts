@@ -18,17 +18,8 @@ const dto: CreateBookingDto = {
   phone: '+375291112233',
 };
 
-function channelDeps(): [never, never] {
-  return [
-    {
-      resolve: vi.fn().mockResolvedValue({
-        source: BookingSource.PUBLIC_PAGE,
-        bookingPageId: null,
-        bookingWidgetId: null,
-      }),
-    } as never,
-    { assertAllowed: vi.fn() } as never,
-  ];
+function channelDeps(): [never] {
+  return [{ assertAllowed: vi.fn() } as never];
 }
 
 function setup() {

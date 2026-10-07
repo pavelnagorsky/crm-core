@@ -1,12 +1,4 @@
-import {
-  Controller,
-  forwardRef,
-  Get,
-  Inject,
-  Param,
-  ParseUUIDPipe,
-  Req,
-} from '@nestjs/common';
+import { Controller, Get, Param, ParseUUIDPipe, Req } from '@nestjs/common';
 import {
   ApiForbiddenResponse,
   ApiNotFoundResponse,
@@ -34,7 +26,6 @@ export class PublicBookingChannelsController {
     private readonly pages: BookingPagesService,
     private readonly widgets: BookingWidgetsService,
     private readonly locationService: LocationService,
-    @Inject(forwardRef(() => BookingsService))
     private readonly bookingsService: BookingsService,
   ) {}
 

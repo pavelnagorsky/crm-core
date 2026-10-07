@@ -11,7 +11,6 @@ import {
   Post,
   Put,
   Query,
-  Req,
   Res,
   StreamableFile,
   UseGuards,
@@ -20,7 +19,6 @@ import {
   ApiBearerAuth,
   ApiConflictResponse,
   ApiCreatedResponse,
-  ApiForbiddenResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
@@ -30,14 +28,12 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { BusinessRole, CancelledBy } from '@prisma/client';
-import type { Request } from 'express';
 import { BookingsService } from './bookings.service.js';
 import { BookingCreateService } from './booking-create.service.js';
 import { BookingClientService } from './booking-client.service.js';
 import { BookingSetupResponseDto } from './dto/booking-setup-response.dto.js';
 import { BookingResolveRequestDto } from './dto/booking-resolve-request.dto.js';
 import { BookingResolveResponseDto } from './dto/booking-resolve-response.dto.js';
-import { CreateBookingDto } from './dto/create-booking.dto.js';
 import { ManualCreateBookingDto } from './dto/manual-create-booking.dto.js';
 import { UpdateBookingDto } from './dto/update-booking.dto.js';
 import { CancelBookingDto } from './dto/cancel-booking.dto.js';
@@ -64,7 +60,6 @@ import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 import { assertLocationRole } from '../auth/guards/assert-location-role.js';
 import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
-import { clientIp, requestOrigin } from '../../shared/http/request-context.js';
 
 @ApiTags('Bookings')
 @Controller()
@@ -104,31 +99,6 @@ export class BookingsController {
     return BaseResponseDto.success(
       await this.bookingsService.resolveBookingSelection(locationId, dto),
     );
-  }
-
-  @ApiOperation({ summary: 'Book an appointment (public / client-facing)' })
-  @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
-  @ApiNotFoundResponse({ description: 'Location, service, or staff not found' })
-  @ApiForbiddenResponse({
-    description:
-      'Location is closed for public booking, or this phone is banned from online booking',
-  })
-  @ApiConflictResponse({ description: 'Slot is no longer available' })
-  @Post('public/locations/:locationId/bookings')
-  async createPublic(
-    @Param('locationId', ParseUUIDPipe) locationId: string,
-    @Body() dto: CreateBookingDto,
-    @Req() req: Request,
-  ): Promise<BaseResponseDto<IdResponseDto>> {
-    const booking = await this.bookingCreateService.createPublicBooking(
-      locationId,
-      dto,
-      {
-        ip: clientIp(req),
-        origin: requestOrigin(req),
-      },
-    );
-    return BaseResponseDto.success({ id: booking.id });
   }
 
   @ApiOperation({ summary: 'Get booking info via client management token' })

@@ -1,4 +1,4 @@
-import { forwardRef, Module } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { PassportModule } from '@nestjs/passport';
 import { BookingsService } from './bookings.service.js';
 import { BookingCreateService } from './booking-create.service.js';
@@ -16,20 +16,16 @@ import { CalendarModule } from '../calendar/calendar.module.js';
 import { ClientsModule } from '../clients/clients.module.js';
 import { StaffModule } from '../staff/staff.module.js';
 import { PayrollModule } from '../payroll/payroll.module.js';
-import { BookingChannelsModule } from '../booking-channels/booking-channels.module.js';
 
 @Module({
-  // Booking create and reschedule use CalendarService; the calendar view reads bookings back.
-  // Public booking creation attributes the row to a page or widget owned by BookingChannelsModule.
   imports: [
     PassportModule,
     LocationModule,
-    forwardRef(() => CalendarModule),
+    CalendarModule,
     ClientsModule,
     StaffModule,
     PayrollModule,
     I18nModule,
-    forwardRef(() => BookingChannelsModule),
   ],
   controllers: [BookingsController],
   providers: [
@@ -43,6 +39,11 @@ import { BookingChannelsModule } from '../booking-channels/booking-channels.modu
     PublicBookingRateLimiter,
     JwtBookingClientStrategy,
   ],
-  exports: [BookingsAggregatesService, CalendarBookingReader, BookingsService],
+  exports: [
+    BookingsAggregatesService,
+    CalendarBookingReader,
+    BookingCreateService,
+    BookingsService,
+  ],
 })
 export class BookingsModule {}
