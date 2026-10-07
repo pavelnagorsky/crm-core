@@ -18,6 +18,12 @@ const dto: CreateBookingDto = {
   phone: '+375291112233',
 };
 
+const publicAttribution = {
+  source: BookingSource.PUBLIC_PAGE,
+  bookingPageId: null,
+  bookingWidgetId: null,
+};
+
 function channelDeps(): [never] {
   return [{ assertAllowed: vi.fn() } as never];
 }
@@ -69,10 +75,12 @@ describe('BookingCreateService client ban', () => {
       bannedAt: new Date('2026-09-01T00:00:00.000Z'),
     });
 
-    const error = await service.createPublicBooking('business-1', dto).then(
-      () => null,
-      (caught: unknown) => caught,
-    );
+    const error = await service
+      .createPublicBooking('business-1', dto, publicAttribution)
+      .then(
+        () => null,
+        (caught: unknown) => caught,
+      );
 
     expect(error).toBeInstanceOf(AppException);
     expect((error as AppException).errorCode).toBe('CLIENT_BANNED');
@@ -105,10 +113,12 @@ describe('BookingCreateService client ban', () => {
     const { service, clients } = setup();
     clients.resolveForBooking.mockResolvedValue({ bannedAt: null });
 
-    const error = await service.createPublicBooking('business-1', dto).then(
-      () => null,
-      (caught: unknown) => caught,
-    );
+    const error = await service
+      .createPublicBooking('business-1', dto, publicAttribution)
+      .then(
+        () => null,
+        (caught: unknown) => caught,
+      );
 
     expect(error).toBeInstanceOf(AppException);
     expect((error as AppException).errorCode).toBe('BOOKING_STAFF_NOT_FOUND');
@@ -121,7 +131,11 @@ describe('BookingCreateService client ban', () => {
     });
 
     await service
-      .createPublicBooking('business-1', { ...dto, lastName: undefined })
+      .createPublicBooking(
+        'business-1',
+        { ...dto, lastName: undefined },
+        publicAttribution,
+      )
       .then(
         () => null,
         () => null,
@@ -266,7 +280,7 @@ describe('BookingCreateService calendar link', () => {
       ...channelDeps(),
     );
 
-    await service.createPublicBooking('business-1', dto);
+    await service.createPublicBooking('business-1', dto, publicAttribution);
 
     expect(tx.calendarEvent.create).toHaveBeenCalledWith({
       data: expect.objectContaining({

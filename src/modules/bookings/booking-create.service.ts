@@ -55,11 +55,7 @@ export class BookingCreateService {
   async createPublicBooking(
     locationId: string,
     dto: CreateBookingDto,
-    attribution: BookingAttribution = {
-      source: BookingSource.PUBLIC_PAGE,
-      bookingPageId: null,
-      bookingWidgetId: null,
-    },
+    attribution: BookingAttribution,
     context: PublicBookingRequestContext = { ip: 'unknown' },
   ): Promise<BookingWithItems> {
     this.rateLimiter.assertAllowed(dto.phone, context.ip);
