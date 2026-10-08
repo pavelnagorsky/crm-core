@@ -227,6 +227,85 @@ describe('StaffEarningsService', () => {
     });
   });
 
+  it('restores the net commission when a reversed booking is completed again', async () => {
+    const tx = {
+      payrollPeriod: { findFirst: vi.fn().mockResolvedValue(null) },
+      staffEarning: {
+        findMany: vi.fn().mockResolvedValue([
+          { staffId: 'anna', amount: new Prisma.Decimal('20.00') },
+          { staffId: 'anna', amount: new Prisma.Decimal('-20.00') },
+        ]),
+        create: vi.fn(({ data }) =>
+          Promise.resolve({ id: 'adjustment-1', ...data }),
+        ),
+        findUnique: vi.fn(),
+      },
+    };
+    compensation.resolveForDate.mockResolvedValue({
+      id: 'plan-1',
+    } as CompensationPlanWithRates);
+    compensation.resolveServicePercent.mockReturnValue('40');
+
+    const corrections = await service.syncForCompletedBooking(
+      booking(),
+      { name: 'Owner' },
+      tx as never,
+    );
+
+    expect(corrections[0].amount.toFixed(2)).toBe('20.00');
+    expect(tx.staffEarning.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        type: 'CORRECTION',
+        bookingItemId: 'booking-item-1',
+        amount: expect.anything(),
+      }),
+    });
+  });
+
+  it('moves booking commission from the old staff member to the new one', async () => {
+    const tx = {
+      payrollPeriod: { findFirst: vi.fn().mockResolvedValue(null) },
+      staffEarning: {
+        findMany: vi
+          .fn()
+          .mockResolvedValue([
+            { staffId: 'anna', amount: new Prisma.Decimal('20.00') },
+          ]),
+        create: vi.fn(({ data }) =>
+          Promise.resolve({ id: `adjustment-${data.staffId}`, ...data }),
+        ),
+        findUnique: vi.fn(),
+      },
+    };
+    compensation.resolveForDate.mockResolvedValue({
+      id: 'plan-1',
+    } as CompensationPlanWithRates);
+    compensation.resolveServicePercent.mockReturnValue('40');
+
+    const corrections = await service.syncForCompletedBooking(
+      booking({
+        items: [
+          {
+            ...booking().items[0],
+            staffId: 'boris',
+            staffName: 'Boris',
+          },
+        ],
+      }),
+      { name: 'Owner' },
+      tx as never,
+    );
+
+    const byStaff = new Map(
+      corrections.map((earning) => [
+        earning.staffId,
+        earning.amount.toFixed(2),
+      ]),
+    );
+    expect(byStaff.get('anna')).toBe('-20.00');
+    expect(byStaff.get('boris')).toBe('20.00');
+  });
+
   it('materializes product commission from a final order line amount', async () => {
     const tx = {
       payrollPeriod: { findFirst: vi.fn().mockResolvedValue(null) },

@@ -99,6 +99,7 @@ describe('BookingsService.completeElapsed', () => {
   db.$transaction = vi.fn((callback) => callback(db));
   const earnings = {
     recordForCompletedBooking: vi.fn(),
+    syncForCompletedBooking: vi.fn(),
   };
   const order = { id: 'order-1', items: [] };
   const orders = {
@@ -145,6 +146,15 @@ describe('BookingsService.completeElapsed', () => {
       db,
       order,
     );
+    expect(earnings.syncForCompletedBooking).toHaveBeenCalledWith(
+      {
+        ...row,
+        status: BookingStatus.COMPLETED,
+      },
+      expect.objectContaining({ name: 'System' }),
+      db,
+      order,
+    );
     expect(emitter.emit).toHaveBeenCalled();
   });
 
@@ -158,6 +168,92 @@ describe('BookingsService.completeElapsed', () => {
       service.completeElapsed(new Date('2026-09-24T12:00:00.000Z')),
     ).resolves.toBe(0);
     expect(earnings.recordForCompletedBooking).not.toHaveBeenCalled();
+    expect(earnings.syncForCompletedBooking).not.toHaveBeenCalled();
+  });
+});
+
+describe('BookingsService.updateStatus transactionality', () => {
+  const token = {
+    sub: 'user-1',
+    role: UserRole.ADMIN,
+    memberships: [],
+  } as TokenPayloadDto;
+  const committed = { orderChanged: false };
+  const db = {
+    booking: {
+      findFirst: vi.fn(),
+    },
+    $transaction: vi.fn(),
+  };
+  const order = { id: 'order-1', items: [] };
+  const orders = {
+    syncCompletedBooking: vi.fn(),
+  };
+  const earnings = {
+    recordForCompletedBooking: vi.fn(),
+    syncForCompletedBooking: vi.fn(),
+  };
+  let service: BookingsService;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    committed.orderChanged = false;
+    db.booking.findFirst.mockResolvedValue(
+      booking({ status: BookingStatus.CONFIRMED }),
+    );
+    db.$transaction.mockImplementation(async (callback) => {
+      const tx = {
+        booking: {
+          update: vi
+            .fn()
+            .mockResolvedValue(booking({ status: BookingStatus.COMPLETED })),
+        },
+        orderChanged: committed.orderChanged,
+      };
+      const result = await callback(tx);
+      committed.orderChanged = tx.orderChanged;
+      return result;
+    });
+    orders.syncCompletedBooking.mockImplementation(
+      async (_booking, _actor, tx) => {
+        tx.orderChanged = true;
+        return order;
+      },
+    );
+    earnings.recordForCompletedBooking.mockResolvedValue([]);
+    earnings.syncForCompletedBooking.mockRejectedValue(
+      new Error('payroll period locked'),
+    );
+
+    const module = await Test.createTestingModule({
+      providers: [
+        BookingsService,
+        BookingMutationService,
+        BookingReadService,
+        BookingSetupService,
+        { provide: DatabaseService, useValue: db },
+        { provide: CalendarService, useValue: {} },
+        { provide: StaffService, useValue: {} },
+        { provide: LocationService, useValue: {} },
+        { provide: ServiceCatalogService, useValue: serviceCatalog },
+        { provide: StaffEarningsService, useValue: earnings },
+        { provide: OrdersService, useValue: orders },
+        { provide: EventEmitter2, useValue: { emit: vi.fn() } },
+      ],
+    }).compile();
+    service = module.get(BookingsService);
+  });
+
+  it('rolls back order sync when payroll sync rejects', async () => {
+    await expect(
+      service.updateStatus('biz', 'booking-1', token, {
+        status: BookingStatus.COMPLETED,
+      }),
+    ).rejects.toThrow('payroll period locked');
+
+    expect(orders.syncCompletedBooking).toHaveBeenCalled();
+    expect(earnings.syncForCompletedBooking).toHaveBeenCalled();
+    expect(committed.orderChanged).toBe(false);
   });
 });
 

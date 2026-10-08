@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   HttpStatus,
   Injectable,
@@ -67,6 +68,9 @@ export class OrdersService {
     dto: CreateOrderDto,
     actor: AuditActor,
   ): Promise<OrderWithItems> {
+    if (dto.confirmImmediately) {
+      return this.createAndConfirmProductSale(locationId, dto, actor);
+    }
     const draft = await this.resolveDraft(locationId, dto, actor);
     const order = await this.db.order.create({
       data: {
@@ -95,6 +99,84 @@ export class OrdersService {
       { totalAmount: order.totalAmount.toFixed(2), currency: order.currency },
     );
     return order;
+  }
+
+  private async createAndConfirmProductSale(
+    locationId: string,
+    dto: CreateOrderDto,
+    actor: AuditActor,
+  ): Promise<OrderWithItems> {
+    const idempotencyKey = dto.idempotencyKey?.trim();
+    if (!idempotencyKey) {
+      throw new BadRequestException(
+        'idempotencyKey is required for confirmed product sales',
+      );
+    }
+    const result = await this.inTransaction(async (tx) => {
+      const existing = await tx.order.findFirst({
+        where: { locationId, idempotencyKey },
+        include: orderInclude,
+      });
+      if (existing) return { order: existing, draft: null, created: false };
+      const draft = await this.resolveDraft(
+        locationId,
+        dto,
+        actor,
+        undefined,
+        tx,
+      );
+      const order = await tx.order.upsert({
+        where: {
+          locationId_idempotencyKey: {
+            locationId,
+            idempotencyKey,
+          },
+        },
+        update: {},
+        create: {
+          locationId,
+          bookingId: null,
+          clientId: draft.clientId,
+          clientName: draft.clientName,
+          clientPhone: draft.clientPhone,
+          currency: draft.location.currency,
+          occurredAt: draft.occurredAt,
+          note: draft.note,
+          idempotencyKey,
+          createdById: actor.id ?? null,
+          createdByName: actor.name,
+          ...draft.totals,
+          items: { create: draft.items },
+        },
+        include: orderInclude,
+      });
+      const created = order.items.some(
+        (item) => item.status === OrderItemStatus.DRAFT,
+      );
+      const transition = await this.confirmProductItemsInTransaction(
+        locationId,
+        order.id,
+        order.items.map((item) => item.id),
+        tx,
+        order.occurredAt,
+      );
+      return { order: transition.order, draft, created };
+    });
+    if (result.created && result.draft) {
+      this.emit(
+        result.draft.location.brandId,
+        locationId,
+        result.order.id,
+        AuditEvent.ORDER_CREATED,
+        AuditActionType.CREATE,
+        actor,
+        {
+          totalAmount: result.order.totalAmount.toFixed(2),
+          currency: result.order.currency,
+        },
+      );
+    }
+    return result.order;
   }
 
   async update(
@@ -188,45 +270,39 @@ export class OrdersService {
       booking.locationId,
       booking.id,
     );
-    const existingByBookingItem = new Map(
-      order.items
-        .filter((item) => item.type === OrderItemType.SERVICE)
-        .map((item) => [item.bookingItemId, item]),
-    );
+    const confirmedByBookingItem = new Map<string, OrderWithItems['items']>();
+    for (const item of order.items) {
+      if (
+        item.type !== OrderItemType.SERVICE ||
+        item.status !== OrderItemStatus.CONFIRMED ||
+        !item.bookingItemId
+      ) {
+        continue;
+      }
+      confirmedByBookingItem.set(item.bookingItemId, [
+        ...(confirmedByBookingItem.get(item.bookingItemId) ?? []),
+        item,
+      ]);
+    }
 
     for (const item of booking.items) {
-      const existing = existingByBookingItem.get(item.id);
-      if (existing?.status === OrderItemStatus.CONFIRMED) continue;
-      const price = this.compute.priceLine(
-        new Prisma.Decimal(1),
-        item.chargedPrice,
-        item.customPrice,
-      );
       const confirmedAt = new Date();
-      const data = {
-        type: OrderItemType.SERVICE,
-        bookingItemId: item.id,
-        status: OrderItemStatus.CONFIRMED,
-        catalogItemId: item.serviceId,
-        title: item.serviceTitle,
-        quantity: new Prisma.Decimal(1),
-        listUnitPrice: price.listUnitPrice,
-        customUnitPrice: price.customUnitPrice,
-        unitPrice: price.unitPrice,
-        lineSubtotal: price.lineSubtotal,
-        discountTotal: price.discountTotal,
-        lineTotal: price.lineTotal,
-        sellerStaffId: item.staffId,
-        sellerName: item.staffName,
-        confirmedAt,
-        occurredAt: item.endAt,
-      };
-      if (existing) {
-        await tx.orderItem.update({
-          where: { id: existing.id },
-          data,
+      const data = this.completedBookingServiceItemData(item, confirmedAt);
+      const existing = confirmedByBookingItem.get(item.id) ?? [];
+      const current = existing.find((row) =>
+        this.matchesCompletedBookingServiceItem(row, data),
+      );
+      const stale = current
+        ? existing.filter((row) => row.id !== current.id)
+        : existing;
+
+      if (stale.length > 0) {
+        await tx.orderItem.updateMany({
+          where: { id: { in: stale.map((row) => row.id) } },
+          data: { status: OrderItemStatus.REVERSED },
         });
-      } else {
+      }
+      if (!current) {
         await tx.orderItem.create({
           data: {
             ...data,
@@ -237,6 +313,79 @@ export class OrdersService {
     }
 
     return this.refreshTotals(tx, booking.locationId, order.id);
+  }
+
+  private completedBookingServiceItemData(
+    item: BookingWithItems['items'][number],
+    confirmedAt: Date,
+  ): Prisma.OrderItemUncheckedCreateWithoutOrderInput {
+    const price = this.compute.priceLine(
+      new Prisma.Decimal(1),
+      item.chargedPrice,
+      item.customPrice,
+    );
+    return {
+      type: OrderItemType.SERVICE,
+      bookingItemId: item.id,
+      status: OrderItemStatus.CONFIRMED,
+      catalogItemId: item.serviceId,
+      title: item.serviceTitle,
+      quantity: new Prisma.Decimal(1),
+      listUnitPrice: price.listUnitPrice,
+      customUnitPrice: price.customUnitPrice,
+      unitPrice: price.unitPrice,
+      lineSubtotal: price.lineSubtotal,
+      discountTotal: price.discountTotal,
+      lineTotal: price.lineTotal,
+      sellerStaffId: item.staffId,
+      sellerName: item.staffName,
+      confirmedAt,
+      occurredAt: item.endAt,
+    };
+  }
+
+  private matchesCompletedBookingServiceItem(
+    existing: OrderWithItems['items'][number],
+    expected: Prisma.OrderItemUncheckedCreateWithoutOrderInput,
+  ): boolean {
+    return (
+      existing.bookingItemId === expected.bookingItemId &&
+      existing.catalogItemId === expected.catalogItemId &&
+      existing.title === expected.title &&
+      this.decimalEquals(existing.quantity, expected.quantity) &&
+      this.decimalEquals(existing.listUnitPrice, expected.listUnitPrice) &&
+      this.decimalEqualsNullable(
+        existing.customUnitPrice,
+        expected.customUnitPrice,
+      ) &&
+      this.decimalEquals(existing.unitPrice, expected.unitPrice) &&
+      this.decimalEquals(existing.lineSubtotal, expected.lineSubtotal) &&
+      this.decimalEquals(existing.discountTotal, expected.discountTotal) &&
+      this.decimalEquals(existing.lineTotal, expected.lineTotal) &&
+      existing.sellerStaffId === expected.sellerStaffId &&
+      existing.sellerName === expected.sellerName &&
+      this.dateEquals(existing.occurredAt, expected.occurredAt)
+    );
+  }
+
+  private decimalEquals(left: Prisma.Decimal, right: unknown): boolean {
+    return right !== undefined && left.equals(String(right));
+  }
+
+  private decimalEqualsNullable(
+    left: Prisma.Decimal | null,
+    right: unknown,
+  ): boolean {
+    if (left === null || right == null) return left === null && right == null;
+    return left.equals(String(right));
+  }
+
+  private dateEquals(
+    left: Date | null,
+    right: Date | string | null | undefined,
+  ): boolean {
+    if (left === null || right == null) return left === null && right == null;
+    return left.getTime() === new Date(right).getTime();
   }
 
   async reverseCompletedBookingServices(
@@ -480,18 +629,41 @@ export class OrdersService {
   ): Promise<OrderTransition> {
     return this.inTransaction(async (tx) => {
       await this.lockOrder(tx, orderId);
-      const order = await this.findInTransaction(tx, locationId, orderId);
-      this.assertActive(order.status);
-      const item = order.items.find((row) => row.id === orderItemId);
+      return this.confirmProductItemsInTransaction(
+        locationId,
+        orderId,
+        [orderItemId],
+        tx,
+      );
+    });
+  }
+
+  private async confirmProductItemsInTransaction(
+    locationId: string,
+    orderId: string,
+    orderItemIds: string[],
+    tx: Prisma.TransactionClient,
+    occurredAt = new Date(),
+  ): Promise<OrderTransition> {
+    const order = await this.findInTransaction(tx, locationId, orderId);
+    this.assertActive(order.status);
+    const targetIds = new Set(orderItemIds);
+    const items = order.items.filter((row) => targetIds.has(row.id));
+    if (items.length !== targetIds.size) {
+      throw new AppException(
+        ErrorCode.ORDER_ITEM_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    const pending: OrderWithItems['items'] = [];
+    for (const item of items) {
       if (!item) {
         throw new AppException(
           ErrorCode.ORDER_ITEM_NOT_FOUND,
           HttpStatus.NOT_FOUND,
         );
       }
-      if (item.status === OrderItemStatus.CONFIRMED) {
-        return { order, changed: false };
-      }
+      if (item.status === OrderItemStatus.CONFIRMED) continue;
       if (
         item.status !== OrderItemStatus.DRAFT ||
         item.type !== OrderItemType.PRODUCT ||
@@ -502,95 +674,103 @@ export class OrdersService {
           HttpStatus.CONFLICT,
         );
       }
-      const productIds = [item.catalogItemId];
-      const products = await this.products.resolveForSale(
-        locationId,
-        productIds,
-        tx,
+      pending.push(item);
+    }
+    if (pending.length === 0) return { order, changed: false };
+
+    const productIds = pending.map((item) => item.catalogItemId!);
+    const products = await this.products.resolveForSale(
+      locationId,
+      productIds,
+      tx,
+    );
+    if (products.length !== productIds.length) {
+      throw new AppException(
+        ErrorCode.ORDER_PRODUCT_NOT_SELLABLE,
+        HttpStatus.CONFLICT,
       );
-      if (products.length !== productIds.length) {
-        throw new AppException(
-          ErrorCode.ORDER_PRODUCT_NOT_SELLABLE,
-          HttpStatus.CONFLICT,
-        );
-      }
-      const sellers = await this.staff.resolveForProductSale(
-        locationId,
-        item.sellerStaffId ? [item.sellerStaffId] : [],
-        tx,
+    }
+    const sellerIds = [
+      ...new Set(
+        pending.flatMap((item) =>
+          item.sellerStaffId ? [item.sellerStaffId] : [],
+        ),
+      ),
+    ];
+    const sellers = await this.staff.resolveForProductSale(
+      locationId,
+      sellerIds,
+      tx,
+    );
+    if (sellers.length !== sellerIds.length) {
+      throw new AppException(
+        ErrorCode.ORDER_SELLER_INVALID,
+        HttpStatus.CONFLICT,
       );
-      const sellerIds = new Set(sellers.map((seller) => seller.id));
-      if (item.sellerStaffId && !sellerIds.has(item.sellerStaffId)) {
-        throw new AppException(
-          ErrorCode.ORDER_SELLER_INVALID,
-          HttpStatus.CONFLICT,
-        );
-      }
-      const byProduct = new Map(products.map((row) => [row.productId, row]));
-      const product = byProduct.get(item.catalogItemId)!;
-      const saleLines: InventorySaleLine[] = [
-        {
-          orderItemId: item.id,
-          productLocationId: product.id,
-          productId: product.productId,
-          productName: item.title,
-          productSku: item.sku,
-          productUnit: product.product.unit,
-          quantity: item.quantity.toString(),
-          trackInventory: product.trackInventory,
-        },
-      ];
-      const occurredAt = new Date();
-      const costs = await this.inventory.postSale(
-        locationId,
-        orderId,
-        occurredAt,
-        saleLines,
-        tx,
-      );
-      for (const cost of costs) {
-        await tx.orderItem.update({
-          where: { id: cost.orderItemId },
-          data: {
-            unitCostSnapshot: cost.unitCost,
-            lineCostSnapshot: cost.lineCost,
-          },
-        });
-      }
-      const commissionLines: ProductOrderCommissionLine[] = order.items.flatMap(
-        (row) =>
-          row.id === item.id && row.sellerStaffId
-            ? [
-                {
-                  orderItemId: row.id,
-                  staffId: row.sellerStaffId,
-                  amount: row.lineTotal,
-                  description: row.title,
-                },
-              ]
-            : [],
-      );
-      await this.earnings.recordForProductOrder(
-        locationId,
-        orderId,
-        occurredAt,
-        order.currency,
-        commissionLines,
-        tx,
-      );
-      await tx.orderItem.update({
-        where: { id: item.id },
-        data: {
-          status: OrderItemStatus.CONFIRMED,
-          confirmedAt: occurredAt,
-          occurredAt,
-        },
-      });
+    }
+    const byProduct = new Map(products.map((row) => [row.productId, row]));
+    const saleLines: InventorySaleLine[] = pending.map((item) => {
+      const product = byProduct.get(item.catalogItemId!)!;
       return {
-        order: await this.findInTransaction(tx, locationId, orderId),
-        changed: true,
+        orderItemId: item.id,
+        productLocationId: product.id,
+        productId: product.productId,
+        productName: item.title,
+        productSku: item.sku,
+        productUnit: product.product.unit,
+        quantity: item.quantity.toString(),
+        trackInventory: product.trackInventory,
       };
     });
+    const costs = await this.inventory.postSale(
+      locationId,
+      orderId,
+      occurredAt,
+      saleLines,
+      tx,
+    );
+    for (const cost of costs) {
+      await tx.orderItem.update({
+        where: { id: cost.orderItemId },
+        data: {
+          unitCostSnapshot: cost.unitCost,
+          lineCostSnapshot: cost.lineCost,
+        },
+      });
+    }
+    const commissionLines: ProductOrderCommissionLine[] = pending.flatMap(
+      (item) =>
+        item.sellerStaffId
+          ? [
+              {
+                orderItemId: item.id,
+                staffId: item.sellerStaffId,
+                amount: item.lineTotal,
+                description: item.title,
+              },
+            ]
+          : [],
+    );
+    await this.earnings.recordForProductOrder(
+      locationId,
+      orderId,
+      occurredAt,
+      order.currency,
+      commissionLines,
+      tx,
+    );
+    await tx.orderItem.updateMany({
+      where: { id: { in: pending.map((item) => item.id) } },
+      data: {
+        status: OrderItemStatus.CONFIRMED,
+        confirmedAt: occurredAt,
+        occurredAt,
+      },
+    });
+    return {
+      order: await this.findInTransaction(tx, locationId, orderId),
+      changed: true,
+    };
   }
 
   private async void(

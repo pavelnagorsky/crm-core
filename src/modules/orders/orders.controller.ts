@@ -44,7 +44,9 @@ import { OrdersService } from './orders.service.js';
 export class OrdersController {
   constructor(private readonly orders: OrdersService) {}
 
-  @ApiOperation({ summary: 'Create an active product order with draft items' })
+  @ApiOperation({
+    summary: 'Create an active product order, optionally confirmed immediately',
+  })
   @ApiCreatedResponse({ type: ApiResponse(OrderResponseDto) })
   @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Post()

@@ -197,6 +197,12 @@ export class BookingMutationService {
       ) {
         const order = await this.orders.syncCompletedBooking(result, actor, tx);
         await this.staffEarnings.recordForCompletedBooking(result, tx, order);
+        await this.staffEarnings.syncForCompletedBooking(
+          result,
+          actor,
+          tx,
+          order,
+        );
       } else if (reversesCommission) {
         await this.orders.reverseCompletedBookingServices(result, tx);
         await this.staffEarnings.reverseForBooking(
@@ -299,6 +305,12 @@ export class BookingMutationService {
           tx,
         );
         await this.staffEarnings.recordForCompletedBooking(updated, tx, order);
+        await this.staffEarnings.syncForCompletedBooking(
+          updated,
+          actor,
+          tx,
+          order,
+        );
         return true;
       });
       if (!didComplete) continue;

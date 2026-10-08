@@ -21,27 +21,27 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { BusinessRole } from '@prisma/client';
-import { LocationRBAC } from '../auth/decorators/location-rbac.decorator.js';
+import { LocationRBAC } from '../../auth/decorators/location-rbac.decorator.js';
 import {
   ApiResponse,
   ApiResponseArray,
   BaseResponseDto,
-} from '../../shared/dto/base-response.dto.js';
-import { CalendarService } from './calendar.service.js';
-import { CreateCalendarEventDto } from './dto/create-calendar-event.dto.js';
-import { UpdateCalendarEventDto } from './dto/update-calendar-event.dto.js';
-import { DeleteCalendarEventDto } from './dto/delete-calendar-event.dto.js';
-import { CalendarEventResponseDto } from './dto/calendar-event-response.dto.js';
-import { MoveCalendarEventDto } from './dto/move-calendar-event.dto.js';
-import { GetCalendarRequestDto } from './dto/get-calendar-request.dto.js';
-import { GetCalendarResponseDto } from './dto/get-calendar-response.dto.js';
-import { AvailableSlotsRequestDto } from './dto/available-slots-request.dto.js';
-import { AvailableSlotsDayDto } from './dto/available-slots-day.dto.js';
-import { ManualAvailableSlotsRequestDto } from './dto/manual-available-slots-request.dto.js';
-import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
-import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
-import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
-import { CalendarViewService } from './services/calendar-view.service.js';
+} from '../../../shared/dto/base-response.dto.js';
+import { CalendarService } from '../calendar.service.js';
+import { CreateCalendarEventDto } from '../dto/create-calendar-event.dto.js';
+import { UpdateCalendarEventDto } from '../dto/update-calendar-event.dto.js';
+import { DeleteCalendarEventDto } from '../dto/delete-calendar-event.dto.js';
+import { CalendarEventResponseDto } from '../dto/calendar-event-response.dto.js';
+import { MoveCalendarEventDto } from '../dto/move-calendar-event.dto.js';
+import { GetCalendarRequestDto } from '../dto/get-calendar-request.dto.js';
+import { GetCalendarResponseDto } from '../dto/get-calendar-response.dto.js';
+import { AvailableSlotsRequestDto } from '../dto/available-slots-request.dto.js';
+import { AvailableSlotsDayDto } from '../dto/available-slots-day.dto.js';
+import { ManualAvailableSlotsRequestDto } from '../dto/manual-available-slots-request.dto.js';
+import { TokenPayload } from '../../auth/decorators/token-payload.decorator.js';
+import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
+import { auditActorFromToken } from '../../audit/utils/audit-actor-from-token.js';
+import { CalendarViewService } from './calendar-view.service.js';
 
 @ApiTags('Calendar')
 @Controller('locations/:locationId/calendar')

@@ -4,6 +4,7 @@ import {
   ArrayMinSize,
   ArrayMaxSize,
   IsArray,
+  IsBoolean,
   IsDateString,
   IsOptional,
   IsString,
@@ -39,6 +40,27 @@ export class CreateOrderDto {
   @IsString()
   @MaxLength(1000)
   note?: string | null;
+
+  @ApiProperty({
+    type: Boolean,
+    required: false,
+    description: 'Create and confirm all product items atomically.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  confirmImmediately?: boolean;
+
+  @ApiProperty({
+    type: String,
+    maxLength: 100,
+    required: false,
+    nullable: true,
+    description: 'Required when confirmImmediately is true.',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  idempotencyKey?: string | null;
 
   @ApiProperty({ type: () => OrderProductItemDto, isArray: true })
   @IsArray()

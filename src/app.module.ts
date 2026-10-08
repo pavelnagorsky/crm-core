@@ -12,7 +12,7 @@ import { LocationModule } from './modules/location/location.module.js';
 import { StaffModule } from './modules/staff/staff.module.js';
 import { ServicesModule } from './modules/services/services.module.js';
 import { ServicesAnalyticsModule } from './modules/services/analytics/services-analytics.module.js';
-import { CalendarApiModule } from './modules/calendar/calendar-api.module.js';
+import { CalendarApiModule } from './modules/calendar/api/calendar-api.module.js';
 import { ClientsModule } from './modules/clients/clients.module.js';
 import { ClientsAnalyticsModule } from './modules/clients/analytics/clients-analytics.module.js';
 import { BookingsModule } from './modules/bookings/bookings.module.js';

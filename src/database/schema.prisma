@@ -607,6 +607,7 @@ model Order {
   discountTotal   Decimal     @default(0) @db.Decimal(12, 2)
   totalAmount     Decimal     @default(0) @db.Decimal(12, 2)
   note            String?     @db.VarChar(1000)
+  idempotencyKey  String?
   createdById     String?
   createdByName   String      @db.VarChar(300)
   voidedAt        DateTime?
@@ -621,6 +622,7 @@ model Order {
   movements InventoryMovement[]
   earnings  StaffEarning[]
 
+  @@unique([locationId, idempotencyKey])
   @@index([locationId, occurredAt])
   @@index([locationId, status])
   @@index([clientId, occurredAt])
