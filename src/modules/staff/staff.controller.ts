@@ -38,7 +38,7 @@ import { StaffResponseDto } from './dto/staff-response.dto.js';
 import { StaffSearchRequestDto } from './dto/staff-search-request.dto.js';
 import { StaffSearchResponseDto } from './dto/staff-search-response.dto.js';
 import { StaffExportRequestDto } from './dto/staff-export-request.dto.js';
-import { StaffExportService } from './staff-export.service.js';
+import { StaffExportService } from './services/staff-export.service.js';
 import { XlsxService } from '../../shared/xlsx/xlsx.service.js';
 import { GetShiftsRequestDto } from './dto/get-shifts-request.dto.js';
 import { ReplaceShiftsRequestDto } from './dto/replace-shifts-request.dto.js';

@@ -6,7 +6,7 @@ import { BookingSetupResponseDto } from '../../bookings/dto/booking-setup-respon
 import {
   resolveBookingFormTheme,
   toBookingFormConfig,
-} from '../booking-form.js';
+} from '../rendering/booking-form.js';
 import { BookingFormConfigDto } from './booking-form-config.dto.js';
 import { BookingFormThemeDto } from './booking-form-theme.dto.js';
 import { PublicBookingWidgetDetailsDto } from './public-booking-widget-details.dto.js';

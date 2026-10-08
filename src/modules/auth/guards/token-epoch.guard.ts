@@ -8,7 +8,7 @@ import {
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { AuthenticatedRequest } from '../interfaces/authenticated-request.interface.js';
-import { TokenEpochRegistryService } from '../token-epoch-registry.service.js';
+import { TokenEpochRegistryService } from '../services/token-epoch-registry.service.js';
 
 @Injectable()
 export class TokenEpochGuard implements CanActivate {

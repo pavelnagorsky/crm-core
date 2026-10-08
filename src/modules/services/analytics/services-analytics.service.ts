@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { BookingStatus, Prisma } from '@prisma/client';
 import { MoneyService } from '../../../shared/money/money.service.js';
-import { BookingsAggregatesService } from '../../bookings/bookings-aggregates.service.js';
+import { BookingsAggregatesService } from '../../bookings/aggregates/bookings-aggregates.service.js';
 import { AggregateRange } from '../../bookings/interfaces/aggregate-range.interface.js';
 import { AggregateSnapshot } from '../../bookings/interfaces/aggregate-snapshot.interface.js';
 import { ServiceCount } from '../../bookings/interfaces/service-count.interface.js';

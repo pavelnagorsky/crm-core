@@ -1,6 +1,6 @@
 import { BookingStatus } from '@prisma/client';
 import { MoneyService } from '../../shared/money/money.service.js';
-import { BookingsAggregatesService } from '../bookings/bookings-aggregates.service.js';
+import { BookingsAggregatesService } from '../bookings/aggregates/bookings-aggregates.service.js';
 import { AggregateSnapshot } from '../bookings/interfaces/aggregate-snapshot.interface.js';
 import { OrdersAggregatesService } from '../orders/analytics/orders-aggregates.service.js';
 import { DashboardWidgetsRequestDto } from './dto/dashboard-widgets-request.dto.js';

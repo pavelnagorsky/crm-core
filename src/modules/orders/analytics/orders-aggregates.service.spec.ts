@@ -5,7 +5,7 @@ import {
   Prisma,
 } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
-import { BookingsAggregatesService } from '../../bookings/bookings-aggregates.service.js';
+import { BookingsAggregatesService } from '../../bookings/aggregates/bookings-aggregates.service.js';
 import { OrdersAggregatesService } from './orders-aggregates.service.js';
 
 describe('OrdersAggregatesService', () => {

@@ -1,7 +1,7 @@
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Client } from '@prisma/client';
 import { ClientsService } from './clients.service.js';
-import { AUDIT_EVENT } from '../audit/audit.constants.js';
+import { AUDIT_EVENT } from '../audit/constants/audit.constants.js';
 import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
 import { AuditActorRole } from '../audit/enums/audit-actor-role.enum.js';
 import { AuditEntity } from '../audit/enums/audit-entity.enum.js';

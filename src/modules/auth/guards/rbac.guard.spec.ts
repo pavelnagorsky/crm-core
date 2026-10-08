@@ -7,7 +7,7 @@ import { Reflector } from '@nestjs/core';
 import { BusinessRole, UserRole } from '@prisma/client';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { TokenPayloadDto } from '../dto/token-payload.dto.js';
-import { TokenEpochRegistryService } from '../token-epoch-registry.service.js';
+import { TokenEpochRegistryService } from '../services/token-epoch-registry.service.js';
 import { BrandRbacGuard } from './brand-rbac.guard.js';
 import { LocationRbacGuard } from './location-rbac.guard.js';
 import { RBAC_ROLES_KEY } from './rbac-roles-key.js';

@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { StaffService } from './staff.service.js';
-import { StaffCleanupService } from './staff-cleanup.service.js';
-import { StaffExportService } from './staff-export.service.js';
+import { StaffCleanupService } from './services/staff-cleanup.service.js';
+import { StaffExportService } from './services/staff-export.service.js';
 import { StaffController } from './staff.controller.js';
 import { StaffKpiController } from './kpi/staff-kpi.controller.js';
 import { StaffKpiService } from './kpi/staff-kpi.service.js';

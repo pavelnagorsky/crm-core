@@ -5,7 +5,7 @@ import { MoneyService } from '../../../shared/money/money.service.js';
 import { BookingExecutionMode } from '../../bookings/enums/booking-execution-mode.enum.js';
 import { ServiceStatus } from '../enums/service-status.enum.js';
 import { BundlePricingMode } from '../enums/bundle-pricing-mode.enum.js';
-import { BundleMetrics } from '../bundle-metrics.js';
+import { BundleMetrics } from '../utils/bundle-metrics.js';
 import { ServiceBundleView } from '../interfaces/service-bundle-view.interface.js';
 import { ServiceBundleItemResponseDto } from './service-bundle-item-response.dto.js';
 

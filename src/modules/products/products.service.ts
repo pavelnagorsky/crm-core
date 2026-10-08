@@ -16,7 +16,7 @@ import { PaginatedResult } from '../../shared/interfaces/paginated-result.interf
 import { MoneyService } from '../../shared/money/money.service.js';
 import { QuantityService } from '../../shared/quantity/quantity.service.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
-import { AUDIT_EVENT } from '../audit/audit.constants.js';
+import { AUDIT_EVENT } from '../audit/constants/audit.constants.js';
 import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
 import { AuditEntity } from '../audit/enums/audit-entity.enum.js';
 import { AuditEvent } from '../audit/enums/audit-event.enum.js';

@@ -4,7 +4,7 @@ import { BookingSource, BookingStatus, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { LocationService } from '../../location/location.service.js';
 import { StaffService } from '../../staff/staff.service.js';
-import { EarningCalculatorService } from './earning-calculator.service.js';
+import { EarningCalculatorService } from './services/earning-calculator.service.js';
 import type { CompensationPlanWithRates } from '../compensation/interfaces/compensation-plan-with-rates.interface.js';
 import { StaffCompensationService } from '../compensation/staff-compensation.service.js';
 import { PayrollPeriodEarningsRequestDto } from './dto/payroll-period-earnings-request.dto.js';

@@ -8,7 +8,7 @@ import { AuditLogItemDto } from './dto/audit-log-item.dto.js';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { stableOrderBy } from '../../shared/database/stable-order-by.js';
-import { AUDIT_EVENT } from './audit.constants.js';
+import { AUDIT_EVENT } from './constants/audit.constants.js';
 
 @Injectable()
 export class AuditService {

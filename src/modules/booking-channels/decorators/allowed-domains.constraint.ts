@@ -2,7 +2,7 @@ import {
   ValidatorConstraint,
   ValidatorConstraintInterface,
 } from 'class-validator';
-import { normalizeAllowedDomains } from '../allowed-domains.js';
+import { normalizeAllowedDomains } from '../rules/allowed-domains.js';
 
 @ValidatorConstraint({ name: 'allowedDomains', async: false })
 export class AllowedDomainsConstraint implements ValidatorConstraintInterface {

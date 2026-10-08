@@ -29,8 +29,8 @@ import {
 } from '@nestjs/swagger';
 import { BusinessRole, CancelledBy } from '@prisma/client';
 import { BookingsService } from './bookings.service.js';
-import { BookingCreateService } from './booking-create.service.js';
-import { BookingClientService } from './booking-client.service.js';
+import { BookingCreateService } from './services/booking-create.service.js';
+import { BookingClientService } from './services/booking-client.service.js';
 import { BookingSetupResponseDto } from './dto/booking-setup-response.dto.js';
 import { BookingResolveRequestDto } from './dto/booking-resolve-request.dto.js';
 import { BookingResolveResponseDto } from './dto/booking-resolve-response.dto.js';

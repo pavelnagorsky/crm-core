@@ -5,12 +5,12 @@ import { DashboardBucketService } from './services/dashboard-bucket.service.js';
 import { DashboardMetricFactory } from './services/dashboard-metric.factory.js';
 import { DashboardRangeService } from './services/dashboard-range.service.js';
 import { DashboardSeriesFactory } from './services/dashboard-series.factory.js';
-import { BookingsModule } from '../bookings/bookings.module.js';
+import { BookingsAggregatesModule } from '../bookings/aggregates/bookings-aggregates.module.js';
 import { LocationModule } from '../location/location.module.js';
 import { OrdersModule } from '../orders/orders.module.js';
 
 @Module({
-  imports: [BookingsModule, LocationModule, OrdersModule],
+  imports: [BookingsAggregatesModule, LocationModule, OrdersModule],
   controllers: [DashboardController],
   providers: [
     DashboardService,

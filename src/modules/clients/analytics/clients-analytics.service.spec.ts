@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { MoneyService } from '../../../shared/money/money.service.js';
-import { BookingsAggregatesService } from '../../bookings/bookings-aggregates.service.js';
+import { BookingsAggregatesService } from '../../bookings/aggregates/bookings-aggregates.service.js';
 import { ClientRecencyBucket } from '../../bookings/enums/client-recency-bucket.enum.js';
 import { ClientCohortBucket } from '../../bookings/interfaces/client-cohort-bucket.interface.js';
 import { ClientCohortSummary } from '../../bookings/interfaces/client-cohort-summary.interface.js';

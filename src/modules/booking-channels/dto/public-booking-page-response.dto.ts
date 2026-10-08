@@ -6,7 +6,7 @@ import { BookingPageWithCover } from '../interfaces/booking-page-with-cover.inte
 import {
   resolveBookingFormTheme,
   toBookingFormConfig,
-} from '../booking-form.js';
+} from '../rendering/booking-form.js';
 import { BookingFormConfigDto } from './booking-form-config.dto.js';
 import { BookingFormThemeDto } from './booking-form-theme.dto.js';
 import { PublicBookingPageDetailsDto } from './public-booking-page-details.dto.js';

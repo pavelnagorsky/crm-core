@@ -3,7 +3,7 @@ import { BookingStatus, Prisma, StaffShift } from '@prisma/client';
 import { MoneyService } from '../../../shared/money/money.service.js';
 import { TimeService } from '../../../shared/time/time.service.js';
 import { StaffService } from '../../staff/staff.service.js';
-import { BookingsAggregatesService } from '../bookings-aggregates.service.js';
+import { BookingsAggregatesService } from '../aggregates/bookings-aggregates.service.js';
 import { AggregateRange } from '../interfaces/aggregate-range.interface.js';
 import { AggregateSnapshot } from '../interfaces/aggregate-snapshot.interface.js';
 import { SeriesRow } from '../interfaces/series-row.interface.js';

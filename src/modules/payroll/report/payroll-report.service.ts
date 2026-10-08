@@ -12,7 +12,7 @@ import { PayrollPeriodResponseDto } from '../periods/dto/payroll-period-response
 import { PayrollResultResponseDto } from '../periods/dto/payroll-result-response.dto.js';
 import { PayrollService } from '../periods/payroll.service.js';
 import { StaffEarningsService } from '../earnings/staff-earnings.service.js';
-import { summarizePayrollReport } from './payroll-report-summary.js';
+import { summarizePayrollReport } from './utils/payroll-report-summary.js';
 import {
   DEFAULT_LANG,
   LocaleService,

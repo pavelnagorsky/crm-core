@@ -15,7 +15,7 @@ import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { PaginatedResult } from '../../../shared/interfaces/paginated-result.interface.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { OrderDirection } from '../../../shared/enums/order-direction.enum.js';
-import { AUDIT_EVENT } from '../../audit/audit.constants.js';
+import { AUDIT_EVENT } from '../../audit/constants/audit.constants.js';
 import { AuditActionType } from '../../audit/enums/audit-action-type.enum.js';
 import { AuditEntity } from '../../audit/enums/audit-entity.enum.js';
 import { AuditEvent } from '../../audit/enums/audit-event.enum.js';
@@ -32,11 +32,11 @@ import {
   PayrollPeriodSearchRequestDto,
 } from './dto/payroll-period-search-request.dto.js';
 import { PayrollPeriodWithResults } from './interfaces/payroll-period-with-results.interface.js';
-import { PayrollComputeService } from './payroll-compute.service.js';
+import { PayrollComputeService } from './services/payroll-compute.service.js';
 import { StaffCompensationService } from '../compensation/staff-compensation.service.js';
 import { StaffEarningsService } from '../earnings/staff-earnings.service.js';
 import { MoneyService } from '../../../shared/money/money.service.js';
-import { lockedPeriodWhere } from './locked-period.js';
+import { lockedPeriodWhere } from './utils/locked-period.js';
 
 const EDITABLE_STATUSES: PayrollPeriodStatus[] = [
   PayrollPeriodStatus.DRAFT,

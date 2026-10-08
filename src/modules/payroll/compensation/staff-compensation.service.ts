@@ -5,7 +5,7 @@ import { DatabaseService } from '../../../database/database.service.js';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
-import { AUDIT_EVENT } from '../../audit/audit.constants.js';
+import { AUDIT_EVENT } from '../../audit/constants/audit.constants.js';
 import { AuditActionType } from '../../audit/enums/audit-action-type.enum.js';
 import { AuditEntity } from '../../audit/enums/audit-entity.enum.js';
 import { AuditEvent } from '../../audit/enums/audit-event.enum.js';
@@ -17,7 +17,7 @@ import { StaffService } from '../../staff/staff.service.js';
 import { TimeService } from '../../../shared/time/time.service.js';
 import { CompensationSalaryMode } from './enums/compensation-salary-mode.enum.js';
 import { ReplaceCompensationPlanDto } from './dto/replace-compensation-plan.dto.js';
-import { assertCompensationVersionStart } from './compensation-plan.rules.js';
+import { assertCompensationVersionStart } from './rules/compensation-plan.rules.js';
 import { CompensationPlanWithRates } from './interfaces/compensation-plan-with-rates.interface.js';
 
 @Injectable()

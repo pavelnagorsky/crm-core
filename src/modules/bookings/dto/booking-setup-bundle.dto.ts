@@ -8,7 +8,7 @@ import {
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
 import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
 import { MoneyService } from '../../../shared/money/money.service.js';
-import { BundleMetrics } from '../../services/bundle-metrics.js';
+import { BundleMetrics } from '../../services/utils/bundle-metrics.js';
 import { ServiceCatalogKind } from '../../services/enums/service-catalog-kind.enum.js';
 import { BookingExecutionMode } from '../enums/booking-execution-mode.enum.js';
 

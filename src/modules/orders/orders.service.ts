@@ -18,7 +18,7 @@ import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
-import { AUDIT_EVENT } from '../audit/audit.constants.js';
+import { AUDIT_EVENT } from '../audit/constants/audit.constants.js';
 import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
 import { AuditEntity } from '../audit/enums/audit-entity.enum.js';
 import { AuditEvent } from '../audit/enums/audit-event.enum.js';
@@ -42,7 +42,7 @@ import { OrderTargetStatus } from './enums/order-target-status.enum.js';
 import { OrderTransition } from './interfaces/order-transition.interface.js';
 import { OrderWithItems } from './interfaces/order-with-items.interface.js';
 import { ResolvedOrderDraft } from './interfaces/resolved-order-draft.interface.js';
-import { OrderComputeService } from './order-compute.service.js';
+import { OrderComputeService } from './services/order-compute.service.js';
 
 const orderInclude = {
   items: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] },

@@ -8,7 +8,7 @@ import {
   ProductUnit,
 } from '@prisma/client';
 import { ForbiddenException } from '@nestjs/common';
-import { OrderComputeService } from './order-compute.service.js';
+import { OrderComputeService } from './services/order-compute.service.js';
 import { OrdersService } from './orders.service.js';
 
 const owner = { id: 'owner-1', name: 'Owner', role: AuditActorRole.OWNER };

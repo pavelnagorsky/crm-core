@@ -5,7 +5,7 @@ import { ConfigService } from '@nestjs/config';
 import { BusinessRole, User, UserRole } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
 import { UserService } from '../user/user.service.js';
-import { TokenEpochRegistryService } from './token-epoch-registry.service.js';
+import { TokenEpochRegistryService } from './services/token-epoch-registry.service.js';
 import { AuthService } from './auth.service.js';
 
 const user = {

@@ -14,7 +14,7 @@ import {
 import {
   catalogCategoryIdDescription,
   catalogItemIdDescription,
-} from '../../bookings/catalog-item-filter.js';
+} from '../../bookings/utils/catalog-item-filter.js';
 import { DashboardRangeDto } from './dashboard-range.dto.js';
 import { DashboardWidgetKey } from '../enums/dashboard-widget-key.enum.js';
 

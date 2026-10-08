@@ -1,6 +1,6 @@
 import { BookingStatus, Prisma, StaffShift } from '@prisma/client';
 import { MoneyService } from '../../../shared/money/money.service.js';
-import { BookingsAggregatesService } from '../bookings-aggregates.service.js';
+import { BookingsAggregatesService } from '../aggregates/bookings-aggregates.service.js';
 import { AggregateRange } from '../interfaces/aggregate-range.interface.js';
 import { AggregateSnapshot } from '../interfaces/aggregate-snapshot.interface.js';
 import { StaffService } from '../../staff/staff.service.js';

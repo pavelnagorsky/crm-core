@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
 import { BookingPageWithCover } from '../interfaces/booking-page-with-cover.interface.js';
-import { sanitizeBookingHtml } from '../booking-html.js';
+import { sanitizeBookingHtml } from '../rendering/booking-html.js';
 
 export class PublicBookingPageDetailsDto {
   @ApiProperty({ type: String })

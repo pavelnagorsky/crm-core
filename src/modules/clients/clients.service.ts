@@ -13,7 +13,7 @@ import { UpdateClientDto } from './dto/update-client.dto.js';
 import { SetClientBanDto } from './dto/set-client-ban.dto.js';
 import { ClientSearchRequestDto } from './dto/client-search-request.dto.js';
 import { ClientSearchOrderBy } from './enums/client-search-order-by.enum.js';
-import { AUDIT_EVENT } from '../audit/audit.constants.js';
+import { AUDIT_EVENT } from '../audit/constants/audit.constants.js';
 import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js';
 import { AuditEntity } from '../audit/enums/audit-entity.enum.js';

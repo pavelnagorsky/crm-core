@@ -27,7 +27,7 @@ import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { stableOrderBy } from '../../shared/database/stable-order-by.js';
 import { GetShiftsRequestDto } from './dto/get-shifts-request.dto.js';
 import { ReplaceShiftsRequestDto } from './dto/replace-shifts-request.dto.js';
-import { AUDIT_EVENT } from '../audit/audit.constants.js';
+import { AUDIT_EVENT } from '../audit/constants/audit.constants.js';
 import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js';
 import { AuditEntity } from '../audit/enums/audit-entity.enum.js';

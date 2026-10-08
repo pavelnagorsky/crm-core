@@ -41,7 +41,7 @@ import { ManualAvailableSlotsRequestDto } from './dto/manual-available-slots-req
 import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
-import { CalendarViewService } from './calendar-view.service.js';
+import { CalendarViewService } from './services/calendar-view.service.js';
 
 @ApiTags('Calendar')
 @Controller('locations/:locationId/calendar')

@@ -7,7 +7,7 @@ import {
 } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { MoneyService } from '../../../shared/money/money.service.js';
-import { BookingsAggregatesService } from '../../bookings/bookings-aggregates.service.js';
+import { BookingsAggregatesService } from '../../bookings/aggregates/bookings-aggregates.service.js';
 import { AggregateRange } from '../../bookings/interfaces/aggregate-range.interface.js';
 import { SeriesGranularity } from '../../dashboard/enums/series-granularity.enum.js';
 import { ClientSalesRange } from './interfaces/client-sales-range.interface.js';

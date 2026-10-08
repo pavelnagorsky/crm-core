@@ -1,16 +1,18 @@
 import { Module } from '@nestjs/common';
 import { PassportModule } from '@nestjs/passport';
 import { BookingsService } from './bookings.service.js';
-import { BookingCreateService } from './booking-create.service.js';
-import { BookingClientService } from './booking-client.service.js';
-import { BookingCronService } from './booking-cron.service.js';
-import { BookingsAggregatesService } from './bookings-aggregates.service.js';
+import { BookingCreateService } from './services/booking-create.service.js';
+import { BookingClientService } from './services/booking-client.service.js';
+import { BookingCronService } from './services/booking-cron.service.js';
 import { BookingsController } from './bookings.controller.js';
 import { BookingsExportService } from './bookings-export/bookings-export.service.js';
-import { PublicBookingRateLimiter } from './public-booking-rate-limiter.js';
+import { PublicBookingRateLimiter } from './services/public-booking-rate-limiter.js';
+import { BookingMutationService } from './services/mutation/booking-mutation.service.js';
+import { BookingReadService } from './services/read/booking-read.service.js';
+import { BookingSetupService } from './services/setup/booking-setup.service.js';
 import { I18nModule } from '../../shared/i18n/i18n.module.js';
-import { JwtBookingClientStrategy } from './strategy/jwt-booking-client.strategy.js';
-import { CalendarBookingReader } from '../calendar/calendar-booking-reader.js';
+import { JwtBookingClientStrategy } from './strategies/jwt-booking-client.strategy.js';
+import { CalendarBookingReader } from '../calendar/tokens/calendar-booking-reader.js';
 import { LocationModule } from '../location/location.module.js';
 import { CalendarModule } from '../calendar/calendar.module.js';
 import { ClientsModule } from '../clients/clients.module.js';
@@ -38,13 +40,14 @@ import { OrdersModule } from '../orders/orders.module.js';
     BookingCreateService,
     BookingClientService,
     BookingCronService,
-    BookingsAggregatesService,
+    BookingMutationService,
+    BookingReadService,
+    BookingSetupService,
     BookingsExportService,
     PublicBookingRateLimiter,
     JwtBookingClientStrategy,
   ],
   exports: [
-    BookingsAggregatesService,
     CalendarBookingReader,
     BookingCreateService,
     BookingsService,

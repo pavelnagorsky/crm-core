@@ -3,11 +3,11 @@ import { Prisma } from '@prisma/client';
 import { MoneyService } from '../../../shared/money/money.service.js';
 import { ClientRevenueBucketTotals } from '../../../shared/interfaces/client-revenue-bucket-totals.interface.js';
 import { ClientRevenueTotals } from '../../../shared/interfaces/client-revenue-totals.interface.js';
-import { BookingsAggregatesService } from '../../bookings/bookings-aggregates.service.js';
+import { BookingsAggregatesService } from '../../bookings/aggregates/bookings-aggregates.service.js';
 import {
   CLIENT_RECENCY_BOUNDS,
   isDormantRecencyBucket,
-} from '../../bookings/client-recency.rules.js';
+} from '../../bookings/rules/client-recency.rules.js';
 import { ClientRecencyBucket } from '../../bookings/enums/client-recency-bucket.enum.js';
 import { ClientCohortBucket } from '../../bookings/interfaces/client-cohort-bucket.interface.js';
 import { ClientCohortSummary } from '../../bookings/interfaces/client-cohort-summary.interface.js';

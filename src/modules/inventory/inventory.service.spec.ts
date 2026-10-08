@@ -8,7 +8,7 @@ import {
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { AuditActorRole } from '../audit/enums/audit-actor-role.enum.js';
 import { InventoryDocumentTargetStatus } from './enums/inventory-document-target-status.enum.js';
-import { InventoryComputeService } from './inventory-compute.service.js';
+import { InventoryComputeService } from './services/inventory-compute.service.js';
 import { InventoryService } from './inventory.service.js';
 
 const actor = { id: 'owner-1', name: 'Owner', role: AuditActorRole.OWNER };

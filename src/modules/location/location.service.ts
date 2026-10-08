@@ -9,7 +9,7 @@ import { DatabaseService } from '../../database/database.service.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { COUNTRY_DEFAULTS } from '../../shared/geo/country-defaults.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
-import { TokenEpochRegistryService } from '../auth/token-epoch-registry.service.js';
+import { TokenEpochRegistryService } from '../auth/services/token-epoch-registry.service.js';
 import { BrandService } from '../brand/brand.service.js';
 import { CreateLocationDto } from './dto/create-location.dto.js';
 import { UpdateLocationDto } from './dto/update-location.dto.js';

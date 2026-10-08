@@ -10,7 +10,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { OrderDirection } from '../../../../shared/enums/order-direction.enum.js';
-import { catalogItemIdsDescription } from '../../catalog-item-filter.js';
+import { catalogItemIdsDescription } from '../../utils/catalog-item-filter.js';
 import { toUuidArray } from '../../dto/booking-search-request.dto.js';
 import { BookingSearchOrderBy } from '../../enums/booking-search-order-by.enum.js';
 import { BookingStatus } from '../../enums/booking-status.enum.js';

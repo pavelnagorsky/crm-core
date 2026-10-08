@@ -14,6 +14,9 @@ import { LocationService } from '../location/location.service.js';
 import { StaffEarningsService } from '../payroll/earnings/staff-earnings.service.js';
 import { OrdersService } from '../orders/orders.service.js';
 import { BookingsService } from './bookings.service.js';
+import { BookingMutationService } from './services/mutation/booking-mutation.service.js';
+import { BookingReadService } from './services/read/booking-read.service.js';
+import { BookingSetupService } from './services/setup/booking-setup.service.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { BookingResolveRequestDto } from './dto/booking-resolve-request.dto.js';
 import { BookingSearchRequestDto } from './dto/booking-search-request.dto.js';
@@ -23,7 +26,7 @@ import { ServiceCatalogKind } from '../services/enums/service-catalog-kind.enum.
 import { BookingWithItems } from './interfaces/booking-with-items.interface.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
-import { ServiceCatalogService } from '../services/service-catalog.service.js';
+import { ServiceCatalogService } from '../services/catalog/service-catalog.service.js';
 
 const serviceCatalog = { loadForBooking: vi.fn() };
 
@@ -110,6 +113,9 @@ describe('BookingsService.completeElapsed', () => {
     const module = await Test.createTestingModule({
       providers: [
         BookingsService,
+        BookingMutationService,
+        BookingReadService,
+        BookingSetupService,
         { provide: DatabaseService, useValue: db },
         { provide: CalendarService, useValue: {} },
         { provide: StaffService, useValue: {} },
@@ -174,6 +180,9 @@ describe('BookingsService.search', () => {
     const module = await Test.createTestingModule({
       providers: [
         BookingsService,
+        BookingMutationService,
+        BookingReadService,
+        BookingSetupService,
         { provide: DatabaseService, useValue: db },
         { provide: CalendarService, useValue: {} },
         { provide: StaffService, useValue: {} },
@@ -352,6 +361,9 @@ describe('BookingsService.listForCalendar', () => {
     const module = await Test.createTestingModule({
       providers: [
         BookingsService,
+        BookingMutationService,
+        BookingReadService,
+        BookingSetupService,
         { provide: DatabaseService, useValue: db },
         { provide: CalendarService, useValue: {} },
         { provide: StaffService, useValue: {} },
@@ -465,6 +477,9 @@ describe('BookingsService catalog selection', () => {
     const module = await Test.createTestingModule({
       providers: [
         BookingsService,
+        BookingMutationService,
+        BookingReadService,
+        BookingSetupService,
         { provide: DatabaseService, useValue: db },
         { provide: CalendarService, useValue: {} },
         { provide: StaffService, useValue: staff },
@@ -678,6 +693,9 @@ describe('BookingsService.update item prices', () => {
     const module = await Test.createTestingModule({
       providers: [
         BookingsService,
+        BookingMutationService,
+        BookingReadService,
+        BookingSetupService,
         { provide: DatabaseService, useValue: db },
         { provide: CalendarService, useValue: {} },
         { provide: StaffService, useValue: {} },
@@ -818,6 +836,9 @@ describe('BookingsService.addProduct', () => {
     const module = await Test.createTestingModule({
       providers: [
         BookingsService,
+        BookingMutationService,
+        BookingReadService,
+        BookingSetupService,
         { provide: DatabaseService, useValue: db },
         { provide: CalendarService, useValue: {} },
         { provide: StaffService, useValue: {} },

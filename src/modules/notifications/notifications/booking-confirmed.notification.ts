@@ -2,7 +2,7 @@ import { AbstractNotification } from './abstract.notification.js';
 import { DeliveryStrategy } from '../enums/delivery-strategy.enum.js';
 import { HasEmailChannel } from '../interfaces/has-email-channel.interface.js';
 import { ChannelPayload } from '../interfaces/channel-payload.interface.js';
-import { BookingNotificationData } from './booking-notification-data.interface.js';
+import { BookingNotificationData } from '../interfaces/booking-notification-data.interface.js';
 
 export class BookingConfirmedNotification
   extends AbstractNotification

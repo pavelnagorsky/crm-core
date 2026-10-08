@@ -13,12 +13,16 @@ import { LocationService } from '../location/location.service.js';
 import { BookingVisibility } from '@prisma/client';
 import { StaffService } from '../staff/staff.service.js';
 import { TimeService } from '../../shared/time/time.service.js';
-import { CalendarComputeService } from './calendar-compute.service.js';
+import { CalendarComputeService } from './services/calendar-compute.service.js';
 import { CalendarService } from './calendar.service.js';
+import { CalendarAvailabilityService } from './services/availability/calendar-availability.service.js';
+import { BookingCalendarEventService } from './services/events/booking-calendar-event.service.js';
+import { CalendarEventService } from './services/events/calendar-event.service.js';
+import { CalendarViewBuilderService } from './services/view/calendar-view-builder.service.js';
 import { UpdateCalendarEventDto } from './dto/update-calendar-event.dto.js';
 import { GetCalendarRequestDto } from './dto/get-calendar-request.dto.js';
 import { ServicesService } from '../services/services.service.js';
-import { ServiceBundleService } from '../services/service-bundle.service.js';
+import { ServiceBundleService } from '../services/catalog/service-bundle.service.js';
 
 function seriesEvent(): CalendarEvent {
   return {
@@ -77,6 +81,10 @@ describe('CalendarService.update', () => {
     const module = await Test.createTestingModule({
       providers: [
         CalendarService,
+        CalendarEventService,
+        BookingCalendarEventService,
+        CalendarAvailabilityService,
+        CalendarViewBuilderService,
         { provide: DatabaseService, useValue: db },
         { provide: StaffService, useValue: {} },
         { provide: LocationService, useValue: {} },
@@ -156,6 +164,10 @@ describe('CalendarService.moveOccurrence', () => {
     const module = await Test.createTestingModule({
       providers: [
         CalendarService,
+        CalendarEventService,
+        BookingCalendarEventService,
+        CalendarAvailabilityService,
+        CalendarViewBuilderService,
         { provide: DatabaseService, useValue: db },
         { provide: StaffService, useValue: {} },
         { provide: LocationService, useValue: {} },
@@ -299,6 +311,10 @@ describe('CalendarService.getManualAvailableSlots', () => {
     const module = await Test.createTestingModule({
       providers: [
         CalendarService,
+        CalendarEventService,
+        BookingCalendarEventService,
+        CalendarAvailabilityService,
+        CalendarViewBuilderService,
         { provide: DatabaseService, useValue: db },
         { provide: StaffService, useValue: staff },
         { provide: LocationService, useValue: location },
@@ -467,6 +483,10 @@ describe('CalendarService.getCalendar', () => {
     const module = await Test.createTestingModule({
       providers: [
         CalendarService,
+        CalendarEventService,
+        BookingCalendarEventService,
+        CalendarAvailabilityService,
+        CalendarViewBuilderService,
         CalendarComputeService,
         { provide: DatabaseService, useValue: db },
         { provide: StaffService, useValue: staff },

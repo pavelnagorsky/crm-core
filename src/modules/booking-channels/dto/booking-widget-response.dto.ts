@@ -7,7 +7,7 @@ import { BookingWidgetTrigger } from '../enums/booking-widget-trigger.enum.js';
 import {
   resolveBookingFormTheme,
   toBookingFormConfig,
-} from '../booking-form.js';
+} from '../rendering/booking-form.js';
 import { BookingFormConfigDto } from './booking-form-config.dto.js';
 import { BookingFormThemeDto } from './booking-form-theme.dto.js';
 

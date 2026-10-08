@@ -18,7 +18,7 @@ import { OAuthResponseDto } from './dto/oauth-response.dto.js';
 import { ITokens } from './interfaces/tokens.interface.js';
 import { LoginErrorEnum } from './enums/login-error.enum.js';
 import { loginErrorCode } from './utils/login-error-code.js';
-import { TokenEpochRegistryService } from './token-epoch-registry.service.js';
+import { TokenEpochRegistryService } from './services/token-epoch-registry.service.js';
 import { IFrontendConfig, IJwtConfig } from '../../config/configuration.js';
 import {
   jwtExpirationConfig,

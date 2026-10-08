@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
 import { BookingsAnalyticsService } from './bookings-analytics.service.js';
 import { BookingsAnalyticsController } from './bookings-analytics.controller.js';
-import { BookingsModule } from '../bookings.module.js';
+import { BookingsAggregatesModule } from '../aggregates/bookings-aggregates.module.js';
 import { DashboardModule } from '../../dashboard/dashboard.module.js';
 import { StaffModule } from '../../staff/staff.module.js';
 
 @Module({
-  imports: [BookingsModule, DashboardModule, StaffModule],
+  imports: [BookingsAggregatesModule, DashboardModule, StaffModule],
   controllers: [BookingsAnalyticsController],
   providers: [BookingsAnalyticsService],
 })

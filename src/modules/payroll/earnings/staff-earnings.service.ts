@@ -15,7 +15,7 @@ import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { PaginatedResult } from '../../../shared/interfaces/paginated-result.interface.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { OrderDirection } from '../../../shared/enums/order-direction.enum.js';
-import { AUDIT_EVENT } from '../../audit/audit.constants.js';
+import { AUDIT_EVENT } from '../../audit/constants/audit.constants.js';
 import { AuditActionType } from '../../audit/enums/audit-action-type.enum.js';
 import { AuditEntity } from '../../audit/enums/audit-entity.enum.js';
 import { AuditEvent } from '../../audit/enums/audit-event.enum.js';
@@ -32,11 +32,11 @@ import {
   StaffEarningSearchOrderBy,
   StaffEarningSearchRequestDto,
 } from './dto/staff-earning-search-request.dto.js';
-import { EarningCalculatorService } from './earning-calculator.service.js';
+import { EarningCalculatorService } from './services/earning-calculator.service.js';
 import { CompensationPlanWithRates } from '../compensation/interfaces/compensation-plan-with-rates.interface.js';
 import { StaffCompensationService } from '../compensation/staff-compensation.service.js';
 import { MoneyService } from '../../../shared/money/money.service.js';
-import { lockedPeriodWhere } from '../periods/locked-period.js';
+import { lockedPeriodWhere } from '../periods/utils/locked-period.js';
 import { BookingWithItems } from '../../bookings/interfaces/booking-with-items.interface.js';
 import { OrderWithItems } from '../../orders/interfaces/order-with-items.interface.js';
 import { ProductOrderCommissionLine } from './interfaces/product-order-commission-line.interface.js';
