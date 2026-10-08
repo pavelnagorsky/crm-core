@@ -65,7 +65,7 @@ export enum DashboardWidgetKey {
   BOOKINGS_SERIES = 'BOOKINGS_SERIES',
 
   /**
-   * Bars of where bookings came from, tallest first: Public page, Widget, Manual.
+   * Bars of where bookings came from, tallest first: Public page, Widget, Manual, Walk-in.
    * Bar height is the count. `sharePct` is that bar's share of `breakdown.total`.
    * There is no comparison with the previous period.
    */
