@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { hash } from 'bcrypt';
 import { createRng } from '../lib/random.mjs';
 import {
   commission,
@@ -33,9 +34,27 @@ export const meta = {
 const SEED = 20260928; // deterministic RNG seed
 const BRAND_NAME = 'Салон красоты «Локон»';
 const LOCATION_NAME = 'Lokon - Center';
+const SECOND_LOCATION_NAME = 'Lokon - East';
+const OWNER_EMAIL =
+  process.env.SEED_OWNER_EMAIL ?? 'pavelnagorsky047@gmail.com';
+const OWNER_PASSWORD = process.env.SEED_OWNER_PASSWORD ?? 'bookingCRM999';
+const OWNER_FIRST_NAME = process.env.SEED_OWNER_FIRST_NAME ?? 'Pavel';
+const OWNER_LAST_NAME = process.env.SEED_OWNER_LAST_NAME ?? 'Nagorsky';
 const PAST_MONTHS = 3;
 const FUTURE_WEEKS = 3;
 const LUNCH = { start: '13:00', end: '14:00' };
+
+const SECOND_LOCATION = {
+  name: SECOND_LOCATION_NAME,
+  countryCode: 'BY',
+  currency: 'BYN',
+  timezone: 'Europe/Minsk',
+  businessType: 'HAIR_SALON',
+  city: 'Minsk',
+  addressLine: 'Nezavisimosti Ave, 88',
+  slotIntervalMinutes: 30,
+  advanceBookingWindowDays: 60,
+};
 
 // Weekly work patterns. workDays = ISO weekdays (1=Mon..7=Sun). Lunch applies on work days.
 // role → StaffService selection is done via SERVICE_TAGS below.
@@ -371,20 +390,70 @@ const BAN_REASONS = [
 ];
 const EMAIL_DOMAINS = ['mail.ru', 'gmail.com', 'yandex.by'];
 
+const PRODUCT_CATALOG = [
+  {
+    category: 'Уход',
+    name: 'Шампунь Lokon Color Care',
+    sku: 'LK-SHAMPOO-COLOR',
+    unit: 'PIECE',
+    retailPrice: '32.00',
+    unitCost: '16.50',
+    stock: '42.000',
+  },
+  {
+    category: 'Уход',
+    name: 'Маска Lokon Repair',
+    sku: 'LK-MASK-REPAIR',
+    unit: 'PIECE',
+    retailPrice: '45.00',
+    unitCost: '22.00',
+    stock: '34.000',
+  },
+  {
+    category: 'Стайлинг',
+    name: 'Термозащита Lokon Pro',
+    sku: 'LK-HEAT-PROTECT',
+    unit: 'PIECE',
+    retailPrice: '38.00',
+    unitCost: '18.00',
+    stock: '28.000',
+  },
+  {
+    category: 'Стайлинг',
+    name: 'Спрей для объёма Lokon Air',
+    sku: 'LK-SPRAY-AIR',
+    unit: 'PIECE',
+    retailPrice: '29.00',
+    unitCost: '13.50',
+    stock: '36.000',
+  },
+  {
+    category: 'Окрашивание',
+    name: 'Тонирующий бальзам Lokon Pearl',
+    sku: 'LK-TONE-PEARL',
+    unit: 'PIECE',
+    retailPrice: '41.00',
+    unitCost: '19.50',
+    stock: '24.000',
+  },
+  {
+    category: 'Аксессуары',
+    name: 'Расчёска Lokon Classic',
+    sku: 'LK-COMB-CLASSIC',
+    unit: 'PIECE',
+    retailPrice: '14.00',
+    unitCost: '5.20',
+    stock: '60.000',
+  },
+];
+
 // ─── Seed entry ──────────────────────────────────────────────────────────────────
 export async function seed(prisma) {
   const rng = createRng(SEED);
   const now = new Date();
 
-  const location = await prisma.location.findFirst({
-    include: { brand: true },
-    orderBy: { createdAt: 'asc' },
-  });
-  if (!location) {
-    throw new Error(
-      'No location found - create a brand, location, services, and categories first.',
-    );
-  }
+  const workspace = await ensureWorkspace(prisma, now);
+  const location = workspace.primaryLocation;
   const {
     id: locationId,
     brandId,
@@ -393,30 +462,26 @@ export async function seed(prisma) {
     slotIntervalMinutes,
   } = location;
 
-  const services = await prisma.service.findMany({
-    where: { locationId },
-    include: { category: true },
-  });
-  const activeServices = services.filter((s) => s.status === 'ACTIVE');
-  const serviceByTitle = new Map(services.map((s) => [s.title, s]));
-
   const dateRange = computeDateRange(now, timezone);
   console.log(
     `  Brand/location: ${location.brand.name} / ${location.name} (${timezone}, ${currency}), range ${dateRange.from}..${dateRange.to}`,
   );
 
   // 1. Clean previously seeded generated data (idempotent re-runs). FK-safe order.
-  await cleanup(prisma, { brandId, locationId });
+  await cleanup(prisma, {
+    brandId,
+    locationIds: workspace.locations.map((item) => item.id),
+  });
 
-  // 2. Brand/location rename for a recognizable demo workspace.
-  await prisma.brand.update({
-    where: { id: brandId },
-    data: { name: BRAND_NAME },
+  // 2. Ensure both branches have a bookable service catalog.
+  await ensureServiceCatalog(prisma, workspace.locations);
+
+  const services = await prisma.service.findMany({
+    where: { locationId },
+    include: { category: true },
   });
-  await prisma.location.update({
-    where: { id: locationId },
-    data: { name: LOCATION_NAME },
-  });
+  const activeServices = services.filter((s) => s.status === 'ACTIVE');
+  const serviceByTitle = new Map(services.map((s) => [s.title, s]));
 
   // 3. Client book: keep whoever already exists, fill up to a realistic salon size.
   const clients = await ensureClients(prisma, brandId, now, timezone);
@@ -474,7 +539,21 @@ export async function seed(prisma) {
     timezone,
   });
 
-  // 9. Monthly payroll periods: salary top-up, then a statement that locks earnings.
+  // 9. Products, inventory receipts, product sales, and product commissions.
+  const products = await createProductsAndSales(prisma, {
+    brandId,
+    locations: workspace.locations,
+    locationId,
+    currency,
+    staffList,
+    clients: clients.bookable,
+    planByStaff,
+    now,
+    timezone,
+    rng,
+  });
+
+  // 10. Monthly payroll periods: salary top-up, then a statement that locks earnings.
   const payroll = await createPayrollPeriods(prisma, {
     brandId,
     locationId,
@@ -486,7 +565,21 @@ export async function seed(prisma) {
     timezone,
   });
 
+  const auditCount = await createAuditLogs(prisma, {
+    brandId,
+    locationId,
+    owner: workspace.owner,
+    locations: workspace.locations,
+    staffList,
+    stats,
+    products,
+    payroll,
+    now,
+  });
+
   printSummary({
+    owner: workspace.owner,
+    locations: workspace.locations,
     staffList,
     dateRange,
     shiftCount: countShifts(shiftIndex),
@@ -494,8 +587,200 @@ export async function seed(prisma) {
     hourlyCount,
     payroll,
     clients,
+    products,
+    auditCount,
     currency,
   });
+}
+
+async function ensureWorkspace(prisma, now) {
+  const owner = await ensureOwner(prisma, now);
+  await prisma.user.deleteMany({
+    where: { NOT: { id: owner.id } },
+  });
+
+  const brand =
+    (await prisma.brand.findFirst({
+      where: { brandMemberships: { some: { userId: owner.id } } },
+      include: { locations: { orderBy: { createdAt: 'asc' } } },
+      orderBy: { createdAt: 'asc' },
+    })) ??
+    (await prisma.brand.create({
+      data: {
+        name: BRAND_NAME,
+        brandMemberships: { create: { userId: owner.id, role: 'OWNER' } },
+      },
+      include: { locations: { orderBy: { createdAt: 'asc' } } },
+    }));
+
+  await prisma.brand.update({
+    where: { id: brand.id },
+    data: { name: BRAND_NAME },
+  });
+
+  const primaryLocation = await ensureLocation(prisma, {
+    brandId: brand.id,
+    ownerId: owner.id,
+    name: LOCATION_NAME,
+    countryCode: 'BY',
+    currency: 'BYN',
+    timezone: 'Europe/Minsk',
+    businessType: 'HAIR_SALON',
+    city: 'Minsk',
+    addressLine: 'Lenina St, 12',
+    slotIntervalMinutes: 30,
+    advanceBookingWindowDays: 60,
+  });
+  const secondLocation = await ensureLocation(prisma, {
+    brandId: brand.id,
+    ownerId: owner.id,
+    ...SECOND_LOCATION,
+  });
+
+  await prisma.brandMembership.upsert({
+    where: { userId_brandId: { userId: owner.id, brandId: brand.id } },
+    update: { role: 'OWNER' },
+    create: { userId: owner.id, brandId: brand.id, role: 'OWNER' },
+  });
+  for (const location of [primaryLocation, secondLocation]) {
+    await prisma.locationMembership.upsert({
+      where: {
+        userId_locationId: { userId: owner.id, locationId: location.id },
+      },
+      update: { role: 'OWNER' },
+      create: { userId: owner.id, locationId: location.id, role: 'OWNER' },
+    });
+  }
+
+  const locations = await prisma.location.findMany({
+    where: { brandId: brand.id },
+    include: { brand: true },
+    orderBy: { createdAt: 'asc' },
+  });
+
+  return {
+    owner,
+    brand,
+    primaryLocation: locations.find((item) => item.id === primaryLocation.id),
+    locations,
+  };
+}
+
+async function ensureOwner(prisma, now) {
+  const passwordHash = await hash(OWNER_PASSWORD, 10);
+  return prisma.user.upsert({
+    where: { email: OWNER_EMAIL },
+    update: {
+      role: 'USER',
+      firstName: OWNER_FIRST_NAME,
+      lastName: OWNER_LAST_NAME,
+      passwordHash,
+      emailVerifiedAt: now,
+      isMarketingEmailsEnabled: true,
+    },
+    create: {
+      role: 'USER',
+      firstName: OWNER_FIRST_NAME,
+      lastName: OWNER_LAST_NAME,
+      email: OWNER_EMAIL,
+      passwordHash,
+      emailVerifiedAt: now,
+      isMarketingEmailsEnabled: true,
+    },
+  });
+}
+
+async function ensureLocation(prisma, data) {
+  const existing = await prisma.location.findFirst({
+    where: { brandId: data.brandId, name: data.name },
+    include: { brand: true },
+  });
+  const payload = {
+    countryCode: data.countryCode,
+    currency: data.currency,
+    timezone: data.timezone,
+    businessType: data.businessType,
+    city: data.city,
+    addressLine: data.addressLine,
+    slotIntervalMinutes: data.slotIntervalMinutes,
+    advanceBookingWindowDays: data.advanceBookingWindowDays,
+  };
+  if (existing) {
+    return prisma.location.update({
+      where: { id: existing.id },
+      data: payload,
+      include: { brand: true },
+    });
+  }
+  return prisma.location.create({
+    data: {
+      brandId: data.brandId,
+      name: data.name,
+      ...payload,
+      staff: {
+        create: {
+          userId: data.ownerId,
+          name: `${OWNER_FIRST_NAME} ${OWNER_LAST_NAME}`.trim(),
+          email: OWNER_EMAIL,
+          roleTitle: 'Owner',
+          status: 'ACTIVE',
+        },
+      },
+    },
+    include: { brand: true },
+  });
+}
+
+async function ensureServiceCatalog(prisma, locations) {
+  const categoryNames = [
+    ...new Set(STAFF_PLAN.flatMap((plan) => plan.categories ?? [])),
+  ];
+  const serviceTitles = Object.keys(SERVICE_WEIGHTS);
+
+  for (const location of locations) {
+    const categoryByName = new Map();
+    for (let index = 0; index < categoryNames.length; index++) {
+      const name = categoryNames[index];
+      const category = await prisma.serviceCategory.upsert({
+        where: { locationId_name: { locationId: location.id, name } },
+        update: {
+          description: `${name} at ${location.name}`,
+          sortOrder: index,
+        },
+        create: {
+          locationId: location.id,
+          name,
+          description: `${name} at ${location.name}`,
+          sortOrder: index,
+        },
+      });
+      categoryByName.set(name, category);
+    }
+
+    for (let index = 0; index < serviceTitles.length; index++) {
+      const title = serviceTitles[index];
+      const category =
+        categoryByName.get(categoryNames[index % categoryNames.length]) ?? null;
+      const existing = await prisma.service.findFirst({
+        where: { locationId: location.id, title },
+      });
+      const data = {
+        categoryId: category?.id ?? null,
+        description: `${title} demo service`,
+        price: decimal(28 + index * 8),
+        durationMinutes: index % 3 === 0 ? 45 : index % 3 === 1 ? 60 : 90,
+        bufferMinutes: 10,
+        status: 'ACTIVE',
+        sortOrder: index,
+      };
+      if (existing)
+        await prisma.service.update({ where: { id: existing.id }, data });
+      else
+        await prisma.service.create({
+          data: { locationId: location.id, title, ...data },
+        });
+    }
+  }
 }
 
 function computeDateRange(now, timezone) {
@@ -508,26 +793,45 @@ function computeDateRange(now, timezone) {
 }
 
 // ─── Cleanup ──────────────────────────────────────────────────────────────────
-async function cleanup(prisma, { brandId, locationId }) {
+async function cleanup(prisma, { brandId, locationIds }) {
   // Periods cascade to results (which restrict staff deletion). Earnings reference bookings;
   // bookings cascade to booking items; booking items reference calendar events. Then shifts,
   // plans, and previously seeded staff.
-  await prisma.payrollPeriod.deleteMany({ where: { locationId } });
-  await prisma.staffEarning.deleteMany({ where: { locationId } });
-  await prisma.inventoryMovement.deleteMany({
-    where: { locationId, orderId: { not: null } },
+  await prisma.auditLog.deleteMany({ where: { brandId } });
+  await prisma.payrollPeriod.deleteMany({
+    where: { locationId: { in: locationIds } },
   });
-  await prisma.order.deleteMany({ where: { locationId } });
-  await prisma.booking.deleteMany({ where: { locationId } });
+  await prisma.staffEarning.deleteMany({
+    where: { locationId: { in: locationIds } },
+  });
+  await prisma.inventoryMovement.deleteMany({
+    where: { locationId: { in: locationIds } },
+  });
+  await prisma.inventoryDocument.deleteMany({
+    where: { locationId: { in: locationIds } },
+  });
+  await prisma.order.deleteMany({ where: { locationId: { in: locationIds } } });
+  await prisma.booking.deleteMany({
+    where: { locationId: { in: locationIds } },
+  });
   await prisma.client.deleteMany({
     where: { brandId, phone: { startsWith: SEED_PHONE_PREFIX } },
   });
-  await prisma.calendarEvent.deleteMany({ where: { locationId } });
-  await prisma.staffShift.deleteMany({ where: { staff: { locationId } } });
-  await prisma.staffCompensationPlan.deleteMany({ where: { locationId } });
+  await prisma.calendarEvent.deleteMany({
+    where: { locationId: { in: locationIds } },
+  });
+  await prisma.staffShift.deleteMany({
+    where: { staff: { locationId: { in: locationIds } } },
+  });
+  await prisma.staffCompensationPlan.deleteMany({
+    where: { locationId: { in: locationIds } },
+  });
   // Remove staff created by a previous seed run (tagged via email marker), keep the original ones.
   await prisma.staff.deleteMany({
-    where: { locationId, email: { endsWith: '@seed.lokon' } },
+    where: {
+      locationId: { in: locationIds },
+      email: { endsWith: '@seed.lokon' },
+    },
   });
 }
 
@@ -777,6 +1081,7 @@ async function createPlans(prisma, locationId, staffList, fromStr) {
         fixedSalaryAmount: s.plan.fixedSalaryAmount,
         hourlyRate: s.plan.hourlyRate,
         serviceCommissionPercent: s.plan.serviceCommissionPercent,
+        productCommissionPercent: s.plan.productCommissionPercent ?? '8.00',
         salaryMode: s.plan.salaryMode,
       },
     });
@@ -1198,10 +1503,7 @@ async function placeBooking(prisma, p) {
   bump(status);
 
   // Commission earning for completed bookings (matches StaffEarningsService.recordForCompletedBooking).
-  if (
-    status === 'COMPLETED' &&
-    bookingItem
-  ) {
+  if (status === 'COMPLETED' && bookingItem) {
     const base = customPrice ?? service.price;
     const order = await prisma.order.create({
       data: {
@@ -1338,6 +1640,316 @@ async function createHourlyEarnings(prisma, ctx) {
   }
   if (rows.length) await prisma.staffEarning.createMany({ data: rows });
   return rows.length;
+}
+
+// ─── Products, inventory, and product sales ─────────────────────────────────────
+async function createProductsAndSales(prisma, ctx) {
+  const {
+    brandId,
+    locations,
+    locationId,
+    currency,
+    staffList,
+    clients,
+    planByStaff,
+    now,
+    timezone,
+    rng,
+  } = ctx;
+  const productCategories = new Map();
+  const products = [];
+
+  for (const item of PRODUCT_CATALOG) {
+    let category = productCategories.get(item.category);
+    if (!category) {
+      category = await prisma.productCategory.upsert({
+        where: { brandId_name: { brandId, name: item.category } },
+        update: { description: `${item.category} demo products` },
+        create: {
+          brandId,
+          name: item.category,
+          description: `${item.category} demo products`,
+          sortOrder: productCategories.size,
+        },
+      });
+      productCategories.set(item.category, category);
+    }
+    const product = await prisma.product.upsert({
+      where: { brandId_sku: { brandId, sku: item.sku } },
+      update: {
+        categoryId: category.id,
+        name: item.name,
+        unit: item.unit,
+        status: 'ACTIVE',
+      },
+      create: {
+        brandId,
+        categoryId: category.id,
+        name: item.name,
+        sku: item.sku,
+        unit: item.unit,
+        status: 'ACTIVE',
+      },
+    });
+    products.push({ ...item, product });
+  }
+
+  const locationProducts = [];
+  for (const location of locations) {
+    const receipt = await prisma.inventoryDocument.create({
+      data: {
+        locationId: location.id,
+        type: 'RECEIPT',
+        status: 'POSTED',
+        occurredAt: now,
+        reference: `SEED-${location.name}`,
+        supplierName: 'Lokon Demo Supply',
+        createdByName: 'Seed',
+        postedAt: now,
+      },
+    });
+
+    for (const item of products) {
+      const productLocation = await prisma.productLocation.upsert({
+        where: {
+          productId_locationId: {
+            productId: item.product.id,
+            locationId: location.id,
+          },
+        },
+        update: {
+          retailPrice: item.retailPrice,
+          status: 'ACTIVE',
+          trackInventory: true,
+          reorderLevel: '6.000',
+        },
+        create: {
+          productId: item.product.id,
+          locationId: location.id,
+          retailPrice: item.retailPrice,
+          status: 'ACTIVE',
+          trackInventory: true,
+          reorderLevel: '6.000',
+        },
+      });
+      const initialStock =
+        location.id === locationId
+          ? decimal(item.stock)
+          : decimal(item.stock).div(2).toDecimalPlaces(3);
+      await prisma.inventoryBalance.upsert({
+        where: { productLocationId: productLocation.id },
+        update: {
+          quantityOnHand: initialStock,
+          averageUnitCost: item.unitCost,
+        },
+        create: {
+          productLocationId: productLocation.id,
+          quantityOnHand: initialStock,
+          averageUnitCost: item.unitCost,
+        },
+      });
+      const documentItem = await prisma.inventoryDocumentItem.create({
+        data: {
+          documentId: receipt.id,
+          productLocationId: productLocation.id,
+          productId: item.product.id,
+          productName: item.product.name,
+          productSku: item.product.sku,
+          productUnit: item.product.unit,
+          quantity: initialStock,
+          unitCost: item.unitCost,
+        },
+      });
+      await prisma.inventoryMovement.create({
+        data: {
+          locationId: location.id,
+          productLocationId: productLocation.id,
+          documentId: receipt.id,
+          documentItemId: documentItem.id,
+          type: 'RECEIPT',
+          productId: item.product.id,
+          productName: item.product.name,
+          productSku: item.product.sku,
+          quantityDelta: initialStock,
+          quantityBefore: decimal(0),
+          quantityAfter: initialStock,
+          averageUnitCostBefore: decimal(0),
+          averageUnitCostAfter: item.unitCost,
+          unitCost: item.unitCost,
+          totalCost: decimal(item.unitCost).mul(initialStock),
+          occurredAt: now,
+          idempotencyKey: `seed:receipt:${receipt.id}:${productLocation.id}`,
+        },
+      });
+      if (location.id === locationId) {
+        locationProducts.push({
+          ...item,
+          productLocation,
+          product: item.product,
+          quantityOnHand: initialStock,
+        });
+      }
+    }
+  }
+
+  const sales = await createProductSales(prisma, {
+    locationId,
+    currency,
+    staffList,
+    clients,
+    planByStaff,
+    products: locationProducts,
+    now,
+    timezone,
+    rng,
+  });
+
+  return {
+    categories: productCategories.size,
+    products: products.length,
+    locationProducts: products.length * locations.length,
+    receipts: locations.length,
+    ...sales,
+  };
+}
+
+async function createProductSales(prisma, ctx) {
+  const {
+    locationId,
+    currency,
+    staffList,
+    clients,
+    planByStaff,
+    products,
+    now,
+    timezone,
+    rng,
+  } = ctx;
+  const count = Math.min(48, clients.length, products.length * 8);
+  const balances = new Map(
+    products.map((item) => [
+      item.productLocation.id,
+      decimal(item.quantityOnHand),
+    ]),
+  );
+  let productOrders = 0;
+  let productOrderItems = 0;
+  let productEarnings = 0;
+
+  for (let index = 0; index < count; index++) {
+    const item = products[index % products.length];
+    const staff = staffList[index % staffList.length];
+    const client = clients[(index * 7) % clients.length];
+    const quantity = decimal(rng.chance(0.18) ? 2 : 1);
+    const before = balances.get(item.productLocation.id) ?? decimal(0);
+    if (before.lt(quantity)) continue;
+    const after = before.minus(quantity);
+    balances.set(item.productLocation.id, after);
+
+    const occurredAt = new Date(
+      now.getTime() - rng.int(2, 85) * 86_400_000 - rng.int(0, 7) * 3_600_000,
+    );
+    const unitPrice = decimal(item.retailPrice);
+    const unitCost = decimal(item.unitCost);
+    const lineTotal = unitPrice.mul(quantity);
+    const lineCost = unitCost.mul(quantity);
+
+    const order = await prisma.order.create({
+      data: {
+        locationId,
+        clientId: client.id,
+        clientName: `${client.firstName} ${client.lastName}`.trim(),
+        clientPhone: client.phone,
+        currency,
+        status: 'ACTIVE',
+        occurredAt,
+        listTotalAmount: lineTotal,
+        subtotalAmount: lineTotal,
+        discountTotal: decimal(0),
+        totalAmount: lineTotal,
+        idempotencyKey: `seed:product-order:${index}`,
+        createdByName: 'Seed',
+        items: {
+          create: {
+            type: 'PRODUCT',
+            status: 'CONFIRMED',
+            catalogItemId: item.product.id,
+            categoryId: item.product.categoryId,
+            productLocationId: item.productLocation.id,
+            title: item.product.name,
+            sku: item.product.sku,
+            unit: item.product.unit,
+            quantity,
+            listUnitPrice: unitPrice,
+            unitPrice,
+            lineSubtotal: lineTotal,
+            discountTotal: decimal(0),
+            lineTotal,
+            unitCostSnapshot: unitCost,
+            lineCostSnapshot: lineCost,
+            sellerStaffId: staff.id,
+            sellerName: staff.name,
+            confirmedAt: occurredAt,
+            occurredAt,
+          },
+        },
+      },
+      include: { items: true },
+    });
+    const orderItem = order.items[0];
+    await prisma.inventoryMovement.create({
+      data: {
+        locationId,
+        productLocationId: item.productLocation.id,
+        orderId: order.id,
+        orderItemId: orderItem.id,
+        type: 'SALE',
+        productId: item.product.id,
+        productName: item.product.name,
+        productSku: item.product.sku,
+        quantityDelta: quantity.neg(),
+        quantityBefore: before,
+        quantityAfter: after,
+        averageUnitCostBefore: unitCost,
+        averageUnitCostAfter: unitCost,
+        unitCost,
+        totalCost: lineCost,
+        occurredAt,
+        idempotencyKey: `seed:sale:${orderItem.id}`,
+      },
+    });
+    await prisma.inventoryBalance.update({
+      where: { productLocationId: item.productLocation.id },
+      data: { quantityOnHand: after, averageUnitCost: unitCost },
+    });
+
+    const plan = planByStaff.get(staff.id);
+    if (plan?.productCommissionPercent != null) {
+      await prisma.staffEarning.create({
+        data: {
+          locationId,
+          staffId: staff.id,
+          type: 'PRODUCT_COMMISSION',
+          source: 'PRODUCT_SALE',
+          earnedOn: dateOnly(zonedDateStr(occurredAt, timezone)),
+          amount: commission(lineTotal, plan.productCommissionPercent),
+          currency,
+          baseAmount: lineTotal,
+          ratePercent: decimal(plan.productCommissionPercent),
+          description: item.product.name,
+          idempotencyKey: `order-item:${orderItem.id}:PRODUCT_COMMISSION`,
+          compensationPlanId: plan.id,
+          orderId: order.id,
+          orderItemId: orderItem.id,
+        },
+      });
+      productEarnings++;
+    }
+    productOrders++;
+    productOrderItems++;
+  }
+
+  return { productOrders, productOrderItems, productEarnings };
 }
 
 // ─── Payroll periods + fixed-salary top-up ───────────────────────────────────────
@@ -1658,8 +2270,116 @@ function totalsFrom(rows) {
   return fields;
 }
 
+// ─── Audit demo ─────────────────────────────────────────────────────────────────
+async function createAuditLogs(prisma, ctx) {
+  const {
+    brandId,
+    locationId,
+    owner,
+    locations,
+    staffList,
+    stats,
+    products,
+    payroll,
+    now,
+  } = ctx;
+  const actorName =
+    [owner.firstName, owner.lastName].filter(Boolean).join(' ') ||
+    owner.email ||
+    'Owner';
+  const rows = [
+    {
+      brandId,
+      locationId,
+      entityType: 'BRAND',
+      entityId: brandId,
+      eventType: 'BRAND_UPDATED',
+      actionType: 'MODIFY',
+      occurredAt: now,
+      actorId: owner.id,
+      actorName,
+      actorRole: 'OWNER',
+      payload: { name: BRAND_NAME, seeded: true },
+    },
+    ...locations.map((location) => ({
+      brandId,
+      locationId: location.id,
+      entityType: 'LOCATION',
+      entityId: location.id,
+      eventType: 'LOCATION_UPDATED',
+      actionType: 'MODIFY',
+      occurredAt: now,
+      actorId: owner.id,
+      actorName,
+      actorRole: 'OWNER',
+      payload: {
+        name: location.name,
+        timezone: location.timezone,
+        seeded: true,
+      },
+    })),
+    ...staffList.slice(0, 4).map((staff) => ({
+      brandId,
+      locationId,
+      entityType: 'STAFF',
+      entityId: staff.id,
+      eventType: 'STAFF_CREATED',
+      actionType: 'CREATE',
+      occurredAt: now,
+      actorId: owner.id,
+      actorName,
+      actorRole: 'OWNER',
+      payload: { name: staff.name, roleTitle: staff.roleTitle },
+    })),
+    {
+      brandId,
+      locationId,
+      entityType: 'BOOKING',
+      entityId: `seed-bookings-${locationId}`,
+      eventType: 'BOOKING_CREATED',
+      actionType: 'CREATE',
+      occurredAt: now,
+      actorId: owner.id,
+      actorName,
+      actorRole: 'OWNER',
+      payload: { count: stats.total, byStatus: stats.byStatus },
+    },
+    {
+      brandId,
+      locationId,
+      entityType: 'PRODUCT',
+      entityId: `seed-products-${brandId}`,
+      eventType: 'PRODUCT_CREATED',
+      actionType: 'CREATE',
+      occurredAt: now,
+      actorId: owner.id,
+      actorName,
+      actorRole: 'OWNER',
+      payload: products,
+    },
+    {
+      brandId,
+      locationId,
+      entityType: 'PAYROLL',
+      entityId: `seed-payroll-${locationId}`,
+      eventType: 'PAYROLL_CALCULATED',
+      actionType: 'ACTION',
+      occurredAt: now,
+      actorId: owner.id,
+      actorName,
+      actorRole: 'OWNER',
+      payload: { periods: payroll.length },
+    },
+  ];
+
+  await prisma.auditLog.createMany({ data: rows });
+  return rows.length;
+}
+
 // ─── Summary ────────────────────────────────────────────────────────────────────
 function printSummary({
+  owner,
+  locations,
   staffList,
   dateRange,
   shiftCount,
@@ -1667,9 +2387,13 @@ function printSummary({
   hourlyCount,
   payroll,
   clients,
+  products,
+  auditCount,
   currency,
 }) {
   console.log('\n  ── Summary ──');
+  console.log(`  Owner user: ${owner.email}`);
+  console.log(`  Locations: ${locations.map((item) => item.name).join(', ')}`);
   console.log(`  Staff: ${staffList.map((s) => s.name).join(', ')}`);
   console.log(
     `  Clients: ${clients.total} (${clients.bookable.length} in the booking rotation)`,
@@ -1686,6 +2410,10 @@ function printSummary({
   );
   console.log(`  Service order items: ${stats.serviceOrderItems}`);
   console.log(`  Hourly earnings: ${hourlyCount}`);
+  console.log(
+    `  Products: ${products.products} (${products.locationProducts} location rows, ${products.productOrders} product orders, ${products.productEarnings} product commissions)`,
+  );
+  console.log(`  Audit logs: ${auditCount}`);
   console.log(`  Payroll periods: ${payroll.length}`);
   for (const p of payroll) {
     console.log(
