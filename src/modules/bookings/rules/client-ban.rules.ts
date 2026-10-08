@@ -5,5 +5,9 @@ export function isSelfBookingBlocked(
   source: BookingSource,
   bannedAt: Date | null,
 ): boolean {
-  return source !== BookingSource.MANUAL && bannedAt !== null;
+  return (
+    source !== BookingSource.MANUAL &&
+    source !== BookingSource.WALK_IN &&
+    bannedAt !== null
+  );
 }

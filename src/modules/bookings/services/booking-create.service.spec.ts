@@ -28,6 +28,16 @@ function channelDeps(): [never] {
   return [{ assertAllowed: vi.fn() } as never];
 }
 
+function commercialDeps(): [never, never] {
+  return [
+    { syncCompletedBooking: vi.fn() } as never,
+    {
+      recordForCompletedBooking: vi.fn(),
+      syncForCompletedBooking: vi.fn(),
+    } as never,
+  ];
+}
+
 function setup() {
   const clients = { resolveForBooking: vi.fn() };
   const staff = {
@@ -64,6 +74,7 @@ function setup() {
     { emit: vi.fn() } as never,
     { generateClientToken: vi.fn() } as never,
     ...channelDeps(),
+    ...commercialDeps(),
   );
   return { service, clients, staff };
 }
@@ -278,6 +289,7 @@ describe('BookingCreateService calendar link', () => {
       { emit: vi.fn() } as never,
       { generateClientToken: vi.fn() } as never,
       ...channelDeps(),
+      ...commercialDeps(),
     );
 
     await service.createPublicBooking('business-1', dto, publicAttribution);
@@ -407,6 +419,7 @@ describe('BookingCreateService manual item prices', () => {
       { emit: vi.fn() } as never,
       { generateClientToken: vi.fn() } as never,
       ...channelDeps(),
+      ...commercialDeps(),
     );
 
     await service.createManualBooking(
@@ -429,5 +442,244 @@ describe('BookingCreateService manual item prices', () => {
       null,
       '70.00',
     ]);
+  });
+});
+
+function walkInSetup(
+  options: {
+    isSlotFree?: boolean;
+    serviceDurationMinutes?: number;
+    serviceBufferMinutes?: number;
+  } = {},
+) {
+  const clients = {
+    resolveForBooking: vi.fn().mockResolvedValue({
+      id: 'client-1',
+      firstName: 'Anna',
+      lastName: 'Ivanova',
+      phone: '+375291112233',
+      email: null,
+      bannedAt: null,
+    }),
+  };
+  const calendar = {
+    filterAvailableStaff: vi.fn().mockResolvedValue([{ id: 'staff-1' }]),
+    isSlotFree: vi.fn().mockReturnValue(options.isSlotFree ?? true),
+    listBlockingEvents: vi.fn(
+      (_locationId, _staffIds, _startAt, _endAt, _excluded, tx) =>
+        tx.calendarEvent.findMany(),
+    ),
+    createBookingEvent: vi.fn((input, tx) =>
+      tx.calendarEvent.create({
+        data: {
+          locationId: input.locationId,
+          staffId: input.staffId,
+          type: CalendarEventType.BOOKING,
+          repeatType: CalendarEventRepeatType.NONE,
+          startDateTime: input.startAt,
+          endDateTime: input.endAt,
+        },
+      }),
+    ),
+  };
+  const staff = {
+    resolveStaffForService: vi.fn().mockResolvedValue([{ id: 'staff-1' }]),
+    findShiftForDate: vi.fn((_staffId, _date, tx) => tx.staffShift.findFirst()),
+    findById: vi.fn().mockResolvedValue({ id: 'staff-1', name: 'Maria' }),
+  };
+  const tx = {
+    $executeRaw: vi.fn(),
+    staffShift: {
+      findFirst: vi.fn().mockResolvedValue({
+        startTime: new Date('1970-01-01T06:00:00.000Z'),
+        endTime: new Date('1970-01-01T18:00:00.000Z'),
+      }),
+    },
+    calendarEvent: {
+      findMany: vi.fn().mockResolvedValue([]),
+      create: vi.fn().mockResolvedValue({ id: 'event-1' }),
+    },
+    booking: {
+      create: vi.fn(
+        (args: {
+          data: {
+            startAt: Date;
+            endAt: Date;
+            status: BookingStatus;
+            source: BookingSource;
+            executionMode: string;
+            items: {
+              create: {
+                startAt: Date;
+                endAt: Date;
+              }[];
+            };
+          };
+        }) =>
+          Promise.resolve({
+            id: 'booking-1',
+            locationId: 'business-1',
+            clientId: 'client-1',
+            startAt: args.data.startAt,
+            endAt: args.data.endAt,
+            status: args.data.status,
+            source: args.data.source,
+            executionMode: args.data.executionMode,
+            bundleId: null,
+            clientFirstName: 'Anna',
+            clientLastName: 'Ivanova',
+            clientPhone: '+375291112233',
+            clientEmail: null,
+            notes: null,
+            internalNotes: null,
+            items: args.data.items.create.map((item, index) => ({
+              id: `booking-item-${index + 1}`,
+              bookingId: 'booking-1',
+              ...item,
+            })),
+          }),
+      ),
+    },
+  };
+  const db = {
+    location: {
+      findUnique: vi.fn().mockResolvedValue({
+        isBookingConfirmationRequired: true,
+        timezone: 'Europe/Minsk',
+        bookingVisibility: BookingVisibility.PUBLIC,
+        currency: 'BYN',
+      }),
+    },
+    service: {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: 'service-1',
+          title: 'Haircut',
+          durationMinutes: options.serviceDurationMinutes ?? 60,
+          bufferMinutes: options.serviceBufferMinutes ?? 0,
+          price: 50,
+        },
+      ]),
+    },
+    bookingItem: { groupBy: vi.fn().mockResolvedValue([]) },
+    $transaction: vi.fn((fn: (client: typeof tx) => Promise<unknown>) =>
+      fn(tx),
+    ),
+  };
+  const orders = {
+    syncCompletedBooking: vi
+      .fn()
+      .mockResolvedValue({ id: 'order-1', items: [] }),
+  };
+  const earnings = {
+    recordForCompletedBooking: vi.fn().mockResolvedValue([]),
+    syncForCompletedBooking: vi.fn().mockResolvedValue([]),
+  };
+  const service = new BookingCreateService(
+    db as never,
+    calendar as never,
+    clients as never,
+    staff as never,
+    { emit: vi.fn() } as never,
+    { generateClientToken: vi.fn() } as never,
+    ...channelDeps(),
+    orders as never,
+    earnings as never,
+  );
+  return { service, tx, calendar, orders, earnings };
+}
+
+describe('BookingCreateService walk-in', () => {
+  it('creates WALK_IN with arbitrary shortened time interval', async () => {
+    const { service, tx } = walkInSetup();
+
+    await service.createManualBooking(
+      'business-1',
+      {
+        ...dto,
+        source: BookingSource.WALK_IN,
+        startAt: '2026-09-20T10:04:00',
+        endAt: '2026-09-20T10:30:00',
+      },
+      { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER },
+    );
+
+    const created = tx.booking.create.mock.calls[0][0] as {
+      data: {
+        startAt: Date;
+        endAt: Date;
+        status: BookingStatus;
+        source: BookingSource;
+        items: { create: { startAt: Date; endAt: Date }[] };
+      };
+    };
+    expect(created.data.source).toBe(BookingSource.WALK_IN);
+    expect(created.data.status).toBe(BookingStatus.CONFIRMED);
+    expect(created.data.startAt.toISOString()).toBe('2026-09-20T07:04:00.000Z');
+    expect(created.data.endAt.toISOString()).toBe('2026-09-20T07:30:00.000Z');
+    expect(created.data.items.create[0].startAt.toISOString()).toBe(
+      '2026-09-20T07:04:00.000Z',
+    );
+    expect(created.data.items.create[0].endAt.toISOString()).toBe(
+      '2026-09-20T07:30:00.000Z',
+    );
+  });
+
+  it('rejects WALK_IN when the requested interval conflicts', async () => {
+    const { service } = walkInSetup({ isSlotFree: false });
+
+    const error = await service
+      .createManualBooking(
+        'business-1',
+        {
+          ...dto,
+          source: BookingSource.WALK_IN,
+          startAt: '2026-09-20T10:04:00',
+          endAt: '2026-09-20T10:30:00',
+        },
+        { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER },
+      )
+      .then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+    expect(error).toBeInstanceOf(AppException);
+    expect((error as AppException).errorCode).toBe('BOOKING_SLOT_UNAVAILABLE');
+  });
+
+  it('creates a completed WALK_IN and syncs service order and earnings atomically', async () => {
+    const { service, tx, orders, earnings } = walkInSetup();
+
+    await service.createManualBooking(
+      'business-1',
+      {
+        ...dto,
+        source: BookingSource.WALK_IN,
+        startAt: '2026-09-20T10:04:00',
+        endAt: '2026-09-20T10:30:00',
+        completeImmediately: true,
+      },
+      { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER },
+    );
+
+    const booking = await tx.booking.create.mock.results[0].value;
+    expect(booking.status).toBe(BookingStatus.COMPLETED);
+    expect(orders.syncCompletedBooking).toHaveBeenCalledWith(
+      booking,
+      expect.objectContaining({ name: 'Olga' }),
+      tx,
+    );
+    expect(earnings.recordForCompletedBooking).toHaveBeenCalledWith(
+      booking,
+      tx,
+      { id: 'order-1', items: [] },
+    );
+    expect(earnings.syncForCompletedBooking).toHaveBeenCalledWith(
+      booking,
+      expect.objectContaining({ name: 'Olga' }),
+      tx,
+      { id: 'order-1', items: [] },
+    );
   });
 });

@@ -135,7 +135,8 @@
   "bookingSource": {
     "PUBLIC_PAGE": "Публичная страница",
     "WIDGET": "Виджет",
-    "MANUAL": "Вручную"
+    "MANUAL": "Вручную",
+    "WALK_IN": "Без записи"
   },
   "staffStatus": {
     "ACTIVE": "Активный",

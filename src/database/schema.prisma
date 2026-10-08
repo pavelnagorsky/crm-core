@@ -79,6 +79,7 @@ enum BookingSource {
   PUBLIC_PAGE
   WIDGET
   MANUAL
+  WALK_IN
 }
 
 enum BookingExecutionMode {

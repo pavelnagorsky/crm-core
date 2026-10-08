@@ -805,6 +805,8 @@ function sourceLabel(s: BookingSource): string {
       return 'Widget';
     case BookingSource.MANUAL:
       return 'Manual';
+    case BookingSource.WALK_IN:
+      return 'Walk-in';
     default: {
       const _exhaustive: never = s;
       return _exhaustive;

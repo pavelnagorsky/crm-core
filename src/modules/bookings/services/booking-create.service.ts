@@ -37,6 +37,8 @@ import { BookingWithItems } from '../interfaces/booking-with-items.interface.js'
 import { BookingServiceSnapshot } from '../interfaces/booking-service-snapshot.interface.js';
 import { ResolvedBookingItem } from '../interfaces/resolved-booking-item.interface.js';
 import { ManualBookingItemDto } from '../dto/manual-booking-item.dto.js';
+import { OrdersService } from '../../orders/orders.service.js';
+import { StaffEarningsService } from '../../payroll/earnings/staff-earnings.service.js';
 
 @Injectable()
 export class BookingCreateService {
@@ -50,6 +52,8 @@ export class BookingCreateService {
     private readonly eventEmitter: EventEmitter2,
     private readonly bookingClientService: BookingClientService,
     private readonly rateLimiter: PublicBookingRateLimiter,
+    private readonly orders: OrdersService,
+    private readonly staffEarnings: StaffEarningsService,
   ) {}
 
   async createPublicBooking(
@@ -62,6 +66,7 @@ export class BookingCreateService {
     const { booking, timezone, currency, bundleTitle } = await this.create(
       locationId,
       attribution,
+      null,
       dto,
     );
     this.logger.log(
@@ -83,13 +88,18 @@ export class BookingCreateService {
     dto: ManualCreateBookingDto,
     actor: AuditActor,
   ): Promise<BookingWithItems> {
+    const source =
+      dto.source === BookingSource.WALK_IN
+        ? BookingSource.WALK_IN
+        : BookingSource.MANUAL;
     const { booking, timezone, currency, bundleTitle } = await this.create(
       locationId,
       {
-        source: BookingSource.MANUAL,
+        source,
         bookingPageId: null,
         bookingWidgetId: null,
       },
+      actor,
       dto,
     );
     this.logger.log(
@@ -103,6 +113,7 @@ export class BookingCreateService {
   private async create(
     locationId: string,
     attribution: BookingAttribution,
+    actor: AuditActor | null,
     dto: CreateBookingDto | ManualCreateBookingDto,
   ): Promise<{
     booking: BookingWithItems;
@@ -125,7 +136,7 @@ export class BookingCreateService {
         HttpStatus.NOT_FOUND,
       );
     if (
-      attribution.source !== BookingSource.MANUAL &&
+      !this.isInternalSource(attribution.source) &&
       business.bookingVisibility === BookingVisibility.PRIVATE
     ) {
       throw new AppException(
@@ -148,6 +159,7 @@ export class BookingCreateService {
     }
 
     const selection = await this.loadSelection(locationId, dto);
+    const walkInEndAt = this.walkInEndAt(dto, business.timezone);
     const items = await this.resolveItems(
       locationId,
       selection.services,
@@ -156,10 +168,13 @@ export class BookingCreateService {
       dto.staffId,
       business.timezone,
       this.manualItems(dto),
+      walkInEndAt,
     );
-    const status = business.isBookingConfirmationRequired
-      ? BookingStatus.PENDING
-      : BookingStatus.CONFIRMED;
+    const status = this.initialStatus(
+      attribution.source,
+      dto,
+      business.isBookingConfirmationRequired,
+    );
 
     const envelopeStart = new Date(
       Math.min(...items.map((item) => item.startAt.getTime())),
@@ -232,7 +247,7 @@ export class BookingCreateService {
         createdItems.push({ ...item, calendarEventId: calendarEvent.id });
       }
 
-      return tx.booking.create({
+      const booking = await tx.booking.create({
         data: {
           locationId,
           clientId: client.id,
@@ -269,6 +284,25 @@ export class BookingCreateService {
         },
         include: { items: { orderBy: { sortOrder: 'asc' } } },
       });
+      if (status === BookingStatus.COMPLETED) {
+        const completedActor = actor ?? {
+          name: 'System',
+          role: AuditActorRole.SYSTEM,
+        };
+        const order = await this.orders.syncCompletedBooking(
+          booking,
+          completedActor,
+          tx,
+        );
+        await this.staffEarnings.recordForCompletedBooking(booking, tx, order);
+        await this.staffEarnings.syncForCompletedBooking(
+          booking,
+          completedActor,
+          tx,
+          order,
+        );
+      }
+      return booking;
     });
 
     return {
@@ -391,6 +425,7 @@ export class BookingCreateService {
     requestedStaffId: string | undefined,
     timezone: string,
     manualItems: ManualBookingItemDto[],
+    walkInEndAt: Date | null,
   ): Promise<ResolvedBookingItem[]> {
     const staffNames = new Map<string, string>();
     const result: ResolvedBookingItem[] = [];
@@ -400,20 +435,20 @@ export class BookingCreateService {
     for (let index = 0; index < services.length; index += 1) {
       const service = services[index];
       const manual = manualItems[index];
-      const itemStart =
-        executionMode === PrismaBookingExecutionMode.PARALLEL
-          ? startAt
-          : new Date(cursor);
-      const itemEnd = new Date(
-        itemStart.getTime() +
-          (service.durationMinutes + service.bufferMinutes) * 60_000,
+      const interval = this.itemInterval(
+        services,
+        index,
+        startAt,
+        cursor,
+        executionMode,
+        walkInEndAt,
       );
       const staffId = await this.resolveItemStaff(
         locationId,
         service.id,
         manual?.staffId ?? requestedStaffId,
-        itemStart,
-        itemEnd,
+        interval.startAt,
+        interval.endAt,
         timezone,
         executionMode === PrismaBookingExecutionMode.PARALLEL
           ? usedParallelStaff
@@ -428,8 +463,8 @@ export class BookingCreateService {
         serviceId: service.id,
         staffId,
         sortOrder: index,
-        startAt: itemStart,
-        endAt: itemEnd,
+        startAt: interval.startAt,
+        endAt: interval.endAt,
         serviceTitle: service.title,
         serviceDuration: service.durationMinutes,
         listPrice: service.price,
@@ -438,10 +473,66 @@ export class BookingCreateService {
         staffName: staffNames.get(staffId)!,
       });
       if (executionMode === PrismaBookingExecutionMode.SEQUENTIAL)
-        cursor.setTime(itemEnd.getTime());
+        cursor.setTime(interval.endAt.getTime());
     }
 
     return result;
+  }
+
+  private itemInterval(
+    services: BookingServiceSnapshot[],
+    index: number,
+    startAt: Date,
+    cursor: Date,
+    executionMode: PrismaBookingExecutionMode,
+    walkInEndAt: Date | null,
+  ): { startAt: Date; endAt: Date } {
+    const defaultMs =
+      (services[index].durationMinutes + services[index].bufferMinutes) *
+      60_000;
+    if (!walkInEndAt) {
+      const itemStart =
+        executionMode === PrismaBookingExecutionMode.PARALLEL
+          ? startAt
+          : new Date(cursor);
+      return {
+        startAt: itemStart,
+        endAt: new Date(itemStart.getTime() + defaultMs),
+      };
+    }
+
+    if (walkInEndAt.getTime() <= startAt.getTime()) {
+      throw new AppException(
+        ErrorCode.BOOKING_TIME_INVALID,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    if (executionMode === PrismaBookingExecutionMode.PARALLEL) {
+      return { startAt, endAt: walkInEndAt };
+    }
+
+    const totalDefaultMs = services.reduce(
+      (sum, service) =>
+        sum + (service.durationMinutes + service.bufferMinutes) * 60_000,
+      0,
+    );
+    const totalActualMs = walkInEndAt.getTime() - startAt.getTime();
+    const itemStart = new Date(cursor);
+    const itemEnd =
+      index === services.length - 1
+        ? walkInEndAt
+        : new Date(
+            itemStart.getTime() +
+              Math.round((totalActualMs * defaultMs) / totalDefaultMs),
+          );
+    if (itemEnd.getTime() <= itemStart.getTime()) {
+      throw new AppException(
+        ErrorCode.BOOKING_TIME_INVALID,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return { startAt: itemStart, endAt: itemEnd };
   }
 
   private async resolveItemStaff(
@@ -512,7 +603,49 @@ export class BookingCreateService {
   private isManualDto(
     dto: CreateBookingDto | ManualCreateBookingDto,
   ): dto is ManualCreateBookingDto {
-    return 'items' in dto || 'executionMode' in dto;
+    return (
+      'items' in dto ||
+      'executionMode' in dto ||
+      'source' in dto ||
+      'endAt' in dto ||
+      'completeImmediately' in dto
+    );
+  }
+
+  private isInternalSource(source: BookingSource): boolean {
+    return source === BookingSource.MANUAL || source === BookingSource.WALK_IN;
+  }
+
+  private isWalkInDto(
+    dto: CreateBookingDto | ManualCreateBookingDto,
+  ): dto is ManualCreateBookingDto {
+    return this.isManualDto(dto) && dto.source === BookingSource.WALK_IN;
+  }
+
+  private walkInEndAt(
+    dto: CreateBookingDto | ManualCreateBookingDto,
+    timezone: string,
+  ): Date | null {
+    if (!this.isWalkInDto(dto) || !dto.endAt) return null;
+    return TimeService.localToUtc(dto.endAt, timezone);
+  }
+
+  private initialStatus(
+    source: BookingSource,
+    dto: CreateBookingDto | ManualCreateBookingDto,
+    isBookingConfirmationRequired: boolean,
+  ): BookingStatus {
+    if (
+      source === BookingSource.WALK_IN &&
+      this.isManualDto(dto) &&
+      dto.completeImmediately
+    ) {
+      return BookingStatus.COMPLETED;
+    }
+    if (source === BookingSource.WALK_IN) return BookingStatus.CONFIRMED;
+    return isBookingConfirmationRequired
+      ? BookingStatus.PENDING
+      : BookingStatus.CONFIRMED;
   }
 
   private bundleItemPrices(
@@ -608,6 +741,7 @@ export class BookingCreateService {
     booking: BookingWithItems,
     timezone: string,
   ): void {
+    if (booking.status === BookingStatus.COMPLETED) return;
     if (!booking.clientEmail) return;
     const clientToken = this.bookingClientService.generateClientToken(
       booking.id,
