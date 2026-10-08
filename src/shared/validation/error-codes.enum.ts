@@ -446,6 +446,15 @@ export const ErrorCode = {
     code: 'ORDER_DUPLICATE_PRODUCT',
     message: 'A product can appear only once in this order',
   },
+  ORDER_DUPLICATE_ITEM: {
+    code: 'ORDER_DUPLICATE_ITEM',
+    message: 'An order item can appear only once in this operation',
+  },
+  ORDER_IDEMPOTENCY_CONFLICT: {
+    code: 'ORDER_IDEMPOTENCY_CONFLICT',
+    message:
+      'This idempotency key was already used for another order operation',
+  },
   ORDER_QUANTITY_INVALID: {
     code: 'ORDER_QUANTITY_INVALID',
     message: 'Order item quantity must be greater than zero',

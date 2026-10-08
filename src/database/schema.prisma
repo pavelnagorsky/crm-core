@@ -423,6 +423,7 @@ model Location {
   incomingInventoryTransfers InventoryDocument[]     @relation("InventoryDocumentDestination")
   inventoryMovements         InventoryMovement[]
   orders                     Order[]
+  orderOperations            OrderOperation[]
 
   @@index([brandId])
 }
@@ -616,17 +617,34 @@ model Order {
   createdAt       DateTime    @default(now())
   updatedAt       DateTime    @updatedAt
 
-  location  Location            @relation(fields: [locationId], references: [id], onDelete: Restrict)
-  booking   Booking?            @relation(fields: [bookingId], references: [id], onDelete: SetNull)
-  client    Client?             @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  items     OrderItem[]
-  movements InventoryMovement[]
-  earnings  StaffEarning[]
+  location   Location            @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  booking    Booking?            @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  client     Client?             @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  items      OrderItem[]
+  movements  InventoryMovement[]
+  earnings   StaffEarning[]
+  operations OrderOperation[]
 
   @@unique([locationId, idempotencyKey])
   @@index([locationId, occurredAt])
   @@index([locationId, status])
   @@index([clientId, occurredAt])
+}
+
+model OrderOperation {
+  id             String   @id @default(uuid())
+  locationId     String
+  orderId        String
+  idempotencyKey String
+  operationType  String   @db.VarChar(80)
+  requestHash    String   @db.Char(64)
+  createdAt      DateTime @default(now())
+
+  location Location @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([locationId, idempotencyKey])
+  @@index([orderId, createdAt])
 }
 
 model OrderItem {

@@ -7,7 +7,10 @@ import {
   ProductStatus,
   ProductUnit,
 } from '@prisma/client';
+import { createHash } from 'crypto';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
+import { PrismaErrorCode } from '../../shared/database/prisma-error-codes.js';
+import { AppException } from '../../shared/exceptions/app.exception.js';
 import { OrderComputeService } from './services/order-compute.service.js';
 import { OrdersService } from './orders.service.js';
 
@@ -84,9 +87,13 @@ function setup() {
     },
     orderItem: {
       create: vi.fn(),
+      createMany: vi.fn(),
       deleteMany: vi.fn(),
       update: vi.fn(),
       updateMany: vi.fn(),
+    },
+    orderOperation: {
+      create: vi.fn(),
     },
   };
   const db = {
@@ -98,6 +105,9 @@ function setup() {
       count: vi.fn(),
       update: vi.fn(),
       upsert: vi.fn(),
+    },
+    orderOperation: {
+      findUnique: vi.fn(),
     },
     $transaction: vi.fn((callback: (value: typeof tx) => unknown) =>
       callback(tx),
@@ -191,6 +201,22 @@ function secondProduct() {
       sku: 'SKU-2',
     },
   };
+}
+
+function confirmItemsHash(
+  locationId: string,
+  orderId: string,
+  itemIds: string[],
+): string {
+  return createHash('sha256')
+    .update(
+      JSON.stringify({
+        locationId,
+        orderId,
+        itemIds: [...itemIds].sort(),
+      }),
+    )
+    .digest('hex');
 }
 
 function bookingWithService(
@@ -606,6 +632,25 @@ describe('OrdersService', () => {
     expect(item.lineTotal.toFixed(2)).toBe('30.00');
   });
 
+  it('prices product items for previews without writing an order', async () => {
+    const { service, db, products } = setup();
+    products.resolveForSale.mockResolvedValue([product()]);
+
+    const result = await service.priceProductItems('location-1', [
+      {
+        productId: 'product-1',
+        quantity: '2.000',
+        customUnitPrice: '12.00',
+      },
+    ]);
+
+    expect(result[0].type).toBe(OrderItemType.PRODUCT);
+    expect(result[0].catalogItemId).toBe('product-1');
+    expect(result[0].listLineTotal.toFixed(2)).toBe('40.00');
+    expect(result[0].lineTotal.toFixed(2)).toBe('24.00');
+    expect(db.order.create).not.toHaveBeenCalled();
+  });
+
   it('makes repeated item confirmation idempotent across stock and payroll', async () => {
     const { service, tx, inventory, earnings, events } = setup();
     tx.order.findFirst.mockResolvedValue(
@@ -623,6 +668,303 @@ describe('OrdersService', () => {
     expect(inventory.postSale).not.toHaveBeenCalled();
     expect(earnings.recordForProductOrder).not.toHaveBeenCalled();
     expect(events.emit).not.toHaveBeenCalled();
+  });
+
+  it('rejects blank group confirmation idempotency keys', async () => {
+    const { service, locations, db } = setup();
+
+    await expect(
+      service.confirmItems(
+        'location-1',
+        'order-1',
+        { itemIds: ['item-1'], idempotencyKey: '   ' },
+        owner,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(locations.findById).not.toHaveBeenCalled();
+    expect(db.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('confirms multiple draft product items atomically', async () => {
+    const { service, tx, products, staff, inventory, earnings, events } =
+      setup();
+    const active = order(OrderStatus.ACTIVE);
+    const draftOrder = {
+      ...active,
+      items: [
+        {
+          ...active.items[0],
+          id: 'item-1',
+          catalogItemId: 'product-1',
+          productLocationId: 'product-location-1',
+          sellerStaffId: 'staff-1',
+          sellerName: 'Seller',
+        },
+        {
+          ...active.items[0],
+          id: 'item-2',
+          catalogItemId: 'product-2',
+          productLocationId: 'product-location-2',
+          title: 'Conditioner',
+          sku: 'SKU-2',
+          listUnitPrice: new Prisma.Decimal(30),
+          unitPrice: new Prisma.Decimal(30),
+          lineSubtotal: new Prisma.Decimal(30),
+          lineTotal: new Prisma.Decimal(30),
+          customUnitPrice: null,
+          sellerStaffId: null,
+          sellerName: null,
+        },
+      ],
+    };
+    const confirmedOrder = {
+      ...draftOrder,
+      items: draftOrder.items.map((item) => ({
+        ...item,
+        status: OrderItemStatus.CONFIRMED,
+      })),
+    };
+    tx.order.findFirst
+      .mockResolvedValueOnce(draftOrder)
+      .mockResolvedValueOnce(confirmedOrder);
+    products.resolveForSale.mockResolvedValue([product(), secondProduct()]);
+    staff.resolveForProductSale.mockResolvedValue([
+      { id: 'staff-1', name: 'Seller' },
+    ]);
+    inventory.postSale.mockResolvedValue([
+      {
+        orderItemId: 'item-1',
+        unitCost: new Prisma.Decimal(5),
+        lineCost: new Prisma.Decimal(5),
+      },
+      {
+        orderItemId: 'item-2',
+        unitCost: null,
+        lineCost: null,
+      },
+    ]);
+    earnings.recordForProductOrder.mockResolvedValue([]);
+
+    const result = await service.confirmItems(
+      'location-1',
+      'order-1',
+      { itemIds: ['item-1', 'item-2'], idempotencyKey: 'confirm-key-1' },
+      owner,
+    );
+
+    expect(result.items.map((item) => item.status)).toEqual([
+      OrderItemStatus.CONFIRMED,
+      OrderItemStatus.CONFIRMED,
+    ]);
+    expect(tx.orderOperation.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        locationId: 'location-1',
+        orderId: 'order-1',
+        idempotencyKey: 'confirm-key-1',
+      }),
+    });
+    expect(inventory.postSale).toHaveBeenCalledWith(
+      'location-1',
+      'order-1',
+      expect.any(Date),
+      expect.arrayContaining([
+        expect.objectContaining({ orderItemId: 'item-1' }),
+        expect.objectContaining({ orderItemId: 'item-2' }),
+      ]),
+      tx,
+    );
+    expect(earnings.recordForProductOrder).toHaveBeenCalledWith(
+      'location-1',
+      'order-1',
+      expect.any(Date),
+      'BYN',
+      [
+        {
+          orderItemId: 'item-1',
+          staffId: 'staff-1',
+          amount: draftOrder.items[0].lineTotal,
+          description: 'Shampoo',
+        },
+      ],
+      tx,
+    );
+    expect(tx.orderItem.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: { in: ['item-1', 'item-2'] } },
+        data: expect.objectContaining({ status: OrderItemStatus.CONFIRMED }),
+      }),
+    );
+    expect(events.emit).toHaveBeenCalled();
+  });
+
+  it('confirms only selected draft products and leaves the rest untouched', async () => {
+    const { service, tx, products, inventory, earnings } = setup();
+    const active = order(OrderStatus.ACTIVE);
+    const draftOrder = {
+      ...active,
+      items: [
+        { ...active.items[0], id: 'item-1', catalogItemId: 'product-1' },
+        {
+          ...active.items[0],
+          id: 'item-2',
+          catalogItemId: 'product-2',
+          productLocationId: 'product-location-2',
+        },
+      ],
+    };
+    tx.order.findFirst.mockResolvedValueOnce(draftOrder).mockResolvedValueOnce({
+      ...draftOrder,
+      items: [
+        { ...draftOrder.items[0], status: OrderItemStatus.CONFIRMED },
+        draftOrder.items[1],
+      ],
+    });
+    products.resolveForSale.mockResolvedValue([product()]);
+    inventory.postSale.mockResolvedValue([
+      {
+        orderItemId: 'item-1',
+        unitCost: null,
+        lineCost: null,
+      },
+    ]);
+    earnings.recordForProductOrder.mockResolvedValue([]);
+
+    await service.confirmItems(
+      'location-1',
+      'order-1',
+      { itemIds: ['item-1'], idempotencyKey: 'confirm-key-2' },
+      owner,
+    );
+
+    expect(tx.orderItem.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: { in: ['item-1'] } } }),
+    );
+    expect(inventory.postSale.mock.calls[0][3]).toEqual([
+      expect.objectContaining({ orderItemId: 'item-1' }),
+    ]);
+  });
+
+  it('returns the existing order for a repeated group confirmation idempotency key', async () => {
+    const { service, tx, db, inventory, earnings } = setup();
+    const hash = confirmItemsHash('location-1', 'order-1', ['item-1']);
+    tx.orderOperation.create.mockRejectedValue({
+      code: PrismaErrorCode.UNIQUE_CONSTRAINT_VIOLATION,
+    });
+    tx.order.findFirst.mockResolvedValue(order(OrderStatus.ACTIVE));
+    db.orderOperation.findUnique.mockResolvedValue({
+      orderId: 'order-1',
+      operationType: 'CONFIRM_PRODUCT_ITEMS',
+      requestHash: hash,
+    });
+    db.order.findFirst.mockResolvedValue(
+      order(OrderStatus.ACTIVE, OrderItemStatus.CONFIRMED),
+    );
+
+    const result = await service.confirmItems(
+      'location-1',
+      'order-1',
+      { itemIds: ['item-1'], idempotencyKey: 'confirm-key-3' },
+      owner,
+    );
+
+    expect(result.items[0].status).toBe(OrderItemStatus.CONFIRMED);
+    expect(inventory.postSale).not.toHaveBeenCalled();
+    expect(earnings.recordForProductOrder).not.toHaveBeenCalled();
+  });
+
+  it('rejects a reused group confirmation idempotency key with different items', async () => {
+    const { service, tx, db } = setup();
+    tx.orderOperation.create.mockRejectedValue({
+      code: PrismaErrorCode.UNIQUE_CONSTRAINT_VIOLATION,
+    });
+    tx.order.findFirst.mockResolvedValue(order(OrderStatus.ACTIVE));
+    db.orderOperation.findUnique.mockResolvedValue({
+      orderId: 'order-1',
+      operationType: 'CONFIRM_PRODUCT_ITEMS',
+      requestHash: 'different',
+    });
+
+    const error = await service
+      .confirmItems(
+        'location-1',
+        'order-1',
+        { itemIds: ['item-1'], idempotencyKey: 'confirm-key-4' },
+        owner,
+      )
+      .then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+    expect(error).toBeInstanceOf(AppException);
+    expect((error as AppException).errorCode).toBe(
+      'ORDER_IDEMPOTENCY_CONFLICT',
+    );
+  });
+
+  it('rejects service items in group confirmation without touching stock', async () => {
+    const { service, tx, inventory, earnings } = setup();
+    const active = order(OrderStatus.ACTIVE);
+    tx.order.findFirst.mockResolvedValue({
+      ...active,
+      items: [
+        {
+          ...active.items[0],
+          id: 'service-item-1',
+          type: OrderItemType.SERVICE,
+          catalogItemId: 'service-1',
+        },
+      ],
+    });
+
+    const error = await service
+      .confirmItems(
+        'location-1',
+        'order-1',
+        { itemIds: ['service-item-1'], idempotencyKey: 'confirm-key-5' },
+        owner,
+      )
+      .then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+    expect(error).toBeInstanceOf(AppException);
+    expect((error as AppException).errorCode).toBe('ORDER_ITEM_NOT_DRAFT');
+    expect(inventory.postSale).not.toHaveBeenCalled();
+    expect(earnings.recordForProductOrder).not.toHaveBeenCalled();
+  });
+
+  it('does not confirm any selected products when one stock write fails', async () => {
+    const { service, tx, products, inventory, earnings } = setup();
+    const active = order(OrderStatus.ACTIVE);
+    tx.order.findFirst.mockResolvedValue({
+      ...active,
+      items: [
+        { ...active.items[0], id: 'item-1', catalogItemId: 'product-1' },
+        {
+          ...active.items[0],
+          id: 'item-2',
+          catalogItemId: 'product-2',
+          productLocationId: 'product-location-2',
+        },
+      ],
+    });
+    products.resolveForSale.mockResolvedValue([product(), secondProduct()]);
+    inventory.postSale.mockRejectedValue(new Error('insufficient stock'));
+
+    await expect(
+      service.confirmItems(
+        'location-1',
+        'order-1',
+        { itemIds: ['item-1', 'item-2'], idempotencyKey: 'confirm-key-6' },
+        owner,
+      ),
+    ).rejects.toThrow('insufficient stock');
+
+    expect(tx.orderItem.updateMany).not.toHaveBeenCalled();
+    expect(earnings.recordForProductOrder).not.toHaveBeenCalled();
   });
 
   it('creates confirmed service lines when a booking is completed', async () => {
@@ -777,6 +1119,87 @@ describe('OrdersService', () => {
         }),
       }),
     );
+  });
+
+  it('adds multiple draft products to a booking order without treating service custom prices as product edits', async () => {
+    const { service, tx, products, staff } = setup();
+    const now = new Date('2026-10-01T10:00:00.000Z');
+    const existingOrder = {
+      ...order(OrderStatus.ACTIVE),
+      bookingId: 'booking-1',
+      items: [
+        {
+          ...order(OrderStatus.ACTIVE).items[0],
+          id: 'service-item-1',
+          type: OrderItemType.SERVICE,
+          bookingItemId: 'booking-item-1',
+          status: OrderItemStatus.CONFIRMED,
+          catalogItemId: 'service-1',
+          productLocationId: null,
+          title: 'Haircut',
+          customUnitPrice: new Prisma.Decimal(40),
+        },
+      ],
+    };
+    const refreshedOrder = {
+      ...existingOrder,
+      items: [
+        ...existingOrder.items,
+        {
+          ...order(OrderStatus.ACTIVE).items[0],
+          id: 'product-item-1',
+          catalogItemId: 'product-1',
+          customUnitPrice: null,
+          lineTotal: new Prisma.Decimal(20),
+        },
+        {
+          ...order(OrderStatus.ACTIVE).items[0],
+          id: 'product-item-2',
+          catalogItemId: 'product-2',
+          customUnitPrice: null,
+          lineTotal: new Prisma.Decimal(30),
+        },
+      ],
+    };
+    tx.order.findUnique.mockResolvedValue(existingOrder);
+    tx.order.findFirst.mockResolvedValue(refreshedOrder);
+    tx.order.update.mockResolvedValue(refreshedOrder);
+    products.resolveForSale.mockResolvedValue([product(), secondProduct()]);
+    staff.resolveForProductSale.mockResolvedValue([]);
+
+    await service.addDraftProductsToBookingOrder(
+      {
+        id: 'booking-1',
+        locationId: 'location-1',
+        clientId: 'client-1',
+        clientFirstName: 'Ann',
+        clientLastName: 'Client',
+        clientPhone: '+79000000000',
+        endAt: now,
+        items: [],
+      } as never,
+      [
+        { productId: 'product-1', quantity: '1.000' },
+        { productId: 'product-2', quantity: '1.000' },
+      ],
+      employee,
+      tx as never,
+    );
+
+    expect(tx.orderItem.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          orderId: 'order-1',
+          type: OrderItemType.PRODUCT,
+          catalogItemId: 'product-1',
+        }),
+        expect.objectContaining({
+          orderId: 'order-1',
+          type: OrderItemType.PRODUCT,
+          catalogItemId: 'product-2',
+        }),
+      ],
+    });
   });
 
   it('versions service lines when a completed booking price or seller changes', async () => {

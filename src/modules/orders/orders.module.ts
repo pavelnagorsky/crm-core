@@ -23,6 +23,6 @@ import { OrdersService } from './orders.service.js';
   ],
   controllers: [OrdersController],
   providers: [OrdersService, OrderComputeService, OrdersAggregatesService],
-  exports: [OrdersService, OrdersAggregatesService],
+  exports: [OrdersService, OrderComputeService, OrdersAggregatesService],
 })
 export class OrdersModule {}

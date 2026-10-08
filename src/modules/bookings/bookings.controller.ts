@@ -34,6 +34,8 @@ import { BookingClientService } from './services/booking-client.service.js';
 import { BookingSetupResponseDto } from './dto/booking-setup-response.dto.js';
 import { BookingResolveRequestDto } from './dto/booking-resolve-request.dto.js';
 import { BookingResolveResponseDto } from './dto/booking-resolve-response.dto.js';
+import { BookingPricingRequestDto } from './dto/booking-pricing-request.dto.js';
+import { BookingPricingResponseDto } from './dto/booking-pricing-response.dto.js';
 import { ManualCreateBookingDto } from './dto/manual-create-booking.dto.js';
 import { UpdateBookingDto } from './dto/update-booking.dto.js';
 import { CancelBookingDto } from './dto/cancel-booking.dto.js';
@@ -100,6 +102,24 @@ export class BookingsController {
   ): Promise<BaseResponseDto<BookingResolveResponseDto>> {
     return BaseResponseDto.success(
       await this.bookingsService.resolveBookingSelection(locationId, dto),
+    );
+  }
+
+  @ApiOperation({
+    summary: 'Calculate booking pricing preview (public)',
+  })
+  @ApiOkResponse({ type: ApiResponse(BookingPricingResponseDto) })
+  @ApiNotFoundResponse({
+    description: 'Location, service, or product not found',
+  })
+  @Post('public/locations/:locationId/pricing')
+  async priceBooking(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Body() dto: BookingPricingRequestDto,
+  ): Promise<BaseResponseDto<BookingPricingResponseDto>> {
+    const pricing = await this.bookingCreateService.price(locationId, dto);
+    return BaseResponseDto.success(
+      BookingPricingResponseDto.fromResult(pricing),
     );
   }
 

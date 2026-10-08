@@ -30,6 +30,7 @@ import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
 import { LocationRBAC } from '../auth/decorators/location-rbac.decorator.js';
 import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
+import { ConfirmOrderItemsDto } from './dto/confirm-order-items.dto.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
 import { OrderResponseDto } from './dto/order-response.dto.js';
 import { OrderSearchRequestDto } from './dto/order-search-request.dto.js';
@@ -155,6 +156,26 @@ export class OrdersController {
       locationId,
       orderId,
       orderItemId,
+      auditActorFromToken(token, locationId),
+    );
+    return BaseResponseDto.success(OrderResponseDto.fromEntity(order));
+  }
+
+  @ApiOperation({ summary: 'Confirm multiple draft product order items' })
+  @ApiOkResponse({ type: ApiResponse(OrderResponseDto) })
+  @ApiConflictResponse({ description: 'Order items cannot be confirmed' })
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Post(':orderId/items/confirm')
+  async confirmItems(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Param('orderId', ParseUUIDPipe) orderId: string,
+    @Body() dto: ConfirmOrderItemsDto,
+    @TokenPayload() token: TokenPayloadDto,
+  ): Promise<BaseResponseDto<OrderResponseDto>> {
+    const order = await this.orders.confirmItems(
+      locationId,
+      orderId,
+      dto,
       auditActorFromToken(token, locationId),
     );
     return BaseResponseDto.success(OrderResponseDto.fromEntity(order));

@@ -1,12 +1,18 @@
 import { HttpStatus } from '@nestjs/common';
-import { CalendarEventRepeatType, CalendarEventType } from '@prisma/client';
+import {
+  CalendarEventRepeatType,
+  CalendarEventType,
+  BookingVisibility,
+  OrderItemType,
+  Prisma,
+} from '@prisma/client';
 import { BookingCreateService } from './booking-create.service.js';
 import { CreateBookingDto } from '../dto/create-booking.dto.js';
-import { BookingVisibility } from '@prisma/client';
 import { AuditActorRole } from '../../audit/enums/audit-actor-role.enum.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { BookingStatus } from '../enums/booking-status.enum.js';
 import { BookingSource } from '../enums/booking-source.enum.js';
+import { OrderComputeService } from '../../orders/services/order-compute.service.js';
 
 const dto: CreateBookingDto = {
   locationId: 'business-1',
@@ -28,9 +34,10 @@ function channelDeps(): [never] {
   return [{ assertAllowed: vi.fn() } as never];
 }
 
-function commercialDeps(): [never, never] {
+function commercialDeps(): [never, OrderComputeService, never] {
   return [
-    { syncCompletedBooking: vi.fn() } as never,
+    { syncCompletedBooking: vi.fn(), priceProductItems: vi.fn() } as never,
+    new OrderComputeService(),
     {
       recordForCompletedBooking: vi.fn(),
       syncForCompletedBooking: vi.fn(),
@@ -77,6 +84,62 @@ function setup() {
     ...commercialDeps(),
   );
   return { service, clients, staff };
+}
+
+function pricingSetup() {
+  const db = {
+    location: {
+      findUnique: vi.fn().mockResolvedValue({ currency: 'BYN' }),
+    },
+    service: {
+      findMany: vi.fn().mockResolvedValue([
+        {
+          id: 'service-1',
+          title: 'Haircut',
+          durationMinutes: 60,
+          bufferMinutes: 0,
+          price: new Prisma.Decimal(50),
+        },
+      ]),
+    },
+    $transaction: vi.fn(),
+  };
+  const orders = {
+    syncCompletedBooking: vi.fn(),
+    priceProductItems: vi.fn().mockResolvedValue([
+      {
+        type: OrderItemType.PRODUCT,
+        catalogItemId: 'product-1',
+        title: 'Shampoo',
+        sku: 'SKU-1',
+        unit: null,
+        quantity: new Prisma.Decimal(2),
+        listUnitPrice: new Prisma.Decimal(20),
+        listLineTotal: new Prisma.Decimal(40),
+        customUnitPrice: new Prisma.Decimal(15),
+        unitPrice: new Prisma.Decimal(15),
+        lineSubtotal: new Prisma.Decimal(30),
+        discountTotal: new Prisma.Decimal(0),
+        lineTotal: new Prisma.Decimal(30),
+      },
+    ]),
+  };
+  const service = new BookingCreateService(
+    db as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    { emit: vi.fn() } as never,
+    { generateClientToken: vi.fn() } as never,
+    ...channelDeps(),
+    orders as never,
+    new OrderComputeService(),
+    {
+      recordForCompletedBooking: vi.fn(),
+      syncForCompletedBooking: vi.fn(),
+    } as never,
+  );
+  return { service, db, orders };
 }
 
 describe('BookingCreateService client ban', () => {
@@ -185,6 +248,37 @@ describe('BookingCreateService client ban', () => {
       HttpStatus.BAD_REQUEST,
     );
     expect(clients.resolveForBooking).not.toHaveBeenCalled();
+  });
+});
+
+describe('BookingCreateService pricing', () => {
+  it('calculates service and product prices without writing to the database', async () => {
+    const { service, db, orders } = pricingSetup();
+
+    const result = await service.price('business-1', {
+      items: [{ serviceId: 'service-1', customPrice: '40.00' }],
+      products: [
+        {
+          productId: 'product-1',
+          quantity: '2.000',
+          customUnitPrice: '15.00',
+        },
+      ],
+    });
+
+    expect(result.currency).toBe('BYN');
+    expect(result.serviceTotal.toFixed(2)).toBe('40.00');
+    expect(result.productTotal.toFixed(2)).toBe('30.00');
+    expect(result.totalAmount.toFixed(2)).toBe('70.00');
+    expect(result.items).toHaveLength(2);
+    expect(orders.priceProductItems).toHaveBeenCalledWith('business-1', [
+      {
+        productId: 'product-1',
+        quantity: '2.000',
+        customUnitPrice: '15.00',
+      },
+    ]);
+    expect(db.$transaction).not.toHaveBeenCalled();
   });
 });
 
@@ -539,6 +633,7 @@ function walkInSetup(
             clientLastName: string;
             clientPhone: string | null;
             clientEmail: string | null;
+            internalNotes?: string | null;
             items: {
               create: {
                 startAt: Date;
@@ -562,7 +657,7 @@ function walkInSetup(
             clientPhone: args.data.clientPhone,
             clientEmail: args.data.clientEmail,
             notes: null,
-            internalNotes: null,
+            internalNotes: args.data.internalNotes ?? null,
             items: args.data.items.create.map((item, index) => ({
               id: `booking-item-${index + 1}`,
               bookingId: 'booking-1',
@@ -601,6 +696,9 @@ function walkInSetup(
     syncCompletedBooking: vi
       .fn()
       .mockResolvedValue({ id: 'order-1', items: [] }),
+    addDraftProductsToBookingOrder: vi
+      .fn()
+      .mockResolvedValue({ id: 'order-1', items: [] }),
   };
   const earnings = {
     recordForCompletedBooking: vi.fn().mockResolvedValue([]),
@@ -615,6 +713,7 @@ function walkInSetup(
     { generateClientToken: vi.fn() } as never,
     ...channelDeps(),
     orders as never,
+    new OrderComputeService(),
     earnings as never,
   );
   return { service, tx, calendar, clients, orders, earnings };
@@ -681,39 +780,90 @@ describe('BookingCreateService walk-in', () => {
     expect(created.data.clientPhone).toBe(dto.phone);
   });
 
-  it('creates WALK_IN with arbitrary shortened time interval', async () => {
-    const { service, tx } = walkInSetup();
+  it('stores internal notes and draft products atomically on manual create', async () => {
+    const { service, tx, orders } = walkInSetup();
+    const actor = { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER };
+    const products = [
+      {
+        productId: 'product-1',
+        quantity: '2.000',
+        sellerStaffId: 'staff-1',
+        customUnitPrice: '15.00',
+      },
+      {
+        productId: 'product-2',
+        quantity: '1.000',
+        sellerStaffId: null,
+        customUnitPrice: null,
+      },
+    ];
 
     await service.createManualBooking(
       'business-1',
       {
         ...dto,
-        source: BookingSource.WALK_IN,
-        startAt: '2026-09-20T10:04:00',
-        endAt: '2026-09-20T10:30:00',
+        internalNotes: 'Prepare retail products',
+        products,
       },
-      { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER },
+      actor,
     );
 
     const created = tx.booking.create.mock.calls[0][0] as {
-      data: {
-        startAt: Date;
-        endAt: Date;
-        status: BookingStatus;
-        source: BookingSource;
-        items: { create: { startAt: Date; endAt: Date }[] };
-      };
+      data: { internalNotes: string | null };
     };
-    expect(created.data.source).toBe(BookingSource.WALK_IN);
-    expect(created.data.status).toBe(BookingStatus.CONFIRMED);
-    expect(created.data.startAt.toISOString()).toBe('2026-09-20T07:04:00.000Z');
-    expect(created.data.endAt.toISOString()).toBe('2026-09-20T07:30:00.000Z');
-    expect(created.data.items.create[0].startAt.toISOString()).toBe(
-      '2026-09-20T07:04:00.000Z',
+    const booking = await tx.booking.create.mock.results[0].value;
+    expect(created.data.internalNotes).toBe('Prepare retail products');
+    expect(orders.addDraftProductsToBookingOrder).toHaveBeenCalledWith(
+      booking,
+      products,
+      actor,
+      tx,
     );
-    expect(created.data.items.create[0].endAt.toISOString()).toBe(
-      '2026-09-20T07:30:00.000Z',
-    );
+  });
+
+  it('keeps an in-progress WALK_IN confirmed when the end is still ahead', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-20T07:10:00.000Z'));
+    try {
+      const { service, tx, orders, earnings } = walkInSetup();
+
+      await service.createManualBooking(
+        'business-1',
+        {
+          ...dto,
+          source: BookingSource.WALK_IN,
+          startAt: '2026-09-20T10:04:00',
+          endAt: '2026-09-20T10:30:00',
+        },
+        { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER },
+      );
+
+      const created = tx.booking.create.mock.calls[0][0] as {
+        data: {
+          startAt: Date;
+          endAt: Date;
+          status: BookingStatus;
+          source: BookingSource;
+          items: { create: { startAt: Date; endAt: Date }[] };
+        };
+      };
+      expect(created.data.source).toBe(BookingSource.WALK_IN);
+      expect(created.data.status).toBe(BookingStatus.CONFIRMED);
+      expect(created.data.startAt.toISOString()).toBe(
+        '2026-09-20T07:04:00.000Z',
+      );
+      expect(created.data.endAt.toISOString()).toBe('2026-09-20T07:30:00.000Z');
+      expect(created.data.items.create[0].startAt.toISOString()).toBe(
+        '2026-09-20T07:04:00.000Z',
+      );
+      expect(created.data.items.create[0].endAt.toISOString()).toBe(
+        '2026-09-20T07:30:00.000Z',
+      );
+      expect(orders.syncCompletedBooking).not.toHaveBeenCalled();
+      expect(earnings.recordForCompletedBooking).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('rejects WALK_IN when the requested interval conflicts', async () => {
@@ -739,38 +889,43 @@ describe('BookingCreateService walk-in', () => {
     expect((error as AppException).errorCode).toBe('BOOKING_SLOT_UNAVAILABLE');
   });
 
-  it('creates a completed WALK_IN and syncs service order and earnings atomically', async () => {
-    const { service, tx, orders, earnings } = walkInSetup();
+  it('completes a WALK_IN whose end is already in the past and syncs order and earnings', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-20T07:30:00.000Z'));
+    try {
+      const { service, tx, orders, earnings } = walkInSetup();
 
-    await service.createManualBooking(
-      'business-1',
-      {
-        ...dto,
-        source: BookingSource.WALK_IN,
-        startAt: '2026-09-20T10:04:00',
-        endAt: '2026-09-20T10:30:00',
-        completeImmediately: true,
-      },
-      { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER },
-    );
+      await service.createManualBooking(
+        'business-1',
+        {
+          ...dto,
+          source: BookingSource.WALK_IN,
+          startAt: '2026-09-20T10:04:00',
+          endAt: '2026-09-20T10:30:00',
+        },
+        { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER },
+      );
 
-    const booking = await tx.booking.create.mock.results[0].value;
-    expect(booking.status).toBe(BookingStatus.COMPLETED);
-    expect(orders.syncCompletedBooking).toHaveBeenCalledWith(
-      booking,
-      expect.objectContaining({ name: 'Olga' }),
-      tx,
-    );
-    expect(earnings.recordForCompletedBooking).toHaveBeenCalledWith(
-      booking,
-      tx,
-      { id: 'order-1', items: [] },
-    );
-    expect(earnings.syncForCompletedBooking).toHaveBeenCalledWith(
-      booking,
-      expect.objectContaining({ name: 'Olga' }),
-      tx,
-      { id: 'order-1', items: [] },
-    );
+      const booking = await tx.booking.create.mock.results[0].value;
+      expect(booking.status).toBe(BookingStatus.COMPLETED);
+      expect(orders.syncCompletedBooking).toHaveBeenCalledWith(
+        booking,
+        expect.objectContaining({ name: 'Olga' }),
+        tx,
+      );
+      expect(earnings.recordForCompletedBooking).toHaveBeenCalledWith(
+        booking,
+        tx,
+        { id: 'order-1', items: [] },
+      );
+      expect(earnings.syncForCompletedBooking).toHaveBeenCalledWith(
+        booking,
+        expect.objectContaining({ name: 'Olga' }),
+        tx,
+        { id: 'order-1', items: [] },
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

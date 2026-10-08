@@ -8,6 +8,7 @@ import {
 import {
   BookingExecutionMode as PrismaBookingExecutionMode,
   BookingVisibility,
+  OrderItemType,
   Prisma,
   ServiceStatus,
 } from '@prisma/client';
@@ -42,9 +43,15 @@ import { BookingWithItems } from '../interfaces/booking-with-items.interface.js'
 import { BookingServiceSnapshot } from '../interfaces/booking-service-snapshot.interface.js';
 import { ResolvedBookingItem } from '../interfaces/resolved-booking-item.interface.js';
 import { ManualBookingItemDto } from '../dto/manual-booking-item.dto.js';
+import { ManualBookingProductDto } from '../dto/manual-booking-product.dto.js';
+import { BookingPricingRequestDto } from '../dto/booking-pricing-request.dto.js';
 import { OrdersService } from '../../orders/orders.service.js';
+import { OrderComputeService } from '../../orders/services/order-compute.service.js';
 import { StaffEarningsService } from '../../payroll/earnings/staff-earnings.service.js';
 import { ResolvedBookingClient } from '../interfaces/resolved-booking-client.interface.js';
+import { BookingPricingResult } from '../interfaces/booking-pricing-result.interface.js';
+import { OrderPricingLine } from '../../orders/interfaces/order-pricing-line.interface.js';
+import { BookingSelectionRequest } from '../interfaces/booking-selection-request.interface.js';
 
 @Injectable()
 export class BookingCreateService {
@@ -59,6 +66,7 @@ export class BookingCreateService {
     private readonly bookingClientService: BookingClientService,
     private readonly rateLimiter: PublicBookingRateLimiter,
     private readonly orders: OrdersService,
+    private readonly compute: OrderComputeService,
     private readonly staffEarnings: StaffEarningsService,
   ) {}
 
@@ -115,6 +123,46 @@ export class BookingCreateService {
     this.emitBookingCreated(booking, actor, currency, bundleTitle);
     this.emitBookingNotification(booking, timezone);
     return booking;
+  }
+
+  async price(
+    locationId: string,
+    dto: BookingPricingRequestDto,
+  ): Promise<BookingPricingResult> {
+    const location = await this.db.location.findUnique({
+      where: { id: locationId },
+      select: { currency: true },
+    });
+    if (!location) {
+      throw new AppException(
+        ErrorCode.BOOKING_BUSINESS_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    const selection = this.hasServiceSelection(dto)
+      ? await this.loadSelection(locationId, dto)
+      : null;
+    const serviceLines = selection
+      ? this.priceServiceLines(selection.services, this.manualItems(dto))
+      : [];
+    const productLines = await this.orders.priceProductItems(
+      locationId,
+      dto.products ?? [],
+    );
+    const serviceTotals = this.compute.totals(serviceLines);
+    const productTotals = this.compute.totals(productLines);
+    const totals = this.compute.totals([...serviceLines, ...productLines]);
+
+    return {
+      currency: location.currency,
+      bundleId: selection?.bundleId ?? null,
+      bundleTitle: selection?.bundleTitle ?? null,
+      serviceTotal: serviceTotals.totalAmount,
+      productTotal: productTotals.totalAmount,
+      ...totals,
+      items: [...serviceLines, ...productLines],
+    };
   }
 
   private async create(
@@ -174,19 +222,20 @@ export class BookingCreateService {
       this.manualItems(dto),
       walkInEndAt,
     );
-    const status = this.initialStatus(
-      attribution.source,
-      dto,
-      business.isBookingConfirmationRequired,
-    );
-
     const envelopeStart = new Date(
       Math.min(...items.map((item) => item.startAt.getTime())),
     );
     const envelopeEnd = new Date(
       Math.max(...items.map((item) => item.endAt.getTime())),
     );
+    const status = this.initialStatus(
+      attribution.source,
+      envelopeEnd,
+      business.isBookingConfirmationRequired,
+    );
     const lockKeys = this.lockKeysForItems(items, business.timezone);
+    const manualProducts = this.manualProducts(dto, attribution.source);
+    const internalNotes = this.manualInternalNotes(dto, attribution.source);
 
     const booking = await this.db.$transaction(async (tx) => {
       for (const lockKey of lockKeys) {
@@ -268,6 +317,7 @@ export class BookingCreateService {
           clientPhone: client.phone,
           clientEmail: client.email,
           notes: dto.notes ?? null,
+          internalNotes,
           items: {
             create: createdItems.map((item) => ({
               locationId,
@@ -306,6 +356,18 @@ export class BookingCreateService {
           order,
         );
       }
+      if (manualProducts.length > 0) {
+        const productActor = actor ?? {
+          name: 'System',
+          role: AuditActorRole.SYSTEM,
+        };
+        await this.orders.addDraftProductsToBookingOrder(
+          booking,
+          manualProducts,
+          productActor,
+          tx,
+        );
+      }
       return booking;
     });
 
@@ -319,7 +381,7 @@ export class BookingCreateService {
 
   private async loadSelection(
     locationId: string,
-    dto: CreateBookingDto | ManualCreateBookingDto,
+    dto: BookingSelectionRequest,
   ): Promise<{
     services: BookingServiceSnapshot[];
     executionMode: PrismaBookingExecutionMode;
@@ -409,16 +471,40 @@ export class BookingCreateService {
       );
     }
     const byId = new Map(services.map((service) => [service.id, service]));
-    const executionMode =
-      this.isManualDto(dto) && dto.executionMode
-        ? (dto.executionMode as PrismaBookingExecutionMode)
-        : PrismaBookingExecutionMode.SEQUENTIAL;
+    const executionMode = dto.executionMode
+      ? (dto.executionMode as PrismaBookingExecutionMode)
+      : PrismaBookingExecutionMode.SEQUENTIAL;
     return {
       bundleId: null,
       bundleTitle: null,
       executionMode,
       services: serviceIds.map((serviceId) => byId.get(serviceId)!),
     };
+  }
+
+  private priceServiceLines(
+    services: BookingServiceSnapshot[],
+    manualItems: ManualBookingItemDto[],
+  ): OrderPricingLine[] {
+    return services.map((service, index) => {
+      const quantity = new Prisma.Decimal(1);
+      const price = this.compute.priceLine(
+        quantity,
+        service.price,
+        manualItems[index]?.customPrice == null
+          ? null
+          : new Prisma.Decimal(manualItems[index].customPrice),
+      );
+      return {
+        type: OrderItemType.SERVICE,
+        catalogItemId: service.id,
+        title: service.title,
+        sku: null,
+        unit: null,
+        quantity,
+        ...price,
+      };
+    });
   }
 
   private async resolveItems(
@@ -598,10 +684,34 @@ export class BookingCreateService {
     )[0].id;
   }
 
-  private manualItems(
+  private manualItems(dto: BookingSelectionRequest): ManualBookingItemDto[] {
+    return dto.items ?? [];
+  }
+
+  private hasServiceSelection(dto: BookingSelectionRequest): boolean {
+    return Boolean(
+      dto.bundleId ||
+      dto.serviceId ||
+      dto.serviceIds?.length ||
+      dto.items?.length,
+    );
+  }
+
+  private manualProducts(
     dto: CreateBookingDto | ManualCreateBookingDto,
-  ): ManualBookingItemDto[] {
-    return this.isManualDto(dto) ? (dto.items ?? []) : [];
+    source: BookingSource,
+  ): ManualBookingProductDto[] {
+    if (!this.isInternalSource(source) || !('products' in dto)) return [];
+    return dto.products ?? [];
+  }
+
+  private manualInternalNotes(
+    dto: CreateBookingDto | ManualCreateBookingDto,
+    source: BookingSource,
+  ): string | null {
+    if (!this.isInternalSource(source) || !('internalNotes' in dto))
+      return null;
+    return dto.internalNotes ?? null;
   }
 
   private isManualDto(
@@ -612,8 +722,9 @@ export class BookingCreateService {
       'executionMode' in dto ||
       'anonymous' in dto ||
       'source' in dto ||
-      'endAt' in dto ||
-      'completeImmediately' in dto
+      'internalNotes' in dto ||
+      'products' in dto ||
+      'endAt' in dto
     );
   }
 
@@ -637,17 +748,14 @@ export class BookingCreateService {
 
   private initialStatus(
     source: BookingSource,
-    dto: CreateBookingDto | ManualCreateBookingDto,
+    endAt: Date,
     isBookingConfirmationRequired: boolean,
   ): BookingStatus {
-    if (
-      source === BookingSource.WALK_IN &&
-      this.isManualDto(dto) &&
-      dto.completeImmediately
-    ) {
-      return BookingStatus.COMPLETED;
+    if (source === BookingSource.WALK_IN) {
+      return endAt.getTime() <= Date.now()
+        ? BookingStatus.COMPLETED
+        : BookingStatus.CONFIRMED;
     }
-    if (source === BookingSource.WALK_IN) return BookingStatus.CONFIRMED;
     return isBookingConfirmationRequired
       ? BookingStatus.PENDING
       : BookingStatus.CONFIRMED;

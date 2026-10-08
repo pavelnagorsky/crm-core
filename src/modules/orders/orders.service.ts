@@ -1,3 +1,4 @@
+import { createHash } from 'crypto';
 import {
   BadRequestException,
   ForbiddenException,
@@ -14,6 +15,7 @@ import {
   Prisma,
 } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
+import { PrismaErrorCode } from '../../shared/database/prisma-error-codes.js';
 import { stableOrderBy } from '../../shared/database/stable-order-by.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
@@ -34,6 +36,7 @@ import { StaffEarningsService } from '../payroll/earnings/staff-earnings.service
 import { ProductOrderCommissionLine } from '../payroll/earnings/interfaces/product-order-commission-line.interface.js';
 import { ProductsService } from '../products/products.service.js';
 import { StaffService } from '../staff/staff.service.js';
+import { ConfirmOrderItemsDto } from './dto/confirm-order-items.dto.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
 import { OrderProductItemDto } from './dto/order-product-item.dto.js';
 import { OrderSearchRequestDto } from './dto/order-search-request.dto.js';
@@ -41,6 +44,7 @@ import { UpdateOrderDto } from './dto/update-order.dto.js';
 import { OrderSearchOrderBy } from './enums/order-search-order-by.enum.js';
 import { OrderTargetStatus } from './enums/order-target-status.enum.js';
 import { OrderTransition } from './interfaces/order-transition.interface.js';
+import { OrderPricingLine } from './interfaces/order-pricing-line.interface.js';
 import { OrderWithItems } from './interfaces/order-with-items.interface.js';
 import { ResolvedOrderDraft } from './interfaces/resolved-order-draft.interface.js';
 import { OrderComputeService } from './services/order-compute.service.js';
@@ -48,6 +52,8 @@ import { OrderComputeService } from './services/order-compute.service.js';
 const orderInclude = {
   items: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] },
 } satisfies Prisma.OrderInclude;
+
+const CONFIRM_PRODUCT_ITEMS_OPERATION = 'CONFIRM_PRODUCT_ITEMS';
 
 @Injectable()
 export class OrdersService {
@@ -414,14 +420,105 @@ export class OrdersService {
     actor: AuditActor,
     tx: Prisma.TransactionClient,
   ): Promise<OrderWithItems> {
+    return this.addDraftProductsToBookingOrder(booking, [dto], actor, tx);
+  }
+
+  async addDraftProductsToBookingOrder(
+    booking: BookingWithItems,
+    items: OrderProductItemDto[],
+    actor: AuditActor,
+    tx: Prisma.TransactionClient,
+  ): Promise<OrderWithItems> {
     const order = await this.ensureBookingOrder(booking, actor, tx);
     this.assertActive(order.status);
+    this.assertProductItemsCanBeAdded(order, items);
+    const resolved = await this.resolveProductItems(
+      booking.locationId,
+      items,
+      actor,
+      order,
+      tx,
+    );
+    await tx.orderItem.createMany({
+      data: resolved.map((item) => ({
+        orderId: order.id,
+        ...item,
+      })),
+    });
+    return this.refreshTotals(tx, booking.locationId, order.id);
+  }
+
+  async priceProductItems(
+    locationId: string,
+    items: OrderProductItemDto[],
+  ): Promise<OrderPricingLine[]> {
+    if (items.length === 0) return [];
+    const productIds = items.map((item) => item.productId);
+    if (items.some((item) => new Prisma.Decimal(item.quantity).lte(0))) {
+      throw new AppException(
+        ErrorCode.ORDER_QUANTITY_INVALID,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (new Set(productIds).size !== productIds.length) {
+      throw new AppException(
+        ErrorCode.ORDER_DUPLICATE_PRODUCT,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const productRows = await this.products.resolveForSale(
+      locationId,
+      productIds,
+    );
+    if (productRows.length !== productIds.length) {
+      throw new AppException(
+        ErrorCode.ORDER_PRODUCT_NOT_SELLABLE,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const productsById = new Map(
+      productRows.map((row) => [row.productId, row]),
+    );
+    return items.map((item) => {
+      const product = productsById.get(item.productId)!;
+      const quantity = new Prisma.Decimal(item.quantity);
+      const price = this.compute.priceLine(
+        quantity,
+        product.retailPrice,
+        item.customUnitPrice == null
+          ? null
+          : new Prisma.Decimal(item.customUnitPrice),
+      );
+      return {
+        type: OrderItemType.PRODUCT,
+        catalogItemId: product.productId,
+        title: product.product.name,
+        sku: product.product.sku,
+        unit: product.product.unit,
+        quantity,
+        ...price,
+      };
+    });
+  }
+
+  private assertProductItemsCanBeAdded(
+    order: OrderWithItems,
+    items: OrderProductItemDto[],
+  ): void {
+    const productIds = items.map((item) => item.productId);
+    if (new Set(productIds).size !== productIds.length) {
+      throw new AppException(
+        ErrorCode.ORDER_DUPLICATE_PRODUCT,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
     if (
       order.items.some(
         (item) =>
           item.type === OrderItemType.PRODUCT &&
           item.status !== OrderItemStatus.REVERSED &&
-          item.catalogItemId === dto.productId,
+          item.catalogItemId &&
+          productIds.includes(item.catalogItemId),
       )
     ) {
       throw new AppException(
@@ -429,20 +526,6 @@ export class OrdersService {
         HttpStatus.BAD_REQUEST,
       );
     }
-    const [item] = await this.resolveProductItems(
-      booking.locationId,
-      [dto],
-      actor,
-      order,
-      tx,
-    );
-    await tx.orderItem.create({
-      data: {
-        orderId: order.id,
-        ...item,
-      },
-    });
-    return this.refreshTotals(tx, booking.locationId, order.id);
   }
 
   async search(
@@ -553,6 +636,128 @@ export class OrdersService {
     return transition.order;
   }
 
+  async confirmItems(
+    locationId: string,
+    orderId: string,
+    dto: ConfirmOrderItemsDto,
+    actor: AuditActor,
+  ): Promise<OrderWithItems> {
+    this.assertUniqueOrderItemIds(dto.itemIds);
+    const idempotencyKey = dto.idempotencyKey.trim();
+    if (!idempotencyKey) {
+      throw new BadRequestException(
+        'idempotencyKey is required for group confirmation',
+      );
+    }
+    const location = await this.locations.findById(locationId);
+    const requestHash = this.confirmItemsRequestHash(
+      locationId,
+      orderId,
+      dto.itemIds,
+    );
+    const operation = {
+      locationId,
+      orderId,
+      idempotencyKey,
+      operationType: CONFIRM_PRODUCT_ITEMS_OPERATION,
+      requestHash,
+    };
+
+    try {
+      const order = await this.inTransaction(async (tx) => {
+        await this.lockOrder(tx, orderId);
+        const locked = await this.findInTransaction(tx, locationId, orderId);
+        await tx.orderOperation.create({ data: operation });
+        const transition = await this.confirmProductItemsInTransaction(
+          locationId,
+          orderId,
+          dto.itemIds,
+          tx,
+          undefined,
+          { order: locked },
+        );
+        return transition.order;
+      });
+      this.emit(
+        location.brandId,
+        locationId,
+        orderId,
+        AuditEvent.ORDER_ITEM_CONFIRMED,
+        AuditActionType.ACTION,
+        actor,
+        {
+          orderItemIds: dto.itemIds,
+          totalAmount: order.totalAmount.toFixed(2),
+          currency: order.currency,
+        },
+      );
+      return order;
+    } catch (error) {
+      const prismaError = error as { code?: string };
+      if (prismaError.code === PrismaErrorCode.UNIQUE_CONSTRAINT_VIOLATION) {
+        return this.resolveIdempotentConfirmItems(
+          locationId,
+          orderId,
+          idempotencyKey,
+          requestHash,
+        );
+      }
+      throw error;
+    }
+  }
+
+  private assertUniqueOrderItemIds(orderItemIds: string[]): void {
+    if (new Set(orderItemIds).size === orderItemIds.length) return;
+    throw new AppException(
+      ErrorCode.ORDER_DUPLICATE_ITEM,
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+
+  private confirmItemsRequestHash(
+    locationId: string,
+    orderId: string,
+    orderItemIds: string[],
+  ): string {
+    return createHash('sha256')
+      .update(
+        JSON.stringify({
+          locationId,
+          orderId,
+          itemIds: [...orderItemIds].sort(),
+        }),
+      )
+      .digest('hex');
+  }
+
+  private async resolveIdempotentConfirmItems(
+    locationId: string,
+    orderId: string,
+    idempotencyKey: string,
+    requestHash: string,
+  ): Promise<OrderWithItems> {
+    const operation = await this.db.orderOperation.findUnique({
+      where: {
+        locationId_idempotencyKey: {
+          locationId,
+          idempotencyKey,
+        },
+      },
+    });
+    if (
+      !operation ||
+      operation.orderId !== orderId ||
+      operation.operationType !== CONFIRM_PRODUCT_ITEMS_OPERATION ||
+      operation.requestHash !== requestHash
+    ) {
+      throw new AppException(
+        ErrorCode.ORDER_IDEMPOTENCY_CONFLICT,
+        HttpStatus.CONFLICT,
+      );
+    }
+    return this.findById(locationId, orderId);
+  }
+
   async reverseItem(
     locationId: string,
     orderId: string,
@@ -634,6 +839,8 @@ export class OrdersService {
         orderId,
         [orderItemId],
         tx,
+        undefined,
+        { allowAlreadyConfirmed: true },
       );
     });
   }
@@ -644,8 +851,10 @@ export class OrdersService {
     orderItemIds: string[],
     tx: Prisma.TransactionClient,
     occurredAt = new Date(),
+    options: { allowAlreadyConfirmed?: boolean; order?: OrderWithItems } = {},
   ): Promise<OrderTransition> {
-    const order = await this.findInTransaction(tx, locationId, orderId);
+    const order =
+      options.order ?? (await this.findInTransaction(tx, locationId, orderId));
     this.assertActive(order.status);
     const targetIds = new Set(orderItemIds);
     const items = order.items.filter((row) => targetIds.has(row.id));
@@ -663,7 +872,13 @@ export class OrdersService {
           HttpStatus.NOT_FOUND,
         );
       }
-      if (item.status === OrderItemStatus.CONFIRMED) continue;
+      if (item.status === OrderItemStatus.CONFIRMED) {
+        if (options.allowAlreadyConfirmed) continue;
+        throw new AppException(
+          ErrorCode.ORDER_ITEM_NOT_DRAFT,
+          HttpStatus.CONFLICT,
+        );
+      }
       if (
         item.status !== OrderItemStatus.DRAFT ||
         item.type !== OrderItemType.PRODUCT ||
@@ -963,7 +1178,10 @@ export class OrdersService {
     const incomingByProduct = new Map(
       items.map((item) => [item.productId, item]),
     );
-    for (const old of existing?.items ?? []) {
+    const existingProducts =
+      existing?.items.filter((item) => item.type === OrderItemType.PRODUCT) ??
+      [];
+    for (const old of existingProducts) {
       if (old.customUnitPrice == null) continue;
       const incoming = incomingByProduct.get(old.catalogItemId!);
       if (!incoming || incoming.customUnitPrice === null) {
@@ -980,7 +1198,7 @@ export class OrdersService {
       items.some(
         (item) =>
           item.customUnitPrice != null &&
-          !existing?.items.some(
+          !existingProducts.some(
             (old) =>
               old.catalogItemId === item.productId &&
               item.customUnitPrice != null &&
@@ -1034,10 +1252,9 @@ export class OrdersService {
     );
     const sellersById = new Map(sellers.map((row) => [row.id, row]));
     const oldCustomByProduct = new Map(
-      existing?.items.map((item) => [
-        item.catalogItemId,
-        item.customUnitPrice,
-      ]) ?? [],
+      existing?.items
+        .filter((item) => item.type === OrderItemType.PRODUCT)
+        .map((item) => [item.catalogItemId, item.customUnitPrice]) ?? [],
     );
     return items.map((item) => {
       const product = productsById.get(item.productId)!;
