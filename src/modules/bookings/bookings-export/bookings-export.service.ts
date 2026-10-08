@@ -99,7 +99,7 @@ export class BookingsExportService {
       source: labelOf(messages.bookingSource, booking.source),
       clientFirstName: booking.clientFirstName,
       clientLastName: booking.clientLastName,
-      clientPhone: booking.clientPhone,
+      clientPhone: booking.clientPhone ?? '',
       clientEmail: booking.clientEmail ?? '',
       serviceTitle: item.serviceTitle,
       serviceDuration: item.serviceDuration,

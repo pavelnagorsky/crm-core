@@ -9,6 +9,7 @@ import {
   IsUUID,
   MaxLength,
   Validate,
+  ValidateIf,
 } from 'class-validator';
 import { MULTI_SERVICE_MAX_ITEMS } from '../../services/constants/multi-service.constants.js';
 import { IsPhone } from '../../../shared/decorators/is-phone.decorator.js';
@@ -84,6 +85,7 @@ export class CreateBookingDto {
   startAt: string;
 
   @ApiProperty({ type: String, maxLength: 100 })
+  @ValidateIf((dto) => dto.anonymous !== true || dto.firstName !== undefined)
   @IsString()
   @MaxLength(100)
   firstName: string;
@@ -99,6 +101,7 @@ export class CreateBookingDto {
   @MaxLength(100)
   lastName?: string | null;
 
+  @ValidateIf((dto) => dto.anonymous !== true || dto.phone !== undefined)
   @IsPhone()
   phone: string;
 

@@ -160,6 +160,32 @@ describe('BookingCreateService client ban', () => {
       undefined,
     );
   });
+
+  it('rejects online booking without client identity even if anonymous is sent', async () => {
+    const { service, clients } = setup();
+
+    const error = await service
+      .createPublicBooking(
+        'business-1',
+        {
+          ...dto,
+          firstName: undefined,
+          phone: undefined,
+          anonymous: true,
+        } as never,
+        publicAttribution,
+      )
+      .then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+    expect(error).toBeInstanceOf(Error);
+    expect((error as { getStatus: () => number }).getStatus()).toBe(
+      HttpStatus.BAD_REQUEST,
+    );
+    expect(clients.resolveForBooking).not.toHaveBeenCalled();
+  });
 });
 
 describe('BookingCreateService calendar link', () => {
@@ -508,6 +534,11 @@ function walkInSetup(
             status: BookingStatus;
             source: BookingSource;
             executionMode: string;
+            clientId: string | null;
+            clientFirstName: string;
+            clientLastName: string;
+            clientPhone: string | null;
+            clientEmail: string | null;
             items: {
               create: {
                 startAt: Date;
@@ -519,17 +550,17 @@ function walkInSetup(
           Promise.resolve({
             id: 'booking-1',
             locationId: 'business-1',
-            clientId: 'client-1',
+            clientId: args.data.clientId,
             startAt: args.data.startAt,
             endAt: args.data.endAt,
             status: args.data.status,
             source: args.data.source,
             executionMode: args.data.executionMode,
             bundleId: null,
-            clientFirstName: 'Anna',
-            clientLastName: 'Ivanova',
-            clientPhone: '+375291112233',
-            clientEmail: null,
+            clientFirstName: args.data.clientFirstName,
+            clientLastName: args.data.clientLastName,
+            clientPhone: args.data.clientPhone,
+            clientEmail: args.data.clientEmail,
             notes: null,
             internalNotes: null,
             items: args.data.items.create.map((item, index) => ({
@@ -586,10 +617,70 @@ function walkInSetup(
     orders as never,
     earnings as never,
   );
-  return { service, tx, calendar, orders, earnings };
+  return { service, tx, calendar, clients, orders, earnings };
 }
 
 describe('BookingCreateService walk-in', () => {
+  it('creates anonymous manual booking without creating or linking a client', async () => {
+    const { service, tx, clients } = walkInSetup();
+
+    await service.createManualBooking(
+      'business-1',
+      {
+        serviceId: 'service-1',
+        staffId: 'staff-1',
+        startAt: '2026-09-20T10:04:00',
+        anonymous: true,
+      } as never,
+      { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER },
+    );
+
+    const created = tx.booking.create.mock.calls[0][0] as {
+      data: {
+        clientId: string | null;
+        clientFirstName: string;
+        clientLastName: string;
+        clientPhone: string | null;
+        clientEmail: string | null;
+      };
+    };
+    expect(clients.resolveForBooking).not.toHaveBeenCalled();
+    expect(created.data.clientId).toBeNull();
+    expect(created.data.clientFirstName).toBe('');
+    expect(created.data.clientLastName).toBe('');
+    expect(created.data.clientPhone).toBeNull();
+    expect(created.data.clientEmail).toBeNull();
+  });
+
+  it('stores optional anonymous contact snapshot without creating a client', async () => {
+    const { service, tx, clients } = walkInSetup();
+
+    await service.createManualBooking(
+      'business-1',
+      {
+        ...dto,
+        anonymous: true,
+        firstName: 'Guest',
+        lastName: 'One',
+      },
+      { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER },
+    );
+
+    const created = tx.booking.create.mock.calls[0][0] as {
+      data: {
+        clientId: string | null;
+        clientFirstName: string;
+        clientLastName: string;
+        clientPhone: string | null;
+      };
+    };
+    expect(clients.resolveForBooking).not.toHaveBeenCalled();
+    expect(created.data.clientId).toBeNull();
+    expect(created.data.clientFirstName).toBe('Guest');
+    expect(created.data.clientLastName).toBe('One');
+    expect(created.data.clientPhone).toBe(dto.phone);
+  });
+
   it('creates WALK_IN with arbitrary shortened time interval', async () => {
     const { service, tx } = walkInSetup();
 

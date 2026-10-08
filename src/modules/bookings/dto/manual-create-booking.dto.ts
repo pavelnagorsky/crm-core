@@ -19,6 +19,17 @@ import { IsLocalDateTime } from '../../../shared/time/decorators/is-local-date-t
 
 export class ManualCreateBookingDto extends CreateBookingDto {
   @ApiProperty({
+    type: Boolean,
+    required: false,
+    default: false,
+    description:
+      'Create the booking without linking or creating a client profile. Manual endpoint only.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  anonymous?: boolean;
+
+  @ApiProperty({
     enum: [BookingSource.MANUAL, BookingSource.WALK_IN],
     required: false,
     default: BookingSource.MANUAL,

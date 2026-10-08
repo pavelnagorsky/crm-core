@@ -958,7 +958,7 @@ model Booking {
   id String @id @default(uuid())
 
   locationId String
-  clientId   String
+  clientId   String?
 
   startAt       DateTime
   endAt         DateTime
@@ -973,7 +973,7 @@ model Booking {
 
   clientFirstName String  @db.VarChar(100)
   clientLastName  String  @db.VarChar(100)
-  clientPhone     String  @db.VarChar(30)
+  clientPhone     String? @db.VarChar(30)
   clientEmail     String? @db.VarChar(254)
 
   notes         String? @db.VarChar(1000)
@@ -990,7 +990,7 @@ model Booking {
   deletedAt DateTime?
 
   location      Location       @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  client        Client         @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  client        Client?        @relation(fields: [clientId], references: [id], onDelete: Restrict)
   bundle        ServiceBundle? @relation(fields: [bundleId], references: [id], onDelete: SetNull)
   items         BookingItem[]
   earnings      StaffEarning[]

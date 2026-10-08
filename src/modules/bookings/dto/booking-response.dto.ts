@@ -15,8 +15,8 @@ export class BookingResponseDto {
   @ApiProperty({ type: String })
   locationId: string;
 
-  @ApiProperty({ type: String })
-  clientId: string;
+  @ApiProperty({ type: String, nullable: true })
+  clientId: string | null;
 
   @ApiProperty({ type: Date })
   startAt: Date;
@@ -42,8 +42,8 @@ export class BookingResponseDto {
   @ApiProperty({ type: String })
   clientLastName: string;
 
-  @ApiProperty({ type: String })
-  clientPhone: string;
+  @ApiProperty({ type: String, nullable: true })
+  clientPhone: string | null;
 
   @ApiProperty({ type: String, nullable: true })
   clientEmail: string | null;

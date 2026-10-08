@@ -1,5 +1,10 @@
 import { createHash } from 'crypto';
-import { HttpStatus, Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpStatus,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import {
   BookingExecutionMode as PrismaBookingExecutionMode,
   BookingVisibility,
@@ -39,6 +44,7 @@ import { ResolvedBookingItem } from '../interfaces/resolved-booking-item.interfa
 import { ManualBookingItemDto } from '../dto/manual-booking-item.dto.js';
 import { OrdersService } from '../../orders/orders.service.js';
 import { StaffEarningsService } from '../../payroll/earnings/staff-earnings.service.js';
+import { ResolvedBookingClient } from '../interfaces/resolved-booking-client.interface.js';
 
 @Injectable()
 export class BookingCreateService {
@@ -62,6 +68,7 @@ export class BookingCreateService {
     attribution: BookingAttribution,
     context: PublicBookingRequestContext = { ip: 'unknown' },
   ): Promise<BookingWithItems> {
+    this.assertPublicClientFields(dto);
     this.rateLimiter.assertAllowed(dto.phone, context.ip);
     const { booking, timezone, currency, bundleTitle } = await this.create(
       locationId,
@@ -146,13 +153,10 @@ export class BookingCreateService {
     }
 
     const startAt = TimeService.localToUtc(dto.startAt, business.timezone);
-    const lastName = dto.lastName?.trim() || '';
-    const client = await this.clientsService.resolveForBooking(
+    const client = await this.resolveBookingClient(
       locationId,
-      dto.phone,
-      dto.firstName,
-      lastName,
-      dto.email,
+      attribution.source,
+      dto,
     );
     if (isSelfBookingBlocked(attribution.source, client.bannedAt)) {
       throw new AppException(ErrorCode.CLIENT_BANNED, HttpStatus.FORBIDDEN);
@@ -262,7 +266,7 @@ export class BookingCreateService {
           clientFirstName: client.firstName,
           clientLastName: client.lastName,
           clientPhone: client.phone,
-          clientEmail: client.email ?? null,
+          clientEmail: client.email,
           notes: dto.notes ?? null,
           items: {
             create: createdItems.map((item) => ({
@@ -606,6 +610,7 @@ export class BookingCreateService {
     return (
       'items' in dto ||
       'executionMode' in dto ||
+      'anonymous' in dto ||
       'source' in dto ||
       'endAt' in dto ||
       'completeImmediately' in dto
@@ -646,6 +651,63 @@ export class BookingCreateService {
     return isBookingConfirmationRequired
       ? BookingStatus.PENDING
       : BookingStatus.CONFIRMED;
+  }
+
+  private assertPublicClientFields(dto: CreateBookingDto): void {
+    if (!dto.firstName?.trim() || !dto.phone?.trim()) {
+      throw new BadRequestException(
+        'Client first name and phone are required for online booking',
+      );
+    }
+  }
+
+  private async resolveBookingClient(
+    locationId: string,
+    source: BookingSource,
+    dto: CreateBookingDto | ManualCreateBookingDto,
+  ): Promise<ResolvedBookingClient> {
+    if (this.isAnonymousManualBooking(source, dto)) {
+      return {
+        id: null,
+        firstName: dto.firstName?.trim() ?? '',
+        lastName: dto.lastName?.trim() ?? '',
+        phone: dto.phone?.trim() || null,
+        email: dto.email ?? null,
+        bannedAt: null,
+      };
+    }
+
+    const firstName = dto.firstName?.trim();
+    const phone = dto.phone?.trim();
+    if (!firstName || !phone) {
+      throw new BadRequestException('Client first name and phone are required');
+    }
+    const client = await this.clientsService.resolveForBooking(
+      locationId,
+      phone,
+      firstName,
+      dto.lastName?.trim() || '',
+      dto.email,
+    );
+    return {
+      id: client.id,
+      firstName: client.firstName,
+      lastName: client.lastName,
+      phone: client.phone,
+      email: client.email,
+      bannedAt: client.bannedAt,
+    };
+  }
+
+  private isAnonymousManualBooking(
+    source: BookingSource,
+    dto: CreateBookingDto | ManualCreateBookingDto,
+  ): dto is ManualCreateBookingDto {
+    return (
+      this.isInternalSource(source) &&
+      this.isManualDto(dto) &&
+      dto.anonymous === true
+    );
   }
 
   private bundleItemPrices(
