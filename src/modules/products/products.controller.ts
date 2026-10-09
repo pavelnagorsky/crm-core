@@ -42,6 +42,8 @@ import { ProductCategoryResponseDto } from './dto/product-category-response.dto.
 import { ProductResponseDto } from './dto/product-response.dto.js';
 import { ProductSearchRequestDto } from './dto/product-search-request.dto.js';
 import { ProductSearchResponseDto } from './dto/product-search-response.dto.js';
+import { ProductStatusCountResponseDto } from './dto/product-status-count-response.dto.js';
+import { ProductStatusCountsRequestDto } from './dto/product-status-counts-request.dto.js';
 import { UpdateProductCategoryDto } from './dto/update-product-category.dto.js';
 import { UpdateProductDto } from './dto/update-product.dto.js';
 import { UpdateProductStatusDto } from './dto/update-product-status.dto.js';
@@ -155,6 +157,22 @@ export class ProductsController {
         dto.pageSize,
         totalItems,
         dto.isExport,
+      ),
+    );
+  }
+
+  @ApiOperation({ summary: 'Get product count per status' })
+  @ApiOkResponse({ type: ApiResponseArray(ProductStatusCountResponseDto) })
+  @BrandRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Get('brands/:brandId/products/status-counts')
+  async getStatusCounts(
+    @Param('brandId', ParseUUIDPipe) brandId: string,
+    @Query() dto: ProductStatusCountsRequestDto,
+  ): Promise<BaseResponseDto<ProductStatusCountResponseDto[]>> {
+    const counts = await this.products.getStatusCounts(brandId, dto);
+    return BaseResponseDto.success(
+      counts.map((row) =>
+        Object.assign(new ProductStatusCountResponseDto(), row),
       ),
     );
   }

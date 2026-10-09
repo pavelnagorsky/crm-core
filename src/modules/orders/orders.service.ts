@@ -23,9 +23,11 @@ import { ConfirmOrderItemsDto } from './dto/confirm-order-items.dto.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
 import { OrderProductItemDto } from './dto/order-product-item.dto.js';
 import { OrderSearchRequestDto } from './dto/order-search-request.dto.js';
+import { OrderStatusCountsRequestDto } from './dto/order-status-counts-request.dto.js';
 import { UpdateOrderDto } from './dto/update-order.dto.js';
 import { OrderTargetStatus } from './enums/order-target-status.enum.js';
 import { OrderPricingLine } from './interfaces/order-pricing-line.interface.js';
+import { OrderStatusCount } from './interfaces/order-status-count.interface.js';
 import { OrderWithItems } from './interfaces/order-with-items.interface.js';
 import { OrderBookingSyncService } from './services/order-booking-sync.service.js';
 import { OrderDraftService } from './services/order-draft.service.js';
@@ -195,6 +197,13 @@ export class OrdersService {
     dto: OrderSearchRequestDto,
   ): Promise<PaginatedResult<OrderWithItems>> {
     return this.persistence.search(locationId, dto);
+  }
+
+  getStatusCounts(
+    locationId: string,
+    dto: OrderStatusCountsRequestDto,
+  ): Promise<OrderStatusCount[]> {
+    return this.persistence.getStatusCounts(locationId, dto);
   }
 
   async changeStatus(

@@ -65,6 +65,39 @@ describe('OrdersAggregatesService', () => {
     expect(result.extraLinkedBookingCount).toBe(1);
   });
 
+  it('builds product KPI snapshots from confirmed product lines', async () => {
+    db.$queryRaw.mockResolvedValue([
+      {
+        revenue: '120.00',
+        grossProfit: '45.50',
+        buyerCount: 3n,
+        repeatBuyerCount: 2n,
+      },
+    ]);
+
+    const result = await service.productSalesKpiSnapshot({
+      locationId: 'location-1',
+      from: new Date('2026-10-01T00:00:00.000Z'),
+      to: new Date('2026-10-02T00:00:00.000Z'),
+      staffId: 'staff-1',
+      catalogItemId: 'product-1',
+      categoryId: 'category-1',
+    });
+
+    const query = db.$queryRaw.mock.calls[0][0] as Prisma.Sql;
+    expect(query.sql).toContain('i."lineCostSnapshot"');
+    expect(query.sql).toContain('COUNT(DISTINCT o."clientId")');
+    expect(query.sql).toContain('pi."occurredAt" < i."occurredAt"');
+    expect(query.sql).toContain('i."sellerStaffId"');
+    expect(query.sql).toContain('pi."sellerStaffId"');
+    expect(query.values).toContain(OrderItemType.PRODUCT);
+    expect(query.values).toContain(OrderItemStatus.CONFIRMED);
+    expect(result.revenue.toFixed(2)).toBe('120.00');
+    expect(result.grossProfit.toFixed(2)).toBe('45.50');
+    expect(result.buyerCount).toBe(3);
+    expect(result.repeatBuyerCount).toBe(2);
+  });
+
   it('does not query the database for an empty brand location scope', async () => {
     await expect(
       service.clientRevenue({

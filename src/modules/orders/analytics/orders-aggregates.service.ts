@@ -15,6 +15,8 @@ import { ClientSalesSeriesRange } from './interfaces/client-sales-series-range.i
 import { OrderClientRevenueBucket } from './interfaces/order-client-revenue-bucket.interface.js';
 import { OrderClientRevenueTotals } from './interfaces/order-client-revenue-totals.interface.js';
 import { ProductSalesRange } from './interfaces/product-sales-range.interface.js';
+import { ProductSalesKpiSeriesRow } from './interfaces/product-sales-kpi-series-row.interface.js';
+import { ProductSalesKpiSnapshot } from './interfaces/product-sales-kpi-snapshot.interface.js';
 import { ProductSalesSeriesRange } from './interfaces/product-sales-series-range.interface.js';
 import { ProductSalesSeriesRow } from './interfaces/product-sales-series-row.interface.js';
 import { ProductSalesSnapshot } from './interfaces/product-sales-snapshot.interface.js';
@@ -63,6 +65,39 @@ export class OrdersAggregatesService {
     };
   }
 
+  async productSalesKpiSnapshot(
+    range: ProductSalesRange,
+  ): Promise<ProductSalesKpiSnapshot> {
+    const rows = await this.db.$queryRaw<
+      Array<{
+        revenue: string;
+        grossProfit: string;
+        buyerCount: bigint;
+        repeatBuyerCount: bigint;
+      }>
+    >(
+      Prisma.sql`
+        SELECT
+          COALESCE(SUM(i."lineTotal"), 0)::text AS revenue,
+          COALESCE(SUM(i."lineTotal" - COALESCE(i."lineCostSnapshot", 0)), 0)::text
+            AS "grossProfit",
+          COUNT(DISTINCT o."clientId") FILTER (
+            WHERE o."clientId" IS NOT NULL
+          )::bigint AS "buyerCount",
+          COUNT(DISTINCT o."clientId") FILTER (
+            WHERE o."clientId" IS NOT NULL
+              AND ${this.priorProductSaleExists(range)}
+          )::bigint AS "repeatBuyerCount"
+        FROM "Order" o
+        JOIN "OrderItem" i ON i."orderId" = o."id"
+        WHERE ${this.baseOrderWhere(range.locationId)}
+          AND i."type"::text = ${OrderItemType.PRODUCT}
+          AND ${this.productItemScope(range, 'i')}
+      `,
+    );
+    return mapProductSalesKpiSnapshot(rows[0]);
+  }
+
   async productSalesSeries(
     range: ProductSalesSeriesRange,
   ): Promise<ProductSalesSeriesRow[]> {
@@ -89,6 +124,53 @@ export class OrdersAggregatesService {
     return rows.map((row) => ({
       bucket: new Date(row.bucket),
       revenue: MoneyService.decimal(row.revenue),
+    }));
+  }
+
+  async productSalesKpiSeries(
+    range: ProductSalesSeriesRange,
+  ): Promise<ProductSalesKpiSeriesRow[]> {
+    const bucket = this.bucketExpr(
+      range.granularity,
+      range.timezone,
+      'i."occurredAt"',
+    );
+    const rows = await this.db.$queryRaw<
+      Array<{
+        bucket: Date;
+        revenue: string;
+        grossProfit: string;
+        buyerCount: bigint;
+        repeatBuyerCount: bigint;
+      }>
+    >(
+      Prisma.sql`
+        SELECT ${bucket} AS bucket,
+               COALESCE(SUM(i."lineTotal"), 0)::text AS revenue,
+               COALESCE(SUM(i."lineTotal" - COALESCE(i."lineCostSnapshot", 0)), 0)::text
+                 AS "grossProfit",
+               COUNT(DISTINCT o."clientId") FILTER (
+                 WHERE o."clientId" IS NOT NULL
+               )::bigint AS "buyerCount",
+               COUNT(DISTINCT o."clientId") FILTER (
+                 WHERE o."clientId" IS NOT NULL
+                   AND ${this.priorProductSaleExists(range)}
+               )::bigint AS "repeatBuyerCount"
+        FROM "Order" o
+        JOIN "OrderItem" i ON i."orderId" = o."id"
+        WHERE ${this.baseOrderWhere(range.locationId)}
+          AND i."type"::text = ${OrderItemType.PRODUCT}
+          AND ${this.productItemScope(range, 'i')}
+        GROUP BY bucket
+        ORDER BY bucket ASC
+      `,
+    );
+    return rows.map((row) => ({
+      bucket: new Date(row.bucket),
+      revenue: MoneyService.decimal(row.revenue),
+      grossProfit: MoneyService.decimal(row.grossProfit),
+      buyerCount: Number(row.buyerCount),
+      repeatBuyerCount: Number(row.repeatBuyerCount),
     }));
   }
 
@@ -295,21 +377,31 @@ export class OrdersAggregatesService {
       Partial<
         Pick<ProductSalesRange, 'staffId' | 'catalogItemId' | 'categoryId'>
       >,
-    alias: 'i' | 'scoped_item' | 'product_item',
+    alias: 'i' | 'scoped_item' | 'product_item' | 'pi',
   ): Prisma.Sql {
-    const parts: Prisma.Sql[] = [];
-    const staff = Prisma.raw(`${alias}."sellerStaffId"`);
-    const catalogItem = Prisma.raw(`${alias}."catalogItemId"`);
-    const category = Prisma.raw(`${alias}."categoryId"`);
-    const status = Prisma.raw(`${alias}."status"`);
+    const parts = this.productItemBaseScope(range, alias);
     const occurredAt = Prisma.raw(`${alias}."occurredAt"`);
-    parts.push(Prisma.sql`${status}::text = ${OrderItemStatus.CONFIRMED}`);
     parts.push(
       Prisma.sql`${occurredAt} >= ${range.from}::timestamptz AT TIME ZONE 'UTC'`,
     );
     parts.push(
       Prisma.sql`${occurredAt} < ${range.to}::timestamptz AT TIME ZONE 'UTC'`,
     );
+    return parts.length > 0 ? Prisma.join(parts, ' AND ') : Prisma.sql`TRUE`;
+  }
+
+  private productItemBaseScope(
+    range: Partial<
+      Pick<ProductSalesRange, 'staffId' | 'catalogItemId' | 'categoryId'>
+    >,
+    alias: 'i' | 'scoped_item' | 'product_item' | 'pi',
+  ): Prisma.Sql[] {
+    const parts: Prisma.Sql[] = [];
+    const staff = Prisma.raw(`${alias}."sellerStaffId"`);
+    const catalogItem = Prisma.raw(`${alias}."catalogItemId"`);
+    const category = Prisma.raw(`${alias}."categoryId"`);
+    const status = Prisma.raw(`${alias}."status"`);
+    parts.push(Prisma.sql`${status}::text = ${OrderItemStatus.CONFIRMED}`);
     if (range.staffId) parts.push(Prisma.sql`${staff} = ${range.staffId}`);
     if (range.catalogItemId) {
       parts.push(Prisma.sql`${catalogItem} = ${range.catalogItemId}`);
@@ -317,7 +409,24 @@ export class OrdersAggregatesService {
     if (range.categoryId) {
       parts.push(Prisma.sql`${category} = ${range.categoryId}`);
     }
-    return parts.length > 0 ? Prisma.join(parts, ' AND ') : Prisma.sql`TRUE`;
+    return parts;
+  }
+
+  private priorProductSaleExists(range: ProductSalesRange): Prisma.Sql {
+    const occurredAt = Prisma.raw('pi."occurredAt"');
+    const parts = this.productItemBaseScope(range, 'pi');
+    parts.push(Prisma.sql`${occurredAt} IS NOT NULL`);
+    parts.push(Prisma.sql`${occurredAt} < i."occurredAt"`);
+    return Prisma.sql`EXISTS (
+      SELECT 1
+      FROM "Order" po
+      JOIN "OrderItem" pi ON pi."orderId" = po."id"
+      WHERE po."locationId" = ${range.locationId}
+        AND po."status"::text = ${OrderStatus.ACTIVE}
+        AND po."clientId" = o."clientId"
+        AND pi."type"::text = ${OrderItemType.PRODUCT}
+        AND ${Prisma.join(parts, ' AND ')}
+    )`;
   }
 
   private bucketExpr(
@@ -361,10 +470,38 @@ function mapOrderClientRevenue(
   };
 }
 
+function mapProductSalesKpiSnapshot(
+  row:
+    | {
+        revenue: string;
+        grossProfit: string;
+        buyerCount: bigint;
+        repeatBuyerCount: bigint;
+      }
+    | undefined,
+): ProductSalesKpiSnapshot {
+  if (!row) return emptyProductSalesKpiSnapshot();
+  return {
+    revenue: MoneyService.decimal(row.revenue),
+    grossProfit: MoneyService.decimal(row.grossProfit),
+    buyerCount: Number(row.buyerCount),
+    repeatBuyerCount: Number(row.repeatBuyerCount),
+  };
+}
+
 function emptyOrderClientRevenue(): OrderClientRevenueTotals {
   return {
     revenue: MoneyService.decimal(0),
     activeClients: 0,
     sharedClients: 0,
+  };
+}
+
+function emptyProductSalesKpiSnapshot(): ProductSalesKpiSnapshot {
+  return {
+    revenue: MoneyService.decimal(0),
+    grossProfit: MoneyService.decimal(0),
+    buyerCount: 0,
+    repeatBuyerCount: 0,
   };
 }

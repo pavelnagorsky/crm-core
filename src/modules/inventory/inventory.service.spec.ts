@@ -179,4 +179,37 @@ describe('InventoryService', () => {
       }),
     });
   });
+
+  it('counts documents by status for the same type filter', async () => {
+    const groupBy = vi.fn().mockResolvedValue([
+      { status: InventoryDocumentStatus.OPEN, _count: { _all: 2 } },
+      { status: InventoryDocumentStatus.POSTED, _count: { _all: 5 } },
+    ]);
+    const service = new InventoryService(
+      { inventoryDocument: { groupBy } } as never,
+      {} as never,
+      {} as never,
+      { emit: vi.fn() } as never,
+      new InventoryComputeService(),
+    );
+
+    const counts = await service.getDocumentStatusCounts('location-1', {
+      type: InventoryDocumentType.RECEIPT,
+    });
+
+    expect(groupBy).toHaveBeenCalledWith({
+      by: ['status'],
+      where: {
+        locationId: 'location-1',
+        type: InventoryDocumentType.RECEIPT,
+        status: undefined,
+      },
+      _count: { _all: true },
+    });
+    expect(counts).toEqual([
+      { status: InventoryDocumentStatus.OPEN, count: 2 },
+      { status: InventoryDocumentStatus.POSTED, count: 5 },
+      { status: InventoryDocumentStatus.VOIDED, count: 0 },
+    ]);
+  });
 });

@@ -16,6 +16,7 @@ function setup() {
       findFirst: vi.fn(),
       findMany: vi.fn(),
       count: vi.fn(),
+      groupBy: vi.fn(),
       update: vi.fn(),
       delete: vi.fn(),
     },
@@ -226,5 +227,35 @@ describe('ProductsService', () => {
     );
 
     expect(result.status).toBe(ProductStatus.INACTIVE);
+  });
+
+  it('counts products by status for the same search filters', async () => {
+    const { db, service } = setup();
+    db.product.groupBy.mockResolvedValue([
+      { status: ProductStatus.ACTIVE, _count: { _all: 4 } },
+    ]);
+
+    const counts = await service.getStatusCounts('brand-1', {
+      search: ' sham ',
+      categoryId: 'category-1',
+    });
+
+    expect(db.product.groupBy).toHaveBeenCalledWith({
+      by: ['status'],
+      where: {
+        brandId: 'brand-1',
+        categoryId: 'category-1',
+        OR: [
+          { name: { contains: 'sham', mode: 'insensitive' } },
+          { sku: { contains: 'sham', mode: 'insensitive' } },
+          { barcode: { contains: 'sham', mode: 'insensitive' } },
+        ],
+      },
+      _count: { _all: true },
+    });
+    expect(counts).toEqual([
+      { status: ProductStatus.ACTIVE, count: 4 },
+      { status: ProductStatus.INACTIVE, count: 0 },
+    ]);
   });
 });

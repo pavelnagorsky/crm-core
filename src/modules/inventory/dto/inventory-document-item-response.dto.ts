@@ -1,6 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { InventoryDocumentItem } from '@prisma/client';
-import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
+import {
+  ApiPrice,
+  ApiSignedAmount,
+} from '../../../shared/decorators/api-decimal.decorator.js';
 import { MoneyService } from '../../../shared/money/money.service.js';
 import { QuantityService } from '../../../shared/quantity/quantity.service.js';
 import { ProductUnit } from '../../products/enums/product-unit.enum.js';
@@ -27,6 +30,9 @@ export class InventoryDocumentItemResponseDto {
   @ApiPrice({ nullable: true })
   unitCost: string | null;
 
+  @ApiSignedAmount({ nullable: true })
+  totalCost: string | null;
+
   static fromEntity(
     entity: InventoryDocumentItem,
   ): InventoryDocumentItemResponseDto {
@@ -34,6 +40,14 @@ export class InventoryDocumentItemResponseDto {
       quantity: QuantityService.format(entity.quantity),
       unitCost:
         entity.unitCost == null ? null : MoneyService.format(entity.unitCost),
+      totalCost: lineTotalCost(entity),
     });
   }
+}
+
+function lineTotalCost(entity: InventoryDocumentItem): string | null {
+  if (entity.unitCost == null) return null;
+  return MoneyService.format(
+    MoneyService.quantize(entity.quantity.mul(entity.unitCost)),
+  );
 }

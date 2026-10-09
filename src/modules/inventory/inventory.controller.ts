@@ -23,6 +23,7 @@ import {
 import { BusinessRole } from '@prisma/client';
 import {
   ApiResponse,
+  ApiResponseArray,
   BaseResponseDto,
 } from '../../shared/dto/base-response.dto.js';
 import { XlsxService } from '../../shared/xlsx/xlsx.service.js';
@@ -35,6 +36,8 @@ import { InventoryBalanceResponseDto } from './dto/inventory-balance-response.dt
 import { InventoryDocumentResponseDto } from './dto/inventory-document-response.dto.js';
 import { InventoryDocumentSearchRequestDto } from './dto/inventory-document-search-request.dto.js';
 import { InventoryDocumentSearchResponseDto } from './dto/inventory-document-search-response.dto.js';
+import { InventoryDocumentStatusCountResponseDto } from './dto/inventory-document-status-count-response.dto.js';
+import { InventoryDocumentStatusCountsRequestDto } from './dto/inventory-document-status-counts-request.dto.js';
 import { InventoryMovementResponseDto } from './dto/inventory-movement-response.dto.js';
 import { InventoryMovementSearchRequestDto } from './dto/inventory-movement-search-request.dto.js';
 import { InventoryMovementSearchResponseDto } from './dto/inventory-movement-search-response.dto.js';
@@ -159,6 +162,27 @@ export class InventoryController {
         dto.pageSize,
         totalItems,
         dto.isExport,
+      ),
+    );
+  }
+
+  @ApiOperation({ summary: 'Get inventory document count per status' })
+  @ApiOkResponse({
+    type: ApiResponseArray(InventoryDocumentStatusCountResponseDto),
+  })
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Get('documents/status-counts')
+  async getDocumentStatusCounts(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Query() dto: InventoryDocumentStatusCountsRequestDto,
+  ): Promise<BaseResponseDto<InventoryDocumentStatusCountResponseDto[]>> {
+    const counts = await this.inventory.getDocumentStatusCounts(
+      locationId,
+      dto,
+    );
+    return BaseResponseDto.success(
+      counts.map((row) =>
+        Object.assign(new InventoryDocumentStatusCountResponseDto(), row),
       ),
     );
   }

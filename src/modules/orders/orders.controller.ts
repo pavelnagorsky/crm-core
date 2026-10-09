@@ -24,6 +24,7 @@ import {
 import { BusinessRole } from '@prisma/client';
 import {
   ApiResponse,
+  ApiResponseArray,
   BaseResponseDto,
 } from '../../shared/dto/base-response.dto.js';
 import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
@@ -35,6 +36,8 @@ import { CreateOrderDto } from './dto/create-order.dto.js';
 import { OrderResponseDto } from './dto/order-response.dto.js';
 import { OrderSearchRequestDto } from './dto/order-search-request.dto.js';
 import { OrderSearchResponseDto } from './dto/order-search-response.dto.js';
+import { OrderStatusCountResponseDto } from './dto/order-status-count-response.dto.js';
+import { OrderStatusCountsRequestDto } from './dto/order-status-counts-request.dto.js';
 import { ReverseOrderItemDto } from './dto/reverse-order-item.dto.js';
 import { UpdateOrderStatusDto } from './dto/update-order-status.dto.js';
 import { UpdateOrderDto } from './dto/update-order.dto.js';
@@ -80,6 +83,22 @@ export class OrdersController {
         dto.pageSize,
         totalItems,
         dto.isExport,
+      ),
+    );
+  }
+
+  @ApiOperation({ summary: 'Get order count per status' })
+  @ApiOkResponse({ type: ApiResponseArray(OrderStatusCountResponseDto) })
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Get('status-counts')
+  async getStatusCounts(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Query() dto: OrderStatusCountsRequestDto,
+  ): Promise<BaseResponseDto<OrderStatusCountResponseDto[]>> {
+    const counts = await this.orders.getStatusCounts(locationId, dto);
+    return BaseResponseDto.success(
+      counts.map((row) =>
+        Object.assign(new OrderStatusCountResponseDto(), row),
       ),
     );
   }

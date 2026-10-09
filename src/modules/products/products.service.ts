@@ -27,12 +27,14 @@ import { CreateProductCategoryDto } from './dto/create-product-category.dto.js';
 import { CreateProductDto } from './dto/create-product.dto.js';
 import { LocationProductSearchRequestDto } from './dto/location-product-search-request.dto.js';
 import { ProductSearchRequestDto } from './dto/product-search-request.dto.js';
+import { ProductStatusCountsRequestDto } from './dto/product-status-counts-request.dto.js';
 import { UpdateProductCategoryDto } from './dto/update-product-category.dto.js';
 import { UpdateProductDto } from './dto/update-product.dto.js';
 import { UpsertProductLocationDto } from './dto/upsert-product-location.dto.js';
 import { ProductLocationSearchOrderBy } from './enums/product-location-search-order-by.enum.js';
 import { ProductSearchOrderBy } from './enums/product-search-order-by.enum.js';
 import { LocationProductView } from './interfaces/location-product-view.interface.js';
+import { ProductStatusCount } from './interfaces/product-status-count.interface.js';
 import { ProductWithDetails } from './interfaces/product-with-details.interface.js';
 
 const productDetailsInclude = {
@@ -44,6 +46,8 @@ const productDetailsInclude = {
 const locationProductInclude = {
   product: { include: { category: true, imageFile: true } },
 } satisfies Prisma.ProductLocationInclude;
+
+const PRODUCT_STATUSES = [ProductStatus.ACTIVE, ProductStatus.INACTIVE];
 
 @Injectable()
 export class ProductsService {
@@ -374,17 +378,7 @@ export class ProductsService {
     brandId: string,
     dto: ProductSearchRequestDto,
   ): Promise<PaginatedResult<ProductWithDetails>> {
-    const where: Prisma.ProductWhereInput = { brandId };
-    const search = dto.search?.trim();
-    if (search) {
-      where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { sku: { contains: search, mode: 'insensitive' } },
-        { barcode: { contains: search, mode: 'insensitive' } },
-      ];
-    }
-    if (dto.categoryId) where.categoryId = dto.categoryId;
-    if (dto.status) where.status = dto.status;
+    const where = this.productWhere(brandId, dto);
     const direction = dto.orderDirection ?? OrderDirection.DESC;
     const args: Prisma.ProductFindManyArgs = {
       where,
@@ -403,6 +397,22 @@ export class ProductsService {
       this.db.product.count({ where }),
     ]);
     return { items: items as ProductWithDetails[], totalItems };
+  }
+
+  async getStatusCounts(
+    brandId: string,
+    dto: ProductStatusCountsRequestDto,
+  ): Promise<ProductStatusCount[]> {
+    const rows = await this.db.product.groupBy({
+      by: ['status'],
+      where: this.productWhere(brandId, dto),
+      _count: { _all: true },
+    });
+    const byStatus = new Map(rows.map((row) => [row.status, row._count._all]));
+    return PRODUCT_STATUSES.map((status) => ({
+      status,
+      count: byStatus.get(status) ?? 0,
+    }));
   }
 
   async searchLocation(
@@ -489,6 +499,28 @@ export class ProductsService {
       include: locationProductInclude,
       orderBy: { id: 'asc' },
     }) as Promise<LocationProductView[]>;
+  }
+
+  private productWhere(
+    brandId: string,
+    filter: {
+      search?: string;
+      categoryId?: string;
+      status?: ProductStatus;
+    },
+  ): Prisma.ProductWhereInput {
+    const where: Prisma.ProductWhereInput = { brandId };
+    const search = filter.search?.trim();
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { sku: { contains: search, mode: 'insensitive' } },
+        { barcode: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+    if (filter.categoryId) where.categoryId = filter.categoryId;
+    if (filter.status) where.status = filter.status;
+    return where;
   }
 
   private locationOrder(

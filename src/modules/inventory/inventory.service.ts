@@ -25,6 +25,7 @@ import { LocationService } from '../location/location.service.js';
 import { ProductsService } from '../products/products.service.js';
 import { CreateInventoryDocumentDto } from './dto/create-inventory-document.dto.js';
 import { InventoryDocumentSearchRequestDto } from './dto/inventory-document-search-request.dto.js';
+import { InventoryDocumentStatusCountsRequestDto } from './dto/inventory-document-status-counts-request.dto.js';
 import { InventoryMovementSearchRequestDto } from './dto/inventory-movement-search-request.dto.js';
 import { InventorySearchRequestDto } from './dto/inventory-search-request.dto.js';
 import { InventoryDocumentItemDto } from './dto/inventory-document-item.dto.js';
@@ -34,6 +35,7 @@ import { InventoryDocumentTargetStatus } from './enums/inventory-document-target
 import { InventoryMovementOrderBy } from './enums/inventory-movement-order-by.enum.js';
 import { InventorySearchOrderBy } from './enums/inventory-search-order-by.enum.js';
 import { InventoryBalanceView } from './interfaces/inventory-balance-view.interface.js';
+import { InventoryDocumentStatusCount } from './interfaces/inventory-document-status-count.interface.js';
 import { InventoryDocumentTransition } from './interfaces/inventory-document-transition.interface.js';
 import { InventoryDocumentWithItems } from './interfaces/inventory-document-with-items.interface.js';
 import { InventorySaleCost } from './interfaces/inventory-sale-cost.interface.js';
@@ -43,6 +45,12 @@ import { InventoryComputeService } from './services/inventory-compute.service.js
 const documentInclude = {
   items: { orderBy: [{ productName: 'asc' }, { id: 'asc' }] },
 } satisfies Prisma.InventoryDocumentInclude;
+
+const DOCUMENT_STATUSES = [
+  InventoryDocumentStatus.OPEN,
+  InventoryDocumentStatus.POSTED,
+  InventoryDocumentStatus.VOIDED,
+];
 
 type Transaction = Prisma.TransactionClient;
 
@@ -189,11 +197,7 @@ export class InventoryService {
     locationId: string,
     dto: InventoryDocumentSearchRequestDto,
   ): Promise<PaginatedResult<InventoryDocumentWithItems>> {
-    const where: Prisma.InventoryDocumentWhereInput = {
-      locationId,
-      type: dto.type,
-      status: dto.status,
-    };
+    const where = this.documentWhere(locationId, dto);
     const direction = dto.orderDirection ?? OrderDirection.DESC;
     const args: Prisma.InventoryDocumentFindManyArgs = {
       where,
@@ -212,6 +216,22 @@ export class InventoryService {
       this.db.inventoryDocument.count({ where }),
     ]);
     return { items: items as InventoryDocumentWithItems[], totalItems };
+  }
+
+  async getDocumentStatusCounts(
+    locationId: string,
+    dto: InventoryDocumentStatusCountsRequestDto,
+  ): Promise<InventoryDocumentStatusCount[]> {
+    const rows = await this.db.inventoryDocument.groupBy({
+      by: ['status'],
+      where: this.documentWhere(locationId, { type: dto.type }),
+      _count: { _all: true },
+    });
+    const byStatus = new Map(rows.map((row) => [row.status, row._count._all]));
+    return DOCUMENT_STATUSES.map((status) => ({
+      status,
+      count: byStatus.get(status) ?? 0,
+    }));
   }
 
   async searchInventory(
@@ -979,6 +999,17 @@ export class InventoryService {
         ? left.productLocationId.localeCompare(right.productLocationId)
         : result * factor;
     });
+  }
+
+  private documentWhere(
+    locationId: string,
+    filter: { type?: InventoryDocumentType; status?: InventoryDocumentStatus },
+  ): Prisma.InventoryDocumentWhereInput {
+    return {
+      locationId,
+      type: filter.type,
+      status: filter.status,
+    };
   }
 
   private assertOpen(status: InventoryDocumentStatus): void {

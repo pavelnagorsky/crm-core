@@ -109,6 +109,7 @@ function setup() {
       findUnique: vi.fn(),
       findMany: vi.fn(),
       count: vi.fn(),
+      groupBy: vi.fn(),
       update: vi.fn(),
       upsert: vi.fn(),
     },
@@ -1557,5 +1558,50 @@ describe('OrdersService', () => {
       }),
     );
     expect(result.items[0].status).toBe(OrderItemStatus.REVERSED);
+  });
+
+  it('counts orders by status for the same search filters', async () => {
+    const { db, service } = setup();
+    db.order.groupBy.mockResolvedValue([
+      { status: OrderStatus.ACTIVE, _count: { _all: 3 } },
+    ]);
+
+    const counts = await service.getStatusCounts('location-1', {
+      search: ' sham ',
+      clientId: 'client-1',
+      from: '2026-10-01T00:00:00.000Z',
+      to: '2026-10-02T00:00:00.000Z',
+    });
+
+    expect(db.order.groupBy).toHaveBeenCalledWith({
+      by: ['status'],
+      where: {
+        locationId: 'location-1',
+        status: undefined,
+        clientId: 'client-1',
+        bookingId: undefined,
+        occurredAt: {
+          gte: new Date('2026-10-01T00:00:00.000Z'),
+          lte: new Date('2026-10-02T00:00:00.000Z'),
+        },
+        OR: [
+          { clientName: { contains: 'sham', mode: 'insensitive' } },
+          { clientPhone: { contains: 'sham' } },
+          {
+            items: {
+              some: { title: { contains: 'sham', mode: 'insensitive' } },
+            },
+          },
+          {
+            items: { some: { sku: { contains: 'sham', mode: 'insensitive' } } },
+          },
+        ],
+      },
+      _count: { _all: true },
+    });
+    expect(counts).toEqual([
+      { status: OrderStatus.ACTIVE, count: 3 },
+      { status: OrderStatus.VOIDED, count: 0 },
+    ]);
   });
 });
