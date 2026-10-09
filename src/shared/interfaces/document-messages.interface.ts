@@ -80,4 +80,23 @@ export interface DocumentMessages {
     cancellationReason: string;
     createdAt: string;
   };
+  inventory: {
+    vedomostSheet: string;
+    movementsSheet: string;
+    vedomostTitle: string;
+    movementsTitle: string;
+    product: string;
+    sku: string;
+    unit: string;
+    openingQuantity: string;
+    closingQuantity: string;
+    openingValue: string;
+    periodValue: string;
+    closingValue: string;
+    unitCost: string;
+    quantityBefore: string;
+    quantityAfter: string;
+    document: string;
+    order: string;
+  };
 }

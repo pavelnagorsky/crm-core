@@ -8,6 +8,8 @@ import {
   Post,
   Put,
   Query,
+  Res,
+  StreamableFile,
 } from '@nestjs/common';
 import {
   ApiConflictResponse,
@@ -15,6 +17,7 @@ import {
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiProduces,
   ApiTags,
 } from '@nestjs/swagger';
 import { BusinessRole } from '@prisma/client';
@@ -22,6 +25,7 @@ import {
   ApiResponse,
   BaseResponseDto,
 } from '../../shared/dto/base-response.dto.js';
+import { XlsxService } from '../../shared/xlsx/xlsx.service.js';
 import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
 import { LocationRBAC } from '../auth/decorators/location-rbac.decorator.js';
 import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
@@ -38,12 +42,17 @@ import { InventorySearchRequestDto } from './dto/inventory-search-request.dto.js
 import { InventorySearchResponseDto } from './dto/inventory-search-response.dto.js';
 import { UpdateInventoryDocumentStatusDto } from './dto/update-inventory-document-status.dto.js';
 import { UpdateInventoryDocumentDto } from './dto/update-inventory-document.dto.js';
+import { InventoryReportQueryDto } from './report/dto/inventory-report-query.dto.js';
+import { InventoryReportService } from './report/inventory-report.service.js';
 import { InventoryService } from './inventory.service.js';
 
 @ApiTags('Inventory')
 @Controller('locations/:locationId/inventory')
 export class InventoryController {
-  constructor(private readonly inventory: InventoryService) {}
+  constructor(
+    private readonly inventory: InventoryService,
+    private readonly reports: InventoryReportService,
+  ) {}
 
   @ApiOperation({ summary: 'Search current inventory balances' })
   @ApiOkResponse({ type: ApiResponse(InventorySearchResponseDto) })
@@ -66,6 +75,25 @@ export class InventoryController {
         dto.isExport,
       ),
     );
+  }
+
+  @ApiOperation({ summary: 'Export inventory turnover statement as XLSX' })
+  @ApiProduces(XlsxService.mimeType)
+  @ApiOkResponse({ description: 'File stream' })
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Get('export/vedomost')
+  async exportVedomost(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Query() dto: InventoryReportQueryDto,
+    @Res({ passthrough: true })
+    res: { setHeader: (name: string, value: string) => void },
+  ): Promise<StreamableFile> {
+    const { stream, filename } = await this.reports.exportVedomost(
+      locationId,
+      dto,
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return new StreamableFile(stream, { type: XlsxService.mimeType });
   }
 
   @ApiOperation({ summary: 'Search inventory movements for a product' })

@@ -191,6 +191,24 @@
     "APPROVED": "Утверждён",
     "PAID": "Выплачен"
   },
+  "inventoryMovementType": {
+    "RECEIPT": "Приход",
+    "TRANSFER_IN": "Перемещение (приход)",
+    "WRITE_OFF": "Списание",
+    "TRANSFER_OUT": "Перемещение (расход)",
+    "SALE": "Продажа",
+    "SALE_REVERSAL": "Возврат продажи",
+    "ADJUSTMENT": "Корректировка",
+    "STOCKTAKE": "Инвентаризация",
+    "REVERSAL": "Сторно"
+  },
+  "productUnit": {
+    "PIECE": "шт",
+    "GRAM": "г",
+    "KILOGRAM": "кг",
+    "MILLILITER": "мл",
+    "LITER": "л"
+  },
   "documents": {
     "common": {
       "business": "Бизнес",
@@ -272,6 +290,25 @@
       "internalNotes": "Внутренние заметки",
       "cancellationReason": "Причина отмены",
       "createdAt": "Создана"
+    },
+    "inventory": {
+      "vedomostSheet": "Ведомость",
+      "movementsSheet": "Движения",
+      "vedomostTitle": "Оборотная ведомость склада",
+      "movementsTitle": "Движения склада",
+      "product": "Товар",
+      "sku": "Артикул",
+      "unit": "Ед.",
+      "openingQuantity": "Остаток на начало",
+      "closingQuantity": "Остаток на конец",
+      "openingValue": "Себестоимость на начало",
+      "periodValue": "Оборот себестоимости",
+      "closingValue": "Себестоимость на конец",
+      "unitCost": "Себестоимость",
+      "quantityBefore": "Было",
+      "quantityAfter": "Стало",
+      "document": "Документ",
+      "order": "Заказ"
     }
   },
   "cancelledBy": {

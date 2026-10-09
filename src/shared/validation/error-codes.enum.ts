@@ -410,6 +410,10 @@ export const ErrorCode = {
     code: 'INVENTORY_FUTURE_DATE',
     message: 'Inventory operation date cannot be in the future',
   },
+  INVENTORY_REPORT_PERIOD_INVALID: {
+    code: 'INVENTORY_REPORT_PERIOD_INVALID',
+    message: 'Inventory report period is invalid',
+  },
 
   // orders
   ORDER_NOT_ACTIVE: {
