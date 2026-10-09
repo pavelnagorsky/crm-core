@@ -463,6 +463,11 @@ export const ErrorCode = {
     code: 'ORDER_VOID_REASON_REQUIRED',
     message: 'A reason is required to void a posted order',
   },
+  ORDER_LINKED_BOOKING_VOID_NOT_ALLOWED: {
+    code: 'ORDER_LINKED_BOOKING_VOID_NOT_ALLOWED',
+    message:
+      'An order linked to a booking cannot be voided; reverse booking services and product items separately',
+  },
   ORDER_FUTURE_DATE: {
     code: 'ORDER_FUTURE_DATE',
     message: 'Order date cannot be in the future',

@@ -3,9 +3,7 @@ import { Prisma } from '@prisma/client';
 import { stableOrderBy } from '../../../../shared/database/stable-order-by.js';
 import { OrderDirection } from '../../../../shared/enums/order-direction.enum.js';
 import { PaginatedResult } from '../../../../shared/interfaces/paginated-result.interface.js';
-import { MoneyService } from '../../../../shared/money/money.service.js';
 import { DatabaseService } from '../../../../database/database.service.js';
-import { CalendarBookingFeed } from '../../../calendar/interfaces/calendar-booking-feed.interface.js';
 import { BookingSearchRequestDto } from '../../dto/booking-search-request.dto.js';
 import { BookingSearchOrderBy } from '../../enums/booking-search-order-by.enum.js';
 import { BookingStatus } from '../../enums/booking-status.enum.js';
@@ -13,76 +11,9 @@ import { BookingWithItems } from '../../interfaces/booking-with-items.interface.
 import { bookingWithItemsInclude } from '../../constants/booking-with-items.include.js';
 import { catalogItemMatch } from '../../utils/catalog-item-filter.js';
 
-const CALENDAR_VISIBLE_STATUSES: ReadonlySet<string> = new Set([
-  BookingStatus.PENDING,
-  BookingStatus.CONFIRMED,
-  BookingStatus.COMPLETED,
-  BookingStatus.NO_SHOW,
-]);
-
 @Injectable()
 export class BookingReadService {
   constructor(private readonly db: DatabaseService) {}
-
-  async listForCalendar(
-    locationId: string,
-    rangeStart: Date,
-    rangeEnd: Date,
-    staffIds?: string[],
-  ): Promise<CalendarBookingFeed> {
-    const rows = await this.db.bookingItem.findMany({
-      where: {
-        locationId,
-        startAt: { lt: rangeEnd },
-        endAt: { gt: rangeStart },
-        ...(staffIds?.length ? { staffId: { in: staffIds } } : {}),
-        booking: { deletedAt: null },
-      },
-      orderBy: [{ startAt: 'asc' }, { id: 'asc' }],
-      select: {
-        id: true,
-        staffId: true,
-        staffName: true,
-        serviceTitle: true,
-        chargedPrice: true,
-        customPrice: true,
-        startAt: true,
-        endAt: true,
-        calendarEventId: true,
-        booking: {
-          select: {
-            id: true,
-            clientFirstName: true,
-            clientLastName: true,
-            status: true,
-          },
-        },
-      },
-    });
-
-    return {
-      bookings: rows
-        .filter((row) => CALENDAR_VISIBLE_STATUSES.has(row.booking.status))
-        .map((row) => ({
-          id: row.booking.id,
-          staffId: row.staffId,
-          staffName: row.staffName,
-          clientFirstName: row.booking.clientFirstName,
-          clientLastName: row.booking.clientLastName,
-          serviceTitle: row.serviceTitle,
-          servicePrice: MoneyService.format(row.chargedPrice),
-          customPrice:
-            row.customPrice == null
-              ? null
-              : MoneyService.format(row.customPrice),
-          startAt: row.startAt,
-          endAt: row.endAt,
-        })),
-      linkedEventIds: rows.flatMap((row) =>
-        row.calendarEventId ? [row.calendarEventId] : [],
-      ),
-    };
-  }
 
   async findById(bookingId: string): Promise<BookingWithItems> {
     const booking = await this.db.booking.findFirst({
@@ -103,20 +34,6 @@ export class BookingReadService {
     });
     if (!booking) throw new NotFoundException('Booking not found');
     return booking;
-  }
-
-  async linkedCalendarEventIdsForBooking(
-    locationId: string,
-    bookingId: string,
-  ): Promise<string[]> {
-    const booking = await this.db.booking.findFirst({
-      where: { id: bookingId, locationId, deletedAt: null },
-      select: { items: { select: { calendarEventId: true } } },
-    });
-    if (!booking) throw new NotFoundException('Booking not found');
-    return booking.items.flatMap((item) =>
-      item.calendarEventId ? [item.calendarEventId] : [],
-    );
   }
 
   async search(

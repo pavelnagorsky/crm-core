@@ -1,18 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import { TimeService } from '../../../shared/time/time.service.js';
+import { BookingCalendarReadService } from '../../bookings/services/read/booking-calendar-read.service.js';
 import { LocationService } from '../../location/location.service.js';
 import { CalendarService } from '../calendar.service.js';
 import { AvailableSlotsDayDto } from '../dto/available-slots-day.dto.js';
 import { GetCalendarRequestDto } from '../dto/get-calendar-request.dto.js';
 import { GetCalendarResponseDto } from '../dto/get-calendar-response.dto.js';
 import { ManualAvailableSlotsRequestDto } from '../dto/manual-available-slots-request.dto.js';
-import { CalendarBookingReader } from '../tokens/calendar-booking-reader.js';
 
 @Injectable()
 export class CalendarViewService {
   constructor(
     private readonly calendarService: CalendarService,
-    private readonly bookings: CalendarBookingReader,
+    private readonly bookings: BookingCalendarReadService,
     private readonly locationService: LocationService,
   ) {}
 

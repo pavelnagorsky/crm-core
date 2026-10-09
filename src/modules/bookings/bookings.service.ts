@@ -2,8 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { Booking, CancelledBy } from '@prisma/client';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
-import { CalendarBookingFeed } from '../calendar/interfaces/calendar-booking-feed.interface.js';
-import { CalendarBookingReader } from '../calendar/tokens/calendar-booking-reader.js';
 import { OrderProductItemDto } from '../orders/dto/order-product-item.dto.js';
 import { OrderWithItems } from '../orders/interfaces/order-with-items.interface.js';
 import { BookingResolveRequestDto } from './dto/booking-resolve-request.dto.js';
@@ -20,7 +18,7 @@ import { BookingReadService } from './services/read/booking-read.service.js';
 import { BookingSetupService } from './services/setup/booking-setup.service.js';
 
 @Injectable()
-export class BookingsService implements CalendarBookingReader {
+export class BookingsService {
   constructor(
     private readonly read: BookingReadService,
     private readonly setup: BookingSetupService,
@@ -69,20 +67,6 @@ export class BookingsService implements CalendarBookingReader {
     return this.mutation.completeElapsed(now);
   }
 
-  async listForCalendar(
-    locationId: string,
-    rangeStart: Date,
-    rangeEnd: Date,
-    staffIds?: string[],
-  ): Promise<CalendarBookingFeed> {
-    return this.read.listForCalendar(
-      locationId,
-      rangeStart,
-      rangeEnd,
-      staffIds,
-    );
-  }
-
   async findById(bookingId: string): Promise<BookingWithItems> {
     return this.read.findById(bookingId);
   }
@@ -92,13 +76,6 @@ export class BookingsService implements CalendarBookingReader {
     bookingId: string,
   ): Promise<BookingWithItems> {
     return this.read.findByIdInLocation(locationId, bookingId);
-  }
-
-  async linkedCalendarEventIdsForBooking(
-    locationId: string,
-    bookingId: string,
-  ): Promise<string[]> {
-    return this.read.linkedCalendarEventIdsForBooking(locationId, bookingId);
   }
 
   async search(

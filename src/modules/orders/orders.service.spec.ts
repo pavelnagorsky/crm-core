@@ -11,8 +11,13 @@ import { createHash } from 'crypto';
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaErrorCode } from '../../shared/database/prisma-error-codes.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
-import { OrderComputeService } from './services/order-compute.service.js';
+import { OrderTargetStatus } from './enums/order-target-status.enum.js';
 import { OrdersService } from './orders.service.js';
+import { OrderBookingSyncService } from './services/order-booking-sync.service.js';
+import { OrderComputeService } from './services/order-compute.service.js';
+import { OrderDraftService } from './services/order-draft.service.js';
+import { OrderPersistenceService } from './services/order-persistence.service.js';
+import { OrderProductTransitionService } from './services/order-product-transition.service.js';
 
 const owner = { id: 'owner-1', name: 'Owner', role: AuditActorRole.OWNER };
 const employee = { id: 'staff-1', name: 'Staff', role: AuditActorRole.STAFF };
@@ -79,6 +84,7 @@ function setup() {
   const tx = {
     $queryRaw: vi.fn().mockResolvedValue([]),
     order: {
+      create: vi.fn(),
       findFirst: vi.fn(),
       findUnique: vi.fn(),
       upsert: vi.fn(),
@@ -134,15 +140,36 @@ function setup() {
     }),
   };
   const events = { emit: vi.fn() };
-  const service = new OrdersService(
+  const compute = new OrderComputeService();
+  const persistence = new OrderPersistenceService(db as never, compute);
+  const drafts = new OrderDraftService(
+    products as never,
+    staff as never,
+    clients as never,
+    locations as never,
+    compute,
+  );
+  const bookingSync = new OrderBookingSyncService(
+    locations as never,
+    compute,
+    drafts,
+    persistence,
+  );
+  const transitions = new OrderProductTransitionService(
     db as never,
     products as never,
     inventory as never,
     staff as never,
     earnings as never,
-    clients as never,
+    persistence,
+  );
+  const service = new OrdersService(
+    db as never,
     locations as never,
-    new OrderComputeService(),
+    drafts,
+    bookingSync,
+    persistence,
+    transitions,
     events as never,
   );
   return {
@@ -611,6 +638,37 @@ describe('OrdersService', () => {
     expect(earnings.recordForProductOrder).not.toHaveBeenCalled();
   });
 
+  it('rejects voiding an order linked to a booking', async () => {
+    const { service, tx, inventory, earnings, events } = setup();
+    tx.order.findFirst.mockResolvedValue({
+      ...order(OrderStatus.ACTIVE, OrderItemStatus.CONFIRMED),
+      bookingId: 'booking-1',
+    });
+
+    const error = await service
+      .changeStatus(
+        'location-1',
+        'order-1',
+        OrderTargetStatus.VOIDED,
+        'wrong order',
+        owner,
+      )
+      .then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+    expect(error).toBeInstanceOf(AppException);
+    expect((error as AppException).errorCode).toBe(
+      'ORDER_LINKED_BOOKING_VOID_NOT_ALLOWED',
+    );
+    expect(earnings.reverseForProductOrder).not.toHaveBeenCalled();
+    expect(inventory.reverseSale).not.toHaveBeenCalled();
+    expect(tx.orderItem.updateMany).not.toHaveBeenCalled();
+    expect(tx.order.update).not.toHaveBeenCalled();
+    expect(events.emit).not.toHaveBeenCalled();
+  });
+
   it('preserves an owner custom price when staff replaces an open order', async () => {
     const { service, tx, products } = setup();
     tx.order.findFirst.mockResolvedValue(order(OrderStatus.ACTIVE));
@@ -1023,8 +1081,18 @@ describe('OrdersService', () => {
       tx as never,
     );
 
-    expect(tx.order.upsert).toHaveBeenCalledWith(
+    expect(tx.order.findUnique).toHaveBeenCalledWith(
       expect.objectContaining({ where: { bookingId: 'booking-1' } }),
+    );
+    expect(tx.order.upsert).not.toHaveBeenCalled();
+    expect(tx.order.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'order-1' },
+        data: expect.objectContaining({
+          clientId: 'client-1',
+          occurredAt: new Date('2026-10-01T11:00:00.000Z'),
+        }),
+      }),
     );
     expect(tx.orderItem.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1044,6 +1112,27 @@ describe('OrdersService', () => {
       }),
     );
     expect(result.items[0].bookingItemId).toBe('booking-item-1');
+  });
+
+  it('rejects syncing completed booking services into a voided order', async () => {
+    const { service, tx } = setup();
+    tx.order.findUnique.mockResolvedValue({
+      ...order(OrderStatus.VOIDED),
+      bookingId: 'booking-1',
+      items: [],
+    });
+
+    const error = await service
+      .syncCompletedBooking(bookingWithService('1500.00'), owner, tx as never)
+      .then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+    expect(error).toBeInstanceOf(AppException);
+    expect((error as AppException).errorCode).toBe('ORDER_NOT_ACTIVE');
+    expect(tx.order.update).not.toHaveBeenCalled();
+    expect(tx.orderItem.create).not.toHaveBeenCalled();
   });
 
   it('creates a new service line instead of reviving a reversed one', async () => {

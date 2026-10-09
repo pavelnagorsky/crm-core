@@ -16,6 +16,7 @@ import { OrdersService } from '../orders/orders.service.js';
 import { BookingsService } from './bookings.service.js';
 import { BookingMutationService } from './services/mutation/booking-mutation.service.js';
 import { BookingReadService } from './services/read/booking-read.service.js';
+import { BookingCalendarReadService } from './services/read/booking-calendar-read.service.js';
 import { BookingSetupService } from './services/setup/booking-setup.service.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { BookingResolveRequestDto } from './dto/booking-resolve-request.dto.js';
@@ -446,31 +447,21 @@ describe('BookingsService.search', () => {
   });
 });
 
-describe('BookingsService.listForCalendar', () => {
+describe('BookingCalendarReadService.listForCalendar', () => {
   const findMany = vi.fn();
   const db = { bookingItem: { findMany } };
 
-  let service: BookingsService;
+  let service: BookingCalendarReadService;
 
   beforeEach(async () => {
     vi.clearAllMocks();
     const module = await Test.createTestingModule({
       providers: [
-        BookingsService,
-        BookingMutationService,
-        BookingReadService,
-        BookingSetupService,
+        BookingCalendarReadService,
         { provide: DatabaseService, useValue: db },
-        { provide: CalendarService, useValue: {} },
-        { provide: StaffService, useValue: {} },
-        { provide: LocationService, useValue: {} },
-        { provide: ServiceCatalogService, useValue: serviceCatalog },
-        { provide: StaffEarningsService, useValue: {} },
-        { provide: OrdersService, useValue: {} },
-        { provide: EventEmitter2, useValue: { emit: vi.fn() } },
       ],
     }).compile();
-    service = module.get(BookingsService);
+    service = module.get(BookingCalendarReadService);
   });
 
   it('returns visible visits and every linked block id, including cancelled', async () => {
