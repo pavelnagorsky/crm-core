@@ -1556,6 +1556,28 @@ describe('OrdersService', () => {
         }),
       ],
     });
+    expect(tx.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          brandId: 'brand-1',
+          locationId: 'location-1',
+          entityType: 'ORDER',
+          entityId: 'order-1',
+          eventType: 'ORDER_UPDATED',
+          actionType: 'MODIFY',
+          payload: expect.objectContaining({
+            itemChanges: expect.objectContaining({
+              added: [
+                expect.objectContaining({ productId: 'product-1' }),
+                expect.objectContaining({ productId: 'product-2' }),
+              ],
+              removed: [],
+              changed: [],
+            }),
+          }),
+        }),
+      }),
+    );
   });
 
   it('versions service lines when a completed booking price or seller changes', async () => {

@@ -7,6 +7,9 @@ import {
 } from '@prisma/client';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
+import { AuditActionType } from '../../audit/enums/audit-action-type.enum.js';
+import { AuditEntity } from '../../audit/enums/audit-entity.enum.js';
+import { AuditEvent } from '../../audit/enums/audit-event.enum.js';
 import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
 import { BookingWithItems } from '../../bookings/interfaces/booking-with-items.interface.js';
 import { LocationService } from '../../location/location.service.js';
@@ -119,7 +122,13 @@ export class OrderBookingSyncService {
     actor: AuditActor,
     tx: Prisma.TransactionClient,
   ): Promise<OrderWithItems> {
-    const order = await this.ensureBookingOrder(booking, actor, tx);
+    const location = await this.locations.findById(booking.locationId);
+    const order = await this.ensureBookingOrder(
+      booking,
+      actor,
+      tx,
+      location.currency,
+    );
     this.assertActive(order.status);
     this.drafts.assertProductItemsCanBeAdded(order, items);
     const resolved = await this.drafts.resolveProductItems(
@@ -135,7 +144,27 @@ export class OrderBookingSyncService {
         ...item,
       })),
     });
-    return this.persistence.refreshTotals(tx, booking.locationId, order.id);
+    const updated = await this.persistence.refreshTotals(
+      tx,
+      booking.locationId,
+      order.id,
+    );
+    await this.writeOrderUpdatedAudit(tx, {
+      brandId: location.brandId,
+      locationId: booking.locationId,
+      entityId: updated.id,
+      actor,
+      payload: {
+        totalAmount: updated.totalAmount.toFixed(2),
+        currency: updated.currency,
+        itemChanges: {
+          added: resolved.map((item) => this.orderItemAuditSnapshot(item)),
+          removed: [],
+          changed: [],
+        },
+      },
+    });
+    return updated;
   }
 
   private async updateExistingBookingOrderForSync(
@@ -265,8 +294,10 @@ export class OrderBookingSyncService {
     booking: BookingWithItems,
     actor: AuditActor,
     tx: Prisma.TransactionClient,
+    currency?: string,
   ): Promise<OrderWithItems> {
-    const location = await this.locations.findById(booking.locationId);
+    const orderCurrency =
+      currency ?? (await this.locations.findById(booking.locationId)).currency;
     await tx.order.upsert({
       where: { bookingId: booking.id },
       update: {
@@ -286,7 +317,7 @@ export class OrderBookingSyncService {
           booking.clientLastName,
         ),
         clientPhone: booking.clientPhone,
-        currency: location.currency,
+        currency: orderCurrency,
         occurredAt: booking.endAt,
         createdById: actor.id ?? null,
         createdByName: actor.name,
@@ -307,5 +338,52 @@ export class OrderBookingSyncService {
 
   private clientName(firstName: string, lastName: string): string {
     return `${firstName} ${lastName}`.trim();
+  }
+
+  private async writeOrderUpdatedAudit(
+    tx: Prisma.TransactionClient,
+    event: {
+      brandId: string;
+      locationId: string;
+      entityId: string;
+      actor: AuditActor;
+      payload: Record<string, unknown>;
+    },
+  ): Promise<void> {
+    await tx.auditLog.create({
+      data: {
+        brandId: event.brandId,
+        locationId: event.locationId,
+        entityType: AuditEntity.ORDER,
+        entityId: event.entityId,
+        eventType: AuditEvent.ORDER_UPDATED,
+        actionType: AuditActionType.MODIFY,
+        occurredAt: new Date(),
+        actorId: event.actor.id ?? null,
+        actorName: event.actor.name,
+        actorRole: event.actor.role,
+        payload: event.payload as object,
+      },
+    });
+  }
+
+  private orderItemAuditSnapshot(
+    item: Prisma.OrderItemUncheckedCreateWithoutOrderInput,
+  ) {
+    return {
+      productId: item.catalogItemId,
+      title: item.title,
+      quantity: this.decimalAuditValue(item.quantity, 3),
+      unitPrice: this.decimalAuditValue(item.unitPrice, 2),
+      customUnitPrice: this.decimalAuditValue(item.customUnitPrice, 2),
+      lineTotal: this.decimalAuditValue(item.lineTotal, 2),
+      sellerStaffId: item.sellerStaffId ?? null,
+      sellerName: item.sellerName ?? null,
+    };
+  }
+
+  private decimalAuditValue(value: unknown, decimals: number): string | null {
+    if (value == null) return null;
+    return new Prisma.Decimal(value as Prisma.Decimal.Value).toFixed(decimals);
   }
 }

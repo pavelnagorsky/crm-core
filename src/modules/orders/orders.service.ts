@@ -102,6 +102,7 @@ export class OrdersService {
       );
       this.stateAssertions.assertActive(locked.status);
       this.stateAssertions.assertVersion(locked.version, dto.version);
+      this.assertEditableUpdateItems(locked, dto.items);
       this.stateAssertions.assertVersionClaimed(
         await this.persistence.incrementVersionIfCurrent(
           tx,
@@ -109,7 +110,6 @@ export class OrdersService {
           dto.version,
         ),
       );
-      this.assertEditableUpdateItems(locked, dto.items);
       const draft = await this.drafts.resolveDraft(
         locationId,
         dto,
