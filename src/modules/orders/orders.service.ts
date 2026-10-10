@@ -5,7 +5,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { OrderItemStatus, OrderStatus, Prisma } from '@prisma/client';
+import { OrderItemStatus, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
@@ -33,6 +33,7 @@ import { OrderBookingSyncService } from './services/order-booking-sync.service.j
 import { OrderDraftService } from './services/order-draft.service.js';
 import { OrderPersistenceService } from './services/order-persistence.service.js';
 import { OrderProductTransitionService } from './services/order-product-transition.service.js';
+import { OrderStateAssertionService } from './services/order-state-assertion.service.js';
 
 @Injectable()
 export class OrdersService {
@@ -43,6 +44,7 @@ export class OrdersService {
     private readonly bookingSync: OrderBookingSyncService,
     private readonly persistence: OrderPersistenceService,
     private readonly transitions: OrderProductTransitionService,
+    private readonly stateAssertions: OrderStateAssertionService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
@@ -97,8 +99,8 @@ export class OrdersService {
         locationId,
         orderId,
       );
-      this.assertActive(locked.status);
-      this.assertDraftItems(locked);
+      this.stateAssertions.assertActive(locked.status);
+      this.stateAssertions.assertAllItemsDraft(locked);
       const draft = await this.drafts.resolveDraft(
         locationId,
         dto,
@@ -355,8 +357,8 @@ export class OrdersService {
         locationId,
         orderId,
       );
-      this.assertActive(order.status);
-      this.assertDraftItems(order);
+      this.stateAssertions.assertActive(order.status);
+      this.stateAssertions.assertAllItemsDraft(order);
       await tx.order.delete({ where: { id: orderId } });
       return order;
     });
@@ -451,21 +453,6 @@ export class OrdersService {
       );
     }
     return result.order;
-  }
-
-  private assertActive(status: OrderStatus): void {
-    if (status !== OrderStatus.ACTIVE) {
-      throw new AppException(ErrorCode.ORDER_NOT_ACTIVE, HttpStatus.CONFLICT);
-    }
-  }
-
-  private assertDraftItems(order: OrderWithItems): void {
-    if (order.items.some((item) => item.status !== OrderItemStatus.DRAFT)) {
-      throw new AppException(
-        ErrorCode.ORDER_ITEM_NOT_DRAFT,
-        HttpStatus.CONFLICT,
-      );
-    }
   }
 
   private emit(

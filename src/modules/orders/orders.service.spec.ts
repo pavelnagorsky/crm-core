@@ -18,6 +18,7 @@ import { OrderComputeService } from './services/order-compute.service.js';
 import { OrderDraftService } from './services/order-draft.service.js';
 import { OrderPersistenceService } from './services/order-persistence.service.js';
 import { OrderProductTransitionService } from './services/order-product-transition.service.js';
+import { OrderStateAssertionService } from './services/order-state-assertion.service.js';
 
 const owner = { id: 'owner-1', name: 'Owner', role: AuditActorRole.OWNER };
 const employee = { id: 'staff-1', name: 'Staff', role: AuditActorRole.STAFF };
@@ -156,6 +157,7 @@ function setup() {
     drafts,
     persistence,
   );
+  const stateAssertions = new OrderStateAssertionService();
   const transitions = new OrderProductTransitionService(
     db as never,
     products as never,
@@ -171,6 +173,7 @@ function setup() {
     bookingSync,
     persistence,
     transitions,
+    stateAssertions,
     events as never,
   );
   return {
