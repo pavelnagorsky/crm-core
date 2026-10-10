@@ -110,6 +110,11 @@ export class OrdersService {
         tx,
         { allowEmptyItems: true },
       );
+      const itemChanges = this.buildUpdateItemChanges(
+        locked,
+        dto.items,
+        draft.items,
+      );
       await tx.order.update({
         where: { id: orderId },
         data: this.updateOrderData(locked, draft),
@@ -153,7 +158,7 @@ export class OrdersService {
         locationId,
         orderId,
       );
-      return { order, draft };
+      return { order, draft, itemChanges };
     });
     this.emit(
       result.draft.location.brandId,
@@ -165,6 +170,7 @@ export class OrdersService {
       {
         totalAmount: result.order.totalAmount.toFixed(2),
         currency: result.order.currency,
+        itemChanges: result.itemChanges,
       },
     );
     return result.order;
@@ -570,6 +576,64 @@ export class OrdersService {
       occurredAt: draft.occurredAt,
       note: draft.note,
     };
+  }
+
+  private buildUpdateItemChanges(
+    order: OrderWithItems,
+    items: UpdateOrderDto['items'],
+    resolvedItems: Prisma.OrderItemUncheckedCreateWithoutOrderInput[],
+  ) {
+    const editableById = new Map(
+      this.editableDraftItems(order).map((item) => [item.id, item]),
+    );
+    const incomingIds = new Set(
+      items.flatMap((item) => (item.id ? [item.id] : [])),
+    );
+    const added = [];
+    const changed = [];
+    for (const [index, item] of items.entries()) {
+      const after = this.orderItemAuditSnapshot(resolvedItems[index]);
+      if (!item.id) {
+        added.push(after);
+        continue;
+      }
+      const before = this.orderItemAuditSnapshot(editableById.get(item.id)!);
+      if (JSON.stringify(before) !== JSON.stringify(after)) {
+        changed.push({ orderItemId: item.id, before, after });
+      }
+    }
+    const removed = this.editableDraftItems(order)
+      .filter((item) => !incomingIds.has(item.id))
+      .map((item) => ({
+        orderItemId: item.id,
+        ...this.orderItemAuditSnapshot(item),
+      }));
+    return { added, removed, changed };
+  }
+
+  private orderItemAuditSnapshot(
+    item:
+      | OrderWithItems['items'][number]
+      | Prisma.OrderItemUncheckedCreateWithoutOrderInput,
+  ) {
+    return {
+      productId: item.catalogItemId,
+      title: item.title,
+      quantity: this.decimalAuditValue(item.quantity, 3),
+      unitPrice: this.decimalAuditValue(item.unitPrice, 2),
+      customUnitPrice: this.decimalAuditValue(item.customUnitPrice, 2),
+      lineTotal: this.decimalAuditValue(item.lineTotal, 2),
+      sellerStaffId: item.sellerStaffId ?? null,
+      sellerName: item.sellerName ?? null,
+    };
+  }
+
+  private decimalAuditValue(
+    value: Prisma.Decimal | string | number | null | undefined,
+    decimals: number,
+  ): string | null {
+    if (value == null) return null;
+    return new Prisma.Decimal(value).toFixed(decimals);
   }
 
   private emit(
