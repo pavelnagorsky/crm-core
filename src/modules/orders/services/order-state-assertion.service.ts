@@ -20,4 +20,10 @@ export class OrderStateAssertionService {
       );
     }
   }
+
+  assertVersion(current: number, expected: number): void {
+    if (current !== expected) {
+      throw new AppException(ErrorCode.ORDER_CHANGED, HttpStatus.CONFLICT);
+    }
+  }
 }

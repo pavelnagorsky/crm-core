@@ -420,6 +420,10 @@ export const ErrorCode = {
     code: 'ORDER_NOT_ACTIVE',
     message: 'Only an active order can be changed',
   },
+  ORDER_CHANGED: {
+    code: 'ORDER_CHANGED',
+    message: 'Order was changed by another user; refresh and try again',
+  },
   ORDER_ITEM_NOT_FOUND: {
     code: 'ORDER_ITEM_NOT_FOUND',
     message: 'Order item not found',

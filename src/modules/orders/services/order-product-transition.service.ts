@@ -158,6 +158,7 @@ export class OrderProductTransitionService {
         where: { id: orderId },
         data: {
           status: OrderStatus.VOIDED,
+          version: { increment: 1 },
           voidedAt: new Date(),
           voidReason: reason,
         },
@@ -364,6 +365,10 @@ export class OrderProductTransitionService {
         confirmedAt: occurredAt,
         occurredAt,
       },
+    });
+    await tx.order.update({
+      where: { id: orderId },
+      data: { version: { increment: 1 } },
     });
     return {
       order: await this.persistence.findInTransaction(tx, locationId, orderId),

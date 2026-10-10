@@ -37,6 +37,7 @@ function order(
     clientPhone: null,
     currency: 'BYN',
     status,
+    version: 1,
     occurredAt: now,
     listTotalAmount: new Prisma.Decimal(20),
     subtotalAmount: new Prisma.Decimal(15),
@@ -683,6 +684,7 @@ describe('OrdersService', () => {
       'location-1',
       'order-1',
       {
+        version: 1,
         items: [{ productId: 'product-1', quantity: '2.000' }],
       },
       employee,
@@ -767,6 +769,7 @@ describe('OrdersService', () => {
       'location-1',
       'order-1',
       {
+        version: 1,
         items: [
           { id: 'draft-product-1', productId: 'product-1', quantity: '2.000' },
           { productId: 'product-2', quantity: '1.000' },
@@ -819,6 +822,7 @@ describe('OrdersService', () => {
         'location-1',
         'order-1',
         {
+          version: 1,
           items: [{ id: 'item-1', productId: 'product-1', quantity: '2.000' }],
         },
         owner,
@@ -830,6 +834,34 @@ describe('OrdersService', () => {
 
     expect(error).toBeInstanceOf(AppException);
     expect((error as AppException).errorCode).toBe('ORDER_ITEM_NOT_DRAFT');
+    expect(products.resolveForSale).not.toHaveBeenCalled();
+    expect(tx.orderItem.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects a stale order update version before resolving products', async () => {
+    const { service, tx, products } = setup();
+    tx.order.findFirst.mockResolvedValue({
+      ...order(OrderStatus.ACTIVE),
+      version: 2,
+    });
+
+    const error = await service
+      .update(
+        'location-1',
+        'order-1',
+        {
+          version: 1,
+          items: [{ id: 'item-1', productId: 'product-1', quantity: '2.000' }],
+        },
+        owner,
+      )
+      .then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+    expect(error).toBeInstanceOf(AppException);
+    expect((error as AppException).errorCode).toBe('ORDER_CHANGED');
     expect(products.resolveForSale).not.toHaveBeenCalled();
     expect(tx.orderItem.update).not.toHaveBeenCalled();
   });

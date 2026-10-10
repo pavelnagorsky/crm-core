@@ -30,6 +30,9 @@ export class OrderResponseDto {
   @ApiProperty({ enum: OrderStatus, enumName: 'OrderStatus' })
   status: OrderStatus;
 
+  @ApiProperty({ type: Number })
+  version: number;
+
   @ApiProperty({ type: Date })
   occurredAt: Date;
 

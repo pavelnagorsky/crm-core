@@ -130,7 +130,10 @@ export class OrderPersistenceService {
     );
     return tx.order.update({
       where: { id: orderId },
-      data: totals,
+      data: {
+        ...totals,
+        version: { increment: 1 },
+      },
       include: orderInclude,
     });
   }

@@ -5,15 +5,26 @@ import {
   ArrayMinSize,
   IsArray,
   IsDateString,
+  IsInt,
   IsOptional,
   IsString,
   IsUUID,
   MaxLength,
+  Min,
   ValidateNested,
 } from 'class-validator';
 import { UpdateOrderItemDto } from './update-order-item.dto.js';
 
 export class UpdateOrderDto {
+  @ApiProperty({
+    type: Number,
+    minimum: 1,
+    description: 'Optimistic concurrency version from the latest order read.',
+  })
+  @IsInt()
+  @Min(1)
+  version: number;
+
   @ApiProperty({
     type: String,
     format: 'uuid',

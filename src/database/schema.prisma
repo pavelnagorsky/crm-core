@@ -603,6 +603,7 @@ model Order {
   clientPhone     String?     @db.VarChar(30)
   currency        String      @db.VarChar(3)
   status          OrderStatus @default(ACTIVE)
+  version         Int         @default(1)
   occurredAt      DateTime
   listTotalAmount Decimal     @default(0) @db.Decimal(12, 2)
   subtotalAmount  Decimal     @default(0) @db.Decimal(12, 2)
