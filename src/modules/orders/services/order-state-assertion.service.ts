@@ -26,4 +26,10 @@ export class OrderStateAssertionService {
       throw new AppException(ErrorCode.ORDER_CHANGED, HttpStatus.CONFLICT);
     }
   }
+
+  assertVersionClaimed(claimed: boolean): void {
+    if (!claimed) {
+      throw new AppException(ErrorCode.ORDER_CHANGED, HttpStatus.CONFLICT);
+    }
+  }
 }

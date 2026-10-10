@@ -91,17 +91,20 @@ Oct 10, 2026 · @Pavel
 }
 ```
 
-Перед применением diff сервер проверяет `locked.version === dto.version`. Любое изменение заказа инкрементирует `version` (редактор, добавление items, confirm/reverse, sync booking services, cleanup draft-products, void). Если версия устарела, сервер возвращает `409 ORDER_CHANGED`, а фронт показывает: «Заказ изменился другим пользователем. Обновите данные.» Так desired-state остаётся безопасным: stale форма не может молча перетереть чужие изменения.
+Перед применением diff сервер делает compare-and-bump версии внутри той же `$transaction`: `UPDATE Order WHERE id = :id AND version = :dto.version SET version = version + 1` (в Prisma — `updateMany`). Если затронуто `0` строк, версия уже изменилась и сервер возвращает `409 ORDER_CHANGED`; фронт показывает: «Заказ изменился другим пользователем. Обновите данные.» После успешного bump строка заказа удерживается транзакцией до `COMMIT`, поэтому параллельный editor-save не может применить старый desired-state. `refreshTotals` в этом flow пересчитывает суммы без повторного инкремента версии; остальные мутации заказа (добавление items, confirm/reverse, sync booking services, cleanup draft-products, void) также инкрементят `version`.
 
-`OrdersService.update` — заменить `deleteMany всё + create заново` на diff по `OrderItem.id`:
+`OrdersService.update` применяет diff по `OrderItem.id`, а не «delete all + create again»:
 
-1. `assertActive` — оставить; **`assertDraftItems` — убрать**.
-2. `assertVersion(locked.version, dto.version)` — stale editor получает `ORDER_CHANGED`.
-3. `editable = locked.items.filter(status === DRAFT)`.
-4. Контракт входа: `items[].id?` есть только у существующей `DRAFT`-строки; `productId` обязателен у каждой строки как бизнес-атрибут товара.
-5. diff `editable` vs `dto.items` по `id`: `id` есть → `update` существующего `DRAFT` (productId/qty/customUnitPrice/seller с RBAC из `assertCustomPriceAccess`); `id` отсутствует → `create` DRAFT; существующий `DRAFT id` отсутствует во входе → `delete` (draft, ссылок нет).
-6. Если во вход прилетел `id`, который не принадлежит редактируемому набору этого заказа (чужая строка, сервисная строка, подтверждённая/списанная товарная строка и т.п.) → `ORDER_ITEM_IMMUTABLE`. Это defensive check для контракта фронта: locked/read-only строки вообще не отправляются в `items`, а ошибка описывает нарушение намерения — попытку изменить неизменяемую строку.
-7. `refreshTotals` (считает по не-REVERSED → проданное остаётся в сумме) и инкрементирует `version`.
+1. `findInTransaction` читает заказ с items.
+2. `assertActive` — заказ должен быть `ACTIVE`; **`assertDraftItems` не используется**.
+3. `assertVersion(locked.version, dto.version)` отсекает явно устаревший read.
+4. `incrementVersionIfCurrent(orderId, dto.version)` делает условный bump; если `count = 0` → `ORDER_CHANGED` (гонка между read и save).
+5. `editable = locked.items.filter(type === PRODUCT && status === DRAFT)`.
+6. Контракт входа: `items[].id?` есть только у существующей `DRAFT`-строки; `productId` обязателен у каждой строки как бизнес-атрибут товара.
+7. diff `editable` vs `dto.items` по `id`: `id` есть → `update` существующего `DRAFT` (productId/qty/customUnitPrice/seller с RBAC из `assertCustomPriceAccess`); `id` отсутствует → `create` DRAFT; существующий `DRAFT id` отсутствует во входе → `delete` (draft, ссылок нет).
+8. Если во вход прилетел `id`, который не принадлежит редактируемому набору этого заказа (чужая строка, сервисная строка, подтверждённая/списанная товарная строка и т.п.) → `ORDER_ITEM_IMMUTABLE`. Это defensive check для контракта фронта: locked/read-only строки вообще не отправляются в `items`, а ошибка описывает нарушение намерения — попытку изменить неизменяемую строку.
+9. `refreshTotals(..., { incrementVersion: false })` считает по не-`REVERSED` → проданное остаётся в сумме, а версия уже поднята compare-and-bump шагом.
+10. `ORDER_UPDATED` audit пишется в той же транзакции с `itemChanges.added/removed/changed`.
 
 Ключ diff’а — `orderItemId`, не `productId`: identity строки остаётся identity сущности, а товар — это изменяемый бизнес-атрибут. Текущий инвариант «один товар в заказе максимум одной активной строкой» можно оставить как доменное правило (`assertProductItemsCanBeAdded`/валидация дублей), но он не должен определять способ сопоставления строк. Это оставляет архитектурный запас для будущих сценариев: один товар от разных продавцов, разные цены/скидки, партии, серийные номера, подарочный экземпляр рядом с обычным или частичный возврат. `OrderItemResponseDto` уже отдаёт `id` и `status` — фронт различает read-only/editable.
 
@@ -151,8 +154,11 @@ Oct 10, 2026 · @Pavel
 2. `reverseCompletedBookingServices` реверсит **только** `SERVICE/CONFIRMED`; товары остаются `CONFIRMED` — бизнес-корректно.
 3. `reverseForBooking` (→ `reverseBookingCommission`) фильтрует `bookingItemId IN … AND source = BOOKING` → товарные комиссии не трогаются. Рассинхрона нет.
 4. `OrderItemResponseDto` отдаёт `id` и `status` — фронт различает read-only/editable.
-5. `UpdateOrderDto` = `CreateOrderDto`; строка опознаётся по `productId`; наследует лишние `confirmImmediately`/`idempotencyKey`.
-6. `update()` сейчас: `assertActive` + `assertDraftItems` (падает на любой не-DRAFT) + `deleteMany всё` + `create заново`.
+5. `UpdateOrderDto` отделён от `CreateOrderDto`: принимает `version`, не наследует `confirmImmediately`/`idempotencyKey`, разрешает пустой `items`.
+6. `UpdateOrderItemDto` содержит `id?`; существующие строки сопоставляются по `OrderItem.id`, новые строки создаются без `id`.
+7. `update()` сейчас: `assertActive`, проверка/claim версии (`ORDER_CHANGED`), diff только `PRODUCT/DRAFT`, `ORDER_ITEM_IMMUTABLE` для попытки изменить locked/read-only строку, `refreshTotals` и `ORDER_UPDATED` audit в одной транзакции.
+8. `ORDER_UPDATED` audit содержит `itemChanges.added/removed/changed`; удалённые DRAFT-строки остаются в истории через audit payload.
+9. Отмена/удаление незавершённой брони удаляет `PRODUCT/DRAFT` через `removeDraftProductsForBooking`; `BOOKING_CANCELLED`/`BOOKING_DELETED` пишут `removedDraftProductItems` в той же транзакции.
 
 ## Аудит: история не теряется
 
@@ -166,24 +172,24 @@ Oct 10, 2026 · @Pavel
 
 ```text
 BEGIN
-lock/read order
-validate version
+read order
 validate ACTIVE
+claim version (UPDATE Order WHERE id AND version)
 delete DRAFT
 update DRAFT
 create DRAFT
-refreshTotals
+refreshTotals (without second version increment)
 write audit log
 COMMIT
 ```
 
 Тот же принцип для отмены/удаления незавершённой брони: `cancel/delete Booking` + удаление `PRODUCT/DRAFT` + audit payload `removedDraftProductItems` выполняются в одном `$transaction`. Если audit write падает, откатывается и отмена/удаление, и чистка товаров.
 
-| Операция                            | Событие                               | Нужно                                                                                                         |
-| ----------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Редактор (`update` на diff)         | `ORDER_UPDATED`                       | расширить payload: добавленные/удалённые/изменённые строки (productId, qty, сумма), сейчас только totalAmount |
-| Автоудаление DRAFT при отмене брони | `BOOKING_CANCELLED`/`BOOKING_DELETED` | добавить `removedDraftProductItems` в payload                                                                 |
-| Добавление товара в бронь           | —                                     | проверить, что эмитится (сейчас, по-видимому, нет)                                                            |
+| Операция                            | Событие                               | Состояние                                                                                        |
+| ----------------------------------- | ------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| Редактор (`update` на diff)         | `ORDER_UPDATED`                       | реализовано: `itemChanges.added/removed/changed` пишется вместе с diff/totals                    |
+| Автоудаление DRAFT при отмене брони | `BOOKING_CANCELLED`/`BOOKING_DELETED` | реализовано: `removedDraftProductItems` пишется вместе с cancel/delete и удалением DRAFT-товаров |
+| Добавление товара в заказ/бронь     | `ORDER_UPDATED`                       | реализовано для `addDraftItems`: audit пишется в той же транзакции с добавлением строк и totals  |
 
 Существующие события заказа (`ORDER_CREATED/UPDATED/VOIDED/DELETED`, `ORDER_ITEM_CONFIRMED/REVERSED`) покрывают факт изменения; пробел — в **гранулярности payload**. Отдельное событие на удаление строки не нужно — достаточно обогатить `ORDER_UPDATED`.
 
@@ -191,18 +197,19 @@ COMMIT
 
 По возрастанию риска; самый ответственный кусок — шаг 3 (diff-логика и защита от задевания не-DRAFT).
 
-| #   | Шаг                                                                                                                | Риск                   |
-| --- | ------------------------------------------------------------------------------------------------------------------ | ---------------------- |
-| 1   | Отделить `UpdateOrderDto` от Create (убрать лишние поля, min 0)                                                    | низкий                 |
-| 2   | Вынести `assertActive`/`assertDraftItems` в единый helper                                                          | низкий                 |
-| 3   | Переписать `update()` на diff DRAFT-строк по `OrderItem.id`, а не по `productId`                                   | средний (ядро)         |
-| 3a  | Обогатить payload ORDER\_UPDATED составом изменений строк (added/removed/changed)                                  | низкий                 |
-| 3b  | Добавить optimistic concurrency (`Order.version`, `UpdateOrderDto.version`, `ORDER_CHANGED`)                       | средний                |
-| 4   | Унифицировать добавление товара в бронь через `POST items`                                                         | средний                |
-| 5   | Тесты: частично-подтверждённый заказ редактируется, проданное не тронуто                                           | средний                |
-| 6   | Автоудаление DRAFT-товаров при отмене/удалении предстоящей брони                                                   | низкий                 |
-| 7   | Фронт: read-only секция + доступ к заказу завершённой отменённой брони                                             | —                      |
-| 8   | (опц.) `POST /:id/void` вместо `PATCH /:id/status`, выпилить `OrderTargetStatus`                                   | средний (API-контракт) |
-| 9   | (опц., позже) фича «создать заказ на товары из отменяемой записи» (предзаполненный standalone-заказ)`POST /orders` | низкий                 |
+| #   | Шаг                                                                                                                | Риск                   | Статус             |
+| --- | ------------------------------------------------------------------------------------------------------------------ | ---------------------- | ------------------ |
+| 1   | Отделить `UpdateOrderDto` от Create (убрать лишние поля, min 0)                                                    | низкий                 | сделано            |
+| 2   | Вынести `assertActive`/`assertDraftItems` в единый helper                                                          | низкий                 | сделано            |
+| 3   | Переписать `update()` на diff DRAFT-строк по `OrderItem.id`, а не по `productId`                                   | средний (ядро)         | сделано            |
+| 3a  | Обогатить payload ORDER\_UPDATED составом изменений строк (added/removed/changed)                                  | низкий                 | сделано            |
+| 3b  | Добавить optimistic concurrency (`Order.version`, `UpdateOrderDto.version`, `ORDER_CHANGED`)                       | средний                | сделано            |
+| 3c  | Усилить lost-update защиту до compare-and-bump `UPDATE ... WHERE id AND version`                                   | средний                | сделано            |
+| 4   | Унифицировать добавление товара в бронь через `POST items`                                                         | средний                | сделано            |
+| 5   | Тесты: частично-подтверждённый заказ редактируется, проданное не тронуто                                           | средний                | сделано            |
+| 6   | Автоудаление DRAFT-товаров при отмене/удалении предстоящей брони                                                   | низкий                 | сделано            |
+| 7   | Фронт: read-only секция + доступ к заказу завершённой отменённой брони                                             | —                      | вне backend-задачи |
+| 8   | (опц.) `POST /:id/void` вместо `PATCH /:id/status`, выпилить `OrderTargetStatus`                                   | средний (API-контракт) | не начато          |
+| 9   | (опц., позже) фича «создать заказ на товары из отменяемой записи» (предзаполненный standalone-заказ)`POST /orders` | низкий                 | не начато          |
 
-Шаги 1–3 изолированы и покрываются юнит-тестами — разумная точка старта. Фронт (шаг 6) и смежная чистка (7–8) идут после.
+Backend-часть шагов 1–6 закрыта и покрыта тестами. Оставшиеся пункты — фронтовая доступность/UX и отдельные опциональные API-улучшения.

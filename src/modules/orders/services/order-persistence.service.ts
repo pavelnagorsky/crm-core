@@ -81,6 +81,18 @@ export class OrderPersistenceService {
     `);
   }
 
+  async incrementVersionIfCurrent(
+    tx: Prisma.TransactionClient,
+    orderId: string,
+    version: number,
+  ): Promise<boolean> {
+    const result = await tx.order.updateMany({
+      where: { id: orderId, version },
+      data: { version: { increment: 1 } },
+    });
+    return result.count === 1;
+  }
+
   async findInTransaction(
     tx: Prisma.TransactionClient,
     locationId: string,
@@ -113,6 +125,7 @@ export class OrderPersistenceService {
     tx: Prisma.TransactionClient,
     locationId: string,
     orderId: string,
+    options: { incrementVersion?: boolean } = {},
   ): Promise<OrderWithItems> {
     const order = await this.findInTransaction(tx, locationId, orderId);
     const totals = this.compute.totals(
@@ -132,7 +145,9 @@ export class OrderPersistenceService {
       where: { id: orderId },
       data: {
         ...totals,
-        version: { increment: 1 },
+        ...(options.incrementVersion === false
+          ? {}
+          : { version: { increment: 1 } }),
       },
       include: orderInclude,
     });

@@ -91,6 +91,7 @@ function setup() {
       findUnique: vi.fn(),
       upsert: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       delete: vi.fn(),
     },
     orderItem: {
@@ -796,6 +797,10 @@ describe('OrdersService', () => {
       }),
     });
     expect(tx.orderItem.deleteMany).not.toHaveBeenCalled();
+    expect(tx.order.updateMany).toHaveBeenCalledWith({
+      where: { id: 'order-1', version: 1 },
+      data: { version: { increment: 1 } },
+    });
     expect(result.items.find((item) => item.id === 'service-item-1')).toEqual(
       expect.objectContaining({ status: OrderItemStatus.CONFIRMED }),
     );
@@ -850,6 +855,32 @@ describe('OrdersService', () => {
       ...order(OrderStatus.ACTIVE),
       version: 2,
     });
+
+    const error = await service
+      .update(
+        'location-1',
+        'order-1',
+        {
+          version: 1,
+          items: [{ id: 'item-1', productId: 'product-1', quantity: '2.000' }],
+        },
+        owner,
+      )
+      .then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+    expect(error).toBeInstanceOf(AppException);
+    expect((error as AppException).errorCode).toBe('ORDER_CHANGED');
+    expect(products.resolveForSale).not.toHaveBeenCalled();
+    expect(tx.orderItem.update).not.toHaveBeenCalled();
+  });
+
+  it('rejects an order update when the version changes during save', async () => {
+    const { service, tx, products } = setup();
+    tx.order.findFirst.mockResolvedValue(order(OrderStatus.ACTIVE));
+    tx.order.updateMany.mockResolvedValueOnce({ count: 0 });
 
     const error = await service
       .update(

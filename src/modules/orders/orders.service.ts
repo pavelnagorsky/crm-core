@@ -95,7 +95,6 @@ export class OrdersService {
     actor: AuditActor,
   ): Promise<OrderWithItems> {
     const order = await this.persistence.inTransaction(async (tx) => {
-      await this.persistence.lockOrder(tx, orderId);
       const locked = await this.persistence.findInTransaction(
         tx,
         locationId,
@@ -103,6 +102,13 @@ export class OrdersService {
       );
       this.stateAssertions.assertActive(locked.status);
       this.stateAssertions.assertVersion(locked.version, dto.version);
+      this.stateAssertions.assertVersionClaimed(
+        await this.persistence.incrementVersionIfCurrent(
+          tx,
+          orderId,
+          dto.version,
+        ),
+      );
       this.assertEditableUpdateItems(locked, dto.items);
       const draft = await this.drafts.resolveDraft(
         locationId,
@@ -159,6 +165,7 @@ export class OrdersService {
         tx,
         locationId,
         orderId,
+        { incrementVersion: false },
       );
       await this.writeAudit(tx, {
         brandId: draft.location.brandId,
