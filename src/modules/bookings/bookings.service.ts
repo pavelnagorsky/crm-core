@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Booking, CancelledBy } from '@prisma/client';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
+import { AddOrderItemsDto } from '../orders/dto/add-order-items.dto.js';
 import { OrderProductItemDto } from '../orders/dto/order-product-item.dto.js';
 import { OrderWithItems } from '../orders/interfaces/order-with-items.interface.js';
 import { BookingResolveRequestDto } from './dto/booking-resolve-request.dto.js';
@@ -61,6 +62,15 @@ export class BookingsService {
     dto: OrderProductItemDto,
   ): Promise<OrderWithItems> {
     return this.mutation.addProduct(locationId, bookingId, tokenPayload, dto);
+  }
+
+  async addProducts(
+    locationId: string,
+    bookingId: string,
+    tokenPayload: TokenPayloadDto,
+    dto: AddOrderItemsDto,
+  ): Promise<OrderWithItems> {
+    return this.mutation.addProducts(locationId, bookingId, tokenPayload, dto);
   }
 
   async completeElapsed(now = new Date()): Promise<number> {

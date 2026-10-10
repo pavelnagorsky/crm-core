@@ -62,6 +62,7 @@ import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 import { assertLocationRole } from '../auth/guards/assert-location-role.js';
 import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
+import { AddOrderItemsDto } from '../orders/dto/add-order-items.dto.js';
 import { OrderProductItemDto } from '../orders/dto/order-product-item.dto.js';
 import { OrderResponseDto } from '../orders/dto/order-response.dto.js';
 
@@ -341,6 +342,27 @@ export class BookingsController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<OrderResponseDto>> {
     const order = await this.bookingsService.addProduct(
+      locationId,
+      id,
+      tokenPayload,
+      dto,
+    );
+    return BaseResponseDto.success(OrderResponseDto.fromEntity(order));
+  }
+
+  @ApiOperation({ summary: 'Add draft product items to a booking order' })
+  @ApiOkResponse({ type: ApiResponse(OrderResponseDto) })
+  @ApiNotFoundResponse({ description: 'Booking or product not found' })
+  @ApiConflictResponse({ description: 'Product cannot be added' })
+  @Auth()
+  @Post('locations/:locationId/bookings/:id/items')
+  async addItems(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: AddOrderItemsDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
+  ): Promise<BaseResponseDto<OrderResponseDto>> {
+    const order = await this.bookingsService.addProducts(
       locationId,
       id,
       tokenPayload,

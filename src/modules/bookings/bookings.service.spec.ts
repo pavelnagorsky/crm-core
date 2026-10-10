@@ -914,6 +914,10 @@ describe('BookingsService.addProduct', () => {
       id: 'order-1',
       items: [],
     }),
+    addDraftProductsToBookingOrder: vi.fn().mockResolvedValue({
+      id: 'order-1',
+      items: [],
+    }),
   };
   let service: BookingsService;
 
@@ -944,9 +948,9 @@ describe('BookingsService.addProduct', () => {
 
     await service.addProduct('biz', 'booking-1', token, dto);
 
-    expect(orders.addDraftProductToBookingOrder).toHaveBeenCalledWith(
+    expect(orders.addDraftProductsToBookingOrder).toHaveBeenCalledWith(
       bookingRow,
-      dto,
+      [dto],
       expect.objectContaining({ name: expect.any(String) }),
       db,
     );

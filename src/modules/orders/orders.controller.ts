@@ -31,6 +31,7 @@ import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
 import { LocationRBAC } from '../auth/decorators/location-rbac.decorator.js';
 import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
+import { AddOrderItemsDto } from './dto/add-order-items.dto.js';
 import { ConfirmOrderItemsDto } from './dto/confirm-order-items.dto.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
 import { OrderResponseDto } from './dto/order-response.dto.js';
@@ -175,6 +176,26 @@ export class OrdersController {
       locationId,
       orderId,
       orderItemId,
+      auditActorFromToken(token, locationId),
+    );
+    return BaseResponseDto.success(OrderResponseDto.fromEntity(order));
+  }
+
+  @ApiOperation({ summary: 'Add draft product items to an active order' })
+  @ApiOkResponse({ type: ApiResponse(OrderResponseDto) })
+  @ApiConflictResponse({ description: 'Product cannot be added' })
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Post(':orderId/items')
+  async addItems(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Param('orderId', ParseUUIDPipe) orderId: string,
+    @Body() dto: AddOrderItemsDto,
+    @TokenPayload() token: TokenPayloadDto,
+  ): Promise<BaseResponseDto<OrderResponseDto>> {
+    const order = await this.orders.addDraftItems(
+      locationId,
+      orderId,
+      dto,
       auditActorFromToken(token, locationId),
     );
     return BaseResponseDto.success(OrderResponseDto.fromEntity(order));

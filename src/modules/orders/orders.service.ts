@@ -20,6 +20,7 @@ import { BookingWithItems } from '../bookings/interfaces/booking-with-items.inte
 import { LocationService } from '../location/location.service.js';
 import { orderInclude } from './constants/order-include.constant.js';
 import { ConfirmOrderItemsDto } from './dto/confirm-order-items.dto.js';
+import { AddOrderItemsDto } from './dto/add-order-items.dto.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
 import { OrderProductItemDto } from './dto/order-product-item.dto.js';
 import { OrderSearchRequestDto } from './dto/order-search-request.dto.js';
@@ -242,6 +243,60 @@ export class OrdersService {
     dto: OrderStatusCountsRequestDto,
   ): Promise<OrderStatusCount[]> {
     return this.persistence.getStatusCounts(locationId, dto);
+  }
+
+  async addDraftItems(
+    locationId: string,
+    orderId: string,
+    dto: AddOrderItemsDto,
+    actor: AuditActor,
+  ): Promise<OrderWithItems> {
+    const location = await this.locations.findById(locationId);
+    const result = await this.persistence.inTransaction(async (tx) => {
+      await this.persistence.lockOrder(tx, orderId);
+      const order = await this.persistence.findInTransaction(
+        tx,
+        locationId,
+        orderId,
+      );
+      this.stateAssertions.assertActive(order.status);
+      this.drafts.assertProductItemsCanBeAdded(order, dto.items);
+      const resolved = await this.drafts.resolveProductItems(
+        locationId,
+        dto.items,
+        actor,
+        order,
+        tx,
+      );
+      await tx.orderItem.createMany({
+        data: resolved.map((item) => ({
+          orderId,
+          ...item,
+        })),
+      });
+      return {
+        order: await this.persistence.refreshTotals(tx, locationId, orderId),
+        added: resolved.map((item) => this.orderItemAuditSnapshot(item)),
+      };
+    });
+    this.emit(
+      location.brandId,
+      locationId,
+      result.order.id,
+      AuditEvent.ORDER_UPDATED,
+      AuditActionType.MODIFY,
+      actor,
+      {
+        totalAmount: result.order.totalAmount.toFixed(2),
+        currency: result.order.currency,
+        itemChanges: {
+          added: result.added,
+          removed: [],
+          changed: [],
+        },
+      },
+    );
+    return result.order;
   }
 
   async changeStatus(

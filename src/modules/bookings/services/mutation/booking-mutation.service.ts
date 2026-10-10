@@ -24,6 +24,7 @@ import { CalendarService } from '../../../calendar/calendar.service.js';
 import { LocationService } from '../../../location/location.service.js';
 import { NOTIFICATION_EVENT } from '../../../notifications/notifications.service.js';
 import { BookingStatusChangedNotification } from '../../../notifications/notifications/booking-status-changed.notification.js';
+import { AddOrderItemsDto } from '../../../orders/dto/add-order-items.dto.js';
 import { OrderProductItemDto } from '../../../orders/dto/order-product-item.dto.js';
 import { OrderWithItems } from '../../../orders/interfaces/order-with-items.interface.js';
 import { OrdersService } from '../../../orders/orders.service.js';
@@ -253,6 +254,17 @@ export class BookingMutationService {
     tokenPayload: TokenPayloadDto,
     dto: OrderProductItemDto,
   ): Promise<OrderWithItems> {
+    return this.addProducts(locationId, bookingId, tokenPayload, {
+      items: [dto],
+    });
+  }
+
+  async addProducts(
+    locationId: string,
+    bookingId: string,
+    tokenPayload: TokenPayloadDto,
+    dto: AddOrderItemsDto,
+  ): Promise<OrderWithItems> {
     assertLocationRole(
       tokenPayload,
       locationId,
@@ -270,7 +282,7 @@ export class BookingMutationService {
     );
     const actor = auditActorFromToken(tokenPayload, booking.locationId);
     return this.db.$transaction((tx) =>
-      this.orders.addDraftProductToBookingOrder(booking, dto, actor, tx),
+      this.orders.addDraftProductsToBookingOrder(booking, dto.items, actor, tx),
     );
   }
 
