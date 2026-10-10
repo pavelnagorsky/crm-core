@@ -974,6 +974,12 @@ describe('BookingsService.cancel draft product cleanup', () => {
       findFirst: vi.fn(),
       update: vi.fn(),
     },
+    location: {
+      findUnique: vi.fn(),
+    },
+    auditLog: {
+      create: vi.fn(),
+    },
     $transaction: vi.fn((callback) => callback(db)),
   };
   const orders = {
@@ -992,6 +998,7 @@ describe('BookingsService.cancel draft product cleanup', () => {
     vi.clearAllMocks();
     db.booking.findFirst.mockResolvedValue(sourceBooking);
     db.booking.update.mockResolvedValue(cancelledBooking);
+    db.location.findUnique.mockResolvedValue({ brandId: 'brand-1' });
     orders.removeDraftProductsForBooking.mockResolvedValue(
       removedDraftProductItems,
     );
@@ -1025,10 +1032,13 @@ describe('BookingsService.cancel draft product cleanup', () => {
     );
     expect(orders.reverseCompletedBookingServices).not.toHaveBeenCalled();
     expect(earnings.reverseForBooking).not.toHaveBeenCalled();
-    expect(emitter.emit).toHaveBeenCalledWith(
-      expect.any(String),
+    expect(emitter.emit).not.toHaveBeenCalled();
+    expect(db.auditLog.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        payload: expect.objectContaining({ removedDraftProductItems }),
+        data: expect.objectContaining({
+          eventType: 'BOOKING_CANCELLED',
+          payload: expect.objectContaining({ removedDraftProductItems }),
+        }),
       }),
     );
   });

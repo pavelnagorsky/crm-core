@@ -103,6 +103,9 @@ function setup() {
     orderOperation: {
       create: vi.fn(),
     },
+    auditLog: {
+      create: vi.fn(),
+    },
   };
   const db = {
     order: {
@@ -796,15 +799,18 @@ describe('OrdersService', () => {
     expect(result.items.find((item) => item.id === 'service-item-1')).toEqual(
       expect.objectContaining({ status: OrderItemStatus.CONFIRMED }),
     );
-    expect(events.emit).toHaveBeenCalledWith(
-      expect.any(String),
+    expect(events.emit).not.toHaveBeenCalled();
+    expect(tx.auditLog.create).toHaveBeenCalledWith(
       expect.objectContaining({
-        payload: expect.objectContaining({
-          itemChanges: expect.objectContaining({
-            added: [expect.objectContaining({ productId: 'product-2' })],
-            changed: [
-              expect.objectContaining({ orderItemId: 'draft-product-1' }),
-            ],
+        data: expect.objectContaining({
+          eventType: 'ORDER_UPDATED',
+          payload: expect.objectContaining({
+            itemChanges: expect.objectContaining({
+              added: [expect.objectContaining({ productId: 'product-2' })],
+              changed: [
+                expect.objectContaining({ orderItemId: 'draft-product-1' }),
+              ],
+            }),
           }),
         }),
       }),

@@ -94,7 +94,7 @@ export class OrdersService {
     dto: UpdateOrderDto,
     actor: AuditActor,
   ): Promise<OrderWithItems> {
-    const result = await this.persistence.inTransaction(async (tx) => {
+    const order = await this.persistence.inTransaction(async (tx) => {
       await this.persistence.lockOrder(tx, orderId);
       const locked = await this.persistence.findInTransaction(
         tx,
@@ -160,22 +160,22 @@ export class OrdersService {
         locationId,
         orderId,
       );
-      return { order, draft, itemChanges };
+      await this.writeAudit(tx, {
+        brandId: draft.location.brandId,
+        locationId,
+        entityId: order.id,
+        eventType: AuditEvent.ORDER_UPDATED,
+        actionType: AuditActionType.MODIFY,
+        actor,
+        payload: {
+          totalAmount: order.totalAmount.toFixed(2),
+          currency: order.currency,
+          itemChanges,
+        },
+      });
+      return order;
     });
-    this.emit(
-      result.draft.location.brandId,
-      locationId,
-      result.order.id,
-      AuditEvent.ORDER_UPDATED,
-      AuditActionType.MODIFY,
-      actor,
-      {
-        totalAmount: result.order.totalAmount.toFixed(2),
-        currency: result.order.currency,
-        itemChanges: result.itemChanges,
-      },
-    );
-    return result.order;
+    return order;
   }
 
   findById(locationId: string, orderId: string): Promise<OrderWithItems> {
@@ -283,7 +283,7 @@ export class OrdersService {
     actor: AuditActor,
   ): Promise<OrderWithItems> {
     const location = await this.locations.findById(locationId);
-    const result = await this.persistence.inTransaction(async (tx) => {
+    const order = await this.persistence.inTransaction(async (tx) => {
       await this.persistence.lockOrder(tx, orderId);
       const order = await this.persistence.findInTransaction(
         tx,
@@ -305,29 +305,60 @@ export class OrdersService {
           ...item,
         })),
       });
-      return {
-        order: await this.persistence.refreshTotals(tx, locationId, orderId),
-        added: resolved.map((item) => this.orderItemAuditSnapshot(item)),
-      };
-    });
-    this.emit(
-      location.brandId,
-      locationId,
-      result.order.id,
-      AuditEvent.ORDER_UPDATED,
-      AuditActionType.MODIFY,
-      actor,
-      {
-        totalAmount: result.order.totalAmount.toFixed(2),
-        currency: result.order.currency,
-        itemChanges: {
-          added: result.added,
-          removed: [],
-          changed: [],
+      const updated = await this.persistence.refreshTotals(
+        tx,
+        locationId,
+        orderId,
+      );
+      await this.writeAudit(tx, {
+        brandId: location.brandId,
+        locationId,
+        entityId: updated.id,
+        eventType: AuditEvent.ORDER_UPDATED,
+        actionType: AuditActionType.MODIFY,
+        actor,
+        payload: {
+          totalAmount: updated.totalAmount.toFixed(2),
+          currency: updated.currency,
+          itemChanges: {
+            added: resolved.map((item) => this.orderItemAuditSnapshot(item)),
+            removed: [],
+            changed: [],
+          },
         },
+      });
+      return updated;
+    });
+    return order;
+  }
+
+  private async writeAudit(
+    tx: Prisma.TransactionClient,
+    event: {
+      brandId: string;
+      locationId: string;
+      entityId: string;
+      eventType: AuditEvent;
+      actionType: AuditActionType;
+      actor: AuditActor;
+      payload: Record<string, unknown>;
+    },
+  ): Promise<void> {
+    await tx.auditLog.create({
+      data: {
+        brandId: event.brandId,
+        locationId: event.locationId,
+        entityType: AuditEntity.ORDER,
+        entityId: event.entityId,
+        eventType: event.eventType,
+        actionType: event.actionType,
+        occurredAt: new Date(),
+        actorId: event.actor.id ?? null,
+        actorName: event.actor.name,
+        actorRole: event.actor.role,
+        payload: event.payload as object,
       },
-    );
-    return result.order;
+    });
   }
 
   async changeStatus(

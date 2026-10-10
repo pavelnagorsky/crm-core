@@ -415,23 +415,23 @@ export class BookingMutationService {
         removedDraftProductItems =
           await this.orders.removeDraftProductsForBooking(booking, tx);
       }
+      await this.writeAudit(tx, {
+        locationId: booking.locationId,
+        entityId: booking.id,
+        eventType: AuditEvent.BOOKING_DELETED,
+        actionType: AuditActionType.DELETE,
+        actor,
+        payload: {
+          serviceTitles: booking.items
+            .map((item) => item.serviceTitle)
+            .join(', '),
+          removedDraftProductItems,
+        },
+      });
     });
     this.logger.log(
       `booking deleted: id=${booking.id} locationId=${booking.locationId}`,
     );
-    this.emitAudit({
-      locationId: booking.locationId,
-      entityId: booking.id,
-      eventType: AuditEvent.BOOKING_DELETED,
-      actionType: AuditActionType.DELETE,
-      actor,
-      payload: {
-        serviceTitles: booking.items
-          .map((item) => item.serviceTitle)
-          .join(', '),
-        removedDraftProductItems,
-      },
-    });
   }
 
   private optionalReason(reason?: string | null): string | null {
@@ -476,23 +476,23 @@ export class BookingMutationService {
         removedDraftProductItems =
           await this.orders.removeDraftProductsForBooking(result, tx);
       }
+      await this.writeAudit(tx, {
+        locationId: booking.locationId,
+        entityId: booking.id,
+        eventType: AuditEvent.BOOKING_CANCELLED,
+        actionType: AuditActionType.MODIFY,
+        actor,
+        payload: {
+          cancelledBy,
+          reason: storedReason ?? undefined,
+          removedDraftProductItems,
+        },
+      });
       return result;
     });
     this.logger.log(
       `booking cancelled: id=${booking.id} locationId=${booking.locationId} cancelledBy=${cancelledBy}`,
     );
-    this.emitAudit({
-      locationId: booking.locationId,
-      entityId: booking.id,
-      eventType: AuditEvent.BOOKING_CANCELLED,
-      actionType: AuditActionType.MODIFY,
-      actor,
-      payload: {
-        cancelledBy,
-        reason: storedReason ?? undefined,
-        removedDraftProductItems,
-      },
-    });
     if (booking.clientEmail && cancelledBy === CancelledBy.STAFF) {
       const { timezone } = await this.locationService.getLocale(
         booking.locationId,
@@ -705,6 +705,41 @@ export class BookingMutationService {
       payload: params.payload,
     };
     this.eventEmitter.emit(AUDIT_EVENT, event);
+  }
+
+  private async writeAudit(
+    tx: Prisma.TransactionClient,
+    params: {
+      locationId: string;
+      entityId: string;
+      eventType: AuditEvent;
+      actionType: AuditActionType;
+      actor: AuditActor;
+      payload: Record<string, unknown>;
+    },
+  ): Promise<void> {
+    const location = await tx.location.findUnique({
+      where: { id: params.locationId },
+      select: { brandId: true },
+    });
+    if (!location) {
+      throw new AppException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND);
+    }
+    await tx.auditLog.create({
+      data: {
+        brandId: location.brandId,
+        locationId: params.locationId,
+        entityType: AuditEntity.BOOKING,
+        entityId: params.entityId,
+        eventType: params.eventType,
+        actionType: params.actionType,
+        occurredAt: new Date(),
+        actorId: params.actor.id ?? null,
+        actorName: params.actor.name,
+        actorRole: params.actor.role,
+        payload: params.payload as object,
+      },
+    });
   }
 
   private pricePatches(
