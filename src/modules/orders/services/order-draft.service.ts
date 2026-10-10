@@ -35,6 +35,7 @@ export class OrderDraftService {
     actor: AuditActor,
     existing?: OrderWithItems,
     tx?: Prisma.TransactionClient,
+    options: { allowEmptyItems?: boolean } = {},
   ): Promise<ResolvedOrderDraft> {
     const location = await this.locations.findById(locationId);
     const occurredAt = dto.occurredAt
@@ -47,10 +48,13 @@ export class OrderDraftService {
       );
     }
     const productIds = dto.items.map((item) => item.productId);
-    if (
-      dto.items.length === 0 ||
-      dto.items.some((item) => new Prisma.Decimal(item.quantity).lte(0))
-    ) {
+    if (dto.items.length === 0 && !options.allowEmptyItems) {
+      throw new AppException(
+        ErrorCode.ORDER_QUANTITY_INVALID,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (dto.items.some((item) => new Prisma.Decimal(item.quantity).lte(0))) {
       throw new AppException(
         ErrorCode.ORDER_QUANTITY_INVALID,
         HttpStatus.BAD_REQUEST,

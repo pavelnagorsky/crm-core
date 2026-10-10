@@ -688,7 +688,7 @@ describe('OrdersService', () => {
       employee,
     );
 
-    const item = tx.order.update.mock.calls[0][0].data.items.create[0];
+    const item = tx.orderItem.create.mock.calls[0][0].data;
     expect(item.customUnitPrice.toFixed(2)).toBe('15.00');
     expect(item.unitPrice.toFixed(2)).toBe('15.00');
     expect(item.lineTotal.toFixed(2)).toBe('30.00');

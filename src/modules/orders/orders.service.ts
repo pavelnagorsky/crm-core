@@ -5,7 +5,7 @@ import {
   Injectable,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { OrderItemStatus, Prisma } from '@prisma/client';
+import { OrderItemStatus, OrderItemType, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
@@ -29,6 +29,7 @@ import { OrderTargetStatus } from './enums/order-target-status.enum.js';
 import { OrderPricingLine } from './interfaces/order-pricing-line.interface.js';
 import { OrderStatusCount } from './interfaces/order-status-count.interface.js';
 import { OrderWithItems } from './interfaces/order-with-items.interface.js';
+import { ResolvedOrderDraft } from './interfaces/resolved-order-draft.interface.js';
 import { OrderBookingSyncService } from './services/order-booking-sync.service.js';
 import { OrderDraftService } from './services/order-draft.service.js';
 import { OrderPersistenceService } from './services/order-persistence.service.js';
@@ -100,29 +101,58 @@ export class OrdersService {
         orderId,
       );
       this.stateAssertions.assertActive(locked.status);
-      this.stateAssertions.assertAllItemsDraft(locked);
+      this.assertEditableUpdateItems(locked, dto.items);
       const draft = await this.drafts.resolveDraft(
         locationId,
         dto,
         actor,
-        locked,
+        this.editableDraftOrder(locked),
         tx,
+        { allowEmptyItems: true },
       );
-      await tx.orderItem.deleteMany({ where: { orderId } });
-      const order = await tx.order.update({
+      await tx.order.update({
         where: { id: orderId },
-        data: {
-          bookingId: draft.bookingId,
-          clientId: draft.clientId,
-          clientName: draft.clientName,
-          clientPhone: draft.clientPhone,
-          occurredAt: draft.occurredAt,
-          note: draft.note,
-          ...draft.totals,
-          items: { create: draft.items },
-        },
+        data: this.updateOrderData(locked, draft),
         include: orderInclude,
       });
+      const editableItems = this.editableDraftItems(locked);
+      const incomingIds = new Set(
+        dto.items.flatMap((item) => (item.id ? [item.id] : [])),
+      );
+      const deleteIds = editableItems
+        .filter((item) => !incomingIds.has(item.id))
+        .map((item) => item.id);
+      if (deleteIds.length > 0) {
+        await tx.orderItem.deleteMany({
+          where: {
+            orderId,
+            id: { in: deleteIds },
+            type: OrderItemType.PRODUCT,
+            status: OrderItemStatus.DRAFT,
+          },
+        });
+      }
+      for (const [index, item] of dto.items.entries()) {
+        const data = draft.items[index];
+        if (item.id) {
+          await tx.orderItem.update({
+            where: { id: item.id },
+            data,
+          });
+          continue;
+        }
+        await tx.orderItem.create({
+          data: {
+            orderId,
+            ...data,
+          },
+        });
+      }
+      const order = await this.persistence.refreshTotals(
+        tx,
+        locationId,
+        orderId,
+      );
       return { order, draft };
     });
     this.emit(
@@ -453,6 +483,93 @@ export class OrdersService {
       );
     }
     return result.order;
+  }
+
+  private assertEditableUpdateItems(
+    order: OrderWithItems,
+    items: UpdateOrderDto['items'],
+  ): void {
+    const editableIds = new Set(
+      this.editableDraftItems(order).map((item) => item.id),
+    );
+    const seenItemIds = new Set<string>();
+    for (const item of items) {
+      if (!item.id) continue;
+      if (seenItemIds.has(item.id)) {
+        throw new AppException(
+          ErrorCode.ORDER_DUPLICATE_ITEM,
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      seenItemIds.add(item.id);
+      if (!editableIds.has(item.id)) {
+        throw new AppException(
+          ErrorCode.ORDER_ITEM_NOT_DRAFT,
+          HttpStatus.CONFLICT,
+        );
+      }
+    }
+    const productIds = items.map((item) => item.productId);
+    if (new Set(productIds).size !== productIds.length) {
+      throw new AppException(
+        ErrorCode.ORDER_DUPLICATE_PRODUCT,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const lockedProductIds = new Set(
+      order.items
+        .filter(
+          (item) =>
+            item.type === OrderItemType.PRODUCT &&
+            item.status !== OrderItemStatus.DRAFT &&
+            item.status !== OrderItemStatus.REVERSED &&
+            item.catalogItemId,
+        )
+        .map((item) => item.catalogItemId!),
+    );
+    if (items.some((item) => lockedProductIds.has(item.productId))) {
+      throw new AppException(
+        ErrorCode.ORDER_DUPLICATE_PRODUCT,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  private editableDraftItems(order: OrderWithItems): OrderWithItems['items'] {
+    return order.items.filter(
+      (item) =>
+        item.type === OrderItemType.PRODUCT &&
+        item.status === OrderItemStatus.DRAFT,
+    );
+  }
+
+  private editableDraftOrder(order: OrderWithItems): OrderWithItems {
+    return {
+      ...order,
+      items: this.editableDraftItems(order),
+    };
+  }
+
+  private updateOrderData(
+    locked: OrderWithItems,
+    draft: ResolvedOrderDraft,
+  ): Prisma.OrderUncheckedUpdateInput {
+    const standaloneClient = locked.bookingId
+      ? {
+          clientId: locked.clientId,
+          clientName: locked.clientName,
+          clientPhone: locked.clientPhone,
+        }
+      : {
+          clientId: draft.clientId,
+          clientName: draft.clientName,
+          clientPhone: draft.clientPhone,
+        };
+    return {
+      ...standaloneClient,
+      occurredAt: draft.occurredAt,
+      note: draft.note,
+    };
   }
 
   private emit(
