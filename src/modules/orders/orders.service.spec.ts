@@ -694,6 +694,146 @@ describe('OrdersService', () => {
     expect(item.lineTotal.toFixed(2)).toBe('30.00');
   });
 
+  it('updates draft product items in a partially confirmed order without touching confirmed lines', async () => {
+    const { service, tx, products, events } = setup();
+    const active = order(OrderStatus.ACTIVE);
+    const confirmedService = {
+      ...active.items[0],
+      id: 'service-item-1',
+      type: OrderItemType.SERVICE,
+      bookingItemId: 'booking-item-1',
+      status: OrderItemStatus.CONFIRMED,
+      catalogItemId: 'service-1',
+      productLocationId: null,
+      title: 'Haircut',
+      quantity: new Prisma.Decimal(1),
+      listUnitPrice: new Prisma.Decimal(50),
+      unitPrice: new Prisma.Decimal(50),
+      lineSubtotal: new Prisma.Decimal(50),
+      lineTotal: new Prisma.Decimal(50),
+    };
+    const draftProduct = {
+      ...active.items[0],
+      id: 'draft-product-1',
+      status: OrderItemStatus.DRAFT,
+      catalogItemId: 'product-1',
+      productLocationId: 'product-location-1',
+      title: 'Shampoo',
+      quantity: new Prisma.Decimal(1),
+      lineTotal: new Prisma.Decimal(15),
+    };
+    const locked = {
+      ...active,
+      bookingId: 'booking-1',
+      clientId: 'client-1',
+      clientName: 'Ann Client',
+      clientPhone: '+79000000000',
+      items: [confirmedService, draftProduct],
+    };
+    const refreshed = {
+      ...locked,
+      items: [
+        confirmedService,
+        {
+          ...draftProduct,
+          quantity: new Prisma.Decimal(2),
+          lineSubtotal: new Prisma.Decimal(30),
+          lineTotal: new Prisma.Decimal(30),
+        },
+        {
+          ...active.items[0],
+          id: 'draft-product-2',
+          catalogItemId: 'product-2',
+          productLocationId: 'product-location-2',
+          title: 'Conditioner',
+          quantity: new Prisma.Decimal(1),
+          listUnitPrice: new Prisma.Decimal(30),
+          unitPrice: new Prisma.Decimal(30),
+          lineSubtotal: new Prisma.Decimal(30),
+          lineTotal: new Prisma.Decimal(30),
+        },
+      ],
+    };
+    tx.order.findFirst
+      .mockResolvedValueOnce(locked)
+      .mockResolvedValueOnce(refreshed);
+    tx.order.update.mockResolvedValueOnce(locked).mockResolvedValueOnce({
+      ...refreshed,
+      totalAmount: new Prisma.Decimal(110),
+    });
+    products.resolveForSale.mockResolvedValue([product(), secondProduct()]);
+
+    const result = await service.update(
+      'location-1',
+      'order-1',
+      {
+        items: [
+          { id: 'draft-product-1', productId: 'product-1', quantity: '2.000' },
+          { productId: 'product-2', quantity: '1.000' },
+        ],
+      },
+      owner,
+    );
+
+    expect(tx.orderItem.update).toHaveBeenCalledWith({
+      where: { id: 'draft-product-1' },
+      data: expect.objectContaining({
+        type: OrderItemType.PRODUCT,
+        catalogItemId: 'product-1',
+      }),
+    });
+    expect(tx.orderItem.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        orderId: 'order-1',
+        type: OrderItemType.PRODUCT,
+        catalogItemId: 'product-2',
+      }),
+    });
+    expect(tx.orderItem.deleteMany).not.toHaveBeenCalled();
+    expect(result.items.find((item) => item.id === 'service-item-1')).toEqual(
+      expect.objectContaining({ status: OrderItemStatus.CONFIRMED }),
+    );
+    expect(events.emit).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        payload: expect.objectContaining({
+          itemChanges: expect.objectContaining({
+            added: [expect.objectContaining({ productId: 'product-2' })],
+            changed: [
+              expect.objectContaining({ orderItemId: 'draft-product-1' }),
+            ],
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('rejects editing a confirmed product item by id', async () => {
+    const { service, tx, products } = setup();
+    tx.order.findFirst.mockResolvedValue(
+      order(OrderStatus.ACTIVE, OrderItemStatus.CONFIRMED),
+    );
+
+    const error = await service
+      .update(
+        'location-1',
+        'order-1',
+        {
+          items: [{ id: 'item-1', productId: 'product-1', quantity: '2.000' }],
+        },
+        owner,
+      )
+      .then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+    expect(error).toBeInstanceOf(AppException);
+    expect((error as AppException).errorCode).toBe('ORDER_ITEM_NOT_DRAFT');
+    expect(products.resolveForSale).not.toHaveBeenCalled();
+    expect(tx.orderItem.update).not.toHaveBeenCalled();
+  });
+
   it('prices product items for previews without writing an order', async () => {
     const { service, db, products } = setup();
     products.resolveForSale.mockResolvedValue([product()]);
