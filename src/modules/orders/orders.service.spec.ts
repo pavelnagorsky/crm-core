@@ -13,6 +13,7 @@ import { PrismaErrorCode } from '../../shared/database/prisma-error-codes.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { OrderTargetStatus } from './enums/order-target-status.enum.js';
 import { OrdersService } from './orders.service.js';
+import { OrderAuditService } from './services/order-audit.service.js';
 import { OrderBookingSyncService } from './services/order-booking-sync.service.js';
 import { OrderComputeService } from './services/order-compute.service.js';
 import { OrderDraftService } from './services/order-draft.service.js';
@@ -148,6 +149,7 @@ function setup() {
   };
   const events = { emit: vi.fn() };
   const compute = new OrderComputeService();
+  const audit = new OrderAuditService();
   const persistence = new OrderPersistenceService(db as never, compute);
   const drafts = new OrderDraftService(
     products as never,
@@ -160,6 +162,7 @@ function setup() {
     locations as never,
     compute,
     drafts,
+    audit,
     persistence,
   );
   const stateAssertions = new OrderStateAssertionService();
@@ -175,6 +178,7 @@ function setup() {
     db as never,
     locations as never,
     drafts,
+    audit,
     bookingSync,
     persistence,
     transitions,
@@ -1518,7 +1522,9 @@ describe('OrdersService', () => {
       ],
     };
     tx.order.findUnique.mockResolvedValue(existingOrder);
-    tx.order.findFirst.mockResolvedValue(refreshedOrder);
+    tx.order.findFirst
+      .mockResolvedValueOnce(existingOrder)
+      .mockResolvedValueOnce(refreshedOrder);
     tx.order.update.mockResolvedValue(refreshedOrder);
     products.resolveForSale.mockResolvedValue([product(), secondProduct()]);
     staff.resolveForProductSale.mockResolvedValue([]);
@@ -1556,6 +1562,7 @@ describe('OrdersService', () => {
         }),
       ],
     });
+    expect(tx.$queryRaw).toHaveBeenCalled();
     expect(tx.auditLog.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({

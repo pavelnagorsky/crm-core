@@ -31,6 +31,7 @@ import { OrderPricingLine } from './interfaces/order-pricing-line.interface.js';
 import { OrderStatusCount } from './interfaces/order-status-count.interface.js';
 import { OrderWithItems } from './interfaces/order-with-items.interface.js';
 import { ResolvedOrderDraft } from './interfaces/resolved-order-draft.interface.js';
+import { OrderAuditService } from './services/order-audit.service.js';
 import { OrderBookingSyncService } from './services/order-booking-sync.service.js';
 import { OrderDraftService } from './services/order-draft.service.js';
 import { OrderPersistenceService } from './services/order-persistence.service.js';
@@ -43,6 +44,7 @@ export class OrdersService {
     private readonly db: DatabaseService,
     private readonly locations: LocationService,
     private readonly drafts: OrderDraftService,
+    private readonly audit: OrderAuditService,
     private readonly bookingSync: OrderBookingSyncService,
     private readonly persistence: OrderPersistenceService,
     private readonly transitions: OrderProductTransitionService,
@@ -167,7 +169,7 @@ export class OrdersService {
         orderId,
         { incrementVersion: false },
       );
-      await this.writeAudit(tx, {
+      await this.audit.write(tx, {
         brandId: draft.location.brandId,
         locationId,
         entityId: order.id,
@@ -230,7 +232,7 @@ export class OrdersService {
     await this.persistence.refreshTotals(tx, booking.locationId, order.id);
     return draftProducts.map((item) => ({
       orderItemId: item.id,
-      ...this.orderItemAuditSnapshot(item),
+      ...this.audit.itemSnapshot(item),
     }));
   }
 
@@ -317,18 +319,16 @@ export class OrdersService {
         locationId,
         orderId,
       );
-      await this.writeAudit(tx, {
+      await this.audit.writeUpdated(tx, {
         brandId: location.brandId,
         locationId,
         entityId: updated.id,
-        eventType: AuditEvent.ORDER_UPDATED,
-        actionType: AuditActionType.MODIFY,
         actor,
         payload: {
           totalAmount: updated.totalAmount.toFixed(2),
           currency: updated.currency,
           itemChanges: {
-            added: resolved.map((item) => this.orderItemAuditSnapshot(item)),
+            added: resolved.map((item) => this.audit.itemSnapshot(item)),
             removed: [],
             changed: [],
           },
@@ -337,35 +337,6 @@ export class OrdersService {
       return updated;
     });
     return order;
-  }
-
-  private async writeAudit(
-    tx: Prisma.TransactionClient,
-    event: {
-      brandId: string;
-      locationId: string;
-      entityId: string;
-      eventType: AuditEvent;
-      actionType: AuditActionType;
-      actor: AuditActor;
-      payload: Record<string, unknown>;
-    },
-  ): Promise<void> {
-    await tx.auditLog.create({
-      data: {
-        brandId: event.brandId,
-        locationId: event.locationId,
-        entityType: AuditEntity.ORDER,
-        entityId: event.entityId,
-        eventType: event.eventType,
-        actionType: event.actionType,
-        occurredAt: new Date(),
-        actorId: event.actor.id ?? null,
-        actorName: event.actor.name,
-        actorRole: event.actor.role,
-        payload: event.payload as object,
-      },
-    });
   }
 
   async changeStatus(
@@ -716,12 +687,12 @@ export class OrdersService {
     const added = [];
     const changed = [];
     for (const [index, item] of items.entries()) {
-      const after = this.orderItemAuditSnapshot(resolvedItems[index]);
+      const after = this.audit.itemSnapshot(resolvedItems[index]);
       if (!item.id) {
         added.push(after);
         continue;
       }
-      const before = this.orderItemAuditSnapshot(editableById.get(item.id)!);
+      const before = this.audit.itemSnapshot(editableById.get(item.id)!);
       if (JSON.stringify(before) !== JSON.stringify(after)) {
         changed.push({ orderItemId: item.id, before, after });
       }
@@ -730,31 +701,9 @@ export class OrdersService {
       .filter((item) => !incomingIds.has(item.id))
       .map((item) => ({
         orderItemId: item.id,
-        ...this.orderItemAuditSnapshot(item),
+        ...this.audit.itemSnapshot(item),
       }));
     return { added, removed, changed };
-  }
-
-  private orderItemAuditSnapshot(
-    item:
-      | OrderWithItems['items'][number]
-      | Prisma.OrderItemUncheckedCreateWithoutOrderInput,
-  ) {
-    return {
-      productId: item.catalogItemId,
-      title: item.title,
-      quantity: this.decimalAuditValue(item.quantity, 3),
-      unitPrice: this.decimalAuditValue(item.unitPrice, 2),
-      customUnitPrice: this.decimalAuditValue(item.customUnitPrice, 2),
-      lineTotal: this.decimalAuditValue(item.lineTotal, 2),
-      sellerStaffId: item.sellerStaffId ?? null,
-      sellerName: item.sellerName ?? null,
-    };
-  }
-
-  private decimalAuditValue(value: unknown, decimals: number): string | null {
-    if (value == null) return null;
-    return new Prisma.Decimal(value as Prisma.Decimal.Value).toFixed(decimals);
   }
 
   private emit(

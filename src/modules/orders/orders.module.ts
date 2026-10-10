@@ -7,6 +7,7 @@ import { PayrollModule } from '../payroll/payroll.module.js';
 import { ProductsModule } from '../products/products.module.js';
 import { StaffModule } from '../staff/staff.module.js';
 import { OrdersAggregatesService } from './analytics/orders-aggregates.service.js';
+import { OrderAuditService } from './services/order-audit.service.js';
 import { OrderBookingSyncService } from './services/order-booking-sync.service.js';
 import { OrderComputeService } from './services/order-compute.service.js';
 import { OrderDraftService } from './services/order-draft.service.js';
@@ -29,6 +30,7 @@ import { OrdersService } from './orders.service.js';
   controllers: [OrdersController],
   providers: [
     OrdersService,
+    OrderAuditService,
     OrderComputeService,
     OrderPersistenceService,
     OrderDraftService,
