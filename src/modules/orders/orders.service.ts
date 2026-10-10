@@ -627,7 +627,7 @@ export class OrdersService {
       seenItemIds.add(item.id);
       if (!editableIds.has(item.id)) {
         throw new AppException(
-          ErrorCode.ORDER_ITEM_NOT_DRAFT,
+          ErrorCode.ORDER_ITEM_IMMUTABLE,
           HttpStatus.CONFLICT,
         );
       }

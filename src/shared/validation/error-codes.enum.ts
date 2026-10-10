@@ -432,6 +432,10 @@ export const ErrorCode = {
     code: 'ORDER_ITEM_NOT_DRAFT',
     message: 'Only a draft order item can be confirmed or changed',
   },
+  ORDER_ITEM_IMMUTABLE: {
+    code: 'ORDER_ITEM_IMMUTABLE',
+    message: 'This order item cannot be changed through the order editor',
+  },
   ORDER_STATUS_INVALID: {
     code: 'ORDER_STATUS_INVALID',
     message: 'Order is not in a valid status for this action',

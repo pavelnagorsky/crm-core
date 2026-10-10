@@ -839,7 +839,7 @@ describe('OrdersService', () => {
       );
 
     expect(error).toBeInstanceOf(AppException);
-    expect((error as AppException).errorCode).toBe('ORDER_ITEM_NOT_DRAFT');
+    expect((error as AppException).errorCode).toBe('ORDER_ITEM_IMMUTABLE');
     expect(products.resolveForSale).not.toHaveBeenCalled();
     expect(tx.orderItem.update).not.toHaveBeenCalled();
   });
