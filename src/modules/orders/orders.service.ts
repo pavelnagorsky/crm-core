@@ -151,7 +151,7 @@ export class OrdersService {
           data: {
             orderId,
             ...data,
-          },
+          } as Prisma.OrderItemUncheckedCreateInput,
         });
       }
       const order = await this.persistence.refreshTotals(
@@ -194,6 +194,36 @@ export class OrdersService {
     tx: Prisma.TransactionClient,
   ): Promise<OrderWithItems | null> {
     return this.bookingSync.reverseCompletedBookingServices(booking, tx);
+  }
+
+  async removeDraftProductsForBooking(
+    booking: BookingWithItems,
+    tx: Prisma.TransactionClient,
+  ): Promise<Record<string, unknown>[]> {
+    const order = await tx.order.findUnique({
+      where: { bookingId: booking.id },
+      include: orderInclude,
+    });
+    if (!order || order.locationId !== booking.locationId) return [];
+    const draftProducts = order.items.filter(
+      (item) =>
+        item.type === OrderItemType.PRODUCT &&
+        item.status === OrderItemStatus.DRAFT,
+    );
+    if (draftProducts.length === 0) return [];
+    await tx.orderItem.deleteMany({
+      where: {
+        orderId: order.id,
+        id: { in: draftProducts.map((item) => item.id) },
+        type: OrderItemType.PRODUCT,
+        status: OrderItemStatus.DRAFT,
+      },
+    });
+    await this.persistence.refreshTotals(tx, booking.locationId, order.id);
+    return draftProducts.map((item) => ({
+      orderItemId: item.id,
+      ...this.orderItemAuditSnapshot(item),
+    }));
   }
 
   addDraftProductToBookingOrder(
@@ -683,12 +713,9 @@ export class OrdersService {
     };
   }
 
-  private decimalAuditValue(
-    value: Prisma.Decimal | string | number | null | undefined,
-    decimals: number,
-  ): string | null {
+  private decimalAuditValue(value: unknown, decimals: number): string | null {
     if (value == null) return null;
-    return new Prisma.Decimal(value).toFixed(decimals);
+    return new Prisma.Decimal(value as Prisma.Decimal.Value).toFixed(decimals);
   }
 
   private emit(

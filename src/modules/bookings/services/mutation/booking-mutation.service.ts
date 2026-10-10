@@ -396,6 +396,7 @@ export class BookingMutationService {
     const booking = await this.read.findByIdInLocation(locationId, bookingId);
     assertLocationRole(tokenPayload, booking.locationId, BusinessRole.OWNER);
     const actor = auditActorFromToken(tokenPayload, booking.locationId);
+    let removedDraftProductItems: Record<string, unknown>[] = [];
     await this.db.$transaction(async (tx) => {
       await tx.booking.update({
         where: { id: booking.id },
@@ -410,6 +411,9 @@ export class BookingMutationService {
       if (booking.status === BookingStatus.COMPLETED) {
         await this.orders.reverseCompletedBookingServices(booking, tx);
         await this.staffEarnings.reverseForBooking(booking, null, actor, tx);
+      } else {
+        removedDraftProductItems =
+          await this.orders.removeDraftProductsForBooking(booking, tx);
       }
     });
     this.logger.log(
@@ -425,6 +429,7 @@ export class BookingMutationService {
         serviceTitles: booking.items
           .map((item) => item.serviceTitle)
           .join(', '),
+        removedDraftProductItems,
       },
     });
   }
@@ -447,6 +452,7 @@ export class BookingMutationService {
       );
     }
     const storedReason = this.optionalReason(reason);
+    let removedDraftProductItems: Record<string, unknown>[] = [];
     const updated = await this.db.$transaction(async (tx) => {
       const result = await tx.booking.update({
         where: { id: booking.id },
@@ -466,6 +472,9 @@ export class BookingMutationService {
           actor,
           tx,
         );
+      } else {
+        removedDraftProductItems =
+          await this.orders.removeDraftProductsForBooking(result, tx);
       }
       return result;
     });
@@ -478,7 +487,11 @@ export class BookingMutationService {
       eventType: AuditEvent.BOOKING_CANCELLED,
       actionType: AuditActionType.MODIFY,
       actor,
-      payload: { cancelledBy, reason: storedReason ?? undefined },
+      payload: {
+        cancelledBy,
+        reason: storedReason ?? undefined,
+        removedDraftProductItems,
+      },
     });
     if (booking.clientEmail && cancelledBy === CancelledBy.STAFF) {
       const { timezone } = await this.locationService.getLocale(

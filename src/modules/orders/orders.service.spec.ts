@@ -834,6 +834,60 @@ describe('OrdersService', () => {
     expect(tx.orderItem.update).not.toHaveBeenCalled();
   });
 
+  it('removes only draft product items from a booking order', async () => {
+    const { service, tx } = setup();
+    const active = order(OrderStatus.ACTIVE);
+    const draftProduct = {
+      ...active.items[0],
+      id: 'draft-product-1',
+      status: OrderItemStatus.DRAFT,
+      catalogItemId: 'product-1',
+    };
+    const confirmedProduct = {
+      ...active.items[0],
+      id: 'confirmed-product-1',
+      status: OrderItemStatus.CONFIRMED,
+      catalogItemId: 'product-2',
+    };
+    const bookingOrder = {
+      ...active,
+      bookingId: 'booking-1',
+      items: [draftProduct, confirmedProduct],
+    };
+    tx.order.findUnique.mockResolvedValue(bookingOrder);
+    tx.order.findFirst.mockResolvedValue({
+      ...bookingOrder,
+      items: [confirmedProduct],
+    });
+    tx.order.update.mockResolvedValue({
+      ...bookingOrder,
+      items: [confirmedProduct],
+    });
+
+    const removed = await service.removeDraftProductsForBooking(
+      {
+        id: 'booking-1',
+        locationId: 'location-1',
+      } as never,
+      tx as never,
+    );
+
+    expect(tx.orderItem.deleteMany).toHaveBeenCalledWith({
+      where: {
+        orderId: 'order-1',
+        id: { in: ['draft-product-1'] },
+        type: OrderItemType.PRODUCT,
+        status: OrderItemStatus.DRAFT,
+      },
+    });
+    expect(removed).toEqual([
+      expect.objectContaining({
+        orderItemId: 'draft-product-1',
+        productId: 'product-1',
+      }),
+    ]);
+  });
+
   it('prices product items for previews without writing an order', async () => {
     const { service, db, products } = setup();
     products.resolveForSale.mockResolvedValue([product()]);

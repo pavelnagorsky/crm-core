@@ -4,6 +4,7 @@ import {
   Booking,
   BookingSource,
   BookingStatus,
+  CancelledBy,
   Prisma,
   UserRole,
 } from '@prisma/client';
@@ -953,6 +954,82 @@ describe('BookingsService.addProduct', () => {
       [dto],
       expect.objectContaining({ name: expect.any(String) }),
       db,
+    );
+  });
+});
+
+describe('BookingsService.cancel draft product cleanup', () => {
+  const token = {
+    sub: 'user-1',
+    role: UserRole.ADMIN,
+    memberships: [],
+  } as TokenPayloadDto;
+  const sourceBooking = booking({ status: BookingStatus.CONFIRMED });
+  const cancelledBooking = booking({ status: BookingStatus.CANCELLED });
+  const removedDraftProductItems = [
+    { orderItemId: 'draft-product-1', productId: 'product-1' },
+  ];
+  const db = {
+    booking: {
+      findFirst: vi.fn(),
+      update: vi.fn(),
+    },
+    $transaction: vi.fn((callback) => callback(db)),
+  };
+  const orders = {
+    removeDraftProductsForBooking: vi
+      .fn()
+      .mockResolvedValue(removedDraftProductItems),
+    reverseCompletedBookingServices: vi.fn(),
+  };
+  const earnings = {
+    reverseForBooking: vi.fn(),
+  };
+  const emitter = { emit: vi.fn() };
+  let service: BookingsService;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    db.booking.findFirst.mockResolvedValue(sourceBooking);
+    db.booking.update.mockResolvedValue(cancelledBooking);
+    orders.removeDraftProductsForBooking.mockResolvedValue(
+      removedDraftProductItems,
+    );
+    const module = await Test.createTestingModule({
+      providers: [
+        BookingsService,
+        BookingMutationService,
+        BookingReadService,
+        BookingSetupService,
+        { provide: DatabaseService, useValue: db },
+        { provide: CalendarService, useValue: {} },
+        { provide: StaffService, useValue: {} },
+        { provide: LocationService, useValue: {} },
+        { provide: ServiceCatalogService, useValue: serviceCatalog },
+        { provide: StaffEarningsService, useValue: earnings },
+        { provide: OrdersService, useValue: orders },
+        { provide: EventEmitter2, useValue: emitter },
+      ],
+    }).compile();
+    service = module.get(BookingsService);
+  });
+
+  it('removes draft product items when cancelling a non-completed booking', async () => {
+    await service.cancel('biz', 'booking-1', token, CancelledBy.STAFF, {
+      reason: 'client cancelled',
+    });
+
+    expect(orders.removeDraftProductsForBooking).toHaveBeenCalledWith(
+      cancelledBooking,
+      db,
+    );
+    expect(orders.reverseCompletedBookingServices).not.toHaveBeenCalled();
+    expect(earnings.reverseForBooking).not.toHaveBeenCalled();
+    expect(emitter.emit).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        payload: expect.objectContaining({ removedDraftProductItems }),
+      }),
     );
   });
 });
