@@ -1,5 +1,15 @@
 import { Prisma } from '@prisma/client';
 
 export type OrderWithItems = Prisma.OrderGetPayload<{
-  include: { items: true };
+  include: {
+    items: {
+      include: {
+        productLocation: {
+          include: {
+            product: { include: { imageFile: true } };
+          };
+        };
+      };
+    };
+  };
 }>;

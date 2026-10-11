@@ -1,5 +1,14 @@
 import { Prisma } from '@prisma/client';
 
 export const orderInclude = {
-  items: { orderBy: [{ createdAt: 'asc' }, { id: 'asc' }] },
+  items: {
+    include: {
+      productLocation: {
+        include: {
+          product: { include: { imageFile: true } },
+        },
+      },
+    },
+    orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+  },
 } satisfies Prisma.OrderInclude;

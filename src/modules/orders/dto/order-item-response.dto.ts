@@ -1,11 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { OrderItem } from '@prisma/client';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
+import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
 import { MoneyService } from '../../../shared/money/money.service.js';
 import { QuantityService } from '../../../shared/quantity/quantity.service.js';
 import { ProductUnit } from '../../products/enums/product-unit.enum.js';
 import { OrderItemStatus } from '../enums/order-item-status.enum.js';
 import { OrderItemType } from '../enums/order-item-type.enum.js';
+import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
 
 export class OrderItemResponseDto {
   @ApiProperty({ type: String, format: 'uuid' })
@@ -31,6 +32,9 @@ export class OrderItemResponseDto {
 
   @ApiProperty({ type: String, nullable: true })
   sku: string | null;
+
+  @ApiProperty({ type: () => FileResponseDto, nullable: true })
+  image: FileResponseDto | null;
 
   @ApiProperty({ enum: ProductUnit, enumName: 'ProductUnit', nullable: true })
   unit: ProductUnit | null;
@@ -74,8 +78,13 @@ export class OrderItemResponseDto {
   @ApiProperty({ type: Date, nullable: true })
   occurredAt: Date | null;
 
-  static fromEntity(entity: OrderItem): OrderItemResponseDto {
+  static fromEntity(
+    entity: OrderWithItems['items'][number],
+  ): OrderItemResponseDto {
     return Object.assign(new OrderItemResponseDto(), entity, {
+      image: entity.productLocation?.product.imageFile
+        ? FileResponseDto.fromEntity(entity.productLocation.product.imageFile)
+        : null,
       quantity: QuantityService.format(entity.quantity),
       listUnitPrice: MoneyService.format(entity.listUnitPrice),
       customUnitPrice:
