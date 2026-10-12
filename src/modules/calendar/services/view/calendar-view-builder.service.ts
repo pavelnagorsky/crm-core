@@ -24,8 +24,7 @@ export class CalendarViewBuilderService {
     dto: GetCalendarRequestDto,
     feed: CalendarBookingFeed,
   ): Promise<GetCalendarResponseDto> {
-    const { timezone, currency } =
-      await this.locationService.getLocale(locationId);
+    const { timezone } = await this.locationService.getLocale(locationId);
 
     const rangeStart = TimeService.dateOnly(dto.from);
     const rangeEnd = TimeService.dateOnly(dto.to);
@@ -106,7 +105,7 @@ export class CalendarViewBuilderService {
           staffNames,
         ),
         ...feed.bookings.map((booking) =>
-          CalendarEventItemDto.booking(booking, timezone, currency),
+          CalendarEventItemDto.booking(booking, timezone),
         ),
       ],
     };

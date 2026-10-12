@@ -1,10 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { CalendarEventRepeatType, CalendarEventType } from '@prisma/client';
-import { MoneyService } from '../../../shared/money/money.service.js';
+import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
 import { TimeService } from '../../../shared/time/time.service.js';
 import { CalendarBookingView } from '../interfaces/calendar-booking-view.interface.js';
-
-const FALLBACK_TITLE = 'Событие';
 
 export class CalendarEventItemDto {
   @ApiProperty({
@@ -30,14 +28,28 @@ export class CalendarEventItemDto {
   @ApiProperty({ type: String, nullable: true })
   staffName: string | null;
 
-  @ApiProperty({ type: String })
-  title: string;
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      'Explicit event name. Null when the card should fall back to the type label.',
+  })
+  title: string | null;
 
-  @ApiProperty({ type: String, nullable: true })
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      'Booking service line: one title, two titles joined by " + ", or a count from three upward.',
+  })
   subtitle: string | null;
 
-  @ApiProperty({ type: String, nullable: true })
-  caption: string | null;
+  @ApiPrice({
+    nullable: true,
+    description:
+      'Booking amount as a decimal string. Null when the event has no price.',
+  })
+  price: string | null;
 
   @ApiProperty({
     type: String,
@@ -70,45 +82,57 @@ export class CalendarEventItemDto {
     endTime: string,
     staffName: string | null,
   ): CalendarEventItemDto {
-    const dto = new CalendarEventItemDto();
-    dto.id = `${event.id}:${date}`;
-    dto.type = CalendarEventType.BLOCK;
-    dto.entityId = event.id;
-    dto.staffId = event.staffId;
-    dto.staffName = event.staffId ? staffName : null;
-    dto.title = event.title?.trim() || event.reason?.trim() || FALLBACK_TITLE;
-    dto.subtitle = null;
-    dto.caption = null;
-    dto.date = date;
-    dto.startTime = startTime;
-    dto.endTime = endTime;
-    dto.editable = true;
-    dto.repeating = event.repeatType === CalendarEventRepeatType.WEEKLY;
+    const dto = CalendarEventItemDto.placed(
+      event,
+      CalendarEventType.BLOCK,
+      date,
+      startTime,
+      endTime,
+      staffName,
+    );
+    dto.title = event.title?.trim() || event.reason?.trim() || null;
+    return dto;
+  }
+
+  static integration(
+    event: {
+      id: string;
+      staffId: string | null;
+      title: string | null;
+      repeatType: CalendarEventRepeatType;
+    },
+    date: string,
+    startTime: string,
+    endTime: string,
+    staffName: string | null,
+  ): CalendarEventItemDto {
+    const dto = CalendarEventItemDto.placed(
+      event,
+      CalendarEventType.INTEGRATION,
+      date,
+      startTime,
+      endTime,
+      staffName,
+    );
+    dto.title = event.title?.trim() || null;
     return dto;
   }
 
   static booking(
     booking: CalendarBookingView,
     timezone: string,
-    currency: string,
   ): CalendarEventItemDto {
-    const name = `${booking.clientLastName} ${booking.clientFirstName}`.trim();
-    const serviceTitle = booking.serviceTitle.trim();
-    const title = serviceTitle || name || FALLBACK_TITLE;
     const start = TimeService.toZonedParts(booking.startAt, timezone);
     const end = TimeService.toZonedParts(booking.endAt, timezone);
     const dto = new CalendarEventItemDto();
     dto.id = booking.id;
     dto.type = CalendarEventType.BOOKING;
-    dto.entityId = booking.id;
+    dto.entityId = booking.entityId;
     dto.staffId = booking.staffId;
     dto.staffName = booking.staffName;
-    dto.title = title;
-    dto.subtitle = name && name !== title ? name : null;
-    dto.caption = MoneyService.formatCurrency(
-      booking.customPrice ?? booking.servicePrice,
-      currency,
-    );
+    dto.title = null;
+    dto.subtitle = serviceSubtitle(booking.serviceTitles);
+    dto.price = booking.price;
     dto.date = TimeService.zonedDateStr(booking.startAt, timezone);
     dto.startTime = TimeService.minutesToHHmm(start.hour * 60 + start.minute);
     dto.endTime = TimeService.minutesToHHmm(end.hour * 60 + end.minute);
@@ -116,4 +140,50 @@ export class CalendarEventItemDto {
     dto.repeating = false;
     return dto;
   }
+
+  private static placed(
+    event: {
+      id: string;
+      staffId: string | null;
+      repeatType: CalendarEventRepeatType;
+    },
+    type: CalendarEventType,
+    date: string,
+    startTime: string,
+    endTime: string,
+    staffName: string | null,
+  ): CalendarEventItemDto {
+    const dto = new CalendarEventItemDto();
+    dto.id = `${event.id}:${date}`;
+    dto.type = type;
+    dto.entityId = event.id;
+    dto.staffId = event.staffId;
+    dto.staffName = event.staffId ? staffName : null;
+    dto.title = null;
+    dto.subtitle = null;
+    dto.price = null;
+    dto.date = date;
+    dto.startTime = startTime;
+    dto.endTime = endTime;
+    dto.editable = true;
+    dto.repeating = event.repeatType === CalendarEventRepeatType.WEEKLY;
+    return dto;
+  }
+}
+
+function serviceSubtitle(titles: string[]): string | null {
+  const names = titles.map((title) => title.trim()).filter((title) => title);
+  if (names.length === 0) return null;
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return `${names[0]} + ${names[1]}`;
+  return `${names.length} ${serviceCountWord(names.length)}`;
+}
+
+function serviceCountWord(count: number): string {
+  const mod10 = count % 10;
+  const mod100 = count % 100;
+  if (mod10 === 1 && mod100 !== 11) return 'услуга';
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14))
+    return 'услуги';
+  return 'услуг';
 }

@@ -1,12 +1,10 @@
 export interface CalendarBookingView {
   id: string;
+  entityId: string;
   staffId: string;
   staffName: string;
-  clientFirstName: string;
-  clientLastName: string;
-  serviceTitle: string;
-  servicePrice: string;
-  customPrice: string | null;
+  serviceTitles: string[];
+  price: string;
   startAt: Date;
   endAt: Date;
 }

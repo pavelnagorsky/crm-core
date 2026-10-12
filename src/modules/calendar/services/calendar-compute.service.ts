@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import {
   CalendarEvent,
   CalendarEventRepeatType,
+  CalendarEventType,
   StaffShift,
 } from '@prisma/client';
 import { TimeService } from '../../../shared/time/time.service.js';
@@ -80,12 +81,24 @@ export class CalendarComputeService {
     endTime: string,
     staffNames: ReadonlyMap<string, string>,
   ): CalendarEventItemDto {
+    const staffName = event.staffId
+      ? (staffNames.get(event.staffId) ?? null)
+      : null;
+    if (event.type === CalendarEventType.INTEGRATION) {
+      return CalendarEventItemDto.integration(
+        event,
+        date,
+        startTime,
+        endTime,
+        staffName,
+      );
+    }
     return CalendarEventItemDto.block(
       event,
       date,
       startTime,
       endTime,
-      event.staffId ? (staffNames.get(event.staffId) ?? null) : null,
+      staffName,
     );
   }
 

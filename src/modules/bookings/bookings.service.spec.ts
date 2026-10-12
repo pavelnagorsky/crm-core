@@ -514,6 +514,7 @@ describe('BookingCalendarReadService.listForCalendar', () => {
         staffId: true,
         staffName: true,
         serviceTitle: true,
+        sortOrder: true,
         chargedPrice: true,
         customPrice: true,
         startAt: true,
@@ -522,17 +523,104 @@ describe('BookingCalendarReadService.listForCalendar', () => {
         booking: {
           select: {
             id: true,
-            clientFirstName: true,
-            clientLastName: true,
             status: true,
           },
         },
       },
     });
     expect(feed.bookings.map((item) => item.id)).toEqual(['visible', 'noshow']);
-    expect(feed.bookings[0].customPrice).toBe('10.00');
-    expect(feed.bookings[0].servicePrice).toBe('50.00');
+    expect(feed.bookings[0].price).toBe('10.00');
+    expect(feed.bookings[0].entityId).toBe('visible');
     expect(feed.linkedEventIds).toEqual(['ev-1', 'ev-2']);
+  });
+
+  it('draws one card per staff stretch and sums its services', async () => {
+    const rangeStart = new Date('2026-09-21T00:00:00.000Z');
+    const rangeEnd = new Date('2026-09-28T00:00:00.000Z');
+    const item = (
+      id: string,
+      staffId: string,
+      serviceTitle: string,
+      sortOrder: number,
+      startAt: string,
+      endAt: string,
+      price: string,
+    ) => ({
+      id,
+      staffId,
+      staffName: staffId,
+      serviceTitle,
+      sortOrder,
+      chargedPrice: new Prisma.Decimal(price),
+      customPrice: null,
+      startAt: new Date(startAt),
+      endAt: new Date(endAt),
+      calendarEventId: null,
+      booking: { id: 'booking-1', status: BookingStatus.CONFIRMED },
+    });
+    findMany.mockResolvedValue([
+      item(
+        'cut',
+        'anna',
+        'Стрижка',
+        0,
+        '2026-09-22T07:00:00.000Z',
+        '2026-09-22T08:00:00.000Z',
+        '50.00',
+      ),
+      item(
+        'color',
+        'anna',
+        'Окрашивание',
+        1,
+        '2026-09-22T08:00:00.000Z',
+        '2026-09-22T09:00:00.000Z',
+        '70.00',
+      ),
+      item(
+        'style',
+        'anna',
+        'Укладка',
+        2,
+        '2026-09-22T09:00:00.000Z',
+        '2026-09-22T09:30:00.000Z',
+        '30.00',
+      ),
+      item(
+        'brows',
+        'ira',
+        'Брови',
+        3,
+        '2026-09-22T07:00:00.000Z',
+        '2026-09-22T07:30:00.000Z',
+        '20.00',
+      ),
+    ]);
+
+    const feed = await service.listForCalendar('biz', rangeStart, rangeEnd);
+
+    expect(feed.bookings).toEqual([
+      {
+        id: 'booking-1:anna',
+        entityId: 'booking-1',
+        staffId: 'anna',
+        staffName: 'anna',
+        serviceTitles: ['Стрижка', 'Окрашивание', 'Укладка'],
+        price: '150.00',
+        startAt: new Date('2026-09-22T07:00:00.000Z'),
+        endAt: new Date('2026-09-22T09:30:00.000Z'),
+      },
+      {
+        id: 'booking-1:ira',
+        entityId: 'booking-1',
+        staffId: 'ira',
+        staffName: 'ira',
+        serviceTitles: ['Брови'],
+        price: '20.00',
+        startAt: new Date('2026-09-22T07:00:00.000Z'),
+        endAt: new Date('2026-09-22T07:30:00.000Z'),
+      },
+    ]);
   });
 });
 

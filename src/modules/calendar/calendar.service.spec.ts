@@ -8,7 +8,6 @@ import {
 } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
-import { MoneyService } from '../../shared/money/money.service.js';
 import { LocationService } from '../location/location.service.js';
 import { BookingVisibility } from '@prisma/client';
 import { StaffService } from '../staff/staff.service.js';
@@ -540,9 +539,9 @@ describe('CalendarService.getCalendar', () => {
     expect(result.events[0]).toMatchObject({
       entityId: 'in-week',
       type: CalendarEventType.BLOCK,
-      title: 'Событие',
+      title: null,
       subtitle: null,
-      caption: null,
+      price: null,
       editable: true,
       repeating: false,
       staffId: null,
@@ -640,13 +639,11 @@ describe('CalendarService.getCalendar', () => {
       bookings: [
         {
           id: 'booking-1',
+          entityId: 'booking-1',
           staffId: 'staff-1',
           staffName: 'Анна',
-          clientFirstName: 'Иван',
-          clientLastName: 'Петров',
-          serviceTitle: 'Стрижка',
-          servicePrice: '1500.50',
-          customPrice: null,
+          serviceTitles: ['Стрижка'],
+          price: '1500.50',
           startAt: new Date('2026-09-22T07:00:00.000Z'),
           endAt: new Date('2026-09-22T08:00:00.000Z'),
         },
@@ -671,9 +668,9 @@ describe('CalendarService.getCalendar', () => {
         entityId: 'booking-1',
         staffId: 'staff-1',
         staffName: 'Анна',
-        title: 'Стрижка',
-        subtitle: 'Петров Иван',
-        caption: MoneyService.formatCurrency('1500.50', 'RUB'),
+        title: null,
+        subtitle: 'Стрижка',
+        price: '1500.50',
         date: '2026-09-22',
         startTime: '10:00',
         endTime: '11:00',
