@@ -19,6 +19,8 @@ import { BookingMutationService } from './services/mutation/booking-mutation.ser
 import { BookingReadService } from './services/read/booking-read.service.js';
 import { BookingCalendarReadService } from './services/read/booking-calendar-read.service.js';
 import { BookingSetupService } from './services/setup/booking-setup.service.js';
+import { AuditService } from '../audit/audit.service.js';
+import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { BookingResolveRequestDto } from './dto/booking-resolve-request.dto.js';
 import { BookingSearchRequestDto } from './dto/booking-search-request.dto.js';
@@ -31,6 +33,36 @@ import { AppException } from '../../shared/exceptions/app.exception.js';
 import { ServiceCatalogService } from '../services/catalog/service-catalog.service.js';
 
 const serviceCatalog = { loadForBooking: vi.fn() };
+
+function auditProvider(db?: {
+  auditLog?: {
+    create: (args: { data: Record<string, unknown> }) => Promise<unknown>;
+  };
+}) {
+  return {
+    provide: AuditService,
+    useValue: {
+      writeInTransaction: vi.fn((tx: typeof db, event: AuditLogEvent) => {
+        if (!tx?.auditLog?.create) return Promise.resolve();
+        return tx.auditLog.create({
+          data: {
+            brandId: event.brandId ?? 'brand-1',
+            locationId: event.locationId ?? null,
+            entityType: event.entityType,
+            entityId: event.entityId,
+            eventType: event.eventType,
+            actionType: event.actionType,
+            occurredAt: event.occurredAt,
+            actorId: event.actor.id ?? null,
+            actorName: event.actor.name,
+            actorRole: event.actor.role,
+            payload: event.payload as object,
+          },
+        });
+      }),
+    },
+  };
+}
 
 function booking(
   overrides: Partial<Booking> & Partial<BookingWithItems> = {},
@@ -127,6 +159,7 @@ describe('BookingsService.completeElapsed', () => {
         { provide: StaffEarningsService, useValue: earnings },
         { provide: OrdersService, useValue: orders },
         { provide: EventEmitter2, useValue: emitter },
+        auditProvider(db),
       ],
     }).compile();
     service = module.get(BookingsService);
@@ -241,6 +274,7 @@ describe('BookingsService.updateStatus transactionality', () => {
         { provide: StaffEarningsService, useValue: earnings },
         { provide: OrdersService, useValue: orders },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
+        auditProvider(db),
       ],
     }).compile();
     service = module.get(BookingsService);
@@ -289,6 +323,7 @@ describe('BookingsService.search', () => {
         { provide: StaffEarningsService, useValue: {} },
         { provide: OrdersService, useValue: {} },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
+        auditProvider(db),
       ],
     }).compile();
     service = module.get(BookingsService);
@@ -664,6 +699,7 @@ describe('BookingsService catalog selection', () => {
         { provide: StaffEarningsService, useValue: {} },
         { provide: OrdersService, useValue: {} },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
+        auditProvider(db),
       ],
     }).compile();
     service = module.get(BookingsService);
@@ -890,6 +926,7 @@ describe('BookingsService.update item prices', () => {
           },
         },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
+        auditProvider(db),
       ],
     }).compile();
     service = module.get(BookingsService);
@@ -1027,6 +1064,7 @@ describe('BookingsService.addProduct', () => {
         { provide: StaffEarningsService, useValue: {} },
         { provide: OrdersService, useValue: orders },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
+        auditProvider(db),
       ],
     }).compile();
     service = module.get(BookingsService);
@@ -1104,6 +1142,7 @@ describe('BookingsService.cancel draft product cleanup', () => {
         { provide: StaffEarningsService, useValue: earnings },
         { provide: OrdersService, useValue: orders },
         { provide: EventEmitter2, useValue: emitter },
+        auditProvider(db),
       ],
     }).compile();
     service = module.get(BookingsService);

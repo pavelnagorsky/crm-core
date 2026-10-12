@@ -222,7 +222,12 @@ export class ServiceBundleService {
       where: { id: bundleId, locationId, status: ServiceStatus.ACTIVE },
       include: serviceBundleInclude,
     });
-    if (!bundle) throw new NotFoundException('Service bundle not found');
+    if (!bundle) {
+      throw new AppException(
+        ErrorCode.BOOKING_BUNDLE_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
+    }
     return bundle;
   }
 

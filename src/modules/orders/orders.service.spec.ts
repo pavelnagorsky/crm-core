@@ -21,6 +21,7 @@ import { OrderPersistenceService } from './services/order-persistence.service.js
 import { OrderProductTransitionService } from './services/order-product-transition.service.js';
 import { OrderReturnService } from './services/order-return.service.js';
 import { OrderStateAssertionService } from './services/order-state-assertion.service.js';
+import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js';
 
 const owner = { id: 'owner-1', name: 'Owner', role: AuditActorRole.OWNER };
 const employee = { id: 'staff-1', name: 'Staff', role: AuditActorRole.STAFF };
@@ -157,7 +158,26 @@ function setup() {
   };
   const events = { emit: vi.fn() };
   const compute = new OrderComputeService();
-  const audit = new OrderAuditService();
+  const auditWriter = {
+    writeInTransaction: vi.fn((transaction: typeof tx, event: AuditLogEvent) =>
+      transaction.auditLog.create({
+        data: {
+          brandId: event.brandId,
+          locationId: event.locationId ?? null,
+          entityType: event.entityType,
+          entityId: event.entityId,
+          eventType: event.eventType,
+          actionType: event.actionType,
+          occurredAt: event.occurredAt,
+          actorId: event.actor.id ?? null,
+          actorName: event.actor.name,
+          actorRole: event.actor.role,
+          payload: event.payload as object,
+        },
+      }),
+    ),
+  };
+  const audit = new OrderAuditService(auditWriter as never);
   const persistence = new OrderPersistenceService(db as never, compute);
   const drafts = new OrderDraftService(
     products as never,

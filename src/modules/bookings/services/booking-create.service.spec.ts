@@ -45,6 +45,31 @@ function commercialDeps(): [never, OrderComputeService, never] {
   ];
 }
 
+type CatalogServiceRow = {
+  id: string;
+  title: string;
+  durationMinutes: number;
+  bufferMinutes: number;
+  price: Prisma.Decimal | number;
+};
+
+function catalogDeps(db: {
+  service: { findMany: () => Promise<CatalogServiceRow[]> };
+}): [never, never] {
+  return [
+    {
+      resolveActiveForBooking: vi.fn(
+        async (_locationId: string, serviceIds: string[]) => {
+          const rows = await db.service.findMany();
+          const byId = new Map(rows.map((row) => [row.id, row]));
+          return serviceIds.map((serviceId) => byId.get(serviceId)!);
+        },
+      ),
+    } as never,
+    { resolveActiveForBooking: vi.fn() } as never,
+  ];
+}
+
 function setup() {
   const clients = { resolveForBooking: vi.fn() };
   const staff = {
@@ -82,6 +107,7 @@ function setup() {
     { generateClientToken: vi.fn() } as never,
     ...channelDeps(),
     ...commercialDeps(),
+    ...catalogDeps(db),
   );
   return { service, clients, staff };
 }
@@ -138,6 +164,7 @@ function pricingSetup() {
       recordForCompletedBooking: vi.fn(),
       syncForCompletedBooking: vi.fn(),
     } as never,
+    ...catalogDeps(db),
   );
   return { service, db, orders };
 }
@@ -410,6 +437,7 @@ describe('BookingCreateService calendar link', () => {
       { generateClientToken: vi.fn() } as never,
       ...channelDeps(),
       ...commercialDeps(),
+      ...catalogDeps(db),
     );
 
     await service.createPublicBooking('business-1', dto, publicAttribution);
@@ -540,6 +568,7 @@ describe('BookingCreateService manual item prices', () => {
       { generateClientToken: vi.fn() } as never,
       ...channelDeps(),
       ...commercialDeps(),
+      ...catalogDeps(db),
     );
 
     await service.createManualBooking(
@@ -715,6 +744,7 @@ function walkInSetup(
     orders as never,
     new OrderComputeService(),
     earnings as never,
+    ...catalogDeps(db),
   );
   return { service, tx, calendar, clients, orders, earnings };
 }

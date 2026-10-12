@@ -1,5 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
+import { Prisma } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
 import { AuditRendererService } from './renderer/audit-renderer.service.js';
 import type { AuditLogEvent } from './interfaces/audit-log-event.interface.js';
@@ -9,6 +10,8 @@ import { PaginatedResult } from '../../shared/interfaces/paginated-result.interf
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { stableOrderBy } from '../../shared/database/stable-order-by.js';
 import { AUDIT_EVENT } from './constants/audit.constants.js';
+import { AppException } from '../../shared/exceptions/app.exception.js';
+import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 
 @Injectable()
 export class AuditService {
@@ -51,9 +54,48 @@ export class AuditService {
     }
   }
 
+  async writeInTransaction(
+    tx: Prisma.TransactionClient,
+    event: AuditLogEvent,
+  ): Promise<void> {
+    const brandId =
+      event.brandId ?? (await this.resolveBrandIdInTransaction(tx, event));
+    if (!brandId) {
+      throw new AppException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND);
+    }
+
+    await tx.auditLog.create({
+      data: {
+        brandId,
+        locationId: event.locationId ?? null,
+        entityType: event.entityType,
+        entityId: event.entityId,
+        eventType: event.eventType,
+        actionType: event.actionType,
+        occurredAt: event.occurredAt,
+        actorId: event.actor.id ?? null,
+        actorName: event.actor.name,
+        actorRole: event.actor.role,
+        payload: event.payload as object,
+      },
+    });
+  }
+
   private async resolveBrandId(event: AuditLogEvent): Promise<string | null> {
     if (!event.locationId) return null;
     const location = await this.db.location.findUnique({
+      where: { id: event.locationId },
+      select: { brandId: true },
+    });
+    return location?.brandId ?? null;
+  }
+
+  private async resolveBrandIdInTransaction(
+    tx: Prisma.TransactionClient,
+    event: AuditLogEvent,
+  ): Promise<string | null> {
+    if (!event.locationId) return null;
+    const location = await tx.location.findUnique({
       where: { id: event.locationId },
       select: { brandId: true },
     });

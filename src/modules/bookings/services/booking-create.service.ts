@@ -10,7 +10,6 @@ import {
   BookingVisibility,
   OrderItemType,
   Prisma,
-  ServiceStatus,
 } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../../database/database.service.js';
@@ -52,6 +51,8 @@ import { ResolvedBookingClient } from '../interfaces/resolved-booking-client.int
 import { BookingPricingResult } from '../interfaces/booking-pricing-result.interface.js';
 import { OrderPricingLine } from '../../orders/interfaces/order-pricing-line.interface.js';
 import { BookingSelectionRequest } from '../interfaces/booking-selection-request.interface.js';
+import { ServicesService } from '../../services/services.service.js';
+import { ServiceBundleService } from '../../services/catalog/service-bundle.service.js';
 
 @Injectable()
 export class BookingCreateService {
@@ -68,6 +69,8 @@ export class BookingCreateService {
     private readonly orders: OrdersService,
     private readonly compute: OrderComputeService,
     private readonly staffEarnings: StaffEarningsService,
+    private readonly servicesService: ServicesService,
+    private readonly serviceBundles: ServiceBundleService,
   ) {}
 
   async createPublicBooking(
@@ -399,17 +402,10 @@ export class BookingCreateService {
     }
 
     if (dto.bundleId) {
-      const bundle = await this.db.serviceBundle.findFirst({
-        where: { id: dto.bundleId, locationId, status: ServiceStatus.ACTIVE },
-        include: {
-          items: { orderBy: { sortOrder: 'asc' }, include: { service: true } },
-        },
-      });
-      if (!bundle)
-        throw new AppException(
-          ErrorCode.BOOKING_BUNDLE_NOT_FOUND,
-          HttpStatus.NOT_FOUND,
-        );
+      const bundle = await this.serviceBundles.resolveActiveForBooking(
+        locationId,
+        dto.bundleId,
+      );
       if (bundle.items.length === 0)
         throw new AppException(
           ErrorCode.BOOKING_SERVICE_NOT_FOUND,
@@ -449,28 +445,10 @@ export class BookingCreateService {
         HttpStatus.NOT_FOUND,
       );
 
-    const uniqueServiceIds = [...new Set(serviceIds)];
-    const services = await this.db.service.findMany({
-      where: {
-        id: { in: uniqueServiceIds },
-        locationId,
-        status: ServiceStatus.ACTIVE,
-      },
-      select: {
-        id: true,
-        title: true,
-        durationMinutes: true,
-        bufferMinutes: true,
-        price: true,
-      },
-    });
-    if (services.length !== uniqueServiceIds.length) {
-      throw new AppException(
-        ErrorCode.BOOKING_SERVICE_NOT_FOUND,
-        HttpStatus.NOT_FOUND,
-      );
-    }
-    const byId = new Map(services.map((service) => [service.id, service]));
+    const services = await this.servicesService.resolveActiveForBooking(
+      locationId,
+      serviceIds,
+    );
     const executionMode = dto.executionMode
       ? (dto.executionMode as PrismaBookingExecutionMode)
       : PrismaBookingExecutionMode.SEQUENTIAL;
@@ -478,7 +456,7 @@ export class BookingCreateService {
       bundleId: null,
       bundleTitle: null,
       executionMode,
-      services: serviceIds.map((serviceId) => byId.get(serviceId)!),
+      services,
     };
   }
 

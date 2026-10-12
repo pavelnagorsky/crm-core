@@ -8,6 +8,7 @@ import { MoneyService } from '../../../../shared/money/money.service.js';
 import { TimeService } from '../../../../shared/time/time.service.js';
 import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
 import { AUDIT_EVENT } from '../../../audit/constants/audit.constants.js';
+import { AuditService } from '../../../audit/audit.service.js';
 import { AuditActionType } from '../../../audit/enums/audit-action-type.enum.js';
 import { AuditActorRole } from '../../../audit/enums/audit-actor-role.enum.js';
 import { AuditEntity } from '../../../audit/enums/audit-entity.enum.js';
@@ -53,6 +54,7 @@ export class BookingMutationService {
     private readonly orders: OrdersService,
     private readonly eventEmitter: EventEmitter2,
     private readonly read: BookingReadService,
+    private readonly audit: AuditService,
   ) {}
 
   async update(
@@ -718,27 +720,15 @@ export class BookingMutationService {
       payload: Record<string, unknown>;
     },
   ): Promise<void> {
-    const location = await tx.location.findUnique({
-      where: { id: params.locationId },
-      select: { brandId: true },
-    });
-    if (!location) {
-      throw new AppException(ErrorCode.NOT_FOUND, HttpStatus.NOT_FOUND);
-    }
-    await tx.auditLog.create({
-      data: {
-        brandId: location.brandId,
-        locationId: params.locationId,
-        entityType: AuditEntity.BOOKING,
-        entityId: params.entityId,
-        eventType: params.eventType,
-        actionType: params.actionType,
-        occurredAt: new Date(),
-        actorId: params.actor.id ?? null,
-        actorName: params.actor.name,
-        actorRole: params.actor.role,
-        payload: params.payload as object,
-      },
+    await this.audit.writeInTransaction(tx, {
+      locationId: params.locationId,
+      entityType: AuditEntity.BOOKING,
+      entityId: params.entityId,
+      eventType: params.eventType,
+      actionType: params.actionType,
+      occurredAt: new Date(),
+      actor: params.actor,
+      payload: params.payload,
     });
   }
 

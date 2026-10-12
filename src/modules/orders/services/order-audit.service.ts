@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { AuditService } from '../../audit/audit.service.js';
 import { AuditActionType } from '../../audit/enums/audit-action-type.enum.js';
 import { AuditEntity } from '../../audit/enums/audit-entity.enum.js';
 import { AuditEvent } from '../../audit/enums/audit-event.enum.js';
@@ -8,6 +9,8 @@ import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
 
 @Injectable()
 export class OrderAuditService {
+  constructor(private readonly audit: AuditService) {}
+
   async write(
     tx: Prisma.TransactionClient,
     event: {
@@ -20,20 +23,16 @@ export class OrderAuditService {
       payload: Record<string, unknown>;
     },
   ): Promise<void> {
-    await tx.auditLog.create({
-      data: {
-        brandId: event.brandId,
-        locationId: event.locationId,
-        entityType: AuditEntity.ORDER,
-        entityId: event.entityId,
-        eventType: event.eventType,
-        actionType: event.actionType,
-        occurredAt: new Date(),
-        actorId: event.actor.id ?? null,
-        actorName: event.actor.name,
-        actorRole: event.actor.role,
-        payload: event.payload as object,
-      },
+    await this.audit.writeInTransaction(tx, {
+      brandId: event.brandId,
+      locationId: event.locationId,
+      entityType: AuditEntity.ORDER,
+      entityId: event.entityId,
+      eventType: event.eventType,
+      actionType: event.actionType,
+      occurredAt: new Date(),
+      actor: event.actor,
+      payload: event.payload,
     });
   }
 
