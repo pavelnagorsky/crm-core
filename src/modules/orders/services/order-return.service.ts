@@ -5,6 +5,7 @@ import {
   OrderItemType,
   OrderReturnStatus,
   Prisma,
+  ProductUnit,
 } from '@prisma/client';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
@@ -187,6 +188,7 @@ export class OrderReturnService {
           HttpStatus.BAD_REQUEST,
         );
       }
+      this.assertQuantityMatchesUnit(quantity, orderItem.unit);
       const returnedQuantity = orderItem.returnItems
         .filter((item) => item.return.status === OrderReturnStatus.POSTED)
         .reduce((sum, item) => sum.plus(item.quantity), new Prisma.Decimal(0));
@@ -226,6 +228,17 @@ export class OrderReturnService {
         sellerName: orderItem.sellerName,
       };
     });
+  }
+
+  private assertQuantityMatchesUnit(
+    quantity: Prisma.Decimal,
+    unit: ProductUnit | null,
+  ): void {
+    if (unit !== ProductUnit.PIECE || quantity.isInteger()) return;
+    throw new AppException(
+      ErrorCode.ORDER_QUANTITY_MUST_BE_WHOLE,
+      HttpStatus.BAD_REQUEST,
+    );
   }
 
   private async resolveIdempotentReturn(

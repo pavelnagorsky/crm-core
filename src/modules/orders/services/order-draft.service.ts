@@ -4,6 +4,7 @@ import {
   OrderItemStatus,
   OrderItemType,
   Prisma,
+  ProductUnit,
 } from '@prisma/client';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
@@ -124,6 +125,7 @@ export class OrderDraftService {
     return items.map((item) => {
       const product = productsById.get(item.productId)!;
       const quantity = new Prisma.Decimal(item.quantity);
+      this.assertQuantityMatchesUnit(quantity, product.product.unit);
       const price = this.compute.priceLine(
         quantity,
         product.retailPrice,
@@ -259,8 +261,10 @@ export class OrderDraftService {
       const seller = item.sellerStaffId
         ? sellersById.get(item.sellerStaffId)!
         : null;
+      const quantity = new Prisma.Decimal(item.quantity);
+      this.assertQuantityMatchesUnit(quantity, product.product.unit);
       const price = this.compute.priceLine(
-        new Prisma.Decimal(item.quantity),
+        quantity,
         product.retailPrice,
         this.customPrice(actor, item, oldCustomByProduct.get(item.productId)),
       );
@@ -351,6 +355,17 @@ export class OrderDraftService {
         HttpStatus.BAD_REQUEST,
       );
     }
+  }
+
+  private assertQuantityMatchesUnit(
+    quantity: Prisma.Decimal,
+    unit: ProductUnit,
+  ): void {
+    if (unit !== ProductUnit.PIECE || quantity.isInteger()) return;
+    throw new AppException(
+      ErrorCode.ORDER_QUANTITY_MUST_BE_WHOLE,
+      HttpStatus.BAD_REQUEST,
+    );
   }
 
   private assertUniqueProducts(productIds: string[]): void {

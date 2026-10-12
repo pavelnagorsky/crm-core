@@ -471,6 +471,10 @@ export const ErrorCode = {
     code: 'ORDER_QUANTITY_INVALID',
     message: 'Order item quantity must be greater than zero',
   },
+  ORDER_QUANTITY_MUST_BE_WHOLE: {
+    code: 'ORDER_QUANTITY_MUST_BE_WHOLE',
+    message: 'Piece products must use a whole-number quantity',
+  },
   ORDER_RETURN_QUANTITY_EXCEEDS_REMAINING: {
     code: 'ORDER_RETURN_QUANTITY_EXCEEDS_REMAINING',
     message: 'Return quantity cannot exceed the remaining order item quantity',

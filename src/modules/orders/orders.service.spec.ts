@@ -456,6 +456,30 @@ describe('OrdersService', () => {
     expect(db.order.create).not.toHaveBeenCalled();
   });
 
+  it('rejects fractional quantities for piece products', async () => {
+    const { service, db, products } = setup();
+    products.resolveForSale.mockResolvedValue([product()]);
+
+    const error = await service
+      .create(
+        'location-1',
+        {
+          items: [{ productId: 'product-1', quantity: '0.500' }],
+        },
+        owner,
+      )
+      .then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+    expect(error).toBeInstanceOf(AppException);
+    expect((error as AppException).errorCode).toBe(
+      'ORDER_QUANTITY_MUST_BE_WHOLE',
+    );
+    expect(db.order.create).not.toHaveBeenCalled();
+  });
+
   it('creates and confirms a multi-item product sale atomically', async () => {
     const { service, tx, products, staff, inventory, earnings, events } =
       setup();
@@ -607,6 +631,35 @@ describe('OrdersService', () => {
       },
     });
     expect(events.emit).toHaveBeenCalled();
+  });
+
+  it('rejects fractional quantities for immediate piece product sales', async () => {
+    const { service, tx, products, inventory, earnings } = setup();
+    products.resolveForSale.mockResolvedValue([product()]);
+    tx.order.findFirst.mockResolvedValueOnce(null);
+
+    const error = await service
+      .create(
+        'location-1',
+        {
+          confirmImmediately: true,
+          idempotencyKey: 'sale-key-1',
+          items: [{ productId: 'product-1', quantity: '0.500' }],
+        },
+        owner,
+      )
+      .then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+    expect(error).toBeInstanceOf(AppException);
+    expect((error as AppException).errorCode).toBe(
+      'ORDER_QUANTITY_MUST_BE_WHOLE',
+    );
+    expect(tx.order.upsert).not.toHaveBeenCalled();
+    expect(inventory.postSale).not.toHaveBeenCalled();
+    expect(earnings.recordForProductOrder).not.toHaveBeenCalled();
   });
 
   it('returns an existing confirmed sale on idempotent retry', async () => {
@@ -970,6 +1023,31 @@ describe('OrdersService', () => {
     });
   });
 
+  it('rejects adding fractional quantities for piece products', async () => {
+    const { service, tx, products } = setup();
+    tx.order.findFirst.mockResolvedValue(order(OrderStatus.ACTIVE));
+    products.resolveForSale.mockResolvedValue([product()]);
+
+    const error = await service
+      .addDraftItems(
+        'location-1',
+        'order-1',
+        { items: [{ productId: 'product-1', quantity: '0.500' }] },
+        owner,
+      )
+      .then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+    expect(error).toBeInstanceOf(AppException);
+    expect((error as AppException).errorCode).toBe(
+      'ORDER_QUANTITY_MUST_BE_WHOLE',
+    );
+    expect(tx.orderItem.update).not.toHaveBeenCalled();
+    expect(tx.orderItem.createMany).not.toHaveBeenCalled();
+  });
+
   it('updates a draft item for a product that also has a confirmed line', async () => {
     const { service, tx, products } = setup();
     const active = order(OrderStatus.ACTIVE);
@@ -1180,6 +1258,26 @@ describe('OrdersService', () => {
     expect(result[0].catalogItemId).toBe('product-1');
     expect(result[0].listLineTotal.toFixed(2)).toBe('40.00');
     expect(result[0].lineTotal.toFixed(2)).toBe('24.00');
+    expect(db.order.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects fractional piece quantities in product price previews', async () => {
+    const { service, db, products } = setup();
+    products.resolveForSale.mockResolvedValue([product()]);
+
+    const error = await service
+      .priceProductItems('location-1', [
+        { productId: 'product-1', quantity: '0.500' },
+      ])
+      .then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+    expect(error).toBeInstanceOf(AppException);
+    expect((error as AppException).errorCode).toBe(
+      'ORDER_QUANTITY_MUST_BE_WHOLE',
+    );
     expect(db.order.create).not.toHaveBeenCalled();
   });
 
@@ -1790,6 +1888,47 @@ describe('OrdersService', () => {
     );
   });
 
+  it('rejects fractional quantities when adding piece products to a booking order', async () => {
+    const { service, tx, products } = setup();
+    const now = new Date('2026-10-01T10:00:00.000Z');
+    const existingOrder = {
+      ...order(OrderStatus.ACTIVE),
+      bookingId: 'booking-1',
+      items: [],
+    };
+    tx.order.findUnique.mockResolvedValue(existingOrder);
+    tx.order.findFirst.mockResolvedValue(existingOrder);
+    products.resolveForSale.mockResolvedValue([product()]);
+
+    const error = await service
+      .addDraftProductsToBookingOrder(
+        {
+          id: 'booking-1',
+          locationId: 'location-1',
+          clientId: 'client-1',
+          clientFirstName: 'Ann',
+          clientLastName: 'Client',
+          clientPhone: '+79000000000',
+          endAt: now,
+          items: [],
+        } as never,
+        [{ productId: 'product-1', quantity: '0.500' }],
+        owner,
+        tx as never,
+      )
+      .then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+    expect(error).toBeInstanceOf(AppException);
+    expect((error as AppException).errorCode).toBe(
+      'ORDER_QUANTITY_MUST_BE_WHOLE',
+    );
+    expect(tx.orderItem.createMany).not.toHaveBeenCalled();
+    expect(tx.orderItem.update).not.toHaveBeenCalled();
+  });
+
   it('merges a repeated product into an existing booking draft item', async () => {
     const { service, tx, products } = setup();
     const now = new Date('2026-10-01T10:00:00.000Z');
@@ -2338,6 +2477,36 @@ describe('OrdersService', () => {
     expect(error).toBeInstanceOf(AppException);
     expect((error as AppException).errorCode).toBe(
       'ORDER_RETURN_QUANTITY_EXCEEDS_REMAINING',
+    );
+    expect(tx.orderReturn.create).not.toHaveBeenCalled();
+    expect(inventory.reverseSaleItemQuantity).not.toHaveBeenCalled();
+    expect(earnings.reverseForProductOrderItemAmount).not.toHaveBeenCalled();
+  });
+
+  it('rejects a fractional product return for piece items', async () => {
+    const { service, tx, inventory, earnings } = setup();
+    const confirmed = order(OrderStatus.ACTIVE, OrderItemStatus.CONFIRMED);
+    tx.order.findFirst.mockResolvedValue(confirmed);
+
+    const error = await service
+      .createReturn(
+        'location-1',
+        'order-1',
+        {
+          idempotencyKey: 'return-key-1',
+          reason: 'half piece',
+          items: [{ orderItemId: 'item-1', quantity: '0.500' }],
+        },
+        owner,
+      )
+      .then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+    expect(error).toBeInstanceOf(AppException);
+    expect((error as AppException).errorCode).toBe(
+      'ORDER_QUANTITY_MUST_BE_WHOLE',
     );
     expect(tx.orderReturn.create).not.toHaveBeenCalled();
     expect(inventory.reverseSaleItemQuantity).not.toHaveBeenCalled();
