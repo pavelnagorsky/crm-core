@@ -181,6 +181,7 @@ export class OrderPersistenceService {
     filter: {
       search?: string;
       status?: OrderStatus;
+      orderId?: string;
       clientId?: string;
       bookingId?: string;
       from?: string;
@@ -189,6 +190,7 @@ export class OrderPersistenceService {
   ): Prisma.OrderWhereInput {
     const where: Prisma.OrderWhereInput = {
       locationId,
+      id: filter.orderId,
       status: filter.status,
       clientId: filter.clientId,
       bookingId: filter.bookingId,

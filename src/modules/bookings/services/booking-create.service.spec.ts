@@ -80,6 +80,7 @@ function setup() {
   const db = {
     location: {
       findUnique: vi.fn().mockResolvedValue({
+        brandId: 'brand-1',
         isBookingConfirmationRequired: false,
         timezone: 'Europe/Minsk',
         bookingVisibility: BookingVisibility.PUBLIC,
@@ -243,7 +244,7 @@ describe('BookingCreateService client ban', () => {
       );
 
     expect(clients.resolveForBooking).toHaveBeenCalledWith(
-      'business-1',
+      'brand-1',
       dto.phone,
       dto.firstName,
       '',
@@ -405,6 +406,7 @@ describe('BookingCreateService calendar link', () => {
     const db = {
       location: {
         findUnique: vi.fn().mockResolvedValue({
+          brandId: 'brand-1',
           isBookingConfirmationRequired: false,
           timezone: 'Europe/Minsk',
           bookingVisibility: BookingVisibility.PUBLIC,
@@ -530,6 +532,7 @@ describe('BookingCreateService manual item prices', () => {
     const db = {
       location: {
         findUnique: vi.fn().mockResolvedValue({
+          brandId: 'brand-1',
           isBookingConfirmationRequired: false,
           timezone: 'Europe/Minsk',
           bookingVisibility: BookingVisibility.PUBLIC,
@@ -699,6 +702,7 @@ function walkInSetup(
   const db = {
     location: {
       findUnique: vi.fn().mockResolvedValue({
+        brandId: 'brand-1',
         isBookingConfirmationRequired: true,
         timezone: 'Europe/Minsk',
         bookingVisibility: BookingVisibility.PUBLIC,

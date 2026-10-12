@@ -17,6 +17,11 @@ export class OrderStatusCountsRequestDto {
   @ApiProperty({ type: String, format: 'uuid', required: false })
   @IsOptional()
   @IsUUID()
+  orderId?: string;
+
+  @ApiProperty({ type: String, format: 'uuid', required: false })
+  @IsOptional()
+  @IsUUID()
   clientId?: string;
 
   @ApiProperty({ type: String, format: 'uuid', required: false })

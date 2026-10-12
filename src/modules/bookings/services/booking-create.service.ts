@@ -182,6 +182,7 @@ export class BookingCreateService {
     const business = await this.db.location.findUnique({
       where: { id: locationId },
       select: {
+        brandId: true,
         isBookingConfirmationRequired: true,
         timezone: true,
         bookingVisibility: true,
@@ -205,7 +206,7 @@ export class BookingCreateService {
 
     const startAt = TimeService.localToUtc(dto.startAt, business.timezone);
     const client = await this.resolveBookingClient(
-      locationId,
+      business.brandId,
       attribution.source,
       dto,
     );
@@ -748,7 +749,7 @@ export class BookingCreateService {
   }
 
   private async resolveBookingClient(
-    locationId: string,
+    brandId: string,
     source: BookingSource,
     dto: CreateBookingDto | ManualCreateBookingDto,
   ): Promise<ResolvedBookingClient> {
@@ -769,7 +770,7 @@ export class BookingCreateService {
       throw new BadRequestException('Client first name and phone are required');
     }
     const client = await this.clientsService.resolveForBooking(
-      locationId,
+      brandId,
       phone,
       firstName,
       dto.lastName?.trim() || '',

@@ -2419,6 +2419,7 @@ describe('OrdersService', () => {
       by: ['status'],
       where: {
         locationId: 'location-1',
+        id: undefined,
         status: undefined,
         clientId: 'client-1',
         bookingId: undefined,
@@ -2445,5 +2446,26 @@ describe('OrdersService', () => {
       { status: OrderStatus.ACTIVE, count: 3 },
       { status: OrderStatus.VOIDED, count: 0 },
     ]);
+  });
+
+  it('filters orders by sale id', async () => {
+    const { db, service } = setup();
+    db.order.groupBy.mockResolvedValue([]);
+    const orderId = 'eb516132-b50b-449d-9e6e-0ab0801cd714';
+
+    await service.getStatusCounts('location-1', { orderId });
+
+    expect(db.order.groupBy).toHaveBeenCalledWith({
+      by: ['status'],
+      where: {
+        locationId: 'location-1',
+        id: orderId,
+        status: undefined,
+        clientId: undefined,
+        bookingId: undefined,
+        occurredAt: undefined,
+      },
+      _count: { _all: true },
+    });
   });
 });
