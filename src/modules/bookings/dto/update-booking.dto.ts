@@ -37,6 +37,17 @@ export class UpdateBookingDto {
   @IsLocalDateTime()
   startAt?: string;
 
+  @ApiProperty({
+    type: String,
+    example: '2026-09-20T10:30:00',
+    required: false,
+    description:
+      'Local datetime in location timezone. When present, updates the booking as a manual interval without requiring an available slot.',
+  })
+  @IsOptional()
+  @IsLocalDateTime()
+  endAt?: string;
+
   @ApiProperty({ type: String, required: false, nullable: true })
   @IsOptional()
   @IsPhone()

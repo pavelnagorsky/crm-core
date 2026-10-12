@@ -1022,6 +1022,214 @@ describe('BookingsService.update item prices', () => {
   });
 });
 
+describe('BookingsService.update manual interval', () => {
+  const findFirst = vi.fn();
+  const bookingUpdate = vi.fn();
+  const bookingItemUpdate = vi.fn();
+  const db = {
+    booking: { findFirst, update: bookingUpdate },
+    bookingItem: { update: bookingItemUpdate },
+    $executeRaw: vi.fn(),
+    $transaction: vi.fn((callback) => callback(db)),
+  };
+  const calendar = {
+    saveBookingEvent: vi.fn(),
+    isSlotFree: vi.fn(),
+    listBlockingEvents: vi.fn(),
+  };
+  const token = {
+    sub: 'user-1',
+    role: UserRole.ADMIN,
+    memberships: [],
+  } as TokenPayloadDto;
+  let service: BookingsService;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    calendar.saveBookingEvent.mockResolvedValue({ id: 'event-1' });
+    const module = await Test.createTestingModule({
+      providers: [
+        BookingsService,
+        BookingMutationService,
+        BookingReadService,
+        BookingSetupService,
+        { provide: DatabaseService, useValue: db },
+        { provide: CalendarService, useValue: calendar },
+        { provide: StaffService, useValue: {} },
+        {
+          provide: LocationService,
+          useValue: {
+            findById: vi.fn().mockResolvedValue({ timezone: 'UTC' }),
+          },
+        },
+        { provide: ServiceCatalogService, useValue: serviceCatalog },
+        { provide: StaffEarningsService, useValue: {} },
+        {
+          provide: OrdersService,
+          useValue: {
+            syncCompletedBooking: vi.fn(),
+          },
+        },
+        { provide: EventEmitter2, useValue: { emit: vi.fn() } },
+        auditProvider(db),
+      ],
+    }).compile();
+    service = module.get(BookingsService);
+  });
+
+  function twoItemVisit(overrides: Partial<BookingWithItems> = {}) {
+    return booking({
+      source: BookingSource.WALK_IN,
+      startAt: new Date('2026-09-24T10:00:00.000Z'),
+      endAt: new Date('2026-09-24T12:00:00.000Z'),
+      items: [
+        {
+          id: 'item-1',
+          bookingId: 'booking-1',
+          locationId: 'biz',
+          serviceId: 'cut',
+          staffId: 'anna',
+          sortOrder: 0,
+          startAt: new Date('2026-09-24T10:00:00.000Z'),
+          endAt: new Date('2026-09-24T11:00:00.000Z'),
+          serviceTitle: 'Cut',
+          serviceDuration: 60,
+          listPrice: new Prisma.Decimal('50.00'),
+          chargedPrice: new Prisma.Decimal('50.00'),
+          customPrice: null,
+          staffName: 'Anna',
+          calendarEventId: 'event-1',
+        },
+        {
+          id: 'item-2',
+          bookingId: 'booking-1',
+          locationId: 'biz',
+          serviceId: 'color',
+          staffId: 'anna',
+          sortOrder: 1,
+          startAt: new Date('2026-09-24T11:00:00.000Z'),
+          endAt: new Date('2026-09-24T12:00:00.000Z'),
+          serviceTitle: 'Color',
+          serviceDuration: 60,
+          listPrice: new Prisma.Decimal('80.00'),
+          chargedPrice: new Prisma.Decimal('80.00'),
+          customPrice: null,
+          staffName: 'Anna',
+          calendarEventId: 'event-2',
+        },
+      ],
+      ...overrides,
+    });
+  }
+
+  it('updates start and end as a manual interval without checking slot availability', async () => {
+    const current = twoItemVisit();
+    const updated = twoItemVisit({
+      startAt: new Date('2026-09-24T10:15:00.000Z'),
+      endAt: new Date('2026-09-24T12:45:00.000Z'),
+      items: [
+        {
+          ...current.items[0],
+          startAt: new Date('2026-09-24T10:15:00.000Z'),
+          endAt: new Date('2026-09-24T11:30:00.000Z'),
+        },
+        {
+          ...current.items[1],
+          startAt: new Date('2026-09-24T11:30:00.000Z'),
+          endAt: new Date('2026-09-24T12:45:00.000Z'),
+        },
+      ],
+    });
+    findFirst.mockResolvedValue(current);
+    bookingUpdate.mockResolvedValue(updated);
+
+    await service.update('biz', 'booking-1', token, {
+      startAt: '2026-09-24T10:15:00',
+      endAt: '2026-09-24T12:45:00',
+    });
+
+    expect(calendar.isSlotFree).not.toHaveBeenCalled();
+    expect(calendar.listBlockingEvents).not.toHaveBeenCalled();
+    expect(bookingItemUpdate).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        where: { id: 'item-1' },
+        data: expect.objectContaining({
+          startAt: new Date('2026-09-24T10:15:00.000Z'),
+          endAt: new Date('2026-09-24T11:30:00.000Z'),
+        }),
+      }),
+    );
+    expect(bookingItemUpdate).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        where: { id: 'item-2' },
+        data: expect.objectContaining({
+          startAt: new Date('2026-09-24T11:30:00.000Z'),
+          endAt: new Date('2026-09-24T12:45:00.000Z'),
+        }),
+      }),
+    );
+    expect(bookingUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          startAt: new Date('2026-09-24T10:15:00.000Z'),
+          endAt: new Date('2026-09-24T12:45:00.000Z'),
+        }),
+      }),
+    );
+  });
+
+  it('rejects manual intervals whose end is not after start', async () => {
+    findFirst.mockResolvedValue(twoItemVisit());
+
+    const error = await service
+      .update('biz', 'booking-1', token, {
+        startAt: '2026-09-24T10:00:00',
+        endAt: '2026-09-24T10:00:00',
+      })
+      .then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+    expect(error).toBeInstanceOf(AppException);
+    expect((error as AppException).errorCode).toBe('BOOKING_INVALID_INTERVAL');
+    expect(db.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('allows saving the same past off-grid walk-in interval again', async () => {
+    const current = twoItemVisit({
+      startAt: new Date('2026-09-20T10:07:00.000Z'),
+      endAt: new Date('2026-09-20T10:53:00.000Z'),
+      items: [
+        {
+          ...twoItemVisit().items[0],
+          startAt: new Date('2026-09-20T10:07:00.000Z'),
+          endAt: new Date('2026-09-20T10:30:00.000Z'),
+        },
+        {
+          ...twoItemVisit().items[1],
+          startAt: new Date('2026-09-20T10:30:00.000Z'),
+          endAt: new Date('2026-09-20T10:53:00.000Z'),
+        },
+      ],
+    });
+    findFirst.mockResolvedValue(current);
+    bookingUpdate.mockResolvedValue(current);
+
+    await expect(
+      service.update('biz', 'booking-1', token, {
+        startAt: '2026-09-20T10:07:00',
+        endAt: '2026-09-20T10:53:00',
+      }),
+    ).resolves.toBe(current);
+
+    expect(calendar.isSlotFree).not.toHaveBeenCalled();
+    expect(bookingUpdate).toHaveBeenCalled();
+  });
+});
+
 describe('BookingsService.addProduct', () => {
   const bookingRow = booking();
   const db = {

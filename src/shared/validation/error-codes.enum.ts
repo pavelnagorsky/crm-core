@@ -211,6 +211,10 @@ export const ErrorCode = {
     code: 'BOOKING_SLOT_UNAVAILABLE',
     message: 'The requested slot is not available',
   },
+  BOOKING_INVALID_INTERVAL: {
+    code: 'BOOKING_INVALID_INTERVAL',
+    message: 'Booking end time must be after start time',
+  },
   BOOKING_TIME_INVALID: {
     code: 'BOOKING_TIME_INVALID',
     message: 'Booking end time must be after start time',

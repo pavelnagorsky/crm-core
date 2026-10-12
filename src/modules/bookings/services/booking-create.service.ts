@@ -572,7 +572,7 @@ export class BookingCreateService {
 
     if (walkInEndAt.getTime() <= startAt.getTime()) {
       throw new AppException(
-        ErrorCode.BOOKING_TIME_INVALID,
+        ErrorCode.BOOKING_INVALID_INTERVAL,
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -597,7 +597,7 @@ export class BookingCreateService {
           );
     if (itemEnd.getTime() <= itemStart.getTime()) {
       throw new AppException(
-        ErrorCode.BOOKING_TIME_INVALID,
+        ErrorCode.BOOKING_INVALID_INTERVAL,
         HttpStatus.BAD_REQUEST,
       );
     }

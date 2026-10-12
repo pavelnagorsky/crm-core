@@ -80,6 +80,7 @@ export class BookingMutationService {
     );
     const actor = auditActorFromToken(tokenPayload, locationId);
 
+    const manualIntervalChanging = dto.endAt !== undefined;
     const slotChanging = dto.startAt !== undefined || dto.staffId !== undefined;
     const pricePatches = this.pricePatches(old, dto);
 
@@ -101,7 +102,15 @@ export class BookingMutationService {
       include: bookingWithItemsInclude,
     } satisfies Prisma.BookingUpdateArgs;
     let updated: BookingWithItems;
-    if (slotChanging) {
+    if (manualIntervalChanging) {
+      updated = await this.updateWithManualInterval(
+        old,
+        locationId,
+        dto,
+        pricePatches,
+        actor,
+      );
+    } else if (slotChanging) {
       updated = await this.updateWithSlotReschedule(
         old,
         locationId,
@@ -686,6 +695,191 @@ export class BookingMutationService {
       }
       return updated;
     });
+  }
+
+  private async updateWithManualInterval(
+    old: BookingWithItems,
+    locationId: string,
+    dto: UpdateBookingDto,
+    pricePatches: UpdateBookingItemPriceDto[],
+    actor: AuditActor,
+  ): Promise<BookingWithItems> {
+    const business = await this.locationService.findById(locationId);
+    if (old.items.length === 0) {
+      throw new AppException(
+        ErrorCode.BOOKING_SERVICE_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
+    }
+
+    const newStartAt = dto.startAt
+      ? TimeService.localToUtc(dto.startAt, business.timezone)
+      : old.startAt;
+    const newEndAt = TimeService.localToUtc(dto.endAt!, business.timezone);
+    if (newEndAt.getTime() <= newStartAt.getTime()) {
+      throw new AppException(
+        ErrorCode.BOOKING_INVALID_INTERVAL,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    const targetStaffId = dto.staffId;
+    const targetStaff = targetStaffId
+      ? await this.staffService.findById(targetStaffId)
+      : null;
+    const movedItems = await this.manualIntervalItems(
+      old,
+      locationId,
+      newStartAt,
+      newEndAt,
+      targetStaffId,
+      targetStaff?.name ?? null,
+    );
+    const lockKeys = [
+      ...new Set(
+        movedItems.map(
+          (item) =>
+            `${item.staffId}:${TimeService.zonedDateStr(item.startAt, business.timezone)}`,
+        ),
+      ),
+    ]
+      .map((key) => {
+        const [staffId, dateStr] = key.split(':');
+        return this.buildLockKey(staffId, dateStr);
+      })
+      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+
+    return this.db.$transaction(async (tx) => {
+      for (const lockKey of lockKeys) {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockKey})`;
+      }
+
+      for (const item of movedItems) {
+        const calendarEvent = await this.calendarService.saveBookingEvent(
+          {
+            eventId: item.calendarEventId,
+            locationId,
+            staffId: item.staffId,
+            startAt: item.startAt,
+            endAt: item.endAt,
+          },
+          tx,
+        );
+        await tx.bookingItem.update({
+          where: { id: item.id },
+          data: {
+            staffId: item.staffId,
+            staffName: item.staffName,
+            startAt: item.startAt,
+            endAt: item.endAt,
+            calendarEventId: calendarEvent.id,
+          },
+        });
+      }
+
+      const updated = await tx.booking.update({
+        where: { id: old.id },
+        data: {
+          startAt: newStartAt,
+          endAt: newEndAt,
+          clientFirstName: dto.firstName ?? old.clientFirstName,
+          clientLastName: dto.lastName ?? old.clientLastName,
+          clientPhone: dto.phone ?? old.clientPhone,
+          clientEmail:
+            dto.email !== undefined ? (dto.email ?? null) : old.clientEmail,
+          notes: dto.notes !== undefined ? (dto.notes ?? null) : undefined,
+          internalNotes:
+            dto.internalNotes !== undefined
+              ? (dto.internalNotes ?? null)
+              : undefined,
+          ...this.itemPriceWrite(pricePatches),
+        },
+        include: bookingWithItemsInclude,
+      });
+      if (old.status === BookingStatus.COMPLETED) {
+        const order = await this.orders.syncCompletedBooking(
+          updated,
+          actor,
+          tx,
+        );
+        await this.staffEarnings.syncForCompletedBooking(
+          updated,
+          actor,
+          tx,
+          order,
+        );
+      }
+      return updated;
+    });
+  }
+
+  private async manualIntervalItems(
+    old: BookingWithItems,
+    locationId: string,
+    startAt: Date,
+    endAt: Date,
+    targetStaffId: string | undefined,
+    targetStaffName: string | null,
+  ): Promise<BookingWithItems['items']> {
+    const items = [...old.items].sort((a, b) => a.sortOrder - b.sortOrder);
+    const spans = items.map((item) => this.itemSpanMs(item));
+    const totalSpan = spans.reduce((sum, span) => sum + span, 0);
+    const totalActual = endAt.getTime() - startAt.getTime();
+    const movedItems: BookingWithItems['items'] = [];
+    let cursor = new Date(startAt);
+
+    for (let index = 0; index < items.length; index += 1) {
+      const item = items[index];
+      const staffId = targetStaffId ?? item.staffId;
+      if (targetStaffId) {
+        const candidates = await this.staffService.resolveStaffForService(
+          locationId,
+          item.serviceId,
+          targetStaffId,
+        );
+        if (candidates.length === 0) {
+          throw new AppException(
+            ErrorCode.BOOKING_STAFF_NOT_FOUND,
+            HttpStatus.NOT_FOUND,
+          );
+        }
+      }
+
+      const itemStart =
+        old.executionMode === 'PARALLEL' ? new Date(startAt) : new Date(cursor);
+      const itemEnd =
+        old.executionMode === 'PARALLEL' || index === items.length - 1
+          ? new Date(endAt)
+          : new Date(
+              itemStart.getTime() +
+                Math.round((totalActual * spans[index]) / totalSpan),
+            );
+      if (itemEnd.getTime() <= itemStart.getTime()) {
+        throw new AppException(
+          ErrorCode.BOOKING_INVALID_INTERVAL,
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+
+      movedItems.push({
+        ...item,
+        staffId,
+        staffName: targetStaffName ?? item.staffName,
+        startAt: itemStart,
+        endAt: itemEnd,
+      });
+      cursor = new Date(itemEnd);
+    }
+
+    return movedItems;
+  }
+
+  private itemSpanMs(item: BookingWithItems['items'][number]): number {
+    return Math.max(
+      item.endAt.getTime() - item.startAt.getTime(),
+      item.serviceDuration * 60_000,
+      1,
+    );
   }
 
   private emitAudit(params: {
