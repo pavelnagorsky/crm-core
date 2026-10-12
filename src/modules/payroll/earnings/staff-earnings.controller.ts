@@ -24,6 +24,7 @@ import {
   ApiResponse,
   BaseResponseDto,
 } from '../../../shared/dto/base-response.dto.js';
+import { IdResponseDto } from '../../../shared/dto/id-response.dto.js';
 import { CreateManualEarningDto } from './dto/create-manual-earning.dto.js';
 import { RecordProductSaleDto } from './dto/record-product-sale.dto.js';
 import { StaffEarningsByStaffRequestDto } from './dto/staff-earnings-by-staff-request.dto.js';
@@ -98,7 +99,7 @@ export class StaffEarningsController {
   }
 
   @ApiOperation({ summary: 'Add a manual bonus, deduction, or correction' })
-  @ApiCreatedResponse({ type: ApiResponse(StaffEarningResponseDto) })
+  @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Staff member not found' })
   @Auth()
   @Post('locations/:locationId/staff/:id/earnings')
@@ -107,7 +108,7 @@ export class StaffEarningsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreateManualEarningDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
-  ): Promise<BaseResponseDto<StaffEarningResponseDto>> {
+  ): Promise<BaseResponseDto<IdResponseDto>> {
     assertLocationRole(tokenPayload, locationId, BusinessRole.OWNER);
     const earning = await this.earnings.createManual(
       locationId,
@@ -115,24 +116,24 @@ export class StaffEarningsController {
       dto,
       auditActorFromToken(tokenPayload, locationId),
     );
-    return BaseResponseDto.success(StaffEarningResponseDto.fromEntity(earning));
+    return BaseResponseDto.success({ id: earning.id });
   }
 
   @ApiOperation({ summary: 'Record a product sale commission (no inventory)' })
-  @ApiCreatedResponse({ type: ApiResponse(StaffEarningResponseDto) })
+  @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
   @Auth()
   @Post('locations/:locationId/payroll/product-sales')
   async recordProductSale(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Body() dto: RecordProductSaleDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
-  ): Promise<BaseResponseDto<StaffEarningResponseDto>> {
+  ): Promise<BaseResponseDto<IdResponseDto>> {
     assertLocationRole(tokenPayload, locationId, BusinessRole.OWNER);
     const earning = await this.earnings.recordProductSale(
       locationId,
       dto,
       auditActorFromToken(tokenPayload, locationId),
     );
-    return BaseResponseDto.success(StaffEarningResponseDto.fromEntity(earning));
+    return BaseResponseDto.success({ id: earning.id });
   }
 }

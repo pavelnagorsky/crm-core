@@ -26,6 +26,7 @@ import {
   ApiResponseArray,
   BaseResponseDto,
 } from '../../shared/dto/base-response.dto.js';
+import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
 import { XlsxService } from '../../shared/xlsx/xlsx.service.js';
 import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
 import { LocationRBAC } from '../auth/decorators/location-rbac.decorator.js';
@@ -125,22 +126,20 @@ export class InventoryController {
   }
 
   @ApiOperation({ summary: 'Create an open inventory document' })
-  @ApiCreatedResponse({ type: ApiResponse(InventoryDocumentResponseDto) })
+  @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
   @LocationRBAC(BusinessRole.OWNER)
   @Post('documents')
   async createDocument(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Body() dto: CreateInventoryDocumentDto,
     @TokenPayload() token: TokenPayloadDto,
-  ): Promise<BaseResponseDto<InventoryDocumentResponseDto>> {
+  ): Promise<BaseResponseDto<IdResponseDto>> {
     const document = await this.inventory.createDocument(
       locationId,
       dto,
       auditActorFromToken(token, locationId),
     );
-    return BaseResponseDto.success(
-      InventoryDocumentResponseDto.fromEntity(document),
-    );
+    return BaseResponseDto.success({ id: document.id });
   }
 
   @ApiOperation({ summary: 'Search inventory documents' })
@@ -204,7 +203,7 @@ export class InventoryController {
   }
 
   @ApiOperation({ summary: 'Replace an open inventory document' })
-  @ApiOkResponse({ type: ApiResponse(InventoryDocumentResponseDto) })
+  @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiConflictResponse({ description: 'Inventory document is immutable' })
   @LocationRBAC(BusinessRole.OWNER)
   @Put('documents/:documentId')
@@ -213,20 +212,18 @@ export class InventoryController {
     @Param('documentId', ParseUUIDPipe) documentId: string,
     @Body() dto: UpdateInventoryDocumentDto,
     @TokenPayload() token: TokenPayloadDto,
-  ): Promise<BaseResponseDto<InventoryDocumentResponseDto>> {
+  ): Promise<BaseResponseDto<IdResponseDto>> {
     const document = await this.inventory.updateDocument(
       locationId,
       documentId,
       dto,
       auditActorFromToken(token, locationId),
     );
-    return BaseResponseDto.success(
-      InventoryDocumentResponseDto.fromEntity(document),
-    );
+    return BaseResponseDto.success({ id: document.id });
   }
 
   @ApiOperation({ summary: 'Post or void an inventory document' })
-  @ApiOkResponse({ type: ApiResponse(InventoryDocumentResponseDto) })
+  @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiConflictResponse({ description: 'Inventory status transition rejected' })
   @LocationRBAC(BusinessRole.OWNER)
   @Patch('documents/:documentId/status')
@@ -235,15 +232,13 @@ export class InventoryController {
     @Param('documentId', ParseUUIDPipe) documentId: string,
     @Body() dto: UpdateInventoryDocumentStatusDto,
     @TokenPayload() token: TokenPayloadDto,
-  ): Promise<BaseResponseDto<InventoryDocumentResponseDto>> {
+  ): Promise<BaseResponseDto<IdResponseDto>> {
     const document = await this.inventory.changeDocumentStatus(
       locationId,
       documentId,
       dto.status,
       auditActorFromToken(token, locationId),
     );
-    return BaseResponseDto.success(
-      InventoryDocumentResponseDto.fromEntity(document),
-    );
+    return BaseResponseDto.success({ id: document.id });
   }
 }

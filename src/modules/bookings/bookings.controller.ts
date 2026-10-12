@@ -64,7 +64,6 @@ import { assertLocationRole } from '../auth/guards/assert-location-role.js';
 import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
 import { AddOrderItemsDto } from '../orders/dto/add-order-items.dto.js';
 import { OrderProductItemDto } from '../orders/dto/order-product-item.dto.js';
-import { OrderResponseDto } from '../orders/dto/order-response.dto.js';
 
 @ApiTags('Bookings')
 @Controller()
@@ -289,7 +288,7 @@ export class BookingsController {
   }
 
   @ApiOperation({ summary: 'Update booking (owner / staff)' })
-  @ApiOkResponse({ type: ApiResponse(BookingResponseDto) })
+  @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking not found' })
   @ApiConflictResponse({ description: 'Slot is no longer available' })
   @Auth()
@@ -299,14 +298,14 @@ export class BookingsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateBookingDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
-  ): Promise<BaseResponseDto<BookingResponseDto>> {
+  ): Promise<BaseResponseDto<IdResponseDto>> {
     const booking = await this.bookingsService.update(
       locationId,
       id,
       tokenPayload,
       dto,
     );
-    return BaseResponseDto.success(BookingResponseDto.fromEntity(booking));
+    return BaseResponseDto.success({ id: booking.id });
   }
 
   @ApiOperation({ summary: 'Update booking status' })
@@ -330,7 +329,7 @@ export class BookingsController {
   }
 
   @ApiOperation({ summary: 'Add a draft product sale to a booking order' })
-  @ApiOkResponse({ type: ApiResponse(OrderResponseDto) })
+  @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking or product not found' })
   @ApiConflictResponse({ description: 'Product cannot be added' })
   @Auth()
@@ -340,18 +339,18 @@ export class BookingsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: OrderProductItemDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
-  ): Promise<BaseResponseDto<OrderResponseDto>> {
+  ): Promise<BaseResponseDto<IdResponseDto>> {
     const order = await this.bookingsService.addProduct(
       locationId,
       id,
       tokenPayload,
       dto,
     );
-    return BaseResponseDto.success(OrderResponseDto.fromEntity(order));
+    return BaseResponseDto.success({ id: order.id });
   }
 
   @ApiOperation({ summary: 'Add draft product items to a booking order' })
-  @ApiOkResponse({ type: ApiResponse(OrderResponseDto) })
+  @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking or product not found' })
   @ApiConflictResponse({ description: 'Product cannot be added' })
   @Auth()
@@ -361,14 +360,14 @@ export class BookingsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: AddOrderItemsDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
-  ): Promise<BaseResponseDto<OrderResponseDto>> {
+  ): Promise<BaseResponseDto<IdResponseDto>> {
     const order = await this.bookingsService.addProducts(
       locationId,
       id,
       tokenPayload,
       dto,
     );
-    return BaseResponseDto.success(OrderResponseDto.fromEntity(order));
+    return BaseResponseDto.success({ id: order.id });
   }
 
   @ApiOperation({ summary: 'Generate client management token for a booking' })

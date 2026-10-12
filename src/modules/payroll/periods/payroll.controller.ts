@@ -33,6 +33,7 @@ import {
   ApiResponseArray,
   BaseResponseDto,
 } from '../../../shared/dto/base-response.dto.js';
+import { IdResponseDto } from '../../../shared/dto/id-response.dto.js';
 import { CreatePayrollCorrectionDto } from './dto/create-payroll-correction.dto.js';
 import { LockedPayrollRangeDto } from './dto/locked-payroll-range.dto.js';
 import { CreatePayrollPeriodDto } from './dto/create-payroll-period.dto.js';
@@ -59,21 +60,21 @@ export class PayrollController {
   ) {}
 
   @ApiOperation({ summary: 'Create a payroll period' })
-  @ApiCreatedResponse({ type: ApiResponse(PayrollPeriodResponseDto) })
+  @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
   @Auth()
   @Post('periods')
   async create(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Body() dto: CreatePayrollPeriodDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
-  ): Promise<BaseResponseDto<PayrollPeriodResponseDto>> {
+  ): Promise<BaseResponseDto<IdResponseDto>> {
     assertLocationRole(tokenPayload, locationId, BusinessRole.OWNER);
     const period = await this.payroll.create(
       locationId,
       dto,
       auditActorFromToken(tokenPayload, locationId),
     );
-    return BaseResponseDto.success(PayrollPeriodResponseDto.fromEntity(period));
+    return BaseResponseDto.success({ id: period.id });
   }
 
   @ApiOperation({
@@ -279,7 +280,7 @@ export class PayrollController {
   }
 
   @ApiOperation({ summary: 'Calculate or recalculate a payroll period' })
-  @ApiOkResponse({ type: ApiResponse(PayrollPeriodResponseDto) })
+  @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @Auth()
   @Post('periods/:id/calculate')
   @HttpCode(HttpStatus.OK)
@@ -287,7 +288,7 @@ export class PayrollController {
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @TokenPayload() tokenPayload: TokenPayloadDto,
-  ): Promise<BaseResponseDto<PayrollPeriodResponseDto>> {
+  ): Promise<BaseResponseDto<IdResponseDto>> {
     const period = await this.payroll.findById(id);
     this.assertPeriodInLocation(period, locationId);
     assertLocationRole(tokenPayload, period.locationId, BusinessRole.OWNER);
@@ -295,13 +296,11 @@ export class PayrollController {
       id,
       auditActorFromToken(tokenPayload, period.locationId),
     );
-    return BaseResponseDto.success(
-      PayrollPeriodResponseDto.fromEntity(updated),
-    );
+    return BaseResponseDto.success({ id: updated.id });
   }
 
   @ApiOperation({ summary: 'Approve a calculated payroll period' })
-  @ApiOkResponse({ type: ApiResponse(PayrollPeriodResponseDto) })
+  @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @Auth()
   @Post('periods/:id/approve')
   @HttpCode(HttpStatus.OK)
@@ -309,7 +308,7 @@ export class PayrollController {
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @TokenPayload() tokenPayload: TokenPayloadDto,
-  ): Promise<BaseResponseDto<PayrollPeriodResponseDto>> {
+  ): Promise<BaseResponseDto<IdResponseDto>> {
     const period = await this.payroll.findById(id);
     this.assertPeriodInLocation(period, locationId);
     assertLocationRole(tokenPayload, period.locationId, BusinessRole.OWNER);
@@ -317,13 +316,11 @@ export class PayrollController {
       id,
       auditActorFromToken(tokenPayload, period.locationId),
     );
-    return BaseResponseDto.success(
-      PayrollPeriodResponseDto.fromEntity(updated),
-    );
+    return BaseResponseDto.success({ id: updated.id });
   }
 
   @ApiOperation({ summary: 'Mark an approved payroll period as paid' })
-  @ApiOkResponse({ type: ApiResponse(PayrollPeriodResponseDto) })
+  @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @Auth()
   @Post('periods/:id/pay')
   @HttpCode(HttpStatus.OK)
@@ -331,7 +328,7 @@ export class PayrollController {
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @TokenPayload() tokenPayload: TokenPayloadDto,
-  ): Promise<BaseResponseDto<PayrollPeriodResponseDto>> {
+  ): Promise<BaseResponseDto<IdResponseDto>> {
     const period = await this.payroll.findById(id);
     this.assertPeriodInLocation(period, locationId);
     assertLocationRole(tokenPayload, period.locationId, BusinessRole.OWNER);
@@ -339,9 +336,7 @@ export class PayrollController {
       id,
       auditActorFromToken(tokenPayload, period.locationId),
     );
-    return BaseResponseDto.success(
-      PayrollPeriodResponseDto.fromEntity(updated),
-    );
+    return BaseResponseDto.success({ id: updated.id });
   }
 
   @ApiOperation({ summary: 'Delete a draft or calculated payroll period' })
@@ -366,7 +361,7 @@ export class PayrollController {
   @ApiOperation({
     summary: 'Add a post-approval correction; it lands in the next open period',
   })
-  @ApiCreatedResponse({ type: ApiResponse(StaffEarningResponseDto) })
+  @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
   @Auth()
   @Post('results/:id/corrections')
   async correct(
@@ -374,7 +369,7 @@ export class PayrollController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: CreatePayrollCorrectionDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
-  ): Promise<BaseResponseDto<StaffEarningResponseDto>> {
+  ): Promise<BaseResponseDto<IdResponseDto>> {
     const result = await this.payroll.findResultById(id);
     this.assertResultInLocation(result, locationId);
     assertLocationRole(tokenPayload, result.locationId, BusinessRole.OWNER);
@@ -383,7 +378,7 @@ export class PayrollController {
       dto,
       auditActorFromToken(tokenPayload, result.locationId),
     );
-    return BaseResponseDto.success(StaffEarningResponseDto.fromEntity(earning));
+    return BaseResponseDto.success({ id: earning.id });
   }
 
   private assertPeriodInLocation(

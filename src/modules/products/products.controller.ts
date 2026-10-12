@@ -48,7 +48,6 @@ import { UpdateProductCategoryDto } from './dto/update-product-category.dto.js';
 import { UpdateProductDto } from './dto/update-product.dto.js';
 import { UpdateProductStatusDto } from './dto/update-product-status.dto.js';
 import { UpsertProductLocationDto } from './dto/upsert-product-location.dto.js';
-import { ProductLocationResponseDto } from './dto/product-location-response.dto.js';
 import { ProductsService } from './products.service.js';
 
 @ApiTags('Products')
@@ -251,7 +250,7 @@ export class ProductsController {
   @ApiOperation({
     summary: 'Create or replace product settings for a location',
   })
-  @ApiOkResponse({ type: ApiResponse(ProductLocationResponseDto) })
+  @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @LocationRBAC(BusinessRole.OWNER)
   @Put('locations/:locationId/products/:productId')
   async upsertLocation(
@@ -259,14 +258,14 @@ export class ProductsController {
     @Param('productId', ParseUUIDPipe) productId: string,
     @Body() dto: UpsertProductLocationDto,
     @TokenPayload() token: TokenPayloadDto,
-  ): Promise<BaseResponseDto<ProductLocationResponseDto>> {
+  ): Promise<BaseResponseDto<IdResponseDto>> {
     const row = await this.products.upsertLocation(
       locationId,
       productId,
       dto,
       auditActorFromToken(token, locationId),
     );
-    return BaseResponseDto.success(ProductLocationResponseDto.fromEntity(row));
+    return BaseResponseDto.success({ id: row.id });
   }
 
   @ApiOperation({ summary: 'Search products enabled for a location' })
