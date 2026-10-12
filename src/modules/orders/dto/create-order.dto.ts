@@ -12,6 +12,7 @@ import {
   MaxLength,
   ValidateNested,
 } from 'class-validator';
+import { TrimString } from '../../../shared/transforms/trim-string.transform.js';
 import { OrderProductItemDto } from './order-product-item.dto.js';
 
 export class CreateOrderDto {
@@ -38,6 +39,7 @@ export class CreateOrderDto {
   })
   @IsOptional()
   @IsString()
+  @TrimString()
   @MaxLength(1000)
   note?: string | null;
 
@@ -59,6 +61,7 @@ export class CreateOrderDto {
   })
   @IsOptional()
   @IsString()
+  @TrimString()
   @MaxLength(100)
   idempotencyKey?: string | null;
 

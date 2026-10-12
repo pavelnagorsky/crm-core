@@ -19,6 +19,7 @@ import { OrderComputeService } from './services/order-compute.service.js';
 import { OrderDraftService } from './services/order-draft.service.js';
 import { OrderPersistenceService } from './services/order-persistence.service.js';
 import { OrderProductTransitionService } from './services/order-product-transition.service.js';
+import { OrderReturnService } from './services/order-return.service.js';
 import { OrderStateAssertionService } from './services/order-state-assertion.service.js';
 
 const owner = { id: 'owner-1', name: 'Owner', role: AuditActorRole.OWNER };
@@ -75,6 +76,7 @@ function order(
         lineCostSnapshot: null,
         sellerStaffId: null,
         sellerName: null,
+        returnItems: [],
         confirmedAt: itemStatus === OrderItemStatus.CONFIRMED ? now : null,
         occurredAt: itemStatus === OrderItemStatus.CONFIRMED ? now : null,
         createdAt: now,
@@ -105,6 +107,10 @@ function setup() {
     orderOperation: {
       create: vi.fn(),
     },
+    orderReturn: {
+      create: vi.fn(),
+      findUnique: vi.fn(),
+    },
     auditLog: {
       create: vi.fn(),
     },
@@ -132,12 +138,14 @@ function setup() {
     postSale: vi.fn(),
     reverseSale: vi.fn(),
     reverseSaleItem: vi.fn(),
+    reverseSaleItemQuantity: vi.fn(),
   };
   const staff = { resolveForProductSale: vi.fn().mockResolvedValue([]) };
   const earnings = {
     recordForProductOrder: vi.fn(),
     reverseForProductOrder: vi.fn(),
     reverseForProductOrderItem: vi.fn(),
+    reverseForProductOrderItemAmount: vi.fn(),
   };
   const clients = { findInBrand: vi.fn() };
   const locations = {
@@ -174,6 +182,15 @@ function setup() {
     earnings as never,
     persistence,
   );
+  const returns = new OrderReturnService(
+    inventory as never,
+    earnings as never,
+    persistence,
+    compute,
+    stateAssertions,
+    audit,
+    locations as never,
+  );
   const service = new OrdersService(
     db as never,
     locations as never,
@@ -182,6 +199,7 @@ function setup() {
     bookingSync,
     persistence,
     transitions,
+    returns,
     stateAssertions,
     events as never,
   );
@@ -336,6 +354,7 @@ function attachStatefulBookingOrder(tx: ReturnType<typeof setup>['tx']) {
       lineCostSnapshot: null,
       sellerStaffId: data.sellerStaffId ?? null,
       sellerName: data.sellerName ?? null,
+      returnItems: [],
       confirmedAt: data.confirmedAt ?? null,
       occurredAt: data.occurredAt ?? null,
       createdAt: new Date(`2026-10-01T10:00:0${state.sequence}.000Z`),
@@ -826,6 +845,170 @@ describe('OrdersService', () => {
     );
   });
 
+  it('merges an added product into an existing draft product item', async () => {
+    const { service, tx, products } = setup();
+    const active = order(OrderStatus.ACTIVE);
+    const refreshed = {
+      ...active,
+      listTotalAmount: new Prisma.Decimal(40),
+      subtotalAmount: new Prisma.Decimal(30),
+      totalAmount: new Prisma.Decimal(30),
+      items: [
+        {
+          ...active.items[0],
+          quantity: new Prisma.Decimal(2),
+          lineSubtotal: new Prisma.Decimal(30),
+          lineTotal: new Prisma.Decimal(30),
+        },
+      ],
+    };
+    tx.order.findFirst
+      .mockResolvedValueOnce(active)
+      .mockResolvedValueOnce(refreshed);
+    tx.order.update.mockResolvedValue(refreshed);
+    products.resolveForSale.mockResolvedValue([product()]);
+
+    await service.addDraftItems(
+      'location-1',
+      'order-1',
+      { items: [{ productId: 'product-1', quantity: '1.000' }] },
+      owner,
+    );
+
+    expect(tx.orderItem.update).toHaveBeenCalledWith({
+      where: { id: 'item-1' },
+      data: expect.objectContaining({
+        catalogItemId: 'product-1',
+        quantity: '2.000',
+        customUnitPrice: expect.objectContaining({}),
+        lineTotal: expect.objectContaining({}),
+      }),
+    });
+    const updateData = tx.orderItem.update.mock.calls[0][0].data;
+    expect(updateData.customUnitPrice.toFixed(2)).toBe('15.00');
+    expect(updateData.lineTotal.toFixed(2)).toBe('30.00');
+    expect(tx.orderItem.createMany).not.toHaveBeenCalled();
+    expect(tx.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          eventType: 'ORDER_UPDATED',
+          payload: expect.objectContaining({
+            itemChanges: expect.objectContaining({
+              added: [],
+              changed: [
+                expect.objectContaining({
+                  orderItemId: 'item-1',
+                  before: expect.objectContaining({ quantity: '1.000' }),
+                  after: expect.objectContaining({ quantity: '2.000' }),
+                }),
+              ],
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('adds a new draft item when the same product is already confirmed', async () => {
+    const { service, tx, products } = setup();
+    const confirmed = order(OrderStatus.ACTIVE, OrderItemStatus.CONFIRMED);
+    const refreshed = {
+      ...confirmed,
+      items: [
+        ...confirmed.items,
+        {
+          ...confirmed.items[0],
+          id: 'item-2',
+          status: OrderItemStatus.DRAFT,
+          confirmedAt: null,
+          occurredAt: null,
+        },
+      ],
+    };
+    tx.order.findFirst
+      .mockResolvedValueOnce(confirmed)
+      .mockResolvedValueOnce(refreshed);
+    tx.order.update.mockResolvedValue(refreshed);
+    products.resolveForSale.mockResolvedValue([product()]);
+
+    await service.addDraftItems(
+      'location-1',
+      'order-1',
+      { items: [{ productId: 'product-1', quantity: '1.000' }] },
+      owner,
+    );
+
+    expect(tx.orderItem.update).not.toHaveBeenCalled();
+    expect(tx.orderItem.createMany).toHaveBeenCalledWith({
+      data: [
+        expect.objectContaining({
+          orderId: 'order-1',
+          type: OrderItemType.PRODUCT,
+          catalogItemId: 'product-1',
+        }),
+      ],
+    });
+  });
+
+  it('updates a draft item for a product that also has a confirmed line', async () => {
+    const { service, tx, products } = setup();
+    const active = order(OrderStatus.ACTIVE);
+    const confirmedProduct = {
+      ...active.items[0],
+      id: 'confirmed-product-1',
+      status: OrderItemStatus.CONFIRMED,
+      confirmedAt: new Date('2026-10-01T10:00:00.000Z'),
+      occurredAt: new Date('2026-10-01T10:00:00.000Z'),
+    };
+    const draftProduct = {
+      ...active.items[0],
+      id: 'draft-product-1',
+      status: OrderItemStatus.DRAFT,
+      confirmedAt: null,
+      occurredAt: null,
+    };
+    const locked = { ...active, items: [confirmedProduct, draftProduct] };
+    const refreshed = {
+      ...locked,
+      items: [
+        confirmedProduct,
+        {
+          ...draftProduct,
+          quantity: new Prisma.Decimal(2),
+          lineSubtotal: new Prisma.Decimal(30),
+          lineTotal: new Prisma.Decimal(30),
+        },
+      ],
+    };
+    tx.order.findFirst
+      .mockResolvedValueOnce(locked)
+      .mockResolvedValueOnce(refreshed);
+    tx.order.update
+      .mockResolvedValueOnce(locked)
+      .mockResolvedValueOnce(refreshed);
+    products.resolveForSale.mockResolvedValue([product()]);
+
+    await service.update(
+      'location-1',
+      'order-1',
+      {
+        version: 1,
+        items: [
+          { id: 'draft-product-1', productId: 'product-1', quantity: '2.000' },
+        ],
+      },
+      owner,
+    );
+
+    expect(tx.orderItem.update).toHaveBeenCalledWith({
+      where: { id: 'draft-product-1' },
+      data: expect.objectContaining({
+        catalogItemId: 'product-1',
+        quantity: '2.000',
+      }),
+    });
+  });
+
   it('rejects editing a confirmed product item by id', async () => {
     const { service, tx, products } = setup();
     tx.order.findFirst.mockResolvedValue(
@@ -1006,7 +1189,7 @@ describe('OrdersService', () => {
       service.confirmItems(
         'location-1',
         'order-1',
-        { itemIds: ['item-1'], idempotencyKey: '   ' },
+        { itemIds: ['item-1'], idempotencyKey: '' },
         owner,
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -1587,6 +1770,87 @@ describe('OrdersService', () => {
     );
   });
 
+  it('merges a repeated product into an existing booking draft item', async () => {
+    const { service, tx, products } = setup();
+    const now = new Date('2026-10-01T10:00:00.000Z');
+    const existingOrder = {
+      ...order(OrderStatus.ACTIVE),
+      bookingId: 'booking-1',
+      items: [
+        {
+          ...order(OrderStatus.ACTIVE).items[0],
+          id: 'draft-product-1',
+          status: OrderItemStatus.DRAFT,
+          catalogItemId: 'product-1',
+          quantity: new Prisma.Decimal(1),
+          customUnitPrice: null,
+          unitPrice: new Prisma.Decimal(20),
+          lineSubtotal: new Prisma.Decimal(20),
+          lineTotal: new Prisma.Decimal(20),
+        },
+      ],
+    };
+    const refreshedOrder = {
+      ...existingOrder,
+      items: [
+        {
+          ...existingOrder.items[0],
+          quantity: new Prisma.Decimal(2),
+          lineSubtotal: new Prisma.Decimal(40),
+          lineTotal: new Prisma.Decimal(40),
+        },
+      ],
+    };
+    tx.order.findUnique.mockResolvedValue(existingOrder);
+    tx.order.findFirst
+      .mockResolvedValueOnce(existingOrder)
+      .mockResolvedValueOnce(refreshedOrder);
+    tx.order.update.mockResolvedValue(refreshedOrder);
+    products.resolveForSale.mockResolvedValue([product()]);
+
+    await service.addDraftProductsToBookingOrder(
+      {
+        id: 'booking-1',
+        locationId: 'location-1',
+        clientId: 'client-1',
+        clientFirstName: 'Ann',
+        clientLastName: 'Client',
+        clientPhone: '+79000000000',
+        endAt: now,
+        items: [],
+      } as never,
+      [{ productId: 'product-1', quantity: '1.000' }],
+      owner,
+      tx as never,
+    );
+
+    expect(tx.orderItem.update).toHaveBeenCalledWith({
+      where: { id: 'draft-product-1' },
+      data: expect.objectContaining({
+        catalogItemId: 'product-1',
+        quantity: '2.000',
+      }),
+    });
+    expect(tx.orderItem.createMany).not.toHaveBeenCalled();
+    expect(tx.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          eventType: 'ORDER_UPDATED',
+          payload: expect.objectContaining({
+            itemChanges: expect.objectContaining({
+              added: [],
+              changed: [
+                expect.objectContaining({
+                  orderItemId: 'draft-product-1',
+                }),
+              ],
+            }),
+          }),
+        }),
+      }),
+    );
+  });
+
   it('versions service lines when a completed booking price or seller changes', async () => {
     const { service, tx } = setup();
     const activeOrder = order(OrderStatus.ACTIVE);
@@ -1831,21 +2095,28 @@ describe('OrdersService', () => {
       owner,
     );
 
-    expect(earnings.reverseForProductOrderItem).toHaveBeenCalledWith(
+    expect(earnings.reverseForProductOrderItemAmount).toHaveBeenCalledWith(
       'location-1',
       'order-1',
       'item-1',
+      expect.objectContaining({}),
       'returned',
       owner,
       tx,
     );
-    expect(inventory.reverseSaleItem).toHaveBeenCalledWith(
+    const reversedAmount =
+      earnings.reverseForProductOrderItemAmount.mock.calls[0][3];
+    expect(reversedAmount.toFixed(2)).toBe('15.00');
+    expect(inventory.reverseSaleItemQuantity).toHaveBeenCalledWith(
       'location-1',
       'order-1',
       'item-1',
+      expect.objectContaining({}),
       expect.any(Date),
       tx,
     );
+    const reversedQuantity = inventory.reverseSaleItemQuantity.mock.calls[0][3];
+    expect(reversedQuantity.toFixed(3)).toBe('1.000');
     expect(tx.orderItem.update).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'item-1' },
@@ -1853,6 +2124,255 @@ describe('OrdersService', () => {
       }),
     );
     expect(result.items[0].status).toBe(OrderItemStatus.REVERSED);
+  });
+
+  it('reverses only the remaining quantity after partial returns', async () => {
+    const { service, tx, inventory, earnings } = setup();
+    const confirmed = {
+      ...order(OrderStatus.ACTIVE, OrderItemStatus.CONFIRMED),
+      items: [
+        {
+          ...order(OrderStatus.ACTIVE).items[0],
+          status: OrderItemStatus.CONFIRMED,
+          quantity: new Prisma.Decimal(5),
+          lineTotal: new Prisma.Decimal(50),
+          returnItems: [
+            {
+              quantity: new Prisma.Decimal(3),
+              lineTotal: new Prisma.Decimal(30),
+              return: { status: 'POSTED' },
+            },
+          ],
+        },
+      ],
+    };
+    const reversed = {
+      ...confirmed,
+      totalAmount: new Prisma.Decimal(0),
+      items: [
+        {
+          ...confirmed.items[0],
+          status: OrderItemStatus.REVERSED,
+        },
+      ],
+    };
+    tx.order.findFirst
+      .mockResolvedValueOnce(confirmed)
+      .mockResolvedValueOnce(reversed);
+    tx.order.update.mockResolvedValue(reversed);
+
+    await service.reverseItem(
+      'location-1',
+      'order-1',
+      'item-1',
+      'returned remaining',
+      owner,
+    );
+
+    expect(
+      earnings.reverseForProductOrderItemAmount.mock.calls[0][3].toFixed(2),
+    ).toBe('20.00');
+    expect(inventory.reverseSaleItemQuantity.mock.calls[0][3].toFixed(3)).toBe(
+      '2.000',
+    );
+    expect(tx.orderItem.update).toHaveBeenCalledWith({
+      where: { id: 'item-1' },
+      data: { status: OrderItemStatus.REVERSED },
+    });
+  });
+
+  it('creates a partial product return with explicit quantity', async () => {
+    const { service, tx, inventory, earnings } = setup();
+    const confirmed = {
+      ...order(OrderStatus.ACTIVE, OrderItemStatus.CONFIRMED),
+      items: [
+        {
+          ...order(OrderStatus.ACTIVE).items[0],
+          status: OrderItemStatus.CONFIRMED,
+          quantity: new Prisma.Decimal(5),
+          listUnitPrice: new Prisma.Decimal(10),
+          customUnitPrice: null,
+          unitPrice: new Prisma.Decimal(10),
+          lineSubtotal: new Prisma.Decimal(50),
+          lineTotal: new Prisma.Decimal(50),
+          unitCostSnapshot: new Prisma.Decimal(3),
+          lineCostSnapshot: new Prisma.Decimal(15),
+          sellerStaffId: 'staff-1',
+          sellerName: 'Seller',
+          returnItems: [],
+        },
+      ],
+    };
+    const returnItem = {
+      id: 'return-item-1',
+      returnId: 'return-1',
+      orderItemId: 'item-1',
+      productLocationId: 'product-location-1',
+      productId: 'product-1',
+      categoryId: null,
+      title: 'Shampoo',
+      sku: 'SKU-1',
+      unit: ProductUnit.PIECE,
+      quantity: new Prisma.Decimal(3),
+      listUnitPrice: new Prisma.Decimal(10),
+      customUnitPrice: null,
+      unitPrice: new Prisma.Decimal(10),
+      lineSubtotal: new Prisma.Decimal(30),
+      discountTotal: new Prisma.Decimal(0),
+      lineTotal: new Prisma.Decimal(30),
+      unitCostSnapshot: new Prisma.Decimal(3),
+      lineCostSnapshot: new Prisma.Decimal(9),
+      sellerStaffId: 'staff-1',
+      sellerName: 'Seller',
+      createdAt: new Date('2026-10-01T10:05:00.000Z'),
+      return: { status: 'POSTED' },
+    };
+    const withReturn = {
+      ...confirmed,
+      items: [{ ...confirmed.items[0], returnItems: [returnItem] }],
+    };
+    const updated = {
+      ...withReturn,
+      totalAmount: new Prisma.Decimal(20),
+      subtotalAmount: new Prisma.Decimal(20),
+      listTotalAmount: new Prisma.Decimal(20),
+    };
+    tx.order.findFirst
+      .mockResolvedValueOnce(confirmed)
+      .mockResolvedValueOnce(withReturn);
+    tx.orderReturn.create.mockResolvedValue({
+      id: 'return-1',
+      items: [returnItem],
+    });
+    tx.order.update.mockResolvedValue(updated);
+
+    const result = await service.createReturn(
+      'location-1',
+      'order-1',
+      {
+        idempotencyKey: 'return-key-1',
+        reason: 'customer returned part',
+        occurredAt: '2026-10-01T10:05:00.000Z',
+        items: [{ orderItemId: 'item-1', quantity: '3.000' }],
+      },
+      owner,
+    );
+
+    const createData = tx.orderReturn.create.mock.calls[0][0].data;
+    expect(createData.items.create[0].quantity.toFixed(3)).toBe('3.000');
+    expect(createData.items.create[0].lineTotal.toFixed(2)).toBe('30.00');
+    expect(createData.items.create[0].lineCostSnapshot.toFixed(2)).toBe('9.00');
+    expect(inventory.reverseSaleItemQuantity).toHaveBeenCalledWith(
+      'location-1',
+      'order-1',
+      'item-1',
+      expect.objectContaining({}),
+      new Date('2026-10-01T10:05:00.000Z'),
+      tx,
+      'return-item-1',
+    );
+    expect(earnings.reverseForProductOrderItemAmount).toHaveBeenCalledWith(
+      'location-1',
+      'order-1',
+      'item-1',
+      expect.objectContaining({}),
+      'customer returned part',
+      owner,
+      tx,
+      'return-item-1',
+    );
+    expect(
+      earnings.reverseForProductOrderItemAmount.mock.calls[0][3].toFixed(2),
+    ).toBe('30.00');
+    expect(result.totalAmount.toFixed(2)).toBe('20.00');
+  });
+
+  it('rejects a product return quantity above the remaining quantity', async () => {
+    const { service, tx, inventory, earnings } = setup();
+    const confirmed = order(OrderStatus.ACTIVE, OrderItemStatus.CONFIRMED);
+    tx.order.findFirst.mockResolvedValue(confirmed);
+
+    const error = await service
+      .createReturn(
+        'location-1',
+        'order-1',
+        {
+          idempotencyKey: 'return-key-1',
+          reason: 'too many',
+          items: [{ orderItemId: 'item-1', quantity: '2.000' }],
+        },
+        owner,
+      )
+      .then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+    expect(error).toBeInstanceOf(AppException);
+    expect((error as AppException).errorCode).toBe(
+      'ORDER_RETURN_QUANTITY_EXCEEDS_REMAINING',
+    );
+    expect(tx.orderReturn.create).not.toHaveBeenCalled();
+    expect(inventory.reverseSaleItemQuantity).not.toHaveBeenCalled();
+    expect(earnings.reverseForProductOrderItemAmount).not.toHaveBeenCalled();
+  });
+
+  it('returns the existing order on an idempotent return retry', async () => {
+    const { service, tx, inventory, earnings } = setup();
+    const dto = {
+      idempotencyKey: 'return-key-1',
+      reason: 'customer returned part',
+      occurredAt: '2026-10-01T10:05:00.000Z',
+      items: [{ orderItemId: 'item-1', quantity: '1.000' }],
+    };
+    const confirmed = order(OrderStatus.ACTIVE, OrderItemStatus.CONFIRMED);
+    const existing = {
+      ...confirmed,
+      totalAmount: new Prisma.Decimal(0),
+      items: [
+        {
+          ...confirmed.items[0],
+          returnItems: [
+            {
+              quantity: new Prisma.Decimal(1),
+              return: { status: 'POSTED' },
+            },
+          ],
+        },
+      ],
+    };
+    const requestHash = createHash('sha256')
+      .update(
+        JSON.stringify({
+          orderId: 'order-1',
+          reason: dto.reason,
+          occurredAt: dto.occurredAt,
+          items: dto.items,
+        }),
+      )
+      .digest('hex');
+    tx.order.findFirst
+      .mockResolvedValueOnce(confirmed)
+      .mockResolvedValueOnce(existing);
+    tx.orderReturn.create.mockRejectedValue({
+      code: PrismaErrorCode.UNIQUE_CONSTRAINT_VIOLATION,
+    });
+    tx.orderReturn.findUnique.mockResolvedValue({
+      id: 'return-1',
+      orderId: 'order-1',
+      requestHash,
+    });
+
+    const result = await service.createReturn(
+      'location-1',
+      'order-1',
+      dto,
+      owner,
+    );
+
+    expect(result).toBe(existing);
+    expect(inventory.reverseSaleItemQuantity).not.toHaveBeenCalled();
+    expect(earnings.reverseForProductOrderItemAmount).not.toHaveBeenCalled();
   });
 
   it('counts orders by status for the same search filters', async () => {

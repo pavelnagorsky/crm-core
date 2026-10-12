@@ -2,9 +2,12 @@ import { Test } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { BookingSource, BookingStatus, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
+import { AuditActorRole } from '../../audit/enums/audit-actor-role.enum.js';
 import { LocationService } from '../../location/location.service.js';
 import { StaffService } from '../../staff/staff.service.js';
 import { EarningCalculatorService } from './services/earning-calculator.service.js';
+import { ProductSaleEarningReversalService } from './services/product-sale-earning-reversal.service.js';
+import { StaffEarningWriterService } from './services/staff-earning-writer.service.js';
 import type { CompensationPlanWithRates } from '../compensation/interfaces/compensation-plan-with-rates.interface.js';
 import { StaffCompensationService } from '../compensation/staff-compensation.service.js';
 import { PayrollPeriodEarningsRequestDto } from './dto/payroll-period-earnings-request.dto.js';
@@ -100,6 +103,8 @@ describe('StaffEarningsService', () => {
       providers: [
         StaffEarningsService,
         EarningCalculatorService,
+        StaffEarningWriterService,
+        ProductSaleEarningReversalService,
         { provide: DatabaseService, useValue: db },
         { provide: StaffCompensationService, useValue: compensation },
         { provide: StaffService, useValue: {} },
@@ -347,6 +352,63 @@ describe('StaffEarningsService', () => {
         idempotencyKey: 'order-item:order-item-1:PRODUCT_COMMISSION',
       }),
     });
+  });
+
+  it('creates a partial product commission reversal linked to an order return item', async () => {
+    const tx = {
+      payrollPeriod: { findFirst: vi.fn().mockResolvedValue(null) },
+      staffEarning: {
+        findMany: vi
+          .fn()
+          .mockResolvedValueOnce([
+            {
+              id: 'earning-1',
+              staffId: 'anna',
+              amount: new Prisma.Decimal('10.00'),
+              currency: 'RUB',
+              earnedOn: new Date('2026-09-15T00:00:00.000Z'),
+              baseAmount: new Prisma.Decimal('100.00'),
+              ratePercent: new Prisma.Decimal('10.00'),
+              description: 'Shampoo',
+              compensationPlanId: 'plan-1',
+              orderItemId: 'order-item-1',
+            },
+          ])
+          .mockResolvedValueOnce([]),
+        create: vi.fn(({ data }) =>
+          Promise.resolve({ id: 'reversal-1', ...data }),
+        ),
+        findUnique: vi.fn(),
+      },
+    };
+
+    const [reversal] = await service.reverseForProductOrderItemAmount(
+      'biz',
+      'order-1',
+      'order-item-1',
+      new Prisma.Decimal('30.00'),
+      'customer returned part',
+      { id: 'owner-1', name: 'Owner', role: AuditActorRole.OWNER },
+      tx as never,
+      'return-item-1',
+    );
+
+    expect(reversal.amount.toFixed(2)).toBe('-3.00');
+    expect(tx.staffEarning.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        type: 'CORRECTION',
+        source: 'PRODUCT_SALE',
+        orderId: 'order-1',
+        orderItemId: 'order-item-1',
+        orderReturnItemId: 'return-item-1',
+        baseAmount: expect.objectContaining({}),
+        idempotencyKey:
+          'order-item:order-item-1:PRODUCT_COMMISSION:reversal:30.00',
+        reversesEarningId: null,
+      }),
+    });
+    const data = tx.staffEarning.create.mock.calls[0][0].data;
+    expect(data.baseAmount.toFixed(2)).toBe('30.00');
   });
 
   it('does not consult payroll locks when an order creates no commission', async () => {

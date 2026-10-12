@@ -40,7 +40,9 @@ import { InventoryDocumentTransition } from './interfaces/inventory-document-tra
 import { InventoryDocumentWithItems } from './interfaces/inventory-document-with-items.interface.js';
 import { InventorySaleCost } from './interfaces/inventory-sale-cost.interface.js';
 import { InventorySaleLine } from './interfaces/inventory-sale-line.interface.js';
+import { InventoryBalanceLockService } from './services/inventory-balance-lock.service.js';
 import { InventoryComputeService } from './services/inventory-compute.service.js';
+import { InventorySaleReversalService } from './services/inventory-sale-reversal.service.js';
 
 const documentInclude = {
   items: { orderBy: [{ productName: 'asc' }, { id: 'asc' }] },
@@ -62,6 +64,8 @@ export class InventoryService {
     private readonly locations: LocationService,
     private readonly eventEmitter: EventEmitter2,
     private readonly compute: InventoryComputeService,
+    private readonly balanceLocks: InventoryBalanceLockService,
+    private readonly saleReversals: InventorySaleReversalService,
   ) {}
 
   async createDocument(
@@ -351,7 +355,7 @@ export class InventoryService {
       ]),
     );
     if (tracked.length === 0) return [...costs.values()];
-    const balances = await this.lockBalances(
+    const balances = await this.balanceLocks.lock(
       tx,
       tracked.map((line) => line.productLocationId),
     );
@@ -415,7 +419,7 @@ export class InventoryService {
     occurredAt: Date,
     tx: Prisma.TransactionClient,
   ): Promise<void> {
-    await this.reverseSaleMovements(locationId, orderId, occurredAt, tx);
+    await this.saleReversals.reverse(locationId, orderId, occurredAt, tx);
   }
 
   async reverseSaleItem(
@@ -425,7 +429,7 @@ export class InventoryService {
     occurredAt: Date,
     tx: Prisma.TransactionClient,
   ): Promise<void> {
-    await this.reverseSaleMovements(
+    await this.saleReversals.reverse(
       locationId,
       orderId,
       occurredAt,
@@ -434,77 +438,26 @@ export class InventoryService {
     );
   }
 
-  private async reverseSaleMovements(
+  async reverseSaleItemQuantity(
     locationId: string,
     orderId: string,
+    orderItemId: string,
+    quantity: Prisma.Decimal,
     occurredAt: Date,
     tx: Prisma.TransactionClient,
-    orderItemId?: string,
+    orderReturnItemId?: string,
   ): Promise<void> {
-    const originals = await tx.inventoryMovement.findMany({
-      where: {
-        locationId,
-        orderId,
-        orderItemId,
-        type: InventoryMovementType.SALE,
-      },
-      orderBy: { productLocationId: 'asc' },
-    });
-    if (originals.length === 0) return;
-    const existing = await tx.inventoryMovement.findMany({
-      where: { reversedMovementId: { in: originals.map((row) => row.id) } },
-      select: { reversedMovementId: true },
-    });
-    const reversedIds = new Set(existing.map((row) => row.reversedMovementId));
-    const pending = originals.filter((row) => !reversedIds.has(row.id));
-    if (pending.length === 0) return;
-    const balances = await this.lockBalances(
+    await this.saleReversals.reverse(
+      locationId,
+      orderId,
+      occurredAt,
       tx,
-      pending.map((row) => row.productLocationId),
+      orderItemId,
+      new Map([[orderItemId, quantity]]),
+      orderReturnItemId
+        ? new Map([[orderItemId, orderReturnItemId]])
+        : new Map(),
     );
-    for (const movement of pending) {
-      const balance = balances.get(movement.productLocationId)!;
-      const quantity = movement.quantityDelta.neg();
-      const next = this.compute.nextState(
-        {
-          quantity: balance.quantityOnHand,
-          averageUnitCost: balance.averageUnitCost,
-        },
-        quantity,
-        movement.unitCost,
-      );
-      await tx.inventoryBalance.update({
-        where: { id: balance.id },
-        data: {
-          quantityOnHand: next.quantity,
-          averageUnitCost: next.averageUnitCost,
-        },
-      });
-      await tx.inventoryMovement.create({
-        data: {
-          locationId,
-          productLocationId: movement.productLocationId,
-          orderId,
-          orderItemId: movement.orderItemId,
-          type: InventoryMovementType.SALE_REVERSAL,
-          productId: movement.productId,
-          productName: movement.productName,
-          productSku: movement.productSku,
-          quantityDelta: quantity,
-          quantityBefore: balance.quantityOnHand,
-          quantityAfter: next.quantity,
-          averageUnitCostBefore: balance.averageUnitCost,
-          averageUnitCostAfter: next.averageUnitCost,
-          unitCost: movement.unitCost,
-          totalCost: MoneyService.quantize(quantity.mul(movement.unitCost)),
-          occurredAt,
-          idempotencyKey: `order:${orderId}:item:${movement.orderItemId}:sale-reversal`,
-          reversedMovementId: movement.id,
-        },
-      });
-      balance.quantityOnHand = next.quantity;
-      balance.averageUnitCost = next.averageUnitCost;
-    }
   }
 
   private async postDocument(
@@ -534,7 +487,7 @@ export class InventoryService {
         ...document.items.map((item) => item.productLocationId),
         ...destinationRows.map((row) => row.id),
       ];
-      const balances = await this.lockBalances(tx, balanceIds);
+      const balances = await this.balanceLocks.lock(tx, balanceIds);
 
       for (const item of document.items) {
         const source = balances.get(item.productLocationId)!;
@@ -620,7 +573,7 @@ export class InventoryService {
         where: { documentId, reversedMovementId: null },
         orderBy: { createdAt: 'desc' },
       });
-      const balances = await this.lockBalances(
+      const balances = await this.balanceLocks.lock(
         tx,
         movements.map((movement) => movement.productLocationId),
       );
@@ -776,27 +729,6 @@ export class InventoryService {
       TRANSFER: InventoryMovementType.TRANSFER_OUT,
     };
     return types[type];
-  }
-
-  private async lockBalances(
-    tx: Transaction,
-    productLocationIds: string[],
-  ): Promise<Map<string, InventoryBalance>> {
-    const ids = [...new Set(productLocationIds)].sort();
-    for (const productLocationId of ids) {
-      await tx.inventoryBalance.upsert({
-        where: { productLocationId },
-        create: { productLocationId },
-        update: {},
-      });
-    }
-    const rows = await tx.$queryRaw<InventoryBalance[]>(Prisma.sql`
-      SELECT * FROM "InventoryBalance"
-      WHERE "productLocationId" IN (${Prisma.join(ids)})
-      ORDER BY "productLocationId"
-      FOR UPDATE
-    `);
-    return new Map(rows.map((row) => [row.productLocationId, row]));
   }
 
   private lockDocument(tx: Transaction, documentId: string): Promise<unknown> {

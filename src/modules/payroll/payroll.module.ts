@@ -5,6 +5,8 @@ import { StaffModule } from '../staff/staff.module.js';
 import { StaffCompensationController } from './compensation/staff-compensation.controller.js';
 import { StaffCompensationService } from './compensation/staff-compensation.service.js';
 import { EarningCalculatorService } from './earnings/services/earning-calculator.service.js';
+import { ProductSaleEarningReversalService } from './earnings/services/product-sale-earning-reversal.service.js';
+import { StaffEarningWriterService } from './earnings/services/staff-earning-writer.service.js';
 import { StaffEarningsController } from './earnings/staff-earnings.controller.js';
 import { StaffEarningsService } from './earnings/staff-earnings.service.js';
 import { PayrollComputeService } from './periods/services/payroll-compute.service.js';
@@ -22,6 +24,8 @@ import { I18nModule } from '../../shared/i18n/i18n.module.js';
   ],
   providers: [
     EarningCalculatorService,
+    StaffEarningWriterService,
+    ProductSaleEarningReversalService,
     PayrollComputeService,
     StaffCompensationService,
     StaffEarningsService,

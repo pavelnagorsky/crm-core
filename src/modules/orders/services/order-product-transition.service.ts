@@ -3,6 +3,7 @@ import { BadRequestException, HttpStatus, Injectable } from '@nestjs/common';
 import {
   OrderItemStatus,
   OrderItemType,
+  OrderReturnStatus,
   OrderStatus,
   Prisma,
 } from '@prisma/client';
@@ -60,7 +61,7 @@ export class OrderProductTransitionService {
     dto: ConfirmOrderItemsDto,
   ): Promise<OrderTransition> {
     this.assertUniqueOrderItemIds(dto.itemIds);
-    const idempotencyKey = dto.idempotencyKey.trim();
+    const idempotencyKey = dto.idempotencyKey;
     if (!idempotencyKey) {
       throw new BadRequestException(
         'idempotencyKey is required for group confirmation',
@@ -120,7 +121,7 @@ export class OrderProductTransitionService {
     rawReason: string | undefined,
     actor: AuditActor,
   ): Promise<OrderTransition> {
-    const reason = rawReason?.trim();
+    const reason = rawReason;
     if (!reason) {
       throw new AppException(
         ErrorCode.ORDER_VOID_REASON_REQUIRED,
@@ -202,21 +203,40 @@ export class OrderProductTransitionService {
           HttpStatus.CONFLICT,
         );
       }
-      await this.earnings.reverseForProductOrderItem(
-        locationId,
-        orderId,
-        orderItemId,
-        reason,
-        actor,
-        tx,
+      const postedReturns = item.returnItems.filter(
+        (returnItem) => returnItem.return.status === OrderReturnStatus.POSTED,
       );
-      await this.inventory.reverseSaleItem(
-        locationId,
-        orderId,
-        orderItemId,
-        new Date(),
-        tx,
+      const returnedQuantity = postedReturns.reduce(
+        (sum, returnItem) => sum.plus(returnItem.quantity),
+        new Prisma.Decimal(0),
       );
+      const returnedAmount = postedReturns.reduce(
+        (sum, returnItem) => sum.plus(returnItem.lineTotal),
+        new Prisma.Decimal(0),
+      );
+      const remainingQuantity = item.quantity.minus(returnedQuantity);
+      const remainingAmount = item.lineTotal.minus(returnedAmount);
+      if (remainingAmount.gt(0)) {
+        await this.earnings.reverseForProductOrderItemAmount(
+          locationId,
+          orderId,
+          orderItemId,
+          remainingAmount,
+          reason,
+          actor,
+          tx,
+        );
+      }
+      if (remainingQuantity.gt(0)) {
+        await this.inventory.reverseSaleItemQuantity(
+          locationId,
+          orderId,
+          orderItemId,
+          remainingQuantity,
+          new Date(),
+          tx,
+        );
+      }
       await tx.orderItem.update({
         where: { id: orderItemId },
         data: { status: OrderItemStatus.REVERSED },

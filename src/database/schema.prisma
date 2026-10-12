@@ -281,6 +281,11 @@ enum OrderItemStatus {
   REVERSED
 }
 
+enum OrderReturnStatus {
+  POSTED
+  VOIDED
+}
+
 enum StaffEarningType {
   SERVICE_COMMISSION
   PRODUCT_COMMISSION
@@ -424,6 +429,7 @@ model Location {
   inventoryMovements         InventoryMovement[]
   orders                     Order[]
   orderOperations            OrderOperation[]
+  orderReturns               OrderReturn[]
 
   @@index([brandId])
 }
@@ -561,6 +567,7 @@ model InventoryMovement {
   documentItemId        String?
   orderId               String?
   orderItemId           String?
+  orderReturnItemId     String?
   type                  InventoryMovementType
   productId             String
   productName           String                @db.VarChar(150)
@@ -583,6 +590,7 @@ model InventoryMovement {
   documentItem     InventoryDocumentItem? @relation(fields: [documentItemId], references: [id], onDelete: Restrict)
   order            Order?                 @relation(fields: [orderId], references: [id], onDelete: Restrict)
   orderItem        OrderItem?             @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  orderReturnItem  OrderReturnItem?       @relation(fields: [orderReturnItemId], references: [id], onDelete: Restrict)
   reversedMovement InventoryMovement?     @relation("InventoryMovementReversal", fields: [reversedMovementId], references: [id], onDelete: Restrict)
   reversedBy       InventoryMovement?     @relation("InventoryMovementReversal")
 
@@ -592,6 +600,7 @@ model InventoryMovement {
   @@index([documentId])
   @@index([orderId])
   @@index([orderItemId])
+  @@index([orderReturnItemId])
 }
 
 model Order {
@@ -625,6 +634,7 @@ model Order {
   movements  InventoryMovement[]
   earnings   StaffEarning[]
   operations OrderOperation[]
+  returns    OrderReturn[]
 
   @@unique([locationId, idempotencyKey])
   @@index([locationId, occurredAt])
@@ -681,6 +691,7 @@ model OrderItem {
   seller          Staff?              @relation(fields: [sellerStaffId], references: [id], onDelete: SetNull)
   movements       InventoryMovement[]
   earnings        StaffEarning[]
+  returnItems     OrderReturnItem[]
 
   @@index([orderId])
   @@index([bookingItemId])
@@ -689,6 +700,67 @@ model OrderItem {
   @@index([type, catalogItemId])
   @@index([type, categoryId])
   @@index([status, occurredAt])
+}
+
+model OrderReturn {
+  id             String            @id @default(uuid())
+  locationId     String
+  orderId        String
+  status         OrderReturnStatus @default(POSTED)
+  reason         String            @db.VarChar(500)
+  occurredAt     DateTime
+  idempotencyKey String            @db.VarChar(100)
+  requestHash    String            @db.Char(64)
+  createdById    String?
+  createdByName  String            @db.VarChar(300)
+  voidedAt       DateTime?
+  voidReason     String?           @db.VarChar(500)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  location Location          @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  order    Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  items    OrderReturnItem[]
+
+  @@unique([locationId, idempotencyKey])
+  @@index([orderId, occurredAt])
+  @@index([locationId, occurredAt])
+  @@index([locationId, status])
+}
+
+model OrderReturnItem {
+  id                String       @id @default(uuid())
+  returnId          String
+  orderItemId       String
+  productLocationId String?
+  productId         String?
+  categoryId        String?
+  title             String       @db.VarChar(150)
+  sku               String?      @db.VarChar(80)
+  unit              ProductUnit?
+  quantity          Decimal      @db.Decimal(14, 3)
+  listUnitPrice     Decimal      @db.Decimal(10, 2)
+  customUnitPrice   Decimal?     @db.Decimal(10, 2)
+  unitPrice         Decimal      @db.Decimal(10, 2)
+  lineSubtotal      Decimal      @db.Decimal(12, 2)
+  discountTotal     Decimal      @default(0) @db.Decimal(12, 2)
+  lineTotal         Decimal      @db.Decimal(12, 2)
+  unitCostSnapshot  Decimal?     @db.Decimal(12, 2)
+  lineCostSnapshot  Decimal?     @db.Decimal(14, 2)
+  sellerStaffId     String?
+  sellerName        String?      @db.VarChar(250)
+  createdAt         DateTime     @default(now())
+
+  return    OrderReturn         @relation(fields: [returnId], references: [id], onDelete: Cascade)
+  orderItem OrderItem           @relation(fields: [orderItemId], references: [id], onDelete: Restrict)
+  movements InventoryMovement[]
+  earnings  StaffEarning[]
+
+  @@unique([returnId, orderItemId])
+  @@index([returnId])
+  @@index([orderItemId])
+  @@index([productLocationId])
+  @@index([sellerStaffId])
 }
 
 model BrandMembership {
@@ -1212,6 +1284,7 @@ model StaffEarning {
   shiftId                 String?
   orderId                 String?
   orderItemId             String?
+  orderReturnItemId       String?
   externalId              String?            @db.VarChar(100)
   reversesEarningId       String?            @unique
   correctsPayrollResultId String?
@@ -1226,6 +1299,7 @@ model StaffEarning {
   shift                 StaffShift?            @relation(fields: [shiftId], references: [id], onDelete: SetNull)
   order                 Order?                 @relation(fields: [orderId], references: [id], onDelete: SetNull)
   orderItem             OrderItem?             @relation(fields: [orderItemId], references: [id], onDelete: SetNull)
+  orderReturnItem       OrderReturnItem?       @relation(fields: [orderReturnItemId], references: [id], onDelete: SetNull)
   reversesEarning       StaffEarning?          @relation("EarningReversal", fields: [reversesEarningId], references: [id])
   reversedBy            StaffEarning?          @relation("EarningReversal")
   correctsPayrollResult PayrollResult?         @relation("PayrollCorrections", fields: [correctsPayrollResultId], references: [id], onDelete: SetNull)
@@ -1239,6 +1313,7 @@ model StaffEarning {
   @@index([shiftId])
   @@index([orderId])
   @@index([orderItemId])
+  @@index([orderReturnItemId])
   @@index([payrollResultId])
 }
 

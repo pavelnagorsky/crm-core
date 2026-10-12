@@ -21,6 +21,7 @@ import { LocationService } from '../location/location.service.js';
 import { orderInclude } from './constants/order-include.constant.js';
 import { ConfirmOrderItemsDto } from './dto/confirm-order-items.dto.js';
 import { AddOrderItemsDto } from './dto/add-order-items.dto.js';
+import { CreateOrderReturnDto } from './dto/create-order-return.dto.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
 import { OrderProductItemDto } from './dto/order-product-item.dto.js';
 import { OrderSearchRequestDto } from './dto/order-search-request.dto.js';
@@ -36,6 +37,7 @@ import { OrderBookingSyncService } from './services/order-booking-sync.service.j
 import { OrderDraftService } from './services/order-draft.service.js';
 import { OrderPersistenceService } from './services/order-persistence.service.js';
 import { OrderProductTransitionService } from './services/order-product-transition.service.js';
+import { OrderReturnService } from './services/order-return.service.js';
 import { OrderStateAssertionService } from './services/order-state-assertion.service.js';
 
 @Injectable()
@@ -48,6 +50,7 @@ export class OrdersService {
     private readonly bookingSync: OrderBookingSyncService,
     private readonly persistence: OrderPersistenceService,
     private readonly transitions: OrderProductTransitionService,
+    private readonly returns: OrderReturnService,
     private readonly stateAssertions: OrderStateAssertionService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
@@ -300,20 +303,27 @@ export class OrdersService {
         orderId,
       );
       this.stateAssertions.assertActive(order.status);
-      this.drafts.assertProductItemsCanBeAdded(order, dto.items);
-      const resolved = await this.drafts.resolveProductItems(
+      const resolved = await this.drafts.resolveProductItemAdditions(
         locationId,
+        order,
         dto.items,
         actor,
-        order,
         tx,
       );
-      await tx.orderItem.createMany({
-        data: resolved.map((item) => ({
-          orderId,
-          ...item,
-        })),
-      });
+      for (const item of resolved.updated) {
+        await tx.orderItem.update({
+          where: { id: item.id },
+          data: item.after,
+        });
+      }
+      if (resolved.created.length > 0) {
+        await tx.orderItem.createMany({
+          data: resolved.created.map((item) => ({
+            orderId,
+            ...item,
+          })),
+        });
+      }
       const updated = await this.persistence.refreshTotals(
         tx,
         locationId,
@@ -328,9 +338,15 @@ export class OrdersService {
           totalAmount: updated.totalAmount.toFixed(2),
           currency: updated.currency,
           itemChanges: {
-            added: resolved.map((item) => this.audit.itemSnapshot(item)),
+            added: resolved.created.map((item) =>
+              this.audit.itemSnapshot(item),
+            ),
             removed: [],
-            changed: [],
+            changed: resolved.updated.map((item) => ({
+              orderItemId: item.id,
+              before: this.audit.itemSnapshot(item.before),
+              after: this.audit.itemSnapshot(item.after),
+            })),
           },
         },
       });
@@ -441,7 +457,7 @@ export class OrdersService {
     rawReason: string,
     actor: AuditActor,
   ): Promise<OrderWithItems> {
-    const reason = rawReason.trim();
+    const reason = rawReason;
     if (!reason) {
       throw new AppException(
         ErrorCode.ORDER_VOID_REASON_REQUIRED,
@@ -512,7 +528,7 @@ export class OrdersService {
     dto: CreateOrderDto,
     actor: AuditActor,
   ): Promise<OrderWithItems> {
-    const idempotencyKey = dto.idempotencyKey?.trim();
+    const idempotencyKey = dto.idempotencyKey;
     if (!idempotencyKey) {
       throw new BadRequestException(
         'idempotencyKey is required for confirmed product sales',
@@ -617,23 +633,31 @@ export class OrdersService {
         HttpStatus.BAD_REQUEST,
       );
     }
-    const lockedProductIds = new Set(
-      order.items
-        .filter(
-          (item) =>
-            item.type === OrderItemType.PRODUCT &&
-            item.status !== OrderItemStatus.DRAFT &&
-            item.status !== OrderItemStatus.REVERSED &&
-            item.catalogItemId,
-        )
-        .map((item) => item.catalogItemId!),
+  }
+
+  async createReturn(
+    locationId: string,
+    orderId: string,
+    dto: CreateOrderReturnDto,
+    actor: AuditActor,
+  ): Promise<OrderWithItems> {
+    const order = await this.returns.create(locationId, orderId, dto, actor);
+    const location = await this.locations.findById(locationId);
+    this.emit(
+      location.brandId,
+      locationId,
+      orderId,
+      AuditEvent.ORDER_ITEM_REVERSED,
+      AuditActionType.ACTION,
+      actor,
+      {
+        itemReturns: dto.items,
+        reason: dto.reason,
+        totalAmount: order.totalAmount.toFixed(2),
+        currency: order.currency,
+      },
     );
-    if (items.some((item) => lockedProductIds.has(item.productId))) {
-      throw new AppException(
-        ErrorCode.ORDER_DUPLICATE_PRODUCT,
-        HttpStatus.BAD_REQUEST,
-      );
-    }
+    return order;
   }
 
   private editableDraftItems(order: OrderWithItems): OrderWithItems['items'] {

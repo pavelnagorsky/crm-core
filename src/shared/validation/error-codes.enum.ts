@@ -471,6 +471,10 @@ export const ErrorCode = {
     code: 'ORDER_QUANTITY_INVALID',
     message: 'Order item quantity must be greater than zero',
   },
+  ORDER_RETURN_QUANTITY_EXCEEDS_REMAINING: {
+    code: 'ORDER_RETURN_QUANTITY_EXCEEDS_REMAINING',
+    message: 'Return quantity cannot exceed the remaining order item quantity',
+  },
   ORDER_VOID_REASON_REQUIRED: {
     code: 'ORDER_VOID_REASON_REQUIRED',
     message: 'A reason is required to void a posted order',

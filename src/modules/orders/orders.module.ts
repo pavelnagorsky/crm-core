@@ -13,6 +13,7 @@ import { OrderComputeService } from './services/order-compute.service.js';
 import { OrderDraftService } from './services/order-draft.service.js';
 import { OrderPersistenceService } from './services/order-persistence.service.js';
 import { OrderProductTransitionService } from './services/order-product-transition.service.js';
+import { OrderReturnService } from './services/order-return.service.js';
 import { OrderStateAssertionService } from './services/order-state-assertion.service.js';
 import { OrdersController } from './orders.controller.js';
 import { OrdersService } from './orders.service.js';
@@ -36,6 +37,7 @@ import { OrdersService } from './orders.service.js';
     OrderDraftService,
     OrderBookingSyncService,
     OrderProductTransitionService,
+    OrderReturnService,
     OrderStateAssertionService,
     OrdersAggregatesService,
   ],

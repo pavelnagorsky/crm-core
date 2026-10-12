@@ -34,6 +34,7 @@ import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 import { AddOrderItemsDto } from './dto/add-order-items.dto.js';
 import { ConfirmOrderItemsDto } from './dto/confirm-order-items.dto.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
+import { CreateOrderReturnDto } from './dto/create-order-return.dto.js';
 import { OrderResponseDto } from './dto/order-response.dto.js';
 import { OrderSearchRequestDto } from './dto/order-search-request.dto.js';
 import { OrderSearchResponseDto } from './dto/order-search-response.dto.js';
@@ -238,6 +239,26 @@ export class OrdersController {
       orderId,
       orderItemId,
       dto.reason,
+      auditActorFromToken(token, locationId),
+    );
+    return BaseResponseDto.success(OrderResponseDto.fromEntity(order));
+  }
+
+  @ApiOperation({ summary: 'Create a product return for an active order' })
+  @ApiCreatedResponse({ type: ApiResponse(OrderResponseDto) })
+  @ApiConflictResponse({ description: 'Order item cannot be returned' })
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Post(':orderId/returns')
+  async createReturn(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Param('orderId', ParseUUIDPipe) orderId: string,
+    @Body() dto: CreateOrderReturnDto,
+    @TokenPayload() token: TokenPayloadDto,
+  ): Promise<BaseResponseDto<OrderResponseDto>> {
+    const order = await this.orders.createReturn(
+      locationId,
+      orderId,
+      dto,
       auditActorFromToken(token, locationId),
     );
     return BaseResponseDto.success(OrderResponseDto.fromEntity(order));

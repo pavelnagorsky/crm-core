@@ -12,7 +12,12 @@ export class DatabaseService
     const adapter = new PrismaPg({
       connectionString: config.get<string>('database.url'),
     });
-    super({ adapter });
+    super({
+      adapter,
+      transactionOptions: {
+        timeout: 10_000,
+      },
+    });
   }
 
   async onModuleInit() {

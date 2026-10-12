@@ -8,7 +8,9 @@ import {
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { AuditActorRole } from '../audit/enums/audit-actor-role.enum.js';
 import { InventoryDocumentTargetStatus } from './enums/inventory-document-target-status.enum.js';
+import { InventoryBalanceLockService } from './services/inventory-balance-lock.service.js';
 import { InventoryComputeService } from './services/inventory-compute.service.js';
+import { InventorySaleReversalService } from './services/inventory-sale-reversal.service.js';
 import { InventoryService } from './inventory.service.js';
 
 const actor = { id: 'owner-1', name: 'Owner', role: AuditActorRole.OWNER };
@@ -75,12 +77,17 @@ function setup(status: InventoryDocumentStatus) {
       .mockResolvedValue({ id: 'location-1', brandId: 'brand-1' }),
   };
   const events = { emit: vi.fn() };
+  const compute = new InventoryComputeService();
+  const balanceLocks = new InventoryBalanceLockService();
+  const saleReversals = new InventorySaleReversalService(compute, balanceLocks);
   const service = new InventoryService(
     db as never,
     products as never,
     locations as never,
     events as never,
-    new InventoryComputeService(),
+    compute,
+    balanceLocks,
+    saleReversals,
   );
   return { service, tx, events };
 }
@@ -180,6 +187,62 @@ describe('InventoryService', () => {
     });
   });
 
+  it('posts a partial sale reversal linked to an order return item', async () => {
+    const { service, tx } = setup(InventoryDocumentStatus.OPEN);
+    const saleMovement = {
+      id: 'movement-1',
+      locationId: 'location-1',
+      productLocationId: 'product-location-1',
+      orderId: 'order-1',
+      orderItemId: 'order-item-1',
+      type: InventoryMovementType.SALE,
+      productId: 'product-1',
+      productName: 'Shampoo',
+      productSku: 'SKU-1',
+      quantityDelta: new Prisma.Decimal(-5),
+      unitCost: new Prisma.Decimal('7.50'),
+    };
+    tx.inventoryMovement.findMany
+      .mockResolvedValueOnce([saleMovement])
+      .mockResolvedValueOnce([]);
+    tx.$queryRaw.mockResolvedValueOnce([
+      {
+        id: 'balance-1',
+        productLocationId: 'product-location-1',
+        quantityOnHand: new Prisma.Decimal(3),
+        averageUnitCost: new Prisma.Decimal('7.50'),
+        updatedAt: new Date(),
+      },
+    ]);
+    tx.inventoryBalance.update.mockResolvedValue({});
+    tx.inventoryMovement.create.mockResolvedValue({});
+
+    await service.reverseSaleItemQuantity(
+      'location-1',
+      'order-1',
+      'order-item-1',
+      new Prisma.Decimal(3),
+      new Date('2026-10-01T10:05:00.000Z'),
+      tx as never,
+      'return-item-1',
+    );
+
+    expect(tx.inventoryMovement.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        orderId: 'order-1',
+        orderItemId: 'order-item-1',
+        orderReturnItemId: 'return-item-1',
+        type: InventoryMovementType.SALE_REVERSAL,
+        quantityDelta: expect.objectContaining({}),
+        idempotencyKey: 'order:order-1:item:order-item-1:sale-reversal:3.000',
+        reversedMovementId: null,
+      }),
+    });
+    const created = tx.inventoryMovement.create.mock.calls[0][0].data;
+    expect(created.quantityDelta.toFixed(3)).toBe('3.000');
+    expect(created.totalCost.toFixed(2)).toBe('22.50');
+  });
+
   it('counts documents by status for the same type filter', async () => {
     const groupBy = vi.fn().mockResolvedValue([
       { status: InventoryDocumentStatus.OPEN, _count: { _all: 2 } },
@@ -191,6 +254,8 @@ describe('InventoryService', () => {
       {} as never,
       { emit: vi.fn() } as never,
       new InventoryComputeService(),
+      {} as never,
+      {} as never,
     );
 
     const counts = await service.getDocumentStatusCounts('location-1', {

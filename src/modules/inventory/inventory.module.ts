@@ -4,7 +4,9 @@ import { LocationModule } from '../location/location.module.js';
 import { ProductsModule } from '../products/products.module.js';
 import { InventoryController } from './inventory.controller.js';
 import { InventoryReportService } from './report/inventory-report.service.js';
+import { InventoryBalanceLockService } from './services/inventory-balance-lock.service.js';
 import { InventoryComputeService } from './services/inventory-compute.service.js';
+import { InventorySaleReversalService } from './services/inventory-sale-reversal.service.js';
 import { InventoryService } from './inventory.service.js';
 
 @Module({
@@ -12,7 +14,9 @@ import { InventoryService } from './inventory.service.js';
   controllers: [InventoryController],
   providers: [
     InventoryService,
+    InventoryBalanceLockService,
     InventoryComputeService,
+    InventorySaleReversalService,
     InventoryReportService,
   ],
   exports: [InventoryService],

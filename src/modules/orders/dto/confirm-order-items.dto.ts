@@ -8,6 +8,7 @@ import {
   IsUUID,
   MaxLength,
 } from 'class-validator';
+import { TrimString } from '../../../shared/transforms/trim-string.transform.js';
 
 export class ConfirmOrderItemsDto {
   @ApiProperty({ type: String, format: 'uuid', isArray: true })
@@ -23,6 +24,7 @@ export class ConfirmOrderItemsDto {
     description: 'Required idempotency key for this group confirmation.',
   })
   @IsString()
+  @TrimString()
   @IsNotEmpty()
   @MaxLength(100)
   idempotencyKey: string;

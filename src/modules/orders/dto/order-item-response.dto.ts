@@ -5,6 +5,7 @@ import { MoneyService } from '../../../shared/money/money.service.js';
 import { QuantityService } from '../../../shared/quantity/quantity.service.js';
 import { ProductUnit } from '../../products/enums/product-unit.enum.js';
 import { OrderItemStatus } from '../enums/order-item-status.enum.js';
+import { OrderReturnStatus } from '../enums/order-return-status.enum.js';
 import { OrderItemType } from '../enums/order-item-type.enum.js';
 import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
 
@@ -41,6 +42,12 @@ export class OrderItemResponseDto {
 
   @ApiProperty({ type: String, format: 'decimal' })
   quantity: string;
+
+  @ApiProperty({ type: String, format: 'decimal' })
+  returnedQuantity: string;
+
+  @ApiProperty({ type: String, format: 'decimal' })
+  returnableQuantity: string;
 
   @ApiPrice()
   listUnitPrice: string;
@@ -81,11 +88,23 @@ export class OrderItemResponseDto {
   static fromEntity(
     entity: OrderWithItems['items'][number],
   ): OrderItemResponseDto {
+    const returnedQuantity = entity.returnItems
+      .filter((item) => item.return.status === OrderReturnStatus.POSTED)
+      .reduce(
+        (sum, item) => sum.plus(item.quantity),
+        QuantityService.decimal(0),
+      );
+    const returnableQuantity =
+      entity.status === OrderItemStatus.CONFIRMED
+        ? entity.quantity.minus(returnedQuantity)
+        : QuantityService.decimal(0);
     return Object.assign(new OrderItemResponseDto(), entity, {
       image: entity.productLocation?.product.imageFile
         ? FileResponseDto.fromEntity(entity.productLocation.product.imageFile)
         : null,
       quantity: QuantityService.format(entity.quantity),
+      returnedQuantity: QuantityService.format(returnedQuantity),
+      returnableQuantity: QuantityService.format(returnableQuantity),
       listUnitPrice: MoneyService.format(entity.listUnitPrice),
       customUnitPrice:
         entity.customUnitPrice == null

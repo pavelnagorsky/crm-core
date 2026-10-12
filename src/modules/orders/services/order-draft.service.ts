@@ -54,18 +54,8 @@ export class OrderDraftService {
         HttpStatus.BAD_REQUEST,
       );
     }
-    if (dto.items.some((item) => new Prisma.Decimal(item.quantity).lte(0))) {
-      throw new AppException(
-        ErrorCode.ORDER_QUANTITY_INVALID,
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-    if (new Set(productIds).size !== productIds.length) {
-      throw new AppException(
-        ErrorCode.ORDER_DUPLICATE_PRODUCT,
-        HttpStatus.BAD_REQUEST,
-      );
-    }
+    this.assertPositiveQuantities(dto.items);
+    this.assertUniqueProducts(productIds);
     this.assertCustomPriceAccess(actor, dto.items, existing);
     const clientId = dto.clientId ?? null;
     const client = clientId
@@ -87,7 +77,7 @@ export class OrderDraftService {
         : null,
       clientPhone: client?.phone ?? null,
       occurredAt,
-      note: dto.note?.trim() || null,
+      note: dto.note || null,
       items,
       totals: this.compute.totals(
         items.map((item) => ({
@@ -116,18 +106,8 @@ export class OrderDraftService {
   ): Promise<OrderPricingLine[]> {
     if (items.length === 0) return [];
     const productIds = items.map((item) => item.productId);
-    if (items.some((item) => new Prisma.Decimal(item.quantity).lte(0))) {
-      throw new AppException(
-        ErrorCode.ORDER_QUANTITY_INVALID,
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-    if (new Set(productIds).size !== productIds.length) {
-      throw new AppException(
-        ErrorCode.ORDER_DUPLICATE_PRODUCT,
-        HttpStatus.BAD_REQUEST,
-      );
-    }
+    this.assertPositiveQuantities(items);
+    this.assertUniqueProducts(productIds);
     const productRows = await this.products.resolveForSale(
       locationId,
       productIds,
@@ -163,31 +143,69 @@ export class OrderDraftService {
     });
   }
 
-  assertProductItemsCanBeAdded(
+  async resolveProductItemAdditions(
+    locationId: string,
     order: OrderWithItems,
     items: OrderProductItemDto[],
-  ): void {
+    actor: AuditActor,
+    tx: Prisma.TransactionClient,
+  ): Promise<{
+    created: Prisma.OrderItemUncheckedCreateWithoutOrderInput[];
+    updated: {
+      id: string;
+      before: OrderWithItems['items'][number];
+      after: Prisma.OrderItemUncheckedCreateWithoutOrderInput;
+    }[];
+  }> {
     const productIds = items.map((item) => item.productId);
-    if (new Set(productIds).size !== productIds.length) {
-      throw new AppException(
-        ErrorCode.ORDER_DUPLICATE_PRODUCT,
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-    if (
-      order.items.some(
-        (item) =>
-          item.type === OrderItemType.PRODUCT &&
-          item.status !== OrderItemStatus.REVERSED &&
-          item.catalogItemId &&
-          productIds.includes(item.catalogItemId),
-      )
-    ) {
-      throw new AppException(
-        ErrorCode.ORDER_DUPLICATE_PRODUCT,
-        HttpStatus.BAD_REQUEST,
-      );
-    }
+    this.assertPositiveQuantities(items);
+    this.assertUniqueProducts(productIds);
+
+    const draftItems = order.items.filter(
+      (item) =>
+        item.type === OrderItemType.PRODUCT &&
+        item.status === OrderItemStatus.DRAFT &&
+        item.catalogItemId,
+    );
+    const draftByProduct = new Map(
+      draftItems.map((item) => [item.catalogItemId!, item]),
+    );
+    const additions = items.map((item) => {
+      const draft = draftByProduct.get(item.productId);
+      return {
+        draft,
+        item: draft ? this.mergeDraftProductItem(draft, item) : item,
+      };
+    });
+    const resolved = await this.resolveProductItems(
+      locationId,
+      additions.map((addition) => addition.item),
+      actor,
+      { ...order, items: draftItems },
+      tx,
+    );
+    return additions.reduce<{
+      created: Prisma.OrderItemUncheckedCreateWithoutOrderInput[];
+      updated: {
+        id: string;
+        before: OrderWithItems['items'][number];
+        after: Prisma.OrderItemUncheckedCreateWithoutOrderInput;
+      }[];
+    }>(
+      (result, addition, index) => {
+        if (addition.draft) {
+          result.updated.push({
+            id: addition.draft.id,
+            before: addition.draft,
+            after: resolved[index],
+          });
+          return result;
+        }
+        result.created.push(resolved[index]);
+        return result;
+      },
+      { created: [], updated: [] },
+    );
   }
 
   async resolveProductItems(
@@ -324,5 +342,45 @@ export class OrderDraftService {
     return item.customUnitPrice == null
       ? null
       : new Prisma.Decimal(item.customUnitPrice);
+  }
+
+  private assertPositiveQuantities(items: OrderProductItemDto[]): void {
+    if (items.some((item) => new Prisma.Decimal(item.quantity).lte(0))) {
+      throw new AppException(
+        ErrorCode.ORDER_QUANTITY_INVALID,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  private assertUniqueProducts(productIds: string[]): void {
+    if (new Set(productIds).size !== productIds.length) {
+      throw new AppException(
+        ErrorCode.ORDER_DUPLICATE_PRODUCT,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  private mergeDraftProductItem(
+    existing: OrderWithItems['items'][number],
+    incoming: OrderProductItemDto,
+  ): OrderProductItemDto {
+    const customUnitPrice =
+      incoming.customUnitPrice === undefined
+        ? (existing.customUnitPrice?.toFixed(2) ?? undefined)
+        : incoming.customUnitPrice;
+    const sellerStaffId =
+      incoming.sellerStaffId === undefined
+        ? (existing.sellerStaffId ?? null)
+        : incoming.sellerStaffId;
+    return {
+      ...incoming,
+      quantity: existing.quantity
+        .plus(new Prisma.Decimal(incoming.quantity))
+        .toFixed(3),
+      ...(customUnitPrice === undefined ? {} : { customUnitPrice }),
+      sellerStaffId,
+    };
   }
 }

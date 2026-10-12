@@ -135,20 +135,27 @@ export class OrderBookingSyncService {
       order.id,
     );
     this.assertActive(locked.status);
-    this.drafts.assertProductItemsCanBeAdded(locked, items);
-    const resolved = await this.drafts.resolveProductItems(
+    const resolved = await this.drafts.resolveProductItemAdditions(
       booking.locationId,
+      locked,
       items,
       actor,
-      locked,
       tx,
     );
-    await tx.orderItem.createMany({
-      data: resolved.map((item) => ({
-        orderId: locked.id,
-        ...item,
-      })),
-    });
+    for (const item of resolved.updated) {
+      await tx.orderItem.update({
+        where: { id: item.id },
+        data: item.after,
+      });
+    }
+    if (resolved.created.length > 0) {
+      await tx.orderItem.createMany({
+        data: resolved.created.map((item) => ({
+          orderId: locked.id,
+          ...item,
+        })),
+      });
+    }
     const updated = await this.persistence.refreshTotals(
       tx,
       booking.locationId,
@@ -163,9 +170,13 @@ export class OrderBookingSyncService {
         totalAmount: updated.totalAmount.toFixed(2),
         currency: updated.currency,
         itemChanges: {
-          added: resolved.map((item) => this.audit.itemSnapshot(item)),
+          added: resolved.created.map((item) => this.audit.itemSnapshot(item)),
           removed: [],
-          changed: [],
+          changed: resolved.updated.map((item) => ({
+            orderItemId: item.id,
+            before: this.audit.itemSnapshot(item.before),
+            after: this.audit.itemSnapshot(item.after),
+          })),
         },
       },
     });

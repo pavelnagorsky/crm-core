@@ -9,6 +9,11 @@ export type OrderWithItems = Prisma.OrderGetPayload<{
             product: { include: { imageFile: true } };
           };
         };
+        returnItems: {
+          include: {
+            return: true;
+          };
+        };
       };
     };
   };

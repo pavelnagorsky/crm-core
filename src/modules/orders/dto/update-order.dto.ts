@@ -13,6 +13,7 @@ import {
   Min,
   ValidateNested,
 } from 'class-validator';
+import { TrimString } from '../../../shared/transforms/trim-string.transform.js';
 import { UpdateOrderItemDto } from './update-order-item.dto.js';
 
 export class UpdateOrderDto {
@@ -48,6 +49,7 @@ export class UpdateOrderDto {
   })
   @IsOptional()
   @IsString()
+  @TrimString()
   @MaxLength(1000)
   note?: string | null;
 

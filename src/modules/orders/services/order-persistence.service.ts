@@ -1,5 +1,10 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { OrderItemStatus, OrderStatus, Prisma } from '@prisma/client';
+import {
+  OrderItemStatus,
+  OrderReturnStatus,
+  OrderStatus,
+  Prisma,
+} from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { stableOrderBy } from '../../../shared/database/stable-order-by.js';
 import { OrderDirection } from '../../../shared/enums/order-direction.enum.js';
@@ -129,9 +134,9 @@ export class OrderPersistenceService {
   ): Promise<OrderWithItems> {
     const order = await this.findInTransaction(tx, locationId, orderId);
     const totals = this.compute.totals(
-      order.items
-        .filter((item) => item.status !== OrderItemStatus.REVERSED)
-        .map((item) => ({
+      order.items.flatMap((item) => {
+        if (item.status === OrderItemStatus.REVERSED) return [];
+        const saleLine = {
           listUnitPrice: item.listUnitPrice,
           listLineTotal: item.quantity.mul(item.listUnitPrice),
           customUnitPrice: item.customUnitPrice,
@@ -139,7 +144,25 @@ export class OrderPersistenceService {
           lineSubtotal: item.lineSubtotal,
           discountTotal: item.discountTotal,
           lineTotal: item.lineTotal,
-        })),
+        };
+        const returnLines = item.returnItems
+          .filter(
+            (returnItem) =>
+              returnItem.return.status === OrderReturnStatus.POSTED,
+          )
+          .map((returnItem) => ({
+            listUnitPrice: returnItem.listUnitPrice,
+            listLineTotal: returnItem.quantity
+              .mul(returnItem.listUnitPrice)
+              .neg(),
+            customUnitPrice: returnItem.customUnitPrice,
+            unitPrice: returnItem.unitPrice,
+            lineSubtotal: returnItem.lineSubtotal.neg(),
+            discountTotal: returnItem.discountTotal.neg(),
+            lineTotal: returnItem.lineTotal.neg(),
+          }));
+        return [saleLine, ...returnLines];
+      }),
     );
     return tx.order.update({
       where: { id: orderId },

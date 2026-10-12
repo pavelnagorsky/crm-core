@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
@@ -9,7 +8,6 @@ import {
   StaffShift,
 } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
-import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
 import { stableOrderBy } from '../../../shared/database/stable-order-by.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { PaginatedResult } from '../../../shared/interfaces/paginated-result.interface.js';
@@ -36,10 +34,11 @@ import { EarningCalculatorService } from './services/earning-calculator.service.
 import { CompensationPlanWithRates } from '../compensation/interfaces/compensation-plan-with-rates.interface.js';
 import { StaffCompensationService } from '../compensation/staff-compensation.service.js';
 import { MoneyService } from '../../../shared/money/money.service.js';
-import { lockedPeriodWhere } from '../periods/utils/locked-period.js';
 import { BookingWithItems } from '../../bookings/interfaces/booking-with-items.interface.js';
 import { OrderWithItems } from '../../orders/interfaces/order-with-items.interface.js';
 import { ProductOrderCommissionLine } from './interfaces/product-order-commission-line.interface.js';
+import { ProductSaleEarningReversalService } from './services/product-sale-earning-reversal.service.js';
+import { StaffEarningWriterService } from './services/staff-earning-writer.service.js';
 
 @Injectable()
 export class StaffEarningsService {
@@ -50,6 +49,8 @@ export class StaffEarningsService {
     private readonly staffService: StaffService,
     private readonly locationService: LocationService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly writer: StaffEarningWriterService,
+    private readonly productSaleReversals: ProductSaleEarningReversalService,
   ) {}
 
   async recordForCompletedBooking(
@@ -125,11 +126,15 @@ export class StaffEarningsService {
         const delta = target.minus(current);
         if (delta.equals(0)) continue;
         if (!dateChecked) {
-          await this.assertDateUnlocked(booking.locationId, earnedOn, tx);
+          await this.writer.assertDateUnlocked(
+            booking.locationId,
+            earnedOn,
+            tx,
+          );
           dateChecked = true;
         }
         corrections.push(
-          await this.insertEarning(
+          await this.writer.insert(
             {
               locationId: booking.locationId,
               staffId,
@@ -147,7 +152,7 @@ export class StaffEarningsService {
               reason: 'Booking price or assignment updated',
               actorId: actor.id ?? null,
               actorName: actor.name,
-              idempotencyKey: this.idempotencyKey({
+              idempotencyKey: this.writer.idempotencyKey({
                 kind: 'bookingAdjustment',
                 bookingItemId: item.id,
               }),
@@ -180,10 +185,10 @@ export class StaffEarningsService {
     const earnedOnStr =
       dto.earnedOn ?? TimeService.zonedDateStr(new Date(), timezone);
     const earnedOn = TimeService.dateOnly(earnedOnStr);
-    await this.assertDateUnlocked(locationId, earnedOn);
+    await this.writer.assertDateUnlocked(locationId, earnedOn);
 
     const amount = this.calculator.manualAmount(dto.type, dto.amount);
-    const earning = await this.insertEarning({
+    const earning = await this.writer.insert({
       locationId,
       staffId,
       type: dto.type,
@@ -194,7 +199,7 @@ export class StaffEarningsService {
       reason: dto.reason,
       actorId: actor.id ?? null,
       actorName: actor.name,
-      idempotencyKey: this.idempotencyKey({ kind: 'manual' }),
+      idempotencyKey: this.writer.idempotencyKey({ kind: 'manual' }),
     });
 
     this.emitEarningAudit(
@@ -234,7 +239,7 @@ export class StaffEarningsService {
       dto.amount,
       plan.productCommissionPercent,
     );
-    const earning = await this.insertEarning({
+    const earning = await this.writer.insert({
       locationId,
       staffId: staff.id,
       type: StaffEarningType.PRODUCT_COMMISSION,
@@ -247,7 +252,7 @@ export class StaffEarningsService {
       description: dto.description,
       actorId: actor.id ?? null,
       actorName: actor.name,
-      idempotencyKey: this.idempotencyKey({
+      idempotencyKey: this.writer.idempotencyKey({
         kind: 'product',
         externalId: dto.externalId,
       }),
@@ -293,7 +298,7 @@ export class StaffEarningsService {
       );
       if (!plan || plan.productCommissionPercent == null) continue;
       if (!dateChecked) {
-        await this.assertDateUnlocked(locationId, earnedOn, tx);
+        await this.writer.assertDateUnlocked(locationId, earnedOn, tx);
         dateChecked = true;
       }
       const amount = this.calculator.commission(
@@ -301,7 +306,7 @@ export class StaffEarningsService {
         plan.productCommissionPercent,
       );
       earnings.push(
-        await this.insertEarning(
+        await this.writer.insert(
           {
             locationId,
             staffId: line.staffId,
@@ -313,7 +318,7 @@ export class StaffEarningsService {
             baseAmount: line.amount,
             ratePercent: plan.productCommissionPercent,
             description: line.description,
-            idempotencyKey: this.idempotencyKey({
+            idempotencyKey: this.writer.idempotencyKey({
               kind: 'orderItem',
               orderItemId: line.orderItemId,
             }),
@@ -335,7 +340,7 @@ export class StaffEarningsService {
     actor: AuditActor,
     tx: Prisma.TransactionClient,
   ): Promise<StaffEarning[]> {
-    return this.reverseProductOrderEarnings(
+    return this.productSaleReversals.reverse(
       locationId,
       orderId,
       reason,
@@ -352,13 +357,37 @@ export class StaffEarningsService {
     actor: AuditActor,
     tx: Prisma.TransactionClient,
   ): Promise<StaffEarning[]> {
-    return this.reverseProductOrderEarnings(
+    return this.productSaleReversals.reverse(
       locationId,
       orderId,
       reason,
       actor,
       tx,
       orderItemId,
+    );
+  }
+
+  async reverseForProductOrderItemAmount(
+    locationId: string,
+    orderId: string,
+    orderItemId: string,
+    baseAmount: Prisma.Decimal,
+    reason: string,
+    actor: AuditActor,
+    tx: Prisma.TransactionClient,
+    orderReturnItemId?: string,
+  ): Promise<StaffEarning[]> {
+    return this.productSaleReversals.reverse(
+      locationId,
+      orderId,
+      reason,
+      actor,
+      tx,
+      orderItemId,
+      new Map([[orderItemId, baseAmount]]),
+      orderReturnItemId
+        ? new Map([[orderItemId, orderReturnItemId]])
+        : new Map(),
     );
   }
 
@@ -376,7 +405,7 @@ export class StaffEarningsService {
       TimeService.timeToMinutes(shift.endTime),
     );
     const amount = this.calculator.hourly(hours, plan.hourlyRate);
-    return this.insertEarning(
+    return this.writer.insert(
       {
         locationId,
         staffId: shift.staffId,
@@ -387,7 +416,7 @@ export class StaffEarningsService {
         currency,
         rateAmount: MoneyService.decimal(plan.hourlyRate),
         quantity: MoneyService.quantize(hours),
-        idempotencyKey: this.idempotencyKey({
+        idempotencyKey: this.writer.idempotencyKey({
           kind: 'shift',
           shiftId: shift.id,
         }),
@@ -412,7 +441,7 @@ export class StaffEarningsService {
     },
     tx?: Prisma.TransactionClient,
   ): Promise<StaffEarning> {
-    return this.insertEarning(
+    return this.writer.insert(
       {
         locationId: params.locationId,
         staffId: params.staffId,
@@ -423,7 +452,7 @@ export class StaffEarningsService {
         currency: params.currency,
         rateAmount: params.rateAmount,
         quantity: params.quantity,
-        idempotencyKey: this.idempotencyKey({
+        idempotencyKey: this.writer.idempotencyKey({
           kind: 'salary',
           periodId: params.periodId,
           staffId: params.staffId,
@@ -444,7 +473,7 @@ export class StaffEarningsService {
     reason: string;
     actor: AuditActor;
   }): Promise<StaffEarning> {
-    const earning = await this.insertEarning({
+    const earning = await this.writer.insert({
       locationId: params.locationId,
       staffId: params.staffId,
       type: StaffEarningType.CORRECTION,
@@ -455,7 +484,7 @@ export class StaffEarningsService {
       reason: params.reason,
       actorId: params.actor.id ?? null,
       actorName: params.actor.name,
-      idempotencyKey: this.idempotencyKey({
+      idempotencyKey: this.writer.idempotencyKey({
         kind: 'correction',
         resultId: params.resultId,
       }),
@@ -596,7 +625,7 @@ export class StaffEarningsService {
             source: StaffEarningSource.PAYROLL,
             type: StaffEarningType.FIXED_SALARY,
             idempotencyKey: {
-              startsWith: this.idempotencyKey({
+              startsWith: this.writer.idempotencyKey({
                 kind: 'salaryPeriod',
                 periodId,
               }),
@@ -646,13 +675,13 @@ export class StaffEarningsService {
       );
       if (percent === null) continue;
       if (!dateChecked) {
-        await this.assertDateUnlocked(booking.locationId, earnedOn, tx);
+        await this.writer.assertDateUnlocked(booking.locationId, earnedOn, tx);
         dateChecked = true;
       }
       const base = item.customPrice ?? item.chargedPrice;
       const amount = this.calculator.commission(base, percent);
       earnings.push(
-        await this.insertEarning(
+        await this.writer.insert(
           {
             locationId: booking.locationId,
             staffId: item.staffId,
@@ -664,7 +693,7 @@ export class StaffEarningsService {
             baseAmount: MoneyService.decimal(base),
             ratePercent: MoneyService.decimal(percent),
             description: item.serviceTitle,
-            idempotencyKey: this.idempotencyKey({
+            idempotencyKey: this.writer.idempotencyKey({
               kind: 'bookingItem',
               bookingItemId: item.id,
             }),
@@ -706,8 +735,12 @@ export class StaffEarningsService {
         reversals.push(existingReversal);
         continue;
       }
-      await this.assertDateUnlocked(booking.locationId, original.earnedOn, tx);
-      const reversal = await this.insertEarning(
+      await this.writer.assertDateUnlocked(
+        booking.locationId,
+        original.earnedOn,
+        tx,
+      );
+      const reversal = await this.writer.insert(
         {
           locationId: booking.locationId,
           staffId: original.staffId,
@@ -722,7 +755,7 @@ export class StaffEarningsService {
           reason,
           actorId: actor?.id ?? null,
           actorName: actor?.name ?? null,
-          idempotencyKey: this.idempotencyKey({
+          idempotencyKey: this.writer.idempotencyKey({
             kind: 'earningReversal',
             earningId: original.id,
           }),
@@ -753,65 +786,6 @@ export class StaffEarningsService {
     return reversals;
   }
 
-  private async reverseProductOrderEarnings(
-    locationId: string,
-    orderId: string,
-    reason: string,
-    actor: AuditActor,
-    tx: Prisma.TransactionClient,
-    orderItemId?: string,
-  ): Promise<StaffEarning[]> {
-    const originals = await tx.staffEarning.findMany({
-      where: {
-        locationId,
-        orderId,
-        orderItemId,
-        type: StaffEarningType.PRODUCT_COMMISSION,
-        source: StaffEarningSource.PRODUCT_SALE,
-      },
-    });
-    const reversals: StaffEarning[] = [];
-    for (const original of originals) {
-      const existing = await tx.staffEarning.findUnique({
-        where: { reversesEarningId: original.id },
-      });
-      if (existing) {
-        reversals.push(existing);
-        continue;
-      }
-      await this.assertDateUnlocked(locationId, original.earnedOn, tx);
-      reversals.push(
-        await this.insertEarning(
-          {
-            locationId,
-            staffId: original.staffId,
-            type: StaffEarningType.CORRECTION,
-            source: StaffEarningSource.PRODUCT_SALE,
-            earnedOn: original.earnedOn,
-            amount: original.amount.neg(),
-            currency: original.currency,
-            baseAmount: original.baseAmount,
-            ratePercent: original.ratePercent,
-            description: original.description,
-            reason,
-            actorId: actor.id ?? null,
-            actorName: actor.name,
-            idempotencyKey: this.idempotencyKey({
-              kind: 'orderItemReversal',
-              orderItemId: original.orderItemId!,
-            }),
-            compensationPlanId: original.compensationPlanId,
-            orderId,
-            orderItemId: original.orderItemId,
-            reversesEarningId: original.id,
-          },
-          tx,
-        ),
-      );
-    }
-    return reversals;
-  }
-
   private orderItemByBookingItemId(
     order: OrderWithItems | undefined,
   ): Map<string, string> {
@@ -822,87 +796,8 @@ export class StaffEarningsService {
     );
   }
 
-  private async assertDateUnlocked(
-    locationId: string,
-    earnedOn: Date,
-    tx?: Prisma.TransactionClient,
-  ): Promise<void> {
-    const locked = await this.store(tx).payrollPeriod.findFirst({
-      where: lockedPeriodWhere(locationId, earnedOn),
-      select: { id: true },
-    });
-    if (locked)
-      throw new AppException(
-        ErrorCode.STAFF_EARNING_DATE_LOCKED,
-        HttpStatus.CONFLICT,
-      );
-  }
-
   private store(tx?: Prisma.TransactionClient) {
     return tx ?? this.db;
-  }
-
-  private idempotencyKey(
-    input:
-      | { kind: 'manual' }
-      | { kind: 'product'; externalId: string }
-      | { kind: 'shift'; shiftId: string }
-      | { kind: 'salary'; periodId: string; staffId: string }
-      | { kind: 'salaryPeriod'; periodId: string }
-      | { kind: 'correction'; resultId: string }
-      | { kind: 'bookingItem'; bookingItemId: string }
-      | { kind: 'bookingAdjustment'; bookingItemId: string }
-      | { kind: 'earningReversal'; earningId: string }
-      | { kind: 'orderItem'; orderItemId: string }
-      | { kind: 'orderItemReversal'; orderItemId: string },
-  ): string {
-    switch (input.kind) {
-      case 'manual':
-        return `manual:${randomUUID()}`;
-      case 'product':
-        return `product:${input.externalId}:${StaffEarningType.PRODUCT_COMMISSION}`;
-      case 'shift':
-        return `shift:${input.shiftId}:${StaffEarningType.HOURLY}`;
-      case 'salary':
-        return `salary:${input.periodId}:${input.staffId}`;
-      case 'salaryPeriod':
-        return `salary:${input.periodId}:`;
-      case 'correction':
-        return `correction:${input.resultId}:${randomUUID()}`;
-      case 'bookingItem':
-        return `booking-item:${input.bookingItemId}:${StaffEarningType.SERVICE_COMMISSION}`;
-      case 'bookingAdjustment':
-        return `booking-item:${input.bookingItemId}:adjustment:${randomUUID()}`;
-      case 'earningReversal':
-        return `earning:${input.earningId}:reversal`;
-      case 'orderItem':
-        return `order-item:${input.orderItemId}:${StaffEarningType.PRODUCT_COMMISSION}`;
-      case 'orderItemReversal':
-        return `order-item:${input.orderItemId}:${StaffEarningType.PRODUCT_COMMISSION}:reversal`;
-    }
-  }
-
-  private async insertEarning(
-    data: Prisma.StaffEarningUncheckedCreateInput,
-    tx?: Prisma.TransactionClient,
-  ): Promise<StaffEarning> {
-    const db = this.store(tx);
-    try {
-      return await db.staffEarning.create({ data });
-    } catch (e: any) {
-      if (e?.code === PrismaErrorCode.UNIQUE_CONSTRAINT_VIOLATION) {
-        const existing = await db.staffEarning.findUnique({
-          where: {
-            locationId_idempotencyKey: {
-              locationId: data.locationId,
-              idempotencyKey: data.idempotencyKey,
-            },
-          },
-        });
-        if (existing) return existing;
-      }
-      throw e;
-    }
   }
 
   private emitEarningAudit(
