@@ -131,7 +131,6 @@ export class OrdersService {
       await tx.order.update({
         where: { id: orderId },
         data: this.updateOrderData(locked, draft),
-        include: orderInclude,
       });
       const editableItems = this.editableDraftItems(locked);
       const incomingIds = new Set(

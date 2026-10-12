@@ -59,7 +59,7 @@ export class PayrollService {
     locationId: string,
     dto: CreatePayrollPeriodDto,
     actor: AuditActor,
-  ): Promise<PayrollPeriodWithResults> {
+  ): Promise<PayrollPeriod> {
     const startDate = TimeService.dateOnly(dto.startDate);
     const endDate = TimeService.dateOnly(dto.endDate);
     if (endDate < startDate)
@@ -92,7 +92,6 @@ export class PayrollService {
           endDate,
           currency,
         },
-        include: { results: true },
       });
       this.emitPayrollAudit(
         locationId,
@@ -375,10 +374,7 @@ export class PayrollService {
     return updated;
   }
 
-  async approve(
-    periodId: string,
-    actor: AuditActor,
-  ): Promise<PayrollPeriodWithResults> {
+  async approve(periodId: string, actor: AuditActor): Promise<PayrollPeriod> {
     const period = await this.findById(periodId);
     if (period.status !== PayrollPeriodStatus.CALCULATED) {
       throw new AppException(
@@ -394,7 +390,6 @@ export class PayrollService {
         approvedById: actor.id ?? null,
         approvedByName: actor.name,
       },
-      include: { results: { orderBy: { staffName: 'asc' } } },
     });
     this.emitPayrollAudit(
       period.locationId,
@@ -407,10 +402,7 @@ export class PayrollService {
     return updated;
   }
 
-  async pay(
-    periodId: string,
-    actor: AuditActor,
-  ): Promise<PayrollPeriodWithResults> {
+  async pay(periodId: string, actor: AuditActor): Promise<PayrollPeriod> {
     const period = await this.findById(periodId);
     if (period.status !== PayrollPeriodStatus.APPROVED) {
       throw new AppException(
@@ -426,7 +418,6 @@ export class PayrollService {
         paidById: actor.id ?? null,
         paidByName: actor.name,
       },
-      include: { results: { orderBy: { staffName: 'asc' } } },
     });
     this.emitPayrollAudit(
       period.locationId,

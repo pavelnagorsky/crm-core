@@ -200,7 +200,7 @@ export class ProductsService {
     dto: UpdateProductDto,
     actor: AuditActor,
   ): Promise<Product> {
-    const old = await this.findByIdInBrand(brandId, productId);
+    const old = await this.findProductForMutation(brandId, productId);
     await this.assertCategory(brandId, dto.categoryId);
     try {
       const product = await this.db.product.update({
@@ -256,7 +256,7 @@ export class ProductsService {
     status: ProductStatus,
     actor: AuditActor,
   ): Promise<Product> {
-    const product = await this.findByIdInBrand(brandId, productId);
+    const product = await this.findProductForMutation(brandId, productId);
     if (product.status === status) {
       throw new AppException(
         ErrorCode.PRODUCT_STATUS_ALREADY_SET,
@@ -285,7 +285,7 @@ export class ProductsService {
     productId: string,
     actor: AuditActor,
   ): Promise<void> {
-    const product = await this.findByIdInBrand(brandId, productId);
+    const product = await this.findProductForMutation(brandId, productId);
     try {
       await this.db.product.delete({ where: { id: productId } });
     } catch (error: any) {
@@ -314,7 +314,10 @@ export class ProductsService {
     actor: AuditActor,
   ): Promise<ProductLocation> {
     const location = await this.locations.findById(locationId);
-    const product = await this.findByIdInBrand(location.brandId, productId);
+    const product = await this.findProductForMutation(
+      location.brandId,
+      productId,
+    );
     const old = await this.db.productLocation.findUnique({
       where: { productId_locationId: { productId, locationId } },
     });
@@ -369,6 +372,17 @@ export class ProductsService {
     const product = await this.db.product.findFirst({
       where: { id: productId, brandId },
       include: productDetailsInclude,
+    });
+    if (!product) throw new NotFoundException('Product not found');
+    return product;
+  }
+
+  private async findProductForMutation(
+    brandId: string,
+    productId: string,
+  ): Promise<Product> {
+    const product = await this.db.product.findFirst({
+      where: { id: productId, brandId },
     });
     if (!product) throw new NotFoundException('Product not found');
     return product;

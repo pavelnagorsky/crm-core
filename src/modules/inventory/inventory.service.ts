@@ -2,6 +2,7 @@ import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   InventoryBalance,
+  InventoryDocument,
   InventoryDocumentStatus,
   InventoryDocumentType,
   InventoryMovement,
@@ -72,7 +73,7 @@ export class InventoryService {
     locationId: string,
     dto: CreateInventoryDocumentDto,
     actor: AuditActor,
-  ): Promise<InventoryDocumentWithItems> {
+  ): Promise<InventoryDocument> {
     const location = await this.locations.findById(locationId);
     const resolved = await this.validateDraft(
       locationId,
@@ -93,7 +94,6 @@ export class InventoryService {
         createdByName: actor.name,
         items: { create: this.itemData(dto.items, resolved) },
       },
-      include: documentInclude,
     });
     this.emit(
       location.brandId,
@@ -102,7 +102,7 @@ export class InventoryService {
       AuditEvent.INVENTORY_DOCUMENT_CREATED,
       AuditActionType.CREATE,
       actor,
-      { type: document.type, itemCount: document.items.length },
+      { type: document.type, itemCount: dto.items.length },
     );
     return document;
   }
@@ -112,7 +112,7 @@ export class InventoryService {
     documentId: string,
     dto: UpdateInventoryDocumentDto,
     actor: AuditActor,
-  ): Promise<InventoryDocumentWithItems> {
+  ): Promise<InventoryDocument> {
     const location = await this.locations.findById(locationId);
     const resolved = await this.validateDraft(
       locationId,
@@ -140,7 +140,6 @@ export class InventoryService {
           note: this.text(dto.note),
           items: { create: this.itemData(dto.items, resolved) },
         },
-        include: documentInclude,
       });
     });
     this.emit(
@@ -150,7 +149,7 @@ export class InventoryService {
       AuditEvent.INVENTORY_DOCUMENT_UPDATED,
       AuditActionType.MODIFY,
       actor,
-      { type: document.type, itemCount: document.items.length },
+      { type: document.type, itemCount: dto.items.length },
     );
     return document;
   }

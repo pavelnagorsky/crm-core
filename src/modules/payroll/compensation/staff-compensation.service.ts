@@ -1,6 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Prisma } from '@prisma/client';
+import { Prisma, StaffCompensationPlan } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
@@ -101,7 +101,7 @@ export class StaffCompensationService {
     staffId: string,
     dto: ReplaceCompensationPlanDto,
     actor: AuditActor,
-  ): Promise<CompensationPlanWithRates> {
+  ): Promise<StaffCompensationPlan> {
     const staff = await this.staffService.findById(staffId);
     const serviceIds = (dto.serviceRates ?? []).map((rate) => rate.serviceId);
     await this.servicesService.assertIdsInLocation(
@@ -153,7 +153,6 @@ export class StaffCompensationService {
                 }
               : undefined,
           },
-          include: { serviceRates: true },
         });
       } catch (e: any) {
         if (e?.code === PrismaErrorCode.UNIQUE_CONSTRAINT_VIOLATION) {
