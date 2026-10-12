@@ -2135,11 +2135,14 @@ describe('OrdersService', () => {
           ...order(OrderStatus.ACTIVE).items[0],
           status: OrderItemStatus.CONFIRMED,
           quantity: new Prisma.Decimal(5),
-          lineTotal: new Prisma.Decimal(50),
+          customUnitPrice: null,
+          unitPrice: new Prisma.Decimal(20),
+          lineSubtotal: new Prisma.Decimal(100),
+          lineTotal: new Prisma.Decimal(100),
           returnItems: [
             {
               quantity: new Prisma.Decimal(3),
-              lineTotal: new Prisma.Decimal(30),
+              lineTotal: new Prisma.Decimal(60),
               return: { status: 'POSTED' },
             },
           ],
@@ -2171,7 +2174,7 @@ describe('OrdersService', () => {
 
     expect(
       earnings.reverseForProductOrderItemAmount.mock.calls[0][3].toFixed(2),
-    ).toBe('20.00');
+    ).toBe('40.00');
     expect(inventory.reverseSaleItemQuantity.mock.calls[0][3].toFixed(3)).toBe(
       '2.000',
     );
@@ -2179,6 +2182,10 @@ describe('OrdersService', () => {
       where: { id: 'item-1' },
       data: { status: OrderItemStatus.REVERSED },
     });
+    const totalsUpdate = tx.order.update.mock.calls[0][0].data;
+    expect(totalsUpdate.listTotalAmount.toFixed(2)).toBe('0.00');
+    expect(totalsUpdate.subtotalAmount.toFixed(2)).toBe('0.00');
+    expect(totalsUpdate.totalAmount.toFixed(2)).toBe('0.00');
   });
 
   it('creates a partial product return with explicit quantity', async () => {
