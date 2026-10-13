@@ -12,5 +12,6 @@ export interface InventoryBalanceView {
   stockValue: Prisma.Decimal;
   reorderLevel: Prisma.Decimal;
   lowStock: boolean;
+  outOfStock: boolean;
   updatedAt: Date | null;
 }

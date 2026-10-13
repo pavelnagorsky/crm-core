@@ -23,6 +23,12 @@ export class InventorySearchRequestDto extends PaginationRequestDto<InventorySea
   @IsBoolean()
   lowStock?: boolean;
 
+  @ApiProperty({ type: Boolean, required: false })
+  @IsOptional()
+  @ParseBoolean()
+  @IsBoolean()
+  outOfStock?: boolean;
+
   @ApiProperty({ enum: InventorySearchOrderBy, required: false })
   @IsOptional()
   @IsEnum(InventorySearchOrderBy)

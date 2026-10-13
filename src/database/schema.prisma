@@ -261,6 +261,11 @@ enum InventoryMovementType {
   REVERSAL
 }
 
+enum InventoryMovementSourceType {
+  INVENTORY_DOCUMENT
+  ORDER
+}
+
 enum OrderStatus {
   ACTIVE
   VOIDED
@@ -566,6 +571,9 @@ model InventoryMovement {
   orderId               String?
   orderItemId           String?
   orderReturnItemId     String?
+  sourceType            InventoryMovementSourceType?
+  sourceId              String?
+  sourceLocationId      String?
   type                  InventoryMovementType
   productId             String
   productName           String                @db.VarChar(150)
@@ -599,6 +607,8 @@ model InventoryMovement {
   @@index([orderId])
   @@index([orderItemId])
   @@index([orderReturnItemId])
+  @@index([sourceType, sourceId])
+  @@index([sourceLocationId])
 }
 
 model Order {

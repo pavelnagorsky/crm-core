@@ -34,6 +34,8 @@ import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 import { CreateInventoryDocumentDto } from './dto/create-inventory-document.dto.js';
 import { InventoryBalanceResponseDto } from './dto/inventory-balance-response.dto.js';
+import { InventoryCountsRequestDto } from './dto/inventory-counts-request.dto.js';
+import { InventoryCountsResponseDto } from './dto/inventory-counts-response.dto.js';
 import { InventoryDocumentResponseDto } from './dto/inventory-document-response.dto.js';
 import { InventoryDocumentSearchRequestDto } from './dto/inventory-document-search-request.dto.js';
 import { InventoryDocumentSearchResponseDto } from './dto/inventory-document-search-response.dto.js';
@@ -77,6 +79,21 @@ export class InventoryController {
         dto.pageSize,
         totalItems,
         dto.isExport,
+      ),
+    );
+  }
+
+  @ApiOperation({ summary: 'Get inventory table counts' })
+  @ApiOkResponse({ type: ApiResponse(InventoryCountsResponseDto) })
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Get('counts')
+  async getCounts(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Query() dto: InventoryCountsRequestDto,
+  ): Promise<BaseResponseDto<InventoryCountsResponseDto>> {
+    return BaseResponseDto.success(
+      InventoryCountsResponseDto.fromEntity(
+        await this.inventory.getInventoryCounts(locationId, dto),
       ),
     );
   }

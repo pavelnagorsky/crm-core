@@ -11,6 +11,7 @@ import {
   InventoryDocumentStatus,
   InventoryDocumentType,
   InventoryMovement,
+  InventoryMovementSourceType,
   InventoryMovementType,
   Prisma,
 } from '@prisma/client';
@@ -33,6 +34,7 @@ import { ProductsService } from '../products/products.service.js';
 import { CreateInventoryDocumentDto } from './dto/create-inventory-document.dto.js';
 import { InventoryDocumentSearchRequestDto } from './dto/inventory-document-search-request.dto.js';
 import { InventoryDocumentStatusCountsRequestDto } from './dto/inventory-document-status-counts-request.dto.js';
+import { InventoryCountsRequestDto } from './dto/inventory-counts-request.dto.js';
 import { InventoryMovementSearchRequestDto } from './dto/inventory-movement-search-request.dto.js';
 import { InventorySearchRequestDto } from './dto/inventory-search-request.dto.js';
 import { InventoryDocumentItemDto } from './dto/inventory-document-item.dto.js';
@@ -42,6 +44,7 @@ import { InventoryDocumentTargetStatus } from './enums/inventory-document-target
 import { InventoryMovementOrderBy } from './enums/inventory-movement-order-by.enum.js';
 import { InventorySearchOrderBy } from './enums/inventory-search-order-by.enum.js';
 import { InventoryBalanceView } from './interfaces/inventory-balance-view.interface.js';
+import { InventoryCountsView } from './interfaces/inventory-counts-view.interface.js';
 import { InventoryDocumentStatusCount } from './interfaces/inventory-document-status-count.interface.js';
 import { InventoryDocumentTransition } from './interfaces/inventory-document-transition.interface.js';
 import { InventoryDocumentWithItems } from './interfaces/inventory-document-with-items.interface.js';
@@ -247,6 +250,39 @@ export class InventoryService {
     locationId: string,
     dto: InventorySearchRequestDto,
   ): Promise<PaginatedResult<InventoryBalanceView>> {
+    let items = await this.getInventoryBalanceViews(locationId, dto.search);
+    if (dto.lowStock !== undefined) {
+      items = items.filter((item) => item.lowStock === dto.lowStock);
+    }
+    if (dto.outOfStock !== undefined) {
+      items = items.filter((item) => item.outOfStock === dto.outOfStock);
+    }
+    this.sortInventory(items, dto);
+    const totalItems = items.length;
+    if (!dto.isExport) {
+      items = items.slice(
+        (dto.page - 1) * dto.pageSize,
+        dto.page * dto.pageSize,
+      );
+    }
+    return { items, totalItems };
+  }
+
+  async getInventoryCounts(
+    locationId: string,
+    dto: InventoryCountsRequestDto,
+  ): Promise<InventoryCountsView> {
+    const items = await this.getInventoryBalanceViews(locationId, dto.search);
+    return {
+      lowStockCount: items.filter((item) => item.lowStock).length,
+      outOfStockCount: items.filter((item) => item.outOfStock).length,
+    };
+  }
+
+  private async getInventoryBalanceViews(
+    locationId: string,
+    searchValue?: string,
+  ): Promise<InventoryBalanceView[]> {
     const locationProducts =
       await this.products.listTrackedForInventory(locationId);
     const balances = await this.db.inventoryBalance.findMany({
@@ -258,7 +294,7 @@ export class InventoryService {
       balances.map((balance) => [balance.productLocationId, balance]),
     );
     const zero = new Prisma.Decimal(0);
-    const search = dto.search?.trim().toLocaleLowerCase();
+    const search = searchValue?.trim().toLocaleLowerCase();
     let items = locationProducts.map((row): InventoryBalanceView => {
       const balance = byProductLocation.get(row.id);
       const quantity = balance?.quantityOnHand ?? zero;
@@ -275,6 +311,7 @@ export class InventoryService {
         stockValue: MoneyService.quantize(quantity.mul(averageCost)),
         reorderLevel: row.reorderLevel,
         lowStock: quantity.lte(row.reorderLevel),
+        outOfStock: quantity.lte(zero),
         updatedAt: balance?.updatedAt ?? null,
       };
     });
@@ -285,18 +322,7 @@ export class InventoryService {
         ),
       );
     }
-    if (dto.lowStock !== undefined) {
-      items = items.filter((item) => item.lowStock === dto.lowStock);
-    }
-    this.sortInventory(items, dto);
-    const totalItems = items.length;
-    if (!dto.isExport) {
-      items = items.slice(
-        (dto.page - 1) * dto.pageSize,
-        dto.page * dto.pageSize,
-      );
-    }
-    return { items, totalItems };
+    return items;
   }
 
   async searchMovements(
@@ -386,6 +412,9 @@ export class InventoryService {
           productLocationId: line.productLocationId,
           orderId,
           orderItemId: line.orderItemId,
+          sourceType: InventoryMovementSourceType.ORDER,
+          sourceId: orderId,
+          sourceLocationId: locationId,
           type: InventoryMovementType.SALE,
           productId: line.productId,
           productName: line.productName,
@@ -605,6 +634,9 @@ export class InventoryService {
             productLocationId: movement.productLocationId,
             documentId,
             documentItemId: movement.documentItemId,
+            sourceType: InventoryMovementSourceType.INVENTORY_DOCUMENT,
+            sourceId: documentId,
+            sourceLocationId: document.locationId,
             type: InventoryMovementType.REVERSAL,
             productId: movement.productId,
             productName: movement.productName,
@@ -672,6 +704,9 @@ export class InventoryService {
         productLocationId: balance.productLocationId,
         documentId: document.id,
         documentItemId: item.id,
+        sourceType: InventoryMovementSourceType.INVENTORY_DOCUMENT,
+        sourceId: document.id,
+        sourceLocationId: document.locationId,
         type,
         productId: item.productId,
         productName: item.productName,

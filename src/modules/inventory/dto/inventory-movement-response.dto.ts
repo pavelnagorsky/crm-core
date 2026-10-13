@@ -3,6 +3,7 @@ import { InventoryMovement } from '@prisma/client';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
 import { MoneyService } from '../../../shared/money/money.service.js';
 import { QuantityService } from '../../../shared/quantity/quantity.service.js';
+import { InventoryMovementSourceType } from '../enums/inventory-movement-source-type.enum.js';
 import { InventoryMovementType } from '../enums/inventory-movement-type.enum.js';
 
 export class InventoryMovementResponseDto {
@@ -17,6 +18,19 @@ export class InventoryMovementResponseDto {
 
   @ApiProperty({ type: String, format: 'uuid', nullable: true })
   documentId: string | null;
+
+  @ApiProperty({
+    enum: InventoryMovementSourceType,
+    enumName: 'InventoryMovementSourceType',
+    nullable: true,
+  })
+  sourceType: InventoryMovementSourceType | null;
+
+  @ApiProperty({ type: String, format: 'uuid', nullable: true })
+  sourceId: string | null;
+
+  @ApiProperty({ type: String, format: 'uuid', nullable: true })
+  sourceLocationId: string | null;
 
   @ApiProperty({ type: String })
   productName: string;

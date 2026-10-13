@@ -75,8 +75,59 @@ describe('ProductsService', () => {
         brandId: 'brand-1',
         name: 'Shampoo',
         description: null,
+        imageFileId: null,
         sku: 'SKU-1',
         barcode: '123',
+      }),
+    });
+  });
+
+  it('assigns one image file on product create', async () => {
+    const { db, service } = setup();
+    db.product.create.mockResolvedValue({
+      id: 'product-1',
+      brandId: 'brand-1',
+      name: 'Shampoo',
+      imageFileId: 'file-1',
+    });
+
+    await service.create(
+      'brand-1',
+      { name: 'Shampoo', imageFileId: 'file-1' },
+      actor,
+    );
+
+    expect(db.product.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        imageFileId: 'file-1',
+      }),
+    });
+  });
+
+  it('replaces or clears one image file on product update', async () => {
+    const { db, service } = setup();
+    db.product.findFirst.mockResolvedValue({
+      id: 'product-1',
+      brandId: 'brand-1',
+      imageFileId: 'file-1',
+    });
+    db.product.update.mockResolvedValue({
+      id: 'product-1',
+      brandId: 'brand-1',
+      imageFileId: null,
+    });
+
+    await service.update(
+      'brand-1',
+      'product-1',
+      { imageFileId: null },
+      actor,
+    );
+
+    expect(db.product.update).toHaveBeenCalledWith({
+      where: { id: 'product-1' },
+      data: expect.objectContaining({
+        imageFileId: null,
       }),
     });
   });

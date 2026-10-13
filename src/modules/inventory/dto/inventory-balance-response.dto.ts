@@ -39,6 +39,9 @@ export class InventoryBalanceResponseDto {
   @ApiProperty({ type: Boolean })
   lowStock: boolean;
 
+  @ApiProperty({ type: Boolean })
+  outOfStock: boolean;
+
   @ApiProperty({ type: Date, nullable: true })
   updatedAt: Date | null;
 

@@ -1,5 +1,9 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { InventoryMovementType, Prisma } from '@prisma/client';
+import {
+  InventoryMovementSourceType,
+  InventoryMovementType,
+  Prisma,
+} from '@prisma/client';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { MoneyService } from '../../../shared/money/money.service.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
@@ -104,6 +108,9 @@ export class InventorySaleReversalService {
           orderItemId: movementOrderItemId,
           orderReturnItemId:
             returnItemByOrderItem.get(movementOrderItemId) ?? null,
+          sourceType: InventoryMovementSourceType.ORDER,
+          sourceId: orderId,
+          sourceLocationId: locationId,
           type: InventoryMovementType.SALE_REVERSAL,
           productId: movement.productId,
           productName: movement.productName,
