@@ -241,7 +241,6 @@ enum InventoryDocumentType {
   RECEIPT
   WRITE_OFF
   ADJUSTMENT
-  STOCKTAKE
   TRANSFER
 }
 
@@ -255,7 +254,6 @@ enum InventoryMovementType {
   RECEIPT
   WRITE_OFF
   ADJUSTMENT
-  STOCKTAKE
   TRANSFER_OUT
   TRANSFER_IN
   SALE

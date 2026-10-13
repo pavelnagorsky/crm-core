@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsOptional } from 'class-validator';
+import { IsEnum, IsOptional, Matches } from 'class-validator';
 import { PaginationRequestDto } from '../../../shared/dto/pagination-request.dto.js';
+import regularExpressions from '../../../shared/regular-expressions.js';
 import { InventoryDocumentOrderBy } from '../enums/inventory-document-order-by.enum.js';
 import { InventoryDocumentStatus } from '../enums/inventory-document-status.enum.js';
 import { InventoryDocumentType } from '../enums/inventory-document-type.enum.js';
@@ -15,6 +16,16 @@ export class InventoryDocumentSearchRequestDto extends PaginationRequestDto<Inve
   @IsOptional()
   @IsEnum(InventoryDocumentStatus)
   status?: InventoryDocumentStatus;
+
+  @ApiProperty({ type: String, format: 'date', required: false })
+  @IsOptional()
+  @Matches(regularExpressions.calendarDate)
+  from?: string;
+
+  @ApiProperty({ type: String, format: 'date', required: false })
+  @IsOptional()
+  @Matches(regularExpressions.calendarDate)
+  to?: string;
 
   @ApiProperty({ enum: InventoryDocumentOrderBy, required: false })
   @IsOptional()

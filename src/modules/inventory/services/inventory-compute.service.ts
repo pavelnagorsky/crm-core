@@ -31,10 +31,8 @@ export class InventoryComputeService {
   documentDelta(
     type: InventoryDocumentType,
     quantity: Prisma.Decimal,
-    onHand: Prisma.Decimal,
   ): Prisma.Decimal {
     if (type === InventoryDocumentType.WRITE_OFF) return quantity.neg();
-    if (type === InventoryDocumentType.STOCKTAKE) return quantity.minus(onHand);
     return quantity;
   }
 }

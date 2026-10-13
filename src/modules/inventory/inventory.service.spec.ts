@@ -66,9 +66,22 @@ function setup(status: InventoryDocumentStatus) {
     },
   };
   const db = {
-    $transaction: vi.fn((callback: (value: typeof tx) => unknown) =>
-      callback(tx),
+    $transaction: vi.fn(
+      (
+        operation:
+          | ((value: typeof tx) => unknown)
+          | Promise<unknown>[],
+      ): unknown =>
+        Array.isArray(operation) ? Promise.all(operation) : operation(tx),
     ),
+    inventoryMovement: {
+      findMany: vi.fn().mockResolvedValue([]),
+      count: vi.fn().mockResolvedValue(0),
+    },
+    inventoryDocument: {
+      findMany: vi.fn().mockResolvedValue([]),
+      count: vi.fn().mockResolvedValue(0),
+    },
   };
   const products = { resolveForInventory: vi.fn() };
   const locations = {
@@ -89,7 +102,7 @@ function setup(status: InventoryDocumentStatus) {
     balanceLocks,
     saleReversals,
   );
-  return { service, tx, events };
+  return { service, tx, db, products, events };
 }
 
 describe('InventoryService', () => {
@@ -243,7 +256,7 @@ describe('InventoryService', () => {
     expect(created.totalCost.toFixed(2)).toBe('22.50');
   });
 
-  it('counts documents by status for the same type filter', async () => {
+  it('counts documents by status for the same type and date filters', async () => {
     const groupBy = vi.fn().mockResolvedValue([
       { status: InventoryDocumentStatus.OPEN, _count: { _all: 2 } },
       { status: InventoryDocumentStatus.POSTED, _count: { _all: 5 } },
@@ -260,6 +273,8 @@ describe('InventoryService', () => {
 
     const counts = await service.getDocumentStatusCounts('location-1', {
       type: InventoryDocumentType.RECEIPT,
+      from: '2026-10-01',
+      to: '2026-10-31',
     });
 
     expect(groupBy).toHaveBeenCalledWith({
@@ -268,6 +283,10 @@ describe('InventoryService', () => {
         locationId: 'location-1',
         type: InventoryDocumentType.RECEIPT,
         status: undefined,
+        occurredAt: {
+          gte: new Date('2026-10-01T00:00:00.000Z'),
+          lt: new Date('2026-11-01T00:00:00.000Z'),
+        },
       },
       _count: { _all: true },
     });
@@ -276,5 +295,79 @@ describe('InventoryService', () => {
       { status: InventoryDocumentStatus.POSTED, count: 5 },
       { status: InventoryDocumentStatus.VOIDED, count: 0 },
     ]);
+  });
+
+  it('filters documents by an inclusive calendar date range', async () => {
+    const { service, db } = setup(InventoryDocumentStatus.OPEN);
+
+    await service.searchDocuments('location-1', {
+      page: 1,
+      pageSize: 10,
+      orderBy: 'occurredAt',
+      type: InventoryDocumentType.ADJUSTMENT,
+      from: '2026-10-01',
+      to: '2026-10-31',
+    } as never);
+
+    expect(db.inventoryDocument.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          locationId: 'location-1',
+          type: InventoryDocumentType.ADJUSTMENT,
+          status: undefined,
+          occurredAt: {
+            gte: new Date('2026-10-01T00:00:00.000Z'),
+            lt: new Date('2026-11-01T00:00:00.000Z'),
+          },
+        },
+      }),
+    );
+    expect(db.inventoryDocument.count).toHaveBeenCalledWith({
+      where: {
+        locationId: 'location-1',
+        type: InventoryDocumentType.ADJUSTMENT,
+        status: undefined,
+        occurredAt: {
+          gte: new Date('2026-10-01T00:00:00.000Z'),
+          lt: new Date('2026-11-01T00:00:00.000Z'),
+        },
+      },
+    });
+  });
+
+  it('filters product movements by an inclusive calendar date range', async () => {
+    const { service, db, products } = setup(InventoryDocumentStatus.OPEN);
+    products.resolveForInventory.mockResolvedValue([
+      { id: 'product-location-1' },
+    ]);
+
+    await service.searchMovements('location-1', 'product-1', {
+      page: 1,
+      pageSize: 10,
+      orderBy: 'occurredAt',
+      from: '2026-10-01',
+      to: '2026-10-31',
+    } as never);
+
+    expect(db.inventoryMovement.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          locationId: 'location-1',
+          productLocationId: 'product-location-1',
+          occurredAt: {
+            gte: new Date('2026-10-01T00:00:00.000Z'),
+            lt: new Date('2026-11-01T00:00:00.000Z'),
+          },
+        }),
+      }),
+    );
+    expect(db.inventoryMovement.count).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        occurredAt: {
+          gte: new Date('2026-10-01T00:00:00.000Z'),
+          lt: new Date('2026-11-01T00:00:00.000Z'),
+        },
+      }),
+    });
   });
 });

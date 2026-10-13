@@ -37,24 +37,16 @@ describe('InventoryComputeService', () => {
     ).toBe('0.00');
   });
 
-  it('derives write-off and stocktake deltas', () => {
+  it('derives write-off and receipt deltas', () => {
     expect(
       service
-        .documentDelta(
-          InventoryDocumentType.WRITE_OFF,
-          new Prisma.Decimal(2),
-          new Prisma.Decimal(9),
-        )
+        .documentDelta(InventoryDocumentType.WRITE_OFF, new Prisma.Decimal(2))
         .toFixed(3),
     ).toBe('-2.000');
     expect(
       service
-        .documentDelta(
-          InventoryDocumentType.STOCKTAKE,
-          new Prisma.Decimal(6),
-          new Prisma.Decimal(9),
-        )
+        .documentDelta(InventoryDocumentType.RECEIPT, new Prisma.Decimal(6))
         .toFixed(3),
-    ).toBe('-3.000');
+    ).toBe('6.000');
   });
 });

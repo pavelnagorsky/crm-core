@@ -185,11 +185,11 @@ describe('InventoryReportService', () => {
     expect(grid?.row(7).text(4)).toBe('10.000');
     expect(grid?.row(7).text(5)).toBe('5.000');
     expect(grid?.row(7).text(9)).toBe('-2.000');
-    expect(grid?.row(7).text(14)).toBe('13.000');
-    expect(grid?.row(7).text(17)).toBe('128.00');
+    expect(grid?.row(7).text(13)).toBe('13.000');
+    expect(grid?.row(7).text(16)).toBe('128.00');
     expect(grid?.row(9).text(1)).toBe('Итого');
-    expect(grid?.row(9).text(14)).toBe('13.000');
-    expect(grid?.row(9).text(17)).toBe('128.00');
+    expect(grid?.row(9).text(13)).toBe('13.000');
+    expect(grid?.row(9).text(16)).toBe('128.00');
 
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(

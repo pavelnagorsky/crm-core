@@ -1,4 +1,9 @@
-import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  HttpStatus,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   InventoryBalance,
@@ -15,6 +20,7 @@ import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
 import { MoneyService } from '../../shared/money/money.service.js';
+import { TimeService } from '../../shared/time/time.service.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { AUDIT_EVENT } from '../audit/constants/audit.constants.js';
 import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
@@ -227,7 +233,7 @@ export class InventoryService {
   ): Promise<InventoryDocumentStatusCount[]> {
     const rows = await this.db.inventoryDocument.groupBy({
       by: ['status'],
-      where: this.documentWhere(locationId, { type: dto.type }),
+      where: this.documentWhere(locationId, dto),
       _count: { _all: true },
     });
     const byStatus = new Map(rows.map((row) => [row.status, row._count._all]));
@@ -312,13 +318,7 @@ export class InventoryService {
       locationId,
       productLocationId: productLocation.id,
       type: dto.type,
-      occurredAt:
-        dto.from || dto.to
-          ? {
-              gte: dto.from ? new Date(dto.from) : undefined,
-              lte: dto.to ? new Date(dto.to) : undefined,
-            }
-          : undefined,
+      occurredAt: this.occurredAtDateWhere(dto),
     };
     const direction = dto.orderDirection ?? OrderDirection.DESC;
     const args: Prisma.InventoryMovementFindManyArgs = {
@@ -513,11 +513,7 @@ export class InventoryService {
           );
           continue;
         }
-        const delta = this.compute.documentDelta(
-          document.type,
-          item.quantity,
-          source.quantityOnHand,
-        );
+        const delta = this.compute.documentDelta(document.type, item.quantity);
         const unitCost = this.movementUnitCost(
           document.type,
           item.unitCost,
@@ -707,15 +703,6 @@ export class InventoryService {
     ) {
       return itemCost!;
     }
-    if (type === InventoryDocumentType.STOCKTAKE && delta.gt(0)) {
-      if (balance.quantityOnHand.isZero() && itemCost == null) {
-        throw new AppException(
-          ErrorCode.INVENTORY_UNIT_COST_REQUIRED,
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-      return itemCost ?? balance.averageUnitCost;
-    }
     return balance.averageUnitCost;
   }
 
@@ -724,7 +711,6 @@ export class InventoryService {
       RECEIPT: InventoryMovementType.RECEIPT,
       WRITE_OFF: InventoryMovementType.WRITE_OFF,
       ADJUSTMENT: InventoryMovementType.ADJUSTMENT,
-      STOCKTAKE: InventoryMovementType.STOCKTAKE,
       TRANSFER: InventoryMovementType.TRANSFER_OUT,
     };
     return types[type];
@@ -866,8 +852,6 @@ export class InventoryService {
             HttpStatus.BAD_REQUEST,
           );
         }
-      } else if (type === InventoryDocumentType.STOCKTAKE) {
-        if (quantity.isNegative()) this.invalidDocument();
       } else if (quantity.lte(0)) {
         this.invalidDocument();
       }
@@ -880,7 +864,6 @@ export class InventoryService {
       if (
         type !== InventoryDocumentType.RECEIPT &&
         type !== InventoryDocumentType.ADJUSTMENT &&
-        type !== InventoryDocumentType.STOCKTAKE &&
         cost != null
       ) {
         this.invalidDocument();
@@ -934,13 +917,36 @@ export class InventoryService {
 
   private documentWhere(
     locationId: string,
-    filter: { type?: InventoryDocumentType; status?: InventoryDocumentStatus },
+    filter: {
+      type?: InventoryDocumentType;
+      status?: InventoryDocumentStatus;
+      from?: string;
+      to?: string;
+    },
   ): Prisma.InventoryDocumentWhereInput {
+    const occurredAt = this.occurredAtDateWhere(filter);
     return {
       locationId,
       type: filter.type,
       status: filter.status,
+      ...(occurredAt ? { occurredAt } : {}),
     };
+  }
+
+  private occurredAtDateWhere(
+    dto: Pick<InventoryMovementSearchRequestDto, 'from' | 'to'>,
+  ): Prisma.DateTimeFilter | undefined {
+    if (!dto.from && !dto.to) return undefined;
+
+    const from = dto.from ? TimeService.dateOnly(dto.from) : undefined;
+    const to = dto.to
+      ? TimeService.dateOnly(TimeService.addDaysStr(dto.to, 1))
+      : undefined;
+    if (from && to && from >= to) {
+      throw new BadRequestException('Invalid date range');
+    }
+
+    return { gte: from, lt: to };
   }
 
   private assertOpen(status: InventoryDocumentStatus): void {

@@ -224,7 +224,6 @@
     "SALE": "Продажа",
     "SALE_REVERSAL": "Возврат продажи",
     "ADJUSTMENT": "Корректировка",
-    "STOCKTAKE": "Инвентаризация",
     "REVERSAL": "Сторно"
   },
   "documents": {

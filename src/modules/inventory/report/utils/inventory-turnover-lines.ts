@@ -14,7 +14,6 @@ const MOVEMENT_COLUMN_ORDER = {
   [InventoryMovementType.SALE]: true,
   [InventoryMovementType.SALE_REVERSAL]: true,
   [InventoryMovementType.ADJUSTMENT]: true,
-  [InventoryMovementType.STOCKTAKE]: true,
   [InventoryMovementType.REVERSAL]: true,
 } satisfies Record<InventoryMovementType, true>;
 
