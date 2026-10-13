@@ -1,4 +1,5 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   OrderItemStatus,
   OrderItemType,
@@ -7,16 +8,21 @@ import {
 } from '@prisma/client';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
+import { AUDIT_EVENT } from '../../audit/constants/audit.constants.js';
+import { AuditActionType } from '../../audit/enums/audit-action-type.enum.js';
+import { AuditEntity } from '../../audit/enums/audit-entity.enum.js';
+import { AuditEvent } from '../../audit/enums/audit-event.enum.js';
 import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
+import { AuditLogEvent } from '../../audit/interfaces/audit-log-event.interface.js';
 import { BookingWithItems } from '../../bookings/interfaces/booking-with-items.interface.js';
 import { LocationService } from '../../location/location.service.js';
 import { OrderProductItemDto } from '../dto/order-product-item.dto.js';
 import { orderInclude } from '../constants/order-include.constant.js';
 import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
-import { OrderAuditService } from './order-audit.service.js';
 import { OrderComputeService } from './order-compute.service.js';
 import { OrderDraftService } from './order-draft.service.js';
 import { OrderPersistenceService } from './order-persistence.service.js';
+import { orderItemSnapshot } from '../utils/order-item-snapshot.js';
 
 @Injectable()
 export class OrderBookingSyncService {
@@ -24,8 +30,8 @@ export class OrderBookingSyncService {
     private readonly locations: LocationService,
     private readonly compute: OrderComputeService,
     private readonly drafts: OrderDraftService,
-    private readonly audit: OrderAuditService,
     private readonly persistence: OrderPersistenceService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async syncCompletedBooking(
@@ -161,26 +167,46 @@ export class OrderBookingSyncService {
       booking.locationId,
       locked.id,
     );
-    await this.audit.writeUpdated(tx, {
-      brandId: location.brandId,
-      locationId: booking.locationId,
-      entityId: updated.id,
+    this.emitUpdated(
+      location.brandId,
+      booking.locationId,
+      updated.id,
       actor,
-      payload: {
+      {
         totalAmount: updated.totalAmount.toFixed(2),
         currency: updated.currency,
         itemChanges: {
-          added: resolved.created.map((item) => this.audit.itemSnapshot(item)),
+          added: resolved.created.map((item) => orderItemSnapshot(item)),
           removed: [],
           changed: resolved.updated.map((item) => ({
             orderItemId: item.id,
-            before: this.audit.itemSnapshot(item.before),
-            after: this.audit.itemSnapshot(item.after),
+            before: orderItemSnapshot(item.before),
+            after: orderItemSnapshot(item.after),
           })),
         },
       },
-    });
+    );
     return updated;
+  }
+
+  private emitUpdated(
+    brandId: string,
+    locationId: string,
+    entityId: string,
+    actor: AuditActor,
+    payload: Record<string, unknown>,
+  ): void {
+    this.eventEmitter.emit(AUDIT_EVENT, {
+      brandId,
+      locationId,
+      entityType: AuditEntity.ORDER,
+      entityId,
+      eventType: AuditEvent.ORDER_UPDATED,
+      actionType: AuditActionType.MODIFY,
+      occurredAt: new Date(),
+      actor,
+      payload,
+    } satisfies AuditLogEvent);
   }
 
   private async updateExistingBookingOrderForSync(

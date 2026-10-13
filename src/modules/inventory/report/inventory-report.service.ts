@@ -7,6 +7,7 @@ import {
   LocaleService,
 } from '../../../shared/i18n/locale.service.js';
 import { labelOf } from '../../../shared/i18n/label-of.js';
+import { productUnitLabelOf } from '../../../shared/i18n/product-unit-label.js';
 import { I18nLocale } from '../../../shared/interfaces/i18n-locale.interface.js';
 import { MoneyService } from '../../../shared/money/money.service.js';
 import { QuantityService } from '../../../shared/quantity/quantity.service.js';
@@ -113,7 +114,7 @@ export class InventoryReportService {
       sheet.addRow([
         line.name,
         line.sku ?? '',
-        labelOf(messages.productUnit, line.unit),
+        productUnitLabelOf(messages.productUnit, line.unit),
         ...this.amountCells(line),
       ]);
     }

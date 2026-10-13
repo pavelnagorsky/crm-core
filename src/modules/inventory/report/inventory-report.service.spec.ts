@@ -181,7 +181,7 @@ describe('InventoryReportService', () => {
     expect(grid?.row(6).text(5)).toBe('Приход');
     expect(grid?.row(6).text(9)).toBe('Продажа');
     expect(grid?.row(7).text(1)).toBe('Шампунь');
-    expect(grid?.row(7).text(3)).toBe('шт');
+    expect(grid?.row(7).text(3)).toBe('штука (шт)');
     expect(grid?.row(7).text(4)).toBe('10.000');
     expect(grid?.row(7).text(5)).toBe('5.000');
     expect(grid?.row(7).text(9)).toBe('-2.000');

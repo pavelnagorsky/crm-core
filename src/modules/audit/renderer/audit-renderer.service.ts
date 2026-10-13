@@ -10,6 +10,7 @@ import { AuditEntity } from '../enums/audit-entity.enum.js';
 import { AuditEvent } from '../enums/audit-event.enum.js';
 import { AUDIT_FIELD_I18N, AUDIT_FIELD_TYPES } from '../fields/index.js';
 import { I18nLocale } from '../../../shared/interfaces/i18n-locale.interface.js';
+import { productUnitLabelOf } from '../../../shared/i18n/product-unit-label.js';
 
 type CompiledTemplate = Handlebars.TemplateDelegate;
 
@@ -131,6 +132,12 @@ export class AuditRendererService implements OnModuleInit {
         Record<string, unknown> | undefined;
       const dictionaryName = AUDIT_FIELD_I18N[field];
       const dictionary = dictionaryName ? locale?.[dictionaryName] : undefined;
+      if (dictionaryName === 'productUnit') {
+        return productUnitLabelOf(
+          dictionary as I18nLocale['productUnit'] | undefined,
+          value,
+        );
+      }
       if (dictionary && typeof dictionary === 'object') {
         const translated = (dictionary as Record<string, unknown>)[value];
         if (typeof translated === 'string') return translated;

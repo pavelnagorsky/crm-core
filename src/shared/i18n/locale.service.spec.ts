@@ -15,7 +15,12 @@ describe('LocaleService', () => {
       'Оборотная ведомость склада',
     );
     expect(messages.inventoryMovementType.SALE).toBe('Продажа');
-    expect(messages.productUnit.PIECE).toBe('шт');
+    expect(messages.productUnit.PIECE).toEqual({
+      one: 'штука',
+      few: 'штуки',
+      many: 'штук',
+      short: 'шт',
+    });
     expect(messages.bookingSource.MANUAL).toBe('Вручную');
     expect(messages.earningType.BONUS).toBe('Бонус');
     expect(messages.earningType.CORRECTION).toBe('Корректировка');

@@ -8,7 +8,6 @@ import { MoneyService } from '../../../../shared/money/money.service.js';
 import { TimeService } from '../../../../shared/time/time.service.js';
 import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
 import { AUDIT_EVENT } from '../../../audit/constants/audit.constants.js';
-import { AuditService } from '../../../audit/audit.service.js';
 import { AuditActionType } from '../../../audit/enums/audit-action-type.enum.js';
 import { AuditActorRole } from '../../../audit/enums/audit-actor-role.enum.js';
 import { AuditEntity } from '../../../audit/enums/audit-entity.enum.js';
@@ -54,7 +53,6 @@ export class BookingMutationService {
     private readonly orders: OrdersService,
     private readonly eventEmitter: EventEmitter2,
     private readonly read: BookingReadService,
-    private readonly audit: AuditService,
   ) {}
 
   async update(
@@ -426,7 +424,7 @@ export class BookingMutationService {
         removedDraftProductItems =
           await this.orders.removeDraftProductsForBooking(booking, tx);
       }
-      await this.writeAudit(tx, {
+      this.emitAudit({
         locationId: booking.locationId,
         entityId: booking.id,
         eventType: AuditEvent.BOOKING_DELETED,
@@ -487,7 +485,7 @@ export class BookingMutationService {
         removedDraftProductItems =
           await this.orders.removeDraftProductsForBooking(result, tx);
       }
-      await this.writeAudit(tx, {
+      this.emitAudit({
         locationId: booking.locationId,
         entityId: booking.id,
         eventType: AuditEvent.BOOKING_CANCELLED,
@@ -901,29 +899,6 @@ export class BookingMutationService {
       payload: params.payload,
     };
     this.eventEmitter.emit(AUDIT_EVENT, event);
-  }
-
-  private async writeAudit(
-    tx: Prisma.TransactionClient,
-    params: {
-      locationId: string;
-      entityId: string;
-      eventType: AuditEvent;
-      actionType: AuditActionType;
-      actor: AuditActor;
-      payload: Record<string, unknown>;
-    },
-  ): Promise<void> {
-    await this.audit.writeInTransaction(tx, {
-      locationId: params.locationId,
-      entityType: AuditEntity.BOOKING,
-      entityId: params.entityId,
-      eventType: params.eventType,
-      actionType: params.actionType,
-      occurredAt: new Date(),
-      actor: params.actor,
-      payload: params.payload,
-    });
   }
 
   private pricePatches(

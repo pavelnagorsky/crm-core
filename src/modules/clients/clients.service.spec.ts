@@ -277,6 +277,44 @@ describe('ClientsService.search ban filter', () => {
     });
   });
 
+  it('matches first and last name search terms in any order', async () => {
+    await service.search('business-1', {
+      brandId: 'business-1',
+      page: 1,
+      pageSize: 25,
+      search: '  Андреева   яна  ',
+    } as ClientSearchRequestDto);
+
+    expect(findMany.mock.calls[0][0].where).toEqual({
+      brandId: 'business-1',
+      OR: [
+        { firstName: { contains: 'Андреева   яна', mode: 'insensitive' } },
+        { lastName: { contains: 'Андреева   яна', mode: 'insensitive' } },
+        { phone: { contains: 'Андреева   яна' } },
+        { email: { contains: 'Андреева   яна', mode: 'insensitive' } },
+        { notes: { contains: 'Андреева   яна', mode: 'insensitive' } },
+        { gender: { contains: 'Андреева   яна', mode: 'insensitive' } },
+        { banReason: { contains: 'Андреева   яна', mode: 'insensitive' } },
+        {
+          AND: [
+            {
+              OR: [
+                { firstName: { contains: 'Андреева', mode: 'insensitive' } },
+                { lastName: { contains: 'Андреева', mode: 'insensitive' } },
+              ],
+            },
+            {
+              OR: [
+                { firstName: { contains: 'яна', mode: 'insensitive' } },
+                { lastName: { contains: 'яна', mode: 'insensitive' } },
+              ],
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   it('returns only clients who can book online', async () => {
     await search(false);
     expect(findMany.mock.calls[0][0].where).toEqual({

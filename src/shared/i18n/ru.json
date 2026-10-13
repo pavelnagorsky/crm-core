@@ -147,11 +147,36 @@
     "INACTIVE": "Неактивна"
   },
   "productUnit": {
-    "PIECE": "Штука",
-    "GRAM": "Грамм",
-    "KILOGRAM": "Килограмм",
-    "MILLILITER": "Миллилитр",
-    "LITER": "Литр"
+    "PIECE": {
+      "one": "штука",
+      "few": "штуки",
+      "many": "штук",
+      "short": "шт"
+    },
+    "GRAM": {
+      "one": "грамм",
+      "few": "грамма",
+      "many": "грамм",
+      "short": "г"
+    },
+    "KILOGRAM": {
+      "one": "килограмм",
+      "few": "килограмма",
+      "many": "килограмм",
+      "short": "кг"
+    },
+    "MILLILITER": {
+      "one": "миллилитр",
+      "few": "миллилитра",
+      "many": "миллилитров",
+      "short": "мл"
+    },
+    "LITER": {
+      "one": "литр",
+      "few": "литра",
+      "many": "литров",
+      "short": "л"
+    }
   },
   "executionMode": {
     "SEQUENTIAL": "По очереди",
@@ -201,13 +226,6 @@
     "ADJUSTMENT": "Корректировка",
     "STOCKTAKE": "Инвентаризация",
     "REVERSAL": "Сторно"
-  },
-  "productUnit": {
-    "PIECE": "шт",
-    "GRAM": "г",
-    "KILOGRAM": "кг",
-    "MILLILITER": "мл",
-    "LITER": "л"
   },
   "documents": {
     "common": {

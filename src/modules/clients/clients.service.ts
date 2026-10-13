@@ -8,6 +8,7 @@ import { stableOrderBy } from '../../shared/database/stable-order-by.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
+import regularExpressions from '../../shared/regular-expressions.js';
 import { CreateClientDto } from './dto/create-client.dto.js';
 import { UpdateClientDto } from './dto/update-client.dto.js';
 import { SetClientBanDto } from './dto/set-client-ban.dto.js';
@@ -172,6 +173,9 @@ export class ClientsService {
 
     const search = dto.search?.trim();
     if (search) {
+      const searchTerms = search
+        .split(regularExpressions.whitespace)
+        .filter(Boolean);
       where.OR = [
         { firstName: { contains: search, mode: 'insensitive' } },
         { lastName: { contains: search, mode: 'insensitive' } },
@@ -181,6 +185,16 @@ export class ClientsService {
         { gender: { contains: search, mode: 'insensitive' } },
         { banReason: { contains: search, mode: 'insensitive' } },
       ];
+      if (searchTerms.length > 1) {
+        where.OR.push({
+          AND: searchTerms.map((term) => ({
+            OR: [
+              { firstName: { contains: term, mode: 'insensitive' } },
+              { lastName: { contains: term, mode: 'insensitive' } },
+            ],
+          })),
+        });
+      }
     }
     if (dto.banned === true) where.bannedAt = { not: null };
     else if (dto.banned === false) where.bannedAt = null;

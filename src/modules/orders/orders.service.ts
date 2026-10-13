@@ -32,13 +32,13 @@ import { OrderPricingLine } from './interfaces/order-pricing-line.interface.js';
 import { OrderStatusCount } from './interfaces/order-status-count.interface.js';
 import { OrderWithItems } from './interfaces/order-with-items.interface.js';
 import { ResolvedOrderDraft } from './interfaces/resolved-order-draft.interface.js';
-import { OrderAuditService } from './services/order-audit.service.js';
 import { OrderBookingSyncService } from './services/order-booking-sync.service.js';
 import { OrderDraftService } from './services/order-draft.service.js';
 import { OrderPersistenceService } from './services/order-persistence.service.js';
 import { OrderProductTransitionService } from './services/order-product-transition.service.js';
 import { OrderReturnService } from './services/order-return.service.js';
 import { OrderStateAssertionService } from './services/order-state-assertion.service.js';
+import { orderItemSnapshot } from './utils/order-item-snapshot.js';
 
 @Injectable()
 export class OrdersService {
@@ -46,7 +46,6 @@ export class OrdersService {
     private readonly db: DatabaseService,
     private readonly locations: LocationService,
     private readonly drafts: OrderDraftService,
-    private readonly audit: OrderAuditService,
     private readonly bookingSync: OrderBookingSyncService,
     private readonly persistence: OrderPersistenceService,
     private readonly transitions: OrderProductTransitionService,
@@ -171,19 +170,19 @@ export class OrdersService {
         orderId,
         { incrementVersion: false },
       );
-      await this.audit.write(tx, {
-        brandId: draft.location.brandId,
+      this.emit(
+        draft.location.brandId,
         locationId,
-        entityId: order.id,
-        eventType: AuditEvent.ORDER_UPDATED,
-        actionType: AuditActionType.MODIFY,
+        order.id,
+        AuditEvent.ORDER_UPDATED,
+        AuditActionType.MODIFY,
         actor,
-        payload: {
+        {
           totalAmount: order.totalAmount.toFixed(2),
           currency: order.currency,
           itemChanges,
         },
-      });
+      );
       return order;
     });
     return order;
@@ -234,7 +233,7 @@ export class OrdersService {
     await this.persistence.refreshTotals(tx, booking.locationId, order.id);
     return draftProducts.map((item) => ({
       orderItemId: item.id,
-      ...this.audit.itemSnapshot(item),
+      ...orderItemSnapshot(item),
     }));
   }
 
@@ -328,27 +327,27 @@ export class OrdersService {
         locationId,
         orderId,
       );
-      await this.audit.writeUpdated(tx, {
-        brandId: location.brandId,
+      this.emit(
+        location.brandId,
         locationId,
-        entityId: updated.id,
+        updated.id,
+        AuditEvent.ORDER_UPDATED,
+        AuditActionType.MODIFY,
         actor,
-        payload: {
+        {
           totalAmount: updated.totalAmount.toFixed(2),
           currency: updated.currency,
           itemChanges: {
-            added: resolved.created.map((item) =>
-              this.audit.itemSnapshot(item),
-            ),
+            added: resolved.created.map((item) => orderItemSnapshot(item)),
             removed: [],
             changed: resolved.updated.map((item) => ({
               orderItemId: item.id,
-              before: this.audit.itemSnapshot(item.before),
-              after: this.audit.itemSnapshot(item.after),
+              before: orderItemSnapshot(item.before),
+              after: orderItemSnapshot(item.after),
             })),
           },
         },
-      });
+      );
       return updated;
     });
     return order;
@@ -710,12 +709,12 @@ export class OrdersService {
     const added = [];
     const changed = [];
     for (const [index, item] of items.entries()) {
-      const after = this.audit.itemSnapshot(resolvedItems[index]);
+      const after = orderItemSnapshot(resolvedItems[index]);
       if (!item.id) {
         added.push(after);
         continue;
       }
-      const before = this.audit.itemSnapshot(editableById.get(item.id)!);
+      const before = orderItemSnapshot(editableById.get(item.id)!);
       if (JSON.stringify(before) !== JSON.stringify(after)) {
         changed.push({ orderItemId: item.id, before, after });
       }
@@ -724,7 +723,7 @@ export class OrdersService {
       .filter((item) => !incomingIds.has(item.id))
       .map((item) => ({
         orderItemId: item.id,
-        ...this.audit.itemSnapshot(item),
+        ...orderItemSnapshot(item),
       }));
     return { added, removed, changed };
   }

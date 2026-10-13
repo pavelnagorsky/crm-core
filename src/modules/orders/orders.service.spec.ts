@@ -13,7 +13,6 @@ import { PrismaErrorCode } from '../../shared/database/prisma-error-codes.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { OrderTargetStatus } from './enums/order-target-status.enum.js';
 import { OrdersService } from './orders.service.js';
-import { OrderAuditService } from './services/order-audit.service.js';
 import { OrderBookingSyncService } from './services/order-booking-sync.service.js';
 import { OrderComputeService } from './services/order-compute.service.js';
 import { OrderDraftService } from './services/order-draft.service.js';
@@ -21,7 +20,6 @@ import { OrderPersistenceService } from './services/order-persistence.service.js
 import { OrderProductTransitionService } from './services/order-product-transition.service.js';
 import { OrderReturnService } from './services/order-return.service.js';
 import { OrderStateAssertionService } from './services/order-state-assertion.service.js';
-import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js';
 
 const owner = { id: 'owner-1', name: 'Owner', role: AuditActorRole.OWNER };
 const employee = { id: 'staff-1', name: 'Staff', role: AuditActorRole.STAFF };
@@ -158,26 +156,6 @@ function setup() {
   };
   const events = { emit: vi.fn() };
   const compute = new OrderComputeService();
-  const auditWriter = {
-    writeInTransaction: vi.fn((transaction: typeof tx, event: AuditLogEvent) =>
-      transaction.auditLog.create({
-        data: {
-          brandId: event.brandId,
-          locationId: event.locationId ?? null,
-          entityType: event.entityType,
-          entityId: event.entityId,
-          eventType: event.eventType,
-          actionType: event.actionType,
-          occurredAt: event.occurredAt,
-          actorId: event.actor.id ?? null,
-          actorName: event.actor.name,
-          actorRole: event.actor.role,
-          payload: event.payload as object,
-        },
-      }),
-    ),
-  };
-  const audit = new OrderAuditService(auditWriter as never);
   const persistence = new OrderPersistenceService(db as never, compute);
   const drafts = new OrderDraftService(
     products as never,
@@ -190,8 +168,8 @@ function setup() {
     locations as never,
     compute,
     drafts,
-    audit,
     persistence,
+    events as never,
   );
   const stateAssertions = new OrderStateAssertionService();
   const transitions = new OrderProductTransitionService(
@@ -208,14 +186,13 @@ function setup() {
     persistence,
     compute,
     stateAssertions,
-    audit,
     locations as never,
+    events as never,
   );
   const service = new OrdersService(
     db as never,
     locations as never,
     drafts,
-    audit,
     bookingSync,
     persistence,
     transitions,
@@ -900,18 +877,16 @@ describe('OrdersService', () => {
     expect(result.items.find((item) => item.id === 'service-item-1')).toEqual(
       expect.objectContaining({ status: OrderItemStatus.CONFIRMED }),
     );
-    expect(events.emit).not.toHaveBeenCalled();
-    expect(tx.auditLog.create).toHaveBeenCalledWith(
+    expect(events.emit).toHaveBeenCalledWith(
+      'audit',
       expect.objectContaining({
-        data: expect.objectContaining({
-          eventType: 'ORDER_UPDATED',
-          payload: expect.objectContaining({
-            itemChanges: expect.objectContaining({
-              added: [expect.objectContaining({ productId: 'product-2' })],
-              changed: [
-                expect.objectContaining({ orderItemId: 'draft-product-1' }),
-              ],
-            }),
+        eventType: 'ORDER_UPDATED',
+        payload: expect.objectContaining({
+          itemChanges: expect.objectContaining({
+            added: [expect.objectContaining({ productId: 'product-2' })],
+            changed: [
+              expect.objectContaining({ orderItemId: 'draft-product-1' }),
+            ],
           }),
         }),
       }),
@@ -919,7 +894,7 @@ describe('OrdersService', () => {
   });
 
   it('merges an added product into an existing draft product item', async () => {
-    const { service, tx, products } = setup();
+    const { service, tx, products, events } = setup();
     const active = order(OrderStatus.ACTIVE);
     const refreshed = {
       ...active,
@@ -961,21 +936,20 @@ describe('OrdersService', () => {
     expect(updateData.customUnitPrice.toFixed(2)).toBe('15.00');
     expect(updateData.lineTotal.toFixed(2)).toBe('30.00');
     expect(tx.orderItem.createMany).not.toHaveBeenCalled();
-    expect(tx.auditLog.create).toHaveBeenCalledWith(
+    expect(events.emit).toHaveBeenCalledWith(
+      'audit',
       expect.objectContaining({
-        data: expect.objectContaining({
-          eventType: 'ORDER_UPDATED',
-          payload: expect.objectContaining({
-            itemChanges: expect.objectContaining({
-              added: [],
-              changed: [
-                expect.objectContaining({
-                  orderItemId: 'item-1',
-                  before: expect.objectContaining({ quantity: '1.000' }),
-                  after: expect.objectContaining({ quantity: '2.000' }),
-                }),
-              ],
-            }),
+        eventType: 'ORDER_UPDATED',
+        payload: expect.objectContaining({
+          itemChanges: expect.objectContaining({
+            added: [],
+            changed: [
+              expect.objectContaining({
+                orderItemId: 'item-1',
+                before: expect.objectContaining({ quantity: '1.000' }),
+                after: expect.objectContaining({ quantity: '2.000' }),
+              }),
+            ],
           }),
         }),
       }),
@@ -1783,7 +1757,7 @@ describe('OrdersService', () => {
   });
 
   it('adds multiple draft products to a booking order without treating service custom prices as product edits', async () => {
-    const { service, tx, products, staff } = setup();
+    const { service, tx, products, staff, events } = setup();
     const now = new Date('2026-10-01T10:00:00.000Z');
     const existingOrder = {
       ...order(OrderStatus.ACTIVE),
@@ -1864,24 +1838,23 @@ describe('OrdersService', () => {
       ],
     });
     expect(tx.$queryRaw).toHaveBeenCalled();
-    expect(tx.auditLog.create).toHaveBeenCalledWith(
+    expect(events.emit).toHaveBeenCalledWith(
+      'audit',
       expect.objectContaining({
-        data: expect.objectContaining({
-          brandId: 'brand-1',
-          locationId: 'location-1',
-          entityType: 'ORDER',
-          entityId: 'order-1',
-          eventType: 'ORDER_UPDATED',
-          actionType: 'MODIFY',
-          payload: expect.objectContaining({
-            itemChanges: expect.objectContaining({
-              added: [
-                expect.objectContaining({ productId: 'product-1' }),
-                expect.objectContaining({ productId: 'product-2' }),
-              ],
-              removed: [],
-              changed: [],
-            }),
+        brandId: 'brand-1',
+        locationId: 'location-1',
+        entityType: 'ORDER',
+        entityId: 'order-1',
+        eventType: 'ORDER_UPDATED',
+        actionType: 'MODIFY',
+        payload: expect.objectContaining({
+          itemChanges: expect.objectContaining({
+            added: [
+              expect.objectContaining({ productId: 'product-1' }),
+              expect.objectContaining({ productId: 'product-2' }),
+            ],
+            removed: [],
+            changed: [],
           }),
         }),
       }),
@@ -1930,7 +1903,7 @@ describe('OrdersService', () => {
   });
 
   it('merges a repeated product into an existing booking draft item', async () => {
-    const { service, tx, products } = setup();
+    const { service, tx, products, events } = setup();
     const now = new Date('2026-10-01T10:00:00.000Z');
     const existingOrder = {
       ...order(OrderStatus.ACTIVE),
@@ -1991,19 +1964,18 @@ describe('OrdersService', () => {
       }),
     });
     expect(tx.orderItem.createMany).not.toHaveBeenCalled();
-    expect(tx.auditLog.create).toHaveBeenCalledWith(
+    expect(events.emit).toHaveBeenCalledWith(
+      'audit',
       expect.objectContaining({
-        data: expect.objectContaining({
-          eventType: 'ORDER_UPDATED',
-          payload: expect.objectContaining({
-            itemChanges: expect.objectContaining({
-              added: [],
-              changed: [
-                expect.objectContaining({
-                  orderItemId: 'draft-product-1',
-                }),
-              ],
-            }),
+        eventType: 'ORDER_UPDATED',
+        payload: expect.objectContaining({
+          itemChanges: expect.objectContaining({
+            added: [],
+            changed: [
+              expect.objectContaining({
+                orderItemId: 'draft-product-1',
+              }),
+            ],
           }),
         }),
       }),

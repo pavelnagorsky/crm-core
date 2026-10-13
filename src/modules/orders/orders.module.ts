@@ -6,9 +6,7 @@ import { LocationModule } from '../location/location.module.js';
 import { PayrollModule } from '../payroll/payroll.module.js';
 import { ProductsModule } from '../products/products.module.js';
 import { StaffModule } from '../staff/staff.module.js';
-import { AuditModule } from '../audit/audit.module.js';
 import { OrdersAggregatesService } from './analytics/orders-aggregates.service.js';
-import { OrderAuditService } from './services/order-audit.service.js';
 import { OrderBookingSyncService } from './services/order-booking-sync.service.js';
 import { OrderComputeService } from './services/order-compute.service.js';
 import { OrderDraftService } from './services/order-draft.service.js';
@@ -28,12 +26,10 @@ import { OrdersService } from './orders.service.js';
     StaffModule,
     PayrollModule,
     ClientsModule,
-    AuditModule,
   ],
   controllers: [OrdersController],
   providers: [
     OrdersService,
-    OrderAuditService,
     OrderComputeService,
     OrderPersistenceService,
     OrderDraftService,

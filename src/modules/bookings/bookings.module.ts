@@ -20,7 +20,6 @@ import { StaffModule } from '../staff/staff.module.js';
 import { PayrollModule } from '../payroll/payroll.module.js';
 import { ServicesModule } from '../services/services.module.js';
 import { OrdersModule } from '../orders/orders.module.js';
-import { AuditModule } from '../audit/audit.module.js';
 
 @Module({
   imports: [
@@ -32,7 +31,6 @@ import { AuditModule } from '../audit/audit.module.js';
     PayrollModule,
     ServicesModule,
     OrdersModule,
-    AuditModule,
     I18nModule,
   ],
   controllers: [BookingsController],

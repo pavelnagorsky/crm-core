@@ -1,5 +1,6 @@
 import { createHash } from 'crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   OrderItemStatus,
   OrderItemType,
@@ -11,13 +12,17 @@ import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js'
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { MoneyService } from '../../../shared/money/money.service.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
+import { AUDIT_EVENT } from '../../audit/constants/audit.constants.js';
+import { AuditActionType } from '../../audit/enums/audit-action-type.enum.js';
+import { AuditEntity } from '../../audit/enums/audit-entity.enum.js';
+import { AuditEvent } from '../../audit/enums/audit-event.enum.js';
 import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
+import { AuditLogEvent } from '../../audit/interfaces/audit-log-event.interface.js';
 import { InventoryService } from '../../inventory/inventory.service.js';
 import { LocationService } from '../../location/location.service.js';
 import { StaffEarningsService } from '../../payroll/earnings/staff-earnings.service.js';
 import { CreateOrderReturnDto } from '../dto/create-order-return.dto.js';
 import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
-import { OrderAuditService } from './order-audit.service.js';
 import { OrderComputeService } from './order-compute.service.js';
 import { OrderPersistenceService } from './order-persistence.service.js';
 import { OrderStateAssertionService } from './order-state-assertion.service.js';
@@ -30,8 +35,8 @@ export class OrderReturnService {
     private readonly persistence: OrderPersistenceService,
     private readonly compute: OrderComputeService,
     private readonly stateAssertions: OrderStateAssertionService,
-    private readonly audit: OrderAuditService,
     private readonly locations: LocationService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async create(
@@ -114,12 +119,12 @@ export class OrderReturnService {
           locationId,
           orderId,
         );
-        await this.audit.writeUpdated(tx, {
-          brandId: location.brandId,
+        this.emitUpdated(
+          location.brandId,
           locationId,
-          entityId: orderId,
+          orderId,
           actor,
-          payload: {
+          {
             orderReturnId: orderReturn.id,
             reason,
             totalAmount: updated.totalAmount.toFixed(2),
@@ -134,7 +139,7 @@ export class OrderReturnService {
               })),
             },
           },
-        });
+        );
         return updated;
       });
     } catch (error) {
@@ -300,5 +305,25 @@ export class OrderReturnService {
     if (!target) return true;
     const columns = Array.isArray(target) ? target : [target];
     return columns.includes('locationId') && columns.includes('idempotencyKey');
+  }
+
+  private emitUpdated(
+    brandId: string,
+    locationId: string,
+    entityId: string,
+    actor: AuditActor,
+    payload: Record<string, unknown>,
+  ): void {
+    this.eventEmitter.emit(AUDIT_EVENT, {
+      brandId,
+      locationId,
+      entityType: AuditEntity.ORDER,
+      entityId,
+      eventType: AuditEvent.ORDER_UPDATED,
+      actionType: AuditActionType.MODIFY,
+      occurredAt: new Date(),
+      actor,
+      payload,
+    } satisfies AuditLogEvent);
   }
 }

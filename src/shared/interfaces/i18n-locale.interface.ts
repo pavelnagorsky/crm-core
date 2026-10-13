@@ -1,4 +1,5 @@
 import { DocumentMessages } from './document-messages.interface.js';
+import { ProductUnitLabel } from './product-unit-label.interface.js';
 
 export interface I18nLocale {
   email: Record<string, Record<string, unknown>>;
@@ -13,7 +14,7 @@ export interface I18nLocale {
   salaryMode: Record<string, string>;
   payrollPeriodStatus: Record<string, string>;
   inventoryMovementType: Record<string, string>;
-  productUnit: Record<string, string>;
+  productUnit: Record<string, ProductUnitLabel>;
   documents: DocumentMessages;
   fields: Record<string, Record<string, string>>;
 }
