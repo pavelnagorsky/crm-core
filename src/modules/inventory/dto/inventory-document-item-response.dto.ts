@@ -36,12 +36,17 @@ export class InventoryDocumentItemResponseDto {
   static fromEntity(
     entity: InventoryDocumentItem,
   ): InventoryDocumentItemResponseDto {
-    return Object.assign(new InventoryDocumentItemResponseDto(), entity, {
-      quantity: QuantityService.format(entity.quantity),
-      unitCost:
-        entity.unitCost == null ? null : MoneyService.format(entity.unitCost),
-      totalCost: lineTotalCost(entity),
-    });
+    const dto = new InventoryDocumentItemResponseDto();
+    dto.id = entity.id;
+    dto.productId = entity.productId;
+    dto.productName = entity.productName;
+    dto.productSku = entity.productSku;
+    dto.productUnit = entity.productUnit;
+    dto.quantity = QuantityService.format(entity.quantity);
+    dto.unitCost =
+      entity.unitCost == null ? null : MoneyService.format(entity.unitCost);
+    dto.totalCost = lineTotalCost(entity);
+    return dto;
   }
 }
 

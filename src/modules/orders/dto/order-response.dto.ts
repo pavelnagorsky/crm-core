@@ -70,12 +70,28 @@ export class OrderResponseDto {
   items: OrderItemResponseDto[];
 
   static fromEntity(entity: OrderWithItems): OrderResponseDto {
-    return Object.assign(new OrderResponseDto(), entity, {
-      listTotalAmount: MoneyService.format(entity.listTotalAmount),
-      subtotalAmount: MoneyService.format(entity.subtotalAmount),
-      discountTotal: MoneyService.format(entity.discountTotal),
-      totalAmount: MoneyService.format(entity.totalAmount),
-      items: entity.items.map(OrderItemResponseDto.fromEntity),
-    });
+    const dto = new OrderResponseDto();
+    dto.id = entity.id;
+    dto.locationId = entity.locationId;
+    dto.bookingId = entity.bookingId;
+    dto.clientId = entity.clientId;
+    dto.clientName = entity.clientName;
+    dto.clientPhone = entity.clientPhone;
+    dto.currency = entity.currency;
+    dto.status = entity.status;
+    dto.version = entity.version;
+    dto.occurredAt = entity.occurredAt;
+    dto.listTotalAmount = MoneyService.format(entity.listTotalAmount);
+    dto.subtotalAmount = MoneyService.format(entity.subtotalAmount);
+    dto.discountTotal = MoneyService.format(entity.discountTotal);
+    dto.totalAmount = MoneyService.format(entity.totalAmount);
+    dto.note = entity.note;
+    dto.createdByName = entity.createdByName;
+    dto.voidedAt = entity.voidedAt;
+    dto.voidReason = entity.voidReason;
+    dto.createdAt = entity.createdAt;
+    dto.updatedAt = entity.updatedAt;
+    dto.items = entity.items.map(OrderItemResponseDto.fromEntity);
+    return dto;
   }
 }

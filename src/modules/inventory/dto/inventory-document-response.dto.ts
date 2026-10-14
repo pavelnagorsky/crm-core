@@ -68,11 +68,25 @@ export class InventoryDocumentResponseDto {
   static fromEntity(
     entity: InventoryDocumentWithItems,
   ): InventoryDocumentResponseDto {
-    const items = entity.items.map(InventoryDocumentItemResponseDto.fromEntity);
-    return Object.assign(new InventoryDocumentResponseDto(), entity, {
-      items,
-      totalCost: documentTotalCost(items),
-    });
+    const dto = new InventoryDocumentResponseDto();
+    dto.id = entity.id;
+    dto.locationId = entity.locationId;
+    dto.destinationLocationId = entity.destinationLocationId;
+    dto.type = entity.type;
+    dto.status = entity.status;
+    dto.occurredAt = entity.occurredAt;
+    dto.reference = entity.reference;
+    dto.supplierName = entity.supplierName;
+    dto.reason = entity.reason;
+    dto.note = entity.note;
+    dto.createdByName = entity.createdByName;
+    dto.postedAt = entity.postedAt;
+    dto.voidedAt = entity.voidedAt;
+    dto.createdAt = entity.createdAt;
+    dto.updatedAt = entity.updatedAt;
+    dto.items = entity.items.map(InventoryDocumentItemResponseDto.fromEntity);
+    dto.totalCost = documentTotalCost(dto.items);
+    return dto;
   }
 }
 

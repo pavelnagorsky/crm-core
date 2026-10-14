@@ -49,12 +49,23 @@ export class ProductResponseDto {
   updatedAt: Date;
 
   static fromEntity(entity: ProductWithDetails): ProductResponseDto {
-    return Object.assign(new ProductResponseDto(), entity, {
-      categoryName: entity.category?.name ?? null,
-      image: entity.imageFile
-        ? FileResponseDto.fromEntity(entity.imageFile)
-        : null,
-      locations: entity.locations.map(ProductLocationResponseDto.fromEntity),
-    });
+    const dto = new ProductResponseDto();
+    dto.id = entity.id;
+    dto.brandId = entity.brandId;
+    dto.categoryId = entity.categoryId;
+    dto.categoryName = entity.category?.name ?? null;
+    dto.image = entity.imageFile
+      ? FileResponseDto.fromEntity(entity.imageFile)
+      : null;
+    dto.name = entity.name;
+    dto.description = entity.description;
+    dto.sku = entity.sku;
+    dto.barcode = entity.barcode;
+    dto.unit = entity.unit;
+    dto.status = entity.status;
+    dto.locations = entity.locations.map(ProductLocationResponseDto.fromEntity);
+    dto.createdAt = entity.createdAt;
+    dto.updatedAt = entity.updatedAt;
+    return dto;
   }
 }

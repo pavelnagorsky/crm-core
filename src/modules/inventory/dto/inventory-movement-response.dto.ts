@@ -66,14 +66,26 @@ export class InventoryMovementResponseDto {
   createdAt: Date;
 
   static fromEntity(entity: InventoryMovement): InventoryMovementResponseDto {
-    return Object.assign(new InventoryMovementResponseDto(), entity, {
-      quantityDelta: QuantityService.format(entity.quantityDelta),
-      quantityBefore: QuantityService.format(entity.quantityBefore),
-      quantityAfter: QuantityService.format(entity.quantityAfter),
-      averageUnitCostBefore: MoneyService.format(entity.averageUnitCostBefore),
-      averageUnitCostAfter: MoneyService.format(entity.averageUnitCostAfter),
-      unitCost: MoneyService.format(entity.unitCost),
-      totalCost: MoneyService.format(entity.totalCost),
-    });
+    const dto = new InventoryMovementResponseDto();
+    dto.id = entity.id;
+    dto.type = entity.type;
+    dto.documentId = entity.documentId;
+    dto.sourceType = entity.sourceType;
+    dto.sourceId = entity.sourceId;
+    dto.sourceLocationId = entity.sourceLocationId;
+    dto.productName = entity.productName;
+    dto.productSku = entity.productSku;
+    dto.quantityDelta = QuantityService.format(entity.quantityDelta);
+    dto.quantityBefore = QuantityService.format(entity.quantityBefore);
+    dto.quantityAfter = QuantityService.format(entity.quantityAfter);
+    dto.averageUnitCostBefore = MoneyService.format(
+      entity.averageUnitCostBefore,
+    );
+    dto.averageUnitCostAfter = MoneyService.format(entity.averageUnitCostAfter);
+    dto.unitCost = MoneyService.format(entity.unitCost);
+    dto.totalCost = MoneyService.format(entity.totalCost);
+    dto.occurredAt = entity.occurredAt;
+    dto.createdAt = entity.createdAt;
+    return dto;
   }
 }

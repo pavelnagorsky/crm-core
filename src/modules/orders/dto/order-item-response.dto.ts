@@ -98,30 +98,43 @@ export class OrderItemResponseDto {
       entity.status === OrderItemStatus.CONFIRMED
         ? entity.quantity.minus(returnedQuantity)
         : QuantityService.decimal(0);
-    return Object.assign(new OrderItemResponseDto(), entity, {
-      image: entity.productLocation?.product.imageFile
-        ? FileResponseDto.fromEntity(entity.productLocation.product.imageFile)
-        : null,
-      quantity: QuantityService.format(entity.quantity),
-      returnedQuantity: QuantityService.format(returnedQuantity),
-      returnableQuantity: QuantityService.format(returnableQuantity),
-      listUnitPrice: MoneyService.format(entity.listUnitPrice),
-      customUnitPrice:
-        entity.customUnitPrice == null
-          ? null
-          : MoneyService.format(entity.customUnitPrice),
-      unitPrice: MoneyService.format(entity.unitPrice),
-      lineSubtotal: MoneyService.format(entity.lineSubtotal),
-      discountTotal: MoneyService.format(entity.discountTotal),
-      lineTotal: MoneyService.format(entity.lineTotal),
-      unitCostSnapshot:
-        entity.unitCostSnapshot == null
-          ? null
-          : MoneyService.format(entity.unitCostSnapshot),
-      lineCostSnapshot:
-        entity.lineCostSnapshot == null
-          ? null
-          : MoneyService.format(entity.lineCostSnapshot),
-    });
+    const dto = new OrderItemResponseDto();
+    dto.id = entity.id;
+    dto.type = entity.type;
+    dto.status = entity.status;
+    dto.bookingItemId = entity.bookingItemId;
+    dto.catalogItemId = entity.catalogItemId;
+    dto.categoryId = entity.categoryId;
+    dto.title = entity.title;
+    dto.sku = entity.sku;
+    dto.image = entity.productLocation?.product.imageFile
+      ? FileResponseDto.fromEntity(entity.productLocation.product.imageFile)
+      : null;
+    dto.unit = entity.unit;
+    dto.quantity = QuantityService.format(entity.quantity);
+    dto.returnedQuantity = QuantityService.format(returnedQuantity);
+    dto.returnableQuantity = QuantityService.format(returnableQuantity);
+    dto.listUnitPrice = MoneyService.format(entity.listUnitPrice);
+    dto.customUnitPrice =
+      entity.customUnitPrice == null
+        ? null
+        : MoneyService.format(entity.customUnitPrice);
+    dto.unitPrice = MoneyService.format(entity.unitPrice);
+    dto.lineSubtotal = MoneyService.format(entity.lineSubtotal);
+    dto.discountTotal = MoneyService.format(entity.discountTotal);
+    dto.lineTotal = MoneyService.format(entity.lineTotal);
+    dto.unitCostSnapshot =
+      entity.unitCostSnapshot == null
+        ? null
+        : MoneyService.format(entity.unitCostSnapshot);
+    dto.lineCostSnapshot =
+      entity.lineCostSnapshot == null
+        ? null
+        : MoneyService.format(entity.lineCostSnapshot);
+    dto.sellerStaffId = entity.sellerStaffId;
+    dto.sellerName = entity.sellerName;
+    dto.confirmedAt = entity.confirmedAt;
+    dto.occurredAt = entity.occurredAt;
+    return dto;
   }
 }
