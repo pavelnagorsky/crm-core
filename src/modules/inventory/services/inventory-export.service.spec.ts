@@ -49,16 +49,23 @@ describe('InventoryExportService', () => {
     searchInventory: vi.fn<InventoryService['searchInventory']>(),
     searchMovements: vi.fn<InventoryService['searchMovements']>(),
   };
+  const locations = {
+    findById: vi
+      .fn()
+      .mockResolvedValue({ id: 'location-1', name: 'Main warehouse' }),
+  };
   const locale = new LocaleService();
   locale.onModuleInit();
   const service = new InventoryExportService(
     inventory as unknown as InventoryService,
+    locations as never,
     locale,
   );
 
   beforeEach(() => {
     inventory.searchInventory.mockReset();
     inventory.searchMovements.mockReset();
+    locations.findById.mockClear();
   });
 
   it('exports every balance matching the inventory filters as xlsx', async () => {
@@ -214,5 +221,59 @@ describe('InventoryExportService', () => {
     expect(grid.row(2).text(11)).toBe('');
     expect(grid.row(2).text(12)).toBe('movement-1');
     expect(grid.row(2).text(13)).toBe('2026-10-02T09:31:00.000Z');
+  });
+
+  it('exports an inventory statement for manual stock count', async () => {
+    inventory.searchInventory.mockResolvedValue({
+      items: [
+        balance({ name: 'Shampoo', quantityOnHand: new Prisma.Decimal(5) }),
+        balance({
+          productLocationId: 'product-location-2',
+          productId: 'product-2',
+          name: 'Mask',
+          sku: null,
+          barcode: null,
+          quantityOnHand: new Prisma.Decimal(0),
+          averageUnitCost: new Prisma.Decimal(4),
+          stockValue: new Prisma.Decimal(0),
+          reorderLevel: new Prisma.Decimal(1),
+          lowStock: true,
+          outOfStock: true,
+          updatedAt: null,
+        }),
+      ],
+      totalItems: 2,
+    });
+
+    const file = await service.streamInventoryStatement('location-1');
+
+    expect(locations.findById).toHaveBeenCalledWith('location-1');
+    expect(inventory.searchInventory).toHaveBeenCalledWith('location-1', {
+      page: 1,
+      pageSize: 1,
+      isExport: true,
+    });
+    expect(file.filename).toMatch(
+      /^inventory-statement-\d{4}-\d{2}-\d{2}\.xlsx$/,
+    );
+
+    const grid = await XlsxService.read(await collect(file.stream));
+    expect(grid).not.toBeNull();
+    if (!grid) return;
+    expect(grid.row(1).text(1)).toBe('Инвентаризационная ведомость');
+    expect(grid.row(2).text(2)).toBe('Main warehouse');
+    expect(grid.row(5).text(4)).toBe('БЕИ');
+    expect(grid.row(5).text(5)).toBe('Учетный остаток');
+    expect(grid.row(5).text(6)).toBe('Факт');
+    expect(grid.row(6).text(1)).toBe('1');
+    expect(grid.row(6).text(2)).toBe('Shampoo');
+    expect(grid.row(6).text(5)).toBe('5.000');
+    expect(grid.row(6).text(6)).toBe('');
+    expect(grid.row(7).text(1)).toBe('2');
+    expect(grid.row(7).text(2)).toBe('Mask');
+    expect(grid.row(7).text(5)).toBe('0.000');
+    expect(grid.row(9).text(1)).toBe('Ответственный от отдела автоматизации');
+    expect(grid.row(10).text(1)).toBe('Ответственный от склада');
+    expect(grid.row(10).text(4)).toBe('Подпись');
   });
 });

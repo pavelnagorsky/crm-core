@@ -12,6 +12,7 @@ import { QuantityService } from '../../../shared/quantity/quantity.service.js';
 import { XlsxColumn } from '../../../shared/xlsx/interfaces/xlsx-column.interface.js';
 import { XlsxFile } from '../../../shared/xlsx/interfaces/xlsx-file.interface.js';
 import { XlsxService } from '../../../shared/xlsx/xlsx.service.js';
+import { LocationService } from '../../location/location.service.js';
 import { InventoryExportRequestDto } from '../dto/inventory-export-request.dto.js';
 import { InventoryMovementExportRequestDto } from '../dto/inventory-movement-export-request.dto.js';
 import { InventoryBalanceView } from '../interfaces/inventory-balance-view.interface.js';
@@ -51,6 +52,7 @@ type InventoryMovementRow = {
 export class InventoryExportService {
   constructor(
     private readonly inventory: InventoryService,
+    private readonly locations: LocationService,
     private readonly locale: LocaleService,
   ) {}
 
@@ -124,6 +126,63 @@ export class InventoryExportService {
       'inventory-movements',
       inventory.movementsSheet,
     );
+  }
+
+  async streamInventoryStatement(
+    locationId: string,
+    lang = DEFAULT_LANG,
+  ): Promise<XlsxFile> {
+    const messages = this.locale.get(lang);
+    const inventory = messages.documents.inventory;
+    const common = messages.documents.common;
+    const day = new Date().toISOString().slice(0, 10);
+    const [location, { items }] = await Promise.all([
+      this.locations.findById(locationId),
+      this.inventory.searchInventory(locationId, {
+        page: 1,
+        pageSize: 1,
+        isExport: true,
+      }),
+    ]);
+
+    return XlsxService.write(`inventory-statement-${day}.xlsx`, (book) => {
+      const sheet = book.addSheet(inventory.inventoryStatementSheet);
+      sheet.addRow([inventory.inventoryStatementTitle]);
+      sheet.addRow([common.location, location.name]);
+      sheet.addRow([common.date, day]);
+      sheet.addRow([]);
+      sheet.addRow([
+        '№',
+        inventory.product,
+        inventory.sku,
+        inventory.baseUnit,
+        inventory.accountingQuantity,
+        inventory.actualQuantity,
+      ]);
+      items.forEach((item, index) => {
+        sheet.addRow([
+          index + 1,
+          item.name,
+          item.sku ?? '',
+          productUnitLabelOf(messages.productUnit, item.unit),
+          QuantityService.format(item.quantityOnHand),
+          '',
+        ]);
+      });
+      sheet.addRow([]);
+      sheet.addRow([
+        inventory.responsibleAutomation,
+        '',
+        '',
+        inventory.signature,
+      ]);
+      sheet.addRow([
+        inventory.responsibleWarehouse,
+        '',
+        '',
+        inventory.signature,
+      ]);
+    });
   }
 
   private toRow(

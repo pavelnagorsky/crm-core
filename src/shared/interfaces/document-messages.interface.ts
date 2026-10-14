@@ -83,11 +83,25 @@ export interface DocumentMessages {
   inventory: {
     vedomostSheet: string;
     movementsSheet: string;
+    inventoryStatementSheet: string;
     vedomostTitle: string;
     movementsTitle: string;
+    inventoryStatementTitle: string;
     product: string;
     sku: string;
     unit: string;
+    baseUnit: string;
+    balancesSheet: string;
+    barcode: string;
+    quantityOnHand: string;
+    averageUnitCost: string;
+    stockValue: string;
+    reorderLevel: string;
+    lowStock: string;
+    outOfStock: string;
+    updatedAt: string;
+    yes: string;
+    no: string;
     openingQuantity: string;
     closingQuantity: string;
     openingValue: string;
@@ -96,6 +110,11 @@ export interface DocumentMessages {
     unitCost: string;
     quantityBefore: string;
     quantityAfter: string;
+    accountingQuantity: string;
+    actualQuantity: string;
+    responsibleAutomation: string;
+    responsibleWarehouse: string;
+    signature: string;
     document: string;
     order: string;
   };

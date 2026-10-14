@@ -145,6 +145,24 @@ export class InventoryController {
     );
   }
 
+  @ApiOperation({
+    summary: 'Export inventory statement for manual count as XLSX',
+  })
+  @ApiProduces(XlsxService.mimeType)
+  @ApiOkResponse({ description: 'File stream' })
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Get('export/inventory-statement')
+  async exportInventoryStatement(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Res({ passthrough: true })
+    res: { setHeader: (name: string, value: string) => void },
+  ): Promise<StreamableFile> {
+    const { stream, filename } =
+      await this.exports.streamInventoryStatement(locationId);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return new StreamableFile(stream, { type: XlsxService.mimeType });
+  }
+
   @ApiOperation({ summary: 'Export inventory turnover statement as XLSX' })
   @ApiProduces(XlsxService.mimeType)
   @ApiOkResponse({ description: 'File stream' })
