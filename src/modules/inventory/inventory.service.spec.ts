@@ -309,48 +309,52 @@ describe('InventoryService', () => {
     expect(created.totalCost.toFixed(2)).toBe('22.50');
   });
 
-  it('counts documents by status for the same type and date filters', async () => {
-    const groupBy = vi.fn().mockResolvedValue([
-      { status: InventoryDocumentStatus.OPEN, _count: { _all: 2 } },
-      { status: InventoryDocumentStatus.POSTED, _count: { _all: 5 } },
-    ]);
-    const service = new InventoryService(
-      { inventoryDocument: { groupBy } } as never,
-      {} as never,
-      {} as never,
-      {} as never,
-      { emit: vi.fn() } as never,
-      new InventoryComputeService(),
-      {} as never,
-      {} as never,
-    );
+  it.each([undefined, 'e0e8d4d1-cd3f-4b21-bc10-a1a48c2b0347'])(
+    'counts documents by status for the same type and date filters with supplierId=%s',
+    async (supplierId) => {
+      const groupBy = vi.fn().mockResolvedValue([
+        { status: InventoryDocumentStatus.OPEN, _count: { _all: 2 } },
+        { status: InventoryDocumentStatus.POSTED, _count: { _all: 5 } },
+      ]);
+      const service = new InventoryService(
+        { inventoryDocument: { groupBy } } as never,
+        {} as never,
+        {} as never,
+        {} as never,
+        { emit: vi.fn() } as never,
+        new InventoryComputeService(),
+        {} as never,
+        {} as never,
+      );
 
-    const counts = await service.getDocumentStatusCounts('location-1', {
-      type: InventoryDocumentType.RECEIPT,
-      from: '2026-10-01',
-      to: '2026-10-31',
-    });
-
-    expect(groupBy).toHaveBeenCalledWith({
-      by: ['status'],
-      where: {
-        locationId: 'location-1',
+      const counts = await service.getDocumentStatusCounts('location-1', {
         type: InventoryDocumentType.RECEIPT,
-        status: undefined,
-        supplierId: undefined,
-        occurredAt: {
-          gte: new Date('2026-10-01T00:00:00.000Z'),
-          lt: new Date('2026-11-01T00:00:00.000Z'),
+        from: '2026-10-01',
+        to: '2026-10-31',
+        supplierId,
+      });
+
+      expect(groupBy).toHaveBeenCalledWith({
+        by: ['status'],
+        where: {
+          locationId: 'location-1',
+          type: InventoryDocumentType.RECEIPT,
+          status: undefined,
+          supplierId,
+          occurredAt: {
+            gte: new Date('2026-10-01T00:00:00.000Z'),
+            lt: new Date('2026-11-01T00:00:00.000Z'),
+          },
         },
-      },
-      _count: { _all: true },
-    });
-    expect(counts).toEqual([
-      { status: InventoryDocumentStatus.OPEN, count: 2 },
-      { status: InventoryDocumentStatus.POSTED, count: 5 },
-      { status: InventoryDocumentStatus.VOIDED, count: 0 },
-    ]);
-  });
+        _count: { _all: true },
+      });
+      expect(counts).toEqual([
+        { status: InventoryDocumentStatus.OPEN, count: 2 },
+        { status: InventoryDocumentStatus.POSTED, count: 5 },
+        { status: InventoryDocumentStatus.VOIDED, count: 0 },
+      ]);
+    },
+  );
 
   it('links an active supplier and stores its name snapshot when creating a document', async () => {
     const { service, db, products, suppliers } = setup(

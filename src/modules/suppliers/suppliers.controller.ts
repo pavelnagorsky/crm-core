@@ -27,7 +27,7 @@ import {
   BaseResponseDto,
 } from '../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
-import { BrandRBAC } from '../auth/decorators/brand-rbac.decorator.js';
+import { SupplierRBAC } from './decorators/supplier-rbac.decorator.js';
 import { CreateSupplierDto } from './dto/create-supplier.dto.js';
 import { SupplierOptionDto } from './dto/supplier-option.dto.js';
 import { SupplierOptionsRequestDto } from './dto/supplier-options-request.dto.js';
@@ -45,7 +45,7 @@ export class SuppliersController {
   @ApiOperation({ summary: 'Create a supplier' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
   @ApiConflictResponse({ description: 'Supplier name already exists' })
-  @BrandRBAC(BusinessRole.OWNER)
+  @SupplierRBAC(BusinessRole.OWNER, BusinessRole.MANAGER)
   @Post()
   async create(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -57,7 +57,7 @@ export class SuppliersController {
 
   @ApiOperation({ summary: 'Search suppliers' })
   @ApiOkResponse({ type: ApiResponse(SupplierSearchResponseDto) })
-  @BrandRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @SupplierRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Get()
   async search(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -77,7 +77,7 @@ export class SuppliersController {
 
   @ApiOperation({ summary: 'List active supplier options' })
   @ApiOkResponse({ type: ApiResponseArray(SupplierOptionDto) })
-  @BrandRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @SupplierRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Get('options')
   async listOptions(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -90,7 +90,7 @@ export class SuppliersController {
   @ApiOperation({ summary: 'Get supplier details' })
   @ApiOkResponse({ type: ApiResponse(SupplierResponseDto) })
   @ApiNotFoundResponse({ description: 'Supplier not found' })
-  @BrandRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @SupplierRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @Get(':supplierId')
   async findById(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -107,7 +107,7 @@ export class SuppliersController {
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiConflictResponse({ description: 'Supplier name already exists' })
   @ApiNotFoundResponse({ description: 'Supplier not found' })
-  @BrandRBAC(BusinessRole.OWNER)
+  @SupplierRBAC(BusinessRole.OWNER, BusinessRole.MANAGER)
   @Put(':supplierId')
   async update(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -121,7 +121,7 @@ export class SuppliersController {
   @ApiOperation({ summary: 'Deactivate supplier' })
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Supplier not found' })
-  @BrandRBAC(BusinessRole.OWNER)
+  @SupplierRBAC(BusinessRole.OWNER, BusinessRole.MANAGER)
   @Delete(':supplierId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deactivate(
