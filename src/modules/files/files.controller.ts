@@ -23,7 +23,8 @@ import {
 } from '@nestjs/swagger';
 import { BusinessRole } from '@prisma/client';
 import { FilesService } from './files.service.js';
-import { LocationRBAC } from '../auth/decorators/location-rbac.decorator.js';
+import { Auth } from '../auth/decorators/auth.decorator.js';
+import { BrandRBAC } from '../auth/decorators/brand-rbac.decorator.js';
 import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 import {
@@ -33,14 +34,14 @@ import {
 import { UploadFileResponseDto } from './dto/upload-file-response.dto.js';
 
 @ApiTags('Files')
-@Controller('locations/:locationId/files')
+@Controller()
 export class FilesController {
   constructor(private readonly filesService: FilesService) {}
 
-  @Post()
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Post('brands/:brandId/files')
+  @BrandRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
-  @ApiOperation({ summary: 'Upload a file to Google Cloud Storage' })
+  @ApiOperation({ summary: 'Upload a brand file to Google Cloud Storage' })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
     schema: {
@@ -54,24 +55,65 @@ export class FilesController {
   @ApiOkResponse({ type: ApiResponse(UploadFileResponseDto) })
   @ApiPayloadTooLargeResponse({ description: 'File exceeds 15 MB limit' })
   @ApiUnprocessableEntityResponse({ description: 'File extension is blocked' })
-  async upload(
-    @Param('locationId', ParseUUIDPipe) locationId: string,
+  async uploadForBrand(
+    @Param('brandId', ParseUUIDPipe) brandId: string,
     @UploadedFile() file: Express.Multer.File,
     @TokenPayload() payload: TokenPayloadDto,
   ): Promise<BaseResponseDto<UploadFileResponseDto>> {
-    const saved = await this.filesService.upload(file, payload.sub, locationId);
+    const saved = await this.filesService.uploadForBrand(
+      file,
+      payload.sub,
+      brandId,
+    );
     return BaseResponseDto.success(UploadFileResponseDto.fromEntity(saved));
   }
 
-  @Delete(':fileId')
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Post('users/me/files')
+  @Auth()
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
+  @ApiOperation({ summary: 'Upload a personal file to Google Cloud Storage' })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['file'],
+      properties: {
+        file: { type: 'string', format: 'binary' },
+      },
+    },
+  })
+  @ApiOkResponse({ type: ApiResponse(UploadFileResponseDto) })
+  @ApiPayloadTooLargeResponse({ description: 'File exceeds 15 MB limit' })
+  @ApiUnprocessableEntityResponse({ description: 'File extension is blocked' })
+  async uploadForUser(
+    @UploadedFile() file: Express.Multer.File,
+    @TokenPayload() payload: TokenPayloadDto,
+  ): Promise<BaseResponseDto<UploadFileResponseDto>> {
+    const saved = await this.filesService.uploadForUser(file, payload.sub);
+    return BaseResponseDto.success(UploadFileResponseDto.fromEntity(saved));
+  }
+
+  @Delete('brands/:brandId/files/:fileId')
+  @BrandRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Delete a file' })
+  @ApiOperation({ summary: 'Delete a brand file' })
   @ApiNoContentResponse({ description: 'File deleted' })
-  async delete(
-    @Param('locationId', ParseUUIDPipe) locationId: string,
+  async deleteFromBrand(
+    @Param('brandId', ParseUUIDPipe) brandId: string,
     @Param('fileId', ParseUUIDPipe) fileId: string,
   ): Promise<void> {
-    await this.filesService.delete(fileId, locationId);
+    await this.filesService.deleteInBrand(fileId, brandId);
+  }
+
+  @Delete('users/me/files/:fileId')
+  @Auth()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete a personal file' })
+  @ApiNoContentResponse({ description: 'File deleted' })
+  async deleteFromUser(
+    @Param('fileId', ParseUUIDPipe) fileId: string,
+    @TokenPayload() payload: TokenPayloadDto,
+  ): Promise<void> {
+    await this.filesService.deleteInUser(fileId, payload.sub);
   }
 }

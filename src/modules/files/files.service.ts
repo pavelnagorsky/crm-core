@@ -6,6 +6,7 @@ import { AppException } from '../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { IGoogleCloudConfig } from '../../config/configuration.js';
 import { BlockedFileExtension } from './enums/blocked-file-extension.enum.js';
+import { FileStorageScope } from './enums/file-storage-scope.enum.js';
 import { randomUUID } from 'crypto';
 import { File } from '@prisma/client';
 
@@ -29,10 +30,23 @@ export class FilesService implements OnModuleInit {
     this.storage = new Storage({ projectId: gcsConfig.projectId });
   }
 
-  async upload(
+  uploadForBrand(
     file: Express.Multer.File,
     userId: string,
-    locationId: string,
+    brandId: string,
+  ): Promise<File> {
+    return this.upload(file, userId, FileStorageScope.BRAND, brandId);
+  }
+
+  uploadForUser(file: Express.Multer.File, userId: string): Promise<File> {
+    return this.upload(file, userId, FileStorageScope.USER, userId);
+  }
+
+  private async upload(
+    file: Express.Multer.File,
+    userId: string,
+    scope: FileStorageScope,
+    ownerId: string,
   ): Promise<File> {
     if (file.size > MAX_FILE_SIZE_BYTES) {
       throw new AppException(
@@ -58,7 +72,7 @@ export class FilesService implements OnModuleInit {
       );
     }
 
-    const storageKey = `locations/${locationId}/files/${randomUUID()}.${ext}`;
+    const storageKey = this.storageKey(scope, ownerId, ext);
 
     try {
       const bucket = this.storage.bucket(this.bucketName);
@@ -89,17 +103,41 @@ export class FilesService implements OnModuleInit {
     });
   }
 
-  async findInLocation(locationId: string, fileId: string): Promise<File> {
+  async findInBrand(brandId: string, fileId: string): Promise<File> {
     const file = await this.db.file.findUnique({ where: { id: fileId } });
-    if (!file || !file.storageKey.startsWith(`locations/${locationId}/`)) {
+    if (!file || !this.isInBrand(file, brandId)) {
       throw new AppException(ErrorCode.FILE_NOT_FOUND, HttpStatus.NOT_FOUND);
     }
     return file;
   }
 
-  async delete(fileId: string, locationId: string): Promise<void> {
-    const file = await this.findInLocation(locationId, fileId);
+  async findInUser(userId: string, fileId: string): Promise<File> {
+    const file = await this.db.file.findUnique({ where: { id: fileId } });
+    if (!file || !this.isInUser(file, userId)) {
+      throw new AppException(ErrorCode.FILE_NOT_FOUND, HttpStatus.NOT_FOUND);
+    }
+    return file;
+  }
 
+  async findById(fileId: string): Promise<File> {
+    const file = await this.db.file.findUnique({ where: { id: fileId } });
+    if (!file) {
+      throw new AppException(ErrorCode.FILE_NOT_FOUND, HttpStatus.NOT_FOUND);
+    }
+    return file;
+  }
+
+  async deleteInBrand(fileId: string, brandId: string): Promise<void> {
+    const file = await this.findInBrand(brandId, fileId);
+    await this.deleteFile(file);
+  }
+
+  async deleteInUser(fileId: string, userId: string): Promise<void> {
+    const file = await this.findInUser(userId, fileId);
+    await this.deleteFile(file);
+  }
+
+  private async deleteFile(file: File): Promise<void> {
     try {
       await this.storage.bucket(this.bucketName).file(file.storageKey).delete();
     } catch (err) {
@@ -110,6 +148,25 @@ export class FilesService implements OnModuleInit {
       );
     }
 
-    await this.db.file.delete({ where: { id: fileId } });
+    await this.db.file.delete({ where: { id: file.id } });
+  }
+
+  private storageKey(
+    scope: FileStorageScope,
+    ownerId: string,
+    ext: string,
+  ): string {
+    return `${scope}/${ownerId}/files/${randomUUID()}.${ext}`;
+  }
+
+  private isInBrand(file: File, brandId: string): boolean {
+    return file.storageKey.startsWith(`${FileStorageScope.BRAND}/${brandId}/`);
+  }
+
+  private isInUser(file: File, userId: string): boolean {
+    return (
+      file.userId === userId &&
+      file.storageKey.startsWith(`${FileStorageScope.USER}/${userId}/`)
+    );
   }
 }

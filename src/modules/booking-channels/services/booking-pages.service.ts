@@ -221,7 +221,7 @@ export class BookingPagesService {
     fileId: string | null,
   ): Promise<string | null> {
     if (!fileId) return null;
-    const file = await this.filesService.findInLocation(locationId, fileId);
+    const file = await this.filesService.findById(fileId);
     if (!COVER_MIME_TYPES.has(file.mimeType)) {
       throw new AppException(
         ErrorCode.BOOKING_PAGE_COVER_INVALID,
