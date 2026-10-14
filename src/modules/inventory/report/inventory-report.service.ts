@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
+import { OrderDirection } from '../../../shared/enums/order-direction.enum.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import {
   DEFAULT_LANG,
@@ -19,11 +20,16 @@ import { XlsxSheet } from '../../../shared/xlsx/interfaces/xlsx-sheet.interface.
 import { XlsxService } from '../../../shared/xlsx/xlsx.service.js';
 import { LocationService } from '../../location/location.service.js';
 import { InventoryReportQueryDto } from './dto/inventory-report-query.dto.js';
+import { InventoryTurnoverExportRequestDto } from './dto/inventory-turnover-export-request.dto.js';
+import { InventoryTurnoverRequestDto } from './dto/inventory-turnover-request.dto.js';
+import { InventoryTurnoverOrderBy } from './enums/inventory-turnover-order-by.enum.js';
 import { InventoryReportMovement } from './interfaces/inventory-report-movement.interface.js';
 import { InventoryReportMovementRow } from './interfaces/inventory-report-movement-row.interface.js';
 import { InventoryReportView } from './interfaces/inventory-report-view.interface.js';
 import { InventoryTurnoverBucketRow } from './interfaces/inventory-turnover-bucket-row.interface.js';
 import { InventoryTurnoverLine } from './interfaces/inventory-turnover-line.interface.js';
+import { InventoryTurnoverResult } from './interfaces/inventory-turnover-result.interface.js';
+import { InventoryTurnoverView } from './interfaces/inventory-turnover-view.interface.js';
 import {
   INVENTORY_MOVEMENT_COLUMNS,
   inventoryTurnoverLines,
@@ -40,40 +46,62 @@ export class InventoryReportService {
 
   async exportVedomost(
     locationId: string,
-    dto: InventoryReportQueryDto,
+    dto: InventoryTurnoverExportRequestDto,
     lang = DEFAULT_LANG,
   ): Promise<XlsxFile> {
-    const report = await this.build(locationId, dto);
+    const report = await this.buildTurnover(locationId, dto);
     const messages = this.locale.get(lang);
     const text = messages.documents.inventory;
     return XlsxService.write(
       `inventory-vedomost-${report.from}.xlsx`,
       (book) => {
         this.writeVedomost(book.addSheet(text.vedomostSheet), report, messages);
-        this.writeMovements(
-          book.addSheet(text.movementsSheet),
-          report,
-          messages,
-        );
       },
     );
+  }
+
+  async searchTurnover(
+    locationId: string,
+    dto: InventoryTurnoverRequestDto,
+  ): Promise<InventoryTurnoverResult> {
+    const report = await this.buildTurnover(locationId, dto);
+    this.sortLines(report.lines, dto);
+    const totalItems = report.lines.length;
+    const totals = sumInventoryTurnoverLines(report.lines);
+    const items = dto.isExport
+      ? report.lines
+      : report.lines.slice(
+          (dto.page - 1) * dto.pageSize,
+          dto.page * dto.pageSize,
+        );
+    return { items, totalItems, totals };
   }
 
   async build(
     locationId: string,
     dto: InventoryReportQueryDto,
   ): Promise<InventoryReportView> {
+    const report = await this.buildTurnover(locationId, dto);
+    const { start, end } = this.bounds(dto.from, dto.to, report.timezone);
+    const movements = await this.db.$queryRaw<InventoryReportMovementRow[]>(
+      this.movementQuery(locationId, start, end),
+    );
+    return {
+      ...report,
+      movements: movements.map((row) => this.movement(row)),
+    };
+  }
+
+  private async buildTurnover(
+    locationId: string,
+    dto: Pick<InventoryTurnoverRequestDto, 'from' | 'to' | 'productIds'>,
+  ): Promise<InventoryTurnoverView> {
     this.assertPeriod(dto.from, dto.to);
     const location = await this.locations.findById(locationId);
     const { start, end } = this.bounds(dto.from, dto.to, location.timezone);
-    const [buckets, movements] = await this.db.$transaction([
-      this.db.$queryRaw<InventoryTurnoverBucketRow[]>(
-        this.bucketQuery(locationId, start, end),
-      ),
-      this.db.$queryRaw<InventoryReportMovementRow[]>(
-        this.movementQuery(locationId, start, end),
-      ),
-    ]);
+    const buckets = await this.db.$queryRaw<InventoryTurnoverBucketRow[]>(
+      this.bucketQuery(locationId, start, end, dto.productIds),
+    );
     return {
       locationName: location.name,
       currency: location.currency,
@@ -81,13 +109,12 @@ export class InventoryReportService {
       from: dto.from,
       to: dto.to,
       lines: inventoryTurnoverLines(buckets),
-      movements: movements.map((row) => this.movement(row)),
     };
   }
 
   private writeVedomost(
     sheet: XlsxSheet,
-    report: InventoryReportView,
+    report: InventoryTurnoverView,
     messages: I18nLocale,
   ): void {
     const inventory = messages.documents.inventory;
@@ -127,46 +154,6 @@ export class InventoryReportService {
     ]);
   }
 
-  private writeMovements(
-    sheet: XlsxSheet,
-    report: InventoryReportView,
-    messages: I18nLocale,
-  ): void {
-    const inventory = messages.documents.inventory;
-    const common = messages.documents.common;
-    sheet.addRow([inventory.movementsTitle]);
-    sheet.addRow([common.period, `${report.from} — ${report.to}`]);
-    sheet.addRow([]);
-    sheet.addRow([
-      common.date,
-      common.type,
-      inventory.product,
-      inventory.sku,
-      common.quantity,
-      inventory.unitCost,
-      common.amount,
-      inventory.quantityBefore,
-      inventory.quantityAfter,
-      inventory.document,
-      inventory.order,
-    ]);
-    for (const movement of report.movements) {
-      sheet.addRow([
-        this.formatOccurredAt(movement.occurredAt, report.timezone),
-        labelOf(messages.inventoryMovementType, movement.type),
-        movement.productName,
-        movement.productSku ?? '',
-        QuantityService.format(movement.quantityDelta),
-        MoneyService.format(movement.unitCost),
-        MoneyService.format(movement.totalCost),
-        QuantityService.format(movement.quantityBefore),
-        QuantityService.format(movement.quantityAfter),
-        movement.documentReference ?? '',
-        movement.orderId ?? '',
-      ]);
-    }
-  }
-
   private amountCells(line: InventoryTurnoverLine): string[] {
     return [
       QuantityService.format(line.openingQuantity),
@@ -199,10 +186,16 @@ export class InventoryReportService {
     };
   }
 
-  private bucketQuery(locationId: string, start: Date, end: Date): Prisma.Sql {
+  private bucketQuery(
+    locationId: string,
+    start: Date,
+    end: Date,
+    productIds: string[] | undefined,
+  ): Prisma.Sql {
     return Prisma.sql`
       SELECT
         rows."productLocationId",
+        rows."productId",
         rows.name,
         rows.sku,
         rows.unit,
@@ -212,6 +205,7 @@ export class InventoryReportService {
       FROM (
         SELECT
           im."productLocationId" AS "productLocationId",
+          p.id AS "productId",
           p.name AS name,
           p.sku AS sku,
           p.unit AS unit,
@@ -226,14 +220,41 @@ export class InventoryReportService {
         INNER JOIN "Product" p ON p.id = pl."productId"
         WHERE im."locationId" = ${locationId}
           AND im."occurredAt" < ${end}
+          ${
+            productIds?.length
+              ? Prisma.sql`AND p.id IN (${Prisma.join(productIds)})`
+              : Prisma.empty
+          }
       ) rows
       GROUP BY
         rows."productLocationId",
+        rows."productId",
         rows.name,
         rows.sku,
         rows.unit,
         rows.bucket
     `;
+  }
+
+  private sortLines(
+    lines: InventoryTurnoverLine[],
+    dto: Pick<InventoryTurnoverRequestDto, 'orderBy' | 'orderDirection'>,
+  ): void {
+    if (!dto.orderBy) return;
+    const direction = dto.orderDirection ?? OrderDirection.DESC;
+    const factor = direction === OrderDirection.ASC ? 1 : -1;
+    const field = dto.orderBy;
+    lines.sort((left, right) => {
+      let result: number;
+      if (field === InventoryTurnoverOrderBy.NAME) {
+        result = left.name.localeCompare(right.name, 'ru');
+      } else {
+        result = left[field].comparedTo(right[field]);
+      }
+      return result === 0
+        ? left.productLocationId.localeCompare(right.productLocationId)
+        : result * factor;
+    });
   }
 
   private movementQuery(
@@ -294,13 +315,5 @@ export class InventoryReportService {
         timezone,
       ),
     };
-  }
-
-  private formatOccurredAt(date: Date, timezone: string): string {
-    const parts = TimeService.toZonedParts(date, timezone);
-    const hour = String(parts.hour).padStart(2, '0');
-    const minute = String(parts.minute).padStart(2, '0');
-    const second = String(parts.second).padStart(2, '0');
-    return `${TimeService.zonedDateStr(date, timezone)} ${hour}:${minute}:${second}`;
   }
 }

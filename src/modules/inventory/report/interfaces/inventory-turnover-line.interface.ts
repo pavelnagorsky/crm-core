@@ -2,6 +2,7 @@ import { InventoryMovementType, Prisma, ProductUnit } from '@prisma/client';
 
 export interface InventoryTurnoverLine {
   productLocationId: string;
+  productId: string;
   name: string;
   sku: string | null;
   unit: ProductUnit;

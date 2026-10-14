@@ -1,10 +1,12 @@
 import { PassThrough } from 'stream';
-import { InventoryMovementType, Prisma, ProductUnit } from '@prisma/client';
+import { InventoryMovementType, ProductUnit } from '@prisma/client';
 import ExcelJS from 'exceljs';
+import { OrderDirection } from '../../../shared/enums/order-direction.enum.js';
 import { LocaleService } from '../../../shared/i18n/locale.service.js';
 import { MoneyService } from '../../../shared/money/money.service.js';
 import { QuantityService } from '../../../shared/quantity/quantity.service.js';
 import { XlsxService } from '../../../shared/xlsx/xlsx.service.js';
+import { InventoryTurnoverOrderBy } from './enums/inventory-turnover-order-by.enum.js';
 import { InventoryReportService } from './inventory-report.service.js';
 import { InventoryReportMovementRow } from './interfaces/inventory-report-movement-row.interface.js';
 import { InventoryTurnoverBucketRow } from './interfaces/inventory-turnover-bucket-row.interface.js';
@@ -50,9 +52,11 @@ function bucket(
   value: string,
   productLocationId = 'product-location-1',
   name = 'Шампунь',
+  productId = 'product-1',
 ): InventoryTurnoverBucketRow {
   return {
     productLocationId,
+    productId,
     name,
     sku: 'SKU-1',
     unit: ProductUnit.PIECE,
@@ -138,33 +142,62 @@ describe('InventoryReportService', () => {
     ).toBe(true);
   });
 
-  it('writes the turnover sheet and the movement journal as xlsx', async () => {
+  it('paginates turnover lines and keeps totals for all filtered products', async () => {
     const { service, db } = setup();
-    db.$queryRaw
-      .mockReturnValueOnce(
-        Promise.resolve([
-          bucket('OPENING', '10.000', '100.00'),
-          bucket(InventoryMovementType.RECEIPT, '5.000', '60.00'),
-          bucket(InventoryMovementType.SALE, '-2.000', '-32.00'),
-        ]),
-      )
-      .mockReturnValueOnce(
-        Promise.resolve([
-          {
-            occurredAt: new Date('2026-10-01T10:00:00.000Z'),
-            type: InventoryMovementType.SALE,
-            productName: 'Шампунь',
-            productSku: 'SKU-1',
-            quantityDelta: new Prisma.Decimal('-2.000'),
-            unitCost: new Prisma.Decimal('16.00'),
-            totalCost: new Prisma.Decimal('-32.00'),
-            quantityBefore: new Prisma.Decimal('15.000'),
-            quantityAfter: new Prisma.Decimal('13.000'),
-            documentReference: 'Накладная 12',
-            orderId: 'order-1',
-          } satisfies InventoryReportMovementRow,
-        ]),
-      );
+    let query: { values: unknown[] } | undefined;
+    db.$queryRaw.mockImplementation((value: { values: unknown[] }) => {
+      query = value;
+      return Promise.resolve([
+        bucket('OPENING', '10.000', '100.00'),
+        bucket(InventoryMovementType.SALE, '-2.000', '-32.00'),
+        bucket(
+          'OPENING',
+          '5.000',
+          '50.00',
+          'product-location-2',
+          'Mask',
+          'product-2',
+        ),
+      ]);
+    });
+
+    const result = await service.searchTurnover('location-1', {
+      from: '2026-10-01',
+      to: '2026-10-31',
+      productIds: ['product-1', 'product-2'],
+      orderBy: InventoryTurnoverOrderBy.CLOSING_QUANTITY,
+      orderDirection: OrderDirection.DESC,
+      page: 1,
+      pageSize: 1,
+    });
+
+    expect(query?.values).toEqual([
+      new Date('2026-09-30T21:00:00.000Z'),
+      'location-1',
+      new Date('2026-10-31T21:00:00.000Z'),
+      'product-1',
+      'product-2',
+    ]);
+    expect(result.totalItems).toBe(2);
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].productId).toBe('product-1');
+    expect(QuantityService.format(result.items[0].closingQuantity)).toBe(
+      '8.000',
+    );
+    expect(QuantityService.format(result.totals.closingQuantity)).toBe(
+      '13.000',
+    );
+  });
+
+  it('writes only the turnover sheet as xlsx', async () => {
+    const { service, db } = setup();
+    db.$queryRaw.mockReturnValueOnce(
+      Promise.resolve([
+        bucket('OPENING', '10.000', '100.00'),
+        bucket(InventoryMovementType.RECEIPT, '5.000', '60.00'),
+        bucket(InventoryMovementType.SALE, '-2.000', '-32.00'),
+      ]),
+    );
 
     const file = await service.exportVedomost('location-1', {
       from: '2026-10-01',
@@ -195,14 +228,8 @@ describe('InventoryReportService', () => {
     await workbook.xlsx.load(
       buffer as unknown as Parameters<ExcelJS.Xlsx['load']>[0],
     );
-    const journal = workbook.worksheets[1];
-    expect(journal.name).toBe('Движения');
-    expect(journal.getRow(1).getCell(1).value).toBe('Движения склада');
-    expect(journal.getRow(5).getCell(1).value).toBe('2026-10-01 13:00:00');
-    expect(journal.getRow(5).getCell(2).value).toBe('Продажа');
-    expect(journal.getRow(5).getCell(5).value).toBe('-2.000');
-    expect(journal.getRow(5).getCell(10).value).toBe('Накладная 12');
-    expect(journal.getRow(5).getCell(11).value).toBe('order-1');
+    expect(workbook.worksheets).toHaveLength(1);
+    expect(db.$queryRaw).toHaveBeenCalledTimes(1);
   });
 
   it('refuses a movement type the statement has no column for', async () => {

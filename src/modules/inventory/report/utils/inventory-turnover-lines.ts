@@ -97,6 +97,7 @@ function emptyLine(row: InventoryTurnoverBucketRow): InventoryTurnoverLine {
   return {
     ...blankLine(),
     productLocationId: row.productLocationId,
+    productId: row.productId,
     name: row.name,
     sku: row.sku,
     unit: row.unit,
@@ -106,6 +107,7 @@ function emptyLine(row: InventoryTurnoverBucketRow): InventoryTurnoverLine {
 function blankLine(): InventoryTurnoverLine {
   return {
     productLocationId: '',
+    productId: '',
     name: '',
     sku: null,
     unit: ProductUnit.PIECE,

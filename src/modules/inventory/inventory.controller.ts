@@ -42,14 +42,20 @@ import { InventoryDocumentSearchResponseDto } from './dto/inventory-document-sea
 import { InventoryDocumentStatusCountResponseDto } from './dto/inventory-document-status-count-response.dto.js';
 import { InventoryDocumentStatusCountsRequestDto } from './dto/inventory-document-status-counts-request.dto.js';
 import { InventoryMovementResponseDto } from './dto/inventory-movement-response.dto.js';
+import { InventoryMovementExportRequestDto } from './dto/inventory-movement-export-request.dto.js';
 import { InventoryMovementSearchRequestDto } from './dto/inventory-movement-search-request.dto.js';
 import { InventoryMovementSearchResponseDto } from './dto/inventory-movement-search-response.dto.js';
 import { InventorySearchRequestDto } from './dto/inventory-search-request.dto.js';
 import { InventorySearchResponseDto } from './dto/inventory-search-response.dto.js';
 import { UpdateInventoryDocumentStatusDto } from './dto/update-inventory-document-status.dto.js';
 import { UpdateInventoryDocumentDto } from './dto/update-inventory-document.dto.js';
-import { InventoryReportQueryDto } from './report/dto/inventory-report-query.dto.js';
+import { InventoryExportRequestDto } from './dto/inventory-export-request.dto.js';
+import { InventoryTurnoverExportRequestDto } from './report/dto/inventory-turnover-export-request.dto.js';
+import { InventoryTurnoverLineDto } from './report/dto/inventory-turnover-line.dto.js';
+import { InventoryTurnoverRequestDto } from './report/dto/inventory-turnover-request.dto.js';
+import { InventoryTurnoverSearchResponseDto } from './report/dto/inventory-turnover-search-response.dto.js';
 import { InventoryReportService } from './report/inventory-report.service.js';
+import { InventoryExportService } from './services/inventory-export.service.js';
 import { InventoryService } from './inventory.service.js';
 
 @ApiTags('Inventory')
@@ -58,6 +64,7 @@ export class InventoryController {
   constructor(
     private readonly inventory: InventoryService,
     private readonly reports: InventoryReportService,
+    private readonly exports: InventoryExportService,
   ) {}
 
   @ApiOperation({ summary: 'Search current inventory balances' })
@@ -98,6 +105,46 @@ export class InventoryController {
     );
   }
 
+  @ApiOperation({ summary: 'Export current inventory balances as XLSX' })
+  @ApiProduces(XlsxService.mimeType)
+  @ApiOkResponse({ description: 'File stream' })
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Get('export')
+  async exportBalances(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Query() dto: InventoryExportRequestDto,
+    @Res({ passthrough: true })
+    res: { setHeader: (name: string, value: string) => void },
+  ): Promise<StreamableFile> {
+    const { stream, filename } = await this.exports.stream(locationId, dto);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return new StreamableFile(stream, { type: XlsxService.mimeType });
+  }
+
+  @ApiOperation({ summary: 'Search inventory turnover statement lines' })
+  @ApiOkResponse({ type: ApiResponse(InventoryTurnoverSearchResponseDto) })
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Get('vedomost')
+  async searchVedomost(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Query() dto: InventoryTurnoverRequestDto,
+  ): Promise<BaseResponseDto<InventoryTurnoverSearchResponseDto>> {
+    const { items, totalItems, totals } = await this.reports.searchTurnover(
+      locationId,
+      dto,
+    );
+    return BaseResponseDto.success(
+      new InventoryTurnoverSearchResponseDto(
+        items.map(InventoryTurnoverLineDto.fromEntity),
+        InventoryTurnoverLineDto.fromEntity(totals),
+        dto.page,
+        dto.pageSize,
+        totalItems,
+        dto.isExport,
+      ),
+    );
+  }
+
   @ApiOperation({ summary: 'Export inventory turnover statement as XLSX' })
   @ApiProduces(XlsxService.mimeType)
   @ApiOkResponse({ description: 'File stream' })
@@ -105,7 +152,7 @@ export class InventoryController {
   @Get('export/vedomost')
   async exportVedomost(
     @Param('locationId', ParseUUIDPipe) locationId: string,
-    @Query() dto: InventoryReportQueryDto,
+    @Query() dto: InventoryTurnoverExportRequestDto,
     @Res({ passthrough: true })
     res: { setHeader: (name: string, value: string) => void },
   ): Promise<StreamableFile> {
@@ -140,6 +187,27 @@ export class InventoryController {
         dto.isExport,
       ),
     );
+  }
+
+  @ApiOperation({ summary: 'Export inventory movements for a product as XLSX' })
+  @ApiProduces(XlsxService.mimeType)
+  @ApiOkResponse({ description: 'File stream' })
+  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Get(':productId/movements/export')
+  async exportMovements(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Param('productId', ParseUUIDPipe) productId: string,
+    @Query() dto: InventoryMovementExportRequestDto,
+    @Res({ passthrough: true })
+    res: { setHeader: (name: string, value: string) => void },
+  ): Promise<StreamableFile> {
+    const { stream, filename } = await this.exports.streamMovements(
+      locationId,
+      productId,
+      dto,
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return new StreamableFile(stream, { type: XlsxService.mimeType });
   }
 
   @ApiOperation({ summary: 'Create an open inventory document' })
