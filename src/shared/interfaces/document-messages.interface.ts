@@ -108,8 +108,12 @@ export interface DocumentMessages {
     periodValue: string;
     closingValue: string;
     unitCost: string;
+    accountingUnitCost: string;
+    accountingCost: string;
     quantityBefore: string;
     quantityAfter: string;
+    balanceBefore: string;
+    balanceAfter: string;
     accountingQuantity: string;
     actualQuantity: string;
     responsibleAutomation: string;

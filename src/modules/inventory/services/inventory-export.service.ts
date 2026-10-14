@@ -1,5 +1,7 @@
+import { PassThrough } from 'stream';
 import { Injectable } from '@nestjs/common';
 import { InventoryMovement } from '@prisma/client';
+import ExcelJS from 'exceljs';
 import {
   DEFAULT_LANG,
   LocaleService,
@@ -26,6 +28,7 @@ type InventoryBalanceRow = {
   quantityOnHand: string;
   averageUnitCost: string;
   stockValue: string;
+  currency: string;
   reorderLevel: string;
   lowStock: string;
   outOfStock: string;
@@ -40,6 +43,7 @@ type InventoryMovementRow = {
   quantityDelta: string;
   unitCost: string;
   totalCost: string;
+  currency: string;
   quantityBefore: string;
   quantityAfter: string;
   documentId: string;
@@ -71,17 +75,21 @@ export class InventoryExportService {
       { header: inventory.quantityOnHand, key: 'quantityOnHand' },
       { header: inventory.averageUnitCost, key: 'averageUnitCost' },
       { header: inventory.stockValue, key: 'stockValue' },
+      { header: messages.documents.common.currency, key: 'currency' },
       { header: inventory.reorderLevel, key: 'reorderLevel' },
       { header: inventory.lowStock, key: 'lowStock' },
       { header: inventory.outOfStock, key: 'outOfStock' },
       { header: inventory.updatedAt, key: 'updatedAt' },
     ];
-    const { items } = await this.inventory.searchInventory(locationId, {
-      ...dto,
-      isExport: true,
-    });
+    const [location, { items }] = await Promise.all([
+      this.locations.findById(locationId),
+      this.inventory.searchInventory(locationId, {
+        ...dto,
+        isExport: true,
+      }),
+    ]);
     return XlsxService.table(
-      items.map((item) => this.toRow(item, messages)),
+      items.map((item) => this.toRow(item, messages, location.currency)),
       columns,
       'inventory-balances',
       inventory.balancesSheet,
@@ -103,25 +111,27 @@ export class InventoryExportService {
       { header: inventory.product, key: 'productName' },
       { header: inventory.sku, key: 'productSku' },
       { header: common.quantity, key: 'quantityDelta' },
-      { header: inventory.unitCost, key: 'unitCost' },
-      { header: common.amount, key: 'totalCost' },
-      { header: inventory.quantityBefore, key: 'quantityBefore' },
-      { header: inventory.quantityAfter, key: 'quantityAfter' },
+      { header: inventory.accountingUnitCost, key: 'unitCost' },
+      { header: inventory.accountingCost, key: 'totalCost' },
+      { header: common.currency, key: 'currency' },
+      { header: inventory.balanceBefore, key: 'quantityBefore' },
+      { header: inventory.balanceAfter, key: 'quantityAfter' },
       { header: inventory.document, key: 'documentId' },
       { header: inventory.order, key: 'orderId' },
       { header: common.id, key: 'id' },
       { header: common.createdAt, key: 'createdAt' },
     ];
-    const { items } = await this.inventory.searchMovements(
-      locationId,
-      productId,
-      {
+    const [location, { items }] = await Promise.all([
+      this.locations.findById(locationId),
+      this.inventory.searchMovements(locationId, productId, {
         ...dto,
         isExport: true,
-      },
-    );
+      }),
+    ]);
     return XlsxService.table(
-      items.map((item) => this.toMovementRow(item, messages)),
+      items.map((item) =>
+        this.toMovementRow(item, messages, location.currency),
+      ),
       columns,
       'inventory-movements',
       inventory.movementsSheet,
@@ -145,49 +155,91 @@ export class InventoryExportService {
       }),
     ]);
 
-    return XlsxService.write(`inventory-statement-${day}.xlsx`, (book) => {
-      const sheet = book.addSheet(inventory.inventoryStatementSheet);
-      sheet.addRow([inventory.inventoryStatementTitle]);
-      sheet.addRow([common.location, location.name]);
-      sheet.addRow([common.date, day]);
-      sheet.addRow([]);
-      sheet.addRow([
-        '№',
-        inventory.product,
-        inventory.sku,
-        inventory.baseUnit,
-        inventory.accountingQuantity,
-        inventory.actualQuantity,
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet(inventory.inventoryStatementSheet);
+    sheet.columns = [
+      { width: 6 },
+      { width: 34 },
+      { width: 18 },
+      { width: 12 },
+      { width: 18 },
+      { width: 18 },
+    ];
+
+    sheet.mergeCells('A1:F1');
+    const title = sheet.getCell('A1');
+    title.value = inventory.inventoryStatementTitle;
+    title.font = { bold: true, size: 14 };
+    title.alignment = { horizontal: 'center', vertical: 'middle' };
+    sheet.getRow(1).height = 24;
+
+    sheet.getCell('A2').value = common.location;
+    sheet.getCell('B2').value = location.name;
+    sheet.getCell('A3').value = common.date;
+    sheet.getCell('B3').value = day;
+    sheet.getCell('A2').font = { bold: true };
+    sheet.getCell('A3').font = { bold: true };
+
+    sheet.addRow([]);
+    const header = sheet.addRow([
+      '№',
+      inventory.product,
+      inventory.sku,
+      inventory.baseUnit,
+      inventory.accountingQuantity,
+      inventory.actualQuantity,
+    ]);
+    header.eachCell((cell) => {
+      cell.font = { bold: true };
+      cell.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFEDEFF3' },
+      };
+    });
+    this.applyInventoryStatementTableStyle(header);
+
+    items.forEach((item, index) => {
+      const row = sheet.addRow([
+        index + 1,
+        item.name,
+        item.sku ?? '',
+        productUnitLabelOf(messages.productUnit, item.unit),
+        QuantityService.format(item.quantityOnHand),
+        '',
       ]);
-      items.forEach((item, index) => {
-        sheet.addRow([
-          index + 1,
-          item.name,
-          item.sku ?? '',
-          productUnitLabelOf(messages.productUnit, item.unit),
-          QuantityService.format(item.quantityOnHand),
-          '',
-        ]);
-      });
-      sheet.addRow([]);
+      this.applyInventoryStatementTableStyle(row);
+    });
+
+    sheet.addRow([]);
+    this.addSignatureRow(
       sheet.addRow([
         inventory.responsibleAutomation,
         '',
         '',
         inventory.signature,
-      ]);
+        '',
+        '',
+      ]),
+    );
+    this.addSignatureRow(
       sheet.addRow([
         inventory.responsibleWarehouse,
         '',
         '',
         inventory.signature,
-      ]);
-    });
+        '',
+        '',
+      ]),
+    );
+
+    return this.workbookFile(workbook, `inventory-statement-${day}.xlsx`);
   }
 
   private toRow(
     item: InventoryBalanceView,
     messages: I18nLocale,
+    currency: string,
   ): InventoryBalanceRow {
     const inventory = messages.documents.inventory;
     return {
@@ -202,6 +254,7 @@ export class InventoryExportService {
       quantityOnHand: QuantityService.format(item.quantityOnHand),
       averageUnitCost: MoneyService.format(item.averageUnitCost),
       stockValue: MoneyService.format(item.stockValue),
+      currency,
       reorderLevel: QuantityService.format(item.reorderLevel),
       lowStock: item.lowStock ? inventory.yes : inventory.no,
       outOfStock: item.outOfStock ? inventory.yes : inventory.no,
@@ -212,6 +265,7 @@ export class InventoryExportService {
   private toMovementRow(
     item: InventoryMovement,
     messages: I18nLocale,
+    currency: string,
   ): InventoryMovementRow {
     return {
       occurredAt: item.occurredAt.toISOString(),
@@ -221,6 +275,7 @@ export class InventoryExportService {
       quantityDelta: QuantityService.format(item.quantityDelta),
       unitCost: MoneyService.format(item.unitCost),
       totalCost: MoneyService.format(item.totalCost),
+      currency,
       quantityBefore: QuantityService.format(item.quantityBefore),
       quantityAfter: QuantityService.format(item.quantityAfter),
       documentId: item.documentId ?? '',
@@ -228,5 +283,40 @@ export class InventoryExportService {
       id: item.id,
       createdAt: item.createdAt.toISOString(),
     };
+  }
+
+  private applyInventoryStatementTableStyle(row: ExcelJS.Row): void {
+    for (let column = 1; column <= 6; column += 1) {
+      const cell = row.getCell(column);
+      cell.border = {
+        top: { style: 'thin' },
+        left: { style: 'thin' },
+        bottom: { style: 'thin' },
+        right: { style: 'thin' },
+      };
+      cell.alignment = {
+        vertical: 'middle',
+        horizontal: column === 2 || column === 3 ? 'left' : 'center',
+        wrapText: true,
+      };
+    }
+  }
+
+  private addSignatureRow(row: ExcelJS.Row): void {
+    row.height = 26;
+    row.getCell(1).font = { bold: true };
+    row.getCell(4).alignment = { horizontal: 'right', vertical: 'bottom' };
+    for (const column of [2, 3, 5, 6]) {
+      row.getCell(column).border = { bottom: { style: 'medium' } };
+    }
+  }
+
+  private workbookFile(workbook: ExcelJS.Workbook, filename: string): XlsxFile {
+    const stream = new PassThrough();
+    void workbook.xlsx
+      .write(stream)
+      .then(() => stream.end())
+      .catch((error: unknown) => stream.destroy(error as Error));
+    return { stream, filename };
   }
 }

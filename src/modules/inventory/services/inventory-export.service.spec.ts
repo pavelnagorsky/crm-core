@@ -5,6 +5,7 @@ import {
   Prisma,
   ProductUnit,
 } from '@prisma/client';
+import ExcelJS from 'exceljs';
 import { OrderDirection } from '../../../shared/enums/order-direction.enum.js';
 import { LocaleService } from '../../../shared/i18n/locale.service.js';
 import { XlsxService } from '../../../shared/xlsx/xlsx.service.js';
@@ -52,7 +53,11 @@ describe('InventoryExportService', () => {
   const locations = {
     findById: vi
       .fn()
-      .mockResolvedValue({ id: 'location-1', name: 'Main warehouse' }),
+      .mockResolvedValue({
+        id: 'location-1',
+        name: 'Main warehouse',
+        currency: 'BYN',
+      }),
   };
   const locale = new LocaleService();
   locale.onModuleInit();
@@ -112,18 +117,22 @@ describe('InventoryExportService', () => {
       pageSize: 10,
       isExport: true,
     });
+    expect(locations.findById).toHaveBeenCalledWith('location-1');
     expect(file.filename).toMatch(
       /^inventory-balances-\d{4}-\d{2}-\d{2}\.xlsx$/,
     );
 
-    const grid = await XlsxService.read(await collect(file.stream));
+    const buffer = await collect(file.stream);
+    const grid = await XlsxService.read(buffer);
     expect(grid).not.toBeNull();
     if (!grid) return;
     expect(grid.rowCount).toBe(3);
     expect(grid.row(1).text(1)).toBe('Товар');
     expect(grid.row(1).text(3)).toBe('Штрихкод');
     expect(grid.row(1).text(5)).toBe('Остаток');
-    expect(grid.row(1).text(11)).toBe('Обновлён');
+    expect(grid.row(1).text(8)).toBe('Валюта');
+    expect(grid.row(1).text(9)).toBe('Минимальный остаток');
+    expect(grid.row(1).text(12)).toBe('Обновлён');
     expect(grid.row(2).text(1)).toBe('Шампунь');
     expect(grid.row(2).text(2)).toBe('SKU-1');
     expect(grid.row(2).text(3)).toBe('4600000000001');
@@ -131,14 +140,16 @@ describe('InventoryExportService', () => {
     expect(grid.row(2).text(5)).toBe('5.000');
     expect(grid.row(2).text(6)).toBe('3.00');
     expect(grid.row(2).text(7)).toBe('15.00');
-    expect(grid.row(2).text(9)).toBe('Нет');
+    expect(grid.row(2).text(8)).toBe('BYN');
     expect(grid.row(2).text(10)).toBe('Нет');
-    expect(grid.row(2).text(11)).toBe('2026-10-01');
+    expect(grid.row(2).text(11)).toBe('Нет');
+    expect(grid.row(2).text(12)).toBe('2026-10-01');
     expect(grid.row(3).text(2)).toBe('');
     expect(grid.row(3).text(3)).toBe('');
-    expect(grid.row(3).text(9)).toBe('Да');
+    expect(grid.row(3).text(8)).toBe('BYN');
     expect(grid.row(3).text(10)).toBe('Да');
-    expect(grid.row(3).text(11)).toBe('');
+    expect(grid.row(3).text(11)).toBe('Да');
+    expect(grid.row(3).text(12)).toBe('');
   });
 
   it('exports every movement matching the movement filters as xlsx', async () => {
@@ -200,27 +211,35 @@ describe('InventoryExportService', () => {
         isExport: true,
       },
     );
+    expect(locations.findById).toHaveBeenCalledWith('location-1');
     expect(file.filename).toMatch(
       /^inventory-movements-\d{4}-\d{2}-\d{2}\.xlsx$/,
     );
 
-    const grid = await XlsxService.read(await collect(file.stream));
+    const buffer = await collect(file.stream);
+    const grid = await XlsxService.read(buffer);
     expect(grid).not.toBeNull();
     if (!grid) return;
     expect(grid.rowCount).toBe(2);
-    expect(grid.row(1).text(12)).toBe('ID');
+    expect(grid.row(1).text(6)).toBe('Учетная стоимость / БЕИ');
+    expect(grid.row(1).text(7)).toBe('Учетная стоимость изменения');
+    expect(grid.row(1).text(8)).toBe('Валюта');
+    expect(grid.row(1).text(9)).toBe('Остаток до');
+    expect(grid.row(1).text(10)).toBe('Остаток после');
+    expect(grid.row(1).text(13)).toBe('ID');
     expect(grid.row(2).text(1)).toBe('2026-10-02T09:30:00.000Z');
     expect(grid.row(2).text(3)).toBe('Shampoo');
     expect(grid.row(2).text(4)).toBe('SKU-1');
     expect(grid.row(2).text(5)).toBe('5.000');
     expect(grid.row(2).text(6)).toBe('3.00');
     expect(grid.row(2).text(7)).toBe('15.00');
-    expect(grid.row(2).text(8)).toBe('0.000');
-    expect(grid.row(2).text(9)).toBe('5.000');
-    expect(grid.row(2).text(10)).toBe('document-1');
-    expect(grid.row(2).text(11)).toBe('');
-    expect(grid.row(2).text(12)).toBe('movement-1');
-    expect(grid.row(2).text(13)).toBe('2026-10-02T09:31:00.000Z');
+    expect(grid.row(2).text(8)).toBe('BYN');
+    expect(grid.row(2).text(9)).toBe('0.000');
+    expect(grid.row(2).text(10)).toBe('5.000');
+    expect(grid.row(2).text(11)).toBe('document-1');
+    expect(grid.row(2).text(12)).toBe('');
+    expect(grid.row(2).text(13)).toBe('movement-1');
+    expect(grid.row(2).text(14)).toBe('2026-10-02T09:31:00.000Z');
   });
 
   it('exports an inventory statement for manual stock count', async () => {
@@ -257,7 +276,8 @@ describe('InventoryExportService', () => {
       /^inventory-statement-\d{4}-\d{2}-\d{2}\.xlsx$/,
     );
 
-    const grid = await XlsxService.read(await collect(file.stream));
+    const buffer = await collect(file.stream);
+    const grid = await XlsxService.read(buffer);
     expect(grid).not.toBeNull();
     if (!grid) return;
     expect(grid.row(1).text(1)).toBe('Инвентаризационная ведомость');
@@ -275,5 +295,15 @@ describe('InventoryExportService', () => {
     expect(grid.row(9).text(1)).toBe('Ответственный от отдела автоматизации');
     expect(grid.row(10).text(1)).toBe('Ответственный от склада');
     expect(grid.row(10).text(4)).toBe('Подпись');
+
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(
+      buffer as unknown as Parameters<ExcelJS.Xlsx['load']>[0],
+    );
+    const worksheet = workbook.worksheets[0];
+    expect(worksheet?.getCell('A5').border.top?.style).toBe('thin');
+    expect(worksheet?.getCell('F7').border.right?.style).toBe('thin');
+    expect(worksheet?.getCell('B9').border.bottom?.style).toBe('medium');
+    expect(worksheet?.getCell('F10').border.bottom?.style).toBe('medium');
   });
 });
