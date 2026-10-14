@@ -59,4 +59,44 @@ describe('StaffService.search', () => {
       [],
     ]);
   });
+
+  it('matches a single name token', async () => {
+    await service.search('business-1', {
+      page: 1,
+      pageSize: 25,
+      search: '  Мария  ',
+    } as StaffSearchRequestDto);
+
+    expect(findMany.mock.calls[0][0].where).toEqual({
+      locationId: 'business-1',
+      AND: [
+        {
+          OR: [{ name: { contains: 'мария', mode: 'insensitive' } }],
+        },
+      ],
+    });
+  });
+
+  it('matches first and last name in any order and folds yo', async () => {
+    await service.search('business-1', {
+      page: 1,
+      pageSize: 25,
+      search: '  Ковалева   Мария  ',
+    } as StaffSearchRequestDto);
+
+    expect(findMany.mock.calls[0][0].where).toEqual({
+      locationId: 'business-1',
+      AND: [
+        {
+          OR: [
+            { name: { contains: 'ковалева', mode: 'insensitive' } },
+            { name: { contains: 'ковалёва', mode: 'insensitive' } },
+          ],
+        },
+        {
+          OR: [{ name: { contains: 'мария', mode: 'insensitive' } }],
+        },
+      ],
+    });
+  });
 });

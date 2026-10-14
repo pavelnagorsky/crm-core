@@ -43,6 +43,8 @@ import { StaffWithAvatar } from './interfaces/staff-with-avatar.interface.js';
 import { StaffWithServiceCount } from './interfaces/staff-with-service-count.interface.js';
 import { sanitizeRichHtml } from '../../shared/html/sanitize-rich-html.js';
 import { LocationService } from '../location/location.service.js';
+import regularExpressions from '../../shared/regular-expressions.js';
+import { yoSearchVariants } from './utils/yo-search-variants.js';
 
 const STAFF_DESCRIPTION_MAX_LENGTH = 2_000;
 
@@ -302,8 +304,15 @@ export class StaffService {
     filter: StaffFilterDto,
   ): Prisma.StaffWhereInput {
     const where: Prisma.StaffWhereInput = { locationId };
-    if (filter.search)
-      where.name = { contains: filter.search, mode: 'insensitive' };
+    const search = filter.search?.trim();
+    if (search) {
+      const terms = search.split(regularExpressions.whitespace).filter(Boolean);
+      where.AND = terms.map((term) => ({
+        OR: yoSearchVariants(term).map((variant) => ({
+          name: { contains: variant, mode: 'insensitive' as const },
+        })),
+      }));
+    }
     if (filter.status !== undefined) where.status = filter.status;
     return where;
   }
