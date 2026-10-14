@@ -11,6 +11,18 @@ import { XlsxSheet } from './interfaces/xlsx-sheet.interface.js';
 const OCTET_STREAM = 'application/octet-stream';
 const SHEET_NAME_LIMIT = 31;
 const INVALID_SHEET_CHARS = /[\\/*?:[\]]/g;
+const DEFAULT_COLUMN_WIDTH = 20;
+const MIN_COLUMN_WIDTH = 10;
+const MAX_COLUMN_WIDTH = 255;
+const COLUMN_PADDING = 2;
+
+type XlsxStoredColumn = { header: string; key: string; width?: number };
+type XlsxStoredRow = unknown[] | Record<string, unknown>;
+type XlsxStoredSheet = {
+  name: string;
+  columns: XlsxStoredColumn[] | null;
+  rows: XlsxStoredRow[];
+};
 
 export class XlsxService {
   static readonly mimeType =
@@ -46,32 +58,38 @@ export class XlsxService {
 
   /** Streaming workbook. `filename` is the download name, including `.xlsx`. */
   static write(filename: string, build: (book: XlsxBook) => void): XlsxFile {
-    const stream = new PassThrough();
-    const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({ stream });
-    const commits: Array<() => void> = [];
+    const sheets: XlsxStoredSheet[] = [];
     const book: XlsxBook = {
       addSheet(name: string, fallback = 'Sheet'): XlsxSheet {
-        const worksheet = workbook.addWorksheet(
-          XlsxService.sheetName(name, fallback),
-        );
-        commits.push(() => worksheet.commit());
+        const sheet: XlsxStoredSheet = {
+          name: XlsxService.sheetName(name, fallback),
+          columns: null,
+          rows: [],
+        };
+        sheets.push(sheet);
         return {
           setColumns(columns) {
-            worksheet.columns = columns.map((column) => ({
-              header: column.header,
-              key: column.key,
-              width: column.width ?? 20,
-            }));
+            sheet.columns = columns.map((column) => ({ ...column }));
           },
           addRow(values) {
-            const data = Array.isArray(values) ? [...values] : values;
-            worksheet.addRow(data).commit();
+            sheet.rows.push(
+              Array.isArray(values) ? [...values] : { ...values },
+            );
           },
         };
       },
     };
     build(book);
-    for (const commit of commits) commit();
+
+    const stream = new PassThrough();
+    const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({ stream });
+    for (const sheet of sheets) {
+      const worksheet = workbook.addWorksheet(sheet.name);
+      const columns = XlsxService.columns(sheet);
+      if (columns.length > 0) worksheet.columns = columns;
+      for (const row of sheet.rows) worksheet.addRow(row).commit();
+      worksheet.commit();
+    }
     // Resolves only after the HTTP layer reads the stream. Awaiting it here deadlocks the response.
     void workbook.commit();
     return { stream, filename };
@@ -131,5 +149,95 @@ export class XlsxService {
         return XlsxService.cellText(value.text as ExcelJS.CellValue);
     }
     return String(value).trim();
+  }
+
+  private static contentWidth(value: unknown): number {
+    const text = XlsxService.cellText(value as ExcelJS.CellValue);
+    if (!text) return 0;
+    return text.split(/\r\n|\r|\n/).reduce((max, line) => {
+      return Math.max(max, Array.from(line).length);
+    }, 0);
+  }
+
+  private static columnWidth(width: number): number {
+    return Math.min(
+      MAX_COLUMN_WIDTH,
+      Math.max(MIN_COLUMN_WIDTH, Math.ceil(width)),
+    );
+  }
+
+  private static columns(sheet: XlsxStoredSheet): Partial<ExcelJS.Column>[] {
+    return sheet.columns
+      ? XlsxService.configuredColumns(sheet.columns, sheet.rows)
+      : XlsxService.inferredColumns(sheet.rows);
+  }
+
+  private static configuredColumns(
+    columns: readonly XlsxStoredColumn[],
+    rows: readonly XlsxStoredRow[],
+  ): Partial<ExcelJS.Column>[] {
+    return columns.map((column) => ({
+      header: column.header,
+      key: column.key,
+      width: XlsxService.fittedWidth(column.width ?? DEFAULT_COLUMN_WIDTH, [
+        column.header,
+        ...rows.map((row) => XlsxService.rowValue(row, column.key)),
+      ]),
+    }));
+  }
+
+  private static inferredColumns(
+    rows: readonly XlsxStoredRow[],
+  ): Partial<ExcelJS.Column>[] {
+    const keys = XlsxService.inferredKeys(rows);
+    const count =
+      keys.length > 0
+        ? keys.length
+        : rows.reduce((max, row) => {
+            return Array.isArray(row) ? Math.max(max, row.length) : max;
+          }, 0);
+    return Array.from({ length: count }, (_, index) => {
+      const key = keys[index];
+      return {
+        key,
+        width: XlsxService.fittedWidth(
+          DEFAULT_COLUMN_WIDTH,
+          rows.map((row) =>
+            key
+              ? XlsxService.rowValue(row, key)
+              : XlsxService.rowValue(row, index),
+          ),
+        ),
+      };
+    });
+  }
+
+  private static inferredKeys(rows: readonly XlsxStoredRow[]): string[] {
+    const keys: string[] = [];
+    for (const row of rows) {
+      if (Array.isArray(row)) continue;
+      for (const key of Object.keys(row)) {
+        if (!keys.includes(key)) keys.push(key);
+      }
+    }
+    return keys;
+  }
+
+  private static rowValue(row: XlsxStoredRow, key: string | number): unknown {
+    if (Array.isArray(row)) return typeof key === 'number' ? row[key] : '';
+    const record: Record<string, unknown> = row;
+    return typeof key === 'string' ? record[key] : Object.values(record)[key];
+  }
+
+  private static fittedWidth(
+    baseWidth: number,
+    values: readonly unknown[],
+  ): number {
+    const contentWidth = values.reduce<number>((max, value) => {
+      return Math.max(max, XlsxService.contentWidth(value));
+    }, 0);
+    return XlsxService.columnWidth(
+      Math.max(baseWidth, contentWidth + COLUMN_PADDING),
+    );
   }
 }

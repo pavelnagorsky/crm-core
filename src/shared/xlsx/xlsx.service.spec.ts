@@ -1,6 +1,7 @@
 import { PassThrough } from 'stream';
 import ExcelJS from 'exceljs';
 import { XlsxBook } from './interfaces/xlsx-book.interface.js';
+import { XlsxFile } from './interfaces/xlsx-file.interface.js';
 import { XlsxService } from './xlsx.service.js';
 
 function collect(stream: PassThrough): Promise<Buffer> {
@@ -14,13 +15,18 @@ function collect(stream: PassThrough): Promise<Buffer> {
 
 async function sheetNames(build: (book: XlsxBook) => void): Promise<string[]> {
   const file = XlsxService.write('book.xlsx', build);
+  const workbook = await loadWorkbook(file);
+  return workbook.worksheets.map((sheet) => sheet.name);
+}
+
+async function loadWorkbook(file: XlsxFile): Promise<ExcelJS.Workbook> {
   const workbook = new ExcelJS.Workbook();
   await workbook.xlsx.load(
     (await collect(file.stream)) as unknown as Parameters<
       ExcelJS.Xlsx['load']
     >[0],
   );
-  return workbook.worksheets.map((sheet) => sheet.name);
+  return workbook;
 }
 
 describe('XlsxService', () => {
@@ -44,6 +50,46 @@ describe('XlsxService', () => {
     expect(grid.row(1).text(2)).toBe('Телефон');
     expect(grid.row(2).text(1)).toBe('Anna');
     expect(grid.row(2).text(2)).toBe('375');
+  });
+
+  it('expands table columns to fit headers and row content', async () => {
+    const file = XlsxService.table(
+      [
+        {
+          name: 'Long client name that should fit',
+          phone: '+375291234567 extra digits',
+        },
+      ],
+      [
+        { header: 'Name', key: 'name' },
+        { header: 'Phone', key: 'phone', width: 18 },
+      ],
+      'clients',
+    );
+
+    const workbook = await loadWorkbook(file);
+    const sheet = workbook.worksheets[0];
+
+    expect(sheet.getColumn(1).width).toBeGreaterThanOrEqual(34);
+    expect(sheet.getColumn(2).width).toBeGreaterThanOrEqual(27);
+  });
+
+  it('expands columns for report-style sheets without setColumns', async () => {
+    const file = XlsxService.write('report.xlsx', (book) => {
+      const sheet = book.addSheet('Report');
+      sheet.addRow(['Period', '2026-10-01 - 2026-10-31']);
+      sheet.addRow([]);
+      sheet.addRow([
+        'Total amount payable for every active staff member',
+        '1234567.89',
+      ]);
+    });
+
+    const workbook = await loadWorkbook(file);
+    const sheet = workbook.worksheets[0];
+
+    expect(sheet.getColumn(1).width).toBeGreaterThanOrEqual(50);
+    expect(sheet.getColumn(2).width).toBeGreaterThanOrEqual(25);
   });
 
   it('sanitizes worksheet names', async () => {
