@@ -1,7 +1,6 @@
 export enum ServicesAnalyticsWidgetKey {
   /**
-   * Big number: how many bookings of these services were completed in the period.
-   * Respects the page filters for search, category, and status.
+   * Big number: how many bookings were completed in the period.
    * `metric.spark` is a thin line of that count per day or week. More is better.
    */
   SERVICES_COMPLETED_COUNT = 'SERVICES_COMPLETED_COUNT',

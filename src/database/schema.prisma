@@ -390,6 +390,7 @@ model Brand {
   locations         Location[]
   productCategories ProductCategory[]
   products          Product[]
+  suppliers         Supplier[]
 }
 
 model Location {
@@ -451,6 +452,29 @@ model ProductCategory {
 
   @@unique([brandId, name])
   @@index([brandId, sortOrder])
+}
+
+model Supplier {
+  id             String   @id @default(uuid())
+  brandId        String
+  name           String   @db.VarChar(200)
+  normalizedName String   @db.VarChar(200)
+  legalName      String?  @db.VarChar(255)
+  taxId          String?  @db.VarChar(30)
+  phone          String?  @db.VarChar(30)
+  email          String?  @db.VarChar(254)
+  contactPerson  String?  @db.VarChar(150)
+  notes          String?  @db.VarChar(1000)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  brand              Brand               @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  inventoryDocuments InventoryDocument[]
+
+  @@unique([brandId, normalizedName])
+  @@index([brandId, isActive])
+  @@index([brandId, updatedAt])
 }
 
 model Product {
@@ -517,6 +541,7 @@ model InventoryDocument {
   id                    String                  @id @default(uuid())
   locationId            String
   destinationLocationId String?
+  supplierId            String?
   type                  InventoryDocumentType
   status                InventoryDocumentStatus @default(OPEN)
   occurredAt            DateTime
@@ -533,11 +558,13 @@ model InventoryDocument {
 
   location            Location                @relation("InventoryDocumentSource", fields: [locationId], references: [id], onDelete: Restrict)
   destinationLocation Location?               @relation("InventoryDocumentDestination", fields: [destinationLocationId], references: [id], onDelete: Restrict)
+  supplier            Supplier?               @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   items               InventoryDocumentItem[]
   movements           InventoryMovement[]
 
   @@index([locationId, occurredAt])
   @@index([locationId, status])
+  @@index([supplierId, occurredAt])
   @@index([destinationLocationId, occurredAt])
 }
 

@@ -22,6 +22,7 @@ function document(status: InventoryDocumentStatus) {
     id: 'document-1',
     locationId: 'location-1',
     destinationLocationId: null,
+    supplierId: null,
     type: InventoryDocumentType.WRITE_OFF,
     status,
     occurredAt: now,
@@ -81,6 +82,7 @@ function setup(status: InventoryDocumentStatus) {
       findMany: vi.fn().mockResolvedValue([]),
     },
     inventoryDocument: {
+      create: vi.fn(),
       findMany: vi.fn().mockResolvedValue([]),
       count: vi.fn().mockResolvedValue(0),
     },
@@ -88,6 +90,9 @@ function setup(status: InventoryDocumentStatus) {
   const products = {
     resolveForInventory: vi.fn(),
     listTrackedForInventory: vi.fn(),
+  };
+  const suppliers = {
+    resolveActiveForDocument: vi.fn(),
   };
   const locations = {
     findById: vi
@@ -101,13 +106,14 @@ function setup(status: InventoryDocumentStatus) {
   const service = new InventoryService(
     db as never,
     products as never,
+    suppliers as never,
     locations as never,
     events as never,
     compute,
     balanceLocks,
     saleReversals,
   );
-  return { service, tx, db, products, events };
+  return { service, tx, db, products, suppliers, events };
 }
 
 describe('InventoryService', () => {
@@ -312,6 +318,7 @@ describe('InventoryService', () => {
       { inventoryDocument: { groupBy } } as never,
       {} as never,
       {} as never,
+      {} as never,
       { emit: vi.fn() } as never,
       new InventoryComputeService(),
       {} as never,
@@ -330,6 +337,7 @@ describe('InventoryService', () => {
         locationId: 'location-1',
         type: InventoryDocumentType.RECEIPT,
         status: undefined,
+        supplierId: undefined,
         occurredAt: {
           gte: new Date('2026-10-01T00:00:00.000Z'),
           lt: new Date('2026-11-01T00:00:00.000Z'),
@@ -342,6 +350,62 @@ describe('InventoryService', () => {
       { status: InventoryDocumentStatus.POSTED, count: 5 },
       { status: InventoryDocumentStatus.VOIDED, count: 0 },
     ]);
+  });
+
+  it('links an active supplier and stores its name snapshot when creating a document', async () => {
+    const { service, db, products, suppliers } = setup(
+      InventoryDocumentStatus.OPEN,
+    );
+    products.resolveForInventory.mockResolvedValue([
+      {
+        id: 'product-location-1',
+        productId: 'product-1',
+        product: {
+          name: 'Shampoo',
+          sku: 'SKU-1',
+          unit: ProductUnit.PIECE,
+        },
+      },
+    ]);
+    suppliers.resolveActiveForDocument.mockResolvedValue({
+      id: 'supplier-1',
+      name: 'Acme Supply',
+    });
+    db.inventoryDocument.create.mockResolvedValue({
+      id: 'document-1',
+      supplierId: 'supplier-1',
+      supplierName: 'Acme Supply',
+    });
+
+    await service.createDocument(
+      'location-1',
+      {
+        type: InventoryDocumentType.RECEIPT,
+        occurredAt: '2026-10-01T10:00:00.000Z',
+        supplierId: 'supplier-1',
+        items: [
+          {
+            productId: 'product-1',
+            quantity: '2.000',
+            unitCost: '5.00',
+          },
+        ],
+      },
+      actor,
+    );
+
+    expect(suppliers.resolveActiveForDocument).toHaveBeenCalledWith(
+      'brand-1',
+      'supplier-1',
+    );
+    expect(db.inventoryDocument.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          supplierId: 'supplier-1',
+          supplierName: 'Acme Supply',
+        }),
+      }),
+    );
   });
 
   it('filters documents by an inclusive calendar date range', async () => {
@@ -362,6 +426,7 @@ describe('InventoryService', () => {
           locationId: 'location-1',
           type: InventoryDocumentType.ADJUSTMENT,
           status: undefined,
+          supplierId: undefined,
           occurredAt: {
             gte: new Date('2026-10-01T00:00:00.000Z'),
             lt: new Date('2026-11-01T00:00:00.000Z'),
@@ -374,6 +439,7 @@ describe('InventoryService', () => {
         locationId: 'location-1',
         type: InventoryDocumentType.ADJUSTMENT,
         status: undefined,
+        supplierId: undefined,
         occurredAt: {
           gte: new Date('2026-10-01T00:00:00.000Z'),
           lt: new Date('2026-11-01T00:00:00.000Z'),
@@ -558,6 +624,78 @@ describe('InventoryService', () => {
     expect(result).toEqual({
       lowStockCount: 3,
       outOfStockCount: 2,
+    });
+  });
+
+  it('filters inventory balances and counts by selected products', async () => {
+    const { service, db, products } = setup(InventoryDocumentStatus.OPEN);
+    products.listTrackedForInventory = vi.fn().mockResolvedValue([
+      {
+        id: 'product-location-1',
+        productId: 'product-1',
+        reorderLevel: new Prisma.Decimal(2),
+        product: {
+          name: 'Shampoo',
+          sku: 'SKU-1',
+          barcode: null,
+          unit: ProductUnit.PIECE,
+        },
+      },
+      {
+        id: 'product-location-2',
+        productId: 'product-2',
+        reorderLevel: new Prisma.Decimal(1),
+        product: {
+          name: 'Conditioner',
+          sku: 'SKU-2',
+          barcode: null,
+          unit: ProductUnit.PIECE,
+        },
+      },
+      {
+        id: 'product-location-3',
+        productId: 'product-3',
+        reorderLevel: new Prisma.Decimal(1),
+        product: {
+          name: 'Mask',
+          sku: 'SKU-3',
+          barcode: null,
+          unit: ProductUnit.PIECE,
+        },
+      },
+    ]);
+    db.inventoryBalance.findMany.mockResolvedValue([
+      {
+        productLocationId: 'product-location-1',
+        quantityOnHand: new Prisma.Decimal(5),
+        averageUnitCost: new Prisma.Decimal(3),
+        updatedAt: new Date('2026-10-01T10:00:00.000Z'),
+      },
+      {
+        productLocationId: 'product-location-2',
+        quantityOnHand: new Prisma.Decimal(0),
+        averageUnitCost: new Prisma.Decimal(4),
+        updatedAt: new Date('2026-10-01T10:00:00.000Z'),
+      },
+    ]);
+
+    const result = await service.searchInventory('location-1', {
+      page: 1,
+      pageSize: 10,
+      productIds: ['product-1', 'product-3'],
+    } as never);
+    const counts = await service.getInventoryCounts('location-1', {
+      productIds: ['product-1', 'product-3'],
+    });
+
+    expect(result.totalItems).toBe(2);
+    expect(result.items.map((item) => item.productId)).toEqual([
+      'product-3',
+      'product-1',
+    ]);
+    expect(counts).toEqual({
+      lowStockCount: 1,
+      outOfStockCount: 1,
     });
   });
 });

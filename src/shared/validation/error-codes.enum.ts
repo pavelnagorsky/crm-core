@@ -370,6 +370,20 @@ export const ErrorCode = {
       'Inventory tracking cannot be disabled after it has been enabled for a location',
   },
 
+  // suppliers
+  SUPPLIER_NAME_EXISTS: {
+    code: 'SUPPLIER_NAME_EXISTS',
+    message: 'Supplier name already exists in this brand',
+  },
+  SUPPLIER_NAME_REQUIRED: {
+    code: 'SUPPLIER_NAME_REQUIRED',
+    message: 'Supplier name is required',
+  },
+  SUPPLIER_INACTIVE: {
+    code: 'SUPPLIER_INACTIVE',
+    message: 'Supplier is inactive',
+  },
+
   // inventory
   INVENTORY_PRODUCT_NOT_CONFIGURED: {
     code: 'INVENTORY_PRODUCT_NOT_CONFIGURED',

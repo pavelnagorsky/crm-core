@@ -31,6 +31,7 @@ import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js';
 import { LocationService } from '../location/location.service.js';
 import { ProductsService } from '../products/products.service.js';
+import { SuppliersService } from '../suppliers/suppliers.service.js';
 import { CreateInventoryDocumentDto } from './dto/create-inventory-document.dto.js';
 import { InventoryDocumentSearchRequestDto } from './dto/inventory-document-search-request.dto.js';
 import { InventoryDocumentStatusCountsRequestDto } from './dto/inventory-document-status-counts-request.dto.js';
@@ -65,12 +66,14 @@ const DOCUMENT_STATUSES = [
 ];
 
 type Transaction = Prisma.TransactionClient;
+type ResolvedDocumentSupplier = { id: string | null; name: string | null };
 
 @Injectable()
 export class InventoryService {
   constructor(
     private readonly db: DatabaseService,
     private readonly products: ProductsService,
+    private readonly suppliers: SuppliersService,
     private readonly locations: LocationService,
     private readonly eventEmitter: EventEmitter2,
     private readonly compute: InventoryComputeService,
@@ -89,14 +92,16 @@ export class InventoryService {
       location.brandId,
       dto,
     );
+    const supplier = await this.resolveDocumentSupplier(location.brandId, dto);
     const document = await this.db.inventoryDocument.create({
       data: {
         locationId,
         destinationLocationId: dto.destinationLocationId ?? null,
+        supplierId: supplier.id,
         type: dto.type,
         occurredAt: new Date(dto.occurredAt),
         reference: this.text(dto.reference),
-        supplierName: this.text(dto.supplierName),
+        supplierName: supplier.name,
         reason: this.text(dto.reason),
         note: this.text(dto.note),
         createdById: actor.id ?? null,
@@ -128,6 +133,7 @@ export class InventoryService {
       location.brandId,
       dto,
     );
+    const supplier = await this.resolveDocumentSupplier(location.brandId, dto);
     const document = await this.inTransaction(async (tx) => {
       await this.lockDocument(tx, documentId);
       const old = await this.findDocumentInTransaction(
@@ -141,10 +147,11 @@ export class InventoryService {
         where: { id: documentId },
         data: {
           destinationLocationId: dto.destinationLocationId ?? null,
+          supplierId: supplier.id,
           type: dto.type,
           occurredAt: new Date(dto.occurredAt),
           reference: this.text(dto.reference),
-          supplierName: this.text(dto.supplierName),
+          supplierName: supplier.name,
           reason: this.text(dto.reason),
           note: this.text(dto.note),
           items: { create: this.itemData(dto.items, resolved) },
@@ -250,7 +257,11 @@ export class InventoryService {
     locationId: string,
     dto: InventorySearchRequestDto,
   ): Promise<PaginatedResult<InventoryBalanceView>> {
-    let items = await this.getInventoryBalanceViews(locationId, dto.search);
+    let items = await this.getInventoryBalanceViews(
+      locationId,
+      dto.search,
+      dto.productIds,
+    );
     if (dto.lowStock !== undefined) {
       items = items.filter((item) => item.lowStock === dto.lowStock);
     }
@@ -272,7 +283,11 @@ export class InventoryService {
     locationId: string,
     dto: InventoryCountsRequestDto,
   ): Promise<InventoryCountsView> {
-    const items = await this.getInventoryBalanceViews(locationId, dto.search);
+    const items = await this.getInventoryBalanceViews(
+      locationId,
+      dto.search,
+      dto.productIds,
+    );
     return {
       lowStockCount: items.filter((item) => item.lowStock).length,
       outOfStockCount: items.filter((item) => item.outOfStock).length,
@@ -282,6 +297,7 @@ export class InventoryService {
   private async getInventoryBalanceViews(
     locationId: string,
     searchValue?: string,
+    productIds?: string[],
   ): Promise<InventoryBalanceView[]> {
     const locationProducts =
       await this.products.listTrackedForInventory(locationId);
@@ -315,6 +331,10 @@ export class InventoryService {
         updatedAt: balance?.updatedAt ?? null,
       };
     });
+    if (productIds?.length) {
+      const selected = new Set(productIds);
+      items = items.filter((item) => selected.has(item.productId));
+    }
     if (search) {
       items = items.filter((item) =>
         [item.name, item.sku, item.barcode].some((value) =>
@@ -792,6 +812,20 @@ export class InventoryService {
     return rows;
   }
 
+  private async resolveDocumentSupplier(
+    brandId: string,
+    dto: CreateInventoryDocumentDto,
+  ): Promise<ResolvedDocumentSupplier> {
+    if (!dto.supplierId) {
+      return { id: null, name: this.text(dto.supplierName) };
+    }
+    const supplier = await this.suppliers.resolveActiveForDocument(
+      brandId,
+      dto.supplierId,
+    );
+    return { id: supplier.id, name: supplier.name };
+  }
+
   private async validateDraft(
     locationId: string,
     brandId: string,
@@ -957,6 +991,7 @@ export class InventoryService {
       status?: InventoryDocumentStatus;
       from?: string;
       to?: string;
+      supplierId?: string;
     },
   ): Prisma.InventoryDocumentWhereInput {
     const occurredAt = this.occurredAtDateWhere(filter);
@@ -964,6 +999,7 @@ export class InventoryService {
       locationId,
       type: filter.type,
       status: filter.status,
+      supplierId: filter.supplierId,
       ...(occurredAt ? { occurredAt } : {}),
     };
   }

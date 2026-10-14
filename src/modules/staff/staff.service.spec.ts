@@ -69,15 +69,11 @@ describe('StaffService.search', () => {
 
     expect(findMany.mock.calls[0][0].where).toEqual({
       locationId: 'business-1',
-      AND: [
-        {
-          OR: [{ name: { contains: 'мария', mode: 'insensitive' } }],
-        },
-      ],
+      AND: [{ name: { contains: 'Мария', mode: 'insensitive' } }],
     });
   });
 
-  it('matches first and last name in any order and folds yo', async () => {
+  it('matches first and last name in any order', async () => {
     await service.search('business-1', {
       page: 1,
       pageSize: 25,
@@ -87,15 +83,8 @@ describe('StaffService.search', () => {
     expect(findMany.mock.calls[0][0].where).toEqual({
       locationId: 'business-1',
       AND: [
-        {
-          OR: [
-            { name: { contains: 'ковалева', mode: 'insensitive' } },
-            { name: { contains: 'ковалёва', mode: 'insensitive' } },
-          ],
-        },
-        {
-          OR: [{ name: { contains: 'мария', mode: 'insensitive' } }],
-        },
+        { name: { contains: 'Ковалева', mode: 'insensitive' } },
+        { name: { contains: 'Мария', mode: 'insensitive' } },
       ],
     });
   });

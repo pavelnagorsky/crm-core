@@ -2589,6 +2589,22 @@ describe('OrdersService', () => {
     ]);
   });
 
+  it('matches a client full name in any word order', async () => {
+    const { db, service } = setup();
+    db.order.groupBy.mockResolvedValue([]);
+
+    await service.getStatusCounts('location-1', {
+      search: '  Ковалева   Мария  ',
+    });
+
+    expect(db.order.groupBy.mock.calls[0][0].where.OR.at(-1)).toEqual({
+      AND: [
+        { clientName: { contains: 'Ковалева', mode: 'insensitive' } },
+        { clientName: { contains: 'Мария', mode: 'insensitive' } },
+      ],
+    });
+  });
+
   it('filters orders by sale id', async () => {
     const { db, service } = setup();
     db.order.groupBy.mockResolvedValue([]);

@@ -16,6 +16,7 @@ import { OrderStatusCount } from '../interfaces/order-status-count.interface.js'
 import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
 import { orderInclude } from '../constants/order-include.constant.js';
 import { OrderComputeService } from './order-compute.service.js';
+import regularExpressions from '../../../shared/regular-expressions.js';
 
 const ORDER_STATUSES = [OrderStatus.ACTIVE, OrderStatus.VOIDED];
 
@@ -204,6 +205,7 @@ export class OrderPersistenceService {
     };
     const search = filter.search?.trim();
     if (search) {
+      const terms = search.split(regularExpressions.whitespace).filter(Boolean);
       where.OR = [
         { clientName: { contains: search, mode: 'insensitive' } },
         { clientPhone: { contains: search } },
@@ -212,6 +214,13 @@ export class OrderPersistenceService {
         },
         { items: { some: { sku: { contains: search, mode: 'insensitive' } } } },
       ];
+      if (terms.length > 1) {
+        where.OR.push({
+          AND: terms.map((term) => ({
+            clientName: { contains: term, mode: 'insensitive' as const },
+          })),
+        });
+      }
     }
     return where;
   }

@@ -24,7 +24,7 @@
 | `ServicesService`          | Service/category CRUD, status changes, booking/catalog lookup, active-service resolution.                      | `service`, `serviceCategory`                                   | `LocationService`                                                   |
 | `ServiceBundleService`     | Bundle CRUD/status и lookup bundle для catalog/booking.                                                        | `service`, `serviceBundle`                                     | `LocationService`                                                   |
 | `ServiceCatalogService`    | Единый facade каталога поверх services и bundles.                                                              | none                                                           | `ServicesService`, `ServiceBundleService`                           |
-| `ServicesAnalyticsService` | Analytics widgets по услугам.                                                                                  | aggregate reads через зависимости                              | `BookingsAggregatesService`, dashboard factories, `ServicesService` |
+| `ServicesAnalyticsService` | Analytics widgets по услугам.                                                                                  | aggregate reads через зависимости                              | `BookingsAggregatesService`, dashboard factories                    |
 
 ## Calendar И Booking
 

@@ -10,6 +10,7 @@ import { BookingStatus } from '../../enums/booking-status.enum.js';
 import { BookingWithItems } from '../../interfaces/booking-with-items.interface.js';
 import { bookingWithItemsInclude } from '../../constants/booking-with-items.include.js';
 import { catalogItemMatch } from '../../utils/catalog-item-filter.js';
+import regularExpressions from '../../../../shared/regular-expressions.js';
 
 @Injectable()
 export class BookingReadService {
@@ -129,6 +130,7 @@ export class BookingReadService {
     }
     const search = dto.search?.trim();
     if (search) {
+      const terms = search.split(regularExpressions.whitespace).filter(Boolean);
       where.OR = [
         { clientFirstName: { contains: search, mode: 'insensitive' } },
         { clientLastName: { contains: search, mode: 'insensitive' } },
@@ -148,6 +150,27 @@ export class BookingReadService {
         { internalNotes: { contains: search, mode: 'insensitive' } },
         { cancellationReason: { contains: search, mode: 'insensitive' } },
       ];
+      if (terms.length > 1) {
+        where.OR.push(
+          {
+            AND: terms.map((term) => ({
+              OR: [
+                { clientFirstName: { contains: term, mode: 'insensitive' } },
+                { clientLastName: { contains: term, mode: 'insensitive' } },
+              ],
+            })),
+          },
+          {
+            items: {
+              some: {
+                AND: terms.map((term) => ({
+                  staffName: { contains: term, mode: 'insensitive' as const },
+                })),
+              },
+            },
+          },
+        );
+      }
     }
 
     return where;

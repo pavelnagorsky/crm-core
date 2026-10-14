@@ -510,8 +510,6 @@ export class BookingsAggregatesService {
     if (range.staffId)
       and.push({ items: { some: { staffId: range.staffId } } });
     if (range.catalogItemId) and.push(catalogItemMatch([range.catalogItemId]));
-    // serviceIds is the services-analytics filter: work performed, including inside a bundle.
-    if (range.serviceIds) and.push(this.performedServices(range.serviceIds));
     if (range.categoryId) and.push(catalogCategoryMatch(range.categoryId));
     if (and.length) where.AND = and;
     return where;
@@ -543,24 +541,8 @@ export class BookingsAggregatesService {
     }
     if (range.catalogItemId)
       parts.push(this.catalogItemSql(range.catalogItemId));
-    if (range.serviceIds)
-      parts.push(this.performedServicesSql(range.serviceIds));
     if (range.categoryId) parts.push(this.catalogCategorySql(range.categoryId));
     return Prisma.join(parts, ' AND ');
-  }
-
-  private performedServices(ids: string[]): Prisma.BookingWhereInput {
-    if (ids.length === 0) return { id: { in: [] } };
-    return { items: { some: { serviceId: { in: ids } } } };
-  }
-
-  private performedServicesSql(ids: string[]): Prisma.Sql {
-    if (ids.length === 0) return Prisma.sql`FALSE`;
-    return Prisma.sql`EXISTS (
-      SELECT 1 FROM "BookingItem" bi
-      WHERE bi."bookingId" = b."id"
-        AND bi."serviceId" IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}`))})
-    )`;
   }
 
   private catalogItemSql(id: string): Prisma.Sql {
@@ -607,12 +589,6 @@ export class BookingsAggregatesService {
 
     if (range.staffId)
       parts.push(Prisma.sql`${staffIdColumn} = ${range.staffId}`);
-    if (range.serviceIds) {
-      if (range.serviceIds.length === 0) return Prisma.sql`FALSE`;
-      parts.push(
-        Prisma.sql`${serviceIdColumn} IN (${Prisma.join(range.serviceIds.map((id) => Prisma.sql`${id}`))})`,
-      );
-    }
     if (range.catalogItemId) {
       parts.push(Prisma.sql`(
         b."bundleId" = ${range.catalogItemId}

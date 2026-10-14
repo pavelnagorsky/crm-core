@@ -32,6 +32,7 @@ function document(
     id: 'document-1',
     locationId: 'location-1',
     destinationLocationId: null,
+    supplierId: null,
     type: InventoryDocumentType.RECEIPT,
     status,
     occurredAt: new Date('2026-10-01T10:00:00.000Z'),
@@ -118,6 +119,21 @@ describe('InventoryDocumentResponseDto totalCost', () => {
     const dto = InventoryDocumentResponseDto.fromEntity(document([]));
 
     expect(dto.totalCost).toBeNull();
+  });
+
+  it('exposes linked supplier id and historical supplier name', () => {
+    const dto = InventoryDocumentResponseDto.fromEntity({
+      ...document([]),
+      supplierId: 'supplier-1',
+      supplierName: 'Acme Supply',
+    });
+
+    expect(dto.supplierId).toBe('supplier-1');
+    expect(dto.supplierName).toBe('Acme Supply');
+    expect(dto.supplier).toEqual({
+      id: 'supplier-1',
+      name: 'Acme Supply',
+    });
   });
 
   it.each([

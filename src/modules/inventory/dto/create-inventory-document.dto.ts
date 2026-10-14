@@ -39,6 +39,16 @@ export class CreateInventoryDocumentDto {
 
   @ApiProperty({
     type: String,
+    format: 'uuid',
+    required: false,
+    nullable: true,
+  })
+  @IsOptional()
+  @IsUUID()
+  supplierId?: string | null;
+
+  @ApiProperty({
+    type: String,
     maxLength: 100,
     required: false,
     nullable: true,

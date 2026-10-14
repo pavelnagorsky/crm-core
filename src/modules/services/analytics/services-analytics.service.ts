@@ -15,7 +15,6 @@ import { DashboardBucketService } from '../../dashboard/services/dashboard-bucke
 import { DashboardMetricFactory } from '../../dashboard/services/dashboard-metric.factory.js';
 import { DashboardRangeService } from '../../dashboard/services/dashboard-range.service.js';
 import { DashboardSeriesFactory } from '../../dashboard/services/dashboard-series.factory.js';
-import { ServicesService } from '../services.service.js';
 import { ServicesAnalyticsRequestDto } from './dto/services-analytics-request.dto.js';
 import { ServicesAnalyticsWidgetKey } from './enums/services-analytics-widget-key.enum.js';
 import { ServicesAnalyticsContext } from './interfaces/services-analytics-context.interface.js';
@@ -26,7 +25,6 @@ const DEMAND_TOP_N = 5;
 @Injectable()
 export class ServicesAnalyticsService {
   constructor(
-    private readonly servicesService: ServicesService,
     private readonly rangeService: DashboardRangeService,
     private readonly aggregates: BookingsAggregatesService,
     private readonly metricFactory: DashboardMetricFactory,
@@ -147,19 +145,16 @@ export class ServicesAnalyticsService {
     dto: ServicesAnalyticsRequestDto,
   ): Promise<ServicesAnalyticsContext> {
     const range = await this.rangeService.resolve(locationId, dto);
-    const serviceIds = await this.resolveServiceIds(locationId, dto);
-    const currentRange = this.rangeFor(
+    const currentRange: AggregateRange = {
       locationId,
-      serviceIds,
-      range.from,
-      range.to,
-    );
-    const previousRange = this.rangeFor(
+      from: range.from,
+      to: range.to,
+    };
+    const previousRange: AggregateRange = {
       locationId,
-      serviceIds,
-      range.previousFrom,
-      range.previousTo,
-    );
+      from: range.previousFrom,
+      to: range.previousTo,
+    };
 
     const needsCurrentSnapshot = this.needsAnyMetric(dto.keys);
     const needsPreviousSnapshot =
@@ -200,40 +195,11 @@ export class ServicesAnalyticsService {
     return {
       locationId,
       range,
-      serviceIds,
       currentSnapshot,
       previousSnapshot,
       currentSeries,
       currentServiceCounts,
     };
-  }
-
-  private async resolveServiceIds(
-    locationId: string,
-    dto: ServicesAnalyticsRequestDto,
-  ): Promise<string[] | undefined> {
-    if (
-      dto.search === undefined &&
-      dto.categoryId === undefined &&
-      dto.status === undefined
-    )
-      return undefined;
-    return this.servicesService.findIdsByFilter(locationId, {
-      search: dto.search,
-      categoryId: dto.categoryId,
-      status: dto.status,
-    });
-  }
-
-  private rangeFor(
-    locationId: string,
-    serviceIds: string[] | undefined,
-    from: Date,
-    to: Date,
-  ): AggregateRange {
-    const range: AggregateRange = { locationId, from, to };
-    if (serviceIds !== undefined) range.serviceIds = serviceIds;
-    return range;
   }
 
   private buildRevenuePerHourSpark(ctx: ServicesAnalyticsContext): number[] {

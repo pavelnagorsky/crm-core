@@ -4,6 +4,5 @@ export interface AggregateRange {
   to: Date;
   staffId?: string;
   catalogItemId?: string;
-  serviceIds?: string[];
   categoryId?: string;
 }

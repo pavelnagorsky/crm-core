@@ -356,6 +356,43 @@ describe('BookingsService.search', () => {
     });
   });
 
+  it('matches a client or staff full name in any word order', async () => {
+    await service.search('biz', {
+      locationId: 'biz',
+      page: 1,
+      pageSize: 25,
+      search: '  Андреева   Яна  ',
+    } as BookingSearchRequestDto);
+
+    const or = findMany.mock.calls[0][0].where.OR;
+    expect(or.at(-2)).toEqual({
+      AND: [
+        {
+          OR: [
+            { clientFirstName: { contains: 'Андреева', mode: 'insensitive' } },
+            { clientLastName: { contains: 'Андреева', mode: 'insensitive' } },
+          ],
+        },
+        {
+          OR: [
+            { clientFirstName: { contains: 'Яна', mode: 'insensitive' } },
+            { clientLastName: { contains: 'Яна', mode: 'insensitive' } },
+          ],
+        },
+      ],
+    });
+    expect(or.at(-1)).toEqual({
+      items: {
+        some: {
+          AND: [
+            { staffName: { contains: 'Андреева', mode: 'insensitive' } },
+            { staffName: { contains: 'Яна', mode: 'insensitive' } },
+          ],
+        },
+      },
+    });
+  });
+
   it('does not filter by staff or service when the id lists are empty', async () => {
     await service.search('biz', {
       locationId: 'biz',

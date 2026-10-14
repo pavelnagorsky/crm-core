@@ -6,6 +6,7 @@ import { InventoryDocumentStatus } from '../enums/inventory-document-status.enum
 import { InventoryDocumentType } from '../enums/inventory-document-type.enum.js';
 import { InventoryDocumentWithItems } from '../interfaces/inventory-document-with-items.interface.js';
 import { InventoryDocumentItemResponseDto } from './inventory-document-item-response.dto.js';
+import { InventoryDocumentSupplierDto } from './inventory-document-supplier.dto.js';
 
 export class InventoryDocumentResponseDto {
   @ApiProperty({ type: String, format: 'uuid' })
@@ -37,6 +38,12 @@ export class InventoryDocumentResponseDto {
 
   @ApiProperty({ type: String, nullable: true })
   supplierName: string | null;
+
+  @ApiProperty({ type: String, format: 'uuid', nullable: true })
+  supplierId: string | null;
+
+  @ApiProperty({ type: () => InventoryDocumentSupplierDto, nullable: true })
+  supplier: InventoryDocumentSupplierDto | null;
 
   @ApiProperty({ type: String, nullable: true })
   reason: string | null;
@@ -77,6 +84,11 @@ export class InventoryDocumentResponseDto {
     dto.occurredAt = entity.occurredAt;
     dto.reference = entity.reference;
     dto.supplierName = entity.supplierName;
+    dto.supplierId = entity.supplierId;
+    dto.supplier = InventoryDocumentSupplierDto.fromSnapshot(
+      entity.supplierId,
+      entity.supplierName,
+    );
     dto.reason = entity.reason;
     dto.note = entity.note;
     dto.createdByName = entity.createdByName;

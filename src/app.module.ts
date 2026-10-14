@@ -25,6 +25,7 @@ import { DashboardModule } from './modules/dashboard/dashboard.module.js';
 import { PayrollModule } from './modules/payroll/payroll.module.js';
 import { ProductsModule } from './modules/products/products.module.js';
 import { ProductsAnalyticsModule } from './modules/products/analytics/products-analytics.module.js';
+import { SuppliersModule } from './modules/suppliers/suppliers.module.js';
 import { InventoryModule } from './modules/inventory/inventory.module.js';
 import { InventoryAnalyticsModule } from './modules/inventory/analytics/inventory-analytics.module.js';
 import { OrdersModule } from './modules/orders/orders.module.js';
@@ -63,6 +64,7 @@ import { OrdersModule } from './modules/orders/orders.module.js';
     PayrollModule,
     ProductsModule,
     ProductsAnalyticsModule,
+    SuppliersModule,
     InventoryModule,
     InventoryAnalyticsModule,
     OrdersModule,
