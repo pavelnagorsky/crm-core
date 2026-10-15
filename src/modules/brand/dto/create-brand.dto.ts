@@ -1,5 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
+  IsDefined,
+  IsObject,
   IsOptional,
   IsString,
   IsUUID,
@@ -21,6 +23,8 @@ export class CreateBrandDto {
   logoFileId?: string;
 
   @ApiProperty({ type: () => CreateLocationDto })
+  @IsDefined()
+  @IsObject()
   @ValidateNested()
   @Type(() => CreateLocationDto)
   location: CreateLocationDto;

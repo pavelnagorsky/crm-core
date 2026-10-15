@@ -32,10 +32,10 @@ export class CreateLocationDto {
   @IsIanaTimezone()
   timezone: string;
 
-  @ApiProperty({ enum: BusinessType, required: false })
+  @ApiProperty({ enum: BusinessType, required: false, nullable: true })
   @IsOptional()
   @IsEnum(BusinessType)
-  businessType?: BusinessType;
+  businessType?: BusinessType | null;
 
   @ApiProperty({ type: String, required: false, maxLength: 120 })
   @IsOptional()

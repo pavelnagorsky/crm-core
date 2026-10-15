@@ -1,13 +1,8 @@
-import {
-  BadRequestException,
-  HttpStatus,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { Location, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
-import { COUNTRY_DEFAULTS } from '../../shared/geo/country-defaults.js';
+import { resolveLocationLocale } from '../../shared/geo/resolve-location-locale.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { TokenEpochRegistryService } from '../auth/services/token-epoch-registry.service.js';
 import { BrandService } from '../brand/brand.service.js';
@@ -24,9 +19,9 @@ export class LocationService {
   ) {}
 
   async create(brandId: string, dto: CreateLocationDto): Promise<Location> {
-    this.validateLocationAnchors(dto);
+    const locale = resolveLocationLocale(dto);
     const location = await this.db.location.create({
-      data: { ...dto, brandId },
+      data: { ...dto, ...locale, brandId },
     });
     await this.tokenEpochRegistry.bumpMany(
       await this.brandService.findMemberUserIds(brandId),
@@ -112,19 +107,5 @@ export class LocationService {
         { timezone: row.timezone, currency: row.currency },
       ]),
     );
-  }
-
-  private validateLocationAnchors(dto: CreateLocationDto): void {
-    const country =
-      COUNTRY_DEFAULTS[
-        dto.countryCode.toUpperCase() as keyof typeof COUNTRY_DEFAULTS
-      ];
-    if (!country) throw new BadRequestException('Unsupported country code');
-    if (country.currency !== dto.currency.toUpperCase()) {
-      throw new BadRequestException('Currency does not match country default');
-    }
-    if (!(country.timezones as readonly string[]).includes(dto.timezone)) {
-      throw new BadRequestException('Timezone is not valid for country');
-    }
   }
 }

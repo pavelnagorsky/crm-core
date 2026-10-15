@@ -17,16 +17,21 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { BusinessRole } from '@prisma/client';
+import { BusinessRole, BusinessType } from '@prisma/client';
+import { COUNTRY_DEFAULTS } from '../../shared/geo/country-defaults.js';
 import {
   ApiResponse,
   ApiResponseArray,
   BaseResponseDto,
 } from '../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
+import { Auth } from '../auth/decorators/auth.decorator.js';
 import { BrandRBAC } from '../auth/decorators/brand-rbac.decorator.js';
 import { LocationRBAC } from '../auth/decorators/location-rbac.decorator.js';
 import { CreateLocationDto } from './dto/create-location.dto.js';
+import { LocationBusinessTypesResponseDto } from './dto/location-business-types-response.dto.js';
+import { LocationCountryOptionDto } from './dto/location-country-option.dto.js';
+import { LocationOptionsResponseDto } from './dto/location-options-response.dto.js';
 import { LocationResponseDto } from './dto/location-response.dto.js';
 import { UpdateLocationDto } from './dto/update-location.dto.js';
 import { LocationService } from './location.service.js';
@@ -35,6 +40,35 @@ import { LocationService } from './location.service.js';
 @Controller()
 export class LocationController {
   constructor(private readonly locationService: LocationService) {}
+
+  @ApiOperation({
+    summary: 'List supported location countries and locale options',
+  })
+  @ApiOkResponse({ type: ApiResponse(LocationOptionsResponseDto) })
+  @Auth()
+  @Get('locations/options')
+  async options(): Promise<BaseResponseDto<LocationOptionsResponseDto>> {
+    return BaseResponseDto.success({
+      countries: Object.entries(COUNTRY_DEFAULTS).map(
+        ([countryCode, defaults]) =>
+          new LocationCountryOptionDto(countryCode, defaults),
+      ),
+    });
+  }
+
+  @ApiOperation({
+    summary: 'List business types for creating or updating a location',
+  })
+  @ApiOkResponse({ type: ApiResponse(LocationBusinessTypesResponseDto) })
+  @Auth()
+  @Get('locations/business-types')
+  async businessTypes(): Promise<
+    BaseResponseDto<LocationBusinessTypesResponseDto>
+  > {
+    return BaseResponseDto.success({
+      businessTypes: Object.values(BusinessType),
+    });
+  }
 
   @ApiOperation({ summary: 'Create a location in a brand' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })

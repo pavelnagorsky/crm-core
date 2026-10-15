@@ -1,5 +1,5 @@
 export interface CountryDefault {
-  currency: string;
-  timezones: string[];
-  defaultTimezone: string;
+  readonly currency: string;
+  readonly timezones: readonly string[];
+  readonly defaultTimezone: string;
 }

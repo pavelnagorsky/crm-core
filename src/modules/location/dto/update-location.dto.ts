@@ -17,10 +17,10 @@ export class UpdateLocationDto {
   @MaxLength(255)
   name?: string;
 
-  @ApiProperty({ enum: BusinessType, required: false })
+  @ApiProperty({ enum: BusinessType, required: false, nullable: true })
   @IsOptional()
   @IsEnum(BusinessType)
-  businessType?: BusinessType;
+  businessType?: BusinessType | null;
 
   @ApiProperty({ type: String, required: false, maxLength: 120 })
   @IsOptional()

@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Brand, BusinessRole, Prisma, UserRole } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
+import { resolveLocationLocale } from '../../shared/geo/resolve-location-locale.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 import { TokenEpochRegistryService } from '../auth/services/token-epoch-registry.service.js';
@@ -35,6 +36,7 @@ export class BrandService {
     dto: CreateBrandDto,
     actor: AuditActor,
   ): Promise<Brand> {
+    const locale = resolveLocationLocale(dto.location);
     const user = await this.userService.findById(userId);
     const staffName =
       [user.firstName, user.lastName].filter(Boolean).join(' ') ||
@@ -49,6 +51,7 @@ export class BrandService {
         locations: {
           create: {
             ...dto.location,
+            ...locale,
             locationMemberships: {
               create: { userId, role: BusinessRole.OWNER },
             },
