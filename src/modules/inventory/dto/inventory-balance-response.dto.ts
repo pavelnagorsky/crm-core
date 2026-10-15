@@ -1,4 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { UnitCostService } from '../../../shared/money/unit-cost.service.js';
+import { ApiUnitCost } from '../../../shared/decorators/api-unit-cost.decorator.js';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
 import { MoneyService } from '../../../shared/money/money.service.js';
 import { QuantityService } from '../../../shared/quantity/quantity.service.js';
@@ -27,7 +29,7 @@ export class InventoryBalanceResponseDto {
   @ApiProperty({ type: String, format: 'decimal' })
   quantityOnHand: string;
 
-  @ApiPrice()
+  @ApiUnitCost()
   averageUnitCost: string;
 
   @ApiPrice()
@@ -48,7 +50,7 @@ export class InventoryBalanceResponseDto {
   static fromEntity(entity: InventoryBalanceView): InventoryBalanceResponseDto {
     return Object.assign(new InventoryBalanceResponseDto(), entity, {
       quantityOnHand: QuantityService.format(entity.quantityOnHand),
-      averageUnitCost: MoneyService.format(entity.averageUnitCost),
+      averageUnitCost: UnitCostService.format(entity.averageUnitCost),
       stockValue: MoneyService.format(entity.stockValue),
       reorderLevel: QuantityService.format(entity.reorderLevel),
     });

@@ -1,4 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { ApiUnitCost } from '../../../shared/decorators/api-unit-cost.decorator.js';
+import { UnitCostService } from '../../../shared/money/unit-cost.service.js';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
 import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
 import { MoneyService } from '../../../shared/money/money.service.js';
@@ -67,7 +69,7 @@ export class OrderItemResponseDto {
   @ApiPrice()
   lineTotal: string;
 
-  @ApiPrice({ nullable: true })
+  @ApiUnitCost(true)
   unitCostSnapshot: string | null;
 
   @ApiPrice({ nullable: true })
@@ -126,7 +128,7 @@ export class OrderItemResponseDto {
     dto.unitCostSnapshot =
       entity.unitCostSnapshot == null
         ? null
-        : MoneyService.format(entity.unitCostSnapshot);
+        : UnitCostService.format(entity.unitCostSnapshot);
     dto.lineCostSnapshot =
       entity.lineCostSnapshot == null
         ? null

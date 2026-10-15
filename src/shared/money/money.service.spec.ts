@@ -1,6 +1,26 @@
+import { Prisma } from '@prisma/client';
 import { MoneyService } from './money.service.js';
 
 describe('MoneyService', () => {
+  it('allocates partial returns cumulatively and restores the full original amount', () => {
+    const total = new Prisma.Decimal(100);
+    const totalQuantity = new Prisma.Decimal(3);
+    let allocated = new Prisma.Decimal(0);
+    const amounts: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const amount = MoneyService.allocateCumulative(
+        total,
+        totalQuantity,
+        new Prisma.Decimal(1),
+        new Prisma.Decimal(i),
+        allocated,
+      );
+      allocated = allocated.plus(amount);
+      amounts.push(amount.toFixed(2));
+    }
+    expect(amounts).toEqual(['33.33', '33.34', '33.33']);
+    expect(allocated.toFixed(2)).toBe('100.00');
+  });
   it('pads an exact amount and keeps arithmetic exact until quantize', () => {
     expect(MoneyService.format(20)).toBe('20.00');
     expect(MoneyService.format('9.5')).toBe('9.50');

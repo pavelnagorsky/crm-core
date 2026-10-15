@@ -370,6 +370,20 @@ export const ErrorCode = {
       'Inventory tracking cannot be disabled after it has been enabled for a location',
   },
 
+  PRODUCT_UNIT_IMMUTABLE: {
+    code: 'PRODUCT_UNIT_IMMUTABLE',
+    message:
+      'Base unit cannot be changed after a product has locations or packagings',
+  },
+  PRODUCT_PACKAGING_FACTOR_INVALID: {
+    code: 'PRODUCT_PACKAGING_FACTOR_INVALID',
+    message: 'Packaging factor must be positive and whole for piece products',
+  },
+  PRODUCT_PACKAGING_NAME_EXISTS: {
+    code: 'PRODUCT_PACKAGING_NAME_EXISTS',
+    message: 'Packaging name already exists for this product',
+  },
+
   // suppliers
   SUPPLIER_NAME_EXISTS: {
     code: 'SUPPLIER_NAME_EXISTS',
@@ -385,6 +399,22 @@ export const ErrorCode = {
   },
 
   // inventory
+  INVENTORY_PACKAGING_INVALID: {
+    code: 'INVENTORY_PACKAGING_INVALID',
+    message:
+      'Packaging must belong to the product, be used only for a receipt, and be active when first selected',
+  },
+  INVENTORY_QUANTITY_INVALID: {
+    code: 'INVENTORY_QUANTITY_INVALID',
+    message:
+      'Quantity exceeds storage precision or is fractional for a piece product',
+  },
+  INVENTORY_VALUE_OUT_OF_RANGE: {
+    code: 'INVENTORY_VALUE_OUT_OF_RANGE',
+    message:
+      'Inventory value or calculated unit cost exceeds the supported range',
+  },
+
   INVENTORY_PRODUCT_NOT_CONFIGURED: {
     code: 'INVENTORY_PRODUCT_NOT_CONFIGURED',
     message:
@@ -419,10 +449,6 @@ export const ErrorCode = {
   INVENTORY_REASON_REQUIRED: {
     code: 'INVENTORY_REASON_REQUIRED',
     message: 'A reason is required for this inventory operation',
-  },
-  INVENTORY_DUPLICATE_PRODUCT: {
-    code: 'INVENTORY_DUPLICATE_PRODUCT',
-    message: 'A product can appear only once in an inventory document',
   },
   INVENTORY_FUTURE_DATE: {
     code: 'INVENTORY_FUTURE_DATE',

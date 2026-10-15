@@ -1,6 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { InventoryMovement } from '@prisma/client';
-import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
+import { UnitCostService } from '../../../shared/money/unit-cost.service.js';
+import { ApiUnitCost } from '../../../shared/decorators/api-unit-cost.decorator.js';
+import {
+  ApiPrice,
+  ApiSignedAmount,
+} from '../../../shared/decorators/api-decimal.decorator.js';
 import { MoneyService } from '../../../shared/money/money.service.js';
 import { QuantityService } from '../../../shared/quantity/quantity.service.js';
 import { InventoryMovementSourceType } from '../enums/inventory-movement-source-type.enum.js';
@@ -47,16 +52,22 @@ export class InventoryMovementResponseDto {
   @ApiProperty({ type: String, format: 'decimal' })
   quantityAfter: string;
 
-  @ApiPrice()
+  @ApiUnitCost()
   averageUnitCostBefore: string;
 
-  @ApiPrice()
+  @ApiUnitCost()
   averageUnitCostAfter: string;
 
   @ApiPrice()
-  unitCost: string;
+  stockValueBefore: string;
 
   @ApiPrice()
+  stockValueAfter: string;
+
+  @ApiUnitCost()
+  unitCost: string;
+
+  @ApiSignedAmount()
   totalCost: string;
 
   @ApiProperty({ type: Date })
@@ -78,11 +89,15 @@ export class InventoryMovementResponseDto {
     dto.quantityDelta = QuantityService.format(entity.quantityDelta);
     dto.quantityBefore = QuantityService.format(entity.quantityBefore);
     dto.quantityAfter = QuantityService.format(entity.quantityAfter);
-    dto.averageUnitCostBefore = MoneyService.format(
+    dto.averageUnitCostBefore = UnitCostService.format(
       entity.averageUnitCostBefore,
     );
-    dto.averageUnitCostAfter = MoneyService.format(entity.averageUnitCostAfter);
-    dto.unitCost = MoneyService.format(entity.unitCost);
+    dto.averageUnitCostAfter = UnitCostService.format(
+      entity.averageUnitCostAfter,
+    );
+    dto.stockValueBefore = MoneyService.format(entity.stockValueBefore);
+    dto.stockValueAfter = MoneyService.format(entity.stockValueAfter);
+    dto.unitCost = UnitCostService.format(entity.unitCost);
     dto.totalCost = MoneyService.format(entity.totalCost);
     dto.occurredAt = entity.occurredAt;
     dto.createdAt = entity.createdAt;

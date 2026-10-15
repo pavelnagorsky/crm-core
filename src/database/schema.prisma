@@ -186,6 +186,8 @@ enum AuditEvent {
   PRODUCT_CATEGORY_UPDATED
   PRODUCT_CATEGORY_DELETED
   PRODUCT_LOCATION_UPDATED
+  PRODUCT_PACKAGING_CREATED
+  PRODUCT_PACKAGING_STATUS_CHANGED
   INVENTORY_DOCUMENT_CREATED
   INVENTORY_DOCUMENT_UPDATED
   INVENTORY_DOCUMENT_POSTED
@@ -491,15 +493,31 @@ model Product {
   createdAt   DateTime      @default(now())
   updatedAt   DateTime      @updatedAt
 
-  brand     Brand             @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  category  ProductCategory?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  imageFile File?             @relation(fields: [imageFileId], references: [id], onDelete: SetNull)
-  locations ProductLocation[]
+  brand      Brand              @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  category   ProductCategory?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  imageFile  File?              @relation(fields: [imageFileId], references: [id], onDelete: SetNull)
+  locations  ProductLocation[]
+  packagings ProductPackaging[]
 
   @@unique([brandId, sku])
   @@unique([brandId, barcode])
   @@index([brandId, status])
   @@index([categoryId])
+}
+
+model ProductPackaging {
+  id                 String   @id @default(uuid())
+  productId          String
+  name               String   @db.VarChar(100)
+  quantityInBaseUnit Decimal  @db.Decimal(14, 3)
+  isActive           Boolean  @default(true)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, name])
+  @@index([productId, isActive])
 }
 
 model ProductLocation {
@@ -529,7 +547,8 @@ model InventoryBalance {
   id                String   @id @default(uuid())
   productLocationId String   @unique
   quantityOnHand    Decimal  @default(0) @db.Decimal(14, 3)
-  averageUnitCost   Decimal  @default(0) @db.Decimal(12, 2)
+  averageUnitCost   Decimal  @default(0) @db.Decimal(18, 8)
+  stockValue        Decimal  @default(0) @db.Decimal(14, 2)
   updatedAt         DateTime @updatedAt
 
   productLocation ProductLocation @relation(fields: [productLocationId], references: [id], onDelete: Restrict)
@@ -577,20 +596,28 @@ model InventoryDocumentItem {
   productSku        String?     @db.VarChar(80)
   productUnit       ProductUnit
   quantity          Decimal     @db.Decimal(14, 3)
-  unitCost          Decimal?    @db.Decimal(12, 2)
+  unitCost          Decimal?    @db.Decimal(18, 8)
+  totalCost         Decimal?    @db.Decimal(14, 2)
+  packagingId       String?
+  packagingName     String?     @db.VarChar(100)
+  packagingFactor   Decimal?    @db.Decimal(14, 3)
+  packageQuantity   Decimal?    @db.Decimal(14, 3)
+  packageUnitCost   Decimal?    @db.Decimal(12, 2)
+  position          Int         @default(0)
   createdAt         DateTime    @default(now())
 
   document        InventoryDocument   @relation(fields: [documentId], references: [id], onDelete: Cascade)
   productLocation ProductLocation     @relation(fields: [productLocationId], references: [id], onDelete: Restrict)
   movements       InventoryMovement[]
 
-  @@unique([documentId, productLocationId])
+  @@index([documentId, position])
   @@index([productLocationId])
   @@index([productId])
 }
 
 model InventoryMovement {
-  id                    String                @id @default(uuid())
+  id                    String                       @id @default(uuid())
+  sequence              BigInt                       @unique @default(autoincrement())
   locationId            String
   productLocationId     String
   documentId            String?
@@ -603,19 +630,21 @@ model InventoryMovement {
   sourceLocationId      String?
   type                  InventoryMovementType
   productId             String
-  productName           String                @db.VarChar(150)
-  productSku            String?               @db.VarChar(80)
-  quantityDelta         Decimal               @db.Decimal(14, 3)
-  quantityBefore        Decimal               @db.Decimal(14, 3)
-  quantityAfter         Decimal               @db.Decimal(14, 3)
-  averageUnitCostBefore Decimal               @db.Decimal(12, 2)
-  averageUnitCostAfter  Decimal               @db.Decimal(12, 2)
-  unitCost              Decimal               @db.Decimal(12, 2)
-  totalCost             Decimal               @db.Decimal(14, 2)
+  productName           String                       @db.VarChar(150)
+  productSku            String?                      @db.VarChar(80)
+  quantityDelta         Decimal                      @db.Decimal(14, 3)
+  quantityBefore        Decimal                      @db.Decimal(14, 3)
+  quantityAfter         Decimal                      @db.Decimal(14, 3)
+  averageUnitCostBefore Decimal                      @db.Decimal(18, 8)
+  averageUnitCostAfter  Decimal                      @db.Decimal(18, 8)
+  stockValueBefore      Decimal                      @db.Decimal(14, 2)
+  stockValueAfter       Decimal                      @db.Decimal(14, 2)
+  unitCost              Decimal                      @db.Decimal(18, 8)
+  totalCost             Decimal                      @db.Decimal(14, 2)
   occurredAt            DateTime
   idempotencyKey        String
-  reversedMovementId    String?               @unique
-  createdAt             DateTime              @default(now())
+  reversedMovementId    String?                      @unique
+  createdAt             DateTime                     @default(now())
 
   location         Location               @relation(fields: [locationId], references: [id], onDelete: Restrict)
   productLocation  ProductLocation        @relation(fields: [productLocationId], references: [id], onDelete: Restrict)
@@ -629,6 +658,7 @@ model InventoryMovement {
 
   @@unique([locationId, idempotencyKey])
   @@index([productLocationId, occurredAt])
+  @@index([productLocationId, sequence])
   @@index([locationId, occurredAt])
   @@index([documentId])
   @@index([orderId])
@@ -712,7 +742,7 @@ model OrderItem {
   lineSubtotal      Decimal         @db.Decimal(12, 2)
   discountTotal     Decimal         @default(0) @db.Decimal(12, 2)
   lineTotal         Decimal         @db.Decimal(12, 2)
-  unitCostSnapshot  Decimal?        @db.Decimal(12, 2)
+  unitCostSnapshot  Decimal?        @db.Decimal(18, 8)
   lineCostSnapshot  Decimal?        @db.Decimal(14, 2)
   sellerStaffId     String?
   sellerName        String?         @db.VarChar(250)
@@ -780,7 +810,7 @@ model OrderReturnItem {
   lineSubtotal      Decimal      @db.Decimal(12, 2)
   discountTotal     Decimal      @default(0) @db.Decimal(12, 2)
   lineTotal         Decimal      @db.Decimal(12, 2)
-  unitCostSnapshot  Decimal?     @db.Decimal(12, 2)
+  unitCostSnapshot  Decimal?     @db.Decimal(18, 8)
   lineCostSnapshot  Decimal?     @db.Decimal(14, 2)
   sellerStaffId     String?
   sellerName        String?      @db.VarChar(250)

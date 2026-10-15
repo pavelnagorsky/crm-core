@@ -14,6 +14,10 @@
 <p>{{payload.name}}</p>
 {{/if}}
 
+{{#if (or (eq eventType "PRODUCT_PACKAGING_CREATED") (eq eventType "PRODUCT_PACKAGING_STATUS_CHANGED"))}}
+<p>{{payload.name}}: {{payload.quantityInBaseUnit}}; {{#if payload.isActive}}активна{{else}}архивирована{{/if}}</p>
+{{/if}}
+
 {{#if (eq eventType "PRODUCT_CATEGORY_CREATED")}}
 <p>{{payload.name}}{{#if payload.description}}: {{payload.description}}{{/if}}</p>
 {{/if}}

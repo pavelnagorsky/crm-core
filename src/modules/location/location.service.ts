@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Location } from '@prisma/client';
+import { Location, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { COUNTRY_DEFAULTS } from '../../shared/geo/country-defaults.js';
@@ -41,8 +41,11 @@ export class LocationService {
     });
   }
 
-  async findById(locationId: string): Promise<Location> {
-    const location = await this.db.location.findUnique({
+  async findById(
+    locationId: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<Location> {
+    const location = await (tx ?? this.db).location.findUnique({
       where: { id: locationId },
     });
     if (!location) throw new NotFoundException('Location not found');

@@ -228,7 +228,11 @@ export class InventoryController {
     return new StreamableFile(stream, { type: XlsxService.mimeType });
   }
 
-  @ApiOperation({ summary: 'Create an open inventory document' })
+  @ApiOperation({
+    summary: 'Create an open inventory document',
+    description:
+      'Use quantity and unitCost for base units. Receipt lines may instead use packagingId, packageQuantity (whole packages), and packageUnitCost. A product may have multiple lines. Responses always expose quantity and unitCost in base units, plus the saved packaging input.',
+  })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
   @LocationRBAC(BusinessRole.OWNER)
   @Post('documents')

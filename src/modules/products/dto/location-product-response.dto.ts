@@ -6,6 +6,7 @@ import { QuantityService } from '../../../shared/quantity/quantity.service.js';
 import { ProductStatus } from '../enums/product-status.enum.js';
 import { ProductUnit } from '../enums/product-unit.enum.js';
 import { LocationProductView } from '../interfaces/location-product-view.interface.js';
+import { ProductPackagingResponseDto } from './product-packaging-response.dto.js';
 
 export class LocationProductResponseDto {
   @ApiProperty({ type: String })
@@ -47,6 +48,9 @@ export class LocationProductResponseDto {
   @ApiProperty({ type: String, format: 'decimal' })
   reorderLevel: string;
 
+  @ApiProperty({ type: () => ProductPackagingResponseDto, isArray: true })
+  packagings: ProductPackagingResponseDto[];
+
   static fromEntity(entity: LocationProductView): LocationProductResponseDto {
     return Object.assign(new LocationProductResponseDto(), {
       productId: entity.productId,
@@ -60,6 +64,9 @@ export class LocationProductResponseDto {
         ? FileResponseDto.fromEntity(entity.product.imageFile)
         : null,
       unit: entity.product.unit,
+      packagings: entity.product.packagings.map(
+        ProductPackagingResponseDto.fromEntity,
+      ),
       retailPrice: MoneyService.format(entity.retailPrice),
       status: entity.status,
       trackInventory: entity.trackInventory,

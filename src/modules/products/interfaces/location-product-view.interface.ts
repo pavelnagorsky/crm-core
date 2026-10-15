@@ -6,6 +6,7 @@ export type LocationProductView = Prisma.ProductLocationGetPayload<{
       include: {
         category: true;
         imageFile: true;
+        packagings: true;
       };
     };
   };

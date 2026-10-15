@@ -3,6 +3,7 @@ import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
 import { ProductStatus } from '../enums/product-status.enum.js';
 import { ProductUnit } from '../enums/product-unit.enum.js';
 import { ProductWithDetails } from '../interfaces/product-with-details.interface.js';
+import { ProductPackagingResponseDto } from './product-packaging-response.dto.js';
 import { ProductLocationResponseDto } from './product-location-response.dto.js';
 
 export class ProductResponseDto {
@@ -48,6 +49,9 @@ export class ProductResponseDto {
   @ApiProperty({ type: Date })
   updatedAt: Date;
 
+  @ApiProperty({ type: () => ProductPackagingResponseDto, isArray: true })
+  packagings: ProductPackagingResponseDto[];
+
   static fromEntity(entity: ProductWithDetails): ProductResponseDto {
     const dto = new ProductResponseDto();
     dto.id = entity.id;
@@ -64,6 +68,9 @@ export class ProductResponseDto {
     dto.unit = entity.unit;
     dto.status = entity.status;
     dto.locations = entity.locations.map(ProductLocationResponseDto.fromEntity);
+    dto.packagings = entity.packagings.map(
+      ProductPackagingResponseDto.fromEntity,
+    );
     dto.createdAt = entity.createdAt;
     dto.updatedAt = entity.updatedAt;
     return dto;

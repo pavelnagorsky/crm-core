@@ -3,6 +3,8 @@ import { I18nModule } from '../../shared/i18n/i18n.module.js';
 import { LocationModule } from '../location/location.module.js';
 import { ProductsModule } from '../products/products.module.js';
 import { SuppliersModule } from '../suppliers/suppliers.module.js';
+import { InventoryDocumentDraftService } from './services/inventory-document-draft.service.js';
+import { InventoryDocumentItemComputeService } from './services/inventory-document-item-compute.service.js';
 import { InventoryController } from './inventory.controller.js';
 import { InventoryReportService } from './report/inventory-report.service.js';
 import { InventoryBalanceLockService } from './services/inventory-balance-lock.service.js';
@@ -16,6 +18,8 @@ import { InventoryService } from './inventory.service.js';
   controllers: [InventoryController],
   providers: [
     InventoryService,
+    InventoryDocumentDraftService,
+    InventoryDocumentItemComputeService,
     InventoryBalanceLockService,
     InventoryComputeService,
     InventorySaleReversalService,

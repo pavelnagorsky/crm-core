@@ -20,7 +20,6 @@ import { stableOrderBy } from '../../shared/database/stable-order-by.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
-import { MoneyService } from '../../shared/money/money.service.js';
 import { TimeService } from '../../shared/time/time.service.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { AUDIT_EVENT } from '../audit/constants/audit.constants.js';
@@ -31,14 +30,13 @@ import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js';
 import { LocationService } from '../location/location.service.js';
 import { ProductsService } from '../products/products.service.js';
-import { SuppliersService } from '../suppliers/suppliers.service.js';
+import { InventoryDocumentDraftService } from './services/inventory-document-draft.service.js';
 import { CreateInventoryDocumentDto } from './dto/create-inventory-document.dto.js';
 import { InventoryDocumentSearchRequestDto } from './dto/inventory-document-search-request.dto.js';
 import { InventoryDocumentStatusCountsRequestDto } from './dto/inventory-document-status-counts-request.dto.js';
 import { InventoryCountsRequestDto } from './dto/inventory-counts-request.dto.js';
 import { InventoryMovementSearchRequestDto } from './dto/inventory-movement-search-request.dto.js';
 import { InventorySearchRequestDto } from './dto/inventory-search-request.dto.js';
-import { InventoryDocumentItemDto } from './dto/inventory-document-item.dto.js';
 import { UpdateInventoryDocumentDto } from './dto/update-inventory-document.dto.js';
 import { InventoryDocumentOrderBy } from './enums/inventory-document-order-by.enum.js';
 import { InventoryDocumentTargetStatus } from './enums/inventory-document-target-status.enum.js';
@@ -50,13 +48,14 @@ import { InventoryDocumentStatusCount } from './interfaces/inventory-document-st
 import { InventoryDocumentTransition } from './interfaces/inventory-document-transition.interface.js';
 import { InventoryDocumentWithItems } from './interfaces/inventory-document-with-items.interface.js';
 import { InventorySaleCost } from './interfaces/inventory-sale-cost.interface.js';
+import { InventoryValuation } from './interfaces/inventory-valuation.interface.js';
 import { InventorySaleLine } from './interfaces/inventory-sale-line.interface.js';
 import { InventoryBalanceLockService } from './services/inventory-balance-lock.service.js';
 import { InventoryComputeService } from './services/inventory-compute.service.js';
 import { InventorySaleReversalService } from './services/inventory-sale-reversal.service.js';
 
 const documentInclude = {
-  items: { orderBy: [{ productName: 'asc' }, { id: 'asc' }] },
+  items: { orderBy: [{ position: 'asc' }, { id: 'asc' }] },
 } satisfies Prisma.InventoryDocumentInclude;
 
 const DOCUMENT_STATUSES = [
@@ -65,15 +64,12 @@ const DOCUMENT_STATUSES = [
   InventoryDocumentStatus.VOIDED,
 ];
 
-type Transaction = Prisma.TransactionClient;
-type ResolvedDocumentSupplier = { id: string | null; name: string | null };
-
 @Injectable()
 export class InventoryService {
   constructor(
     private readonly db: DatabaseService,
     private readonly products: ProductsService,
-    private readonly suppliers: SuppliersService,
+    private readonly drafts: InventoryDocumentDraftService,
     private readonly locations: LocationService,
     private readonly eventEmitter: EventEmitter2,
     private readonly compute: InventoryComputeService,
@@ -87,26 +83,21 @@ export class InventoryService {
     actor: AuditActor,
   ): Promise<InventoryDocument> {
     const location = await this.locations.findById(locationId);
-    const resolved = await this.validateDraft(
-      locationId,
-      location.brandId,
-      dto,
-    );
-    const supplier = await this.resolveDocumentSupplier(location.brandId, dto);
+    const draft = await this.drafts.prepare(locationId, location.brandId, dto);
     const document = await this.db.inventoryDocument.create({
       data: {
         locationId,
         destinationLocationId: dto.destinationLocationId ?? null,
-        supplierId: supplier.id,
+        supplierId: draft.supplierId,
         type: dto.type,
         occurredAt: new Date(dto.occurredAt),
         reference: this.text(dto.reference),
-        supplierName: supplier.name,
+        supplierName: draft.supplierName,
         reason: this.text(dto.reason),
         note: this.text(dto.note),
         createdById: actor.id ?? null,
         createdByName: actor.name,
-        items: { create: this.itemData(dto.items, resolved) },
+        items: { create: draft.items },
       },
     });
     this.emit(
@@ -128,12 +119,6 @@ export class InventoryService {
     actor: AuditActor,
   ): Promise<InventoryDocument> {
     const location = await this.locations.findById(locationId);
-    const resolved = await this.validateDraft(
-      locationId,
-      location.brandId,
-      dto,
-    );
-    const supplier = await this.resolveDocumentSupplier(location.brandId, dto);
     const document = await this.inTransaction(async (tx) => {
       await this.lockDocument(tx, documentId);
       const old = await this.findDocumentInTransaction(
@@ -142,19 +127,26 @@ export class InventoryService {
         documentId,
       );
       this.assertOpen(old.status);
+      const draft = await this.drafts.prepare(
+        locationId,
+        location.brandId,
+        dto,
+        old.items,
+        tx,
+      );
       await tx.inventoryDocumentItem.deleteMany({ where: { documentId } });
       return tx.inventoryDocument.update({
         where: { id: documentId },
         data: {
           destinationLocationId: dto.destinationLocationId ?? null,
-          supplierId: supplier.id,
+          supplierId: draft.supplierId,
           type: dto.type,
           occurredAt: new Date(dto.occurredAt),
           reference: this.text(dto.reference),
-          supplierName: supplier.name,
+          supplierName: draft.supplierName,
           reason: this.text(dto.reason),
           note: this.text(dto.note),
-          items: { create: this.itemData(dto.items, resolved) },
+          items: { create: draft.items },
         },
       });
     });
@@ -324,7 +316,7 @@ export class InventoryService {
         unit: row.product.unit,
         quantityOnHand: quantity,
         averageUnitCost: averageCost,
-        stockValue: MoneyService.quantize(quantity.mul(averageCost)),
+        stockValue: balance?.stockValue ?? zero,
         reorderLevel: row.reorderLevel,
         lowStock: quantity.lte(row.reorderLevel),
         outOfStock: quantity.lte(zero),
@@ -407,23 +399,24 @@ export class InventoryService {
     for (const line of tracked) {
       const balance = balances.get(line.productLocationId)!;
       const quantity = new Prisma.Decimal(line.quantity);
-      const quantityAfter = balance.quantityOnHand.minus(quantity);
-      if (quantityAfter.isNegative()) {
-        throw new AppException(
-          ErrorCode.INVENTORY_INSUFFICIENT_STOCK,
-          HttpStatus.CONFLICT,
-        );
-      }
       const unitCost = balance.averageUnitCost;
-      const lineCost = MoneyService.quantize(quantity.mul(unitCost));
-      const averageUnitCostAfter = quantityAfter.isZero()
-        ? new Prisma.Decimal(0)
-        : unitCost;
+      const next = this.compute.nextState(
+        {
+          quantity: balance.quantityOnHand,
+          averageUnitCost: balance.averageUnitCost,
+          stockValue: balance.stockValue,
+        },
+        quantity.neg(),
+        unitCost,
+      );
+      const lineCost = next.totalCost.neg();
+      const averageUnitCostAfter = next.averageUnitCost;
       await tx.inventoryBalance.update({
         where: { id: balance.id },
         data: {
-          quantityOnHand: quantityAfter,
+          quantityOnHand: next.quantity,
           averageUnitCost: averageUnitCostAfter,
+          stockValue: next.stockValue,
         },
       });
       await tx.inventoryMovement.create({
@@ -441,17 +434,20 @@ export class InventoryService {
           productSku: line.productSku,
           quantityDelta: quantity.neg(),
           quantityBefore: balance.quantityOnHand,
-          quantityAfter,
+          quantityAfter: next.quantity,
           averageUnitCostBefore: balance.averageUnitCost,
           averageUnitCostAfter,
+          stockValueBefore: balance.stockValue,
+          stockValueAfter: next.stockValue,
           unitCost,
           totalCost: lineCost.neg(),
           occurredAt,
           idempotencyKey: `order:${orderId}:item:${line.orderItemId}:sale`,
         },
       });
-      balance.quantityOnHand = quantityAfter;
+      balance.quantityOnHand = next.quantity;
       balance.averageUnitCost = averageUnitCostAfter;
+      balance.stockValue = next.stockValue;
       costs.set(line.orderItemId, {
         orderItemId: line.orderItemId,
         unitCost,
@@ -526,7 +522,7 @@ export class InventoryService {
 
       const destinationRows =
         document.type === InventoryDocumentType.TRANSFER
-          ? await this.resolveTransferDestination(document)
+          ? await this.resolveTransferDestination(document, tx)
           : [];
       const destinationByProduct = new Map(
         destinationRows.map((row) => [row.productId, row]),
@@ -542,7 +538,7 @@ export class InventoryService {
         if (document.type === InventoryDocumentType.TRANSFER) {
           const destination = destinationByProduct.get(item.productId)!;
           const unitCost = source.averageUnitCost;
-          await this.applyMovement(
+          const outgoing = await this.applyMovement(
             tx,
             source,
             item,
@@ -559,6 +555,7 @@ export class InventoryService {
             item.quantity,
             unitCost,
             InventoryMovementType.TRANSFER_IN,
+            outgoing.totalCost.neg(),
           );
           continue;
         }
@@ -577,6 +574,7 @@ export class InventoryService {
           delta,
           unitCost,
           this.movementType(document.type),
+          delta.gt(0) ? (item.totalCost ?? undefined) : undefined,
         );
       }
       const posted = await tx.inventoryDocument.update({
@@ -615,22 +613,26 @@ export class InventoryService {
       }
       const movements = await tx.inventoryMovement.findMany({
         where: { documentId, reversedMovementId: null },
-        orderBy: { createdAt: 'desc' },
+        orderBy: { sequence: 'desc' },
       });
       const balances = await this.balanceLocks.lock(
         tx,
         movements.map((movement) => movement.productLocationId),
       );
+      const checked = new Set<string>();
       for (const movement of movements) {
+        if (checked.has(movement.productLocationId)) continue;
+        checked.add(movement.productLocationId);
         const balance = balances.get(movement.productLocationId)!;
         const latest = await tx.inventoryMovement.findFirst({
           where: { productLocationId: movement.productLocationId },
-          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          orderBy: { sequence: 'desc' },
         });
         if (
           latest?.id !== movement.id ||
           !balance.quantityOnHand.equals(movement.quantityAfter) ||
-          !balance.averageUnitCost.equals(movement.averageUnitCostAfter)
+          !balance.averageUnitCost.equals(movement.averageUnitCostAfter) ||
+          !balance.stockValue.equals(movement.stockValueAfter)
         ) {
           throw new AppException(
             ErrorCode.INVENTORY_REVERSAL_NOT_ALLOWED,
@@ -646,6 +648,7 @@ export class InventoryService {
           data: {
             quantityOnHand: movement.quantityBefore,
             averageUnitCost: movement.averageUnitCostBefore,
+            stockValue: movement.stockValueBefore,
           },
         });
         await tx.inventoryMovement.create({
@@ -666,13 +669,18 @@ export class InventoryService {
             quantityAfter: movement.quantityBefore,
             averageUnitCostBefore: balance.averageUnitCost,
             averageUnitCostAfter: movement.averageUnitCostBefore,
+            stockValueBefore: balance.stockValue,
+            stockValueAfter: movement.stockValueBefore,
             unitCost: movement.unitCost,
-            totalCost: MoneyService.quantize(delta.mul(movement.unitCost)),
+            totalCost: movement.totalCost.neg(),
             occurredAt: new Date(),
             idempotencyKey: `${documentId}:void:${movement.id}`,
             reversedMovementId: movement.id,
           },
         });
+        balance.quantityOnHand = movement.quantityBefore;
+        balance.averageUnitCost = movement.averageUnitCostBefore;
+        balance.stockValue = movement.stockValueBefore;
       }
       const voided = await tx.inventoryDocument.update({
         where: { id: documentId },
@@ -684,35 +692,32 @@ export class InventoryService {
   }
 
   private async applyMovement(
-    tx: Transaction,
+    tx: Prisma.TransactionClient,
     balance: InventoryBalance,
     item: InventoryDocumentWithItems['items'][number],
     document: InventoryDocumentWithItems,
     delta: Prisma.Decimal,
     unitCost: Prisma.Decimal,
     type: InventoryMovementType,
-  ): Promise<void> {
-    const quantityAfter = balance.quantityOnHand.plus(delta);
-    if (quantityAfter.isNegative()) {
-      throw new AppException(
-        ErrorCode.INVENTORY_INSUFFICIENT_STOCK,
-        HttpStatus.CONFLICT,
-      );
-    }
+    exactTotalCost?: Prisma.Decimal,
+  ): Promise<InventoryValuation> {
     const next = this.compute.nextState(
       {
         quantity: balance.quantityOnHand,
         averageUnitCost: balance.averageUnitCost,
+        stockValue: balance.stockValue,
       },
       delta,
       unitCost,
+      exactTotalCost,
     );
     const averageUnitCostAfter = next.averageUnitCost;
     await tx.inventoryBalance.update({
       where: { id: balance.id },
       data: {
-        quantityOnHand: quantityAfter,
+        quantityOnHand: next.quantity,
         averageUnitCost: averageUnitCostAfter,
+        stockValue: next.stockValue,
       },
     });
     await tx.inventoryMovement.create({
@@ -733,17 +738,21 @@ export class InventoryService {
         productSku: item.productSku,
         quantityDelta: delta,
         quantityBefore: balance.quantityOnHand,
-        quantityAfter,
+        quantityAfter: next.quantity,
         averageUnitCostBefore: balance.averageUnitCost,
         averageUnitCostAfter,
+        stockValueBefore: balance.stockValue,
+        stockValueAfter: next.stockValue,
         unitCost,
-        totalCost: MoneyService.quantize(delta.mul(unitCost)),
+        totalCost: next.totalCost,
         occurredAt: document.occurredAt,
         idempotencyKey: `${document.id}:post:${item.id}:${balance.productLocationId}`,
       },
     });
-    balance.quantityOnHand = quantityAfter;
+    balance.quantityOnHand = next.quantity;
     balance.averageUnitCost = averageUnitCostAfter;
+    balance.stockValue = next.stockValue;
+    return next;
   }
 
   private movementUnitCost(
@@ -771,14 +780,17 @@ export class InventoryService {
     return types[type];
   }
 
-  private lockDocument(tx: Transaction, documentId: string): Promise<unknown> {
+  private lockDocument(
+    tx: Prisma.TransactionClient,
+    documentId: string,
+  ): Promise<unknown> {
     return tx.$queryRaw(Prisma.sql`
       SELECT "id" FROM "InventoryDocument" WHERE "id" = ${documentId} FOR UPDATE
     `);
   }
 
   private async findDocumentInTransaction(
-    tx: Transaction,
+    tx: Prisma.TransactionClient,
     locationId: string,
     documentId: string,
   ): Promise<InventoryDocumentWithItems> {
@@ -792,6 +804,7 @@ export class InventoryService {
 
   private async resolveTransferDestination(
     document: InventoryDocumentWithItems,
+    tx: Prisma.TransactionClient,
   ) {
     if (!document.destinationLocationId) {
       throw new AppException(
@@ -799,90 +812,13 @@ export class InventoryService {
         HttpStatus.BAD_REQUEST,
       );
     }
+    const productIds = [
+      ...new Set(document.items.map((item) => item.productId)),
+    ];
     const rows = await this.products.resolveForInventory(
       document.destinationLocationId,
-      document.items.map((item) => item.productId),
-    );
-    if (rows.length !== document.items.length) {
-      throw new AppException(
-        ErrorCode.INVENTORY_PRODUCT_NOT_CONFIGURED,
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-    return rows;
-  }
-
-  private async resolveDocumentSupplier(
-    brandId: string,
-    dto: CreateInventoryDocumentDto,
-  ): Promise<ResolvedDocumentSupplier> {
-    if (!dto.supplierId) {
-      return { id: null, name: this.text(dto.supplierName) };
-    }
-    const supplier = await this.suppliers.resolveActiveForDocument(
-      brandId,
-      dto.supplierId,
-    );
-    return { id: supplier.id, name: supplier.name };
-  }
-
-  private async validateDraft(
-    locationId: string,
-    brandId: string,
-    dto: CreateInventoryDocumentDto,
-  ) {
-    if (new Date(dto.occurredAt).getTime() > Date.now()) {
-      throw new AppException(
-        ErrorCode.INVENTORY_FUTURE_DATE,
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-    const productIds = dto.items.map((item) => item.productId);
-    if (new Set(productIds).size !== productIds.length) {
-      throw new AppException(
-        ErrorCode.INVENTORY_DUPLICATE_PRODUCT,
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-    if (
-      (dto.type === InventoryDocumentType.WRITE_OFF ||
-        dto.type === InventoryDocumentType.ADJUSTMENT) &&
-      !dto.reason?.trim()
-    ) {
-      throw new AppException(
-        ErrorCode.INVENTORY_REASON_REQUIRED,
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-    if (dto.type === InventoryDocumentType.TRANSFER) {
-      if (
-        !dto.destinationLocationId ||
-        dto.destinationLocationId === locationId
-      ) {
-        throw new AppException(
-          ErrorCode.INVENTORY_DESTINATION_INVALID,
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-      const destination = await this.locations.findById(
-        dto.destinationLocationId,
-      );
-      if (destination.brandId !== brandId) {
-        throw new AppException(
-          ErrorCode.INVENTORY_DESTINATION_INVALID,
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-    } else if (dto.destinationLocationId) {
-      throw new AppException(
-        ErrorCode.INVENTORY_DESTINATION_INVALID,
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-    this.validateItems(dto.type, dto.items);
-    const rows = await this.products.resolveForInventory(
-      locationId,
       productIds,
+      tx,
     );
     if (rows.length !== productIds.length) {
       throw new AppException(
@@ -890,73 +826,7 @@ export class InventoryService {
         HttpStatus.BAD_REQUEST,
       );
     }
-    if (dto.type === InventoryDocumentType.TRANSFER) {
-      const destinationRows = await this.products.resolveForInventory(
-        dto.destinationLocationId!,
-        productIds,
-      );
-      if (destinationRows.length !== productIds.length) {
-        throw new AppException(
-          ErrorCode.INVENTORY_PRODUCT_NOT_CONFIGURED,
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-    }
     return rows;
-  }
-
-  private validateItems(
-    type: InventoryDocumentType,
-    items: InventoryDocumentItemDto[],
-  ): void {
-    for (const item of items) {
-      const quantity = new Prisma.Decimal(item.quantity);
-      const cost =
-        item.unitCost == null ? null : new Prisma.Decimal(item.unitCost);
-      if (type === InventoryDocumentType.ADJUSTMENT) {
-        if (quantity.isZero()) this.invalidDocument();
-        if (quantity.gt(0) && cost == null) {
-          throw new AppException(
-            ErrorCode.INVENTORY_UNIT_COST_REQUIRED,
-            HttpStatus.BAD_REQUEST,
-          );
-        }
-      } else if (quantity.lte(0)) {
-        this.invalidDocument();
-      }
-      if (type === InventoryDocumentType.RECEIPT && cost == null) {
-        throw new AppException(
-          ErrorCode.INVENTORY_UNIT_COST_REQUIRED,
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-      if (
-        type !== InventoryDocumentType.RECEIPT &&
-        type !== InventoryDocumentType.ADJUSTMENT &&
-        cost != null
-      ) {
-        this.invalidDocument();
-      }
-    }
-  }
-
-  private itemData(
-    items: InventoryDocumentItemDto[],
-    resolved: Awaited<ReturnType<ProductsService['resolveForInventory']>>,
-  ) {
-    const byProduct = new Map(resolved.map((row) => [row.productId, row]));
-    return items.map((item) => {
-      const row = byProduct.get(item.productId)!;
-      return {
-        productLocationId: row.id,
-        productId: row.productId,
-        productName: row.product.name,
-        productSku: row.product.sku,
-        productUnit: row.product.unit,
-        quantity: item.quantity,
-        unitCost: item.unitCost ?? null,
-      };
-    });
   }
 
   private sortInventory(
@@ -1036,13 +906,6 @@ export class InventoryService {
       maxWait: 5_000,
       timeout: 30_000,
     });
-  }
-
-  private invalidDocument(): never {
-    throw new AppException(
-      ErrorCode.INVENTORY_DOCUMENT_INVALID,
-      HttpStatus.BAD_REQUEST,
-    );
   }
 
   private text(value: string | null | undefined): string | null {

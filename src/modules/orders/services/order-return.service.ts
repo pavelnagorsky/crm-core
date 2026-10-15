@@ -119,27 +119,21 @@ export class OrderReturnService {
           locationId,
           orderId,
         );
-        this.emitUpdated(
-          location.brandId,
-          locationId,
-          orderId,
-          actor,
-          {
-            orderReturnId: orderReturn.id,
-            reason,
-            totalAmount: updated.totalAmount.toFixed(2),
-            currency: updated.currency,
-            itemChanges: {
-              added: [],
-              removed: [],
-              changed: orderReturn.items.map((item) => ({
-                orderItemId: item.orderItemId,
-                returnedQuantity: item.quantity.toFixed(3),
-                returnedTotal: item.lineTotal.toFixed(2),
-              })),
-            },
+        this.emitUpdated(location.brandId, locationId, orderId, actor, {
+          orderReturnId: orderReturn.id,
+          reason,
+          totalAmount: updated.totalAmount.toFixed(2),
+          currency: updated.currency,
+          itemChanges: {
+            added: [],
+            removed: [],
+            changed: orderReturn.items.map((item) => ({
+              orderItemId: item.orderItemId,
+              returnedQuantity: item.quantity.toFixed(3),
+              returnedTotal: item.lineTotal.toFixed(2),
+            })),
           },
-        );
+        });
         return updated;
       });
     } catch (error) {
@@ -226,9 +220,22 @@ export class OrderReturnService {
         lineTotal: price.lineTotal,
         unitCostSnapshot: orderItem.unitCostSnapshot,
         lineCostSnapshot:
-          orderItem.unitCostSnapshot == null
+          orderItem.lineCostSnapshot == null
             ? null
-            : MoneyService.quantize(quantity.mul(orderItem.unitCostSnapshot)),
+            : MoneyService.allocateCumulative(
+                orderItem.lineCostSnapshot,
+                orderItem.quantity,
+                quantity,
+                returnedQuantity,
+                orderItem.returnItems
+                  .filter(
+                    (item) => item.return.status === OrderReturnStatus.POSTED,
+                  )
+                  .reduce(
+                    (sum, item) => sum.plus(item.lineCostSnapshot ?? 0),
+                    new Prisma.Decimal(0),
+                  ),
+              ),
         sellerStaffId: orderItem.sellerStaffId,
         sellerName: orderItem.sellerName,
       };

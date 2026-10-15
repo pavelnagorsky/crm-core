@@ -47,6 +47,25 @@ export class MoneyService {
     return MoneyService.decimal(value).toFixed(SCALE);
   }
 
+  static allocateCumulative(
+    total: Prisma.Decimal,
+    totalQuantity: Prisma.Decimal,
+    quantity: Prisma.Decimal,
+    allocatedQuantity: Prisma.Decimal,
+    allocatedAmount: Prisma.Decimal,
+  ): Prisma.Decimal {
+    const target = MoneyService.quantize(
+      total.mul(allocatedQuantity.plus(quantity)).div(totalQuantity),
+    );
+    return Prisma.Decimal.max(
+      0,
+      Prisma.Decimal.min(
+        total.minus(allocatedAmount),
+        target.minus(allocatedAmount),
+      ),
+    );
+  }
+
   /**
    * ru-RU currency label. `amount` is a decimal string and is not parsed with Number().
    */

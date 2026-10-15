@@ -1,4 +1,5 @@
 import { Prisma, ProductUnit } from '@prisma/client';
+import { MoneyService } from '../../../shared/money/money.service.js';
 import { InventoryDocumentStatus } from '../enums/inventory-document-status.enum.js';
 import { InventoryDocumentType } from '../enums/inventory-document-type.enum.js';
 import { InventoryDocumentWithItems } from '../interfaces/inventory-document-with-items.interface.js';
@@ -20,6 +21,16 @@ function item(
     productUnit: ProductUnit.PIECE,
     quantity: new Prisma.Decimal(quantity),
     unitCost: unitCost == null ? null : new Prisma.Decimal(unitCost),
+    totalCost:
+      unitCost == null
+        ? null
+        : MoneyService.quantize(new Prisma.Decimal(quantity).mul(unitCost)),
+    packagingId: null,
+    packagingName: null,
+    packagingFactor: null,
+    packageQuantity: null,
+    packageUnitCost: null,
+    position: 0,
     createdAt: new Date('2026-10-01T10:00:00.000Z'),
   };
 }
@@ -51,12 +62,27 @@ function document(
 }
 
 describe('InventoryDocumentResponseDto totalCost', () => {
+  it('returns the saved package amount even when it differs from quantity times rounded unit cost', () => {
+    const dto = InventoryDocumentItemResponseDto.fromEntity({
+      ...item('30.000', '3.33333333'),
+      totalCost: new Prisma.Decimal(100),
+      packagingId: 'box',
+      packagingName: 'Box',
+      packagingFactor: new Prisma.Decimal(30),
+      packageQuantity: new Prisma.Decimal(1),
+      packageUnitCost: new Prisma.Decimal(100),
+    });
+    expect(dto.totalCost).toBe('100.00');
+    expect(dto.unitCost).toBe('3.33333333');
+    expect(dto.packagingName).toBe('Box');
+    expect(dto.packageQuantity).toBe('1.000');
+  });
   it('rounds a line half-up to two decimal places', () => {
     const dto = InventoryDocumentItemResponseDto.fromEntity(
       item('1.125', '4.50'),
     );
 
-    expect(dto.unitCost).toBe('4.50');
+    expect(dto.unitCost).toBe('4.50000000');
     expect(dto.totalCost).toBe('5.06');
     expect(dto.totalCost).toMatch(/^-?\d+\.\d{2}$/);
   });
@@ -141,7 +167,7 @@ describe('InventoryDocumentResponseDto totalCost', () => {
     InventoryDocumentStatus.POSTED,
     InventoryDocumentStatus.VOIDED,
   ])(
-    'builds the total from saved quantity and unit cost when status is %s',
+    'builds the total from stored line amounts when status is %s',
     (status) => {
       const dto = InventoryDocumentResponseDto.fromEntity(
         document([item('2.000', '6.25')], status),

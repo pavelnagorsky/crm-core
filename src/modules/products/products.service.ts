@@ -41,10 +41,20 @@ const productDetailsInclude = {
   category: true,
   imageFile: true,
   locations: true,
+  packagings: { orderBy: [{ name: 'asc' }, { id: 'asc' }] },
 } satisfies Prisma.ProductInclude;
 
 const locationProductInclude = {
-  product: { include: { category: true, imageFile: true } },
+  product: {
+    include: {
+      category: true,
+      imageFile: true,
+      packagings: {
+        where: { isActive: true },
+        orderBy: [{ name: 'asc' }, { id: 'asc' }],
+      },
+    },
+  },
 } satisfies Prisma.ProductLocationInclude;
 
 const PRODUCT_STATUSES = [ProductStatus.ACTIVE, ProductStatus.INACTIVE];
@@ -203,27 +213,46 @@ export class ProductsService {
     const old = await this.findProductForMutation(brandId, productId);
     await this.assertCategory(brandId, dto.categoryId);
     try {
-      const product = await this.db.product.update({
-        where: { id: productId },
-        data: {
-          name: dto.name?.trim(),
-          description:
-            dto.description !== undefined
-              ? this.optionalText(dto.description)
-              : undefined,
-          categoryId:
-            dto.categoryId !== undefined ? (dto.categoryId ?? null) : undefined,
-          imageFileId:
-            dto.imageFileId !== undefined
-              ? (dto.imageFileId ?? null)
-              : undefined,
-          sku: dto.sku !== undefined ? this.optionalCode(dto.sku) : undefined,
-          barcode:
-            dto.barcode !== undefined
-              ? this.optionalCode(dto.barcode)
-              : undefined,
-          unit: dto.unit,
-        },
+      const product = await this.db.$transaction(async (tx) => {
+        if (dto.unit != null) {
+          await this.lockProduct(brandId, productId, tx);
+          const used = await tx.product.count({
+            where: {
+              id: productId,
+              unit: { not: dto.unit },
+              OR: [{ locations: { some: {} } }, { packagings: { some: {} } }],
+            },
+          });
+          if (used > 0)
+            throw new AppException(
+              ErrorCode.PRODUCT_UNIT_IMMUTABLE,
+              HttpStatus.CONFLICT,
+            );
+        }
+        return tx.product.update({
+          where: { id: productId },
+          data: {
+            name: dto.name?.trim(),
+            description:
+              dto.description !== undefined
+                ? this.optionalText(dto.description)
+                : undefined,
+            categoryId:
+              dto.categoryId !== undefined
+                ? (dto.categoryId ?? null)
+                : undefined,
+            imageFileId:
+              dto.imageFileId !== undefined
+                ? (dto.imageFileId ?? null)
+                : undefined,
+            sku: dto.sku !== undefined ? this.optionalCode(dto.sku) : undefined,
+            barcode:
+              dto.barcode !== undefined
+                ? this.optionalCode(dto.barcode)
+                : undefined,
+            unit: dto.unit,
+          },
+        });
       });
       this.emitChanges(
         brandId,
@@ -377,6 +406,26 @@ export class ProductsService {
     return product;
   }
 
+  resolveForPackagingCreation(
+    brandId: string,
+    productId: string,
+    tx: Prisma.TransactionClient,
+  ): Promise<Product> {
+    return this.lockProduct(brandId, productId, tx);
+  }
+
+  private async lockProduct(
+    brandId: string,
+    productId: string,
+    tx: Prisma.TransactionClient,
+  ): Promise<Product> {
+    const products = await tx.$queryRaw<Product[]>(Prisma.sql`
+      SELECT * FROM "Product" WHERE id = ${productId} AND "brandId" = ${brandId} FOR UPDATE
+    `);
+    if (!products[0]) throw new NotFoundException('Product not found');
+    return products[0];
+  }
+
   private async findProductForMutation(
     brandId: string,
     productId: string,
@@ -486,8 +535,9 @@ export class ProductsService {
   resolveForInventory(
     locationId: string,
     productIds: string[],
+    tx?: Prisma.TransactionClient,
   ): Promise<LocationProductView[]> {
-    return this.db.productLocation.findMany({
+    return (tx ?? this.db).productLocation.findMany({
       where: {
         locationId,
         productId: { in: productIds },

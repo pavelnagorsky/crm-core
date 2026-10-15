@@ -44,11 +44,18 @@ export class InventorySaleReversalService {
         orderItemId,
         type: InventoryMovementType.SALE_REVERSAL,
       },
-      select: { orderItemId: true, quantityDelta: true },
+      select: { orderItemId: true, quantityDelta: true, totalCost: true },
     });
+    const reversedCosts = new Map<string, Prisma.Decimal>();
     const reversedByOrderItem = new Map<string, Prisma.Decimal>();
     for (const movement of reversed) {
       if (!movement.orderItemId) continue;
+      reversedCosts.set(
+        movement.orderItemId,
+        (reversedCosts.get(movement.orderItemId) ?? new Prisma.Decimal(0)).plus(
+          movement.totalCost,
+        ),
+      );
       reversedByOrderItem.set(
         movement.orderItemId,
         (
@@ -85,19 +92,29 @@ export class InventorySaleReversalService {
         pendingMovement;
       const movementOrderItemId = movement.orderItemId!;
       const balance = balances.get(movement.productLocationId)!;
+      const totalCost = MoneyService.allocateCumulative(
+        movement.totalCost.neg(),
+        soldQuantity,
+        quantity,
+        reversedQuantity,
+        reversedCosts.get(movementOrderItemId) ?? new Prisma.Decimal(0),
+      );
       const next = this.compute.nextState(
         {
           quantity: balance.quantityOnHand,
           averageUnitCost: balance.averageUnitCost,
+          stockValue: balance.stockValue,
         },
         quantity,
         movement.unitCost,
+        totalCost,
       );
       await tx.inventoryBalance.update({
         where: { id: balance.id },
         data: {
           quantityOnHand: next.quantity,
           averageUnitCost: next.averageUnitCost,
+          stockValue: next.stockValue,
         },
       });
       await tx.inventoryMovement.create({
@@ -120,8 +137,10 @@ export class InventorySaleReversalService {
           quantityAfter: next.quantity,
           averageUnitCostBefore: balance.averageUnitCost,
           averageUnitCostAfter: next.averageUnitCost,
+          stockValueBefore: balance.stockValue,
+          stockValueAfter: next.stockValue,
           unitCost: movement.unitCost,
-          totalCost: MoneyService.quantize(quantity.mul(movement.unitCost)),
+          totalCost,
           occurredAt,
           idempotencyKey: `order:${orderId}:item:${movementOrderItemId}:sale-reversal:${reversedQuantity.plus(quantity).toFixed(3)}`,
           reversedMovementId:
@@ -132,6 +151,7 @@ export class InventorySaleReversalService {
       });
       balance.quantityOnHand = next.quantity;
       balance.averageUnitCost = next.averageUnitCost;
+      balance.stockValue = next.stockValue;
     }
   }
 }

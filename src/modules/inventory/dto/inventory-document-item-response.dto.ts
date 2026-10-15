@@ -1,5 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { InventoryDocumentItem } from '@prisma/client';
+import { UnitCostService } from '../../../shared/money/unit-cost.service.js';
+import { ApiUnitCost } from '../../../shared/decorators/api-unit-cost.decorator.js';
 import {
   ApiPrice,
   ApiSignedAmount,
@@ -27,11 +29,26 @@ export class InventoryDocumentItemResponseDto {
   @ApiProperty({ type: String, format: 'decimal' })
   quantity: string;
 
-  @ApiPrice({ nullable: true })
+  @ApiUnitCost(true)
   unitCost: string | null;
 
   @ApiSignedAmount({ nullable: true })
   totalCost: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  packagingId: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  packagingName: string | null;
+
+  @ApiProperty({ type: String, format: 'decimal', nullable: true })
+  packagingFactor: string | null;
+
+  @ApiProperty({ type: String, format: 'decimal', nullable: true })
+  packageQuantity: string | null;
+
+  @ApiPrice({ nullable: true })
+  packageUnitCost: string | null;
 
   static fromEntity(
     entity: InventoryDocumentItem,
@@ -44,15 +61,23 @@ export class InventoryDocumentItemResponseDto {
     dto.productUnit = entity.productUnit;
     dto.quantity = QuantityService.format(entity.quantity);
     dto.unitCost =
-      entity.unitCost == null ? null : MoneyService.format(entity.unitCost);
-    dto.totalCost = lineTotalCost(entity);
+      entity.unitCost == null ? null : UnitCostService.format(entity.unitCost);
+    dto.totalCost =
+      entity.totalCost == null ? null : MoneyService.format(entity.totalCost);
+    dto.packagingId = entity.packagingId;
+    dto.packagingName = entity.packagingName;
+    dto.packagingFactor =
+      entity.packagingFactor == null
+        ? null
+        : QuantityService.format(entity.packagingFactor);
+    dto.packageQuantity =
+      entity.packageQuantity == null
+        ? null
+        : QuantityService.format(entity.packageQuantity);
+    dto.packageUnitCost =
+      entity.packageUnitCost == null
+        ? null
+        : MoneyService.format(entity.packageUnitCost);
     return dto;
   }
-}
-
-function lineTotalCost(entity: InventoryDocumentItem): string | null {
-  if (entity.unitCost == null) return null;
-  return MoneyService.format(
-    MoneyService.quantize(entity.quantity.mul(entity.unitCost)),
-  );
 }

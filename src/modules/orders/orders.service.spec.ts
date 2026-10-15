@@ -2319,6 +2319,52 @@ describe('OrdersService', () => {
     expect(totalsUpdate.totalAmount.toFixed(2)).toBe('0.00');
   });
 
+  it('restores the remaining cost snapshot on the final partial return', async () => {
+    const { service, tx } = setup();
+    const confirmed = {
+      ...order(OrderStatus.ACTIVE, OrderItemStatus.CONFIRMED),
+      items: [
+        {
+          ...order(OrderStatus.ACTIVE, OrderItemStatus.CONFIRMED).items[0],
+          quantity: new Prisma.Decimal(3),
+          unitCostSnapshot: new Prisma.Decimal('3.33333333'),
+          lineCostSnapshot: new Prisma.Decimal(10),
+          returnItems: [
+            {
+              quantity: new Prisma.Decimal(2),
+              listUnitPrice: new Prisma.Decimal(20),
+              customUnitPrice: new Prisma.Decimal(15),
+              unitPrice: new Prisma.Decimal(15),
+              lineSubtotal: new Prisma.Decimal(30),
+              discountTotal: new Prisma.Decimal(0),
+              lineTotal: new Prisma.Decimal(30),
+              lineCostSnapshot: new Prisma.Decimal('6.67'),
+              return: { status: 'POSTED' },
+            },
+          ],
+        },
+      ],
+    };
+    tx.order.findFirst.mockResolvedValue(confirmed);
+    tx.orderReturn.create.mockResolvedValue({ id: 'return-1', items: [] });
+    tx.order.update.mockResolvedValue(confirmed);
+    await service.createReturn(
+      'location-1',
+      'order-1',
+      {
+        idempotencyKey: 'last-partial-return',
+        reason: 'Return remaining unit',
+        items: [{ orderItemId: 'item-1', quantity: '1.000' }],
+      },
+      owner,
+    );
+    expect(
+      tx.orderReturn.create.mock.calls[0][0].data.items.create[0].lineCostSnapshot.toFixed(
+        2,
+      ),
+    ).toBe('3.33');
+  });
+
   it('creates a partial product return with explicit quantity', async () => {
     const { service, tx, inventory, earnings } = setup();
     const confirmed = {

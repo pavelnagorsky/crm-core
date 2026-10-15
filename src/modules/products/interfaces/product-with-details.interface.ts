@@ -5,5 +5,6 @@ export type ProductWithDetails = Prisma.ProductGetPayload<{
     category: true;
     imageFile: true;
     locations: true;
+    packagings: true;
   };
 }>;

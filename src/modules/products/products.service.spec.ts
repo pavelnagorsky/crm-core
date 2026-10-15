@@ -1,5 +1,5 @@
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { ProductStatus } from '@prisma/client';
+import { ProductStatus, ProductUnit } from '@prisma/client';
 import { PrismaErrorCode } from '../../shared/database/prisma-error-codes.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { AuditActorRole } from '../audit/enums/audit-actor-role.enum.js';
@@ -11,6 +11,9 @@ const actor = { id: 'owner-1', name: 'Owner', role: AuditActorRole.OWNER };
 
 function setup() {
   const db = {
+    $queryRaw: vi
+      .fn()
+      .mockResolvedValue([{ id: 'product-1', unit: ProductUnit.PIECE }]),
     product: {
       create: vi.fn(),
       findFirst: vi.fn(),
@@ -33,7 +36,10 @@ function setup() {
       count: vi.fn(),
       upsert: vi.fn(),
     },
-    $transaction: vi.fn((values: unknown[]) => Promise.all(values)),
+    $transaction: vi.fn(
+      (values: unknown[] | ((tx: unknown) => unknown)): unknown =>
+        Array.isArray(values) ? Promise.all(values) : values(db),
+    ),
   };
   const locations = {
     findById: vi.fn(),
@@ -48,6 +54,23 @@ function setup() {
 }
 
 describe('ProductsService', () => {
+  it('prevents changing a base unit after locations or packaging have been configured', async () => {
+    const { db, service } = setup();
+    db.product.findFirst.mockResolvedValue({
+      id: 'product-1',
+      unit: ProductUnit.PIECE,
+    });
+    db.product.count.mockResolvedValue(1);
+    await expect(
+      service.update(
+        'brand-1',
+        'product-1',
+        { unit: ProductUnit.LITER },
+        actor,
+      ),
+    ).rejects.toBeInstanceOf(AppException);
+    expect(db.product.update).not.toHaveBeenCalled();
+  });
   it('normalizes optional product codes and text on create', async () => {
     const { db, service } = setup();
     db.product.create.mockResolvedValue({
@@ -117,12 +140,7 @@ describe('ProductsService', () => {
       imageFileId: null,
     });
 
-    await service.update(
-      'brand-1',
-      'product-1',
-      { imageFileId: null },
-      actor,
-    );
+    await service.update('brand-1', 'product-1', { imageFileId: null }, actor);
 
     expect(db.product.update).toHaveBeenCalledWith({
       where: { id: 'product-1' },

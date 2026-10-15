@@ -1,3 +1,5 @@
+import { ProductPackagingAuditPayload } from './product-packaging-audit-payload.interface.js';
+
 export interface AuditFieldChange {
   field: string;
   from: string;
@@ -174,6 +176,7 @@ interface PayrollPeriodAuditPayload {
 // ─── Union ───────────────────────────────────────────────────────────────────
 
 export type AuditPayload =
+  | ProductPackagingAuditPayload
   | BookingCreatedPayload
   | BookingUpdatedPayload
   | BookingCancelledPayload

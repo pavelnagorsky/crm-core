@@ -59,7 +59,7 @@ export class InventoryAnalyticsService {
         SELECT
           pl.id AS "productLocationId",
           COALESCE(ib."quantityOnHand", 0::numeric) AS "quantityOnHand",
-          COALESCE(ib."averageUnitCost", 0::numeric) AS "averageUnitCost",
+          COALESCE(ib."stockValue", 0::numeric) AS "stockValue",
           pl."reorderLevel" AS "reorderLevel"
         FROM "ProductLocation" pl
         LEFT JOIN "InventoryBalance" ib ON ib."productLocationId" = pl.id
@@ -89,7 +89,7 @@ export class InventoryAnalyticsService {
         COUNT(*) FILTER (WHERE i."quantityOnHand" <= 0::numeric)::int
           AS "outOfStockCount",
         COALESCE(
-          SUM(ROUND(i."quantityOnHand" * i."averageUnitCost", 2)),
+          SUM(i."stockValue"),
           0::numeric
         ) AS "stockValue",
         COUNT(*) FILTER (
@@ -121,11 +121,7 @@ export class InventoryAnalyticsService {
             pl."reorderLevel" - COALESCE(ib."quantityOnHand", 0::numeric),
             0::numeric
           ) AS "missingQuantity",
-          ROUND(
-            COALESCE(ib."quantityOnHand", 0::numeric) *
-              COALESCE(ib."averageUnitCost", 0::numeric),
-            2
-          ) AS "stockValue",
+          COALESCE(ib."stockValue", 0::numeric) AS "stockValue",
           ib."updatedAt" AS "updatedAt"
         FROM "ProductLocation" pl
         INNER JOIN "Product" p ON p.id = pl."productId"

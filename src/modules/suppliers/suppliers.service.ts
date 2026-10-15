@@ -92,8 +92,9 @@ export class SuppliersService {
   async findByIdInBrand(
     brandId: string,
     supplierId: string,
+    tx?: Prisma.TransactionClient,
   ): Promise<Supplier> {
-    const supplier = await this.db.supplier.findFirst({
+    const supplier = await (tx ?? this.db).supplier.findFirst({
       where: { id: supplierId, brandId },
     });
     if (!supplier) throw new NotFoundException('Supplier not found');
@@ -103,8 +104,9 @@ export class SuppliersService {
   async resolveActiveForDocument(
     brandId: string,
     supplierId: string,
+    tx?: Prisma.TransactionClient,
   ): Promise<Supplier> {
-    const supplier = await this.findByIdInBrand(brandId, supplierId);
+    const supplier = await this.findByIdInBrand(brandId, supplierId, tx);
     if (!supplier.isActive) {
       throw new AppException(ErrorCode.SUPPLIER_INACTIVE, HttpStatus.CONFLICT);
     }

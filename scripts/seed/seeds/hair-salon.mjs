@@ -1740,11 +1740,17 @@ async function createProductsAndSales(prisma, ctx) {
         where: { productLocationId: productLocation.id },
         update: {
           quantityOnHand: initialStock,
+          stockValue: decimal(item.unitCost)
+            .mul(initialStock)
+            .toDecimalPlaces(2),
           averageUnitCost: item.unitCost,
         },
         create: {
           productLocationId: productLocation.id,
           quantityOnHand: initialStock,
+          stockValue: decimal(item.unitCost)
+            .mul(initialStock)
+            .toDecimalPlaces(2),
           averageUnitCost: item.unitCost,
         },
       });
@@ -1757,6 +1763,9 @@ async function createProductsAndSales(prisma, ctx) {
           productSku: item.product.sku,
           productUnit: item.product.unit,
           quantity: initialStock,
+          totalCost: decimal(item.unitCost)
+            .mul(initialStock)
+            .toDecimalPlaces(2),
           unitCost: item.unitCost,
         },
       });
@@ -1775,6 +1784,10 @@ async function createProductsAndSales(prisma, ctx) {
           quantityAfter: initialStock,
           averageUnitCostBefore: decimal(0),
           averageUnitCostAfter: item.unitCost,
+          stockValueBefore: decimal(0),
+          stockValueAfter: decimal(item.unitCost)
+            .mul(initialStock)
+            .toDecimalPlaces(2),
           unitCost: item.unitCost,
           totalCost: decimal(item.unitCost).mul(initialStock),
           occurredAt: now,
@@ -1912,15 +1925,21 @@ async function createProductSales(prisma, ctx) {
         quantityAfter: after,
         averageUnitCostBefore: unitCost,
         averageUnitCostAfter: unitCost,
+        stockValueBefore: before.mul(unitCost).toDecimalPlaces(2),
+        stockValueAfter: after.mul(unitCost).toDecimalPlaces(2),
         unitCost,
-        totalCost: lineCost,
+        totalCost: lineCost.neg(),
         occurredAt,
         idempotencyKey: `seed:sale:${orderItem.id}`,
       },
     });
     await prisma.inventoryBalance.update({
       where: { productLocationId: item.productLocation.id },
-      data: { quantityOnHand: after, averageUnitCost: unitCost },
+      data: {
+        quantityOnHand: after,
+        averageUnitCost: unitCost,
+        stockValue: after.mul(unitCost).toDecimalPlaces(2),
+      },
     });
 
     const plan = planByStaff.get(staff.id);
