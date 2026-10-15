@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { BusinessType } from '@prisma/client';
 import { LocationService } from './location.service.js';
 
@@ -17,9 +17,14 @@ describe('LocationService locale and business type', () => {
       create: vi.fn().mockResolvedValue(location),
       findUnique: vi.fn().mockResolvedValue(location),
       update: vi.fn(),
+      updateMany: vi.fn(),
+      delete: vi.fn(),
     },
   };
-  const brands = { findMemberUserIds: vi.fn().mockResolvedValue(['user-1']) };
+  const brands = {
+    findById: vi.fn().mockResolvedValue({ id: 'brand-1' }),
+    findMemberUserIds: vi.fn().mockResolvedValue(['user-1']),
+  };
   const epoch = { bumpMany: vi.fn() };
   const service = new LocationService(
     db as never,
@@ -28,6 +33,23 @@ describe('LocationService locale and business type', () => {
   );
 
   beforeEach(() => vi.clearAllMocks());
+
+  it('soft-deletes only the location while preserving related data', async () => {
+    db.location.updateMany.mockResolvedValue({ count: 1 });
+    await service.delete('location-1');
+    expect(db.location.updateMany).toHaveBeenCalledWith({
+      where: { id: 'location-1', deletedAt: null, brand: { deletedAt: null } },
+      data: { deletedAt: expect.any(Date) },
+    });
+    expect(db.location.delete).not.toHaveBeenCalled();
+  });
+
+  it('does not allow deleting a location under a deleted brand', async () => {
+    db.location.updateMany.mockResolvedValue({ count: 0 });
+    await expect(service.delete('location-1')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
 
   it('normalizes the locale when creating another location', async () => {
     await service.create('brand-1', {
@@ -74,7 +96,11 @@ describe('LocationService locale and business type', () => {
       );
 
       expect(db.location.update).toHaveBeenCalledWith({
-        where: { id: 'location-1' },
+        where: {
+          id: 'location-1',
+          deletedAt: null,
+          brand: { deletedAt: null },
+        },
         data: { businessType },
       });
       expect(result).toMatchObject({

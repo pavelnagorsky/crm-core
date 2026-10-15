@@ -11,6 +11,7 @@ import {
 } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
+import { ACTIVE_LOCATION_WHERE } from '../../shared/database/active-business.where.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { PrismaErrorCode } from '../../shared/database/prisma-error-codes.js';
@@ -616,7 +617,7 @@ export class StaffService {
     const tokenHash = createHash('sha256').update(token).digest('hex');
 
     const invitation = await this.db.staffInvitation.findUnique({
-      where: { tokenHash },
+      where: { tokenHash, location: ACTIVE_LOCATION_WHERE },
     });
 
     if (!invitation || invitation.status !== StaffInvitationStatus.PENDING) {
@@ -638,6 +639,17 @@ export class StaffService {
     }
 
     return this.db.$transaction(async (tx) => {
+      if (
+        !(await this.locationService.acquireActiveOperationLock(
+          invitation.locationId,
+          tx,
+        ))
+      ) {
+        throw new AppException(
+          ErrorCode.STAFF_INVITATION_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
+      }
       try {
         await tx.locationMembership.create({
           data: {

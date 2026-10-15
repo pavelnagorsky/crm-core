@@ -142,6 +142,26 @@ describe('AuthService refresh token storage', () => {
         },
       ],
     });
+    expect(db.brandMembership.findMany).toHaveBeenCalledWith({
+      where: { userId: user.id, brand: { deletedAt: null } },
+      select: { brandId: true, role: true },
+    });
+    expect(db.locationMembership.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          userId: user.id,
+          location: { deletedAt: null, brand: { deletedAt: null } },
+        },
+      }),
+    );
+    expect(db.location.findMany).toHaveBeenCalledWith({
+      where: {
+        brandId: { in: ['brand-1'] },
+        deletedAt: null,
+        brand: { deletedAt: null },
+      },
+      select: { id: true, brandId: true },
+    });
   });
 
   it('hashes the cookie value when logging out', async () => {

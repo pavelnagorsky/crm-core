@@ -77,6 +77,11 @@ describe('Location reference endpoints (HTTP)', () => {
 
     expect(body.isSuccess).toBe(true);
     expect(body.responseValue).not.toHaveProperty('businessTypes');
+    expect(
+      body.responseValue.countries.map(
+        (country: { countryCode: string }) => country.countryCode,
+      ),
+    ).toEqual(['BY', 'RU', 'KZ']);
     expect(body.responseValue.countries).toContainEqual({
       countryCode: 'BY',
       currency: 'BYN',

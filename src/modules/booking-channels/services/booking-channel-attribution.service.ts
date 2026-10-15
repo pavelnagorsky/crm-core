@@ -1,5 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { DatabaseService } from '../../../database/database.service.js';
+import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { BookingSource } from '../../bookings/enums/booking-source.enum.js';
@@ -29,6 +30,7 @@ export class BookingChannelAttributionService {
           id: pageId,
           locationId,
           status: BookingChannelStatus.PUBLISHED,
+          location: ACTIVE_LOCATION_WHERE,
         },
         select: { id: true },
       });
@@ -49,6 +51,7 @@ export class BookingChannelAttributionService {
           id: widgetId,
           locationId,
           status: BookingChannelStatus.PUBLISHED,
+          location: ACTIVE_LOCATION_WHERE,
         },
         select: { id: true, allowedDomains: true },
       });

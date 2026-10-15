@@ -13,6 +13,7 @@ import {
 } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../../database/database.service.js';
+import { LocationService } from '../../location/location.service.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { MoneyService } from '../../../shared/money/money.service.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
@@ -71,6 +72,7 @@ export class BookingCreateService {
     private readonly staffEarnings: StaffEarningsService,
     private readonly servicesService: ServicesService,
     private readonly serviceBundles: ServiceBundleService,
+    private readonly locationService: LocationService,
   ) {}
 
   async createPublicBooking(
@@ -132,10 +134,7 @@ export class BookingCreateService {
     locationId: string,
     dto: BookingPricingRequestDto,
   ): Promise<BookingPricingResult> {
-    const location = await this.db.location.findUnique({
-      where: { id: locationId },
-      select: { currency: true },
-    });
+    const location = await this.locationService.findById(locationId);
     if (!location) {
       throw new AppException(
         ErrorCode.BOOKING_BUSINESS_NOT_FOUND,
@@ -179,16 +178,7 @@ export class BookingCreateService {
     currency: string;
     bundleTitle: string | null;
   }> {
-    const business = await this.db.location.findUnique({
-      where: { id: locationId },
-      select: {
-        brandId: true,
-        isBookingConfirmationRequired: true,
-        timezone: true,
-        bookingVisibility: true,
-        currency: true,
-      },
-    });
+    const business = await this.locationService.findById(locationId);
     if (!business)
       throw new AppException(
         ErrorCode.BOOKING_BUSINESS_NOT_FOUND,
@@ -242,6 +232,14 @@ export class BookingCreateService {
     const internalNotes = this.manualInternalNotes(dto, attribution.source);
 
     const booking = await this.db.$transaction(async (tx) => {
+      if (
+        !(await this.locationService.acquireActiveOperationLock(locationId, tx))
+      ) {
+        throw new AppException(
+          ErrorCode.BOOKING_BUSINESS_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
+      }
       for (const lockKey of lockKeys) {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockKey})`;
       }

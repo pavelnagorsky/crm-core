@@ -110,9 +110,17 @@ describe('BookingsService.completeElapsed', () => {
   const emitter = { emit: vi.fn() };
 
   let service: BookingsService;
+  const businessLifecycle = {
+    getAutomaticProcessingCutoffs: vi.fn(),
+    acquireActiveOperationLock: vi.fn(),
+  };
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    businessLifecycle.getAutomaticProcessingCutoffs.mockResolvedValue(
+      new Map([['biz', null]]),
+    );
+    businessLifecycle.acquireActiveOperationLock.mockResolvedValue(true);
     const module = await Test.createTestingModule({
       providers: [
         BookingsService,
@@ -122,7 +130,10 @@ describe('BookingsService.completeElapsed', () => {
         { provide: DatabaseService, useValue: db },
         { provide: CalendarService, useValue: {} },
         { provide: StaffService, useValue: {} },
-        { provide: LocationService, useValue: {} },
+        {
+          provide: LocationService,
+          useValue: businessLifecycle,
+        },
         { provide: ServiceCatalogService, useValue: serviceCatalog },
         { provide: StaffEarningsService, useValue: earnings },
         { provide: OrdersService, useValue: orders },
@@ -171,6 +182,27 @@ describe('BookingsService.completeElapsed', () => {
     ).resolves.toBe(0);
     expect(earnings.recordForCompletedBooking).not.toHaveBeenCalled();
     expect(earnings.syncForCompletedBooking).not.toHaveBeenCalled();
+  });
+
+  it('leaves pre-restoration bookings for manual decisions without orders or payroll', async () => {
+    db.booking.findMany.mockResolvedValue([booking()]);
+    businessLifecycle.getAutomaticProcessingCutoffs.mockResolvedValue(
+      new Map([['biz', new Date('2026-09-25T00:00:00Z')]]),
+    );
+    await expect(
+      service.completeElapsed(new Date('2026-09-26T00:00:00Z')),
+    ).resolves.toBe(0);
+    expect(db.booking.updateMany).not.toHaveBeenCalled();
+    expect(orders.syncCompletedBooking).not.toHaveBeenCalled();
+    expect(earnings.recordForCompletedBooking).not.toHaveBeenCalled();
+  });
+
+  it('skips a location deleted after selecting due bookings', async () => {
+    db.booking.findMany.mockResolvedValue([booking()]);
+    businessLifecycle.acquireActiveOperationLock.mockResolvedValue(false);
+    await expect(service.completeElapsed()).resolves.toBe(0);
+    expect(db.booking.updateMany).not.toHaveBeenCalled();
+    expect(orders.syncCompletedBooking).not.toHaveBeenCalled();
   });
 });
 

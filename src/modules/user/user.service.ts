@@ -1,6 +1,10 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { Prisma, User } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
+import {
+  ACTIVE_BRAND_WHERE,
+  ACTIVE_LOCATION_WHERE,
+} from '../../shared/database/active-business.where.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { UserWithAccessMemberships } from './interfaces/user-with-access-memberships.interface.js';
@@ -23,15 +27,20 @@ export class UserService {
       where: { id },
       include: {
         brandMemberships: {
+          where: { brand: ACTIVE_BRAND_WHERE },
           include: {
             brand: {
               select: {
-                locations: { select: { id: true } },
+                locations: {
+                  where: ACTIVE_LOCATION_WHERE,
+                  select: { id: true },
+                },
               },
             },
           },
         },
         locationMemberships: {
+          where: { location: ACTIVE_LOCATION_WHERE },
           include: {
             location: { select: { brandId: true } },
           },

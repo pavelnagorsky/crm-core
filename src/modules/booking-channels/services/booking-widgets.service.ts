@@ -1,11 +1,15 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { BookingWidget } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
+import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { BookingChannelStatus } from '../enums/booking-channel-status.enum.js';
 import { SaveBookingWidgetDto } from '../dto/save-booking-widget.dto.js';
-import { isDomainAllowed, normalizeAllowedDomains } from '../rules/allowed-domains.js';
+import {
+  isDomainAllowed,
+  normalizeAllowedDomains,
+} from '../rules/allowed-domains.js';
 import { toBookingFormColumns } from '../rendering/booking-form.js';
 import {
   BookingChannelPublishService,
@@ -127,7 +131,11 @@ export class BookingWidgetsService {
     origin?: string,
   ): Promise<BookingWidget> {
     const widget = await this.db.bookingWidget.findFirst({
-      where: { id: widgetId, status: BookingChannelStatus.PUBLISHED },
+      where: {
+        id: widgetId,
+        status: BookingChannelStatus.PUBLISHED,
+        location: ACTIVE_LOCATION_WHERE,
+      },
     });
     if (!widget)
       throw new AppException(

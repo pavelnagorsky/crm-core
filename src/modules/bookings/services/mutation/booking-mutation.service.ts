@@ -3,6 +3,10 @@ import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Booking, BusinessRole, CancelledBy, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
+import {
+  ACTIVE_LOCATION_WHERE,
+  automaticProcessingLocationWhere,
+} from '../../../../shared/database/active-business.where.js';
 import { AppException } from '../../../../shared/exceptions/app.exception.js';
 import { MoneyService } from '../../../../shared/money/money.service.js';
 import { TimeService } from '../../../../shared/time/time.service.js';
@@ -301,21 +305,36 @@ export class BookingMutationService {
         endAt: { lte: now },
         status: { in: [...AUTO_COMPLETABLE_STATUSES] },
         deletedAt: null,
+        location: ACTIVE_LOCATION_WHERE,
       },
       include: bookingWithItemsInclude,
     });
 
+    const cutoffs = await this.locationService.getAutomaticProcessingCutoffs([
+      ...new Set(due.map((booking) => booking.locationId)),
+    ]);
     let completed = 0;
     const actor: AuditActor = { name: 'System', role: AuditActorRole.SYSTEM };
 
     for (const booking of due) {
+      if (!cutoffs.has(booking.locationId)) continue;
+      const cutoff = cutoffs.get(booking.locationId);
+      if (cutoff && booking.startAt <= cutoff) continue;
       const updated = { ...booking, status: BookingStatus.COMPLETED };
       const didComplete = await this.db.$transaction(async (tx) => {
+        if (
+          !(await this.locationService.acquireActiveOperationLock(
+            booking.locationId,
+            tx,
+          ))
+        )
+          return false;
         const { count } = await tx.booking.updateMany({
           where: {
             id: booking.id,
             status: { in: [...AUTO_COMPLETABLE_STATUSES] },
             deletedAt: null,
+            location: automaticProcessingLocationWhere(booking.startAt),
           },
           data: { status: BookingStatus.COMPLETED },
         });

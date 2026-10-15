@@ -6,6 +6,10 @@ import { compare, hash } from 'bcrypt';
 import { createHash, randomInt, randomUUID } from 'crypto';
 import { User } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
+import {
+  ACTIVE_BRAND_WHERE,
+  ACTIVE_LOCATION_WHERE,
+} from '../../shared/database/active-business.where.js';
 import { UserService } from '../user/user.service.js';
 import { NOTIFICATION_EVENT } from '../notifications/notifications.service.js';
 import { ConfirmEmailNotification } from '../notifications/notifications/confirm-email.notification.js';
@@ -308,11 +312,11 @@ export class AuthService {
     const [brandMemberships, locationMembershipRows, tokenEpoch] =
       await Promise.all([
         this.db.brandMembership.findMany({
-          where: { userId: user.id },
+          where: { userId: user.id, brand: ACTIVE_BRAND_WHERE },
           select: { brandId: true, role: true },
         }),
         this.db.locationMembership.findMany({
-          where: { userId: user.id },
+          where: { userId: user.id, location: ACTIVE_LOCATION_WHERE },
           select: {
             locationId: true,
             role: true,
@@ -327,6 +331,7 @@ export class AuthService {
         : await this.db.location.findMany({
             where: {
               brandId: { in: brandMemberships.map((item) => item.brandId) },
+              ...ACTIVE_LOCATION_WHERE,
             },
             select: { id: true, brandId: true },
           });

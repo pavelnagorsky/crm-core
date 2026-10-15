@@ -4,6 +4,7 @@ import { stableOrderBy } from '../../../../shared/database/stable-order-by.js';
 import { OrderDirection } from '../../../../shared/enums/order-direction.enum.js';
 import { PaginatedResult } from '../../../../shared/interfaces/paginated-result.interface.js';
 import { DatabaseService } from '../../../../database/database.service.js';
+import { ACTIVE_LOCATION_WHERE } from '../../../../shared/database/active-business.where.js';
 import { BookingSearchRequestDto } from '../../dto/booking-search-request.dto.js';
 import { BookingSearchOrderBy } from '../../enums/booking-search-order-by.enum.js';
 import { BookingStatus } from '../../enums/booking-status.enum.js';
@@ -18,7 +19,11 @@ export class BookingReadService {
 
   async findById(bookingId: string): Promise<BookingWithItems> {
     const booking = await this.db.booking.findFirst({
-      where: { id: bookingId, deletedAt: null },
+      where: {
+        id: bookingId,
+        deletedAt: null,
+        location: ACTIVE_LOCATION_WHERE,
+      },
       include: bookingWithItemsInclude,
     });
     if (!booking) throw new NotFoundException('Booking not found');
@@ -30,7 +35,12 @@ export class BookingReadService {
     bookingId: string,
   ): Promise<BookingWithItems> {
     const booking = await this.db.booking.findFirst({
-      where: { id: bookingId, locationId, deletedAt: null },
+      where: {
+        id: bookingId,
+        locationId,
+        deletedAt: null,
+        location: ACTIVE_LOCATION_WHERE,
+      },
       include: bookingWithItemsInclude,
     });
     if (!booking) throw new NotFoundException('Booking not found');

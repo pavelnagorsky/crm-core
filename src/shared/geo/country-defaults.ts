@@ -1,32 +1,10 @@
 import { CountryDefault } from './interfaces/country-default.interface.js';
 
 export const COUNTRY_DEFAULTS = {
-  AM: {
-    currency: 'AMD',
-    timezones: ['Asia/Yerevan'],
-    defaultTimezone: 'Asia/Yerevan',
-  },
   BY: {
     currency: 'BYN',
     timezones: ['Europe/Minsk'],
     defaultTimezone: 'Europe/Minsk',
-  },
-  GE: {
-    currency: 'GEL',
-    timezones: ['Asia/Tbilisi'],
-    defaultTimezone: 'Asia/Tbilisi',
-  },
-  KZ: {
-    currency: 'KZT',
-    timezones: [
-      'Asia/Almaty',
-      'Asia/Aqtau',
-      'Asia/Aqtobe',
-      'Asia/Atyrau',
-      'Asia/Oral',
-      'Asia/Qostanay',
-    ],
-    defaultTimezone: 'Asia/Almaty',
   },
   RU: {
     currency: 'RUB',
@@ -47,18 +25,17 @@ export const COUNTRY_DEFAULTS = {
     ],
     defaultTimezone: 'Europe/Moscow',
   },
-  US: {
-    currency: 'USD',
+  KZ: {
+    currency: 'KZT',
     timezones: [
-      'America/New_York',
-      'America/Chicago',
-      'America/Denver',
-      'America/Phoenix',
-      'America/Los_Angeles',
-      'America/Anchorage',
-      'Pacific/Honolulu',
+      'Asia/Almaty',
+      'Asia/Aqtau',
+      'Asia/Aqtobe',
+      'Asia/Atyrau',
+      'Asia/Oral',
+      'Asia/Qostanay',
     ],
-    defaultTimezone: 'America/New_York',
+    defaultTimezone: 'Asia/Almaty',
   },
 } as const satisfies Record<string, CountryDefault>;
 

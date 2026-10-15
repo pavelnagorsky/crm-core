@@ -8,6 +8,7 @@ import {
   ProductStatus,
 } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
+import { ACTIVE_LOCATION_WHERE } from '../../shared/database/active-business.where.js';
 import { PrismaErrorCode } from '../../shared/database/prisma-error-codes.js';
 import { stableOrderBy } from '../../shared/database/stable-order-by.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
@@ -40,7 +41,7 @@ import { ProductWithDetails } from './interfaces/product-with-details.interface.
 const productDetailsInclude = {
   category: true,
   imageFile: true,
-  locations: true,
+  locations: { where: { location: ACTIVE_LOCATION_WHERE } },
   packagings: { orderBy: [{ name: 'asc' }, { id: 'asc' }] },
 } satisfies Prisma.ProductInclude;
 
@@ -542,6 +543,7 @@ export class ProductsService {
         locationId,
         productId: { in: productIds },
         trackInventory: true,
+        location: ACTIVE_LOCATION_WHERE,
       },
       include: locationProductInclude,
       orderBy: { id: 'asc' },
@@ -558,6 +560,7 @@ export class ProductsService {
         locationId,
         productId: { in: productIds },
         status: ProductStatus.ACTIVE,
+        location: ACTIVE_LOCATION_WHERE,
         product: { status: ProductStatus.ACTIVE },
       },
       include: locationProductInclude,

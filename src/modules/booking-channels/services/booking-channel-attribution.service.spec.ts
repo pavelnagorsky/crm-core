@@ -53,6 +53,7 @@ describe('BookingChannelAttributionService', () => {
         id: 'page-1',
         locationId: 'b1',
         status: BookingChannelStatus.PUBLISHED,
+        location: { deletedAt: null, brand: { deletedAt: null } },
       },
       select: { id: true },
     });

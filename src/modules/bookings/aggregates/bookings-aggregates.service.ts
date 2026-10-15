@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { BookingStatus, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
+import { LocationService } from '../../location/location.service.js';
+import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 import { MoneyService } from '../../../shared/money/money.service.js';
 import { ClientRevenueBucketTotals } from '../../../shared/interfaces/client-revenue-bucket-totals.interface.js';
 import { ClientRevenueTotals } from '../../../shared/interfaces/client-revenue-totals.interface.js';
@@ -34,7 +36,10 @@ import { StaffCount } from '../interfaces/staff-count.interface.js';
 
 @Injectable()
 export class BookingsAggregatesService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly locations: LocationService,
+  ) {}
 
   /**
    * Returns count and revenue grouped by BookingStatus for the given range in a single query.
@@ -266,6 +271,9 @@ export class BookingsAggregatesService {
   async clientCohort(
     range: ClientCohortSeriesRange,
   ): Promise<ClientCohortReport> {
+    const locationIds = (await this.locations.listByBrand(range.brandId)).map(
+      (location) => location.id,
+    );
     const rows = await this.db.$queryRaw<
       Array<{
         bucket: Date | null;
@@ -276,7 +284,7 @@ export class BookingsAggregatesService {
       }>
     >(
       Prisma.sql`
-        ${this.completedVisitsCte(range.brandId, range.to)}
+        ${this.completedVisitsCte(range.brandId, range.to, locationIds)}
         SELECT
           ${this.bucketExpr(range.granularity, range.timezone, 'v')} AS bucket,
           ${this.cohortAggregates()}
@@ -385,6 +393,9 @@ export class BookingsAggregatesService {
     asOf: Date,
     timezone: string,
   ): Promise<ClientRecencyRow[]> {
+    const locationIds = (await this.locations.listByBrand(brandId)).map(
+      (location) => location.id,
+    );
     const rows = await this.db.$queryRaw<
       Array<{
         bucket: string;
@@ -403,6 +414,7 @@ export class BookingsAggregatesService {
           JOIN "Client" c ON c."id" = b."clientId"
           ${this.bookingItemTotalsJoin()}
           WHERE c."brandId" = ${brandId}
+            AND ${this.activeLocationScope(locationIds)}
             AND b."deletedAt" IS NULL
             AND b."status"::text = ${BookingStatus.COMPLETED}
             AND b."startAt" < ${asOf}::timestamptz AT TIME ZONE 'UTC'
@@ -503,6 +515,7 @@ export class BookingsAggregatesService {
     const where: Prisma.BookingWhereInput = {
       locationId: range.locationId,
       deletedAt: null,
+      location: ACTIVE_LOCATION_WHERE,
       startAt: { gte: range.from, lt: range.to },
     };
     if (statuses && statuses.length > 0) where.status = { in: statuses };
@@ -628,7 +641,11 @@ export class BookingsAggregatesService {
     `;
   }
 
-  private completedVisitsCte(brandId: string, before: Date): Prisma.Sql {
+  private completedVisitsCte(
+    brandId: string,
+    before: Date,
+    locationIds: string[],
+  ): Prisma.Sql {
     return Prisma.sql`
       WITH visits AS (
         SELECT
@@ -640,11 +657,18 @@ export class BookingsAggregatesService {
         JOIN "Client" c ON c."id" = b."clientId"
         ${this.bookingItemTotalsJoin()}
         WHERE c."brandId" = ${brandId}
+          AND ${this.activeLocationScope(locationIds)}
           AND b."deletedAt" IS NULL
           AND b."status"::text = ${BookingStatus.COMPLETED}
           AND b."startAt" < ${before}::timestamptz AT TIME ZONE 'UTC'
       )
     `;
+  }
+
+  private activeLocationScope(locationIds: string[]): Prisma.Sql {
+    return locationIds.length
+      ? Prisma.sql`b."locationId" IN (${Prisma.join(locationIds)})`
+      : Prisma.sql`FALSE`;
   }
 
   private bookingItemTotalsJoin(): Prisma.Sql {

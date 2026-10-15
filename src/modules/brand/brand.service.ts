@@ -2,6 +2,10 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { Brand, BusinessRole, Prisma, UserRole } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
+import {
+  ACTIVE_BRAND_WHERE,
+  ACTIVE_LOCATION_WHERE,
+} from '../../shared/database/active-business.where.js';
 import { resolveLocationLocale } from '../../shared/geo/resolve-location-locale.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
@@ -95,7 +99,7 @@ export class BrandService {
   ): Promise<Brand> {
     const old = await this.findById(brandId);
     const brand = await this.db.brand.update({
-      where: { id: brandId },
+      where: { id: brandId, ...ACTIVE_BRAND_WHERE },
       data: { name: dto.name, logoFileId: dto.logoFileId },
     });
     const changes = diffFields(old, brand, BUSINESS_AUDIT_FIELDS);
@@ -116,7 +120,7 @@ export class BrandService {
 
   async findById(brandId: string): Promise<BrandWithLogo> {
     const brand = await this.db.brand.findUnique({
-      where: { id: brandId },
+      where: { id: brandId, ...ACTIVE_BRAND_WHERE },
       include: { logoFile: true },
     });
     if (!brand) throw new NotFoundException('Brand not found');
@@ -127,7 +131,7 @@ export class BrandService {
     payload: TokenPayloadDto,
     dto: BrandSearchRequestDto,
   ): Promise<BrandWithCounts[]> {
-    const where: Prisma.BrandWhereInput = {};
+    const where: Prisma.BrandWhereInput = { ...ACTIVE_BRAND_WHERE };
     if (payload.role !== UserRole.ADMIN) {
       where.brandMemberships = { some: { userId: payload.sub } };
     }
@@ -150,13 +154,34 @@ export class BrandService {
           where: { userId: payload.sub },
           select: { role: true },
         },
-        _count: { select: { locations: true, clients: true } },
+        _count: {
+          select: {
+            locations: { where: ACTIVE_LOCATION_WHERE },
+            clients: true,
+          },
+        },
       },
     });
   }
 
   async delete(brandId: string): Promise<void> {
-    await this.db.brand.delete({ where: { id: brandId } });
+    const { count } = await this.db.brand.updateMany({
+      where: { id: brandId, ...ACTIVE_BRAND_WHERE },
+      data: { deletedAt: new Date() },
+    });
+    if (count === 0) throw new NotFoundException('Brand not found');
+  }
+
+  async acquireActiveOperationLock(
+    brandId: string,
+    tx: Prisma.TransactionClient,
+  ): Promise<boolean> {
+    const rows = await tx.$queryRaw<Pick<Brand, 'id'>[]>`
+      SELECT "id" FROM "Brand"
+      WHERE "id" = ${brandId} AND "deletedAt" IS NULL
+      FOR SHARE
+    `;
+    return rows.length > 0;
   }
 
   async findMemberUserIds(brandId: string): Promise<string[]> {

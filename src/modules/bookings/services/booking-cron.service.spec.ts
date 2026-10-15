@@ -10,25 +10,35 @@ describe('BookingCronService.sendReminders', () => {
   const db = {
     booking: {
       findMany: vi.fn(),
-      update: vi.fn(),
+      updateMany: vi.fn(),
     },
   };
   const business = {
+    acquireActiveOperationLock: vi.fn(),
     getLocalesByIds: vi
       .fn()
       .mockResolvedValue(new Map([['biz', { timezone: 'UTC' }]])),
   };
   const emitter = { emit: vi.fn() };
+  const database = {
+    ...db,
+    $transaction: vi.fn(async (callback) => callback(db)),
+  };
   const bookings = { completeElapsed: vi.fn() };
 
   let service: BookingCronService;
 
   beforeEach(async () => {
     vi.clearAllMocks();
+    business.acquireActiveOperationLock.mockResolvedValue(true);
+    business.getLocalesByIds.mockResolvedValue(
+      new Map([['biz', { timezone: 'UTC' }]]),
+    );
+    db.booking.updateMany.mockResolvedValue({ count: 1 });
     const module = await Test.createTestingModule({
       providers: [
         BookingCronService,
-        { provide: DatabaseService, useValue: db },
+        { provide: DatabaseService, useValue: database },
         { provide: BookingsService, useValue: bookings },
         { provide: EventEmitter2, useValue: emitter },
         { provide: LocationService, useValue: business },
@@ -55,7 +65,6 @@ describe('BookingCronService.sendReminders', () => {
       ],
     };
     db.booking.findMany.mockResolvedValue([due]);
-    db.booking.update.mockResolvedValue(due);
 
     await service.sendReminders();
 
@@ -69,9 +78,35 @@ describe('BookingCronService.sendReminders', () => {
       BookingStatus.CONFIRMED,
     ]);
     expect(emitter.emit).toHaveBeenCalledTimes(1);
-    expect(db.booking.update).toHaveBeenCalledWith({
-      where: { id: 'b1' },
+    expect(where.location).toEqual({
+      deletedAt: null,
+      brand: { deletedAt: null },
+    });
+    expect(db.booking.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: 'b1',
+        deletedAt: null,
+        reminderSentAt: null,
+        status: { in: [BookingStatus.PENDING, BookingStatus.CONFIRMED] },
+        location: { deletedAt: null, brand: { deletedAt: null } },
+      },
       data: { reminderSentAt: expect.any(Date) },
     });
+  });
+
+  it('skips reminders when the location disappeared from the active locale lookup', async () => {
+    db.booking.findMany.mockResolvedValue([{ id: 'b1', locationId: 'biz' }]);
+    business.getLocalesByIds.mockResolvedValue(new Map());
+    await service.sendReminders();
+    expect(db.booking.updateMany).not.toHaveBeenCalled();
+    expect(emitter.emit).not.toHaveBeenCalled();
+  });
+
+  it('rechecks business state before sending a reminder', async () => {
+    db.booking.findMany.mockResolvedValue([{ id: 'b1', locationId: 'biz' }]);
+    business.acquireActiveOperationLock.mockResolvedValue(false);
+    await service.sendReminders();
+    expect(db.booking.updateMany).not.toHaveBeenCalled();
+    expect(emitter.emit).not.toHaveBeenCalled();
   });
 });

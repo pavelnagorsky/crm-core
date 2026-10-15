@@ -1,4 +1,4 @@
-import { BadRequestException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { BusinessRole, BusinessType } from '@prisma/client';
 import { AuditActorRole } from '../audit/enums/audit-actor-role.enum.js';
 import { BrandService } from './brand.service.js';
@@ -9,6 +9,8 @@ describe('BrandService first location', () => {
       create: vi
         .fn()
         .mockResolvedValue({ id: 'brand-1', locations: [{ staff: [] }] }),
+      updateMany: vi.fn(),
+      delete: vi.fn(),
     },
   };
   const users = {
@@ -39,6 +41,23 @@ describe('BrandService first location', () => {
   };
 
   beforeEach(() => vi.clearAllMocks());
+
+  it('soft-deletes a brand without deleting its locations or memberships', async () => {
+    db.brand.updateMany.mockResolvedValue({ count: 1 });
+    await service.delete('brand-1');
+    expect(db.brand.updateMany).toHaveBeenCalledWith({
+      where: { id: 'brand-1', deletedAt: null },
+      data: { deletedAt: expect.any(Date) },
+    });
+    expect(db.brand.delete).not.toHaveBeenCalled();
+  });
+
+  it('returns not found when the brand is already deleted', async () => {
+    db.brand.updateMany.mockResolvedValue({ count: 0 });
+    await expect(service.delete('brand-1')).rejects.toBeInstanceOf(
+      NotFoundException,
+    );
+  });
 
   it('creates the first location with normalized locale, business type and owner access', async () => {
     await service.create('user-1', dto, actor);

@@ -386,6 +386,8 @@ model Brand {
   logoFileId        String?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
+  deletedAt         DateTime?
+  restoredAt        DateTime?
   logoFile          File?             @relation(fields: [logoFileId], references: [id], onDelete: SetNull)
   brandMemberships  BrandMembership[]
   clients           Client[]
@@ -393,6 +395,8 @@ model Brand {
   productCategories ProductCategory[]
   products          Product[]
   suppliers         Supplier[]
+
+  @@index([deletedAt])
 }
 
 model Location {
@@ -412,6 +416,8 @@ model Location {
   isBookingConfirmationRequired Boolean           @default(false)
   createdAt                     DateTime          @default(now())
   updatedAt                     DateTime          @updatedAt
+  deletedAt                     DateTime?
+  restoredAt                    DateTime?
 
   brand                      Brand                   @relation(fields: [brandId], references: [id], onDelete: Cascade)
   locationMemberships        LocationMembership[]
@@ -437,7 +443,7 @@ model Location {
   orderOperations            OrderOperation[]
   orderReturns               OrderReturn[]
 
-  @@index([brandId])
+  @@index([brandId, deletedAt])
 }
 
 model ProductCategory {

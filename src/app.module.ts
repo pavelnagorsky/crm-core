@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
+import { BusinessActiveGuard } from './shared/guards/business-active.guard.js';
 import { ConfigModule } from '@nestjs/config';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import configuration from './config/configuration.js';
@@ -69,5 +71,6 @@ import { OrdersModule } from './modules/orders/orders.module.js';
     InventoryAnalyticsModule,
     OrdersModule,
   ],
+  providers: [{ provide: APP_GUARD, useClass: BusinessActiveGuard }],
 })
 export class AppModule {}

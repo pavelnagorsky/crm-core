@@ -515,6 +515,7 @@ export class InventoryService {
         locationId,
         documentId,
       );
+      await this.assertDocumentBusinessesActive(document, tx);
       if (document.status === InventoryDocumentStatus.POSTED) {
         return { document, changed: false };
       }
@@ -597,6 +598,7 @@ export class InventoryService {
         locationId,
         documentId,
       );
+      await this.assertDocumentBusinessesActive(document, tx);
       if (document.status === InventoryDocumentStatus.VOIDED) {
         return { document, changed: false };
       }
@@ -827,6 +829,25 @@ export class InventoryService {
       );
     }
     return rows;
+  }
+
+  private async assertDocumentBusinessesActive(
+    document: InventoryDocumentWithItems,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    const locationIds = [
+      ...new Set([
+        document.locationId,
+        ...(document.destinationLocationId
+          ? [document.destinationLocationId]
+          : []),
+      ]),
+    ].sort();
+    for (const locationId of locationIds) {
+      if (!(await this.locations.acquireActiveOperationLock(locationId, tx))) {
+        throw new NotFoundException('Location not found');
+      }
+    }
   }
 
   private sortInventory(

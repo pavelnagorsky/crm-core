@@ -55,7 +55,8 @@ type CatalogServiceRow = {
 
 function catalogDeps(db: {
   service: { findMany: () => Promise<CatalogServiceRow[]> };
-}): [never, never] {
+  location: { findUnique: () => Promise<unknown> };
+}): [never, never, never] {
   return [
     {
       resolveActiveForBooking: vi.fn(
@@ -67,6 +68,10 @@ function catalogDeps(db: {
       ),
     } as never,
     { resolveActiveForBooking: vi.fn() } as never,
+    {
+      findById: vi.fn(() => db.location.findUnique()),
+      acquireActiveOperationLock: vi.fn().mockResolvedValue(true),
+    } as never,
   ];
 }
 

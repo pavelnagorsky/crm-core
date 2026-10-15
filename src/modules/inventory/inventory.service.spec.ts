@@ -106,6 +106,7 @@ function setup(status: InventoryDocumentStatus) {
     resolveActiveForDocument: vi.fn(),
   };
   const locations = {
+    acquireActiveOperationLock: vi.fn().mockResolvedValue(true),
     findById: vi
       .fn()
       .mockResolvedValue({ id: 'location-1', brandId: 'brand-1' }),

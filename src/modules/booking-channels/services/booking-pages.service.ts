@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
+import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { FilesService } from '../../files/files.service.js';
@@ -179,7 +180,11 @@ export class BookingPagesService {
       );
     }
     const page = await this.db.bookingPage.findFirst({
-      where: { slug: normalized, status: BookingChannelStatus.PUBLISHED },
+      where: {
+        slug: normalized,
+        status: BookingChannelStatus.PUBLISHED,
+        location: ACTIVE_LOCATION_WHERE,
+      },
       include: pageInclude,
     });
     if (!page)
