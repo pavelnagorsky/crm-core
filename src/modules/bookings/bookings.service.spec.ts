@@ -30,6 +30,8 @@ import { BookingWithItems } from './interfaces/booking-with-items.interface.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { ServiceCatalogService } from '../services/catalog/service-catalog.service.js';
+import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
+import { authorizeTestToken } from '../../../test/factories/token-payload.factory.js';
 
 const serviceCatalog = { loadForBooking: vi.fn() };
 
@@ -94,7 +96,10 @@ function booking(
 
 describe('Booking mutations during business deletion', () => {
   const now = new Date('2026-09-24T09:00:00.000Z');
-  const token = { sub: 'owner', role: UserRole.ADMIN } as TokenPayloadDto;
+  const token = authorizeTestToken({
+    sub: 'owner',
+    role: UserRole.ADMIN,
+  } as TokenPayloadDto);
   const tx = { booking: { update: vi.fn() }, $executeRaw: vi.fn() };
   const db = { $transaction: vi.fn((callback) => callback(tx)) };
   const lifecycle = {
@@ -130,7 +135,11 @@ describe('Booking mutations during business deletion', () => {
         booking({ status: BookingStatus.CANCELLED }),
       );
       await expect(
-        mutation.updateStatus('biz', 'booking-1', token, { status }),
+        mutation.updateStatus(
+          await read.findByIdInLocation('biz', 'booking-1'),
+          auditActorFromToken(token, 'biz'),
+          { status },
+        ),
       ).rejects.toBeInstanceOf(NotFoundException);
       expect(tx.booking.update).not.toHaveBeenCalled();
       expect(lifecycle.acquireActiveOperationLock).toHaveBeenCalledWith(
@@ -147,7 +156,11 @@ describe('Booking mutations during business deletion', () => {
     'does not move an open booking into the future after deletion: %j',
     async (dto) => {
       await expect(
-        mutation.update('biz', 'booking-1', token, dto),
+        mutation.update(
+          await read.findByIdInLocation('biz', 'booking-1'),
+          auditActorFromToken(token, 'biz'),
+          dto,
+        ),
       ).rejects.toBeInstanceOf(NotFoundException);
       expect(tx.booking.update).not.toHaveBeenCalled();
       expect(calendar.saveBookingEvent).not.toHaveBeenCalled();
@@ -272,11 +285,11 @@ describe('BookingsService.completeElapsed', () => {
 });
 
 describe('BookingsService.updateStatus transactionality', () => {
-  const token = {
+  const token = authorizeTestToken({
     sub: 'user-1',
     role: UserRole.ADMIN,
     memberships: [],
-  } as TokenPayloadDto;
+  } as TokenPayloadDto);
   const committed = { orderChanged: false };
   const db = {
     booking: {
@@ -345,9 +358,13 @@ describe('BookingsService.updateStatus transactionality', () => {
 
   it('rolls back order sync when payroll sync rejects', async () => {
     await expect(
-      service.updateStatus('biz', 'booking-1', token, {
-        status: BookingStatus.COMPLETED,
-      }),
+      service.updateStatus(
+        await service.findByIdInLocation('biz', 'booking-1'),
+        auditActorFromToken(token, 'biz'),
+        {
+          status: BookingStatus.COMPLETED,
+        },
+      ),
     ).rejects.toThrow('payroll period locked');
 
     expect(orders.syncCompletedBooking).toHaveBeenCalled();
@@ -990,12 +1007,17 @@ describe('BookingsService catalog selection', () => {
 describe('BookingsService.update item prices', () => {
   const findFirst = vi.fn();
   const update = vi.fn();
-  const db = { booking: { findFirst, update } };
-  const token = {
+  const db = {
+    booking: { findFirst, update },
+    $transaction: vi.fn((callback) =>
+      callback({ booking: { findFirst, update } }),
+    ),
+  };
+  const token = authorizeTestToken({
     sub: 'user-1',
     role: UserRole.ADMIN,
     memberships: [],
-  } as TokenPayloadDto;
+  } as TokenPayloadDto);
   let service: BookingsService;
 
   beforeEach(async () => {
@@ -1075,9 +1097,13 @@ describe('BookingsService.update item prices', () => {
     findFirst.mockResolvedValue(current);
     update.mockResolvedValue(current);
 
-    await service.update('biz', 'booking-1', token, {
-      items: [{ id: 'item-2', customPrice: '60.00' }],
-    });
+    await service.update(
+      await service.findByIdInLocation('biz', 'booking-1'),
+      auditActorFromToken(token, 'biz'),
+      {
+        items: [{ id: 'item-2', customPrice: '60.00' }],
+      },
+    );
 
     expect(update).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1096,7 +1122,11 @@ describe('BookingsService.update item prices', () => {
     findFirst.mockResolvedValue(visit());
     update.mockResolvedValue(visit());
 
-    await service.update('biz', 'booking-1', token, { notes: 'окно' });
+    await service.update(
+      await service.findByIdInLocation('biz', 'booking-1'),
+      auditActorFromToken(token, 'biz'),
+      { notes: 'окно' },
+    );
 
     expect(update.mock.calls[0][0].data.items).toBeUndefined();
   });
@@ -1105,9 +1135,13 @@ describe('BookingsService.update item prices', () => {
     findFirst.mockResolvedValue(visit());
 
     const error = await service
-      .update('biz', 'booking-1', token, {
-        items: [{ id: 'missing', customPrice: '10.00' }],
-      })
+      .update(
+        await service.findByIdInLocation('biz', 'booking-1'),
+        auditActorFromToken(token, 'biz'),
+        {
+          items: [{ id: 'missing', customPrice: '10.00' }],
+        },
+      )
       .then(
         () => null,
         (caught: unknown) => caught,
@@ -1134,11 +1168,11 @@ describe('BookingsService.update manual interval', () => {
     isSlotFree: vi.fn(),
     listBlockingEvents: vi.fn(),
   };
-  const token = {
+  const token = authorizeTestToken({
     sub: 'user-1',
     role: UserRole.ADMIN,
     memberships: [],
-  } as TokenPayloadDto;
+  } as TokenPayloadDto);
   let service: BookingsService;
 
   beforeEach(async () => {
@@ -1239,10 +1273,14 @@ describe('BookingsService.update manual interval', () => {
     findFirst.mockResolvedValue(current);
     bookingUpdate.mockResolvedValue(updated);
 
-    await service.update('biz', 'booking-1', token, {
-      startAt: '2026-09-24T10:15:00',
-      endAt: '2026-09-24T12:45:00',
-    });
+    await service.update(
+      await service.findByIdInLocation('biz', 'booking-1'),
+      auditActorFromToken(token, 'biz'),
+      {
+        startAt: '2026-09-24T10:15:00',
+        endAt: '2026-09-24T12:45:00',
+      },
+    );
 
     expect(calendar.isSlotFree).not.toHaveBeenCalled();
     expect(calendar.listBlockingEvents).not.toHaveBeenCalled();
@@ -1280,10 +1318,14 @@ describe('BookingsService.update manual interval', () => {
     findFirst.mockResolvedValue(twoItemVisit());
 
     const error = await service
-      .update('biz', 'booking-1', token, {
-        startAt: '2026-09-24T10:00:00',
-        endAt: '2026-09-24T10:00:00',
-      })
+      .update(
+        await service.findByIdInLocation('biz', 'booking-1'),
+        auditActorFromToken(token, 'biz'),
+        {
+          startAt: '2026-09-24T10:00:00',
+          endAt: '2026-09-24T10:00:00',
+        },
+      )
       .then(
         () => null,
         (caught: unknown) => caught,
@@ -1315,10 +1357,14 @@ describe('BookingsService.update manual interval', () => {
     bookingUpdate.mockResolvedValue(current);
 
     await expect(
-      service.update('biz', 'booking-1', token, {
-        startAt: '2026-09-20T10:07:00',
-        endAt: '2026-09-20T10:53:00',
-      }),
+      service.update(
+        await service.findByIdInLocation('biz', 'booking-1'),
+        auditActorFromToken(token, 'biz'),
+        {
+          startAt: '2026-09-20T10:07:00',
+          endAt: '2026-09-20T10:53:00',
+        },
+      ),
     ).resolves.toBe(current);
 
     expect(calendar.isSlotFree).not.toHaveBeenCalled();
@@ -1334,11 +1380,11 @@ describe('BookingsService.addProduct', () => {
     },
     $transaction: vi.fn((callback) => callback(db)),
   };
-  const token = {
+  const token = authorizeTestToken({
     sub: 'user-1',
     role: UserRole.ADMIN,
     memberships: [],
-  } as TokenPayloadDto;
+  } as TokenPayloadDto);
   const orders = {
     addDraftProductToBookingOrder: vi.fn().mockResolvedValue({
       id: 'order-1',
@@ -1376,23 +1422,30 @@ describe('BookingsService.addProduct', () => {
   it('adds a draft product to the booking order without changing booking status', async () => {
     const dto = { productId: 'product-1', quantity: '1.000' };
 
-    await service.addProduct('biz', 'booking-1', token, dto);
+    await service.addProduct(
+      'biz',
+      'booking-1',
+      auditActorFromToken(token, 'biz'),
+      dto,
+      true,
+    );
 
     expect(orders.addDraftProductsToBookingOrder).toHaveBeenCalledWith(
       bookingRow,
       [dto],
       expect.objectContaining({ name: expect.any(String) }),
       db,
+      true,
     );
   });
 });
 
 describe('BookingsService.cancel draft product cleanup', () => {
-  const token = {
+  const token = authorizeTestToken({
     sub: 'user-1',
     role: UserRole.ADMIN,
     memberships: [],
-  } as TokenPayloadDto;
+  } as TokenPayloadDto);
   const sourceBooking = booking({ status: BookingStatus.CONFIRMED });
   const cancelledBooking = booking({ status: BookingStatus.CANCELLED });
   const removedDraftProductItems = [
@@ -1451,9 +1504,14 @@ describe('BookingsService.cancel draft product cleanup', () => {
   });
 
   it('removes draft product items when cancelling a non-completed booking', async () => {
-    await service.cancel('biz', 'booking-1', token, CancelledBy.STAFF, {
-      reason: 'client cancelled',
-    });
+    await service.cancel(
+      await service.findByIdInLocation('biz', 'booking-1'),
+      auditActorFromToken(token, 'biz'),
+      CancelledBy.STAFF,
+      {
+        reason: 'client cancelled',
+      },
+    );
 
     expect(orders.removeDraftProductsForBooking).toHaveBeenCalledWith(
       cancelledBooking,
@@ -1469,4 +1527,12 @@ describe('BookingsService.cancel draft product cleanup', () => {
       }),
     );
   });
+});
+
+// These domain tests isolate lock acquisition; access transaction tests exercise the real database lock.
+beforeEach(() => {
+  vi.spyOn(
+    BookingMutationService.prototype as any,
+    'assertCurrentStatus',
+  ).mockResolvedValue(undefined);
 });

@@ -1,17 +1,14 @@
 import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { BusinessRole } from '@prisma/client';
 import { StaffKpiService } from './staff-kpi.service.js';
 import { StaffWidgetsRequestDto } from './dto/staff-widgets-request.dto.js';
 import { StaffWidgetsResponseDto } from './dto/staff-widgets-response.dto.js';
-import { Auth } from '../../auth/decorators/auth.decorator.js';
 import {
   ApiResponse,
   BaseResponseDto,
 } from '../../../shared/dto/base-response.dto.js';
-import { TokenPayload } from '../../auth/decorators/token-payload.decorator.js';
-import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
-import { assertLocationRole } from '../../auth/guards/assert-location-role.js';
+import { Permission } from '../../access/enums/permission.enum.js';
+import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 
 @ApiTags('Staff')
 @Controller('locations/:locationId/staff')
@@ -22,20 +19,12 @@ export class StaffKpiController {
     summary: 'Get staff management KPI cards, sharing the /search filters',
   })
   @ApiOkResponse({ type: ApiResponse(StaffWidgetsResponseDto) })
-  @Auth()
+  @Permissions(Permission.ANALYTICS_LOCATION_READ)
   @Get('widgets')
   async getWidgets(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Query() dto: StaffWidgetsRequestDto,
-    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<StaffWidgetsResponseDto>> {
-    assertLocationRole(
-      tokenPayload,
-      locationId,
-      BusinessRole.OWNER,
-      BusinessRole.MANAGER,
-      BusinessRole.STAFF,
-    );
     const cards = await this.staffKpiService.getWidgets(locationId, dto);
     return BaseResponseDto.success(new StaffWidgetsResponseDto(cards));
   }

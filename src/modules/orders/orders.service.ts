@@ -1,9 +1,4 @@
-import {
-  BadRequestException,
-  ForbiddenException,
-  HttpStatus,
-  Injectable,
-} from '@nestjs/common';
+import { BadRequestException, HttpStatus, Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { OrderItemStatus, OrderItemType, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
@@ -58,11 +53,25 @@ export class OrdersService {
     locationId: string,
     dto: CreateOrderDto,
     actor: AuditActor,
+    canOverridePrice = false,
   ): Promise<OrderWithItems> {
     if (dto.confirmImmediately) {
-      return this.createAndConfirmProductSale(locationId, dto, actor);
+      return this.createAndConfirmProductSale(
+        locationId,
+        dto,
+        actor,
+        canOverridePrice,
+      );
     }
-    const draft = await this.drafts.resolveDraft(locationId, dto, actor);
+    const draft = await this.drafts.resolveDraft(
+      locationId,
+      dto,
+      actor,
+      undefined,
+      undefined,
+      undefined,
+      canOverridePrice,
+    );
     const order = await this.db.order.create({
       data: {
         locationId,
@@ -97,6 +106,7 @@ export class OrdersService {
     orderId: string,
     dto: UpdateOrderDto,
     actor: AuditActor,
+    canOverridePrice = false,
   ): Promise<OrderWithItems> {
     const order = await this.persistence.inTransaction(async (tx) => {
       const locked = await this.persistence.findInTransaction(
@@ -121,6 +131,7 @@ export class OrdersService {
         this.editableDraftOrder(locked),
         tx,
         { allowEmptyItems: true },
+        canOverridePrice,
       );
       const itemChanges = this.buildUpdateItemChanges(
         locked,
@@ -242,12 +253,14 @@ export class OrdersService {
     dto: OrderProductItemDto,
     actor: AuditActor,
     tx: Prisma.TransactionClient,
+    canOverridePrice = false,
   ): Promise<OrderWithItems> {
     return this.bookingSync.addDraftProductToBookingOrder(
       booking,
       dto,
       actor,
       tx,
+      canOverridePrice,
     );
   }
 
@@ -256,12 +269,14 @@ export class OrdersService {
     items: OrderProductItemDto[],
     actor: AuditActor,
     tx: Prisma.TransactionClient,
+    canOverridePrice = false,
   ): Promise<OrderWithItems> {
     return this.bookingSync.addDraftProductsToBookingOrder(
       booking,
       items,
       actor,
       tx,
+      canOverridePrice,
     );
   }
 
@@ -291,6 +306,7 @@ export class OrdersService {
     orderId: string,
     dto: AddOrderItemsDto,
     actor: AuditActor,
+    canOverridePrice = false,
   ): Promise<OrderWithItems> {
     const location = await this.locations.findById(locationId);
     const order = await this.persistence.inTransaction(async (tx) => {
@@ -307,6 +323,7 @@ export class OrdersService {
         dto.items,
         actor,
         tx,
+        canOverridePrice,
       );
       for (const item of resolved.updated) {
         await tx.orderItem.update({
@@ -360,9 +377,6 @@ export class OrdersService {
     reason: string | undefined,
     actor: AuditActor,
   ): Promise<OrderWithItems> {
-    if (!this.drafts.canSetCustomPrice(actor)) {
-      throw new ForbiddenException('Only an owner can void an order');
-    }
     const location = await this.locations.findById(locationId);
     const transition = await this.transitions.void(
       locationId,
@@ -525,6 +539,7 @@ export class OrdersService {
     locationId: string,
     dto: CreateOrderDto,
     actor: AuditActor,
+    canOverridePrice = false,
   ): Promise<OrderWithItems> {
     const idempotencyKey = dto.idempotencyKey;
     if (!idempotencyKey) {
@@ -544,6 +559,8 @@ export class OrdersService {
         actor,
         undefined,
         tx,
+        undefined,
+        canOverridePrice,
       );
       const order = await tx.order.upsert({
         where: {

@@ -9,6 +9,7 @@ import { BlockedFileExtension } from './enums/blocked-file-extension.enum.js';
 import { FileStorageScope } from './enums/file-storage-scope.enum.js';
 import { randomUUID } from 'crypto';
 import { File } from '@prisma/client';
+import { PrismaErrorCode } from '../../shared/database/prisma-error-codes.js';
 
 const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024; // 15 MB
 
@@ -139,16 +140,28 @@ export class FilesService implements OnModuleInit {
 
   private async deleteFile(file: File): Promise<void> {
     try {
-      await this.storage.bucket(this.bucketName).file(file.storageKey).delete();
+      await this.db.$transaction(
+        async (tx) => {
+          await tx.file.delete({ where: { id: file.id } });
+          await this.storage
+            .bucket(this.bucketName)
+            .file(file.storageKey)
+            .delete({ ignoreNotFound: true });
+        },
+        { timeout: 15000 },
+      );
     } catch (err) {
+      if (
+        (err as { code?: string })?.code ===
+        PrismaErrorCode.FOREIGN_KEY_VIOLATION
+      )
+        throw new AppException(ErrorCode.FILE_IN_USE, HttpStatus.CONFLICT);
       this.logger.error('GCS delete failed', err);
       throw new AppException(
         ErrorCode.FILE_DELETE_FAILED,
         HttpStatus.INTERNAL_SERVER_ERROR,
       );
     }
-
-    await this.db.file.delete({ where: { id: file.id } });
   }
 
   private storageKey(

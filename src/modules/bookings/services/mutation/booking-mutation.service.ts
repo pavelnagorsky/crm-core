@@ -1,12 +1,13 @@
 import { createHash } from 'crypto';
 import {
+  ForbiddenException,
   HttpStatus,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Booking, BusinessRole, CancelledBy, Prisma } from '@prisma/client';
+import { Booking, CancelledBy, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
 import {
   ACTIVE_LOCATION_WHERE,
@@ -25,10 +26,7 @@ import { BOOKING_AUDIT_FIELDS } from '../../../audit/fields/booking.fields.js';
 import { AuditActor } from '../../../audit/interfaces/audit-actor.interface.js';
 import { AuditFieldChange } from '../../../audit/interfaces/audit-payload.interface.js';
 import { AuditLogEvent } from '../../../audit/interfaces/audit-log-event.interface.js';
-import { auditActorFromToken } from '../../../audit/utils/audit-actor-from-token.js';
 import { diffFields } from '../../../audit/utils/diff-fields.js';
-import { TokenPayloadDto } from '../../../auth/dto/token-payload.dto.js';
-import { assertLocationRole } from '../../../auth/guards/assert-location-role.js';
 import { CalendarService } from '../../../calendar/calendar.service.js';
 import { LocationService } from '../../../location/location.service.js';
 import { NOTIFICATION_EVENT } from '../../../notifications/notifications.service.js';
@@ -65,32 +63,15 @@ export class BookingMutationService {
   ) {}
 
   async update(
-    locationId: string,
-    bookingId: string,
-    tokenPayload: TokenPayloadDto,
+    old: BookingWithItems,
+    actor: AuditActor,
     dto: UpdateBookingDto,
   ): Promise<BookingWithItems> {
-    assertLocationRole(
-      tokenPayload,
-      locationId,
-      BusinessRole.OWNER,
-      BusinessRole.MANAGER,
-      BusinessRole.STAFF,
-    );
-    const old = await this.read.findByIdInLocation(locationId, bookingId);
-    assertLocationRole(
-      tokenPayload,
-      old.locationId,
-      BusinessRole.OWNER,
-      BusinessRole.MANAGER,
-      BusinessRole.STAFF,
-    );
-    const actor = auditActorFromToken(tokenPayload, locationId);
+    const { locationId, id: bookingId } = old;
 
     const manualIntervalChanging = dto.endAt !== undefined;
     const slotChanging = dto.startAt !== undefined || dto.staffId !== undefined;
     const pricePatches = this.pricePatches(old, dto);
-
     const updateArgs = {
       where: { id: bookingId },
       data: {
@@ -130,6 +111,7 @@ export class BookingMutationService {
       pricePatches.length > 0
     ) {
       updated = await this.db.$transaction(async (tx) => {
+        await this.assertCurrentStatus(tx, old);
         const result = await tx.booking.update(updateArgs);
         const order = await this.orders.syncCompletedBooking(result, actor, tx);
         await this.staffEarnings.syncForCompletedBooking(
@@ -141,7 +123,10 @@ export class BookingMutationService {
         return result;
       });
     } else {
-      updated = await this.db.booking.update(updateArgs);
+      updated = await this.db.$transaction(async (tx) => {
+        await this.assertCurrentStatus(tx, old);
+        return tx.booking.update(updateArgs);
+      });
     }
 
     const changes = [
@@ -177,34 +162,19 @@ export class BookingMutationService {
   }
 
   async updateStatus(
-    locationId: string,
-    bookingId: string,
-    tokenPayload: TokenPayloadDto,
+    old: BookingWithItems,
+    actor: AuditActor,
     dto: UpdateBookingStatusDto,
   ): Promise<BookingWithItems> {
-    assertLocationRole(
-      tokenPayload,
-      locationId,
-      BusinessRole.OWNER,
-      BusinessRole.MANAGER,
-      BusinessRole.STAFF,
-    );
-    const old = await this.read.findByIdInLocation(locationId, bookingId);
-    assertLocationRole(
-      tokenPayload,
-      old.locationId,
-      BusinessRole.OWNER,
-      BusinessRole.MANAGER,
-      BusinessRole.STAFF,
-    );
+    const { locationId, id: bookingId } = old;
     const reversesCommission =
       old.status === BookingStatus.COMPLETED &&
       dto.status !== BookingStatus.COMPLETED;
     const reversalReason = reversesCommission
       ? this.optionalReason(dto.reason)
       : null;
-    const actor = auditActorFromToken(tokenPayload, old.locationId);
     const updated = await this.db.$transaction(async (tx) => {
+      await this.assertCurrentStatus(tx, old);
       if (AUTO_COMPLETABLE_STATUSES.includes(dto.status)) {
         await this.assertBookingBusinessActive(locationId, tx);
       }
@@ -272,38 +242,35 @@ export class BookingMutationService {
   async addProduct(
     locationId: string,
     bookingId: string,
-    tokenPayload: TokenPayloadDto,
+    actor: AuditActor,
     dto: OrderProductItemDto,
+    canOverridePrice = false,
   ): Promise<OrderWithItems> {
-    return this.addProducts(locationId, bookingId, tokenPayload, {
-      items: [dto],
-    });
+    return this.addProducts(
+      locationId,
+      bookingId,
+      actor,
+      { items: [dto] },
+      canOverridePrice,
+    );
   }
 
   async addProducts(
     locationId: string,
     bookingId: string,
-    tokenPayload: TokenPayloadDto,
+    actor: AuditActor,
     dto: AddOrderItemsDto,
+    canOverridePrice = false,
   ): Promise<OrderWithItems> {
-    assertLocationRole(
-      tokenPayload,
-      locationId,
-      BusinessRole.OWNER,
-      BusinessRole.MANAGER,
-      BusinessRole.STAFF,
-    );
     const booking = await this.read.findByIdInLocation(locationId, bookingId);
-    assertLocationRole(
-      tokenPayload,
-      booking.locationId,
-      BusinessRole.OWNER,
-      BusinessRole.MANAGER,
-      BusinessRole.STAFF,
-    );
-    const actor = auditActorFromToken(tokenPayload, booking.locationId);
     return this.db.$transaction((tx) =>
-      this.orders.addDraftProductsToBookingOrder(booking, dto.items, actor, tx),
+      this.orders.addDraftProductsToBookingOrder(
+        booking,
+        dto.items,
+        actor,
+        tx,
+        canOverridePrice,
+      ),
     );
   }
 
@@ -377,33 +344,12 @@ export class BookingMutationService {
   }
 
   async cancel(
-    locationId: string,
-    bookingId: string,
-    tokenPayload: TokenPayloadDto,
+    booking: BookingWithItems,
+    actor: AuditActor,
     cancelledBy: CancelledBy,
     dto: CancelBookingDto,
   ): Promise<Booking> {
-    assertLocationRole(
-      tokenPayload,
-      locationId,
-      BusinessRole.OWNER,
-      BusinessRole.MANAGER,
-      BusinessRole.STAFF,
-    );
-    const booking = await this.read.findByIdInLocation(locationId, bookingId);
-    assertLocationRole(
-      tokenPayload,
-      booking.locationId,
-      BusinessRole.OWNER,
-      BusinessRole.MANAGER,
-      BusinessRole.STAFF,
-    );
-    return this.executeCancellation(
-      booking,
-      cancelledBy,
-      dto.reason,
-      auditActorFromToken(tokenPayload, booking.locationId),
-    );
+    return this.executeCancellation(booking, cancelledBy, dto.reason, actor);
   }
 
   async cancelByClient(
@@ -411,6 +357,10 @@ export class BookingMutationService {
     dto: CancelBookingDto,
   ): Promise<Booking> {
     const booking = await this.read.findById(bookingId);
+    if (booking.status === BookingStatus.COMPLETED)
+      throw new ForbiddenException(
+        'Completed bookings cannot be cancelled with a client token',
+      );
     const actor: AuditActor = {
       name: `${booking.clientFirstName} ${booking.clientLastName}`,
       role: AuditActorRole.CLIENT,
@@ -423,17 +373,10 @@ export class BookingMutationService {
     );
   }
 
-  async delete(
-    locationId: string,
-    bookingId: string,
-    tokenPayload: TokenPayloadDto,
-  ): Promise<void> {
-    assertLocationRole(tokenPayload, locationId, BusinessRole.OWNER);
-    const booking = await this.read.findByIdInLocation(locationId, bookingId);
-    assertLocationRole(tokenPayload, booking.locationId, BusinessRole.OWNER);
-    const actor = auditActorFromToken(tokenPayload, booking.locationId);
+  async delete(booking: BookingWithItems, actor: AuditActor): Promise<void> {
     let removedDraftProductItems: Record<string, unknown>[] = [];
     await this.db.$transaction(async (tx) => {
+      await this.assertCurrentStatus(tx, booking);
       await tx.booking.update({
         where: { id: booking.id },
         data: { deletedAt: new Date() },
@@ -501,6 +444,7 @@ export class BookingMutationService {
     const storedReason = this.optionalReason(reason);
     let removedDraftProductItems: Record<string, unknown>[] = [];
     const updated = await this.db.$transaction(async (tx) => {
+      await this.assertCurrentStatus(tx, booking);
       const result = await tx.booking.update({
         where: { id: booking.id },
         data: {
@@ -627,6 +571,7 @@ export class BookingMutationService {
       if (movedItems.some((item) => item.endAt.getTime() > Date.now())) {
         await this.assertBookingBusinessActive(locationId, tx);
       }
+      await this.assertCurrentStatus(tx, old);
       for (const lockKey of lockKeys) {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockKey})`;
       }
@@ -792,6 +737,7 @@ export class BookingMutationService {
       if (newEndAt > new Date()) {
         await this.assertBookingBusinessActive(locationId, tx);
       }
+      await this.assertCurrentStatus(tx, old);
       for (const lockKey of lockKeys) {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockKey})`;
       }
@@ -943,6 +889,25 @@ export class BookingMutationService {
       payload: params.payload,
     };
     this.eventEmitter.emit(AUDIT_EVENT, event);
+  }
+
+  private async assertCurrentStatus(
+    tx: Prisma.TransactionClient,
+    booking: BookingWithItems,
+  ): Promise<void> {
+    const rows = await tx.$queryRaw<
+      { status: string; updatedAt: Date }[]
+    >`SELECT "status", "updatedAt" FROM "Booking" WHERE "id" = ${booking.id} AND "locationId" = ${booking.locationId} AND "deletedAt" IS NULL FOR UPDATE`;
+    if (
+      !rows[0] ||
+      rows[0].status !== booking.status ||
+      rows[0].updatedAt.getTime() !== booking.updatedAt.getTime()
+    ) {
+      throw new AppException(
+        ErrorCode.BOOKING_CONCURRENT_UPDATE,
+        HttpStatus.CONFLICT,
+      );
+    }
   }
 
   private pricePatches(

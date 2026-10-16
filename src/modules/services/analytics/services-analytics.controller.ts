@@ -1,14 +1,14 @@
 import { Body, Controller, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { BusinessRole } from '@prisma/client';
 import { ServicesAnalyticsService } from './services-analytics.service.js';
 import { ServicesAnalyticsRequestDto } from './dto/services-analytics-request.dto.js';
 import { ServicesAnalyticsResponseDto } from './dto/services-analytics-response.dto.js';
-import { LocationRBAC } from '../../auth/decorators/location-rbac.decorator.js';
 import {
   ApiResponse,
   BaseResponseDto,
 } from '../../../shared/dto/base-response.dto.js';
+import { Permission } from '../../access/enums/permission.enum.js';
+import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 
 @ApiTags('Services')
 @Controller('locations/:locationId')
@@ -17,7 +17,7 @@ export class ServicesAnalyticsController {
 
   @ApiOperation({ summary: 'Fetch analytics widgets for the services page' })
   @ApiOkResponse({ type: ApiResponse(ServicesAnalyticsResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.ANALYTICS_LOCATION_READ)
   @Post('services/analytics')
   async analytics(
     @Param('locationId', ParseUUIDPipe) locationId: string,

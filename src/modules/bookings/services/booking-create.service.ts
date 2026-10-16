@@ -1,6 +1,7 @@
 import { createHash } from 'crypto';
 import {
   BadRequestException,
+  ForbiddenException,
   HttpStatus,
   Injectable,
   Logger,
@@ -107,6 +108,8 @@ export class BookingCreateService {
     locationId: string,
     dto: ManualCreateBookingDto,
     actor: AuditActor,
+    canCreateClient = true,
+    canComplete = true,
   ): Promise<BookingWithItems> {
     const source =
       dto.source === BookingSource.WALK_IN
@@ -121,6 +124,8 @@ export class BookingCreateService {
       },
       actor,
       dto,
+      canCreateClient,
+      canComplete,
     );
     this.logger.log(
       `booking created (manual): id=${booking.id} locationId=${locationId} source=${booking.source} items=${booking.items.length} bundleId=${booking.bundleId ?? '-'} actor=${actor.name}`,
@@ -172,6 +177,8 @@ export class BookingCreateService {
     attribution: BookingAttribution,
     actor: AuditActor | null,
     dto: CreateBookingDto | ManualCreateBookingDto,
+    canCreateClient = true,
+    canComplete = true,
   ): Promise<{
     booking: BookingWithItems;
     timezone: string;
@@ -195,14 +202,18 @@ export class BookingCreateService {
     }
 
     const startAt = TimeService.localToUtc(dto.startAt, business.timezone);
-    const client = await this.resolveBookingClient(
-      business.brandId,
-      attribution.source,
-      dto,
-    );
-    if (isSelfBookingBlocked(attribution.source, client.bannedAt)) {
+    const publicClient = this.isInternalSource(attribution.source)
+      ? null
+      : await this.resolveBookingClient(
+          business.brandId,
+          attribution.source,
+          dto,
+        );
+    if (
+      publicClient &&
+      isSelfBookingBlocked(attribution.source, publicClient.bannedAt)
+    )
       throw new AppException(ErrorCode.CLIENT_BANNED, HttpStatus.FORBIDDEN);
-    }
 
     const selection = await this.loadSelection(locationId, dto);
     const walkInEndAt = this.walkInEndAt(dto, business.timezone);
@@ -227,6 +238,19 @@ export class BookingCreateService {
       envelopeEnd,
       business.isBookingConfirmationRequired,
     );
+    if (status === BookingStatus.COMPLETED && !canComplete)
+      throw new ForbiddenException(
+        'Creating a completed booking is not allowed',
+      );
+    const client =
+      publicClient ??
+      (await this.resolveBookingClient(
+        business.brandId,
+        attribution.source,
+        dto,
+        canCreateClient,
+      ));
+
     const lockKeys = this.lockKeysForItems(items, business.timezone);
     const manualProducts = this.manualProducts(dto, attribution.source);
     const internalNotes = this.manualInternalNotes(dto, attribution.source);
@@ -368,6 +392,7 @@ export class BookingCreateService {
           manualProducts,
           productActor,
           tx,
+          true,
         );
       }
       return booking;
@@ -750,6 +775,7 @@ export class BookingCreateService {
     brandId: string,
     source: BookingSource,
     dto: CreateBookingDto | ManualCreateBookingDto,
+    canCreateClient = true,
   ): Promise<ResolvedBookingClient> {
     if (this.isAnonymousManualBooking(source, dto)) {
       return {
@@ -773,6 +799,7 @@ export class BookingCreateService {
       firstName,
       dto.lastName?.trim() || '',
       dto.email,
+      canCreateClient,
     );
     return {
       id: client.id,

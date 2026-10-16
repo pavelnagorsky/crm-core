@@ -31,9 +31,11 @@ import { SuppliersModule } from './modules/suppliers/suppliers.module.js';
 import { InventoryModule } from './modules/inventory/inventory.module.js';
 import { InventoryAnalyticsModule } from './modules/inventory/analytics/inventory-analytics.module.js';
 import { OrdersModule } from './modules/orders/orders.module.js';
+import { AccessManagementModule } from './modules/access-management/access-management.module.js';
 
 @Module({
   imports: [
+    AccessManagementModule,
     ConfigModule.forRoot({
       load: [configuration],
       isGlobal: true,

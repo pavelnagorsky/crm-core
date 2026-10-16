@@ -20,8 +20,6 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { BusinessRole } from '@prisma/client';
-import { LocationRBAC } from '../../auth/decorators/location-rbac.decorator.js';
 import {
   ApiResponse,
   ApiResponseArray,
@@ -31,6 +29,8 @@ import { BookingWidgetsService } from '../services/booking-widgets.service.js';
 import { SaveBookingWidgetDto } from '../dto/save-booking-widget.dto.js';
 import { BookingWidgetResponseDto } from '../dto/booking-widget-response.dto.js';
 import { UpdateBookingChannelStatusDto } from '../dto/update-booking-channel-status.dto.js';
+import { Permission } from '../../access/enums/permission.enum.js';
+import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 
 @ApiTags('Booking widgets')
 @Controller('locations/:locationId/booking-widgets')
@@ -39,7 +39,7 @@ export class BookingWidgetsController {
 
   @ApiOperation({ summary: 'List booking widgets' })
   @ApiOkResponse({ type: ApiResponseArray(BookingWidgetResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Permissions(Permission.BOOKING_CHANNEL_READ)
   @Get()
   async list(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -55,7 +55,7 @@ export class BookingWidgetsController {
   @ApiConflictResponse({
     description: 'Widget title already exists in this business',
   })
-  @LocationRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.BOOKING_CHANNEL_MANAGE)
   @Post()
   async create(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -68,7 +68,7 @@ export class BookingWidgetsController {
   @ApiOperation({ summary: 'Get a booking widget' })
   @ApiOkResponse({ type: ApiResponse(BookingWidgetResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking widget not found' })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Permissions(Permission.BOOKING_CHANNEL_READ)
   @Get(':widgetId')
   async findById(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -86,7 +86,7 @@ export class BookingWidgetsController {
   @ApiConflictResponse({
     description: 'Widget title already exists in this business',
   })
-  @LocationRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.BOOKING_CHANNEL_MANAGE)
   @Put(':widgetId')
   async update(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -104,7 +104,7 @@ export class BookingWidgetsController {
     description:
       'Status is already set, booking is closed, or nothing is bookable',
   })
-  @LocationRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.BOOKING_CHANNEL_MANAGE)
   @Patch(':widgetId/status')
   async updateStatus(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -122,7 +122,7 @@ export class BookingWidgetsController {
   @ApiOperation({ summary: 'Delete a booking widget' })
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Booking widget not found' })
-  @LocationRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.BOOKING_CHANNEL_MANAGE)
   @Delete(':widgetId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(

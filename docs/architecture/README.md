@@ -6,6 +6,11 @@
 
 ## Как Читать
 
+- [rbac-implementation.md](./rbac-implementation.md) — итоговая сводка реализации RBAC: что изменилось, как работает авторизация и что осталось подключить.
+- [rbac.md](./rbac.md) сохраняет исторические роли и доступ к API до перехода на permissions.
+- [rbac-target.md](./rbac-target.md) описывает реализованные permissions, готовые наборы ролей и настройки.
+- [rbac-permissions-map.md](./rbac-permissions-map.md) сопоставляет все 184 существующих API-маршрута с целевыми permissions.
+- [rbac-contracts.md](./rbac-contracts.md) задаёт контракты настройки прав, управления участниками и единых приглашений.
 - [services-map.md](./services-map.md) отвечает на вопрос: "Какой сервис открыть первым?"
 - [domain-ownership.md](./domain-ownership.md) отвечает на вопрос: "Кто владеет этими данными и кто может читать их напрямую?"
 - [flows.md](./flows.md) отвечает на вопрос: "Что происходит в основных бизнес-сценариях?"

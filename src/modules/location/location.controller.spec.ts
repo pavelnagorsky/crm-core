@@ -22,6 +22,7 @@ describe('Location reference endpoints (HTTP)', () => {
       brandMemberships: [],
       locationMemberships: [],
       tokenEpoch: 0,
+      permissions: {},
     },
     { secret, expiresIn: '1h' },
   );

@@ -1,4 +1,3 @@
-import 'reflect-metadata';
 import {
   ExecutionContext,
   ForbiddenException,
@@ -7,21 +6,23 @@ import {
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
 import { BusinessRole, UserRole } from '@prisma/client';
+import 'reflect-metadata';
+import { authorizeTestToken } from '../../../../test/factories/token-payload.factory.js';
 import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard.js';
+import { PermissionGuard } from '../../auth/guards/permission.guard.js';
 import { TokenEpochGuard } from '../../auth/guards/token-epoch.guard.js';
 import { SuppliersController } from '../suppliers.controller.js';
-import { SupplierRbacGuard } from './supplier-rbac.guard.js';
 
 function payload(overrides: Partial<TokenPayloadDto> = {}): TokenPayloadDto {
-  return {
+  return authorizeTestToken({
     sub: 'user-1',
     role: UserRole.USER,
     brandMemberships: [],
     locationMemberships: [],
     tokenEpoch: 100,
     ...overrides,
-  };
+  });
 }
 
 function context(
@@ -47,8 +48,8 @@ const operations = [
 const mutations = ['create', 'update', 'deactivate'] as const;
 const reads = ['search', 'listOptions', 'findById'] as const;
 
-describe.each(operations)('SupplierRbacGuard: %s', (operation) => {
-  const guard = new SupplierRbacGuard(new Reflector());
+describe.each(operations)('PermissionGuard: %s', (operation) => {
+  const guard = new PermissionGuard(new Reflector());
 
   it('keeps authentication and token freshness checks on the endpoint', () => {
     expect(
@@ -56,7 +57,7 @@ describe.each(operations)('SupplierRbacGuard: %s', (operation) => {
         GUARDS_METADATA,
         SuppliersController.prototype[operation],
       ),
-    ).toEqual([JwtAuthGuard, TokenEpochGuard, SupplierRbacGuard]);
+    ).toEqual([JwtAuthGuard, TokenEpochGuard, PermissionGuard]);
   });
 
   it('allows a location manager in the supplier brand without brand membership', () => {
@@ -130,8 +131,8 @@ describe.each(operations)('SupplierRbacGuard: %s', (operation) => {
   });
 });
 
-describe('SupplierRbacGuard: staff access', () => {
-  const guard = new SupplierRbacGuard(new Reflector());
+describe('PermissionGuard: staff access', () => {
+  const guard = new PermissionGuard(new Reflector());
   const user = payload({
     brandMemberships: [{ brandId: 'brand-1', role: BusinessRole.STAFF }],
   });
@@ -142,7 +143,9 @@ describe('SupplierRbacGuard: staff access', () => {
     );
   });
 
-  it.each(reads)('preserves brand staff access to %s', (operation) => {
-    expect(guard.canActivate(context(operation, user))).toBe(true);
+  it.each(reads)('rejects obsolete brand STAFF access to %s', (operation) => {
+    expect(() => guard.canActivate(context(operation, user))).toThrow(
+      ForbiddenException,
+    );
   });
 });

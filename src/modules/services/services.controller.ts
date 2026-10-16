@@ -21,7 +21,6 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { BusinessRole } from '@prisma/client';
 import { ServicesService } from './services.service.js';
 import { CreateServiceCategoryDto } from './dto/create-service-category.dto.js';
 import { UpdateServiceCategoryDto } from './dto/update-service-category.dto.js';
@@ -33,7 +32,6 @@ import { ServiceResponseDto } from './dto/service-response.dto.js';
 import { CreateServiceBundleDto } from './dto/create-service-bundle.dto.js';
 import { UpdateServiceBundleDto } from './dto/update-service-bundle.dto.js';
 import { ServiceBundleResponseDto } from './dto/service-bundle-response.dto.js';
-import { LocationRBAC } from '../auth/decorators/location-rbac.decorator.js';
 import {
   ApiResponse,
   ApiResponseArray,
@@ -50,6 +48,8 @@ import { ServiceCatalogSearchResponseDto } from './dto/service-catalog-search-re
 import { ServiceCatalogItemDto } from './dto/service-catalog-item.dto.js';
 import { ServiceCatalogCountsRequestDto } from './dto/service-catalog-counts-request.dto.js';
 import { ServiceCatalogCountsResponseDto } from './dto/service-catalog-counts-response.dto.js';
+import { Permission } from '../access/enums/permission.enum.js';
+import { Permissions } from '../auth/decorators/permissions.decorator.js';
 
 @ApiTags('Services')
 @Controller('locations/:locationId')
@@ -64,7 +64,7 @@ export class ServicesController {
 
   @ApiOperation({ summary: 'Create a service category' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.SERVICE_MANAGE)
   @Post('service-categories')
   async createCategory(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -81,7 +81,7 @@ export class ServicesController {
 
   @ApiOperation({ summary: 'List service categories for a business' })
   @ApiOkResponse({ type: ApiResponseArray(ServiceCategoryResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Permissions(Permission.SERVICE_READ)
   @Get('service-categories')
   async listCategories(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -96,7 +96,7 @@ export class ServicesController {
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Service category not found' })
   @ApiConflictResponse({ description: 'Category name already exists' })
-  @LocationRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.SERVICE_MANAGE)
   @Put('service-categories/:categoryId')
   async updateCategory(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -116,7 +116,7 @@ export class ServicesController {
   @ApiOperation({ summary: 'Delete a service category' })
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Service category not found' })
-  @LocationRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.SERVICE_MANAGE)
   @Delete('service-categories/:categoryId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteCategory(
@@ -135,7 +135,7 @@ export class ServicesController {
 
   @ApiOperation({ summary: 'Create a service' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.SERVICE_MANAGE)
   @Post('services')
   async create(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -153,7 +153,7 @@ export class ServicesController {
   @ApiOperation({ summary: 'Update a service' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Service not found' })
-  @LocationRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.SERVICE_MANAGE)
   @Put('services/:id')
   async update(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -174,7 +174,7 @@ export class ServicesController {
 
   @ApiOperation({ summary: 'Get unified service catalog counts' })
   @ApiOkResponse({ type: ApiResponse(ServiceCatalogCountsResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Permissions(Permission.SERVICE_READ)
   @Get('service-catalog/counts')
   async getCatalogCounts(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -188,7 +188,7 @@ export class ServicesController {
 
   @ApiOperation({ summary: 'Search the unified service catalog' })
   @ApiOkResponse({ type: ApiResponse(ServiceCatalogSearchResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Permissions(Permission.SERVICE_READ)
   @Get('service-catalog')
   async searchCatalog(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -211,7 +211,7 @@ export class ServicesController {
 
   @ApiOperation({ summary: 'Create a service bundle' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.SERVICE_MANAGE)
   @Post('service-bundles')
   async createBundle(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -229,7 +229,7 @@ export class ServicesController {
   @ApiOperation({ summary: 'Get service bundle by ID' })
   @ApiOkResponse({ type: ApiResponse(ServiceBundleResponseDto) })
   @ApiNotFoundResponse({ description: 'Service bundle not found' })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Permissions(Permission.SERVICE_READ)
   @Get('service-bundles/:id')
   async findBundleById(
     @Param('id', ParseUUIDPipe) id: string,
@@ -241,7 +241,7 @@ export class ServicesController {
   @ApiOperation({ summary: 'Update a service bundle' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Service bundle not found' })
-  @LocationRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.SERVICE_MANAGE)
   @Put('service-bundles/:id')
   async updateBundle(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -262,7 +262,7 @@ export class ServicesController {
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Service bundle not found' })
   @ApiConflictResponse({ description: 'Bundle already has this status' })
-  @LocationRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.SERVICE_MANAGE)
   @HttpCode(HttpStatus.NO_CONTENT)
   @Patch('service-bundles/:id/status')
   async updateBundleStatus(
@@ -283,7 +283,7 @@ export class ServicesController {
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Service bundle not found' })
   @ApiConflictResponse({ description: 'Bundle is used in bookings' })
-  @LocationRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.SERVICE_MANAGE)
   @Delete('service-bundles/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteBundle(
@@ -301,7 +301,7 @@ export class ServicesController {
   @ApiOperation({ summary: 'Get service by ID' })
   @ApiOkResponse({ type: ApiResponse(ServiceResponseDto) })
   @ApiNotFoundResponse({ description: 'Service not found' })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Permissions(Permission.SERVICE_READ)
   @Get('services/:id')
   async findById(
     @Param('id', ParseUUIDPipe) id: string,
@@ -314,7 +314,7 @@ export class ServicesController {
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Service not found' })
   @ApiConflictResponse({ description: 'Service already has this status' })
-  @LocationRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.SERVICE_MANAGE)
   @HttpCode(HttpStatus.NO_CONTENT)
   @Patch('services/:id/status')
   async updateStatus(
@@ -337,7 +337,7 @@ export class ServicesController {
   @ApiConflictResponse({
     description: 'Service is used in bookings or compensation plans',
   })
-  @LocationRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.SERVICE_MANAGE)
   @Delete('services/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(

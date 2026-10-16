@@ -14,11 +14,8 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { BusinessRole } from '@prisma/client';
-import { Auth } from '../../auth/decorators/auth.decorator.js';
 import { TokenPayload } from '../../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
-import { assertLocationRole } from '../../auth/guards/assert-location-role.js';
 import { auditActorFromToken } from '../../audit/utils/audit-actor-from-token.js';
 import {
   ApiResponse,
@@ -32,6 +29,9 @@ import { StaffEarningResponseDto } from './dto/staff-earning-response.dto.js';
 import { StaffEarningSearchRequestDto } from './dto/staff-earning-search-request.dto.js';
 import { StaffEarningSearchResponseDto } from './dto/staff-earning-search-response.dto.js';
 import { StaffEarningsService } from './staff-earnings.service.js';
+import { Permission } from '../../access/enums/permission.enum.js';
+import { assertPermission } from '../../access/utils/assert-permission.js';
+import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 
 @ApiTags('Payroll')
 @Controller()
@@ -40,20 +40,15 @@ export class StaffEarningsController {
 
   @ApiOperation({ summary: 'Search staff earnings' })
   @ApiOkResponse({ type: ApiResponse(StaffEarningSearchResponseDto) })
-  @Auth()
+  @Permissions(Permission.PAYROLL_READ)
   @Get('locations/:locationId/payroll/earnings')
   async search(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Query() dto: StaffEarningSearchRequestDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<StaffEarningSearchResponseDto>> {
-    assertLocationRole(
-      tokenPayload,
-      locationId,
-      BusinessRole.OWNER,
-      BusinessRole.MANAGER,
-      BusinessRole.STAFF,
-    );
+    if (dto.isExport)
+      assertPermission(tokenPayload, Permission.PAYROLL_EXPORT, locationId);
     const { items, totalItems } = await this.earnings.search(locationId, dto);
     return BaseResponseDto.success(
       new StaffEarningSearchResponseDto(
@@ -68,7 +63,7 @@ export class StaffEarningsController {
 
   @ApiOperation({ summary: 'List earnings for a staff member' })
   @ApiOkResponse({ type: ApiResponse(StaffEarningSearchResponseDto) })
-  @Auth()
+  @Permissions(Permission.PAYROLL_READ)
   @Get('locations/:locationId/staff/:id/earnings')
   async listForStaff(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -76,13 +71,8 @@ export class StaffEarningsController {
     @Query() dto: StaffEarningsByStaffRequestDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<StaffEarningSearchResponseDto>> {
-    assertLocationRole(
-      tokenPayload,
-      locationId,
-      BusinessRole.OWNER,
-      BusinessRole.MANAGER,
-      BusinessRole.STAFF,
-    );
+    if (dto.isExport)
+      assertPermission(tokenPayload, Permission.PAYROLL_EXPORT, locationId);
     const { items, totalItems } = await this.earnings.search(locationId, {
       ...dto,
       staffId: id,
@@ -101,7 +91,7 @@ export class StaffEarningsController {
   @ApiOperation({ summary: 'Add a manual bonus, deduction, or correction' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Staff member not found' })
-  @Auth()
+  @Permissions(Permission.PAYROLL_MANAGE)
   @Post('locations/:locationId/staff/:id/earnings')
   async createManual(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -109,7 +99,6 @@ export class StaffEarningsController {
     @Body() dto: CreateManualEarningDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    assertLocationRole(tokenPayload, locationId, BusinessRole.OWNER);
     const earning = await this.earnings.createManual(
       locationId,
       id,
@@ -121,14 +110,13 @@ export class StaffEarningsController {
 
   @ApiOperation({ summary: 'Record a product sale commission (no inventory)' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
-  @Auth()
+  @Permissions(Permission.PAYROLL_MANAGE)
   @Post('locations/:locationId/payroll/product-sales')
   async recordProductSale(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Body() dto: RecordProductSaleDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    assertLocationRole(tokenPayload, locationId, BusinessRole.OWNER);
     const earning = await this.earnings.recordProductSale(
       locationId,
       dto,

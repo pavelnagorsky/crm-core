@@ -381,6 +381,9 @@ model PasswordResetCode {
 }
 
 model Brand {
+  accessState AccessState?
+  permissionOverrides BrandPermissionOverride[]
+  accessInvitations AccessInvitation[]
   id                String            @id @default(uuid())
   name              String            @db.VarChar(255)
   logoFileId        String?
@@ -388,7 +391,7 @@ model Brand {
   updatedAt         DateTime          @updatedAt
   deletedAt         DateTime?
   restoredAt        DateTime?
-  logoFile          File?             @relation(fields: [logoFileId], references: [id], onDelete: SetNull)
+  logoFile          File?             @relation(fields: [logoFileId], references: [id], onDelete: Restrict)
   brandMemberships  BrandMembership[]
   clients           Client[]
   locations         Location[]
@@ -400,6 +403,7 @@ model Brand {
 }
 
 model Location {
+  permissionOverrides LocationPermissionOverride[]
   id                            String            @id @default(uuid())
   brandId                       String
   name                          String            @db.VarChar(255)
@@ -501,7 +505,7 @@ model Product {
 
   brand      Brand              @relation(fields: [brandId], references: [id], onDelete: Cascade)
   category   ProductCategory?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  imageFile  File?              @relation(fields: [imageFileId], references: [id], onDelete: SetNull)
+  imageFile  File?              @relation(fields: [imageFileId], references: [id], onDelete: Restrict)
   locations  ProductLocation[]
   packagings ProductPackaging[]
 
@@ -925,7 +929,7 @@ model Service {
 
   location        Location                       @relation(fields: [locationId], references: [id], onDelete: Cascade)
   category        ServiceCategory?               @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  imageFile       File?                          @relation(fields: [imageFileId], references: [id], onDelete: SetNull)
+  imageFile       File?                          @relation(fields: [imageFileId], references: [id], onDelete: Restrict)
   staffServices   StaffService[]
   bookingItems    BookingItem[]
   bundleItems     ServiceBundleItem[]
@@ -952,7 +956,7 @@ model ServiceBundle {
 
   location  Location            @relation(fields: [locationId], references: [id], onDelete: Cascade)
   category  ServiceCategory?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  imageFile File?               @relation(fields: [imageFileId], references: [id], onDelete: SetNull)
+  imageFile File?               @relation(fields: [imageFileId], references: [id], onDelete: Restrict)
   items     ServiceBundleItem[]
   bookings  Booking[]
 
@@ -995,7 +999,7 @@ model Staff {
 
   location          Location                @relation(fields: [locationId], references: [id], onDelete: Cascade)
   user              User?                   @relation(fields: [userId], references: [id], onDelete: SetNull)
-  avatarFile        File?                   @relation(fields: [avatarFileId], references: [id], onDelete: SetNull)
+  avatarFile        File?                   @relation(fields: [avatarFileId], references: [id], onDelete: Restrict)
   staffServices     StaffService[]
   invitations       StaffInvitation[]
   shifts            StaffShift[]
@@ -1007,6 +1011,7 @@ model Staff {
   soldOrderItems    OrderItem[]
 
   @@index([locationId])
+  @@unique([locationId, userId])
 }
 
 model File {
@@ -1230,7 +1235,7 @@ model BookingPage {
   updatedAt   DateTime  @updatedAt
 
   location  Location  @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  coverFile File?     @relation(fields: [coverFileId], references: [id], onDelete: SetNull)
+  coverFile File?     @relation(fields: [coverFileId], references: [id], onDelete: Restrict)
   bookings  Booking[]
 
   @@index([locationId, updatedAt])
@@ -1446,4 +1451,70 @@ model PayrollResult {
   @@unique([periodId, staffId])
   @@index([locationId])
   @@index([staffId])
+}
+
+model AccessState {
+  brandId String @id
+  revision Int @default(0)
+  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+}
+
+model BrandPermissionOverride {
+  id String @id @default(uuid())
+  brandId String
+  role BusinessRole
+  permission String @db.VarChar(100)
+  allowed Boolean
+  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  @@unique([brandId, role, permission])
+}
+
+model LocationPermissionOverride {
+  id String @id @default(uuid())
+  locationId String
+  role BusinessRole
+  permission String @db.VarChar(100)
+  allowed Boolean
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  @@unique([locationId, role, permission])
+}
+
+model AccessInvitation {
+  id String @id @default(uuid())
+  brandId String
+  issuerId String
+  tokenHash String @unique @db.VarChar(64)
+  expiresAt DateTime
+  revokedAt DateTime?
+  acceptedAt DateTime?
+  acceptedById String?
+  createdAt DateTime @default(now())
+  version Int @default(0)
+  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  grants AccessInvitationGrant[]
+  @@index([brandId, createdAt])
+}
+
+model AccessInvitationGrant {
+  id String @id @default(uuid())
+  invitationId String
+  scopeId String
+  locationId String?
+  role BusinessRole
+  staffId String?
+  invitation AccessInvitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+  @@unique([invitationId, scopeId])
+  @@index([staffId])
+}
+
+model AccessAudit {
+  id String @id @default(uuid())
+  brandId String
+  locationId String?
+  actorId String
+  action String @db.VarChar(100)
+  targetId String?
+  payload Json
+  createdAt DateTime @default(now())
+  @@index([brandId, createdAt])
 }

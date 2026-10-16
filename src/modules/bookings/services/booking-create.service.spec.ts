@@ -254,6 +254,7 @@ describe('BookingCreateService client ban', () => {
       dto.firstName,
       '',
       undefined,
+      true,
     );
   });
 
@@ -857,7 +858,27 @@ describe('BookingCreateService walk-in', () => {
       products,
       actor,
       tx,
+      true,
     );
+  });
+
+  it('rejects creating a completed walk-in before writing the booking or client', async () => {
+    const { service, tx } = walkInSetup();
+    await expect(
+      service.createManualBooking(
+        'business-1',
+        {
+          ...dto,
+          source: BookingSource.WALK_IN,
+          startAt: '2020-09-20T10:04:00',
+          endAt: '2020-09-20T10:30:00',
+        },
+        { id: 'user-1', name: 'Staff', role: AuditActorRole.STAFF },
+        true,
+        false,
+      ),
+    ).rejects.toMatchObject({ status: 403 });
+    expect(tx.booking.create).not.toHaveBeenCalled();
   });
 
   it('keeps an in-progress WALK_IN confirmed when the end is still ahead', async () => {

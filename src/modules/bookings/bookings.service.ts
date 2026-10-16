@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Booking, CancelledBy } from '@prisma/client';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
-import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 import { AddOrderItemsDto } from '../orders/dto/add-order-items.dto.js';
 import { OrderProductItemDto } from '../orders/dto/order-product-item.dto.js';
 import { OrderWithItems } from '../orders/interfaces/order-with-items.interface.js';
@@ -17,6 +16,7 @@ import { BookingWithItems } from './interfaces/booking-with-items.interface.js';
 import { BookingMutationService } from './services/mutation/booking-mutation.service.js';
 import { BookingReadService } from './services/read/booking-read.service.js';
 import { BookingSetupService } from './services/setup/booking-setup.service.js';
+import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
 
 @Injectable()
 export class BookingsService {
@@ -38,39 +38,51 @@ export class BookingsService {
   }
 
   async update(
-    locationId: string,
-    bookingId: string,
-    tokenPayload: TokenPayloadDto,
+    booking: BookingWithItems,
+    actor: AuditActor,
     dto: UpdateBookingDto,
   ): Promise<BookingWithItems> {
-    return this.mutation.update(locationId, bookingId, tokenPayload, dto);
+    return this.mutation.update(booking, actor, dto);
   }
 
   async updateStatus(
-    locationId: string,
-    bookingId: string,
-    tokenPayload: TokenPayloadDto,
+    booking: BookingWithItems,
+    actor: AuditActor,
     dto: UpdateBookingStatusDto,
   ): Promise<BookingWithItems> {
-    return this.mutation.updateStatus(locationId, bookingId, tokenPayload, dto);
+    return this.mutation.updateStatus(booking, actor, dto);
   }
 
   async addProduct(
     locationId: string,
     bookingId: string,
-    tokenPayload: TokenPayloadDto,
+    actor: AuditActor,
     dto: OrderProductItemDto,
+    canOverridePrice = false,
   ): Promise<OrderWithItems> {
-    return this.mutation.addProduct(locationId, bookingId, tokenPayload, dto);
+    return this.mutation.addProduct(
+      locationId,
+      bookingId,
+      actor,
+      dto,
+      canOverridePrice,
+    );
   }
 
   async addProducts(
     locationId: string,
     bookingId: string,
-    tokenPayload: TokenPayloadDto,
+    actor: AuditActor,
     dto: AddOrderItemsDto,
+    canOverridePrice = false,
   ): Promise<OrderWithItems> {
-    return this.mutation.addProducts(locationId, bookingId, tokenPayload, dto);
+    return this.mutation.addProducts(
+      locationId,
+      bookingId,
+      actor,
+      dto,
+      canOverridePrice,
+    );
   }
 
   async completeElapsed(now = new Date()): Promise<number> {
@@ -96,19 +108,12 @@ export class BookingsService {
   }
 
   async cancel(
-    locationId: string,
-    bookingId: string,
-    tokenPayload: TokenPayloadDto,
+    booking: BookingWithItems,
+    actor: AuditActor,
     cancelledBy: CancelledBy,
     dto: CancelBookingDto,
   ): Promise<Booking> {
-    return this.mutation.cancel(
-      locationId,
-      bookingId,
-      tokenPayload,
-      cancelledBy,
-      dto,
-    );
+    return this.mutation.cancel(booking, actor, cancelledBy, dto);
   }
 
   async cancelByClient(
@@ -118,12 +123,8 @@ export class BookingsService {
     return this.mutation.cancelByClient(bookingId, dto);
   }
 
-  async delete(
-    locationId: string,
-    bookingId: string,
-    tokenPayload: TokenPayloadDto,
-  ): Promise<void> {
-    return this.mutation.delete(locationId, bookingId, tokenPayload);
+  async delete(booking: BookingWithItems, actor: AuditActor): Promise<void> {
+    return this.mutation.delete(booking, actor);
   }
 
   async getStatusCounts(

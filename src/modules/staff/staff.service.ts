@@ -1,17 +1,12 @@
-import { createHash, randomBytes } from 'crypto';
-import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import {
-  BusinessRole,
-  Prisma,
-  Staff,
-  StaffInvitation,
-  StaffInvitationStatus,
-  StaffShift,
-  StaffStatus,
-} from '@prisma/client';
+  ForbiddenException,
+  HttpStatus,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { Prisma, Staff, StaffShift, StaffStatus } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
-import { ACTIVE_LOCATION_WHERE } from '../../shared/database/active-business.where.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { PrismaErrorCode } from '../../shared/database/prisma-error-codes.js';
@@ -19,7 +14,6 @@ import { PaginatedResult } from '../../shared/interfaces/paginated-result.interf
 import { CreateStaffDto } from './dto/create-staff.dto.js';
 import { UpdateStaffDto } from './dto/update-staff.dto.js';
 import { ChangeStaffStatusDto } from './dto/change-staff-status.dto.js';
-import { CreateInvitationDto } from './dto/create-invitation.dto.js';
 import { StaffSearchRequestDto } from './dto/staff-search-request.dto.js';
 import { StaffFilterDto } from './dto/staff-filter.dto.js';
 import { StaffStatusCountResponseDto } from './dto/staff-status-count-response.dto.js';
@@ -36,15 +30,14 @@ import { AuditEvent } from '../audit/enums/audit-event.enum.js';
 import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
 import { diffFields } from '../audit/utils/diff-fields.js';
 import { STAFF_AUDIT_FIELDS } from '../audit/fields/staff.fields.js';
-import { NOTIFICATION_EVENT } from '../notifications/notifications.service.js';
-import { StaffInvitationNotification } from '../notifications/notifications/staff-invitation.notification.js';
-import { IFrontendConfig } from '../../config/configuration.js';
-import { ConfigService } from '@nestjs/config';
 import { StaffWithAvatar } from './interfaces/staff-with-avatar.interface.js';
 import { StaffWithServiceCount } from './interfaces/staff-with-service-count.interface.js';
 import { sanitizeRichHtml } from '../../shared/html/sanitize-rich-html.js';
 import { LocationService } from '../location/location.service.js';
 import regularExpressions from '../../shared/regular-expressions.js';
+import { AccessService } from '../access/access.service.js';
+import { TokenEpochRegistryService } from '../auth/services/token-epoch-registry.service.js';
+import { UserService } from '../user/user.service.js';
 
 const STAFF_DESCRIPTION_MAX_LENGTH = 2_000;
 
@@ -56,11 +49,75 @@ const staffViewInclude = {
 
 @Injectable()
 export class StaffService {
+  async resolveInvitationProfile(
+    locationId: string,
+    staffId: string,
+    tx: Prisma.TransactionClient,
+  ) {
+    const staff = await tx.staff.findFirst({
+      where: { id: staffId, locationId, status: 'ACTIVE' },
+    });
+    if (!staff)
+      throw new AppException(
+        ErrorCode.ACCESS_GRANT_INVALID,
+        HttpStatus.CONFLICT,
+      );
+    return staff;
+  }
+
+  async releaseAccessProfile(
+    locationId: string,
+    userId: string,
+    tx: Prisma.TransactionClient,
+  ) {
+    await tx.staff.updateMany({
+      where: { locationId, userId },
+      data: { userId: null },
+    });
+  }
+
+  async bindAccessProfile(
+    locationId: string,
+    staffId: string,
+    userId: string,
+    tx: Prisma.TransactionClient,
+  ) {
+    const staff = await this.resolveInvitationProfile(locationId, staffId, tx);
+    const occupied = await tx.staff.findFirst({
+      where: { locationId, userId, NOT: { id: staffId } },
+    });
+    if ((staff.userId && staff.userId !== userId) || occupied)
+      throw new AppException(
+        ErrorCode.ACCESS_GRANT_INVALID,
+        HttpStatus.CONFLICT,
+      );
+    const result = await tx.staff.updateMany({
+      where: {
+        id: staffId,
+        locationId,
+        status: 'ACTIVE',
+        OR: [{ userId: null }, { userId }],
+      },
+      data: { userId },
+    });
+    if (result.count !== 1)
+      throw new AppException(
+        ErrorCode.ACCESS_GRANT_INVALID,
+        HttpStatus.CONFLICT,
+      );
+    return this.resolveInvitationProfile(locationId, staffId, tx);
+  }
+
+  accessProfilesForUser(userId: string) {
+    return this.db.staff.findMany({ where: { userId, status: 'ACTIVE' } });
+  }
   constructor(
     private readonly db: DatabaseService,
     private readonly eventEmitter: EventEmitter2,
-    private readonly config: ConfigService,
     private readonly locationService: LocationService,
+    private readonly access: AccessService,
+    private readonly users: UserService,
+    private readonly epochs: TokenEpochRegistryService,
   ) {}
 
   listInLocation(locationId: string): Promise<Staff[]> {
@@ -435,7 +492,28 @@ export class StaffService {
       );
 
     const now = new Date();
+    const location = await this.locationService.findById(locationId);
+    let revokedUserId: string | null = null;
     await this.db.$transaction(async (tx) => {
+      await this.access.lockBrand(location.brandId, tx);
+      const current = await tx.staff.findUniqueOrThrow({
+        where: { id: staffId },
+      });
+      if (dto.status === StaffStatus.INACTIVE)
+        await this.protectPlatformAccount(current.userId, actor.id, tx);
+      if (dto.status === StaffStatus.INACTIVE) {
+        const revoked = await this.access.revokeStaffAccess(
+          location.brandId,
+          locationId,
+          staffId,
+          current.userId,
+          tx,
+          actor.id ?? 'system',
+        );
+        if (revoked) revokedUserId = current.userId;
+        if (revoked && current.userId)
+          await this.releaseAccessProfile(locationId, current.userId, tx);
+      }
       await tx.staff.update({
         where: { id: staffId },
         data: { status: dto.status },
@@ -447,6 +525,7 @@ export class StaffService {
       }
     });
 
+    if (revokedUserId) await this.epochs.bump(revokedUserId);
     const event: AuditLogEvent = {
       locationId,
       entityType: AuditEntity.STAFF,
@@ -462,11 +541,34 @@ export class StaffService {
     this.eventEmitter.emit(AUDIT_EVENT, event);
   }
 
-  async delete(locationId: string, staffId: string): Promise<void> {
+  async delete(
+    locationId: string,
+    staffId: string,
+    actor?: AuditActor,
+  ): Promise<void> {
     await this.findInLocation(locationId, staffId);
+    const location = await this.locationService.findById(locationId);
+    let revokedUserId: string | null = null;
 
     try {
-      await this.db.staff.delete({ where: { id: staffId } });
+      await this.db.$transaction(async (tx) => {
+        await this.access.lockBrand(location.brandId, tx);
+        const current = await tx.staff.findUniqueOrThrow({
+          where: { id: staffId },
+        });
+        await this.protectPlatformAccount(current.userId, actor?.id, tx);
+        await this.access.revokeStaffAccess(
+          location.brandId,
+          locationId,
+          staffId,
+          current.userId,
+          tx,
+          actor?.id ?? 'system',
+        );
+        revokedUserId = current.userId;
+        await tx.staff.delete({ where: { id: staffId } });
+      });
+      if (revokedUserId) await this.epochs.bump(revokedUserId);
     } catch (e: any) {
       if (e?.code === PrismaErrorCode.FOREIGN_KEY_VIOLATION) {
         const constraint = String(e?.meta?.constraint ?? '');
@@ -479,6 +581,21 @@ export class StaffService {
       }
       throw e;
     }
+  }
+
+  private async protectPlatformAccount(
+    userId: string | null,
+    actorId: string | null | undefined,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    if (
+      userId &&
+      userId !== actorId &&
+      (await this.users.findById(userId, tx)).role === 'ADMIN'
+    )
+      throw new ForbiddenException(
+        'Platform administrator access cannot be changed',
+      );
   }
 
   async getStatusCounts(
@@ -556,131 +673,6 @@ export class StaffService {
     };
     this.eventEmitter.emit(AUDIT_EVENT, event);
     return shifts;
-  }
-
-  async createInvitation(
-    locationId: string,
-    staffId: string,
-    dto: CreateInvitationDto,
-  ): Promise<{ token: string }> {
-    const staff = await this.findInLocation(locationId, staffId);
-
-    if (staff.userId) {
-      throw new AppException(
-        ErrorCode.STAFF_ALREADY_LINKED,
-        HttpStatus.CONFLICT,
-      );
-    }
-
-    const token = randomBytes(32).toString('hex');
-    const tokenHash = createHash('sha256').update(token).digest('hex');
-
-    // revoke any existing pending invitations for this staff member
-    await this.db.staffInvitation.updateMany({
-      where: { staffId, status: StaffInvitationStatus.PENDING },
-      data: { status: StaffInvitationStatus.REVOKED },
-    });
-
-    await this.db.staffInvitation.create({
-      data: {
-        staffId,
-        locationId: staff.locationId,
-        tokenHash,
-        expiresAt: new Date(dto.expiresAt),
-      },
-    });
-
-    if (dto.email) {
-      const cfg = this.config.get<IFrontendConfig>('frontend')!;
-      const location = await this.locationService.findPublicProfile(
-        staff.locationId,
-      );
-      const businessName = location.brand.name;
-      this.eventEmitter.emit(
-        NOTIFICATION_EVENT,
-        new StaffInvitationNotification(
-          dto.email,
-          `${cfg.domain}/invitation?token=${token}`,
-          staff.name,
-          businessName,
-        ),
-      );
-    }
-
-    return { token };
-  }
-
-  async acceptInvitation(
-    userId: string,
-    token: string,
-  ): Promise<StaffInvitation> {
-    const tokenHash = createHash('sha256').update(token).digest('hex');
-
-    const invitation = await this.db.staffInvitation.findUnique({
-      where: { tokenHash, location: ACTIVE_LOCATION_WHERE },
-    });
-
-    if (!invitation || invitation.status !== StaffInvitationStatus.PENDING) {
-      throw new AppException(
-        ErrorCode.STAFF_INVITATION_NOT_FOUND,
-        HttpStatus.NOT_FOUND,
-      );
-    }
-
-    if (invitation.expiresAt < new Date()) {
-      await this.db.staffInvitation.update({
-        where: { id: invitation.id },
-        data: { status: StaffInvitationStatus.EXPIRED },
-      });
-      throw new AppException(
-        ErrorCode.STAFF_INVITATION_EXPIRED,
-        HttpStatus.GONE,
-      );
-    }
-
-    return this.db.$transaction(async (tx) => {
-      if (
-        !(await this.locationService.acquireActiveOperationLock(
-          invitation.locationId,
-          tx,
-        ))
-      ) {
-        throw new AppException(
-          ErrorCode.STAFF_INVITATION_NOT_FOUND,
-          HttpStatus.NOT_FOUND,
-        );
-      }
-      try {
-        await tx.locationMembership.create({
-          data: {
-            userId,
-            locationId: invitation.locationId,
-            role: BusinessRole.STAFF,
-          },
-        });
-      } catch (e: any) {
-        if (e?.code === PrismaErrorCode.UNIQUE_CONSTRAINT_VIOLATION) {
-          throw new AppException(
-            ErrorCode.STAFF_USER_ALREADY_MEMBER,
-            HttpStatus.CONFLICT,
-          );
-        }
-        throw e;
-      }
-
-      await tx.staff.update({
-        where: { id: invitation.staffId },
-        data: { userId },
-      });
-
-      return tx.staffInvitation.update({
-        where: { id: invitation.id },
-        data: {
-          status: StaffInvitationStatus.ACCEPTED,
-          acceptedAt: new Date(),
-        },
-      });
-    });
   }
 }
 

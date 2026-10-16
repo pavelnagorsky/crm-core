@@ -395,6 +395,7 @@ describe('OrdersService', () => {
         ],
       },
       owner,
+      true,
     );
 
     const data = db.order.create.mock.calls[0][0].data;
@@ -428,6 +429,7 @@ describe('OrdersService', () => {
           ],
         },
         employee,
+        false,
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(db.order.create).not.toHaveBeenCalled();
@@ -444,6 +446,7 @@ describe('OrdersService', () => {
           items: [{ productId: 'product-1', quantity: '0.500' }],
         },
         owner,
+        true,
       )
       .then(
         () => null,
@@ -551,6 +554,7 @@ describe('OrdersService', () => {
         ],
       },
       owner,
+      true,
     );
 
     expect(result.items.map((item) => item.status)).toEqual([
@@ -624,6 +628,7 @@ describe('OrdersService', () => {
           items: [{ productId: 'product-1', quantity: '0.500' }],
         },
         owner,
+        true,
       )
       .then(
         () => null,
@@ -655,6 +660,7 @@ describe('OrdersService', () => {
         items: [{ productId: 'product-1', quantity: '1.000' }],
       },
       owner,
+      true,
     );
 
     expect(result).toBe(existing);
@@ -676,6 +682,7 @@ describe('OrdersService', () => {
           items: [{ productId: 'product-1', quantity: '1.000' }],
         },
         owner,
+        true,
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
 
@@ -713,6 +720,7 @@ describe('OrdersService', () => {
           items: [{ productId: 'product-1', quantity: '1.000' }],
         },
         owner,
+        true,
       ),
     ).rejects.toThrow('insufficient stock');
 
@@ -734,6 +742,7 @@ describe('OrdersService', () => {
         OrderTargetStatus.VOIDED,
         'wrong order',
         owner,
+        true,
       )
       .then(
         () => null,
@@ -765,6 +774,7 @@ describe('OrdersService', () => {
         items: [{ productId: 'product-1', quantity: '2.000' }],
       },
       employee,
+      false,
     );
 
     const item = tx.orderItem.create.mock.calls[0][0].data;
@@ -853,6 +863,7 @@ describe('OrdersService', () => {
         ],
       },
       owner,
+      true,
     );
 
     expect(tx.orderItem.update).toHaveBeenCalledWith({
@@ -921,6 +932,7 @@ describe('OrdersService', () => {
       'order-1',
       { items: [{ productId: 'product-1', quantity: '1.000' }] },
       owner,
+      true,
     );
 
     expect(tx.orderItem.update).toHaveBeenCalledWith({
@@ -983,6 +995,7 @@ describe('OrdersService', () => {
       'order-1',
       { items: [{ productId: 'product-1', quantity: '1.000' }] },
       owner,
+      true,
     );
 
     expect(tx.orderItem.update).not.toHaveBeenCalled();
@@ -1008,6 +1021,7 @@ describe('OrdersService', () => {
         'order-1',
         { items: [{ productId: 'product-1', quantity: '0.500' }] },
         owner,
+        true,
       )
       .then(
         () => null,
@@ -1070,6 +1084,7 @@ describe('OrdersService', () => {
         ],
       },
       owner,
+      true,
     );
 
     expect(tx.orderItem.update).toHaveBeenCalledWith({
@@ -1096,6 +1111,7 @@ describe('OrdersService', () => {
           items: [{ id: 'item-1', productId: 'product-1', quantity: '2.000' }],
         },
         owner,
+        true,
       )
       .then(
         () => null,
@@ -1124,6 +1140,7 @@ describe('OrdersService', () => {
           items: [{ id: 'item-1', productId: 'product-1', quantity: '2.000' }],
         },
         owner,
+        true,
       )
       .then(
         () => null,
@@ -1150,6 +1167,7 @@ describe('OrdersService', () => {
           items: [{ id: 'item-1', productId: 'product-1', quantity: '2.000' }],
         },
         owner,
+        true,
       )
       .then(
         () => null,
@@ -1821,6 +1839,7 @@ describe('OrdersService', () => {
       ],
       employee,
       tx as never,
+      true,
     );
 
     expect(tx.orderItem.createMany).toHaveBeenCalledWith({
@@ -1888,6 +1907,7 @@ describe('OrdersService', () => {
         [{ productId: 'product-1', quantity: '0.500' }],
         owner,
         tx as never,
+        true,
       )
       .then(
         () => null,
@@ -1954,6 +1974,7 @@ describe('OrdersService', () => {
       [{ productId: 'product-1', quantity: '1.000' }],
       owner,
       tx as never,
+      true,
     );
 
     expect(tx.orderItem.update).toHaveBeenCalledWith({

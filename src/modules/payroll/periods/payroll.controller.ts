@@ -22,11 +22,8 @@ import {
   ApiProduces,
   ApiTags,
 } from '@nestjs/swagger';
-import { BusinessRole } from '@prisma/client';
-import { Auth } from '../../auth/decorators/auth.decorator.js';
 import { TokenPayload } from '../../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
-import { assertLocationRole } from '../../auth/guards/assert-location-role.js';
 import { auditActorFromToken } from '../../audit/utils/audit-actor-from-token.js';
 import {
   ApiResponse,
@@ -49,6 +46,9 @@ import { PayrollReportService } from '../report/payroll-report.service.js';
 import { StaffEarningsService } from '../earnings/staff-earnings.service.js';
 import { XlsxService } from '../../../shared/xlsx/xlsx.service.js';
 import { PayrollService } from './payroll.service.js';
+import { Permission } from '../../access/enums/permission.enum.js';
+import { assertPermission } from '../../access/utils/assert-permission.js';
+import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 
 @ApiTags('Payroll')
 @Controller('locations/:locationId/payroll')
@@ -61,14 +61,13 @@ export class PayrollController {
 
   @ApiOperation({ summary: 'Create a payroll period' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
-  @Auth()
+  @Permissions(Permission.PAYROLL_MANAGE)
   @Post('periods')
   async create(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Body() dto: CreatePayrollPeriodDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    assertLocationRole(tokenPayload, locationId, BusinessRole.OWNER);
     const period = await this.payroll.create(
       locationId,
       dto,
@@ -83,19 +82,11 @@ export class PayrollController {
       'Approved and paid periods. A manual earning whose date falls inside one of these ranges is rejected.',
   })
   @ApiOkResponse({ type: ApiResponseArray(LockedPayrollRangeDto) })
-  @Auth()
+  @Permissions(Permission.PAYROLL_READ)
   @Get('locked-ranges')
   async lockedRanges(
     @Param('locationId', ParseUUIDPipe) locationId: string,
-    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<LockedPayrollRangeDto[]>> {
-    assertLocationRole(
-      tokenPayload,
-      locationId,
-      BusinessRole.OWNER,
-      BusinessRole.MANAGER,
-      BusinessRole.STAFF,
-    );
     const ranges = await this.payroll.listLockedRanges(locationId);
     return BaseResponseDto.success(
       ranges.map(LockedPayrollRangeDto.fromEntity),
@@ -104,20 +95,15 @@ export class PayrollController {
 
   @ApiOperation({ summary: 'Search payroll periods' })
   @ApiOkResponse({ type: ApiResponse(PayrollPeriodSearchResponseDto) })
-  @Auth()
+  @Permissions(Permission.PAYROLL_READ)
   @Get('periods')
   async search(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Query() dto: PayrollPeriodSearchRequestDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<PayrollPeriodSearchResponseDto>> {
-    assertLocationRole(
-      tokenPayload,
-      locationId,
-      BusinessRole.OWNER,
-      BusinessRole.MANAGER,
-      BusinessRole.STAFF,
-    );
+    if (dto.isExport)
+      assertPermission(tokenPayload, Permission.PAYROLL_EXPORT, locationId);
     const { items, totalItems } = await this.payroll.search(locationId, dto);
     return BaseResponseDto.success(
       new PayrollPeriodSearchResponseDto(
@@ -134,19 +120,11 @@ export class PayrollController {
   @ApiOkResponse({
     type: ApiResponseArray(PayrollPeriodStatusCountResponseDto),
   })
-  @Auth()
+  @Permissions(Permission.PAYROLL_READ)
   @Get('periods/status-counts')
   async getStatusCounts(
     @Param('locationId', ParseUUIDPipe) locationId: string,
-    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<PayrollPeriodStatusCountResponseDto[]>> {
-    assertLocationRole(
-      tokenPayload,
-      locationId,
-      BusinessRole.OWNER,
-      BusinessRole.MANAGER,
-      BusinessRole.STAFF,
-    );
     const counts = await this.payroll.getStatusCounts(locationId);
     return BaseResponseDto.success(
       counts.map((r) =>
@@ -158,7 +136,7 @@ export class PayrollController {
   @ApiOperation({ summary: 'Get payroll period with results' })
   @ApiOkResponse({ type: ApiResponse(PayrollPeriodResponseDto) })
   @ApiNotFoundResponse({ description: 'Payroll period not found' })
-  @Auth()
+  @Permissions(Permission.PAYROLL_READ)
   @Get('periods/:id')
   async findById(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -167,19 +145,13 @@ export class PayrollController {
   ): Promise<BaseResponseDto<PayrollPeriodResponseDto>> {
     const period = await this.payroll.findById(id);
     this.assertPeriodInLocation(period, locationId);
-    assertLocationRole(
-      tokenPayload,
-      period.locationId,
-      BusinessRole.OWNER,
-      BusinessRole.MANAGER,
-      BusinessRole.STAFF,
-    );
+    assertPermission(tokenPayload, Permission.PAYROLL_READ, period.locationId);
     return BaseResponseDto.success(PayrollPeriodResponseDto.fromEntity(period));
   }
 
   @ApiOperation({ summary: 'Payroll report: vedomost + payslips' })
   @ApiOkResponse({ type: ApiResponse(PayrollReportResponseDto) })
-  @Auth()
+  @Permissions(Permission.PAYROLL_READ)
   @Get('periods/:id/report')
   async report(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -188,19 +160,13 @@ export class PayrollController {
   ): Promise<BaseResponseDto<PayrollReportResponseDto>> {
     const period = await this.payroll.findById(id);
     this.assertPeriodInLocation(period, locationId);
-    assertLocationRole(
-      tokenPayload,
-      period.locationId,
-      BusinessRole.OWNER,
-      BusinessRole.MANAGER,
-      BusinessRole.STAFF,
-    );
+    assertPermission(tokenPayload, Permission.PAYROLL_READ, period.locationId);
     return BaseResponseDto.success(await this.reports.build(id));
   }
 
   @ApiOperation({ summary: 'List earnings attached to a payroll period' })
   @ApiOkResponse({ type: ApiResponse(StaffEarningSearchResponseDto) })
-  @Auth()
+  @Permissions(Permission.PAYROLL_READ)
   @Get('periods/:id/earnings')
   async listPeriodEarnings(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -208,15 +174,11 @@ export class PayrollController {
     @Query() dto: PayrollPeriodEarningsRequestDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<StaffEarningSearchResponseDto>> {
+    if (dto.isExport)
+      assertPermission(tokenPayload, Permission.PAYROLL_EXPORT, locationId);
     const period = await this.payroll.findById(id);
     this.assertPeriodInLocation(period, locationId);
-    assertLocationRole(
-      tokenPayload,
-      period.locationId,
-      BusinessRole.OWNER,
-      BusinessRole.MANAGER,
-      BusinessRole.STAFF,
-    );
+    assertPermission(tokenPayload, Permission.PAYROLL_READ, period.locationId);
     const { items, totalItems } = await this.earnings.searchByPeriod(id, dto);
     return BaseResponseDto.success(
       new StaffEarningSearchResponseDto(
@@ -231,7 +193,7 @@ export class PayrollController {
 
   @ApiOperation({ summary: 'Export payment vedomost as XLSX' })
   @ApiProduces(XlsxService.mimeType)
-  @Auth()
+  @Permissions(Permission.PAYROLL_EXPORT)
   @Get('periods/:id/export/vedomost')
   async exportVedomost(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -242,12 +204,10 @@ export class PayrollController {
   ): Promise<StreamableFile> {
     const period = await this.payroll.findById(id);
     this.assertPeriodInLocation(period, locationId);
-    assertLocationRole(
+    assertPermission(
       tokenPayload,
+      Permission.PAYROLL_EXPORT,
       period.locationId,
-      BusinessRole.OWNER,
-      BusinessRole.MANAGER,
-      BusinessRole.STAFF,
     );
     const { stream, filename } = await this.reports.exportVedomost(id);
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -256,7 +216,7 @@ export class PayrollController {
 
   @ApiOperation({ summary: 'Export payslips as XLSX' })
   @ApiProduces(XlsxService.mimeType)
-  @Auth()
+  @Permissions(Permission.PAYROLL_EXPORT)
   @Get('periods/:id/export/payslips')
   async exportPayslips(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -267,12 +227,10 @@ export class PayrollController {
   ): Promise<StreamableFile> {
     const period = await this.payroll.findById(id);
     this.assertPeriodInLocation(period, locationId);
-    assertLocationRole(
+    assertPermission(
       tokenPayload,
+      Permission.PAYROLL_EXPORT,
       period.locationId,
-      BusinessRole.OWNER,
-      BusinessRole.MANAGER,
-      BusinessRole.STAFF,
     );
     const { stream, filename } = await this.reports.exportPayslips(id);
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
@@ -281,7 +239,7 @@ export class PayrollController {
 
   @ApiOperation({ summary: 'Calculate or recalculate a payroll period' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
-  @Auth()
+  @Permissions(Permission.PAYROLL_MANAGE)
   @Post('periods/:id/calculate')
   @HttpCode(HttpStatus.OK)
   async calculate(
@@ -291,7 +249,11 @@ export class PayrollController {
   ): Promise<BaseResponseDto<IdResponseDto>> {
     const period = await this.payroll.findById(id);
     this.assertPeriodInLocation(period, locationId);
-    assertLocationRole(tokenPayload, period.locationId, BusinessRole.OWNER);
+    assertPermission(
+      tokenPayload,
+      Permission.PAYROLL_MANAGE,
+      period.locationId,
+    );
     const updated = await this.payroll.calculate(
       id,
       auditActorFromToken(tokenPayload, period.locationId),
@@ -301,7 +263,7 @@ export class PayrollController {
 
   @ApiOperation({ summary: 'Approve a calculated payroll period' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
-  @Auth()
+  @Permissions(Permission.PAYROLL_MANAGE)
   @Post('periods/:id/approve')
   @HttpCode(HttpStatus.OK)
   async approve(
@@ -311,7 +273,11 @@ export class PayrollController {
   ): Promise<BaseResponseDto<IdResponseDto>> {
     const period = await this.payroll.findById(id);
     this.assertPeriodInLocation(period, locationId);
-    assertLocationRole(tokenPayload, period.locationId, BusinessRole.OWNER);
+    assertPermission(
+      tokenPayload,
+      Permission.PAYROLL_MANAGE,
+      period.locationId,
+    );
     const updated = await this.payroll.approve(
       id,
       auditActorFromToken(tokenPayload, period.locationId),
@@ -321,7 +287,7 @@ export class PayrollController {
 
   @ApiOperation({ summary: 'Mark an approved payroll period as paid' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
-  @Auth()
+  @Permissions(Permission.PAYROLL_MANAGE)
   @Post('periods/:id/pay')
   @HttpCode(HttpStatus.OK)
   async pay(
@@ -331,7 +297,11 @@ export class PayrollController {
   ): Promise<BaseResponseDto<IdResponseDto>> {
     const period = await this.payroll.findById(id);
     this.assertPeriodInLocation(period, locationId);
-    assertLocationRole(tokenPayload, period.locationId, BusinessRole.OWNER);
+    assertPermission(
+      tokenPayload,
+      Permission.PAYROLL_MANAGE,
+      period.locationId,
+    );
     const updated = await this.payroll.pay(
       id,
       auditActorFromToken(tokenPayload, period.locationId),
@@ -341,7 +311,7 @@ export class PayrollController {
 
   @ApiOperation({ summary: 'Delete a draft or calculated payroll period' })
   @ApiNoContentResponse()
-  @Auth()
+  @Permissions(Permission.PAYROLL_MANAGE)
   @Delete('periods/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(
@@ -351,7 +321,11 @@ export class PayrollController {
   ): Promise<void> {
     const period = await this.payroll.findById(id);
     this.assertPeriodInLocation(period, locationId);
-    assertLocationRole(tokenPayload, period.locationId, BusinessRole.OWNER);
+    assertPermission(
+      tokenPayload,
+      Permission.PAYROLL_MANAGE,
+      period.locationId,
+    );
     await this.payroll.delete(
       id,
       auditActorFromToken(tokenPayload, period.locationId),
@@ -362,7 +336,7 @@ export class PayrollController {
     summary: 'Add a post-approval correction; it lands in the next open period',
   })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
-  @Auth()
+  @Permissions(Permission.PAYROLL_MANAGE)
   @Post('results/:id/corrections')
   async correct(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -372,7 +346,11 @@ export class PayrollController {
   ): Promise<BaseResponseDto<IdResponseDto>> {
     const result = await this.payroll.findResultById(id);
     this.assertResultInLocation(result, locationId);
-    assertLocationRole(tokenPayload, result.locationId, BusinessRole.OWNER);
+    assertPermission(
+      tokenPayload,
+      Permission.PAYROLL_MANAGE,
+      result.locationId,
+    );
     const earning = await this.payroll.correct(
       id,
       dto,

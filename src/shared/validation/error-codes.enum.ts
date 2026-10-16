@@ -560,4 +560,37 @@ export const ErrorCode = {
     message:
       'Brand analytics requires one currency and an explicit timezone for mixed-timezone locations',
   },
+  ACCESS_VERSION_CONFLICT: {
+    code: 'ACCESS_VERSION_CONFLICT',
+    message: 'Access settings have changed; reload and retry',
+  },
+  FILE_IN_USE: {
+    code: 'FILE_IN_USE',
+    message: 'Detach the file from its resource before deleting it',
+  },
+  INVENTORY_DOCUMENT_CONCURRENT_UPDATE: {
+    code: 'INVENTORY_DOCUMENT_CONCURRENT_UPDATE',
+    message: 'Inventory document changed; reload it and try again',
+  },
+  BOOKING_CONCURRENT_UPDATE: {
+    code: 'BOOKING_CONCURRENT_UPDATE',
+    message: 'Booking has changed; reload and retry',
+  },
+  ACCESS_POLICY_INVALID: {
+    code: 'ACCESS_POLICY_INVALID',
+    message: 'Invalid permission settings or dependencies',
+  },
+  ACCESS_LAST_OWNER: {
+    code: 'ACCESS_LAST_OWNER',
+    message: 'A brand must retain at least one owner',
+  },
+  ACCESS_INVITATION_INVALID: {
+    code: 'ACCESS_INVITATION_INVALID',
+    message:
+      'Invitation is unavailable, expired, or already accepted by another account',
+  },
+  ACCESS_GRANT_INVALID: {
+    code: 'ACCESS_GRANT_INVALID',
+    message: 'Invalid role, scope, or staff binding',
+  },
 } as const satisfies Record<string, ErrorCodeEntry>;

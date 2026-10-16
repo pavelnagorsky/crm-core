@@ -165,8 +165,7 @@ describe('InventoryService', () => {
       },
     ]);
     await service.updateDocument(
-      'location-1',
-      saved.id,
+      await tx.inventoryDocument.findFirst(),
       {
         type: InventoryDocumentType.RECEIPT,
         occurredAt: saved.occurredAt.toISOString(),
@@ -233,8 +232,7 @@ describe('InventoryService', () => {
     tx.$queryRaw.mockResolvedValue([]);
     await expect(
       service.updateDocument(
-        'location-1',
-        'document-1',
+        await tx.inventoryDocument.findFirst(),
         {
           type: InventoryDocumentType.RECEIPT,
           occurredAt: '2026-10-01T10:00:00.000Z',
@@ -405,8 +403,7 @@ describe('InventoryService', () => {
       status: InventoryDocumentStatus.POSTED,
     });
     await service.changeDocumentStatus(
-      'location-1',
-      'document-1',
+      await tx.inventoryDocument.findFirst(),
       InventoryDocumentTargetStatus.POSTED,
       actor,
     );
@@ -470,8 +467,7 @@ describe('InventoryService', () => {
       document(InventoryDocumentStatus.VOIDED),
     );
     await service.changeDocumentStatus(
-      'location-1',
-      'document-1',
+      await tx.inventoryDocument.findFirst(),
       InventoryDocumentTargetStatus.VOIDED,
       actor,
     );
@@ -526,8 +522,7 @@ describe('InventoryService', () => {
       status: InventoryDocumentStatus.POSTED,
     });
     await service.changeDocumentStatus(
-      'location-1',
-      'document-1',
+      await tx.inventoryDocument.findFirst(),
       InventoryDocumentTargetStatus.POSTED,
       actor,
     );
@@ -548,13 +543,32 @@ describe('InventoryService', () => {
     expect(movements[2].stockValueAfter.toString()).toBe('0');
     expect(movements[3].stockValueAfter.toFixed(2)).toBe('10.00');
   });
+
+  it('rejects a changed transfer destination before changing balances', async () => {
+    const { service, tx } = setup(InventoryDocumentStatus.OPEN);
+    tx.inventoryDocument.findFirst.mockResolvedValue({
+      ...document(InventoryDocumentStatus.OPEN),
+      type: InventoryDocumentType.TRANSFER,
+      destinationLocationId: 'location-2',
+    });
+    await expect(
+      service.changeDocumentStatus(
+        document(InventoryDocumentStatus.OPEN),
+        InventoryDocumentTargetStatus.POSTED,
+        actor,
+      ),
+    ).rejects.toMatchObject({
+      errorCode: 'INVENTORY_DOCUMENT_CONCURRENT_UPDATE',
+    });
+    expect(tx.inventoryMovement.create).not.toHaveBeenCalled();
+    expect(tx.inventoryBalance.upsert).not.toHaveBeenCalled();
+  });
   it('makes repeated posting idempotent', async () => {
     const { service, tx, events } = setup(InventoryDocumentStatus.POSTED);
     tx.$queryRaw.mockResolvedValue([]);
 
     const result = await service.changeDocumentStatus(
-      'location-1',
-      'document-1',
+      await tx.inventoryDocument.findFirst(),
       InventoryDocumentTargetStatus.POSTED,
       actor,
     );
@@ -579,8 +593,7 @@ describe('InventoryService', () => {
 
     await expect(
       service.changeDocumentStatus(
-        'location-1',
-        'document-1',
+        await tx.inventoryDocument.findFirst(),
         InventoryDocumentTargetStatus.POSTED,
         actor,
       ),
@@ -610,8 +623,7 @@ describe('InventoryService', () => {
     });
 
     await service.changeDocumentStatus(
-      'location-1',
-      'document-1',
+      await tx.inventoryDocument.findFirst(),
       InventoryDocumentTargetStatus.POSTED,
       actor,
     );

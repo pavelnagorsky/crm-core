@@ -1,15 +1,14 @@
 import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
-import { BusinessRole } from '@prisma/client';
 import { AuditService } from './audit.service.js';
 import { AuditHistoryRequestDto } from './dto/audit-history-request.dto.js';
 import { AuditHistoryResponseDto } from './dto/audit-history-response.dto.js';
-import { BrandRBAC } from '../auth/decorators/brand-rbac.decorator.js';
-import { LocationRBAC } from '../auth/decorators/location-rbac.decorator.js';
 import {
   ApiResponse,
   BaseResponseDto,
 } from '../../shared/dto/base-response.dto.js';
+import { Permission } from '../access/enums/permission.enum.js';
+import { Permissions } from '../auth/decorators/permissions.decorator.js';
 
 @ApiTags('Audit')
 @Controller()
@@ -18,7 +17,7 @@ export class AuditController {
 
   @ApiOperation({ summary: 'Get audit history for an entity' })
   @ApiOkResponse({ type: ApiResponse(AuditHistoryResponseDto) })
-  @BrandRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Permissions(Permission.AUDIT_BRAND_READ)
   @Get('brands/:brandId/audit')
   async getBrandHistory(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -35,7 +34,7 @@ export class AuditController {
 
   @ApiOperation({ summary: 'Get location audit history for an entity' })
   @ApiOkResponse({ type: ApiResponse(AuditHistoryResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Permissions(Permission.AUDIT_LOCATION_READ)
   @Get('locations/:locationId/audit')
   async getLocationHistory(
     @Param('locationId', ParseUUIDPipe) locationId: string,

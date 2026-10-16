@@ -16,12 +16,13 @@ import { YandexOAuthStrategy } from './strategies/yandex.strategy.js';
 import { UserFromTokenPipe } from './pipes/user-from-token.pipe.js';
 import { TokenEpochRegistryService } from './services/token-epoch-registry.service.js';
 import { TokenEpochGuard } from './guards/token-epoch.guard.js';
-import { BrandRbacGuard } from './guards/brand-rbac.guard.js';
-import { LocationRbacGuard } from './guards/location-rbac.guard.js';
+import { AccessModule } from '../access/access.module.js';
+import { PermissionGuard } from './guards/permission.guard.js';
 
 @Global()
 @Module({
   imports: [
+    AccessModule,
     UserModule,
     PassportModule.register({}),
     JwtModule.register({ global: true }),
@@ -29,6 +30,7 @@ import { LocationRbacGuard } from './guards/location-rbac.guard.js';
   ],
   controllers: [AuthController, UserController],
   providers: [
+    PermissionGuard,
     AuthService,
     AuthCleanupService,
     JwtAccessStrategy,
@@ -40,24 +42,14 @@ import { LocationRbacGuard } from './guards/location-rbac.guard.js';
     UserFromTokenPipe,
     TokenEpochRegistryService,
     TokenEpochGuard,
-    BrandRbacGuard,
-    LocationRbacGuard,
   ],
   exports: [
+    PermissionGuard,
     PassportModule,
     AuthService,
     UserFromTokenPipe,
     TokenEpochRegistryService,
     TokenEpochGuard,
-    BrandRbacGuard,
-    LocationRbacGuard,
-    // JwtRefreshStrategy,
-    // JwtAccessStrategy,
-    // JwtEmailStrategy,
-    // JwtResetPasswordStrategy,
-    // GoogleOAuthStrategy,
-    // VkOAuthStrategy,
-    // YandexOAuthStrategy,
   ],
 })
 export class AuthModule {}

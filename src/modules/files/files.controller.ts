@@ -21,10 +21,8 @@ import {
   ApiPayloadTooLargeResponse,
   ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
-import { BusinessRole } from '@prisma/client';
 import { FilesService } from './files.service.js';
 import { Auth } from '../auth/decorators/auth.decorator.js';
-import { BrandRBAC } from '../auth/decorators/brand-rbac.decorator.js';
 import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 import {
@@ -32,6 +30,8 @@ import {
   ApiResponse,
 } from '../../shared/dto/base-response.dto.js';
 import { UploadFileResponseDto } from './dto/upload-file-response.dto.js';
+import { Permission } from '../access/enums/permission.enum.js';
+import { Permissions } from '../auth/decorators/permissions.decorator.js';
 
 @ApiTags('Files')
 @Controller()
@@ -39,7 +39,7 @@ export class FilesController {
   constructor(private readonly filesService: FilesService) {}
 
   @Post('brands/:brandId/files')
-  @BrandRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Permissions(Permission.FILE_BRAND_MANAGE)
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
   @ApiOperation({ summary: 'Upload a brand file to Google Cloud Storage' })
   @ApiConsumes('multipart/form-data')
@@ -94,7 +94,7 @@ export class FilesController {
   }
 
   @Delete('brands/:brandId/files/:fileId')
-  @BrandRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Permissions(Permission.FILE_BRAND_MANAGE)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a brand file' })
   @ApiNoContentResponse({ description: 'File deleted' })

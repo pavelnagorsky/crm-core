@@ -19,12 +19,16 @@ export function auditActorFromToken(
     (membership) => membership.locationId === scopeId,
   );
   const brandId = locationMembership?.brandId ?? scopeId;
-  const membership =
-    payload.brandMemberships.find((item) => item.brandId === brandId) ??
-    locationMembership;
-  const role =
-    membership?.role === BusinessRole.OWNER
-      ? AuditActorRole.OWNER
-      : AuditActorRole.STAFF;
+  const memberships = [
+    ...payload.brandMemberships.filter((item) => item.brandId === brandId),
+    ...payload.locationMemberships.filter(
+      (item) => item.locationId === scopeId,
+    ),
+  ];
+  const role = memberships.some(
+    (membership) => membership.role === BusinessRole.OWNER,
+  )
+    ? AuditActorRole.OWNER
+    : AuditActorRole.STAFF;
   return { id: payload.sub, name, role };
 }

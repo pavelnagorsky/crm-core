@@ -2,7 +2,7 @@ import { createHash } from 'crypto';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { BusinessRole, User, UserRole } from '@prisma/client';
+import { User, UserRole } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
 import { UserService } from '../user/user.service.js';
 import { TokenEpochRegistryService } from './services/token-epoch-registry.service.js';
@@ -68,6 +68,13 @@ describe('AuthService refresh token storage', () => {
     { emit: vi.fn() } as unknown as EventEmitter2,
     config as unknown as ConfigService,
     tokenEpoch as unknown as TokenEpochRegistryService,
+    {
+      resolvePermissions: vi.fn().mockResolvedValue({
+        brandMemberships: [],
+        locationMemberships: [],
+        permissions: {},
+      }),
+    } as never,
   );
 
   beforeEach(() => {
@@ -107,61 +114,20 @@ describe('AuthService refresh token storage', () => {
     );
   });
 
-  it('embeds inherited brand location access in the access token', async () => {
-    db.brandMembership.findMany.mockResolvedValue([
-      { brandId: 'brand-1', role: BusinessRole.OWNER },
-    ]);
-    db.location.findMany.mockResolvedValue([
-      { id: 'location-1', brandId: 'brand-1' },
-      { id: 'location-2', brandId: 'brand-1' },
-    ]);
-
+  it('embeds scoped permissions and memberships when issuing JWT', async () => {
     await service.handleOAuth(
-      {
-        email: user.email!,
-        providerType: 'GOOGLE',
-      } as never,
+      { email: user.email!, providerType: 'GOOGLE' } as never,
       'browser',
     );
-
-    const accessSignCall = jwt.signAsync.mock.calls.find(
+    const call = jwt.signAsync.mock.calls.find(
       ([, options]) => options.secret === 'access-secret',
     );
-    expect(accessSignCall?.[0]).toMatchObject({
-      brandMemberships: [{ brandId: 'brand-1', role: BusinessRole.OWNER }],
-      locationMemberships: [
-        {
-          locationId: 'location-1',
-          brandId: 'brand-1',
-          role: BusinessRole.OWNER,
-        },
-        {
-          locationId: 'location-2',
-          brandId: 'brand-1',
-          role: BusinessRole.OWNER,
-        },
-      ],
-    });
-    expect(db.brandMembership.findMany).toHaveBeenCalledWith({
-      where: { userId: user.id, brand: { deletedAt: null } },
-      select: { brandId: true, role: true },
-    });
-    expect(db.locationMembership.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: {
-          userId: user.id,
-          location: { deletedAt: null, brand: { deletedAt: null } },
-        },
-      }),
-    );
-    expect(db.location.findMany).toHaveBeenCalledWith({
-      where: {
-        brandId: { in: ['brand-1'] },
-        deletedAt: null,
-        brand: { deletedAt: null },
-      },
-      select: { id: true, brandId: true },
-    });
+    expect(call?.[0]).toMatchObject({ sub: user.id, role: user.role });
+    expect(call?.[0]).toHaveProperty('brandMemberships', []);
+    expect(call?.[0]).toHaveProperty('locationMemberships', []);
+    expect(call?.[0]).not.toHaveProperty('access');
+    expect(call?.[0]).toHaveProperty('permissions', {});
+    expect(call?.[0]).toHaveProperty('tokenEpoch', 0);
   });
 
   it('hashes the cookie value when logging out', async () => {

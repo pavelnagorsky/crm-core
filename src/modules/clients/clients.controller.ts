@@ -29,7 +29,6 @@ import {
   ApiTags,
   ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
-import { BusinessRole } from '@prisma/client';
 import { ClientsService } from './clients.service.js';
 import { CreateClientDto } from './dto/create-client.dto.js';
 import { UpdateClientDto } from './dto/update-client.dto.js';
@@ -43,7 +42,6 @@ import { ClientImportFile } from './clients-import/decorators/client-import-uplo
 import { ClientExportRequestDto } from './clients-export/dto/client-export-request.dto.js';
 import { ClientsExportService } from './clients-export/clients-export.service.js';
 import { XlsxService } from '../../shared/xlsx/xlsx.service.js';
-import { Auth } from '../auth/decorators/auth.decorator.js';
 import {
   ApiResponse,
   BaseResponseDto,
@@ -51,8 +49,10 @@ import {
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
 import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
-import { assertBrandRole } from '../auth/guards/assert-brand-role.js';
 import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
+import { Permission } from '../access/enums/permission.enum.js';
+import { assertPermission } from '../access/utils/assert-permission.js';
+import { Permissions } from '../auth/decorators/permissions.decorator.js';
 
 @ApiTags('Clients')
 @Controller('brands/:brandId/clients')
@@ -66,14 +66,13 @@ export class ClientsController {
   @ApiOperation({ summary: 'Create a client' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
   @ApiConflictResponse({ description: 'Phone number already in use' })
-  @Auth()
+  @Permissions(Permission.CLIENT_CREATE)
   @Post()
   async create(
     @Param('brandId', ParseUUIDPipe) brandId: string,
     @Body() dto: CreateClientDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    assertBrandRole(tokenPayload, brandId, BusinessRole.OWNER);
     const client = await this.clientsService.create(
       brandId,
       dto,
@@ -104,7 +103,7 @@ export class ClientsController {
   @ApiUnprocessableEntityResponse({
     description: 'Import file is not an .xlsx spreadsheet',
   })
-  @Auth()
+  @Permissions(Permission.CLIENT_IMPORT)
   @ClientImportFile()
   @Post('import')
   async import(
@@ -112,7 +111,6 @@ export class ClientsController {
     @UploadedFile() file: Express.Multer.File | undefined,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<ClientImportResponseDto>> {
-    assertBrandRole(tokenPayload, brandId, BusinessRole.OWNER);
     const result = await this.clientsImportService.import(
       brandId,
       file,
@@ -131,7 +129,7 @@ export class ClientsController {
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Client not found' })
   @ApiConflictResponse({ description: 'Phone number already in use' })
-  @Auth()
+  @Permissions(Permission.CLIENT_UPDATE)
   @Put(':id')
   async update(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -139,7 +137,6 @@ export class ClientsController {
     @Body() dto: UpdateClientDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    assertBrandRole(tokenPayload, brandId, BusinessRole.OWNER);
     const updated = await this.clientsService.update(
       brandId,
       id,
@@ -153,7 +150,7 @@ export class ClientsController {
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Client not found' })
   @ApiConflictResponse({ description: 'Client ban is already in this state' })
-  @Auth()
+  @Permissions(Permission.CLIENT_BAN)
   @Patch(':id/ban')
   @HttpCode(HttpStatus.NO_CONTENT)
   async setBan(
@@ -162,7 +159,6 @@ export class ClientsController {
     @Body() dto: SetClientBanDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<void> {
-    assertBrandRole(tokenPayload, brandId, BusinessRole.OWNER);
     await this.clientsService.setBan(
       brandId,
       id,
@@ -174,22 +170,14 @@ export class ClientsController {
   @ApiOperation({ summary: 'Export clients as XLSX' })
   @ApiProduces(XlsxService.mimeType)
   @ApiOkResponse({ description: 'File stream' })
-  @Auth()
+  @Permissions(Permission.CLIENT_EXPORT)
   @Get('export')
   async export(
     @Param('brandId', ParseUUIDPipe) brandId: string,
     @Query() dto: ClientExportRequestDto,
-    @TokenPayload() tokenPayload: TokenPayloadDto,
     @Res({ passthrough: true })
     res: { setHeader: (name: string, value: string) => void },
   ): Promise<StreamableFile> {
-    assertBrandRole(
-      tokenPayload,
-      brandId,
-      BusinessRole.OWNER,
-      BusinessRole.MANAGER,
-      BusinessRole.STAFF,
-    );
     const { stream, filename } = await this.clientsExportService.stream(
       brandId,
       dto,
@@ -201,40 +189,27 @@ export class ClientsController {
   @ApiOperation({ summary: 'Get client by ID' })
   @ApiOkResponse({ type: ApiResponse(ClientResponseDto) })
   @ApiNotFoundResponse({ description: 'Client not found' })
-  @Auth()
+  @Permissions(Permission.CLIENT_READ)
   @Get(':id')
   async findById(
     @Param('brandId', ParseUUIDPipe) brandId: string,
     @Param('id', ParseUUIDPipe) id: string,
-    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<ClientResponseDto>> {
-    assertBrandRole(
-      tokenPayload,
-      brandId,
-      BusinessRole.OWNER,
-      BusinessRole.MANAGER,
-      BusinessRole.STAFF,
-    );
     const client = await this.clientsService.findInBrand(brandId, id);
     return BaseResponseDto.success(ClientResponseDto.fromEntity(client));
   }
 
   @ApiOperation({ summary: 'Search clients' })
   @ApiOkResponse({ type: ApiResponse(ClientSearchResponseDto) })
-  @Auth()
+  @Permissions(Permission.CLIENT_READ)
   @Get()
   async search(
     @Param('brandId', ParseUUIDPipe) brandId: string,
     @Query() dto: ClientSearchRequestDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<ClientSearchResponseDto>> {
-    assertBrandRole(
-      tokenPayload,
-      brandId,
-      BusinessRole.OWNER,
-      BusinessRole.MANAGER,
-      BusinessRole.STAFF,
-    );
+    if (dto.isExport)
+      assertPermission(tokenPayload, Permission.CLIENT_EXPORT, brandId);
     const { items, totalItems } = await this.clientsService.search(
       brandId,
       dto,

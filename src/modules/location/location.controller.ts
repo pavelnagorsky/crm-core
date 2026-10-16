@@ -18,7 +18,7 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { BusinessRole, BusinessType } from '@prisma/client';
+import { BusinessType } from '@prisma/client';
 import { COUNTRY_DEFAULTS } from '../../shared/geo/country-defaults.js';
 import {
   ApiResponse,
@@ -27,8 +27,6 @@ import {
 } from '../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
 import { Auth } from '../auth/decorators/auth.decorator.js';
-import { BrandRBAC } from '../auth/decorators/brand-rbac.decorator.js';
-import { LocationRBAC } from '../auth/decorators/location-rbac.decorator.js';
 import { CreateLocationDto } from './dto/create-location.dto.js';
 import { LocationBusinessTypesResponseDto } from './dto/location-business-types-response.dto.js';
 import { LocationCountryOptionDto } from './dto/location-country-option.dto.js';
@@ -36,6 +34,11 @@ import { LocationOptionsResponseDto } from './dto/location-options-response.dto.
 import { LocationResponseDto } from './dto/location-response.dto.js';
 import { UpdateLocationDto } from './dto/update-location.dto.js';
 import { LocationService } from './location.service.js';
+import { Permission } from '../access/enums/permission.enum.js';
+import { hasPermission } from '../access/utils/assert-permission.js';
+import { Permissions } from '../auth/decorators/permissions.decorator.js';
+import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
+import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 
 @ApiTags('Locations')
 @Controller()
@@ -73,7 +76,7 @@ export class LocationController {
 
   @ApiOperation({ summary: 'Create a location in a brand' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
-  @BrandRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.LOCATION_CREATE)
   @Post('brands/:brandId/locations')
   async create(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -85,20 +88,25 @@ export class LocationController {
 
   @ApiOperation({ summary: 'List brand locations' })
   @ApiOkResponse({ type: ApiResponseArray(LocationResponseDto) })
-  @BrandRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Auth()
   @Get('brands/:brandId/locations')
   async listByBrand(
     @Param('brandId', ParseUUIDPipe) brandId: string,
+    @TokenPayload() token: TokenPayloadDto,
   ): Promise<BaseResponseDto<LocationResponseDto[]>> {
     const locations = await this.locationService.listByBrand(brandId);
     return BaseResponseDto.success(
-      locations.map(LocationResponseDto.fromEntity),
+      locations
+        .filter((location) =>
+          hasPermission(token, Permission.LOCATION_READ, location.id),
+        )
+        .map(LocationResponseDto.fromEntity),
     );
   }
 
   @ApiOperation({ summary: 'Get location details' })
   @ApiOkResponse({ type: ApiResponse(LocationResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Permissions(Permission.LOCATION_READ)
   @Get('locations/:locationId')
   async findById(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -112,7 +120,7 @@ export class LocationController {
 
   @ApiOperation({ summary: 'Update location' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.LOCATION_SETTINGS_MANAGE)
   @Put('locations/:locationId')
   async update(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -146,7 +154,7 @@ export class LocationController {
       'BUSINESS_HAS_OPEN_BOOKINGS: cancel or complete open current and upcoming bookings first; responseValue.openBookingsCount contains the count',
   })
   @ApiNoContentResponse()
-  @LocationRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.LOCATION_SETTINGS_MANAGE)
   @Delete('locations/:locationId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(

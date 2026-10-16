@@ -20,7 +20,6 @@ import {
   ApiProduces,
   ApiTags,
 } from '@nestjs/swagger';
-import { BusinessRole } from '@prisma/client';
 import {
   ApiResponse,
   ApiResponseArray,
@@ -29,7 +28,6 @@ import {
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
 import { XlsxService } from '../../shared/xlsx/xlsx.service.js';
 import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
-import { LocationRBAC } from '../auth/decorators/location-rbac.decorator.js';
 import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 import { CreateInventoryDocumentDto } from './dto/create-inventory-document.dto.js';
@@ -57,6 +55,9 @@ import { InventoryTurnoverSearchResponseDto } from './report/dto/inventory-turno
 import { InventoryReportService } from './report/inventory-report.service.js';
 import { InventoryExportService } from './services/inventory-export.service.js';
 import { InventoryService } from './inventory.service.js';
+import { Permission } from '../access/enums/permission.enum.js';
+import { assertPermission } from '../access/utils/assert-permission.js';
+import { Permissions } from '../auth/decorators/permissions.decorator.js';
 
 @ApiTags('Inventory')
 @Controller('locations/:locationId/inventory')
@@ -69,12 +70,15 @@ export class InventoryController {
 
   @ApiOperation({ summary: 'Search current inventory balances' })
   @ApiOkResponse({ type: ApiResponse(InventorySearchResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Permissions(Permission.INVENTORY_READ)
   @Get()
   async search(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Query() dto: InventorySearchRequestDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<InventorySearchResponseDto>> {
+    if (dto.isExport)
+      assertPermission(tokenPayload, Permission.INVENTORY_EXPORT, locationId);
     const { items, totalItems } = await this.inventory.searchInventory(
       locationId,
       dto,
@@ -92,7 +96,7 @@ export class InventoryController {
 
   @ApiOperation({ summary: 'Get inventory table counts' })
   @ApiOkResponse({ type: ApiResponse(InventoryCountsResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Permissions(Permission.INVENTORY_READ)
   @Get('counts')
   async getCounts(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -108,7 +112,7 @@ export class InventoryController {
   @ApiOperation({ summary: 'Export current inventory balances as XLSX' })
   @ApiProduces(XlsxService.mimeType)
   @ApiOkResponse({ description: 'File stream' })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Permissions(Permission.INVENTORY_EXPORT)
   @Get('export')
   async exportBalances(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -123,12 +127,15 @@ export class InventoryController {
 
   @ApiOperation({ summary: 'Search inventory turnover statement lines' })
   @ApiOkResponse({ type: ApiResponse(InventoryTurnoverSearchResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Permissions(Permission.INVENTORY_READ)
   @Get('vedomost')
   async searchVedomost(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Query() dto: InventoryTurnoverRequestDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<InventoryTurnoverSearchResponseDto>> {
+    if (dto.isExport)
+      assertPermission(tokenPayload, Permission.INVENTORY_EXPORT, locationId);
     const { items, totalItems, totals } = await this.reports.searchTurnover(
       locationId,
       dto,
@@ -150,7 +157,7 @@ export class InventoryController {
   })
   @ApiProduces(XlsxService.mimeType)
   @ApiOkResponse({ description: 'File stream' })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Permissions(Permission.INVENTORY_EXPORT)
   @Get('export/inventory-statement')
   async exportInventoryStatement(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -166,7 +173,7 @@ export class InventoryController {
   @ApiOperation({ summary: 'Export inventory turnover statement as XLSX' })
   @ApiProduces(XlsxService.mimeType)
   @ApiOkResponse({ description: 'File stream' })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Permissions(Permission.INVENTORY_EXPORT)
   @Get('export/vedomost')
   async exportVedomost(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -184,13 +191,16 @@ export class InventoryController {
 
   @ApiOperation({ summary: 'Search inventory movements for a product' })
   @ApiOkResponse({ type: ApiResponse(InventoryMovementSearchResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Permissions(Permission.INVENTORY_READ)
   @Get(':productId/movements')
   async searchMovements(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('productId', ParseUUIDPipe) productId: string,
     @Query() dto: InventoryMovementSearchRequestDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<InventoryMovementSearchResponseDto>> {
+    if (dto.isExport)
+      assertPermission(tokenPayload, Permission.INVENTORY_EXPORT, locationId);
     const { items, totalItems } = await this.inventory.searchMovements(
       locationId,
       productId,
@@ -210,7 +220,7 @@ export class InventoryController {
   @ApiOperation({ summary: 'Export inventory movements for a product as XLSX' })
   @ApiProduces(XlsxService.mimeType)
   @ApiOkResponse({ description: 'File stream' })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Permissions(Permission.INVENTORY_EXPORT)
   @Get(':productId/movements/export')
   async exportMovements(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -234,13 +244,19 @@ export class InventoryController {
       'Use quantity and unitCost for base units. Receipt lines may instead use packagingId, packageQuantity (whole packages), and packageUnitCost. A product may have multiple lines. Responses always expose quantity and unitCost in base units, plus the saved packaging input.',
   })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.INVENTORY_MANAGE)
   @Post('documents')
   async createDocument(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Body() dto: CreateInventoryDocumentDto,
     @TokenPayload() token: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
+    if (dto.destinationLocationId)
+      assertPermission(
+        token,
+        Permission.INVENTORY_MANAGE,
+        dto.destinationLocationId,
+      );
     const document = await this.inventory.createDocument(
       locationId,
       dto,
@@ -251,12 +267,15 @@ export class InventoryController {
 
   @ApiOperation({ summary: 'Search inventory documents' })
   @ApiOkResponse({ type: ApiResponse(InventoryDocumentSearchResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Permissions(Permission.INVENTORY_READ)
   @Get('documents')
   async searchDocuments(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Query() dto: InventoryDocumentSearchRequestDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<InventoryDocumentSearchResponseDto>> {
+    if (dto.isExport)
+      assertPermission(tokenPayload, Permission.INVENTORY_EXPORT, locationId);
     const { items, totalItems } = await this.inventory.searchDocuments(
       locationId,
       dto,
@@ -276,7 +295,7 @@ export class InventoryController {
   @ApiOkResponse({
     type: ApiResponseArray(InventoryDocumentStatusCountResponseDto),
   })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Permissions(Permission.INVENTORY_READ)
   @Get('documents/status-counts')
   async getDocumentStatusCounts(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -296,7 +315,7 @@ export class InventoryController {
   @ApiOperation({ summary: 'Get an inventory document' })
   @ApiOkResponse({ type: ApiResponse(InventoryDocumentResponseDto) })
   @ApiNotFoundResponse({ description: 'Inventory document not found' })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Permissions(Permission.INVENTORY_READ)
   @Get('documents/:documentId')
   async findDocument(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -312,7 +331,7 @@ export class InventoryController {
   @ApiOperation({ summary: 'Replace an open inventory document' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiConflictResponse({ description: 'Inventory document is immutable' })
-  @LocationRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.INVENTORY_MANAGE)
   @Put('documents/:documentId')
   async updateDocument(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -320,9 +339,21 @@ export class InventoryController {
     @Body() dto: UpdateInventoryDocumentDto,
     @TokenPayload() token: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
+    const current = await this.inventory.findDocument(locationId, documentId);
+    if (current.destinationLocationId)
+      assertPermission(
+        token,
+        Permission.INVENTORY_MANAGE,
+        current.destinationLocationId,
+      );
+    if (dto.destinationLocationId)
+      assertPermission(
+        token,
+        Permission.INVENTORY_MANAGE,
+        dto.destinationLocationId,
+      );
     const document = await this.inventory.updateDocument(
-      locationId,
-      documentId,
+      current,
       dto,
       auditActorFromToken(token, locationId),
     );
@@ -332,7 +363,7 @@ export class InventoryController {
   @ApiOperation({ summary: 'Post or void an inventory document' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiConflictResponse({ description: 'Inventory status transition rejected' })
-  @LocationRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.INVENTORY_MANAGE)
   @Patch('documents/:documentId/status')
   async changeDocumentStatus(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -340,9 +371,15 @@ export class InventoryController {
     @Body() dto: UpdateInventoryDocumentStatusDto,
     @TokenPayload() token: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
+    const current = await this.inventory.findDocument(locationId, documentId);
+    if (current.destinationLocationId)
+      assertPermission(
+        token,
+        Permission.INVENTORY_MANAGE,
+        current.destinationLocationId,
+      );
     const document = await this.inventory.changeDocumentStatus(
-      locationId,
-      documentId,
+      current,
       dto.status,
       auditActorFromToken(token, locationId),
     );

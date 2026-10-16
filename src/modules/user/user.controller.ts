@@ -30,8 +30,8 @@ export class UserController {
   async me(
     @TokenPayload() payload: TokenPayloadDto,
   ): Promise<BaseResponseDto<UserResponseDto>> {
-    const user = await this.userService.findByIdWithMemberships(payload.sub);
-    return BaseResponseDto.success(UserResponseDto.fromEntity(user));
+    const user = await this.userService.findById(payload.sub);
+    return BaseResponseDto.success(UserResponseDto.fromEntity(user, payload));
   }
 
   @ApiOperation({ summary: 'Update current user profile' })
@@ -43,8 +43,7 @@ export class UserController {
     @TokenPayload() payload: TokenPayloadDto,
     @Body() dto: UpdateUserDto,
   ): Promise<BaseResponseDto<UserResponseDto>> {
-    await this.userService.update(payload.sub, dto);
-    const user = await this.userService.findByIdWithMemberships(payload.sub);
-    return BaseResponseDto.success(UserResponseDto.fromEntity(user));
+    const user = await this.userService.update(payload.sub, dto);
+    return BaseResponseDto.success(UserResponseDto.fromEntity(user, payload));
   }
 }

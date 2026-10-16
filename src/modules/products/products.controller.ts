@@ -21,15 +21,12 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { BusinessRole } from '@prisma/client';
 import {
   ApiResponse,
   ApiResponseArray,
   BaseResponseDto,
 } from '../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
-import { BrandRBAC } from '../auth/decorators/brand-rbac.decorator.js';
-import { LocationRBAC } from '../auth/decorators/location-rbac.decorator.js';
 import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
@@ -49,6 +46,9 @@ import { UpdateProductDto } from './dto/update-product.dto.js';
 import { UpdateProductStatusDto } from './dto/update-product-status.dto.js';
 import { UpsertProductLocationDto } from './dto/upsert-product-location.dto.js';
 import { ProductsService } from './products.service.js';
+import { Permission } from '../access/enums/permission.enum.js';
+import { hasPermission } from '../access/utils/assert-permission.js';
+import { Permissions } from '../auth/decorators/permissions.decorator.js';
 
 @ApiTags('Products')
 @Controller()
@@ -57,7 +57,7 @@ export class ProductsController {
 
   @ApiOperation({ summary: 'Create a product category' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
-  @BrandRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.PRODUCT_CATALOG_MANAGE)
   @Post('brands/:brandId/product-categories')
   async createCategory(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -74,7 +74,7 @@ export class ProductsController {
 
   @ApiOperation({ summary: 'List product categories' })
   @ApiOkResponse({ type: ApiResponseArray(ProductCategoryResponseDto) })
-  @BrandRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Permissions(Permission.PRODUCT_READ)
   @Get('brands/:brandId/product-categories')
   async listCategories(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -88,7 +88,7 @@ export class ProductsController {
   @ApiOperation({ summary: 'Update a product category' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiConflictResponse({ description: 'Category name already exists' })
-  @BrandRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.PRODUCT_CATALOG_MANAGE)
   @Put('brands/:brandId/product-categories/:categoryId')
   async updateCategory(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -107,7 +107,7 @@ export class ProductsController {
 
   @ApiOperation({ summary: 'Delete a product category' })
   @ApiNoContentResponse()
-  @BrandRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.PRODUCT_CATALOG_MANAGE)
   @Delete('brands/:brandId/product-categories/:categoryId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteCategory(
@@ -125,7 +125,7 @@ export class ProductsController {
   @ApiOperation({ summary: 'Create a product' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
   @ApiConflictResponse({ description: 'SKU or barcode already exists' })
-  @BrandRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.PRODUCT_CATALOG_MANAGE)
   @Post('brands/:brandId/products')
   async create(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -142,16 +142,28 @@ export class ProductsController {
 
   @ApiOperation({ summary: 'Search brand products' })
   @ApiOkResponse({ type: ApiResponse(ProductSearchResponseDto) })
-  @BrandRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Permissions(Permission.PRODUCT_READ)
   @Get('brands/:brandId/products')
   async search(
     @Param('brandId', ParseUUIDPipe) brandId: string,
     @Query() dto: ProductSearchRequestDto,
+    @TokenPayload() token: TokenPayloadDto,
   ): Promise<BaseResponseDto<ProductSearchResponseDto>> {
     const { items, totalItems } = await this.products.search(brandId, dto);
     return BaseResponseDto.success(
       new ProductSearchResponseDto(
-        items.map(ProductResponseDto.fromEntity),
+        items.map((item) =>
+          ProductResponseDto.fromEntity({
+            ...item,
+            locations: item.locations.filter((location) =>
+              hasPermission(
+                token,
+                Permission.PRODUCT_LOCATION_READ,
+                location.locationId,
+              ),
+            ),
+          }),
+        ),
         dto.page,
         dto.pageSize,
         totalItems,
@@ -162,7 +174,7 @@ export class ProductsController {
 
   @ApiOperation({ summary: 'Get product count per status' })
   @ApiOkResponse({ type: ApiResponseArray(ProductStatusCountResponseDto) })
-  @BrandRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Permissions(Permission.PRODUCT_READ)
   @Get('brands/:brandId/products/status-counts')
   async getStatusCounts(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -179,22 +191,31 @@ export class ProductsController {
   @ApiOperation({ summary: 'Get product details' })
   @ApiOkResponse({ type: ApiResponse(ProductResponseDto) })
   @ApiNotFoundResponse({ description: 'Product not found' })
-  @BrandRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Permissions(Permission.PRODUCT_READ)
   @Get('brands/:brandId/products/:productId')
   async findById(
     @Param('brandId', ParseUUIDPipe) brandId: string,
     @Param('productId', ParseUUIDPipe) productId: string,
+    @TokenPayload() token: TokenPayloadDto,
   ): Promise<BaseResponseDto<ProductResponseDto>> {
+    const product = await this.products.findByIdInBrand(brandId, productId);
     return BaseResponseDto.success(
-      ProductResponseDto.fromEntity(
-        await this.products.findByIdInBrand(brandId, productId),
-      ),
+      ProductResponseDto.fromEntity({
+        ...product,
+        locations: product.locations.filter((location) =>
+          hasPermission(
+            token,
+            Permission.PRODUCT_LOCATION_READ,
+            location.locationId,
+          ),
+        ),
+      }),
     );
   }
 
   @ApiOperation({ summary: 'Update a product' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
-  @BrandRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.PRODUCT_CATALOG_MANAGE)
   @Put('brands/:brandId/products/:productId')
   async update(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -213,7 +234,7 @@ export class ProductsController {
 
   @ApiOperation({ summary: 'Change product status' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
-  @BrandRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.PRODUCT_CATALOG_MANAGE)
   @Patch('brands/:brandId/products/:productId/status')
   async changeStatus(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -232,7 +253,7 @@ export class ProductsController {
 
   @ApiOperation({ summary: 'Delete an unused product' })
   @ApiNoContentResponse()
-  @BrandRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.PRODUCT_CATALOG_MANAGE)
   @Delete('brands/:brandId/products/:productId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(
@@ -251,7 +272,7 @@ export class ProductsController {
     summary: 'Create or replace product settings for a location',
   })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.PRODUCT_LOCATION_MANAGE)
   @Put('locations/:locationId/products/:productId')
   async upsertLocation(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -270,7 +291,7 @@ export class ProductsController {
 
   @ApiOperation({ summary: 'Search products enabled for a location' })
   @ApiOkResponse({ type: ApiResponse(LocationProductSearchResponseDto) })
-  @LocationRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Permissions(Permission.PRODUCT_LOCATION_READ)
   @Get('locations/:locationId/products')
   async searchLocation(
     @Param('locationId', ParseUUIDPipe) locationId: string,

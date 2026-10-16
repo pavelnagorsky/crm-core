@@ -117,8 +117,15 @@ export class OrderBookingSyncService {
     dto: OrderProductItemDto,
     actor: AuditActor,
     tx: Prisma.TransactionClient,
+    canOverridePrice = false,
   ): Promise<OrderWithItems> {
-    return this.addDraftProductsToBookingOrder(booking, [dto], actor, tx);
+    return this.addDraftProductsToBookingOrder(
+      booking,
+      [dto],
+      actor,
+      tx,
+      canOverridePrice,
+    );
   }
 
   async addDraftProductsToBookingOrder(
@@ -126,6 +133,7 @@ export class OrderBookingSyncService {
     items: OrderProductItemDto[],
     actor: AuditActor,
     tx: Prisma.TransactionClient,
+    canOverridePrice = false,
   ): Promise<OrderWithItems> {
     const location = await this.locations.findById(booking.locationId);
     const order = await this.ensureBookingOrder(
@@ -147,6 +155,7 @@ export class OrderBookingSyncService {
       items,
       actor,
       tx,
+      canOverridePrice,
     );
     for (const item of resolved.updated) {
       await tx.orderItem.update({
@@ -167,25 +176,19 @@ export class OrderBookingSyncService {
       booking.locationId,
       locked.id,
     );
-    this.emitUpdated(
-      location.brandId,
-      booking.locationId,
-      updated.id,
-      actor,
-      {
-        totalAmount: updated.totalAmount.toFixed(2),
-        currency: updated.currency,
-        itemChanges: {
-          added: resolved.created.map((item) => orderItemSnapshot(item)),
-          removed: [],
-          changed: resolved.updated.map((item) => ({
-            orderItemId: item.id,
-            before: orderItemSnapshot(item.before),
-            after: orderItemSnapshot(item.after),
-          })),
-        },
+    this.emitUpdated(location.brandId, booking.locationId, updated.id, actor, {
+      totalAmount: updated.totalAmount.toFixed(2),
+      currency: updated.currency,
+      itemChanges: {
+        added: resolved.created.map((item) => orderItemSnapshot(item)),
+        removed: [],
+        changed: resolved.updated.map((item) => ({
+          orderItemId: item.id,
+          before: orderItemSnapshot(item.before),
+          after: orderItemSnapshot(item.after),
+        })),
       },
-    );
+    });
     return updated;
   }
 

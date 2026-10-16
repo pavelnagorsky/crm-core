@@ -4,12 +4,8 @@ import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { compare, hash } from 'bcrypt';
 import { createHash, randomInt, randomUUID } from 'crypto';
-import { User } from '@prisma/client';
+import { Prisma, User } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
-import {
-  ACTIVE_BRAND_WHERE,
-  ACTIVE_LOCATION_WHERE,
-} from '../../shared/database/active-business.where.js';
 import { UserService } from '../user/user.service.js';
 import { NOTIFICATION_EVENT } from '../notifications/notifications.service.js';
 import { ConfirmEmailNotification } from '../notifications/notifications/confirm-email.notification.js';
@@ -32,6 +28,8 @@ import {
 } from '../../config/token-expiration.config.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
+import { AccessService } from '../access/access.service.js';
+import { TokenPayloadDto } from './dto/token-payload.dto.js';
 
 const SALT_ROUNDS = 10;
 const MAX_TOKENS_PER_USER = 10;
@@ -47,6 +45,7 @@ export class AuthService {
     private readonly eventEmitter: EventEmitter2,
     private readonly config: ConfigService,
     private readonly tokenEpochRegistry: TokenEpochRegistryService,
+    private readonly access: AccessService,
   ) {}
 
   async register(dto: RegisterDto): Promise<void> {
@@ -307,62 +306,27 @@ export class AuthService {
     });
   }
 
+  async resolveTokenPayload(
+    userId: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<TokenPayloadDto> {
+    const tokenEpoch = await this.tokenEpochRegistry.get(userId);
+    const user = await this.userService.findById(userId, tx);
+    const permissions = await this.access.resolvePermissions(userId, tx);
+    return {
+      sub: user.id,
+      role: user.role,
+      firstName: user.firstName ?? undefined,
+      lastName: user.lastName ?? undefined,
+      tokenEpoch,
+      ...permissions,
+    };
+  }
+
   private async generateAccessToken(user: User): Promise<string> {
     const cfg = this.config.get<IJwtConfig>('jwt')!;
-    const [brandMemberships, locationMembershipRows, tokenEpoch] =
-      await Promise.all([
-        this.db.brandMembership.findMany({
-          where: { userId: user.id, brand: ACTIVE_BRAND_WHERE },
-          select: { brandId: true, role: true },
-        }),
-        this.db.locationMembership.findMany({
-          where: { userId: user.id, location: ACTIVE_LOCATION_WHERE },
-          select: {
-            locationId: true,
-            role: true,
-            location: { select: { brandId: true } },
-          },
-        }),
-        this.tokenEpochRegistry.get(user.id),
-      ]);
-    const brandLocations =
-      brandMemberships.length === 0
-        ? []
-        : await this.db.location.findMany({
-            where: {
-              brandId: { in: brandMemberships.map((item) => item.brandId) },
-              ...ACTIVE_LOCATION_WHERE,
-            },
-            select: { id: true, brandId: true },
-          });
-    const locationMemberships = [
-      ...brandLocations.map((location) => {
-        const brandMembership = brandMemberships.find(
-          (item) => item.brandId === location.brandId,
-        )!;
-        return {
-          locationId: location.id,
-          brandId: location.brandId,
-          role: brandMembership.role,
-        };
-      }),
-      ...locationMembershipRows.map(({ location, ...membership }) => ({
-        locationId: membership.locationId,
-        brandId: location.brandId,
-        role: membership.role,
-      })),
-    ];
-    // firstName/lastName are embedded for audit display; can be stale until the user re-logs in — accepted trade-off.
     return this.sign(
-      {
-        sub: user.id,
-        role: user.role,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        brandMemberships,
-        locationMemberships,
-        tokenEpoch,
-      },
+      { ...(await this.resolveTokenPayload(user.id)) },
       cfg.accessTokenSecret,
       jwtExpirationConfig.accessToken,
     );

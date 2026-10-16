@@ -1,5 +1,4 @@
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { ConfigService } from '@nestjs/config';
 import { StaffService } from './staff.service.js';
 import { StaffSearchRequestDto } from './dto/staff-search-request.dto.js';
 import { StaffResponseDto } from './dto/staff-response.dto.js';
@@ -13,7 +12,6 @@ describe('StaffService.search', () => {
       $transaction: (ops: Promise<unknown>[]) => Promise.all(ops),
     } as never,
     { emit: vi.fn() } as unknown as EventEmitter2,
-    {} as ConfigService,
     {} as never,
   );
 

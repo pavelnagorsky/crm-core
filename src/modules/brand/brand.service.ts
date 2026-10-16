@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Brand, BusinessRole, Prisma, UserRole } from '@prisma/client';
+import { Brand, Prisma, UserRole } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
 import {
@@ -26,6 +26,7 @@ import { UpdateBrandDto } from './dto/update-brand.dto.js';
 import { BrandSearchOrderBy } from './enums/brand-search-order-by.enum.js';
 import { BrandWithCounts } from './interfaces/brand-with-counts.interface.js';
 import { BrandWithLogo } from './interfaces/brand-with-logo.interface.js';
+import { AccessService } from '../access/access.service.js';
 
 @Injectable()
 export class BrandService {
@@ -35,6 +36,7 @@ export class BrandService {
     private readonly eventEmitter: EventEmitter2,
     private readonly tokenEpochRegistry: TokenEpochRegistryService,
     private readonly bookingDeletionPolicy: BookingDeletionPolicyService,
+    private readonly access: AccessService,
   ) {}
 
   async create(
@@ -49,30 +51,30 @@ export class BrandService {
       user.email ||
       'Owner';
 
-    const brand = await this.db.brand.create({
-      data: {
-        name: dto.name,
-        logoFileId: dto.logoFileId ?? null,
-        brandMemberships: { create: { userId, role: BusinessRole.OWNER } },
-        locations: {
-          create: {
-            ...dto.location,
-            ...locale,
-            locationMemberships: {
-              create: { userId, role: BusinessRole.OWNER },
-            },
-            staff: {
-              create: {
-                userId,
-                name: staffName,
-                phone: user.phone,
-                email: user.email,
+    const brand = await this.db.$transaction(async (tx) => {
+      const brand = await tx.brand.create({
+        data: {
+          name: dto.name,
+          logoFileId: dto.logoFileId ?? null,
+          locations: {
+            create: {
+              ...dto.location,
+              ...locale,
+              staff: {
+                create: {
+                  userId,
+                  name: staffName,
+                  phone: user.phone,
+                  email: user.email,
+                },
               },
             },
           },
         },
-      },
-      include: { locations: { include: { staff: true } } },
+        include: { locations: { include: { staff: true } } },
+      });
+      await this.access.assignInitialOwner(brand.id, userId, tx);
+      return brand;
     });
 
     await this.tokenEpochRegistry.bump(userId);
@@ -135,7 +137,14 @@ export class BrandService {
   ): Promise<BrandWithCounts[]> {
     const where: Prisma.BrandWhereInput = { ...ACTIVE_BRAND_WHERE };
     if (payload.role !== UserRole.ADMIN) {
-      where.brandMemberships = { some: { userId: payload.sub } };
+      where.id = {
+        in: [
+          ...new Set([
+            ...(payload.brandMemberships.map((row) => row.brandId) ?? []),
+            ...(payload.locationMemberships.map((row) => row.brandId) ?? []),
+          ]),
+        ],
+      };
     }
     if (dto.search) where.name = { contains: dto.search, mode: 'insensitive' };
     if (dto.createdFrom || dto.createdTo) {
@@ -144,26 +153,46 @@ export class BrandService {
       if (dto.createdTo) where.createdAt.lte = new Date(dto.createdTo);
     }
 
-    return this.db.brand.findMany({
-      where,
-      orderBy: {
-        [dto.orderBy ?? BrandSearchOrderBy.CREATED_AT]:
-          dto.orderDirection ?? OrderDirection.DESC,
-      },
-      include: {
-        logoFile: true,
-        brandMemberships: {
-          where: { userId: payload.sub },
-          select: { role: true },
+    return this.db.brand
+      .findMany({
+        where,
+        orderBy: {
+          [dto.orderBy ?? BrandSearchOrderBy.CREATED_AT]:
+            dto.orderDirection ?? OrderDirection.DESC,
         },
-        _count: {
-          select: {
-            locations: { where: ACTIVE_LOCATION_WHERE },
-            clients: true,
+        include: {
+          logoFile: true,
+          _count: {
+            select: {
+              locations: {
+                where: {
+                  ...ACTIVE_LOCATION_WHERE,
+                  ...(payload.role === UserRole.ADMIN
+                    ? {}
+                    : {
+                        id: {
+                          in:
+                            payload.locationMemberships.map(
+                              (row) => row.locationId,
+                            ) ?? [],
+                        },
+                      }),
+                },
+              },
+              clients: true,
+            },
           },
         },
-      },
-    });
+      })
+      .then((rows) =>
+        rows.map((row) => ({
+          ...row,
+          brandMemberships:
+            payload?.brandMemberships
+              .filter((membership) => membership.brandId === row.id)
+              .map(({ role }) => ({ role })) ?? [],
+        })),
+      );
   }
 
   async delete(brandId: string): Promise<void> {
@@ -190,10 +219,6 @@ export class BrandService {
   }
 
   async findMemberUserIds(brandId: string): Promise<string[]> {
-    const rows = await this.db.brandMembership.findMany({
-      where: { brandId },
-      select: { userId: true },
-    });
-    return rows.map((row) => row.userId);
+    return this.access.memberUserIds(brandId);
   }
 }

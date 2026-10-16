@@ -113,11 +113,11 @@ export class InventoryService {
   }
 
   async updateDocument(
-    locationId: string,
-    documentId: string,
+    expected: InventoryDocument,
     dto: UpdateInventoryDocumentDto,
     actor: AuditActor,
   ): Promise<InventoryDocument> {
+    const { locationId, id: documentId } = expected;
     const location = await this.locations.findById(locationId);
     const document = await this.inTransaction(async (tx) => {
       await this.lockDocument(tx, documentId);
@@ -126,6 +126,7 @@ export class InventoryService {
         locationId,
         documentId,
       );
+      this.assertCurrentDocument(old, expected);
       this.assertOpen(old.status);
       const draft = await this.drafts.prepare(
         locationId,
@@ -163,16 +164,16 @@ export class InventoryService {
   }
 
   async changeDocumentStatus(
-    locationId: string,
-    documentId: string,
+    expected: InventoryDocument,
     status: InventoryDocumentTargetStatus,
     actor: AuditActor,
   ): Promise<InventoryDocumentWithItems> {
+    const { locationId } = expected;
     const location = await this.locations.findById(locationId);
     const transition =
       status === InventoryDocumentTargetStatus.POSTED
-        ? await this.postDocument(locationId, documentId)
-        : await this.voidDocument(locationId, documentId);
+        ? await this.postDocument(expected)
+        : await this.voidDocument(expected);
     if (transition.changed) {
       this.emit(
         location.brandId,
@@ -505,9 +506,9 @@ export class InventoryService {
   }
 
   private async postDocument(
-    locationId: string,
-    documentId: string,
+    expected: InventoryDocument,
   ): Promise<InventoryDocumentTransition> {
+    const { locationId, id: documentId } = expected;
     return this.inTransaction(async (tx) => {
       await this.lockDocument(tx, documentId);
       const document = await this.findDocumentInTransaction(
@@ -515,6 +516,7 @@ export class InventoryService {
         locationId,
         documentId,
       );
+      this.assertCurrentDocument(document, expected);
       await this.assertDocumentBusinessesActive(document, tx);
       if (document.status === InventoryDocumentStatus.POSTED) {
         return { document, changed: false };
@@ -588,9 +590,9 @@ export class InventoryService {
   }
 
   private async voidDocument(
-    locationId: string,
-    documentId: string,
+    expected: InventoryDocument,
   ): Promise<InventoryDocumentTransition> {
+    const { locationId, id: documentId } = expected;
     return this.inTransaction(async (tx) => {
       await this.lockDocument(tx, documentId);
       const document = await this.findDocumentInTransaction(
@@ -598,6 +600,7 @@ export class InventoryService {
         locationId,
         documentId,
       );
+      this.assertCurrentDocument(document, expected);
       await this.assertDocumentBusinessesActive(document, tx);
       if (document.status === InventoryDocumentStatus.VOIDED) {
         return { document, changed: false };
@@ -780,6 +783,21 @@ export class InventoryService {
       TRANSFER: InventoryMovementType.TRANSFER_OUT,
     };
     return types[type];
+  }
+
+  private assertCurrentDocument(
+    current: InventoryDocument,
+    expected: InventoryDocument,
+  ): void {
+    if (
+      current.updatedAt.getTime() !== expected.updatedAt.getTime() ||
+      current.destinationLocationId !== expected.destinationLocationId ||
+      current.status !== expected.status
+    )
+      throw new AppException(
+        ErrorCode.INVENTORY_DOCUMENT_CONCURRENT_UPDATE,
+        HttpStatus.CONFLICT,
+      );
   }
 
   private lockDocument(

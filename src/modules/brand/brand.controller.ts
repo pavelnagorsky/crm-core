@@ -20,7 +20,6 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { BusinessRole } from '@prisma/client';
 import {
   ApiResponse,
   ApiResponseArray,
@@ -28,7 +27,6 @@ import {
 } from '../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../shared/dto/id-response.dto.js';
 import { Auth } from '../auth/decorators/auth.decorator.js';
-import { BrandRBAC } from '../auth/decorators/brand-rbac.decorator.js';
 import { TokenPayload } from '../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 import { AuditActorRole } from '../audit/enums/audit-actor-role.enum.js';
@@ -40,6 +38,8 @@ import { BrandSearchItemDto } from './dto/brand-search-item.dto.js';
 import { BrandSearchRequestDto } from './dto/brand-search-request.dto.js';
 import { CreateBrandDto } from './dto/create-brand.dto.js';
 import { UpdateBrandDto } from './dto/update-brand.dto.js';
+import { Permission } from '../access/enums/permission.enum.js';
+import { Permissions } from '../auth/decorators/permissions.decorator.js';
 
 @ApiTags('Brands')
 @Controller('brands')
@@ -79,7 +79,7 @@ export class BrandController {
   @ApiOperation({ summary: 'Get brand details' })
   @ApiOkResponse({ type: ApiResponse(BrandResponseDto) })
   @ApiNotFoundResponse({ description: 'Brand not found' })
-  @BrandRBAC(BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF)
+  @Permissions(Permission.BRAND_READ)
   @Get(':brandId')
   async findById(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -91,7 +91,7 @@ export class BrandController {
 
   @ApiOperation({ summary: 'Update brand' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
-  @BrandRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.BRAND_SETTINGS_MANAGE)
   @Put(':brandId')
   async update(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -125,7 +125,7 @@ export class BrandController {
       'BUSINESS_HAS_OPEN_BOOKINGS: cancel or complete open current and upcoming bookings in active locations first; responseValue.openBookingsCount contains the count',
   })
   @ApiNoContentResponse()
-  @BrandRBAC(BusinessRole.OWNER)
+  @Permissions(Permission.BRAND_SETTINGS_MANAGE)
   @Delete(':brandId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(

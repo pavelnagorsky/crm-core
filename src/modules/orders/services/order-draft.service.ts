@@ -1,6 +1,5 @@
 import { ForbiddenException, HttpStatus, Injectable } from '@nestjs/common';
 import {
-  AuditActorRole,
   OrderItemStatus,
   OrderItemType,
   Prisma,
@@ -37,6 +36,7 @@ export class OrderDraftService {
     existing?: OrderWithItems,
     tx?: Prisma.TransactionClient,
     options: { allowEmptyItems?: boolean } = {},
+    canOverridePrice = false,
   ): Promise<ResolvedOrderDraft> {
     const location = await this.locations.findById(locationId);
     const occurredAt = dto.occurredAt
@@ -57,7 +57,6 @@ export class OrderDraftService {
     }
     this.assertPositiveQuantities(dto.items);
     this.assertUniqueProducts(productIds);
-    this.assertCustomPriceAccess(actor, dto.items, existing);
     const clientId = dto.clientId ?? null;
     const client = clientId
       ? await this.clients.findInBrand(location.brandId, clientId)
@@ -68,6 +67,7 @@ export class OrderDraftService {
       actor,
       existing,
       tx,
+      canOverridePrice,
     );
     return {
       location,
@@ -151,6 +151,7 @@ export class OrderDraftService {
     items: OrderProductItemDto[],
     actor: AuditActor,
     tx: Prisma.TransactionClient,
+    canOverridePrice = false,
   ): Promise<{
     created: Prisma.OrderItemUncheckedCreateWithoutOrderInput[];
     updated: {
@@ -185,6 +186,7 @@ export class OrderDraftService {
       actor,
       { ...order, items: draftItems },
       tx,
+      canOverridePrice,
     );
     return additions.reduce<{
       created: Prisma.OrderItemUncheckedCreateWithoutOrderInput[];
@@ -216,7 +218,9 @@ export class OrderDraftService {
     actor: AuditActor,
     existing?: OrderWithItems,
     tx?: Prisma.TransactionClient,
+    canOverridePrice = false,
   ): Promise<Prisma.OrderItemUncheckedCreateWithoutOrderInput[]> {
+    this.assertCustomPriceAccess(canOverridePrice, items, existing);
     const productIds = items.map((item) => item.productId);
     const productRows = await this.products.resolveForSale(
       locationId,
@@ -266,7 +270,7 @@ export class OrderDraftService {
       const price = this.compute.priceLine(
         quantity,
         product.retailPrice,
-        this.customPrice(actor, item, oldCustomByProduct.get(item.productId)),
+        this.customPrice(item, oldCustomByProduct.get(item.productId)),
       );
       return {
         type: OrderItemType.PRODUCT,
@@ -289,19 +293,12 @@ export class OrderDraftService {
     });
   }
 
-  canSetCustomPrice(actor: AuditActor): boolean {
-    return (
-      actor.role === AuditActorRole.OWNER ||
-      actor.role === AuditActorRole.SUPPORT
-    );
-  }
-
   private assertCustomPriceAccess(
-    actor: AuditActor,
+    canOverride: boolean,
     items: OrderProductItemDto[],
     existing?: OrderWithItems,
   ): void {
-    if (this.canSetCustomPrice(actor)) return;
+    if (canOverride) return;
     const incomingByProduct = new Map(
       items.map((item) => [item.productId, item]),
     );
@@ -311,14 +308,15 @@ export class OrderDraftService {
     for (const old of existingProducts) {
       if (old.customUnitPrice == null) continue;
       const incoming = incomingByProduct.get(old.catalogItemId!);
-      if (!incoming || incoming.customUnitPrice === null) {
-        throw new ForbiddenException('Only an owner can clear a custom price');
+      if (!incoming) continue;
+      if (incoming.customUnitPrice === null) {
+        throw new ForbiddenException('Custom price permission required');
       }
       if (
         incoming.customUnitPrice !== undefined &&
         !old.customUnitPrice.equals(incoming.customUnitPrice)
       ) {
-        throw new ForbiddenException('Only an owner can change a custom price');
+        throw new ForbiddenException('Custom price permission required');
       }
     }
     if (
@@ -333,16 +331,15 @@ export class OrderDraftService {
           ),
       )
     ) {
-      throw new ForbiddenException('Only an owner can set a custom price');
+      throw new ForbiddenException('Custom price permission required');
     }
   }
 
   private customPrice(
-    actor: AuditActor,
     item: OrderProductItemDto,
     existing: Prisma.Decimal | null | undefined,
   ): Prisma.Decimal | null {
-    if (!this.canSetCustomPrice(actor) && existing != null) return existing;
+    if (item.customUnitPrice === undefined) return existing ?? null;
     return item.customUnitPrice == null
       ? null
       : new Prisma.Decimal(item.customUnitPrice);
