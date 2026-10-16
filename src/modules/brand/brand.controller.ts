@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiCreatedResponse,
+  ApiConflictResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
@@ -119,6 +120,10 @@ export class BrandController {
   }
 
   @ApiOperation({ summary: 'Delete brand' })
+  @ApiConflictResponse({
+    description:
+      'BUSINESS_HAS_OPEN_BOOKINGS: cancel or complete open current and upcoming bookings in active locations first; responseValue.openBookingsCount contains the count',
+  })
   @ApiNoContentResponse()
   @BrandRBAC(BusinessRole.OWNER)
   @Delete(':brandId')

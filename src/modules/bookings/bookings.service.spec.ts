@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   Booking,
@@ -90,6 +91,70 @@ function booking(
     ],
   } as unknown as BookingWithItems;
 }
+
+describe('Booking mutations during business deletion', () => {
+  const now = new Date('2026-09-24T09:00:00.000Z');
+  const token = { sub: 'owner', role: UserRole.ADMIN } as TokenPayloadDto;
+  const tx = { booking: { update: vi.fn() }, $executeRaw: vi.fn() };
+  const db = { $transaction: vi.fn((callback) => callback(tx)) };
+  const lifecycle = {
+    findById: vi.fn().mockResolvedValue({ timezone: 'UTC' }),
+    acquireActiveOperationLock: vi.fn(),
+  };
+  const read = { findByIdInLocation: vi.fn() };
+  const calendar = { saveBookingEvent: vi.fn() };
+  const mutation = new BookingMutationService(
+    db as never,
+    calendar as never,
+    {} as never,
+    lifecycle as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    read as never,
+  );
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(now);
+    read.findByIdInLocation.mockResolvedValue(booking());
+    lifecycle.acquireActiveOperationLock.mockResolvedValue(false);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it.each([BookingStatus.PENDING, BookingStatus.CONFIRMED])(
+    'does not reopen a future booking as %s in a deleted business',
+    async (status) => {
+      read.findByIdInLocation.mockResolvedValue(
+        booking({ status: BookingStatus.CANCELLED }),
+      );
+      await expect(
+        mutation.updateStatus('biz', 'booking-1', token, { status }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(tx.booking.update).not.toHaveBeenCalled();
+      expect(lifecycle.acquireActiveOperationLock).toHaveBeenCalledWith(
+        'biz',
+        tx,
+      );
+    },
+  );
+
+  it.each([
+    { startAt: '2026-09-25T10:00:00' },
+    { startAt: '2026-09-25T10:00:00', endAt: '2026-09-25T11:00:00' },
+  ])(
+    'does not move an open booking into the future after deletion: %j',
+    async (dto) => {
+      await expect(
+        mutation.update('biz', 'booking-1', token, dto),
+      ).rejects.toBeInstanceOf(NotFoundException);
+      expect(tx.booking.update).not.toHaveBeenCalled();
+      expect(calendar.saveBookingEvent).not.toHaveBeenCalled();
+      expect(tx.$executeRaw).not.toHaveBeenCalled();
+    },
+  );
+});
 
 describe('BookingsService.completeElapsed', () => {
   const db = {

@@ -11,6 +11,7 @@ import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 import { TokenEpochRegistryService } from '../auth/services/token-epoch-registry.service.js';
 import { UserService } from '../user/user.service.js';
+import { BookingDeletionPolicyService } from '../bookings/deletion-policy/booking-deletion-policy.service.js';
 import { AUDIT_EVENT } from '../audit/constants/audit.constants.js';
 import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
 import { AuditEntity } from '../audit/enums/audit-entity.enum.js';
@@ -33,6 +34,7 @@ export class BrandService {
     private readonly userService: UserService,
     private readonly eventEmitter: EventEmitter2,
     private readonly tokenEpochRegistry: TokenEpochRegistryService,
+    private readonly bookingDeletionPolicy: BookingDeletionPolicyService,
   ) {}
 
   async create(
@@ -165,11 +167,14 @@ export class BrandService {
   }
 
   async delete(brandId: string): Promise<void> {
-    const { count } = await this.db.brand.updateMany({
-      where: { id: brandId, ...ACTIVE_BRAND_WHERE },
-      data: { deletedAt: new Date() },
+    await this.db.$transaction(async (tx) => {
+      const { count } = await tx.brand.updateMany({
+        where: { id: brandId, ...ACTIVE_BRAND_WHERE },
+        data: { deletedAt: new Date() },
+      });
+      if (count === 0) throw new NotFoundException('Brand not found');
+      await this.bookingDeletionPolicy.assertBrandDeletionAllowed(brandId, tx);
     });
-    if (count === 0) throw new NotFoundException('Brand not found');
   }
 
   async acquireActiveOperationLock(

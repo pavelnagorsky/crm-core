@@ -12,6 +12,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiCreatedResponse,
+  ApiConflictResponse,
   ApiNoContentResponse,
   ApiOkResponse,
   ApiOperation,
@@ -140,6 +141,10 @@ export class LocationController {
   }
 
   @ApiOperation({ summary: 'Delete location' })
+  @ApiConflictResponse({
+    description:
+      'BUSINESS_HAS_OPEN_BOOKINGS: cancel or complete open current and upcoming bookings first; responseValue.openBookingsCount contains the count',
+  })
   @ApiNoContentResponse()
   @LocationRBAC(BusinessRole.OWNER)
   @Delete('locations/:locationId')

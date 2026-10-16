@@ -7,6 +7,7 @@ import { resolveLocationLocale } from '../../shared/geo/resolve-location-locale.
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { TokenEpochRegistryService } from '../auth/services/token-epoch-registry.service.js';
 import { BrandService } from '../brand/brand.service.js';
+import { BookingDeletionPolicyService } from '../bookings/deletion-policy/booking-deletion-policy.service.js';
 import { CreateLocationDto } from './dto/create-location.dto.js';
 import { UpdateLocationDto } from './dto/update-location.dto.js';
 import { LocationPublicProfile } from './interfaces/location-public-profile.interface.js';
@@ -17,6 +18,7 @@ export class LocationService {
     private readonly db: DatabaseService,
     private readonly brandService: BrandService,
     private readonly tokenEpochRegistry: TokenEpochRegistryService,
+    private readonly bookingDeletionPolicy: BookingDeletionPolicyService,
   ) {}
 
   async create(brandId: string, dto: CreateLocationDto): Promise<Location> {
@@ -81,11 +83,17 @@ export class LocationService {
   }
 
   async delete(locationId: string): Promise<void> {
-    const { count } = await this.db.location.updateMany({
-      where: { id: locationId, ...ACTIVE_LOCATION_WHERE },
-      data: { deletedAt: new Date() },
+    await this.db.$transaction(async (tx) => {
+      const { count } = await tx.location.updateMany({
+        where: { id: locationId, ...ACTIVE_LOCATION_WHERE },
+        data: { deletedAt: new Date() },
+      });
+      if (count === 0) throw new NotFoundException('Location not found');
+      await this.bookingDeletionPolicy.assertLocationDeletionAllowed(
+        locationId,
+        tx,
+      );
     });
-    if (count === 0) throw new NotFoundException('Location not found');
   }
 
   async acquireActiveOperationLock(

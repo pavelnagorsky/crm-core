@@ -1,5 +1,10 @@
 import { createHash } from 'crypto';
-import { HttpStatus, Injectable, Logger } from '@nestjs/common';
+import {
+  HttpStatus,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Booking, BusinessRole, CancelledBy, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
@@ -200,6 +205,9 @@ export class BookingMutationService {
       : null;
     const actor = auditActorFromToken(tokenPayload, old.locationId);
     const updated = await this.db.$transaction(async (tx) => {
+      if (AUTO_COMPLETABLE_STATUSES.includes(dto.status)) {
+        await this.assertBookingBusinessActive(locationId, tx);
+      }
       const result = await tx.booking.update({
         where: { id: bookingId },
         data: { status: dto.status },
@@ -467,6 +475,17 @@ export class BookingMutationService {
     return text || null;
   }
 
+  private async assertBookingBusinessActive(
+    locationId: string,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    if (
+      !(await this.locationService.acquireActiveOperationLock(locationId, tx))
+    ) {
+      throw new NotFoundException('Location not found');
+    }
+  }
+
   private async executeCancellation(
     booking: BookingWithItems,
     cancelledBy: CancelledBy,
@@ -605,6 +624,9 @@ export class BookingMutationService {
       .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 
     return this.db.$transaction(async (tx) => {
+      if (movedItems.some((item) => item.endAt.getTime() > Date.now())) {
+        await this.assertBookingBusinessActive(locationId, tx);
+      }
       for (const lockKey of lockKeys) {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockKey})`;
       }
@@ -767,6 +789,9 @@ export class BookingMutationService {
       .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 
     return this.db.$transaction(async (tx) => {
+      if (newEndAt > new Date()) {
+        await this.assertBookingBusinessActive(locationId, tx);
+      }
       for (const lockKey of lockKeys) {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(${lockKey})`;
       }

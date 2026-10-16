@@ -5,6 +5,7 @@ import { BrandService } from './brand.service.js';
 
 describe('BrandService first location', () => {
   const db = {
+    $transaction: vi.fn(),
     brand: {
       create: vi
         .fn()
@@ -22,11 +23,13 @@ describe('BrandService first location', () => {
     }),
   };
   const epoch = { bump: vi.fn() };
+  const bookingDeletionPolicy = { assertBrandDeletionAllowed: vi.fn() };
   const service = new BrandService(
     db as never,
     users as never,
     { emit: vi.fn() } as never,
     epoch as never,
+    bookingDeletionPolicy as never,
   );
   const actor = { id: 'user-1', name: 'Anna', role: AuditActorRole.OWNER };
   const dto = {
@@ -40,7 +43,10 @@ describe('BrandService first location', () => {
     },
   };
 
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db.$transaction.mockImplementation((callback) => callback(db));
+  });
 
   it('soft-deletes a brand without deleting its locations or memberships', async () => {
     db.brand.updateMany.mockResolvedValue({ count: 1 });
@@ -50,6 +56,9 @@ describe('BrandService first location', () => {
       data: { deletedAt: expect.any(Date) },
     });
     expect(db.brand.delete).not.toHaveBeenCalled();
+    expect(
+      bookingDeletionPolicy.assertBrandDeletionAllowed,
+    ).toHaveBeenCalledWith('brand-1', db);
   });
 
   it('returns not found when the brand is already deleted', async () => {
@@ -57,6 +66,9 @@ describe('BrandService first location', () => {
     await expect(service.delete('brand-1')).rejects.toBeInstanceOf(
       NotFoundException,
     );
+    expect(
+      bookingDeletionPolicy.assertBrandDeletionAllowed,
+    ).not.toHaveBeenCalled();
   });
 
   it('creates the first location with normalized locale, business type and owner access', async () => {

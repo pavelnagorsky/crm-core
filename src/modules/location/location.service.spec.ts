@@ -13,6 +13,7 @@ describe('LocationService locale and business type', () => {
     businessType: BusinessType.BEAUTY_SALON,
   };
   const db = {
+    $transaction: vi.fn(),
     location: {
       create: vi.fn().mockResolvedValue(location),
       findUnique: vi.fn().mockResolvedValue(location),
@@ -26,13 +27,18 @@ describe('LocationService locale and business type', () => {
     findMemberUserIds: vi.fn().mockResolvedValue(['user-1']),
   };
   const epoch = { bumpMany: vi.fn() };
+  const bookingDeletionPolicy = { assertLocationDeletionAllowed: vi.fn() };
   const service = new LocationService(
     db as never,
     brands as never,
     epoch as never,
+    bookingDeletionPolicy as never,
   );
 
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    db.$transaction.mockImplementation((callback) => callback(db));
+  });
 
   it('soft-deletes only the location while preserving related data', async () => {
     db.location.updateMany.mockResolvedValue({ count: 1 });
@@ -42,6 +48,9 @@ describe('LocationService locale and business type', () => {
       data: { deletedAt: expect.any(Date) },
     });
     expect(db.location.delete).not.toHaveBeenCalled();
+    expect(
+      bookingDeletionPolicy.assertLocationDeletionAllowed,
+    ).toHaveBeenCalledWith('location-1', db);
   });
 
   it('does not allow deleting a location under a deleted brand', async () => {
@@ -49,6 +58,9 @@ describe('LocationService locale and business type', () => {
     await expect(service.delete('location-1')).rejects.toBeInstanceOf(
       NotFoundException,
     );
+    expect(
+      bookingDeletionPolicy.assertLocationDeletionAllowed,
+    ).not.toHaveBeenCalled();
   });
 
   it('normalizes the locale when creating another location', async () => {

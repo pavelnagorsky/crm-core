@@ -47,6 +47,11 @@ export const ErrorCode = {
   USER_NOT_FOUND: { code: 'USER_NOT_FOUND', message: 'User not found' },
 
   // brand / locations
+  BUSINESS_HAS_OPEN_BOOKINGS: {
+    code: 'BUSINESS_HAS_OPEN_BOOKINGS',
+    message:
+      'Cancel or complete open current and upcoming bookings before deleting the business',
+  },
   LOCATION_ANCHORS_IMMUTABLE: {
     code: 'LOCATION_ANCHORS_IMMUTABLE',
     message:
