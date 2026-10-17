@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PERMISSION_REGISTRY } from '../../access/constants/permission-registry.js';
+import { PermissionScope } from '../../access/enums/permission-scope.enum.js';
 import { Permission } from '../../access/enums/permission.enum.js';
 import { assertPermission } from '../../access/utils/assert-permission.js';
 import { AuthenticatedRequest } from '../interfaces/authenticated-request.interface.js';
@@ -28,7 +29,9 @@ export class PermissionGuard implements CanActivate {
     for (const permission of permissions) {
       const scope = PERMISSION_REGISTRY[permission]?.scope;
       const local =
-        scope === 'L' || (scope === 'B/L' && !!request.params.locationId);
+        scope === PermissionScope.LOCATION ||
+        (scope === PermissionScope.BRAND_OR_LOCATION &&
+          !!request.params.locationId);
       const scopeId = local
         ? request.params.locationId
         : request.params.brandId;

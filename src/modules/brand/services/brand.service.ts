@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Brand, Prisma, UserRole } from '@prisma/client';
+import { Brand, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import {
   ACTIVE_BRAND_WHERE,
@@ -17,7 +17,6 @@ import { BUSINESS_AUDIT_FIELDS } from '../../audit/fields/business.fields.js';
 import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../../audit/interfaces/audit-log-event.interface.js';
 import { diffFields } from '../../audit/utils/diff-fields.js';
-import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
 import { TokenEpochRegistryService } from '../../auth/services/token-epoch-registry.service.js';
 import { BookingDeletionPolicyService } from '../../bookings/deletion-policy/services/booking-deletion-policy.service.js';
 import { UserService } from '../../user/services/user.service.js';
@@ -25,6 +24,7 @@ import { BrandSearchRequestDto } from '../dto/brand-search-request.dto.js';
 import { CreateBrandDto } from '../dto/create-brand.dto.js';
 import { UpdateBrandDto } from '../dto/update-brand.dto.js';
 import { BrandSearchOrderBy } from '../enums/brand-search-order-by.enum.js';
+import { BrandSearchScope } from '../interfaces/brand-search-scope.interface.js';
 import { BrandWithCounts } from '../interfaces/brand-with-counts.interface.js';
 import { BrandWithLogo } from '../interfaces/brand-with-logo.interface.js';
 
@@ -132,20 +132,11 @@ export class BrandService {
   }
 
   async search(
-    payload: TokenPayloadDto,
     dto: BrandSearchRequestDto,
+    scope: BrandSearchScope,
   ): Promise<BrandWithCounts[]> {
     const where: Prisma.BrandWhereInput = { ...ACTIVE_BRAND_WHERE };
-    if (payload.role !== UserRole.ADMIN) {
-      where.id = {
-        in: [
-          ...new Set([
-            ...(payload.brandMemberships.map((row) => row.brandId) ?? []),
-            ...(payload.locationMemberships.map((row) => row.brandId) ?? []),
-          ]),
-        ],
-      };
-    }
+    if (scope.brandIds !== null) where.id = { in: scope.brandIds };
     if (dto.search) where.name = { contains: dto.search, mode: 'insensitive' };
     if (dto.createdFrom || dto.createdTo) {
       where.createdAt = {};
@@ -153,46 +144,33 @@ export class BrandService {
       if (dto.createdTo) where.createdAt.lte = new Date(dto.createdTo);
     }
 
-    return this.db.brand
-      .findMany({
-        where,
-        orderBy: {
-          [dto.orderBy ?? BrandSearchOrderBy.CREATED_AT]:
-            dto.orderDirection ?? OrderDirection.DESC,
-        },
-        include: {
-          logoFile: true,
-          _count: {
-            select: {
-              locations: {
-                where: {
-                  ...ACTIVE_LOCATION_WHERE,
-                  ...(payload.role === UserRole.ADMIN
-                    ? {}
-                    : {
-                        id: {
-                          in:
-                            payload.locationMemberships.map(
-                              (row) => row.locationId,
-                            ) ?? [],
-                        },
-                      }),
-                },
+    return this.db.brand.findMany({
+      where,
+      orderBy: {
+        [dto.orderBy ?? BrandSearchOrderBy.CREATED_AT]:
+          dto.orderDirection ?? OrderDirection.DESC,
+      },
+      include: {
+        logoFile: true,
+        _count: {
+          select: {
+            locations: {
+              where: {
+                ...ACTIVE_LOCATION_WHERE,
+                ...(scope.locationIds === null
+                  ? {}
+                  : {
+                      id: {
+                        in: scope.locationIds,
+                      },
+                    }),
               },
-              clients: true,
             },
+            clients: true,
           },
         },
-      })
-      .then((rows) =>
-        rows.map((row) => ({
-          ...row,
-          brandMemberships:
-            payload?.brandMemberships
-              .filter((membership) => membership.brandId === row.id)
-              .map(({ role }) => ({ role })) ?? [],
-        })),
-      );
+      },
+    });
   }
 
   async delete(brandId: string): Promise<void> {

@@ -11,6 +11,7 @@ import { PERMISSION_REGISTRY } from '../constants/permission-registry.js';
 import { InvitationGrantDto } from '../dto/invitation-grant.dto.js';
 import { PermissionChangeDto } from '../dto/permission-change.dto.js';
 import { AccessScope } from '../enums/access-scope.enum.js';
+import { PermissionScope } from '../enums/permission-scope.enum.js';
 import { PermissionValue } from '../enums/permission-value.enum.js';
 import { Permission } from '../enums/permission.enum.js';
 import { assertPermission, hasPermission } from '../utils/assert-permission.js';
@@ -78,7 +79,10 @@ export class AccessAdministrationService {
           .filter(
             (permission) =>
               !locationId ||
-              ['L', 'B/L'].includes(PERMISSION_REGISTRY[permission].scope),
+              PERMISSION_REGISTRY[permission].scope ===
+                PermissionScope.LOCATION ||
+              PERMISSION_REGISTRY[permission].scope ===
+                PermissionScope.BRAND_OR_LOCATION,
           )
           .map((permission) => {
             const definition = PERMISSION_REGISTRY[permission];
@@ -126,7 +130,9 @@ export class AccessAdministrationService {
       if (
         !definition ||
         !definition.configurable.includes(change.role) ||
-        (locationId && !['L', 'B/L'].includes(definition.scope)) ||
+        (locationId &&
+          definition.scope !== PermissionScope.LOCATION &&
+          definition.scope !== PermissionScope.BRAND_OR_LOCATION) ||
         seen.has(key)
       )
         this.invalidPolicy();
@@ -184,7 +190,12 @@ export class AccessAdministrationService {
       );
       for (const [key, definition] of Object.entries(PERMISSION_REGISTRY)) {
         const permission = key as Permission;
-        if (locationId && !['L', 'B/L'].includes(definition.scope)) continue;
+        if (
+          locationId &&
+          definition.scope !== PermissionScope.LOCATION &&
+          definition.scope !== PermissionScope.BRAND_OR_LOCATION
+        )
+          continue;
         const local = updated.locationOverrides.find(
           (row) => row.role === role && row.permission === key,
         );

@@ -20,6 +20,7 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { UserRole } from '@prisma/client';
 import { ApiResponseArray } from '../../../shared/dto/api-response-array.dto.js';
 import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
@@ -70,8 +71,33 @@ export class BrandController {
     @TokenPayload() payload: TokenPayloadDto,
     @Query() dto: BrandSearchRequestDto,
   ): Promise<BaseResponseDto<BrandSearchItemDto[]>> {
-    const items = await this.brandService.search(payload, dto);
-    return BaseResponseDto.success(items.map(BrandSearchItemDto.fromEntity));
+    const isAdmin = payload.role === UserRole.ADMIN;
+    const items = await this.brandService.search(dto, {
+      brandIds: isAdmin
+        ? null
+        : [
+            ...new Set([
+              ...payload.brandMemberships.map((row) => row.brandId),
+              ...payload.locationMemberships.map((row) => row.brandId),
+            ]),
+          ],
+      locationIds: isAdmin
+        ? null
+        : [
+            ...new Set(
+              payload.locationMemberships.map((row) => row.locationId),
+            ),
+          ],
+    });
+    return BaseResponseDto.success(
+      items.map((item) =>
+        BrandSearchItemDto.fromEntity(
+          item,
+          payload.brandMemberships.find((row) => row.brandId === item.id)
+            ?.role ?? null,
+        ),
+      ),
+    );
   }
 
   @ApiOperation({ summary: 'Get brand details' })

@@ -139,11 +139,9 @@ export class PayrollPeriodsController {
   async findById(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
-    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<PayrollPeriodResponseDto>> {
     const period = await this.payroll.findById(id);
     this.assertPeriodInLocation(period, locationId);
-    assertPermission(tokenPayload, Permission.PAYROLL_READ, period.locationId);
     return BaseResponseDto.success(PayrollPeriodResponseDto.fromEntity(period));
   }
 
@@ -154,11 +152,9 @@ export class PayrollPeriodsController {
   async report(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
-    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<PayrollReportResponseDto>> {
     const period = await this.payroll.findById(id);
     this.assertPeriodInLocation(period, locationId);
-    assertPermission(tokenPayload, Permission.PAYROLL_READ, period.locationId);
     return BaseResponseDto.success(await this.reports.build(id));
   }
 
@@ -176,7 +172,6 @@ export class PayrollPeriodsController {
       assertPermission(tokenPayload, Permission.PAYROLL_EXPORT, locationId);
     const period = await this.payroll.findById(id);
     this.assertPeriodInLocation(period, locationId);
-    assertPermission(tokenPayload, Permission.PAYROLL_READ, period.locationId);
     const { items, totalItems } = await this.earnings.searchByPeriod(id, dto);
     return BaseResponseDto.success(
       new StaffEarningSearchResponseDto(
@@ -196,17 +191,11 @@ export class PayrollPeriodsController {
   async exportVedomost(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
-    @TokenPayload() tokenPayload: TokenPayloadDto,
     @Res({ passthrough: true })
     res: { setHeader: (name: string, value: string) => void },
   ): Promise<StreamableFile> {
     const period = await this.payroll.findById(id);
     this.assertPeriodInLocation(period, locationId);
-    assertPermission(
-      tokenPayload,
-      Permission.PAYROLL_EXPORT,
-      period.locationId,
-    );
     const { stream, filename } = await this.reports.exportVedomost(id);
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     return new StreamableFile(stream, { type: XlsxUtils.mimeType });
@@ -219,17 +208,11 @@ export class PayrollPeriodsController {
   async exportPayslips(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
-    @TokenPayload() tokenPayload: TokenPayloadDto,
     @Res({ passthrough: true })
     res: { setHeader: (name: string, value: string) => void },
   ): Promise<StreamableFile> {
     const period = await this.payroll.findById(id);
     this.assertPeriodInLocation(period, locationId);
-    assertPermission(
-      tokenPayload,
-      Permission.PAYROLL_EXPORT,
-      period.locationId,
-    );
     const { stream, filename } = await this.reports.exportPayslips(id);
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     return new StreamableFile(stream, { type: XlsxUtils.mimeType });
@@ -247,11 +230,6 @@ export class PayrollPeriodsController {
   ): Promise<BaseResponseDto<IdResponseDto>> {
     const period = await this.payroll.findById(id);
     this.assertPeriodInLocation(period, locationId);
-    assertPermission(
-      tokenPayload,
-      Permission.PAYROLL_MANAGE,
-      period.locationId,
-    );
     const updated = await this.payroll.calculate(
       id,
       auditActorFromToken(tokenPayload, period.locationId),
@@ -271,11 +249,6 @@ export class PayrollPeriodsController {
   ): Promise<BaseResponseDto<IdResponseDto>> {
     const period = await this.payroll.findById(id);
     this.assertPeriodInLocation(period, locationId);
-    assertPermission(
-      tokenPayload,
-      Permission.PAYROLL_MANAGE,
-      period.locationId,
-    );
     const updated = await this.payroll.approve(
       id,
       auditActorFromToken(tokenPayload, period.locationId),
@@ -295,11 +268,6 @@ export class PayrollPeriodsController {
   ): Promise<BaseResponseDto<IdResponseDto>> {
     const period = await this.payroll.findById(id);
     this.assertPeriodInLocation(period, locationId);
-    assertPermission(
-      tokenPayload,
-      Permission.PAYROLL_MANAGE,
-      period.locationId,
-    );
     const updated = await this.payroll.pay(
       id,
       auditActorFromToken(tokenPayload, period.locationId),
@@ -319,11 +287,6 @@ export class PayrollPeriodsController {
   ): Promise<void> {
     const period = await this.payroll.findById(id);
     this.assertPeriodInLocation(period, locationId);
-    assertPermission(
-      tokenPayload,
-      Permission.PAYROLL_MANAGE,
-      period.locationId,
-    );
     await this.payroll.delete(
       id,
       auditActorFromToken(tokenPayload, period.locationId),
@@ -344,11 +307,6 @@ export class PayrollPeriodsController {
   ): Promise<BaseResponseDto<IdResponseDto>> {
     const result = await this.payroll.findResultById(id);
     this.assertResultInLocation(result, locationId);
-    assertPermission(
-      tokenPayload,
-      Permission.PAYROLL_MANAGE,
-      result.locationId,
-    );
     const earning = await this.payroll.correct(
       id,
       dto,

@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Staff, UserRole } from '@prisma/client';
 import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
+import { PermissionScope } from '../enums/permission-scope.enum.js';
 import { AccessScopeResponseDto } from './access-scope-response.dto.js';
 
 export class UserAccessResponseDto {
@@ -30,8 +31,10 @@ export class UserAccessResponseDto {
                 ?.role ?? null,
             inheritedRole: null,
             staffId: null,
-            permissions: token.permissions?.['B:' + brandId] ?? [],
-            sharedPermissions: token.permissions?.['G:' + brandId] ?? [],
+            permissions:
+              token.permissions?.[`${PermissionScope.BRAND}:${brandId}`] ?? [],
+            sharedPermissions:
+              token.permissions?.[`${PermissionScope.SHARED}:${brandId}`] ?? [],
           }),
         ),
         ...[
@@ -54,7 +57,10 @@ export class UserAccessResponseDto {
             staffId:
               profiles.find((row) => row.locationId === location.locationId)
                 ?.id ?? null,
-            permissions: token.permissions?.['L:' + location.locationId] ?? [],
+            permissions:
+              token.permissions?.[
+                `${PermissionScope.LOCATION}:${location.locationId}`
+              ] ?? [],
             sharedPermissions: [],
           }),
         ),

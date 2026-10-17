@@ -528,7 +528,6 @@ export class StaffService {
 
     const now = new Date();
     const location = await this.locationService.findById(locationId);
-    let revokedUserId: string | null = null;
     await this.db.$transaction(async (tx) => {
       await this.access.lockBrand(location.brandId, tx);
       const current = await tx.staff.findUniqueOrThrow({
@@ -545,9 +544,10 @@ export class StaffService {
           tx,
           actor.id ?? 'system',
         );
-        if (revoked) revokedUserId = current.userId;
-        if (revoked && current.userId)
+        if (revoked && current.userId) {
           await this.releaseAccessProfile(locationId, current.userId, tx);
+          await this.epochs.bump(current.userId, tx);
+        }
       }
       await tx.staff.update({
         where: { id: staffId },
@@ -560,7 +560,6 @@ export class StaffService {
       }
     });
 
-    if (revokedUserId) await this.epochs.bump(revokedUserId);
     const event: AuditLogEvent = {
       locationId,
       entityType: AuditEntity.STAFF,
@@ -583,8 +582,6 @@ export class StaffService {
   ): Promise<void> {
     await this.findInLocation(locationId, staffId);
     const location = await this.locationService.findById(locationId);
-    let revokedUserId: string | null = null;
-
     try {
       await this.db.$transaction(async (tx) => {
         await this.access.lockBrand(location.brandId, tx);
@@ -600,10 +597,9 @@ export class StaffService {
           tx,
           actor?.id ?? 'system',
         );
-        revokedUserId = current.userId;
         await tx.staff.delete({ where: { id: staffId } });
+        if (current.userId) await this.epochs.bump(current.userId, tx);
       });
-      if (revokedUserId) await this.epochs.bump(revokedUserId);
     } catch (e: any) {
       if (e?.code === PrismaErrorCode.FOREIGN_KEY_VIOLATION) {
         const constraint = String(e?.meta?.constraint ?? '');

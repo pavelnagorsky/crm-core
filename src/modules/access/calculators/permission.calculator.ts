@@ -7,6 +7,7 @@ import {
 import { BrandMembershipPayloadDto } from '../../auth/dto/brand-membership-payload.dto.js';
 import { LocationMembershipPayloadDto } from '../../auth/dto/location-membership-payload.dto.js';
 import { PERMISSION_REGISTRY } from '../constants/permission-registry.js';
+import { PermissionScope } from '../enums/permission-scope.enum.js';
 import { Permission } from '../enums/permission.enum.js';
 import { AccessLocation } from '../interfaces/access-location.interface.js';
 
@@ -28,11 +29,13 @@ export class PermissionCalculator {
         const brand = brandOverrides.find(
           (row) => row.role === role && row.permission === permission,
         );
-        const local = ['L', 'B/L'].includes(definition.scope)
-          ? locationOverrides.find(
-              (row) => row.role === role && row.permission === permission,
-            )
-          : undefined;
+        const local =
+          definition.scope === PermissionScope.LOCATION ||
+          definition.scope === PermissionScope.BRAND_OR_LOCATION
+            ? locationOverrides.find(
+                (row) => row.role === role && row.permission === permission,
+              )
+            : undefined;
         allowed = local?.allowed ?? brand?.allowed ?? allowed;
       }
       if (allowed) result.add(permission);
@@ -63,16 +66,21 @@ export class PermissionCalculator {
   ): Record<string, Permission[]> {
     const claims: Record<string, Permission[]> = {};
     const add = (
-      key: string,
+      scopeId: string,
       permissions: Set<Permission>,
-      scope: 'B' | 'G' | 'L',
+      scope: Exclude<PermissionScope, PermissionScope.BRAND_OR_LOCATION>,
     ) => {
+      const key = `${scope}:${scopeId}`;
       claims[key] = [
         ...new Set([
           ...(claims[key] ?? []),
           ...[...permissions].filter((permission) => {
             const declared = PERMISSION_REGISTRY[permission].scope;
-            return declared === scope || (declared === 'B/L' && scope !== 'G');
+            return (
+              declared === scope ||
+              (declared === PermissionScope.BRAND_OR_LOCATION &&
+                scope !== PermissionScope.SHARED)
+            );
           }),
         ]),
       ];
@@ -83,12 +91,12 @@ export class PermissionCalculator {
         membership.role,
         brandOverrides.filter((row) => row.brandId === membership.brandId),
       );
-      add('B:' + membership.brandId, permissions, 'B');
-      add('G:' + membership.brandId, permissions, 'G');
+      add(membership.brandId, permissions, PermissionScope.BRAND);
+      add(membership.brandId, permissions, PermissionScope.SHARED);
       for (const location of locations.filter(
         (row) => row.brandId === membership.brandId,
       ))
-        add('L:' + location.id, permissions, 'L');
+        add(location.id, permissions, PermissionScope.LOCATION);
     }
     for (const membership of memberships.filter((row) => !row.inherited)) {
       if (
@@ -103,12 +111,12 @@ export class PermissionCalculator {
         (row) => row.brandId === membership.brandId,
       );
       add(
-        'G:' + membership.brandId,
+        membership.brandId,
         this.rolePermissions(membership.role, overrides),
-        'G',
+        PermissionScope.SHARED,
       );
       add(
-        'L:' + membership.locationId,
+        membership.locationId,
         this.rolePermissions(
           membership.role,
           overrides,
@@ -116,7 +124,7 @@ export class PermissionCalculator {
             (row) => row.locationId === membership.locationId,
           ),
         ),
-        'L',
+        PermissionScope.LOCATION,
       );
     }
     return claims;

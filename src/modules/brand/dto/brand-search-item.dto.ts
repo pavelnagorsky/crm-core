@@ -25,14 +25,17 @@ export class BrandSearchItemDto {
   @ApiProperty({ type: Date })
   createdAt: Date;
 
-  static fromEntity(brand: BrandWithCounts): BrandSearchItemDto {
+  static fromEntity(
+    brand: BrandWithCounts,
+    myRole: BusinessRole | null,
+  ): BrandSearchItemDto {
     const dto = new BrandSearchItemDto();
     dto.id = brand.id;
     dto.name = brand.name;
     dto.logo = brand.logoFile
       ? FileResponseDto.fromEntity(brand.logoFile)
       : null;
-    dto.myRole = brand.brandMemberships[0]?.role ?? null;
+    dto.myRole = myRole;
     dto.locationsCount = brand._count.locations;
     dto.clientsCount = brand._count.clients;
     dto.createdAt = brand.createdAt;
