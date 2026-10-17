@@ -10,6 +10,9 @@ sequenceDiagram
   participant Attribution as BookingChannelAttributionService
   participant Create as BookingCreateFacade
   participant Selection as BookingSelectionService
+  participant Scheduling as BookingSchedulingService
+  participant Reservation as BookingReservationService
+  participant Slots as BookingSlotLockService
   participant Catalog as ServiceCatalogFacade
   participant Clients as ClientsService
   participant Staff as StaffService
@@ -23,11 +26,16 @@ sequenceDiagram
   Create->>Selection: resolve()
   Selection->>Catalog: resolveServicesForBooking() / resolveBundleForBooking()
   Create->>Clients: resolveForBooking()
-  Create->>Staff: resolveStaffingForServices()
-  Create->>Calendar: isSlotFree() / createBookingEvent()
-  Create->>DB: create booking and booking items
-  Create->>Orders: sync/create related order state
-  Create->>Earnings: record when booking work is completed
+  Create->>Scheduling: resolveForBooking()
+  Scheduling->>Staff: resolveStaffForService()
+  Scheduling->>Calendar: filterAvailableStaff()
+  Create->>Reservation: reserve()
+  Reservation->>Slots: lock staff days and recheck availability
+  Reservation->>Calendar: createBookingEvent() in transaction
+  Reservation->>DB: create booking and booking items
+  Note over Reservation,DB: Заказ и начисления синхронизируются только для соответствующего сценария создания
+  Reservation->>Orders: sync completed booking / add draft products when applicable
+  Reservation->>Earnings: record when booking work is completed
 ```
 
 ## Ручное Управление Бронью
@@ -41,15 +49,20 @@ flowchart LR
   BookingsController --> BookingCreateFacade
   BookingsController --> BookingsExportService
 
-  BookingMutationService --> CalendarFacade
+  BookingMutationService --> BookingRescheduleService
+  BookingMutationService --> BookingLifecycleService
   BookingMutationService --> OrdersFacade
   BookingMutationService --> StaffEarningsService
-  BookingCreateFacade --> CalendarFacade
+  BookingRescheduleService --> CalendarFacade
+  BookingLifecycleService --> CalendarFacade
+  BookingCreateFacade --> BookingSchedulingService
+  BookingCreateFacade --> BookingReservationService
   BookingCreateFacade --> ClientsService
-  BookingCreateFacade --> StaffService
+  BookingSchedulingService --> StaffService
+  BookingSchedulingService --> CalendarFacade
   BookingCreateFacade --> BookingSelectionService
   BookingSelectionService --> ServiceCatalogFacade
-  BookingMutationService --> AuditService
+  BookingMutationService --> BookingEventsService
 ```
 
 ## Календарь И Доступность
@@ -125,10 +138,11 @@ flowchart LR
   PayrollPeriodsController --> PayrollReportService
   PayrollPeriodsController --> StaffEarningsService
 
-  PayrollPeriodService --> StaffEarningsService
-  PayrollPeriodService --> StaffCompensationService
-  PayrollPeriodService --> PayrollCalculator
-  PayrollPeriodService --> StaffService
+  PayrollPeriodService --> PayrollCalculationService
+  PayrollCalculationService --> StaffEarningsService
+  PayrollCalculationService --> StaffCompensationService
+  PayrollCalculationService --> PayrollCalculator
+  PayrollCalculationService --> StaffService
   PayrollPeriodService --> LocationService
 
   StaffEarningsService --> StaffCompensationService

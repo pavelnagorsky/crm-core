@@ -34,4 +34,4 @@ fresh availability check. A move excludes every old event of the booking and
 checks proposed item intervals against each other before reserving slots.
 
 Booking lifecycle audit is published after its transaction commits. Notification
-delivery still uses in-process events; see the review limitations in README.md.
+delivery still uses in-process events; see [known limitations](./README.md#оставшийся-технический-долг).

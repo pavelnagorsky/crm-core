@@ -47,12 +47,12 @@ Running with no/unknown name prints the list of seeds.
 Ported from the app so seeded data matches runtime reads:
 
 - `lib/time.mjs` - `localToUtc`, `dateOnly`, `zonedDateStr`, `@db.Time`
-  encoding (from `TimeService` / `staff.service.ts parseTime`).
+  encoding (see `TimeUtils` and staff time parsing).
 - Bookings: `endAt = startAt + durationMinutes`; buffer only affects packing.
 - Slot packing never overlaps shifts, lunch, one-off blocks, or other bookings.
 - Earnings mirror `staff-earnings.service.ts` (formula, fields,
   `idempotencyKey`, and `bookingItemId` linkage).
-- Payroll periods mirror `payroll.service.ts` `calculate`: salary is prorated by
+- Payroll periods mirror `PayrollCalculationService`: salary is prorated by
   calendar day, a guaranteed minimum pays only the top-up above hourly and
   commission, and each result locks the earnings it includes. Older months are
   `PAID`, the last closed month is `APPROVED`, the current month is `CALCULATED`.
