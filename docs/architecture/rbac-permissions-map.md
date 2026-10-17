@@ -1,14 +1,16 @@
-# Целевые permissions для существующих API
+# Permissions для API
 
-Реализовано в backend, 2026-10-16. [Модель и defaults](./rbac-target.md), [исторические роли и API](./rbac.md), [контракты управления доступом](./rbac-contracts.md). Для списков клиентов, сотрудников, записей, склада и зарплаты режим `isExport=true` дополнительно требует соответствующий export-permission, как и отдельный XLSX endpoint.
+Сопоставление маршрутов с проверками backend на 2026-10-17. [Модель ролей и defaults](./rbac.md), [контракты управления доступом](./rbac-contracts.md). Permissions `*.export` закрывают только скачивание XLSX. Параметр списка `isExport=true` отключает пагинацию и доступен при том же праве чтения, что и обычный список.
 
-Покрыты все 184 маршрута из 31 controller-файла на момент проектирования. Новые маршруты управления доступом описаны отдельно в контрактах.
+Составные действия проверяют все перечисленные permissions и состояние документа. Аналитические endpoints ниже не проверяют permissions по содержимому выбранных показателей; дополнительное `inventory.read` явно требуется только у складского KPI.
+
+Маршруты управления доступом описаны отдельно в контрактах. Эта карта дополняет OpenAPI условиями авторизации и не заменяет DTO из кода.
 
 ## Как читать
 
 - B — управление брендом, G — общие данные бренда, L — филиал, U — собственный аккаунт/доступная навигация, P — публичный или специальный сценарий.
 - `+` означает все перечисленные permissions. Дополнительно действуют зависимости чтения из контракта вычисления доступа.
-- Название метода рядом с HTTP-путём связывает действие с исходником. Описание действия и defaults ролей находятся в целевой матрице.
+- Название метода рядом с HTTP-путём связывает действие с исходником. Описание действия и defaults ролей находятся в модели ролей.
 - Принадлежность всех ID проверяется владельцем домена независимо от permission.
 - P не означает отсутствие проверок: сохраняются условия JWT, refresh/email/client token, публичной публикации и валидации.
 - U не является доступом к произвольному чужому аккаунту. Псевдоключи после U/P обозначают сценарии, не новые permissions.
@@ -89,7 +91,7 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `POST /locations/:locationId/bookings/analytics` | `analytics` | L: `analytics.location.read` | Если результат включает зарплаты/складские данные — также payroll.read/inventory.read; весь запрос отклоняется при нехватке прав. |
+| `POST /locations/:locationId/bookings/analytics` | `analytics` | L: `analytics.location.read` | Дополнительных проверок payroll.read/inventory.read по показателям нет. |
 
 ## bookings
 
@@ -102,15 +104,15 @@
 | `POST /public/locations/:locationId/pricing` | `priceBooking` | P: `public` | — |
 | `GET /public/bookings/me` | `getByClientToken` | P: `booking-client-token` | Токен только этой записи; бизнес-роль не требуется. |
 | `POST /public/bookings/me/cancel` | `cancelByClientToken` | P: `booking-client-token` | Действующая клиентская политика отмены; не обход к возврату произвольного заказа. |
-| `POST /locations/:locationId/bookings/manual` | `createManual` | L: `booking.create` | Произвольная цена: дополнительно sale.price.override. Новый клиент: дополнительно client.create, если сценарий его создаёт. |
+| `POST /locations/:locationId/bookings/manual` | `createManual` | L: `booking.create` | Произвольная цена: также sale.price.override. Товары: order.update. Создание клиента: G:client.create. WALK_IN с немедленным COMPLETED: order.confirm. |
 | `GET /locations/:locationId/bookings/status-counts` | `getStatusCounts` | L: `booking.read` | — |
 | `GET /locations/:locationId/bookings/export` | `export` | L: `booking.export` | — |
 | `GET /locations/:locationId/bookings/:id` | `findById` | L: `booking.read` | — |
 | `GET /locations/:locationId/bookings` | `search` | L: `booking.read` | — |
-| `PUT /locations/:locationId/bookings/:id` | `update` | L: `booking.update` | Произвольная цена: дополнительно sale.price.override. Новый клиент: дополнительно client.create, если сценарий его создаёт. |
+| `PUT /locations/:locationId/bookings/:id` | `update` | L: `booking.update` | Изменение/сброс произвольной цены: также sale.price.override. Меняет сведения клиента в записи, не создаёт и не редактирует общую карточку клиента. |
 | `PATCH /locations/:locationId/bookings/:id/status` | `updateStatus` | L: `booking.status.manage` | При проведении также order.confirm; при сторнировании проведённого — order.return. |
-| `POST /locations/:locationId/bookings/:id/products` | `addProduct` | L: `booking.read` + `order.update` | Произвольная цена: дополнительно sale.price.override. Новый клиент: дополнительно client.create, если сценарий его создаёт. |
-| `POST /locations/:locationId/bookings/:id/items` | `addItems` | L: `booking.read` + `order.update` | Произвольная цена: дополнительно sale.price.override. Новый клиент: дополнительно client.create, если сценарий его создаёт. |
+| `POST /locations/:locationId/bookings/:id/products` | `addProduct` | L: `booking.read` + `order.update` | Произвольная цена: также sale.price.override. Клиента не создаёт. |
+| `POST /locations/:locationId/bookings/:id/items` | `addItems` | L: `booking.read` + `order.update` | Произвольная цена: также sale.price.override. Клиента не создаёт. |
 | `POST /locations/:locationId/bookings/:id/client-token` | `generateClientToken` | L: `booking.client-token.issue` | — |
 | `POST /locations/:locationId/bookings/:id/cancel` | `cancel` | L: `booking.cancel` | При сторнировании проведённого — также order.return. |
 | `DELETE /locations/:locationId/bookings/:id` | `delete` | L: `booking.delete` | При сторнировании проведённого — также order.return. |
@@ -171,7 +173,7 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `POST /locations/:locationId/dashboard/widgets` | `getWidgets` | L: `analytics.location.read` | Если результат включает зарплаты/складские данные — также payroll.read/inventory.read; весь запрос отклоняется при нехватке прав. |
+| `POST /locations/:locationId/dashboard/widgets` | `getWidgets` | L: `analytics.location.read` | Дополнительных проверок payroll.read/inventory.read по показателям нет. |
 
 ## files
 
@@ -214,12 +216,12 @@
 | `GET /locations/:locationId/inventory/export/vedomost` | `exportVedomost` | L: `inventory.export` | — |
 | `GET /locations/:locationId/inventory/:productId/movements` | `searchMovements` | L: `inventory.read` | — |
 | `GET /locations/:locationId/inventory/:productId/movements/export` | `exportMovements` | L: `inventory.export` | — |
-| `POST /locations/:locationId/inventory/documents` | `createDocument` | L: `inventory.manage` | — |
+| `POST /locations/:locationId/inventory/documents` | `createDocument` | L: `inventory.manage` | Если задан destinationLocationId, также inventory.manage получателя. |
 | `GET /locations/:locationId/inventory/documents` | `searchDocuments` | L: `inventory.read` | — |
 | `GET /locations/:locationId/inventory/documents/status-counts` | `getDocumentStatusCounts` | L: `inventory.read` | — |
 | `GET /locations/:locationId/inventory/documents/:documentId` | `findDocument` | L: `inventory.read` | — |
-| `PUT /locations/:locationId/inventory/documents/:documentId` | `updateDocument` | L: `inventory.manage` | — |
-| `PATCH /locations/:locationId/inventory/documents/:documentId/status` | `changeDocumentStatus` | L: `inventory.manage` | — |
+| `PUT /locations/:locationId/inventory/documents/:documentId` | `updateDocument` | L: `inventory.manage` | Также inventory.manage прежнего и нового получателя, если они заданы. |
+| `PATCH /locations/:locationId/inventory/documents/:documentId/status` | `changeDocumentStatus` | L: `inventory.manage` | Также inventory.manage сохранённого получателя, если задан. |
 
 ## location
 
@@ -242,14 +244,14 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `POST /locations/:locationId/orders` | `create` | L: `order.create` | Произвольная цена: дополнительно sale.price.override. Новый клиент: дополнительно client.create, если сценарий его создаёт. |
+| `POST /locations/:locationId/orders` | `create` | L: `order.create` | Произвольная цена: также sale.price.override. confirmImmediately: также order.confirm. Принимает существующий clientId; новый клиент создаётся отдельным API с G:client.create. |
 | `GET /locations/:locationId/orders` | `search` | L: `order.read` | — |
 | `GET /locations/:locationId/orders/status-counts` | `getStatusCounts` | L: `order.read` | — |
 | `GET /locations/:locationId/orders/:orderId` | `findById` | L: `order.read` | — |
-| `PUT /locations/:locationId/orders/:orderId` | `update` | L: `order.update` | Произвольная цена: дополнительно sale.price.override. Новый клиент: дополнительно client.create, если сценарий его создаёт. |
+| `PUT /locations/:locationId/orders/:orderId` | `update` | L: `order.update` | Изменение/сброс произвольной цены: также sale.price.override. Клиента не создаёт. |
 | `PATCH /locations/:locationId/orders/:orderId/status` | `changeStatus` | L: `order.void` | Текущий DTO допускает только VOIDED. Новые статусы потребуют явной проверки действия. |
 | `PATCH /locations/:locationId/orders/:orderId/items/:orderItemId/confirm` | `confirmItem` | L: `order.confirm` | — |
-| `POST /locations/:locationId/orders/:orderId/items` | `addItems` | L: `order.update` | Произвольная цена: дополнительно sale.price.override. Новый клиент: дополнительно client.create, если сценарий его создаёт. |
+| `POST /locations/:locationId/orders/:orderId/items` | `addItems` | L: `order.update` | Произвольная цена: также sale.price.override. Клиента не создаёт. |
 | `POST /locations/:locationId/orders/:orderId/items/confirm` | `confirmItems` | L: `order.confirm` | — |
 | `PATCH /locations/:locationId/orders/:orderId/items/:orderItemId/reverse` | `reverseItem` | L: `order.return` | — |
 | `POST /locations/:locationId/orders/:orderId/returns` | `createReturn` | L: `order.return` | — |
@@ -303,7 +305,7 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `POST /locations/:locationId/products/analytics` | `analytics` | L: `analytics.location.read` | Если результат включает зарплаты/складские данные — также payroll.read/inventory.read; весь запрос отклоняется при нехватке прав. |
+| `POST /locations/:locationId/products/analytics` | `analytics` | L: `analytics.location.read` | Включая показатели валовой прибыли; дополнительных проверок payroll.read/inventory.read нет. |
 
 ## product-packaging
 
@@ -340,11 +342,11 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `POST /locations/:locationId/services/analytics` | `analytics` | L: `analytics.location.read` | Если результат включает зарплаты/складские данные — также payroll.read/inventory.read; весь запрос отклоняется при нехватке прав. |
+| `POST /locations/:locationId/services/analytics` | `analytics` | L: `analytics.location.read` | Дополнительных проверок payroll.read/inventory.read по показателям нет. |
 
 ## services
 
-[Исходник](../../src/modules/services/controllers/services.controller.ts)
+[Чтение каталога](../../src/modules/services/catalog/controllers/service-catalog.controller.ts), [изменение услуг](../../src/modules/services/service-write/controllers/service-write.controller.ts), [изменение комплексов](../../src/modules/services/bundle-write/controllers/service-bundle-write.controller.ts), [категории](../../src/modules/services/categories/controllers/service-categories.controller.ts). После разделения контроллеров HTTP-пути сохранены, operationId изменились.
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
@@ -371,7 +373,7 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `GET /locations/:locationId/staff/widgets` | `getWidgets` | L: `analytics.location.read` | Если результат включает зарплаты/складские данные — также payroll.read/inventory.read; весь запрос отклоняется при нехватке прав. |
+| `GET /locations/:locationId/staff/widgets` | `getWidgets` | L: `analytics.location.read` | Дополнительных проверок payroll.read/inventory.read по показателям нет. |
 
 ## staff
 

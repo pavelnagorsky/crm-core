@@ -249,10 +249,7 @@ export class BookingsController {
   async search(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Query() dto: BookingSearchRequestDto,
-    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<BookingSearchResponseDto>> {
-    if (dto.isExport)
-      assertPermission(tokenPayload, Permission.BOOKING_EXPORT, locationId);
     const { items, totalItems } = await this.bookings.search(locationId, dto);
     return BaseResponseDto.success(
       new BookingSearchResponseDto(

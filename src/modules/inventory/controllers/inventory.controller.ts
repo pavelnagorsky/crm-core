@@ -73,10 +73,7 @@ export class InventoryController {
   async search(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Query() dto: InventorySearchRequestDto,
-    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<InventorySearchResponseDto>> {
-    if (dto.isExport)
-      assertPermission(tokenPayload, Permission.INVENTORY_EXPORT, locationId);
     const { items, totalItems } = await this.inventory.searchInventory(
       locationId,
       dto,
@@ -130,10 +127,7 @@ export class InventoryController {
   async searchVedomost(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Query() dto: InventoryTurnoverRequestDto,
-    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<InventoryTurnoverSearchResponseDto>> {
-    if (dto.isExport)
-      assertPermission(tokenPayload, Permission.INVENTORY_EXPORT, locationId);
     const { items, totalItems, totals } = await this.reports.searchTurnover(
       locationId,
       dto,
@@ -195,10 +189,7 @@ export class InventoryController {
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('productId', ParseUUIDPipe) productId: string,
     @Query() dto: InventoryMovementSearchRequestDto,
-    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<InventoryMovementSearchResponseDto>> {
-    if (dto.isExport)
-      assertPermission(tokenPayload, Permission.INVENTORY_EXPORT, locationId);
     const { items, totalItems } = await this.inventory.searchMovements(
       locationId,
       productId,
@@ -270,10 +261,7 @@ export class InventoryController {
   async searchDocuments(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Query() dto: InventoryDocumentSearchRequestDto,
-    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<InventoryDocumentSearchResponseDto>> {
-    if (dto.isExport)
-      assertPermission(tokenPayload, Permission.INVENTORY_EXPORT, locationId);
     const { items, totalItems } = await this.inventory.searchDocuments(
       locationId,
       dto,

@@ -18,7 +18,6 @@ import { ApiResponse } from '../../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../../../shared/dto/id-response.dto.js';
 import { Permission } from '../../../access/enums/permission.enum.js';
-import { assertPermission } from '../../../access/utils/assert-permission.js';
 import { auditActorFromToken } from '../../../audit/utils/audit-actor-from-token.js';
 import { Permissions } from '../../../auth/decorators/permissions.decorator.js';
 import { TokenPayload } from '../../../auth/decorators/token-payload.decorator.js';
@@ -43,10 +42,7 @@ export class StaffEarningsController {
   async search(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Query() dto: StaffEarningSearchRequestDto,
-    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<StaffEarningSearchResponseDto>> {
-    if (dto.isExport)
-      assertPermission(tokenPayload, Permission.PAYROLL_EXPORT, locationId);
     const { items, totalItems } = await this.earnings.search(locationId, dto);
     return BaseResponseDto.success(
       new StaffEarningSearchResponseDto(
@@ -67,10 +63,7 @@ export class StaffEarningsController {
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Query() dto: StaffEarningsByStaffRequestDto,
-    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<StaffEarningSearchResponseDto>> {
-    if (dto.isExport)
-      assertPermission(tokenPayload, Permission.PAYROLL_EXPORT, locationId);
     const { items, totalItems } = await this.earnings.search(locationId, {
       ...dto,
       staffId: id,
