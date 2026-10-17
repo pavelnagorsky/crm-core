@@ -9,6 +9,7 @@ import {
   StaffEarning,
 } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
+import { ACTIVE_LOCATION_WHERE } from '../../../../shared/database/active-business.where.js';
 import { stableOrderBy } from '../../../../shared/database/stable-order-by.js';
 import { OrderDirection } from '../../../../shared/enums/order-direction.enum.js';
 import { AppException } from '../../../../shared/exceptions/app.exception.js';
@@ -67,6 +68,7 @@ export class PayrollPeriodService {
       await this.locks.lockLocation(locationId, tx);
       const overlap = await tx.payrollPeriod.findFirst({
         where: {
+          location: ACTIVE_LOCATION_WHERE,
           locationId,
           startDate: { lte: endDate },
           endDate: { gte: startDate },
@@ -102,7 +104,10 @@ export class PayrollPeriodService {
     locationId: string,
     dto: PayrollPeriodSearchRequestDto,
   ): Promise<PaginatedResult<PayrollPeriodWithResults>> {
-    const where: Prisma.PayrollPeriodWhereInput = { locationId };
+    const where: Prisma.PayrollPeriodWhereInput = {
+      location: ACTIVE_LOCATION_WHERE,
+      locationId,
+    };
     if (dto.status) where.status = dto.status;
 
     const direction = dto.orderDirection ?? OrderDirection.DESC;
@@ -131,7 +136,7 @@ export class PayrollPeriodService {
   ): Promise<{ status: PayrollPeriodStatus; count: number }[]> {
     const rows = await this.db.payrollPeriod.groupBy({
       by: ['status'],
-      where: { locationId },
+      where: { location: ACTIVE_LOCATION_WHERE, locationId },
       _count: { _all: true },
     });
     return rows.map((r) => ({ status: r.status, count: r._count._all }));
@@ -150,7 +155,7 @@ export class PayrollPeriodService {
 
   async findById(periodId: string): Promise<PayrollPeriodWithResults> {
     const period = await this.db.payrollPeriod.findUnique({
-      where: { id: periodId },
+      where: { location: ACTIVE_LOCATION_WHERE, id: periodId },
       include: { results: { orderBy: { staffName: 'asc' } } },
     });
     if (!period)
@@ -281,7 +286,7 @@ export class PayrollPeriodService {
     actor: AuditActor,
   ): Promise<StaffEarning> {
     const result = await this.db.payrollResult.findUnique({
-      where: { id: resultId },
+      where: { location: ACTIVE_LOCATION_WHERE, id: resultId },
       include: { period: true },
     });
     if (!result)
@@ -335,7 +340,7 @@ export class PayrollPeriodService {
     resultId: string,
   ): Promise<PayrollResult & { period: PayrollPeriod; staff: Staff }> {
     const result = await this.db.payrollResult.findUnique({
-      where: { id: resultId },
+      where: { location: ACTIVE_LOCATION_WHERE, id: resultId },
       include: { period: true, staff: true },
     });
     if (!result)

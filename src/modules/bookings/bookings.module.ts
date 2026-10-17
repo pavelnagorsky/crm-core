@@ -20,9 +20,9 @@ import { BookingSchedulingService } from './services/booking-scheduling.service.
 import { BookingSelectionService } from './services/booking-selection.service.js';
 import { BookingSlotLockService } from './services/booking-slot-lock.service.js';
 import { BookingWriteLockService } from './services/booking-write-lock.service.js';
-import { BookingLifecycleService } from './services/mutation/booking-lifecycle.service.js';
-import { BookingMutationService } from './services/mutation/booking-mutation.service.js';
-import { BookingRescheduleService } from './services/mutation/booking-reschedule.service.js';
+import { BookingLifecycleService } from './services/write/booking-lifecycle.service.js';
+import { BookingMutationService } from './services/write/booking-mutation.service.js';
+import { BookingRescheduleService } from './services/write/booking-reschedule.service.js';
 import { PublicBookingRateLimiter } from './services/public-booking-rate-limiter.js';
 import { BookingCalendarReadService } from './services/read/booking-calendar-read.service.js';
 import { BookingReadService } from './services/read/booking-read.service.js';

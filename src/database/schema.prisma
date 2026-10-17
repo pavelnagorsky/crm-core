@@ -4,6 +4,7 @@ generator client {
 
 // SQL-managed read views: ServiceCatalogView and InventoryStockView.
 // Definitions and catalog_ru collation: migrations/20261017160000_catalog_read_views/migration.sql.
+// Active business filters: migrations/20261017170000_filter_deleted_business_views/migration.sql.
 // Provision empty databases with prisma migrate deploy; db push does not create these views.
 // See ../../docs/architecture/services-catalog.md for restoration and verification.
 

@@ -1,5 +1,5 @@
 import { ForbiddenException } from '@nestjs/common';
-import { tokenPayload } from '../../../../test/factories/token-payload.factory.js';
+import { tokenPayload } from '../../auth/testing/factories/token-payload.factory.js';
 import { Permission } from '../../access/enums/permission.enum.js';
 import { ManualCreateBookingDto } from '../dto/manual-create-booking.dto.js';
 import { BookingsController } from './bookings.controller.js';

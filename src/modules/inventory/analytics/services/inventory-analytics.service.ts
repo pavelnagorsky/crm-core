@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { InventoryMovementType, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
+import { activeLocationSql } from '../../../../shared/database/active-business.sql.js';
 import { MoneyUtils } from '../../../../shared/money/money.utils.js';
 import { InventoryKpiQueryDto } from '../dto/inventory-kpi-query.dto.js';
 import { InventoryKpiSummaryRow } from '../interfaces/inventory-kpi-summary-row.interface.js';
@@ -64,6 +65,7 @@ export class InventoryAnalyticsService {
         FROM "ProductLocation" pl
         LEFT JOIN "InventoryBalance" ib ON ib."productLocationId" = pl.id
         WHERE pl."locationId" = ${locationId}
+          AND ${activeLocationSql(Prisma.sql`pl."locationId"`)}
           AND pl."trackInventory" = true
       ),
       recent_sales AS (
@@ -127,6 +129,7 @@ export class InventoryAnalyticsService {
         INNER JOIN "Product" p ON p.id = pl."productId"
         LEFT JOIN "InventoryBalance" ib ON ib."productLocationId" = pl.id
         WHERE pl."locationId" = ${locationId}
+          AND ${activeLocationSql(Prisma.sql`pl."locationId"`)}
           AND pl."trackInventory" = true
       )
       SELECT

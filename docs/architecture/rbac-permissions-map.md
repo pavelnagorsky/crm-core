@@ -365,9 +365,9 @@
 | `PATCH /locations/:locationId/services/:id/status` | `updateStatus` | L: `service.manage` | — |
 | `DELETE /locations/:locationId/services/:id` | `delete` | L: `service.manage` | — |
 
-## staff-kpi
+## staff-analytics
 
-[Исходник](../../src/modules/staff/kpi/controllers/staff-kpi.controller.ts)
+[Исходник](../../src/modules/staff/analytics/controllers/staff-analytics.controller.ts)
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |

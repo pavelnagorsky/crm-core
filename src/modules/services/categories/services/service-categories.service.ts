@@ -7,6 +7,7 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ServiceCategory } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
+import { ACTIVE_LOCATION_WHERE } from '../../../../shared/database/active-business.where.js';
 import { PrismaErrorCode } from '../../../../shared/database/prisma-error-codes.js';
 import { AppException } from '../../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
@@ -80,7 +81,7 @@ export class ServiceCategoriesService {
     actor: AuditActor,
   ): Promise<ServiceCategory> {
     const existing = await this.db.serviceCategory.findFirst({
-      where: { id: categoryId, locationId },
+      where: { location: ACTIVE_LOCATION_WHERE, id: categoryId, locationId },
     });
     if (!existing) throw new NotFoundException('Service category not found');
 
@@ -127,7 +128,7 @@ export class ServiceCategoriesService {
 
   async listCategories(locationId: string): Promise<ServiceCategory[]> {
     return this.db.serviceCategory.findMany({
-      where: { locationId },
+      where: { location: ACTIVE_LOCATION_WHERE, locationId },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
     });
   }
@@ -138,7 +139,7 @@ export class ServiceCategoriesService {
     actor: AuditActor,
   ): Promise<void> {
     const category = await this.db.serviceCategory.findFirst({
-      where: { id: categoryId, locationId },
+      where: { location: ACTIVE_LOCATION_WHERE, id: categoryId, locationId },
     });
     if (!category) throw new NotFoundException('Service category not found');
     await this.db.serviceCategory.delete({ where: { id: categoryId } });

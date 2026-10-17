@@ -244,12 +244,16 @@ describe('ClientsService.search ban filter', () => {
 
   it('returns every client when the ban filter is omitted', async () => {
     await search();
-    expect(findMany.mock.calls[0][0].where).toEqual({ brandId: 'business-1' });
+    expect(findMany.mock.calls[0][0].where).toEqual({
+      brand: { deletedAt: null },
+      brandId: 'business-1',
+    });
   });
 
   it('returns only banned clients', async () => {
     await search(true);
     expect(findMany.mock.calls[0][0].where).toEqual({
+      brand: { deletedAt: null },
       brandId: 'business-1',
       bannedAt: { not: null },
     });
@@ -264,6 +268,7 @@ describe('ClientsService.search ban filter', () => {
     } as ClientSearchRequestDto);
 
     expect(findMany.mock.calls[0][0].where).toEqual({
+      brand: { deletedAt: null },
       brandId: 'business-1',
       OR: [
         { firstName: { contains: 'анна', mode: 'insensitive' } },
@@ -286,6 +291,7 @@ describe('ClientsService.search ban filter', () => {
     } as ClientSearchRequestDto);
 
     expect(findMany.mock.calls[0][0].where).toEqual({
+      brand: { deletedAt: null },
       brandId: 'business-1',
       OR: [
         { firstName: { contains: 'Андреева   яна', mode: 'insensitive' } },
@@ -318,6 +324,7 @@ describe('ClientsService.search ban filter', () => {
   it('returns only clients who can book online', async () => {
     await search(false);
     expect(findMany.mock.calls[0][0].where).toEqual({
+      brand: { deletedAt: null },
       brandId: 'business-1',
       bannedAt: null,
     });

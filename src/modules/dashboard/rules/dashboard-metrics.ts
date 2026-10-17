@@ -2,8 +2,8 @@ import { BookingSource, BookingStatus, Prisma } from '@prisma/client';
 import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { AggregateSnapshot } from '../../bookings/interfaces/aggregate-snapshot.interface.js';
 import { SeriesRow } from '../../bookings/interfaces/series-row.interface.js';
-import { ProductSalesSeriesRow } from '../../orders/analytics/interfaces/product-sales-series-row.interface.js';
-import { ProductSalesSnapshot } from '../../orders/analytics/interfaces/product-sales-snapshot.interface.js';
+import { ProductSalesSeriesRow } from '../../orders/aggregates/interfaces/product-sales-series-row.interface.js';
+import { ProductSalesSnapshot } from '../../orders/aggregates/interfaces/product-sales-snapshot.interface.js';
 import { DashboardWidgetsRequestDto } from '../dto/dashboard-widgets-request.dto.js';
 import { DashboardWidgetKey } from '../enums/dashboard-widget-key.enum.js';
 

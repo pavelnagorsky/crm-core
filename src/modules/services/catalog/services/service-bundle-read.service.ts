@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, ServiceStatus } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
+import { ACTIVE_LOCATION_WHERE } from '../../../../shared/database/active-business.where.js';
 import { AppException } from '../../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
 import { ServiceBundleForCatalog } from '../interfaces/service-bundle-for-catalog.interface.js';
@@ -39,7 +40,7 @@ export class ServiceBundleReadService {
     bundleId: string,
   ): Promise<ServiceBundleView> {
     const bundle = await this.db.serviceBundle.findUnique({
-      where: { id: bundleId, locationId },
+      where: { location: ACTIVE_LOCATION_WHERE, id: bundleId, locationId },
       include: serviceBundleInclude,
     });
     if (!bundle) throw new NotFoundException('Service bundle not found');
@@ -48,7 +49,11 @@ export class ServiceBundleReadService {
 
   listActiveForBooking(locationId: string): Promise<ServiceBundleView[]> {
     return this.db.serviceBundle.findMany({
-      where: { locationId, status: ServiceStatus.ACTIVE },
+      where: {
+        location: ACTIVE_LOCATION_WHERE,
+        locationId,
+        status: ServiceStatus.ACTIVE,
+      },
       include: serviceBundleInclude,
       orderBy: [{ sortOrder: 'asc' }, { title: 'asc' }],
     });
@@ -59,7 +64,12 @@ export class ServiceBundleReadService {
     bundleId: string,
   ): Promise<ServiceBundleView> {
     const bundle = await this.db.serviceBundle.findFirst({
-      where: { id: bundleId, locationId, status: ServiceStatus.ACTIVE },
+      where: {
+        location: ACTIVE_LOCATION_WHERE,
+        id: bundleId,
+        locationId,
+        status: ServiceStatus.ACTIVE,
+      },
       include: serviceBundleInclude,
     });
     if (!bundle) {
@@ -78,7 +88,7 @@ export class ServiceBundleReadService {
   ): Promise<ServiceBundleForCatalog[]> {
     if (ids.length === 0) return [];
     return tx.serviceBundle.findMany({
-      where: { locationId, id: { in: ids } },
+      where: { location: ACTIVE_LOCATION_WHERE, locationId, id: { in: ids } },
       include: serviceBundleCatalogInclude,
     });
   }

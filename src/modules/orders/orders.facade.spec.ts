@@ -1704,7 +1704,12 @@ describe('OrdersFacade', () => {
     );
 
     expect(tx.order.findUnique).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { bookingId: 'booking-1' } }),
+      expect.objectContaining({
+        where: {
+          location: { deletedAt: null, brand: { deletedAt: null } },
+          bookingId: 'booking-1',
+        },
+      }),
     );
     expect(tx.order.upsert).not.toHaveBeenCalled();
     expect(tx.order.update).toHaveBeenCalledWith(
@@ -2684,6 +2689,7 @@ describe('OrdersFacade', () => {
     expect(db.order.groupBy).toHaveBeenCalledWith({
       by: ['status'],
       where: {
+        location: { deletedAt: null, brand: { deletedAt: null } },
         locationId: 'location-1',
         id: undefined,
         status: undefined,
@@ -2740,6 +2746,7 @@ describe('OrdersFacade', () => {
     expect(db.order.groupBy).toHaveBeenCalledWith({
       by: ['status'],
       where: {
+        location: { deletedAt: null, brand: { deletedAt: null } },
         locationId: 'location-1',
         id: orderId,
         status: undefined,

@@ -3,7 +3,7 @@ import ExcelJS from 'exceljs';
 import {
   CLIENT_IMPORT_MAX_BYTES,
   CLIENT_IMPORT_MAX_ROWS,
-} from '../clients-import.constants.js';
+} from '../constants/clients-import.constants.js';
 import { ClientImportFileReason } from '../enums/client-import-file-reason.enum.js';
 import { ClientSheetColumn } from '../enums/client-sheet-column.enum.js';
 import { ClientImportUpload } from '../interfaces/client-import-upload.interface.js';

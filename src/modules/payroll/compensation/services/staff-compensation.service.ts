@@ -2,6 +2,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma, StaffCompensationPlan } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
+import { ACTIVE_LOCATION_WHERE } from '../../../../shared/database/active-business.where.js';
 import { PrismaErrorCode } from '../../../../shared/database/prisma-error-codes.js';
 import { AppException } from '../../../../shared/exceptions/app.exception.js';
 import { TimeUtils } from '../../../../shared/time/time.utils.js';
@@ -33,7 +34,7 @@ export class StaffCompensationService {
   async listHistory(staffId: string): Promise<CompensationPlanWithRates[]> {
     const staff = await this.staffService.findById(staffId);
     return this.db.staffCompensationPlan.findMany({
-      where: { staffId: staff.id },
+      where: { location: ACTIVE_LOCATION_WHERE, staffId: staff.id },
       include: { serviceRates: true },
       orderBy: { effectiveFrom: 'desc' },
     });
@@ -58,6 +59,7 @@ export class StaffCompensationService {
     const day = TimeUtils.dateOnly(TimeUtils.dateOnlyStr(onDate));
     return (tx ?? this.db).staffCompensationPlan.findFirst({
       where: {
+        location: ACTIVE_LOCATION_WHERE,
         staffId,
         effectiveFrom: { lte: day },
         OR: [{ effectiveTo: null }, { effectiveTo: { gte: day } }],
@@ -75,6 +77,7 @@ export class StaffCompensationService {
     if (staffIds.length === 0) return [];
     return this.db.staffCompensationPlan.findMany({
       where: {
+        location: ACTIVE_LOCATION_WHERE,
         staffId: { in: staffIds },
         effectiveFrom: { lte: to },
         OR: [{ effectiveTo: null }, { effectiveTo: { gte: from } }],
@@ -115,7 +118,7 @@ export class StaffCompensationService {
     );
 
     const latest = await this.db.staffCompensationPlan.findFirst({
-      where: { staffId },
+      where: { location: ACTIVE_LOCATION_WHERE, staffId },
       include: { serviceRates: true },
       orderBy: { effectiveFrom: 'desc' },
     });

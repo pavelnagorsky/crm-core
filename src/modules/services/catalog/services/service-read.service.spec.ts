@@ -14,6 +14,7 @@ describe('ServiceReadService.findIdsByFilter', () => {
     await service.findIdsByFilter('business-1', { search: '  окрашивание  ' });
 
     expect(findMany.mock.calls[0][0].where).toEqual({
+      location: { deletedAt: null, brand: { deletedAt: null } },
       locationId: 'business-1',
       OR: [
         { title: { contains: 'окрашивание', mode: 'insensitive' } },
@@ -71,6 +72,7 @@ describe('ServiceReadService.resolveCatalogEntries', () => {
     } as never);
 
     expect(findMany.mock.calls[0][0].where).toEqual({
+      location: { deletedAt: null, brand: { deletedAt: null } },
       locationId: 'business-1',
       id: { in: ['selected'] },
     });

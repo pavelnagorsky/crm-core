@@ -6,7 +6,7 @@ import { LocationModule } from '../location/location.module.js';
 import { PayrollModule } from '../payroll/payroll.module.js';
 import { ProductsModule } from '../products/products.module.js';
 import { StaffModule } from '../staff/staff.module.js';
-import { OrdersAggregatesService } from './analytics/services/orders-aggregates.service.js';
+import { OrdersAggregatesService } from './aggregates/services/orders-aggregates.service.js';
 import { OrderPricingCalculator } from './calculators/order-pricing.calculator.js';
 import { OrdersController } from './controllers/orders.controller.js';
 import { OrdersFacade } from './orders.facade.js';

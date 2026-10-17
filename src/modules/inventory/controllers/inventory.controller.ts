@@ -40,8 +40,8 @@ import { InventoryDocumentSearchRequestDto } from '../dto/inventory-document-sea
 import { InventoryDocumentSearchResponseDto } from '../dto/inventory-document-search-response.dto.js';
 import { InventoryDocumentStatusCountResponseDto } from '../dto/inventory-document-status-count-response.dto.js';
 import { InventoryDocumentStatusCountsRequestDto } from '../dto/inventory-document-status-counts-request.dto.js';
-import { InventoryExportRequestDto } from '../dto/inventory-export-request.dto.js';
-import { InventoryMovementExportRequestDto } from '../dto/inventory-movement-export-request.dto.js';
+import { InventoryExportRequestDto } from '../export/dto/inventory-export-request.dto.js';
+import { InventoryMovementExportRequestDto } from '../export/dto/inventory-movement-export-request.dto.js';
 import { InventoryMovementResponseDto } from '../dto/inventory-movement-response.dto.js';
 import { InventoryMovementSearchRequestDto } from '../dto/inventory-movement-search-request.dto.js';
 import { InventoryMovementSearchResponseDto } from '../dto/inventory-movement-search-response.dto.js';
@@ -55,7 +55,7 @@ import { InventoryTurnoverLineDto } from '../report/dto/inventory-turnover-line.
 import { InventoryTurnoverRequestDto } from '../report/dto/inventory-turnover-request.dto.js';
 import { InventoryTurnoverSearchResponseDto } from '../report/dto/inventory-turnover-search-response.dto.js';
 import { InventoryReportService } from '../report/services/inventory-report.service.js';
-import { InventoryExportService } from '../services/inventory-export.service.js';
+import { InventoryExportService } from '../export/services/inventory-export.service.js';
 
 @ApiTags('Inventory')
 @Controller('locations/:locationId/inventory')

@@ -63,7 +63,7 @@ Guard контроллера заказов допускает все три б�
 - `auditActorFromToken` преобразует платформенного `ADMIN` в `SUPPORT`, бизнес-владельца — в `OWNER`, остальных — в `STAFF`. При наличии членства бренда оно имеет приоритет над членством локации. Поэтому сочетание `MANAGER` бренда + `OWNER` локации проходит owner-проверку RBAC локации, но не проходит эти дополнительные проверки заказа. В обратном сочетании `OWNER` бренда + `MANAGER` локации права владельца сохраняются.
 - Таким образом, `AuditActorRole` формально описывает участника аудита, но в текущем коде также используется для двух проверок доступа к заказам. Значения: `CLIENT`, `STAFF`, `OWNER`, `SUPPORT`, `SYSTEM`, `INTEGRATION`; это не назначаемые бизнес-роли.
 
-Источники: [OrdersFacade.changeStatus](../../src/modules/orders/orders.facade.ts), [OrderDraftService](../../src/modules/orders/services/order-draft.service.ts), [OrderBookingSyncService](../../src/modules/orders/services/order-booking-sync.service.ts), [BookingCreateFacade](../../src/modules/bookings/booking-create.facade.ts), [BookingMutationService](../../src/modules/bookings/services/mutation/booking-mutation.service.ts), [auditActorFromToken](../../src/modules/audit/utils/audit-actor-from-token.ts).
+Источники: [OrdersFacade.changeStatus](../../src/modules/orders/orders.facade.ts), [OrderDraftService](../../src/modules/orders/services/order-draft.service.ts), [OrderBookingSyncService](../../src/modules/orders/services/order-booking-sync.service.ts), [BookingCreateFacade](../../src/modules/bookings/booking-create.facade.ts), [BookingMutationService](../../src/modules/bookings/services/write/booking-mutation.service.ts), [auditActorFromToken](../../src/modules/audit/utils/audit-actor-from-token.ts).
 
 ### Область данных и токены
 
@@ -71,10 +71,10 @@ Guard контроллера заказов допускает все три б�
 - `GET /brands` для `USER` выбирает бренды по `BrandMembership` из БД. Одного членства локации недостаточно для попадания бренда в этот список. Для `ADMIN` возвращаются все подходящие активные бренды.
 - `@Auth()`, `@BrandRBAC()`, `@LocationRBAC()` и `@SupplierRBAC()` требуют access token и проверяют его epoch. Устаревший токен даёт `409 TOKEN_PAYLOAD_STALE` с требованием обновить access token.
 - Отсутствие сопоставления локации в payload для обычного пользователя также даёт `409 TOKEN_PAYLOAD_STALE` (`LOCATION_MAPPING_MISSING`), а не обычный `403`. Это не выдаёт доступ; обновление токена не создаёт отсутствующее членство.
-- Глобальный `BusinessActiveGuard` проверяет `brandId`/`locationId` из пути, в том числе на публичных маршрутах. Бизнес-роль не отменяет проверку активности бренда и локации.
+- Мягкое удаление учитывается в запросах: `deletedAt: null` для брендов, филиалов и связанных выборок. Общего guard и отдельных запросов проверки бизнеса перед каждым HTTP-запросом нет. Это действует также для методов без ID бизнеса в пути.
 - В мутациях бронирований часть проверок находится в `BookingMutationService`, поэтому одного просмотра декораторов контроллера недостаточно для определения прав.
 
-Источники: [TokenEpochGuard](../../src/modules/auth/guards/token-epoch.guard.ts), [BusinessActiveGuard](../../src/shared/guards/business-active.guard.ts), [BookingMutationService](../../src/modules/bookings/services/mutation/booking-mutation.service.ts), [BrandService.search](../../src/modules/brand/services/brand.service.ts).
+Источники: [TokenEpochGuard](../../src/modules/auth/guards/token-epoch.guard.ts), [условия мягкого удаления](../../src/shared/database/active-business.where.ts), [BookingMutationService](../../src/modules/bookings/services/write/booking-mutation.service.ts), [BrandService.search](../../src/modules/brand/services/brand.service.ts).
 
 ## Матрица бизнес-действий
 
@@ -344,7 +344,7 @@ Guard контроллера заказов допускает все три б�
 
 ### Аналитика и показатели
 
-Источники: [bookings-analytics.controller.ts](../../src/modules/bookings/analytics/controllers/bookings-analytics.controller.ts), [clients-analytics.controller.ts](../../src/modules/clients/analytics/controllers/clients-analytics.controller.ts), [dashboard.controller.ts](../../src/modules/dashboard/controllers/dashboard.controller.ts), [inventory-analytics.controller.ts](../../src/modules/inventory/analytics/controllers/inventory-analytics.controller.ts), [products-analytics.controller.ts](../../src/modules/products/analytics/controllers/products-analytics.controller.ts), [services-analytics.controller.ts](../../src/modules/services/analytics/controllers/services-analytics.controller.ts), [staff-kpi.controller.ts](../../src/modules/staff/kpi/controllers/staff-kpi.controller.ts).
+Источники: [bookings-analytics.controller.ts](../../src/modules/bookings/analytics/controllers/bookings-analytics.controller.ts), [clients-analytics.controller.ts](../../src/modules/clients/analytics/controllers/clients-analytics.controller.ts), [dashboard.controller.ts](../../src/modules/dashboard/controllers/dashboard.controller.ts), [inventory-analytics.controller.ts](../../src/modules/inventory/analytics/controllers/inventory-analytics.controller.ts), [products-analytics.controller.ts](../../src/modules/products/analytics/controllers/products-analytics.controller.ts), [services-analytics.controller.ts](../../src/modules/services/analytics/controllers/services-analytics.controller.ts), [staff-analytics.controller.ts](../../src/modules/staff/analytics/controllers/staff-analytics.controller.ts).
 
 | Действие / описание | Метод и путь | Область | OWNER | MANAGER | STAFF |
 | --- | --- | --- | :---: | :---: | :---: |

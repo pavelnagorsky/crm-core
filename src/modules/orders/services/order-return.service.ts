@@ -26,6 +26,7 @@ import { CreateOrderReturnDto } from '../dto/create-order-return.dto.js';
 import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
 import { OrderStateRules } from '../rules/order-state.rules.js';
 import { OrderPersistenceService } from './order-persistence.service.js';
+import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 
 @Injectable()
 export class OrderReturnService {
@@ -262,6 +263,7 @@ export class OrderReturnService {
     const existing = await this.persistence.inTransaction(async (tx) => {
       const orderReturn = await tx.orderReturn.findUnique({
         where: {
+          location: ACTIVE_LOCATION_WHERE,
           locationId_idempotencyKey: { locationId, idempotencyKey },
         },
       });

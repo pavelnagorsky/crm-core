@@ -7,6 +7,7 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ServiceStatus } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
+import { ACTIVE_LOCATION_WHERE } from '../../../../shared/database/active-business.where.js';
 import { PrismaErrorCode } from '../../../../shared/database/prisma-error-codes.js';
 import { AppException } from '../../../../shared/exceptions/app.exception.js';
 import { MoneyUtils } from '../../../../shared/money/money.utils.js';
@@ -245,7 +246,7 @@ export class ServiceBundleWriteService {
     bundleId: string,
   ): Promise<ServiceBundleView> {
     const bundle = await this.db.serviceBundle.findFirst({
-      where: { id: bundleId, locationId },
+      where: { location: ACTIVE_LOCATION_WHERE, id: bundleId, locationId },
       include: serviceBundleInclude,
     });
     if (!bundle) throw new NotFoundException('Service bundle not found');

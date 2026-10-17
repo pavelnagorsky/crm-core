@@ -2,7 +2,7 @@ import { BookingStatus } from '@prisma/client';
 import { MoneyUtils } from '../../shared/money/money.utils.js';
 import { BookingsAggregatesService } from '../bookings/aggregates/services/bookings-aggregates.service.js';
 import { AggregateSnapshot } from '../bookings/interfaces/aggregate-snapshot.interface.js';
-import { OrdersAggregatesService } from '../orders/analytics/services/orders-aggregates.service.js';
+import { OrdersAggregatesService } from '../orders/aggregates/services/orders-aggregates.service.js';
 import { DashboardFacade } from './dashboard.facade.js';
 import { DashboardWidgetsRequestDto } from './dto/dashboard-widgets-request.dto.js';
 import { DashboardWidgetKey } from './enums/dashboard-widget-key.enum.js';

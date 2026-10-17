@@ -12,7 +12,7 @@ import { InventoryBalanceLockService } from './services/inventory-balance-lock.s
 import { InventoryDocumentDraftService } from './services/inventory-document-draft.service.js';
 import { InventoryDocumentMovementService } from './services/inventory-document-movement.service.js';
 import { InventoryDocumentService } from './services/inventory-document.service.js';
-import { InventoryExportService } from './services/inventory-export.service.js';
+import { InventoryExportService } from './export/services/inventory-export.service.js';
 import { InventoryReadService } from './services/inventory-read.service.js';
 import { InventorySaleReversalService } from './services/inventory-sale-reversal.service.js';
 import { InventorySalesService } from './services/inventory-sales.service.js';

@@ -10,6 +10,7 @@ import {
   Prisma,
 } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
+import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { AUDIT_EVENT } from '../../audit/constants/audit.constants.js';
@@ -271,7 +272,11 @@ export class InventoryDocumentService {
         return { document: voided, changed: true };
       }
       const movements = await tx.inventoryMovement.findMany({
-        where: { documentId, reversedMovementId: null },
+        where: {
+          location: ACTIVE_LOCATION_WHERE,
+          documentId,
+          reversedMovementId: null,
+        },
         orderBy: { sequence: 'desc' },
       });
       const balances = await this.balanceLocks.lock(
@@ -284,7 +289,10 @@ export class InventoryDocumentService {
         checked.add(movement.productLocationId);
         const balance = balances.get(movement.productLocationId)!;
         const latest = await tx.inventoryMovement.findFirst({
-          where: { productLocationId: movement.productLocationId },
+          where: {
+            location: ACTIVE_LOCATION_WHERE,
+            productLocationId: movement.productLocationId,
+          },
           orderBy: { sequence: 'desc' },
         });
         if (
@@ -405,7 +413,7 @@ export class InventoryDocumentService {
     documentId: string,
   ): Promise<InventoryDocumentWithItems> {
     const document = await tx.inventoryDocument.findFirst({
-      where: { id: documentId, locationId },
+      where: { location: ACTIVE_LOCATION_WHERE, id: documentId, locationId },
       include: documentInclude,
     });
     if (!document) throw new NotFoundException('Inventory document not found');

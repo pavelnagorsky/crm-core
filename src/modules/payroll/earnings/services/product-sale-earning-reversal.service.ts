@@ -11,6 +11,7 @@ import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
 import { AuditActor } from '../../../audit/interfaces/audit-actor.interface.js';
 import { EarningCalculator } from '../calculators/earning.calculator.js';
 import { StaffEarningWriterService } from './staff-earning-writer.service.js';
+import { ACTIVE_LOCATION_WHERE } from '../../../../shared/database/active-business.where.js';
 
 @Injectable()
 export class ProductSaleEarningReversalService {
@@ -31,6 +32,7 @@ export class ProductSaleEarningReversalService {
   ): Promise<StaffEarning[]> {
     const originals = await tx.staffEarning.findMany({
       where: {
+        location: ACTIVE_LOCATION_WHERE,
         locationId,
         orderId,
         orderItemId,
@@ -43,6 +45,7 @@ export class ProductSaleEarningReversalService {
       if (!original.orderItemId || original.baseAmount == null) continue;
       const existingReversals = await tx.staffEarning.findMany({
         where: {
+          location: ACTIVE_LOCATION_WHERE,
           locationId,
           orderId,
           orderItemId: original.orderItemId,

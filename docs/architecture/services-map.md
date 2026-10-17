@@ -64,6 +64,7 @@
 | UserService | Пользователи и сохранённая версия токенов. |
 | BrandService / LocationService | Бренды и филиалы. Изменения членства принадлежат AccessModule. |
 | StaffService | Сотрудники, смены, выполняемые услуги и привязка профиля к доступу. |
+| StaffAnalyticsService | Метрики сотрудников и покрытия услуг; находится в `staff/analytics`, как аналитика остальных доменов. |
 | ClientsService | Клиенты, запреты публичной записи, поиск и разрешение клиента для бронирования. |
 | ServiceCatalogReadService / ServiceCatalogItemFactory | Выбор страницы из ServiceCatalogView и построение карточек из данных владельцев. |
 | [ServiceCatalogFacade](../../src/modules/services/catalog/service-catalog.facade.ts) | Единый публичный API чтения каталога для других доменов. |

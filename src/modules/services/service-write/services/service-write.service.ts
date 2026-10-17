@@ -7,6 +7,7 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma, ServiceStatus } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
+import { ACTIVE_LOCATION_WHERE } from '../../../../shared/database/active-business.where.js';
 import { PrismaErrorCode } from '../../../../shared/database/prisma-error-codes.js';
 import { AppException } from '../../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
@@ -139,7 +140,7 @@ export class ServiceWriteService {
 
   private async findInLocation(locationId: string, serviceId: string) {
     const service = await this.db.service.findFirst({
-      where: { id: serviceId, locationId },
+      where: { location: ACTIVE_LOCATION_WHERE, id: serviceId, locationId },
       include: serviceAuditInclude,
     });
     if (!service) throw new NotFoundException('Service not found');

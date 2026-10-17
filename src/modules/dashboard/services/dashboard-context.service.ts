@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { BookingStatus } from '@prisma/client';
 import { BookingsAggregatesService } from '../../bookings/aggregates/services/bookings-aggregates.service.js';
-import { OrdersAggregatesService } from '../../orders/analytics/services/orders-aggregates.service.js';
+import { OrdersAggregatesService } from '../../orders/aggregates/services/orders-aggregates.service.js';
 import {
   BOOKING_SERIES_KEYS,
   BOOKING_SNAPSHOT_KEYS,

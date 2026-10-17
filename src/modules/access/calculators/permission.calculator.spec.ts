@@ -1,5 +1,5 @@
 import { BusinessRole, UserRole } from '@prisma/client';
-import { tokenPayload } from '../../../../test/factories/token-payload.factory.js';
+import { tokenPayload } from '../../auth/testing/factories/token-payload.factory.js';
 import { Permission } from '../enums/permission.enum.js';
 import { hasPermission } from '../utils/assert-permission.js';
 import { PermissionCalculator } from './permission.calculator.js';

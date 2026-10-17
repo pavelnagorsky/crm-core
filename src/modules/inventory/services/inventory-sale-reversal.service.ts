@@ -9,6 +9,7 @@ import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { InventoryValuationCalculator } from '../calculators/inventory-valuation.calculator.js';
 import { InventoryBalanceLockService } from './inventory-balance-lock.service.js';
+import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 
 @Injectable()
 export class InventorySaleReversalService {
@@ -28,6 +29,7 @@ export class InventorySaleReversalService {
   ): Promise<void> {
     const originals = await tx.inventoryMovement.findMany({
       where: {
+        location: ACTIVE_LOCATION_WHERE,
         locationId,
         orderId,
         orderItemId,
@@ -39,6 +41,7 @@ export class InventorySaleReversalService {
 
     const reversed = await tx.inventoryMovement.findMany({
       where: {
+        location: ACTIVE_LOCATION_WHERE,
         locationId,
         orderId,
         orderItemId,

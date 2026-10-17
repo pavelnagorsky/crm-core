@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { CalendarEventRepeatType } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
+import { ACTIVE_LOCATION_WHERE } from '../../../../shared/database/active-business.where.js';
 import { TimeUtils } from '../../../../shared/time/time.utils.js';
 import { LocationService } from '../../../location/services/location.service.js';
 import { StaffService } from '../../../staff/services/staff.service.js';
@@ -46,6 +47,7 @@ export class CalendarViewBuilderService {
       ),
       this.db.calendarEvent.findMany({
         where: {
+          location: ACTIVE_LOCATION_WHERE,
           locationId,
           AND: [
             ...(dto.staffIds?.length

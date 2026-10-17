@@ -1,8 +1,8 @@
 import { applyDecorators, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
-import { ClientImportFileInterceptor } from '../client-import-file.interceptor.js';
-import { CLIENT_IMPORT_MAX_BYTES } from '../clients-import.constants.js';
+import { ClientImportFileInterceptor } from '../interceptors/client-import-file.interceptor.js';
+import { CLIENT_IMPORT_MAX_BYTES } from '../constants/clients-import.constants.js';
 
 export const ClientImportFile = () =>
   applyDecorators(

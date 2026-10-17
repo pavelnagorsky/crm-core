@@ -69,6 +69,7 @@ describe('StaffService.search', () => {
     } as StaffSearchRequestDto);
 
     expect(findMany.mock.calls[0][0].where).toEqual({
+      location: { deletedAt: null, brand: { deletedAt: null } },
       locationId: 'business-1',
       AND: [{ name: { contains: 'Мария', mode: 'insensitive' } }],
     });
@@ -82,6 +83,7 @@ describe('StaffService.search', () => {
     } as StaffSearchRequestDto);
 
     expect(findMany.mock.calls[0][0].where).toEqual({
+      location: { deletedAt: null, brand: { deletedAt: null } },
       locationId: 'business-1',
       AND: [
         { name: { contains: 'Ковалева', mode: 'insensitive' } },

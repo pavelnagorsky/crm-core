@@ -7,6 +7,7 @@ import {
 } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../../../database/database.service.js';
+import { ACTIVE_LOCATION_WHERE } from '../../../../shared/database/active-business.where.js';
 import { AUDIT_EVENT } from '../../../audit/constants/audit.constants.js';
 import { AuditActionType } from '../../../audit/enums/audit-action-type.enum.js';
 import { AuditEntity } from '../../../audit/enums/audit-entity.enum.js';
@@ -123,7 +124,7 @@ export class CalendarEventService {
     eventId: string,
   ): Promise<CalendarEvent> {
     const event = await this.db.calendarEvent.findFirst({
-      where: { id: eventId, locationId },
+      where: { location: ACTIVE_LOCATION_WHERE, id: eventId, locationId },
     });
     if (!event) throw new NotFoundException('Calendar event not found');
     return event;

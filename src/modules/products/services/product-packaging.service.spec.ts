@@ -55,7 +55,7 @@ describe('ProductPackagingService', () => {
       where: {
         id: { in: ['box'] },
         isActive: true,
-        product: { brandId: 'brand' },
+        product: { brand: { deletedAt: null }, brandId: 'brand' },
       },
     });
     expect(db.productPackaging.findMany).not.toHaveBeenCalled();
@@ -133,7 +133,11 @@ describe('ProductPackagingService', () => {
       service.changeStatus('brand', 'shampoo', 'box', false, actor),
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(db.productPackaging.findFirst).toHaveBeenCalledWith({
-      where: { id: 'box', productId: 'shampoo', product: { brandId: 'brand' } },
+      where: {
+        id: 'box',
+        productId: 'shampoo',
+        product: { brand: { deletedAt: null }, brandId: 'brand' },
+      },
     });
     expect(db.productPackaging.update).not.toHaveBeenCalled();
   });

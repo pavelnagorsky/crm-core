@@ -42,7 +42,7 @@ export class BookingPagesService {
 
   async list(locationId: string): Promise<BookingPageWithCover[]> {
     return this.db.bookingPage.findMany({
-      where: { locationId },
+      where: { location: ACTIVE_LOCATION_WHERE, locationId },
       include: pageInclude,
       orderBy: { updatedAt: 'desc' },
     });
@@ -53,7 +53,7 @@ export class BookingPagesService {
     pageId: string,
   ): Promise<BookingPageWithCover> {
     const page = await this.db.bookingPage.findFirst({
-      where: { id: pageId, locationId },
+      where: { location: ACTIVE_LOCATION_WHERE, id: pageId, locationId },
       include: pageInclude,
     });
     if (!page)
@@ -76,6 +76,7 @@ export class BookingPagesService {
     if (kind === SlugAvailabilityReason.RESERVED)
       return { isAvailable: false, reason: SlugAvailabilityReason.RESERVED };
     const existing = await this.db.bookingPage.findUnique({
+      // Soft deletion retains the row and its globally unique slug.
       where: { slug },
       select: { id: true, locationId: true },
     });

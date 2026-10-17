@@ -82,7 +82,7 @@ export class BookingReadService {
   ): Promise<{ status: BookingStatus; count: number }[]> {
     const rows = await this.db.booking.groupBy({
       by: ['status'],
-      where: { locationId },
+      where: { deletedAt: null, location: ACTIVE_LOCATION_WHERE, locationId },
       _count: { _all: true },
     });
     return rows.map((r) => ({
@@ -107,7 +107,11 @@ export class BookingReadService {
     locationId: string,
     dto: BookingSearchRequestDto,
   ): Prisma.BookingWhereInput {
-    const where: Prisma.BookingWhereInput = { locationId, deletedAt: null };
+    const where: Prisma.BookingWhereInput = {
+      location: ACTIVE_LOCATION_WHERE,
+      locationId,
+      deletedAt: null,
+    };
 
     if (dto.status) where.status = dto.status;
     if (dto.clientId) where.clientId = dto.clientId;

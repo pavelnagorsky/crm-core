@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { BookingStatus, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
 import { ACTIVE_LOCATION_WHERE } from '../../../../shared/database/active-business.where.js';
+import { activeLocationSql } from '../../../../shared/database/active-business.sql.js';
 import { ClientRevenueBucketTotals } from '../../../../shared/interfaces/client-revenue-bucket-totals.interface.js';
 import { ClientRevenueTotals } from '../../../../shared/interfaces/client-revenue-totals.interface.js';
 import { MoneyUtils } from '../../../../shared/money/money.utils.js';
@@ -537,6 +538,7 @@ export class BookingsAggregatesService {
     // depend on session TIMEZONE (Prisma binds Date as timestamptz).
     const parts: Prisma.Sql[] = [
       Prisma.sql`b."locationId" = ${range.locationId}`,
+      activeLocationSql(Prisma.sql`b."locationId"`),
       Prisma.sql`b."deletedAt" IS NULL`,
       Prisma.sql`b."startAt" >= ${range.from}::timestamptz AT TIME ZONE 'UTC'`,
       Prisma.sql`b."startAt" <  ${range.to}::timestamptz AT TIME ZONE 'UTC'`,
@@ -625,6 +627,7 @@ export class BookingsAggregatesService {
     if (range.locationIds.length === 0) return Prisma.sql`FALSE`;
     return Prisma.sql`
       b."locationId" IN (${Prisma.join(range.locationIds.map((id) => Prisma.sql`${id}`))})
+      AND ${activeLocationSql(Prisma.sql`b."locationId"`)}
       AND b."deletedAt" IS NULL
       AND b."status"::text = ${BookingStatus.COMPLETED}
       AND b."startAt" >= ${range.from}::timestamptz AT TIME ZONE 'UTC'

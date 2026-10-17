@@ -789,6 +789,7 @@ describe('InventoryFacade', () => {
       expect(groupBy).toHaveBeenCalledWith({
         by: ['status'],
         where: {
+          location: { deletedAt: null, brand: { deletedAt: null } },
           locationId: 'location-1',
           type: InventoryDocumentType.RECEIPT,
           status: undefined,
@@ -880,6 +881,7 @@ describe('InventoryFacade', () => {
     expect(db.inventoryDocument.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
         where: {
+          location: { deletedAt: null, brand: { deletedAt: null } },
           locationId: 'location-1',
           type: InventoryDocumentType.ADJUSTMENT,
           status: undefined,
@@ -893,6 +895,7 @@ describe('InventoryFacade', () => {
     );
     expect(db.inventoryDocument.count).toHaveBeenCalledWith({
       where: {
+        location: { deletedAt: null, brand: { deletedAt: null } },
         locationId: 'location-1',
         type: InventoryDocumentType.ADJUSTMENT,
         status: undefined,

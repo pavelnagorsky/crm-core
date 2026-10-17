@@ -14,7 +14,7 @@ import { UpdateBookingStatusDto } from './dto/update-booking-status.dto.js';
 import { UpdateBookingDto } from './dto/update-booking.dto.js';
 import { BookingStatus } from './enums/booking-status.enum.js';
 import { BookingWithItems } from './interfaces/booking-with-items.interface.js';
-import { BookingMutationService } from './services/mutation/booking-mutation.service.js';
+import { BookingMutationService } from './services/write/booking-mutation.service.js';
 import { BookingReadService } from './services/read/booking-read.service.js';
 import { BookingSetupService } from './services/setup/booking-setup.service.js';
 

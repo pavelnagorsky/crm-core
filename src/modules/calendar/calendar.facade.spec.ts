@@ -101,7 +101,11 @@ describe('CalendarFacade.update', () => {
     await service.update('biz', 'event-1', singleOccurrenceUpdate());
 
     expect(db.calendarEvent.findFirst).toHaveBeenCalledWith({
-      where: { id: 'event-1', locationId: 'biz' },
+      where: {
+        location: { deletedAt: null, brand: { deletedAt: null } },
+        id: 'event-1',
+        locationId: 'biz',
+      },
     });
     expect(tx.calendarEventCancelledOccurrence.upsert).toHaveBeenCalledWith({
       where: {
@@ -553,6 +557,7 @@ describe('CalendarFacade.getCalendar', () => {
     );
     expect(db.calendarEvent.findMany).toHaveBeenCalledWith({
       where: {
+        location: { deletedAt: null, brand: { deletedAt: null } },
         locationId: 'biz',
         AND: [
           {

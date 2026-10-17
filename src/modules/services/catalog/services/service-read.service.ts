@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, ServiceStatus, StaffStatus } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
+import { ACTIVE_LOCATION_WHERE } from '../../../../shared/database/active-business.where.js';
 import { AppException } from '../../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
 import { ServiceFilter } from '../interfaces/service-filter.interface.js';
@@ -28,7 +29,7 @@ export class ServiceReadService {
     serviceId: string,
   ): Promise<ServiceWithStaffCount> {
     const service = await this.db.service.findUnique({
-      where: { id: serviceId, locationId },
+      where: { location: ACTIVE_LOCATION_WHERE, id: serviceId, locationId },
       include: serviceViewInclude,
     });
     if (!service) throw new NotFoundException('Service not found');
@@ -37,7 +38,11 @@ export class ServiceReadService {
 
   listActiveForBooking(locationId: string): Promise<ServiceWithImage[]> {
     return this.db.service.findMany({
-      where: { locationId, status: ServiceStatus.ACTIVE },
+      where: {
+        location: ACTIVE_LOCATION_WHERE,
+        locationId,
+        status: ServiceStatus.ACTIVE,
+      },
       include: { imageFile: true },
       orderBy: [{ sortOrder: 'asc' }, { title: 'asc' }],
     });
@@ -50,6 +55,7 @@ export class ServiceReadService {
     const uniqueIds = [...new Set(serviceIds)];
     const services = await this.db.service.findMany({
       where: {
+        location: ACTIVE_LOCATION_WHERE,
         id: { in: uniqueIds },
         locationId,
         status: ServiceStatus.ACTIVE,
@@ -73,7 +79,7 @@ export class ServiceReadService {
   ): Promise<ServiceForCatalog[]> {
     if (ids.length === 0) return [];
     return tx.service.findMany({
-      where: { locationId, id: { in: ids } },
+      where: { location: ACTIVE_LOCATION_WHERE, locationId, id: { in: ids } },
       include: serviceCatalogInclude,
     });
   }
@@ -82,7 +88,11 @@ export class ServiceReadService {
     if (ids.length === 0) return;
     const unique = [...new Set(ids)];
     const found = await this.db.service.findMany({
-      where: { locationId, id: { in: unique } },
+      where: {
+        location: ACTIVE_LOCATION_WHERE,
+        locationId,
+        id: { in: unique },
+      },
       select: { id: true },
     });
     if (found.length !== unique.length) {
@@ -108,7 +118,10 @@ export class ServiceReadService {
     locationId: string,
     filter: ServiceFilter,
   ): Prisma.ServiceWhereInput {
-    const where: Prisma.ServiceWhereInput = { locationId };
+    const where: Prisma.ServiceWhereInput = {
+      location: ACTIVE_LOCATION_WHERE,
+      locationId,
+    };
     const search = filter.search?.trim();
     if (search) {
       where.OR = [
@@ -128,6 +141,7 @@ export class ServiceReadService {
   async countBookable(locationId: string): Promise<number> {
     return this.db.service.count({
       where: {
+        location: ACTIVE_LOCATION_WHERE,
         locationId,
         status: ServiceStatus.ACTIVE,
         staffServices: { some: { staff: { status: StaffStatus.ACTIVE } } },

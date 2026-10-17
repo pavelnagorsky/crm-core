@@ -42,13 +42,13 @@ import { GetShiftsRequestDto } from '../dto/get-shifts-request.dto.js';
 import { ReplaceShiftsRequestDto } from '../dto/replace-shifts-request.dto.js';
 import { ShiftItemDto } from '../dto/shift-item.dto.js';
 import { ShiftsResponseDto } from '../dto/shifts-response.dto.js';
-import { StaffExportRequestDto } from '../dto/staff-export-request.dto.js';
+import { StaffExportRequestDto } from '../export/dto/staff-export-request.dto.js';
 import { StaffResponseDto } from '../dto/staff-response.dto.js';
 import { StaffSearchRequestDto } from '../dto/staff-search-request.dto.js';
 import { StaffSearchResponseDto } from '../dto/staff-search-response.dto.js';
 import { StaffStatusCountResponseDto } from '../dto/staff-status-count-response.dto.js';
 import { UpdateStaffDto } from '../dto/update-staff.dto.js';
-import { StaffExportService } from '../services/staff-export.service.js';
+import { StaffExportService } from '../export/services/staff-export.service.js';
 import { StaffService } from '../services/staff.service.js';
 
 @ApiTags('Staff')

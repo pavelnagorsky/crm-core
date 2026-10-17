@@ -8,7 +8,7 @@ import { XlsxUtils } from '../../../../shared/xlsx/xlsx.utils.js';
 import {
   CLIENT_IMPORT_MAX_BYTES,
   CLIENT_IMPORT_MAX_ROWS,
-} from '../clients-import.constants.js';
+} from '../constants/clients-import.constants.js';
 import { ClientImportFileReason } from '../enums/client-import-file-reason.enum.js';
 import {
   CLIENT_SHEET_COLUMNS,

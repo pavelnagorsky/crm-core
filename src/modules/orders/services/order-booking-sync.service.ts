@@ -23,6 +23,7 @@ import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
 import { orderItemSnapshot } from '../utils/order-item-snapshot.js';
 import { OrderDraftService } from './order-draft.service.js';
 import { OrderPersistenceService } from './order-persistence.service.js';
+import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 
 @Injectable()
 export class OrderBookingSyncService {
@@ -39,7 +40,7 @@ export class OrderBookingSyncService {
     tx: Prisma.TransactionClient,
   ): Promise<Record<string, unknown>[]> {
     const order = await tx.order.findUnique({
-      where: { bookingId: booking.id },
+      where: { location: ACTIVE_LOCATION_WHERE, bookingId: booking.id },
       include: orderInclude,
     });
     if (!order || order.locationId !== booking.locationId) return [];
@@ -70,7 +71,7 @@ export class OrderBookingSyncService {
     tx: Prisma.TransactionClient,
   ): Promise<OrderWithItems> {
     const existing = await tx.order.findUnique({
-      where: { bookingId: booking.id },
+      where: { location: ACTIVE_LOCATION_WHERE, bookingId: booking.id },
       include: orderInclude,
     });
     const order = existing
@@ -127,7 +128,7 @@ export class OrderBookingSyncService {
     tx: Prisma.TransactionClient,
   ): Promise<OrderWithItems | null> {
     const order = await tx.order.findUnique({
-      where: { bookingId: booking.id },
+      where: { location: ACTIVE_LOCATION_WHERE, bookingId: booking.id },
       include: orderInclude,
     });
     if (!order || order.locationId !== booking.locationId) return null;

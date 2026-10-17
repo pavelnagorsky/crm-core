@@ -9,7 +9,7 @@ import { DashboardBucketFactory } from '../../../dashboard/factories/dashboard-b
 import { DashboardMetricFactory } from '../../../dashboard/factories/dashboard-metric.factory.js';
 import { ResolvedRange } from '../../../dashboard/interfaces/resolved-range.interface.js';
 import { DashboardRangeService } from '../../../dashboard/services/dashboard-range.service.js';
-import { OrdersAggregatesService } from '../../../orders/analytics/services/orders-aggregates.service.js';
+import { OrdersAggregatesService } from '../../../orders/aggregates/services/orders-aggregates.service.js';
 import { ProductsAnalyticsRequestDto } from '../dto/products-analytics-request.dto.js';
 import { ProductsAnalyticsWidgetKey } from '../enums/products-analytics-widget-key.enum.js';
 import { ProductsAnalyticsService } from './products-analytics.service.js';

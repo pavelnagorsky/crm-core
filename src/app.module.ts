@@ -1,6 +1,5 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
 import configuration from './config/configuration.js';
@@ -29,7 +28,6 @@ import { ProductsModule } from './modules/products/products.module.js';
 import { ServicesModule } from './modules/services/services.module.js';
 import { StaffModule } from './modules/staff/staff.module.js';
 import { SuppliersModule } from './modules/suppliers/suppliers.module.js';
-import { BusinessActiveGuard } from './shared/guards/business-active.guard.js';
 
 @Module({
   imports: [
@@ -66,6 +64,5 @@ import { BusinessActiveGuard } from './shared/guards/business-active.guard.js';
     InventoryAnalyticsModule,
     OrdersModule,
   ],
-  providers: [{ provide: APP_GUARD, useClass: BusinessActiveGuard }],
 })
 export class AppModule {}

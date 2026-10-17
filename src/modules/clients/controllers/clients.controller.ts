@@ -39,8 +39,8 @@ import { auditActorFromToken } from '../../audit/utils/audit-actor-from-token.js
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 import { TokenPayload } from '../../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
-import { ClientExportRequestDto } from '../clients-export/dto/client-export-request.dto.js';
-import { ClientsExportService } from '../clients-export/services/clients-export.service.js';
+import { ClientExportRequestDto } from '../export/dto/client-export-request.dto.js';
+import { ClientsExportService } from '../export/services/clients-export.service.js';
 import { ClientResponseDto } from '../dto/client-response.dto.js';
 import { ClientSearchRequestDto } from '../dto/client-search-request.dto.js';
 import { ClientSearchResponseDto } from '../dto/client-search-response.dto.js';

@@ -6,6 +6,7 @@ import {
   Prisma,
 } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
+import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 import { stableOrderBy } from '../../../shared/database/stable-order-by.js';
 import { OrderDirection } from '../../../shared/enums/order-direction.enum.js';
 import { PaginatedResult } from '../../../shared/interfaces/paginated-result.interface.js';
@@ -116,7 +117,7 @@ export class OrderPersistenceService {
     orderId: string,
   ): Promise<OrderWithItems> {
     const order = await tx.order.findFirst({
-      where: { id: orderId, locationId },
+      where: { location: ACTIVE_LOCATION_WHERE, id: orderId, locationId },
       include: orderInclude,
     });
     if (!order) throw new NotFoundException('Order not found');
@@ -129,7 +130,7 @@ export class OrderPersistenceService {
     bookingId: string,
   ): Promise<OrderWithItems> {
     const order = await tx.order.findUnique({
-      where: { bookingId },
+      where: { location: ACTIVE_LOCATION_WHERE, bookingId },
       include: orderInclude,
     });
     if (!order || order.locationId !== locationId) {
@@ -201,6 +202,7 @@ export class OrderPersistenceService {
     },
   ): Prisma.OrderWhereInput {
     const where: Prisma.OrderWhereInput = {
+      location: ACTIVE_LOCATION_WHERE,
       locationId,
       id: filter.orderId,
       status: filter.status,
@@ -240,7 +242,7 @@ export class OrderPersistenceService {
     where: Prisma.OrderWhereInput,
   ): Promise<OrderWithItems> {
     const order = await this.db.order.findFirst({
-      where,
+      where: { ...where, location: ACTIVE_LOCATION_WHERE },
       include: orderInclude,
     });
     if (!order) throw new NotFoundException('Order not found');

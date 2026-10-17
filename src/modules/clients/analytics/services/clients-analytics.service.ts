@@ -22,9 +22,9 @@ import { DashboardBucketFactory } from '../../../dashboard/factories/dashboard-b
 import { DashboardMetricFactory } from '../../../dashboard/factories/dashboard-metric.factory.js';
 import { ResolvedRange } from '../../../dashboard/interfaces/resolved-range.interface.js';
 import { DashboardRangeService } from '../../../dashboard/services/dashboard-range.service.js';
-import { OrderClientRevenueBucket } from '../../../orders/analytics/interfaces/order-client-revenue-bucket.interface.js';
-import { OrderClientRevenueTotals } from '../../../orders/analytics/interfaces/order-client-revenue-totals.interface.js';
-import { OrdersAggregatesService } from '../../../orders/analytics/services/orders-aggregates.service.js';
+import { OrderClientRevenueBucket } from '../../../orders/aggregates/interfaces/order-client-revenue-bucket.interface.js';
+import { OrderClientRevenueTotals } from '../../../orders/aggregates/interfaces/order-client-revenue-totals.interface.js';
+import { OrdersAggregatesService } from '../../../orders/aggregates/services/orders-aggregates.service.js';
 import { ClientsAnalyticsRequestDto } from '../dto/clients-analytics-request.dto.js';
 import { ClientsAnalyticsWidgetKey } from '../enums/clients-analytics-widget-key.enum.js';
 import { ClientAnalyticsContext } from '../interfaces/client-analytics-context.interface.js';

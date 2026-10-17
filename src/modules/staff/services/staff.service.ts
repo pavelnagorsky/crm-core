@@ -7,6 +7,7 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma, Staff, StaffShift, StaffStatus } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
+import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
 import { stableOrderBy } from '../../../shared/database/stable-order-by.js';
 import { OrderDirection } from '../../../shared/enums/order-direction.enum.js';
@@ -55,7 +56,12 @@ export class StaffService {
     tx: Prisma.TransactionClient,
   ) {
     const staff = await tx.staff.findFirst({
-      where: { id: staffId, locationId, status: 'ACTIVE' },
+      where: {
+        location: ACTIVE_LOCATION_WHERE,
+        id: staffId,
+        locationId,
+        status: 'ACTIVE',
+      },
     });
     if (!staff)
       throw new AppException(
@@ -84,7 +90,12 @@ export class StaffService {
   ) {
     const staff = await this.resolveInvitationProfile(locationId, staffId, tx);
     const occupied = await tx.staff.findFirst({
-      where: { locationId, userId, NOT: { id: staffId } },
+      where: {
+        location: ACTIVE_LOCATION_WHERE,
+        locationId,
+        userId,
+        NOT: { id: staffId },
+      },
     });
     if ((staff.userId && staff.userId !== userId) || occupied)
       throw new AppException(
@@ -109,7 +120,9 @@ export class StaffService {
   }
 
   accessProfilesForUser(userId: string) {
-    return this.db.staff.findMany({ where: { userId, status: 'ACTIVE' } });
+    return this.db.staff.findMany({
+      where: { location: ACTIVE_LOCATION_WHERE, userId, status: 'ACTIVE' },
+    });
   }
   constructor(
     private readonly db: DatabaseService,
@@ -122,7 +135,7 @@ export class StaffService {
 
   listInLocation(locationId: string): Promise<Staff[]> {
     return this.db.staff.findMany({
-      where: { locationId },
+      where: { location: ACTIVE_LOCATION_WHERE, locationId },
       orderBy: { name: 'asc' },
     });
   }
@@ -135,6 +148,7 @@ export class StaffService {
     if (staffIds.length === 0) return Promise.resolve([]);
     return (tx ?? this.db).staff.findMany({
       where: {
+        location: ACTIVE_LOCATION_WHERE,
         id: { in: staffIds },
         locationId,
         status: StaffStatus.ACTIVE,
@@ -146,7 +160,7 @@ export class StaffService {
   async namesByIds(ids: string[]): Promise<Map<string, string>> {
     if (ids.length === 0) return new Map();
     const rows = await this.db.staff.findMany({
-      where: { id: { in: ids } },
+      where: { location: ACTIVE_LOCATION_WHERE, id: { in: ids } },
       select: { id: true, name: true },
     });
     return new Map(rows.map((row) => [row.id, row.name]));
@@ -161,7 +175,7 @@ export class StaffService {
   ): Promise<StaffShift[]> {
     return (tx ?? this.db).staffShift.findMany({
       where: {
-        staff: { locationId },
+        staff: { location: ACTIVE_LOCATION_WHERE, locationId },
         date: { gte: from, lte: to },
         ...(staffIds?.length ? { staffId: { in: staffIds } } : {}),
       },
@@ -177,7 +191,11 @@ export class StaffService {
   ): Promise<StaffShift[]> {
     if (staffIds.length === 0) return Promise.resolve([]);
     return (tx ?? this.db).staffShift.findMany({
-      where: { staffId: { in: staffIds }, date: { gte: from, lte: to } },
+      where: {
+        staff: { location: ACTIVE_LOCATION_WHERE },
+        staffId: { in: staffIds },
+        date: { gte: from, lte: to },
+      },
       orderBy: [{ date: 'asc' }, { startTime: 'asc' }],
     });
   }
@@ -187,14 +205,20 @@ export class StaffService {
     date: Date,
     tx?: Prisma.TransactionClient,
   ): Promise<StaffShift | null> {
-    return (tx ?? this.db).staffShift.findFirst({ where: { staffId, date } });
+    return (tx ?? this.db).staffShift.findFirst({
+      where: { staff: { location: ACTIVE_LOCATION_WHERE }, staffId, date },
+    });
   }
 
   listActiveWithServices(
     locationId: string,
   ): Promise<(StaffWithAvatar & { staffServices: { serviceId: string }[] })[]> {
     return this.db.staff.findMany({
-      where: { locationId, status: StaffStatus.ACTIVE },
+      where: {
+        location: ACTIVE_LOCATION_WHERE,
+        locationId,
+        status: StaffStatus.ACTIVE,
+      },
       orderBy: { name: 'asc' },
       include: {
         avatarFile: true,
@@ -301,7 +325,7 @@ export class StaffService {
 
   async findById(staffId: string): Promise<StaffWithAvatar> {
     const staff = await this.db.staff.findUnique({
-      where: { id: staffId },
+      where: { location: ACTIVE_LOCATION_WHERE, id: staffId },
       include: { avatarFile: true },
     });
     if (!staff) throw new NotFoundException('Staff member not found');
@@ -310,7 +334,7 @@ export class StaffService {
 
   async findWithServiceCount(staffId: string): Promise<StaffWithServiceCount> {
     const staff = await this.db.staff.findUnique({
-      where: { id: staffId },
+      where: { location: ACTIVE_LOCATION_WHERE, id: staffId },
       include: staffViewInclude,
     });
     if (!staff) throw new NotFoundException('Staff member not found');
@@ -322,7 +346,7 @@ export class StaffService {
     staffId: string,
   ): Promise<StaffWithServiceCount> {
     const staff = await this.db.staff.findFirst({
-      where: { id: staffId, locationId },
+      where: { location: ACTIVE_LOCATION_WHERE, id: staffId, locationId },
       include: staffViewInclude,
     });
     if (!staff) throw new NotFoundException('Staff member not found');
@@ -349,7 +373,7 @@ export class StaffService {
     staffId: string,
   ): Promise<StaffWithAvatar> {
     const staff = await this.db.staff.findFirst({
-      where: { id: staffId, locationId },
+      where: { location: ACTIVE_LOCATION_WHERE, id: staffId, locationId },
       include: { avatarFile: true },
     });
     if (!staff) throw new NotFoundException('Staff member not found');
@@ -360,7 +384,10 @@ export class StaffService {
     locationId: string,
     filter: StaffFilterDto,
   ): Prisma.StaffWhereInput {
-    const where: Prisma.StaffWhereInput = { locationId };
+    const where: Prisma.StaffWhereInput = {
+      location: ACTIVE_LOCATION_WHERE,
+      locationId,
+    };
     const search = filter.search?.trim();
     if (search) {
       const terms = search.split(regularExpressions.whitespace).filter(Boolean);
@@ -409,6 +436,7 @@ export class StaffService {
     if (staffId) {
       return this.db.staff.findMany({
         where: {
+          location: ACTIVE_LOCATION_WHERE,
           id: staffId,
           locationId,
           status: StaffStatus.ACTIVE,
@@ -419,6 +447,7 @@ export class StaffService {
     }
     return this.db.staff.findMany({
       where: {
+        location: ACTIVE_LOCATION_WHERE,
         locationId,
         status: StaffStatus.ACTIVE,
         staffServices: { some: { serviceId } },
@@ -440,6 +469,7 @@ export class StaffService {
 
     const staff = await this.db.staff.findMany({
       where: {
+        location: ACTIVE_LOCATION_WHERE,
         locationId,
         status: StaffStatus.ACTIVE,
         staffServices: { some: { serviceId: { in: uniqueServiceIds } } },
@@ -472,7 +502,12 @@ export class StaffService {
     staffId: string,
   ): Promise<string[]> {
     const staff = await this.db.staff.findFirst({
-      where: { id: staffId, locationId, status: StaffStatus.ACTIVE },
+      where: {
+        location: ACTIVE_LOCATION_WHERE,
+        id: staffId,
+        locationId,
+        status: StaffStatus.ACTIVE,
+      },
       select: { staffServices: { select: { serviceId: true } } },
     });
     return staff?.staffServices.map((service) => service.serviceId) ?? [];
@@ -603,7 +638,7 @@ export class StaffService {
   ): Promise<StaffStatusCountResponseDto[]> {
     const rows = await this.db.staff.groupBy({
       by: ['status'],
-      where: { locationId },
+      where: { location: ACTIVE_LOCATION_WHERE, locationId },
       _count: { _all: true },
     });
     return rows.map((r) => {
@@ -622,6 +657,7 @@ export class StaffService {
     await this.findInLocation(locationId, staffId);
     return this.db.staffShift.findMany({
       where: {
+        staff: { location: ACTIVE_LOCATION_WHERE },
         staffId,
         date: { gte: new Date(dto.from), lte: new Date(dto.to) },
       },
@@ -656,7 +692,11 @@ export class StaffService {
       });
 
       return tx.staffShift.findMany({
-        where: { staffId, date: { gte: from, lte: to } },
+        where: {
+          staff: { location: ACTIVE_LOCATION_WHERE },
+          staffId,
+          date: { gte: from, lte: to },
+        },
         orderBy: { date: 'asc' },
       });
     });

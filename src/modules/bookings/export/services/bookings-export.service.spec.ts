@@ -1,7 +1,7 @@
 import { BookingSource, BookingStatus, Prisma } from '@prisma/client';
 import { PassThrough } from 'stream';
-import { booking as bookingFixture } from '../../../../../test/factories/booking.factory.js';
-import { BookingFixtureOptions } from '../../../../../test/factories/interfaces/booking-fixture-options.interface.js';
+import { booking as bookingFixture } from '../../testing/factories/booking.factory.js';
+import { BookingFixtureOptions } from '../../testing/interfaces/booking-fixture-options.interface.js';
 import { OrderDirection } from '../../../../shared/enums/order-direction.enum.js';
 import { LocaleService } from '../../../../shared/i18n/locale.service.js';
 import { XlsxUtils } from '../../../../shared/xlsx/xlsx.utils.js';

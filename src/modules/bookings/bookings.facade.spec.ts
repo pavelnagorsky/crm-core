@@ -2,8 +2,8 @@ import { NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test } from '@nestjs/testing';
 import { BookingSource, CancelledBy, Prisma, UserRole } from '@prisma/client';
-import { booking } from '../../../test/factories/booking.factory.js';
-import { authorizeTestToken } from '../../../test/factories/token-payload.factory.js';
+import { booking } from './testing/factories/booking.factory.js';
+import { authorizeTestToken } from '../auth/testing/factories/token-payload.factory.js';
 import { DatabaseService } from '../../database/database.service.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
@@ -27,9 +27,9 @@ import { BookingClientTokenService } from './services/booking-client-token.servi
 import { BookingEventsService } from './services/booking-events.service.js';
 import { BookingSlotLockService } from './services/booking-slot-lock.service.js';
 import { BookingWriteLockService } from './services/booking-write-lock.service.js';
-import { BookingLifecycleService } from './services/mutation/booking-lifecycle.service.js';
-import { BookingMutationService } from './services/mutation/booking-mutation.service.js';
-import { BookingRescheduleService } from './services/mutation/booking-reschedule.service.js';
+import { BookingLifecycleService } from './services/write/booking-lifecycle.service.js';
+import { BookingMutationService } from './services/write/booking-mutation.service.js';
+import { BookingRescheduleService } from './services/write/booking-reschedule.service.js';
 import { BookingCalendarReadService } from './services/read/booking-calendar-read.service.js';
 import { BookingReadService } from './services/read/booking-read.service.js';
 import { BookingSetupService } from './services/setup/booking-setup.service.js';
@@ -383,6 +383,7 @@ describe('BookingsFacade.search', () => {
     } as BookingSearchRequestDto);
 
     expect(findMany.mock.calls[0][0].where).toEqual({
+      location: { deletedAt: null, brand: { deletedAt: null } },
       locationId: 'biz',
       deletedAt: null,
       AND: [
@@ -479,6 +480,7 @@ describe('BookingsFacade.search', () => {
     } as BookingSearchRequestDto);
 
     expect(findMany.mock.calls[0][0].where).toEqual({
+      location: { deletedAt: null, brand: { deletedAt: null } },
       locationId: 'biz',
       deletedAt: null,
     });
@@ -620,6 +622,7 @@ describe('BookingCalendarReadService.listForCalendar', () => {
 
     expect(findMany).toHaveBeenCalledWith({
       where: {
+        location: { deletedAt: null, brand: { deletedAt: null } },
         locationId: 'biz',
         startAt: { lt: rangeEnd },
         endAt: { gt: rangeStart },

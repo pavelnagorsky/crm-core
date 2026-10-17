@@ -1,8 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { OnEvent } from '@nestjs/event-emitter';
+import { AuditLog, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
-import { stableOrderBy } from '../../../shared/database/stable-order-by.js';
-import { OrderDirection } from '../../../shared/enums/order-direction.enum.js';
+import {
+  activeBrandSql,
+  activeLocationSql,
+} from '../../../shared/database/active-business.sql.js';
+import { CountRow } from '../../../shared/database/interfaces/count-row.interface.js';
 import { PaginatedResult } from '../../../shared/interfaces/paginated-result.interface.js';
 import { AUDIT_EVENT } from '../constants/audit.constants.js';
 import { AuditHistoryRequestDto } from '../dto/audit-history-request.dto.js';
@@ -64,57 +68,41 @@ export class AuditService {
     brandId: string,
     dto: AuditHistoryRequestDto,
   ): Promise<PaginatedResult<AuditLogItemDto>> {
-    const where = {
-      brandId,
-      entityType: dto.entityType,
-      entityId: dto.entityId,
-    };
-
-    const [logs, totalItems] = await this.db.$transaction([
-      this.db.auditLog.findMany({
-        where,
-        orderBy: stableOrderBy(
-          { occurredAt: OrderDirection.DESC },
-          OrderDirection.DESC,
-        ),
-        skip: (dto.page - 1) * dto.pageSize,
-        take: dto.pageSize,
-      }),
-      this.db.auditLog.count({ where }),
-    ]);
-
-    const items = logs.map((log) =>
-      AuditLogItemDto.fromEntity(
-        log,
-        this.renderer.render(log, dto.lang),
-        this.renderer.eventTitle(log.eventType, dto.lang),
-      ),
+    return this.getHistory(
+      Prisma.sql`audit."brandId" = ${brandId} AND ${activeBrandSql(Prisma.sql`audit."brandId"`)}`,
+      dto,
     );
-
-    return { items, totalItems };
   }
 
   async getLocationHistory(
     locationId: string,
     dto: AuditHistoryRequestDto,
   ): Promise<PaginatedResult<AuditLogItemDto>> {
-    const where = {
-      locationId,
-      entityType: dto.entityType,
-      entityId: dto.entityId,
-    };
+    return this.getHistory(
+      Prisma.sql`audit."locationId" = ${locationId} AND ${activeLocationSql(Prisma.sql`audit."locationId"`)}`,
+      dto,
+    );
+  }
 
-    const [logs, totalItems] = await this.db.$transaction([
-      this.db.auditLog.findMany({
-        where,
-        orderBy: stableOrderBy(
-          { occurredAt: OrderDirection.DESC },
-          OrderDirection.DESC,
-        ),
-        skip: (dto.page - 1) * dto.pageSize,
-        take: dto.pageSize,
-      }),
-      this.db.auditLog.count({ where }),
+  private async getHistory(
+    scope: Prisma.Sql,
+    dto: AuditHistoryRequestDto,
+  ): Promise<PaginatedResult<AuditLogItemDto>> {
+    const conditions = [scope];
+    if (dto.entityType)
+      conditions.push(Prisma.sql`audit."entityType"::text = ${dto.entityType}`);
+    if (dto.entityId)
+      conditions.push(Prisma.sql`audit."entityId" = ${dto.entityId}`);
+    const where = Prisma.join(conditions, ' AND ');
+    const [logs, [count]] = await this.db.$transaction([
+      this.db.$queryRaw<
+        AuditLog[]
+      >`SELECT audit.* FROM "AuditLog" audit WHERE ${where}
+        ORDER BY audit."occurredAt" DESC, audit."id" DESC
+        LIMIT ${dto.pageSize} OFFSET ${(dto.page - 1) * dto.pageSize}`,
+      this.db.$queryRaw<
+        CountRow[]
+      >`SELECT COUNT(*) AS "totalItems" FROM "AuditLog" audit WHERE ${where}`,
     ]);
 
     const items = logs.map((log) =>
@@ -125,6 +113,6 @@ export class AuditService {
       ),
     );
 
-    return { items, totalItems };
+    return { items, totalItems: Number(count.totalItems) };
   }
 }

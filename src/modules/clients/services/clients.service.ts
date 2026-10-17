@@ -7,6 +7,7 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Client, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
+import { ACTIVE_BRAND_WHERE } from '../../../shared/database/active-business.where.js';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
 import { stableOrderBy } from '../../../shared/database/stable-order-by.js';
 import { OrderDirection } from '../../../shared/enums/order-direction.enum.js';
@@ -143,14 +144,16 @@ export class ClientsService {
   }
 
   async findById(clientId: string): Promise<Client> {
-    const client = await this.db.client.findUnique({ where: { id: clientId } });
+    const client = await this.db.client.findUnique({
+      where: { brand: ACTIVE_BRAND_WHERE, id: clientId },
+    });
     if (!client) throw new NotFoundException('Client not found');
     return client;
   }
 
   async findInBrand(brandId: string, clientId: string): Promise<Client> {
     const client = await this.db.client.findFirst({
-      where: { id: clientId, brandId },
+      where: { brand: ACTIVE_BRAND_WHERE, id: clientId, brandId },
     });
     if (!client) throw new NotFoundException('Client not found');
     return client;
@@ -166,7 +169,7 @@ export class ClientsService {
   ): Promise<Client> {
     if (!canCreate) {
       const existing = await this.db.client.findUnique({
-        where: { brandId_phone: { brandId, phone } },
+        where: { brand: ACTIVE_BRAND_WHERE, brandId_phone: { brandId, phone } },
       });
       if (!existing)
         throw new ForbiddenException('Client creation permission required');
@@ -183,7 +186,10 @@ export class ClientsService {
     brandId: string,
     dto: ClientSearchRequestDto,
   ): Promise<PaginatedResult<Client>> {
-    const where: Prisma.ClientWhereInput = { brandId };
+    const where: Prisma.ClientWhereInput = {
+      brand: ACTIVE_BRAND_WHERE,
+      brandId,
+    };
 
     const search = dto.search?.trim();
     if (search) {
@@ -245,6 +251,7 @@ export class ClientsService {
     for (let offset = 0; offset < phones.length; offset += PHONE_LOOKUP_CHUNK) {
       const found = await this.db.client.findMany({
         where: {
+          brand: ACTIVE_BRAND_WHERE,
           brandId,
           phone: { in: phones.slice(offset, offset + PHONE_LOOKUP_CHUNK) },
         },

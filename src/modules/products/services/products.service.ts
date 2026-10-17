@@ -8,7 +8,10 @@ import {
   ProductStatus,
 } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
-import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
+import {
+  ACTIVE_BRAND_WHERE,
+  ACTIVE_LOCATION_WHERE,
+} from '../../../shared/database/active-business.where.js';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
 import { stableOrderBy } from '../../../shared/database/stable-order-by.js';
 import { OrderDirection } from '../../../shared/enums/order-direction.enum.js';
@@ -103,7 +106,7 @@ export class ProductsService {
 
   listCategories(brandId: string): Promise<ProductCategory[]> {
     return this.db.productCategory.findMany({
-      where: { brandId },
+      where: { brand: ACTIVE_BRAND_WHERE, brandId },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }, { id: 'asc' }],
     });
   }
@@ -219,6 +222,7 @@ export class ProductsService {
           await this.lockProduct(brandId, productId, tx);
           const used = await tx.product.count({
             where: {
+              brand: ACTIVE_BRAND_WHERE,
               id: productId,
               unit: { not: dto.unit },
               OR: [{ locations: { some: {} } }, { packagings: { some: {} } }],
@@ -349,7 +353,10 @@ export class ProductsService {
       productId,
     );
     const old = await this.db.productLocation.findUnique({
-      where: { productId_locationId: { productId, locationId } },
+      where: {
+        location: ACTIVE_LOCATION_WHERE,
+        productId_locationId: { productId, locationId },
+      },
     });
     if (old?.trackInventory && !dto.trackInventory) {
       throw new AppException(
@@ -400,7 +407,7 @@ export class ProductsService {
     productId: string,
   ): Promise<ProductWithDetails> {
     const product = await this.db.product.findFirst({
-      where: { id: productId, brandId },
+      where: { brand: ACTIVE_BRAND_WHERE, id: productId, brandId },
       include: productDetailsInclude,
     });
     if (!product) throw new NotFoundException('Product not found');
@@ -432,7 +439,7 @@ export class ProductsService {
     productId: string,
   ): Promise<Product> {
     const product = await this.db.product.findFirst({
-      where: { id: productId, brandId },
+      where: { brand: ACTIVE_BRAND_WHERE, id: productId, brandId },
     });
     if (!product) throw new NotFoundException('Product not found');
     return product;
@@ -483,7 +490,10 @@ export class ProductsService {
     locationId: string,
     dto: LocationProductSearchRequestDto,
   ): Promise<PaginatedResult<LocationProductView>> {
-    const where: Prisma.ProductLocationWhereInput = { locationId };
+    const where: Prisma.ProductLocationWhereInput = {
+      location: ACTIVE_LOCATION_WHERE,
+      locationId,
+    };
     const search = dto.search?.trim();
     if (search) {
       where.product = {
@@ -568,7 +578,10 @@ export class ProductsService {
       status?: ProductStatus;
     },
   ): Prisma.ProductWhereInput {
-    const where: Prisma.ProductWhereInput = { brandId };
+    const where: Prisma.ProductWhereInput = {
+      brand: ACTIVE_BRAND_WHERE,
+      brandId,
+    };
     const search = filter.search?.trim();
     if (search) {
       where.OR = [
@@ -598,7 +611,7 @@ export class ProductsService {
     categoryId: string,
   ): Promise<ProductCategory> {
     const category = await this.db.productCategory.findFirst({
-      where: { id: categoryId, brandId },
+      where: { brand: ACTIVE_BRAND_WHERE, id: categoryId, brandId },
     });
     if (!category) throw new NotFoundException('Product category not found');
     return category;

@@ -2,6 +2,7 @@ import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma, ProductPackaging, ProductUnit } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
+import { ACTIVE_BRAND_WHERE } from '../../../shared/database/active-business.where.js';
 import { fitsDecimal } from '../../../shared/database/fits-decimal.js';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
@@ -88,7 +89,7 @@ export class ProductPackagingService {
       where: {
         id: packagingId,
         productId,
-        product: { brandId },
+        product: { brand: ACTIVE_BRAND_WHERE, brandId },
       },
     });
     if (!packaging) throw new NotFoundException('Product packaging not found');
@@ -116,7 +117,7 @@ export class ProductPackagingService {
       where: {
         id: { in: [...new Set(packagingIds)] },
         isActive: true,
-        product: { brandId },
+        product: { brand: ACTIVE_BRAND_WHERE, brandId },
       },
     });
   }

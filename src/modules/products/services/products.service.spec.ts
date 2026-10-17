@@ -201,7 +201,11 @@ describe('ProductsService', () => {
 
     expect(db.product.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'product-1', brandId: 'brand-1' },
+        where: {
+          brand: { deletedAt: null },
+          id: 'product-1',
+          brandId: 'brand-1',
+        },
       }),
     );
     expect(db.productLocation.upsert).toHaveBeenCalledOnce();
@@ -312,6 +316,7 @@ describe('ProductsService', () => {
     expect(db.product.groupBy).toHaveBeenCalledWith({
       by: ['status'],
       where: {
+        brand: { deletedAt: null },
         brandId: 'brand-1',
         categoryId: 'category-1',
         OR: [

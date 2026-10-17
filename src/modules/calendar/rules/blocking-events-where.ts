@@ -1,4 +1,5 @@
 import { CalendarEventRepeatType, Prisma } from '@prisma/client';
+import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 
 export function blockingEventsWhere(
   locationId: string,
@@ -9,6 +10,7 @@ export function blockingEventsWhere(
 ): Prisma.CalendarEventWhereInput {
   return {
     locationId,
+    location: ACTIVE_LOCATION_WHERE,
     ...(excludedEventIds.length ? { id: { notIn: excludedEventIds } } : {}),
     AND: [
       { OR: [{ staffId: null }, { staffId: { in: staffIds } }] },

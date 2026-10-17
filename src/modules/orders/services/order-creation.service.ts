@@ -1,5 +1,6 @@
 import { BadRequestException, HttpStatus, Injectable } from '@nestjs/common';
 import { DatabaseService } from '../../../database/database.service.js';
+import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { AuditActionType } from '../../audit/enums/audit-action-type.enum.js';
@@ -91,7 +92,7 @@ export class OrderCreationService {
     const result = await this.persistence.inTransaction(async (tx) => {
       await this.persistence.lockSaleRequest(tx, locationId, idempotencyKey);
       const existing = await tx.order.findFirst({
-        where: { locationId, idempotencyKey },
+        where: { location: ACTIVE_LOCATION_WHERE, locationId, idempotencyKey },
         include: orderInclude,
       });
       if (existing) {

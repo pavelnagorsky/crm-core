@@ -1,8 +1,8 @@
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test } from '@nestjs/testing';
 import { BookingStatus, Prisma } from '@prisma/client';
-import { booking as bookingFixture } from '../../../../../test/factories/booking.factory.js';
-import { BookingFixtureOptions } from '../../../../../test/factories/interfaces/booking-fixture-options.interface.js';
+import { booking as bookingFixture } from '../../../bookings/testing/factories/booking.factory.js';
+import { BookingFixtureOptions } from '../../../bookings/testing/interfaces/booking-fixture-options.interface.js';
 import { DatabaseService } from '../../../../database/database.service.js';
 import { AuditActorRole } from '../../../audit/enums/audit-actor-role.enum.js';
 import { BookingWithItems } from '../../../bookings/interfaces/booking-with-items.interface.js';
@@ -409,7 +409,10 @@ describe('StaffEarningsService', () => {
     } as PayrollPeriodEarningsRequestDto);
 
     expect(db.staffEarning.findMany).toHaveBeenCalledWith({
-      where: { payrollResult: { periodId: 'period-1' } },
+      where: {
+        location: { deletedAt: null, brand: { deletedAt: null } },
+        payrollResult: { periodId: 'period-1' },
+      },
       orderBy: [{ earnedOn: 'desc' }, { id: 'desc' }],
       skip: 25,
       take: 25,

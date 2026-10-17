@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { BookingExecutionMode as PrismaBookingExecutionMode } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
+import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { TimeUtils } from '../../../shared/time/time.utils.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
@@ -185,6 +186,7 @@ export class BookingSchedulingService {
     const counts = await this.db.bookingItem.groupBy({
       by: ['staffId'],
       where: {
+        location: ACTIVE_LOCATION_WHERE,
         staffId: { in: available.map((staff) => staff.id) },
         startAt: { gte: dayStart, lt: dayEnd },
       },

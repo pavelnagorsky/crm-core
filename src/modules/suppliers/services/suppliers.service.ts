@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, Supplier } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
+import { ACTIVE_BRAND_WHERE } from '../../../shared/database/active-business.where.js';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
 import { stableOrderBy } from '../../../shared/database/stable-order-by.js';
 import { OrderDirection } from '../../../shared/enums/order-direction.enum.js';
@@ -95,7 +96,7 @@ export class SuppliersService {
     tx?: Prisma.TransactionClient,
   ): Promise<Supplier> {
     const supplier = await (tx ?? this.db).supplier.findFirst({
-      where: { id: supplierId, brandId },
+      where: { brand: ACTIVE_BRAND_WHERE, id: supplierId, brandId },
     });
     if (!supplier) throw new NotFoundException('Supplier not found');
     return supplier;
@@ -157,6 +158,7 @@ export class SuppliersService {
     filter: { search?: string; isActive?: boolean },
   ): Prisma.SupplierWhereInput {
     const where: Prisma.SupplierWhereInput = {
+      brand: ACTIVE_BRAND_WHERE,
       brandId,
       isActive: filter.isActive,
     };

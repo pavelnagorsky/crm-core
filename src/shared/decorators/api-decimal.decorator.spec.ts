@@ -5,7 +5,7 @@ import {
   type SchemaObject,
 } from '@nestjs/swagger';
 import 'reflect-metadata';
-import { MoneySampleModule } from '../../../test/fixtures/decimal/money-sample.module.js';
+import { MoneySampleModule } from './testing/decimal/money-sample.module.js';
 import { registerDecimalSchemas } from './api-decimal.decorator.js';
 
 describe('decimal swagger schemas', () => {

@@ -8,6 +8,7 @@ import {
   StaffShift,
 } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
+import { ACTIVE_LOCATION_WHERE } from '../../../../shared/database/active-business.where.js';
 import { stableOrderBy } from '../../../../shared/database/stable-order-by.js';
 import { OrderDirection } from '../../../../shared/enums/order-direction.enum.js';
 import { AppException } from '../../../../shared/exceptions/app.exception.js';
@@ -87,6 +88,7 @@ export class StaffEarningsService {
     for (const item of booking.items) {
       const existing = await tx.staffEarning.findMany({
         where: {
+          location: ACTIVE_LOCATION_WHERE,
           locationId: booking.locationId,
           bookingItemId: item.id,
           source: StaffEarningSource.BOOKING,
@@ -509,7 +511,10 @@ export class StaffEarningsService {
     locationId: string,
     dto: StaffEarningSearchRequestDto,
   ): Promise<PaginatedResult<StaffEarning>> {
-    const where: Prisma.StaffEarningWhereInput = { locationId };
+    const where: Prisma.StaffEarningWhereInput = {
+      location: ACTIVE_LOCATION_WHERE,
+      locationId,
+    };
     if (dto.staffId) where.staffId = dto.staffId;
     if (dto.type) where.type = dto.type;
     if (dto.from || dto.to) {
@@ -539,6 +544,7 @@ export class StaffEarningsService {
     dto: PayrollPeriodEarningsRequestDto,
   ): Promise<PaginatedResult<StaffEarning>> {
     const where: Prisma.StaffEarningWhereInput = {
+      location: ACTIVE_LOCATION_WHERE,
       payrollResult: { periodId },
     };
     if (dto.staffId) where.staffId = dto.staffId;
@@ -575,7 +581,12 @@ export class StaffEarningsService {
     tx?: Prisma.TransactionClient,
   ): Promise<StaffEarning[]> {
     return this.store(tx).staffEarning.findMany({
-      where: { locationId, earnedOn: { lte: to }, payrollResultId: null },
+      where: {
+        location: ACTIVE_LOCATION_WHERE,
+        locationId,
+        earnedOn: { lte: to },
+        payrollResultId: null,
+      },
       orderBy: [{ staffId: 'asc' }, { earnedOn: 'asc' }],
     });
   }
@@ -583,7 +594,10 @@ export class StaffEarningsService {
   listByResultIds(resultIds: string[]): Promise<StaffEarning[]> {
     if (resultIds.length === 0) return Promise.resolve([]);
     return this.db.staffEarning.findMany({
-      where: { payrollResultId: { in: resultIds } },
+      where: {
+        location: ACTIVE_LOCATION_WHERE,
+        payrollResultId: { in: resultIds },
+      },
       orderBy: { earnedOn: 'asc' },
     });
   }
@@ -594,7 +608,7 @@ export class StaffEarningsService {
   ): Promise<void> {
     const db = this.store(tx);
     const results = await db.payrollResult.findMany({
-      where: { periodId },
+      where: { location: ACTIVE_LOCATION_WHERE, periodId },
       select: { id: true },
     });
     const resultIds = results.map((r) => r.id);
@@ -718,6 +732,7 @@ export class StaffEarningsService {
     const itemIds = booking.items.map((item) => item.id);
     const originals = await db.staffEarning.findMany({
       where: {
+        location: ACTIVE_LOCATION_WHERE,
         locationId: booking.locationId,
         bookingItemId: { in: itemIds },
         source: StaffEarningSource.BOOKING,
@@ -727,7 +742,10 @@ export class StaffEarningsService {
     const reversals: StaffEarning[] = [];
     for (const original of originals) {
       const existingReversal = await db.staffEarning.findUnique({
-        where: { reversesEarningId: original.id },
+        where: {
+          location: ACTIVE_LOCATION_WHERE,
+          reversesEarningId: original.id,
+        },
       });
       if (existingReversal) {
         reversals.push(existingReversal);

@@ -14,7 +14,7 @@ import { DashboardBucketFactory } from '../../../dashboard/factories/dashboard-b
 import { DashboardMetricFactory } from '../../../dashboard/factories/dashboard-metric.factory.js';
 import { ResolvedBrandRange } from '../../../dashboard/interfaces/resolved-brand-range.interface.js';
 import { DashboardRangeService } from '../../../dashboard/services/dashboard-range.service.js';
-import { OrdersAggregatesService } from '../../../orders/analytics/services/orders-aggregates.service.js';
+import { OrdersAggregatesService } from '../../../orders/aggregates/services/orders-aggregates.service.js';
 import { ClientsAnalyticsRequestDto } from '../dto/clients-analytics-request.dto.js';
 import { ClientsAnalyticsWidgetKey } from '../enums/clients-analytics-widget-key.enum.js';
 import { ClientsAnalyticsService } from './clients-analytics.service.js';

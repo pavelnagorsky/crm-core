@@ -28,7 +28,7 @@ export class BookingWidgetsService {
 
   async list(locationId: string): Promise<BookingWidget[]> {
     return this.db.bookingWidget.findMany({
-      where: { locationId },
+      where: { location: ACTIVE_LOCATION_WHERE, locationId },
       orderBy: { updatedAt: 'desc' },
     });
   }
@@ -38,7 +38,7 @@ export class BookingWidgetsService {
     widgetId: string,
   ): Promise<BookingWidget> {
     const widget = await this.db.bookingWidget.findFirst({
-      where: { id: widgetId, locationId },
+      where: { location: ACTIVE_LOCATION_WHERE, id: widgetId, locationId },
     });
     if (!widget)
       throw new AppException(
@@ -158,6 +158,7 @@ export class BookingWidgetsService {
   ): Promise<void> {
     const existing = await this.db.bookingWidget.findFirst({
       where: {
+        location: ACTIVE_LOCATION_WHERE,
         locationId,
         titleKey: title.trim().toLowerCase(),
         ...(widgetId ? { NOT: { id: widgetId } } : {}),

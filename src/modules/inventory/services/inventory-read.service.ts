@@ -11,6 +11,7 @@ import {
   Prisma,
 } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
+import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 import { stableOrderBy } from '../../../shared/database/stable-order-by.js';
 import { OrderDirection } from '../../../shared/enums/order-direction.enum.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
@@ -44,7 +45,7 @@ export class InventoryReadService {
     documentId: string,
   ): Promise<InventoryDocumentWithItems> {
     const document = await this.db.inventoryDocument.findFirst({
-      where: { id: documentId, locationId },
+      where: { location: ACTIVE_LOCATION_WHERE, id: documentId, locationId },
       include: documentInclude,
     });
     if (!document) throw new NotFoundException('Inventory document not found');
@@ -125,6 +126,7 @@ export class InventoryReadService {
       );
     }
     const where: Prisma.InventoryMovementWhereInput = {
+      location: ACTIVE_LOCATION_WHERE,
       locationId,
       productLocationId: productLocation.id,
       type: dto.type,
@@ -161,6 +163,7 @@ export class InventoryReadService {
   ): Prisma.InventoryDocumentWhereInput {
     const occurredAt = this.occurredAtDateWhere(filter);
     return {
+      location: ACTIVE_LOCATION_WHERE,
       locationId,
       type: filter.type,
       status: filter.status,

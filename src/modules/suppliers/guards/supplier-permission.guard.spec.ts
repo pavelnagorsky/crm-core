@@ -7,7 +7,7 @@ import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { Reflector } from '@nestjs/core';
 import { BusinessRole, UserRole } from '@prisma/client';
 import 'reflect-metadata';
-import { authorizeTestToken } from '../../../../test/factories/token-payload.factory.js';
+import { authorizeTestToken } from '../../auth/testing/factories/token-payload.factory.js';
 import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard.js';
 import { PermissionGuard } from '../../auth/guards/permission.guard.js';

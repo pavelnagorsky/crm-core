@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
+import { ACTIVE_LOCATION_WHERE } from '../../../../shared/database/active-business.where.js';
 import { MoneyUtils } from '../../../../shared/money/money.utils.js';
 import { CalendarBookingFeed } from '../../../calendar/interfaces/calendar-booking-feed.interface.js';
 import { CalendarBookingView } from '../../../calendar/interfaces/calendar-booking-view.interface.js';
@@ -48,6 +49,7 @@ export class BookingCalendarReadService {
   ): Promise<CalendarBookingFeed> {
     const rows = await this.db.bookingItem.findMany({
       where: {
+        location: ACTIVE_LOCATION_WHERE,
         locationId,
         startAt: { lt: rangeEnd },
         endAt: { gt: rangeStart },
@@ -73,7 +75,12 @@ export class BookingCalendarReadService {
     bookingId: string,
   ): Promise<string[]> {
     const booking = await this.db.booking.findFirst({
-      where: { id: bookingId, locationId, deletedAt: null },
+      where: {
+        location: ACTIVE_LOCATION_WHERE,
+        id: bookingId,
+        locationId,
+        deletedAt: null,
+      },
       select: { items: { select: { calendarEventId: true } } },
     });
     if (!booking) throw new NotFoundException('Booking not found');
