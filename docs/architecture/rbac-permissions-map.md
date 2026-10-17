@@ -1,6 +1,6 @@
 # Permissions для API
 
-Сопоставление маршрутов с проверками backend на 2026-10-17. [Модель ролей и defaults](./rbac.md), [контракты управления доступом](./rbac-contracts.md). Permissions `*.export` закрывают только скачивание XLSX. Параметр списка `isExport=true` отключает пагинацию и доступен при том же праве чтения, что и обычный список.
+Сопоставление маршрутов с проверками backend на 2026-10-18. [Модель ролей и defaults](./rbac.md), [контракты управления доступом](./rbac-contracts.md). Permissions `*.export` закрывают только скачивание XLSX. Параметр списка `isExport=true` отключает пагинацию и доступен при том же праве чтения, что и обычный список.
 
 Составные действия проверяют все перечисленные permissions и состояние документа. Аналитические endpoints ниже не проверяют permissions по содержимому выбранных показателей; дополнительное `inventory.read` явно требуется только у складского KPI.
 
@@ -104,17 +104,17 @@
 | `POST /public/locations/:locationId/pricing` | `priceBooking` | P: `public` | — |
 | `GET /public/bookings/me` | `getByClientToken` | P: `booking-client-token` | Токен только этой записи; бизнес-роль не требуется. |
 | `POST /public/bookings/me/cancel` | `cancelByClientToken` | P: `booking-client-token` | Действующая клиентская политика отмены; не обход к возврату произвольного заказа. |
-| `POST /locations/:locationId/bookings/manual` | `createManual` | L: `booking.create` | Произвольная цена: также sale.price.override. Товары: order.update. Создание клиента: G:client.create. WALK_IN с немедленным COMPLETED: order.confirm. |
+| `POST /locations/:locationId/bookings/manual` | `createManual` | L: `booking.manage` | Произвольная цена: также sale.price.override. Товары: order.manage. Клиент находится или создаётся автоматически независимо от client.manage. WALK_IN с немедленным COMPLETED: order.manage. |
 | `GET /locations/:locationId/bookings/status-counts` | `getStatusCounts` | L: `booking.read` | — |
 | `GET /locations/:locationId/bookings/export` | `export` | L: `booking.export` | — |
 | `GET /locations/:locationId/bookings/:id` | `findById` | L: `booking.read` | — |
 | `GET /locations/:locationId/bookings` | `search` | L: `booking.read` | — |
-| `PUT /locations/:locationId/bookings/:id` | `update` | L: `booking.update` | Изменение/сброс произвольной цены: также sale.price.override. Меняет сведения клиента в записи, не создаёт и не редактирует общую карточку клиента. |
-| `PATCH /locations/:locationId/bookings/:id/status` | `updateStatus` | L: `booking.status.manage` | При проведении также order.confirm; при сторнировании проведённого — order.return. |
-| `POST /locations/:locationId/bookings/:id/products` | `addProduct` | L: `booking.read` + `order.update` | Произвольная цена: также sale.price.override. Клиента не создаёт. |
-| `POST /locations/:locationId/bookings/:id/items` | `addItems` | L: `booking.read` + `order.update` | Произвольная цена: также sale.price.override. Клиента не создаёт. |
+| `PUT /locations/:locationId/bookings/:id` | `update` | L: `booking.manage` | Изменение/сброс произвольной цены: также sale.price.override. Меняет сведения клиента в записи, не создаёт и не редактирует общую карточку клиента. |
+| `PATCH /locations/:locationId/bookings/:id/status` | `updateStatus` | L: `booking.manage` | При проведении также order.manage; при сторнировании проведённого — order.return. |
+| `POST /locations/:locationId/bookings/:id/products` | `addProduct` | L: `booking.read` + `order.manage` | Произвольная цена: также sale.price.override. Клиента не создаёт. |
+| `POST /locations/:locationId/bookings/:id/items` | `addItems` | L: `booking.read` + `order.manage` | Произвольная цена: также sale.price.override. Клиента не создаёт. |
 | `POST /locations/:locationId/bookings/:id/client-token` | `generateClientToken` | L: `booking.client-token.issue` | — |
-| `POST /locations/:locationId/bookings/:id/cancel` | `cancel` | L: `booking.cancel` | При сторнировании проведённого — также order.return. |
+| `POST /locations/:locationId/bookings/:id/cancel` | `cancel` | L: `booking.manage` | При сторнировании проведённого — также order.return. |
 | `DELETE /locations/:locationId/bookings/:id` | `delete` | L: `booking.delete` | При сторнировании проведённого — также order.return. |
 
 ## brand
@@ -138,8 +138,8 @@
 | --- | --- | --- | --- |
 | `GET /locations/:locationId/calendar/public/available-slots` | `getAvailableSlots` | P: `public` | — |
 | `GET /locations/:locationId/calendar/available-slots` | `getManualAvailableSlots` | L: `booking.read` | — |
-| `GET /locations/:locationId/calendar` | `getCalendar` | L: `calendar.read` | — |
-| `GET /locations/:locationId/calendar/:eventId` | `getEvent` | L: `calendar.read` | — |
+| `GET /locations/:locationId/calendar` | `getCalendar` | L: `booking.read` | — |
+| `GET /locations/:locationId/calendar/:eventId` | `getEvent` | L: `booking.read` | — |
 | `POST /locations/:locationId/calendar` | `create` | L: `calendar.blocks.manage` | — |
 | `PUT /locations/:locationId/calendar/:eventId/occurrence` | `moveOccurrence` | L: `calendar.blocks.manage` | — |
 | `PUT /locations/:locationId/calendar/:eventId` | `update` | L: `calendar.blocks.manage` | — |
@@ -159,9 +159,9 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `POST /brands/:brandId/clients` | `create` | G: `client.create` | — |
+| `POST /brands/:brandId/clients` | `create` | G: `client.manage` | — |
 | `POST /brands/:brandId/clients/import` | `import` | G: `client.import` | — |
-| `PUT /brands/:brandId/clients/:id` | `update` | G: `client.update` | — |
+| `PUT /brands/:brandId/clients/:id` | `update` | G: `client.manage` | — |
 | `PATCH /brands/:brandId/clients/:id/ban` | `setBan` | G: `client.ban` | — |
 | `GET /brands/:brandId/clients/export` | `export` | G: `client.export` | — |
 | `GET /brands/:brandId/clients/:id` | `findById` | G: `client.read` | — |
@@ -244,18 +244,18 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `POST /locations/:locationId/orders` | `create` | L: `order.create` | Произвольная цена: также sale.price.override. confirmImmediately: также order.confirm. Принимает существующий clientId; новый клиент создаётся отдельным API с G:client.create. |
+| `POST /locations/:locationId/orders` | `create` | L: `order.manage` | Произвольная цена: также sale.price.override. confirmImmediately: также order.manage. Принимает существующий clientId; новый клиент создаётся отдельным API с G:client.create. |
 | `GET /locations/:locationId/orders` | `search` | L: `order.read` | — |
 | `GET /locations/:locationId/orders/status-counts` | `getStatusCounts` | L: `order.read` | — |
 | `GET /locations/:locationId/orders/:orderId` | `findById` | L: `order.read` | — |
-| `PUT /locations/:locationId/orders/:orderId` | `update` | L: `order.update` | Изменение/сброс произвольной цены: также sale.price.override. Клиента не создаёт. |
+| `PUT /locations/:locationId/orders/:orderId` | `update` | L: `order.manage` | Изменение/сброс произвольной цены: также sale.price.override. Клиента не создаёт. |
 | `PATCH /locations/:locationId/orders/:orderId/status` | `changeStatus` | L: `order.void` | Текущий DTO допускает только VOIDED. Новые статусы потребуют явной проверки действия. |
-| `PATCH /locations/:locationId/orders/:orderId/items/:orderItemId/confirm` | `confirmItem` | L: `order.confirm` | — |
-| `POST /locations/:locationId/orders/:orderId/items` | `addItems` | L: `order.update` | Произвольная цена: также sale.price.override. Клиента не создаёт. |
-| `POST /locations/:locationId/orders/:orderId/items/confirm` | `confirmItems` | L: `order.confirm` | — |
+| `PATCH /locations/:locationId/orders/:orderId/items/:orderItemId/confirm` | `confirmItem` | L: `order.manage` | — |
+| `POST /locations/:locationId/orders/:orderId/items` | `addItems` | L: `order.manage` | Произвольная цена: также sale.price.override. Клиента не создаёт. |
+| `POST /locations/:locationId/orders/:orderId/items/confirm` | `confirmItems` | L: `order.manage` | — |
 | `PATCH /locations/:locationId/orders/:orderId/items/:orderItemId/reverse` | `reverseItem` | L: `order.return` | — |
 | `POST /locations/:locationId/orders/:orderId/returns` | `createReturn` | L: `order.return` | — |
-| `DELETE /locations/:locationId/orders/:orderId` | `delete` | L: `order.delete` | — |
+| `DELETE /locations/:locationId/orders/:orderId` | `delete` | L: `order.manage` | — |
 
 ## staff-compensation
 
@@ -313,8 +313,8 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `POST /brands/:brandId/products/:productId/packagings` | `create` | G: `product.packaging.manage` | — |
-| `PATCH /brands/:brandId/products/:productId/packagings/:packagingId/status` | `changeStatus` | G: `product.packaging.manage` | — |
+| `POST /brands/:brandId/products/:productId/packagings` | `create` | G: `product.catalog.manage` | — |
+| `PATCH /brands/:brandId/products/:productId/packagings/:packagingId/status` | `changeStatus` | G: `product.catalog.manage` | — |
 
 ## products
 

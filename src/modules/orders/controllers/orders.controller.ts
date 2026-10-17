@@ -26,10 +26,7 @@ import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../../shared/dto/id-response.dto.js';
 import { Permission } from '../../access/enums/permission.enum.js';
-import {
-  assertPermission,
-  hasPermission,
-} from '../../access/utils/assert-permission.js';
+import { hasPermission } from '../../access/utils/assert-permission.js';
 import { auditActorFromToken } from '../../audit/utils/audit-actor-from-token.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 import { TokenPayload } from '../../auth/decorators/token-payload.decorator.js';
@@ -61,15 +58,13 @@ export class OrdersController {
     description:
       'ORDER_IDEMPOTENCY_CONFLICT: the sale key has a different or unknown original request. responseValue.orderId identifies the existing order.',
   })
-  @Permissions(Permission.ORDER_CREATE)
+  @Permissions(Permission.ORDER_MANAGE)
   @Post()
   async create(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Body() dto: CreateOrderDto,
     @TokenPayload() token: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    if (dto.confirmImmediately)
-      assertPermission(token, Permission.ORDER_CONFIRM, locationId);
     const order = await this.orders.create(
       locationId,
       dto,
@@ -134,7 +129,7 @@ export class OrdersController {
   @ApiOperation({ summary: 'Replace draft items in an active order' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiConflictResponse({ description: 'Order is immutable' })
-  @Permissions(Permission.ORDER_UPDATE)
+  @Permissions(Permission.ORDER_MANAGE)
   @Put(':orderId')
   async update(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -176,7 +171,7 @@ export class OrdersController {
   @ApiOperation({ summary: 'Confirm a draft order item' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiConflictResponse({ description: 'Order item cannot be confirmed' })
-  @Permissions(Permission.ORDER_CONFIRM)
+  @Permissions(Permission.ORDER_MANAGE)
   @Patch(':orderId/items/:orderItemId/confirm')
   async confirmItem(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -196,7 +191,7 @@ export class OrdersController {
   @ApiOperation({ summary: 'Add draft product items to an active order' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiConflictResponse({ description: 'Product cannot be added' })
-  @Permissions(Permission.ORDER_UPDATE)
+  @Permissions(Permission.ORDER_MANAGE)
   @Post(':orderId/items')
   async addItems(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -217,7 +212,7 @@ export class OrdersController {
   @ApiOperation({ summary: 'Confirm multiple draft product order items' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiConflictResponse({ description: 'Order items cannot be confirmed' })
-  @Permissions(Permission.ORDER_CONFIRM)
+  @Permissions(Permission.ORDER_MANAGE)
   @Post(':orderId/items/confirm')
   async confirmItems(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -278,7 +273,7 @@ export class OrdersController {
 
   @ApiOperation({ summary: 'Delete an active draft order' })
   @ApiNoContentResponse()
-  @Permissions(Permission.ORDER_DELETE)
+  @Permissions(Permission.ORDER_MANAGE)
   @Delete(':orderId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(

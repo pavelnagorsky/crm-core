@@ -26,6 +26,37 @@ const row: ClientImportRow = {
   notes: null,
 };
 
+describe('ClientsService automatic booking registration', () => {
+  it('creates a missing client or reuses an existing card without changing its contacts', async () => {
+    const upsert = vi.fn().mockResolvedValue({ id: 'client-1' });
+    const service = new ClientsService(
+      { client: { upsert } } as never,
+      {} as never,
+    );
+
+    await expect(
+      service.resolveForBooking(
+        'brand-1',
+        '+375291112233',
+        'Анна',
+        'Иванова',
+        'anna@example.com',
+      ),
+    ).resolves.toEqual({ id: 'client-1' });
+    expect(upsert).toHaveBeenCalledWith({
+      where: { brandId_phone: { brandId: 'brand-1', phone: '+375291112233' } },
+      update: {},
+      create: {
+        brandId: 'brand-1',
+        phone: '+375291112233',
+        firstName: 'Анна',
+        lastName: 'Иванова',
+        email: 'anna@example.com',
+      },
+    });
+  });
+});
+
 describe('ClientsService.insertImported', () => {
   const createManyAndReturn = vi.fn();
   const emit = vi.fn();

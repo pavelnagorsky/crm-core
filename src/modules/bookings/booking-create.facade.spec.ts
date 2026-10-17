@@ -257,7 +257,6 @@ describe('BookingCreateFacade client ban', () => {
       dto.firstName,
       '',
       undefined,
-      true,
     );
   });
 
@@ -763,6 +762,26 @@ function walkInSetup(
 }
 
 describe('BookingCreateFacade walk-in', () => {
+  it('resolves a client automatically for manual booking without a client-management flag', async () => {
+    const { service, tx, clients } = walkInSetup();
+
+    await service.createManualBooking(
+      'business-1',
+      dto,
+      { id: 'user-1', name: 'Staff', role: AuditActorRole.STAFF },
+      false,
+    );
+
+    expect(clients.resolveForBooking).toHaveBeenCalledWith(
+      'brand-1',
+      dto.phone,
+      dto.firstName,
+      dto.lastName,
+      undefined,
+    );
+    expect(tx.booking.create).toHaveBeenCalled();
+  });
+
   it('creates anonymous manual booking without creating or linking a client', async () => {
     const { service, tx, clients } = walkInSetup();
 
@@ -877,7 +896,6 @@ describe('BookingCreateFacade walk-in', () => {
           endAt: '2020-09-20T10:30:00',
         },
         { id: 'user-1', name: 'Staff', role: AuditActorRole.STAFF },
-        true,
         false,
       ),
     ).rejects.toMatchObject({ status: 403 });

@@ -1,9 +1,4 @@
-import {
-  ForbiddenException,
-  HttpStatus,
-  Injectable,
-  NotFoundException,
-} from '@nestjs/common';
+import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Client, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
@@ -165,16 +160,7 @@ export class ClientsService {
     firstName: string,
     lastName: string,
     email?: string,
-    canCreate = true,
   ): Promise<Client> {
-    if (!canCreate) {
-      const existing = await this.db.client.findUnique({
-        where: { brand: ACTIVE_BRAND_WHERE, brandId_phone: { brandId, phone } },
-      });
-      if (!existing)
-        throw new ForbiddenException('Client creation permission required');
-      return existing;
-    }
     return this.db.client.upsert({
       where: { brandId_phone: { brandId, phone } },
       update: {},

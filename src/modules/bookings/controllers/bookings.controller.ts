@@ -165,7 +165,7 @@ export class BookingsController {
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Location, service, or staff not found' })
   @ApiConflictResponse({ description: 'Slot is no longer available' })
-  @Permissions(Permission.BOOKING_CREATE)
+  @Permissions(Permission.BOOKING_MANAGE)
   @Post('locations/:locationId/bookings/manual')
   async createManual(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -182,17 +182,12 @@ export class BookingsController {
         locationId,
       );
     if (dto.products?.length)
-      assertPermission(tokenPayload, Permission.ORDER_UPDATE, locationId);
-    const brandId =
-      tokenPayload.locationMemberships.find(
-        (row) => row.locationId === locationId,
-      )?.brandId ?? '';
+      assertPermission(tokenPayload, Permission.ORDER_MANAGE, locationId);
     const booking = await this.bookingCreateService.createManualBooking(
       locationId,
       dto,
       auditActorFromToken(tokenPayload, locationId),
-      hasPermission(tokenPayload, Permission.CLIENT_CREATE, brandId),
-      hasPermission(tokenPayload, Permission.ORDER_CONFIRM, locationId),
+      hasPermission(tokenPayload, Permission.ORDER_MANAGE, locationId),
     );
     return BaseResponseDto.success({ id: booking.id });
   }
@@ -266,7 +261,7 @@ export class BookingsController {
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking not found' })
   @ApiConflictResponse({ description: 'Slot is no longer available' })
-  @Permissions(Permission.BOOKING_UPDATE)
+  @Permissions(Permission.BOOKING_MANAGE)
   @Put('locations/:locationId/bookings/:id')
   async update(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -301,7 +296,7 @@ export class BookingsController {
   @ApiOperation({ summary: 'Update booking status' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking not found' })
-  @Permissions(Permission.BOOKING_STATUS_MANAGE)
+  @Permissions(Permission.BOOKING_MANAGE)
   @Patch('locations/:locationId/bookings/:id/status')
   async updateStatus(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -319,7 +314,7 @@ export class BookingsController {
       current.status !== BookingStatus.COMPLETED &&
       dto.status === BookingStatus.COMPLETED
     )
-      assertPermission(tokenPayload, Permission.ORDER_CONFIRM, locationId);
+      assertPermission(tokenPayload, Permission.ORDER_MANAGE, locationId);
     const booking = await this.bookings.updateStatus(
       current,
       auditActorFromToken(tokenPayload, locationId),
@@ -332,7 +327,7 @@ export class BookingsController {
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking or product not found' })
   @ApiConflictResponse({ description: 'Product cannot be added' })
-  @Permissions(Permission.BOOKING_READ, Permission.ORDER_UPDATE)
+  @Permissions(Permission.BOOKING_READ, Permission.ORDER_MANAGE)
   @Post('locations/:locationId/bookings/:id/products')
   async addProduct(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -354,7 +349,7 @@ export class BookingsController {
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking or product not found' })
   @ApiConflictResponse({ description: 'Product cannot be added' })
-  @Permissions(Permission.BOOKING_READ, Permission.ORDER_UPDATE)
+  @Permissions(Permission.BOOKING_READ, Permission.ORDER_MANAGE)
   @Post('locations/:locationId/bookings/:id/items')
   async addItems(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -390,7 +385,7 @@ export class BookingsController {
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking not found' })
   @ApiConflictResponse({ description: 'Booking is already cancelled' })
-  @Permissions(Permission.BOOKING_CANCEL)
+  @Permissions(Permission.BOOKING_MANAGE)
   @Post('locations/:locationId/bookings/:id/cancel')
   async cancel(
     @Param('locationId', ParseUUIDPipe) locationId: string,

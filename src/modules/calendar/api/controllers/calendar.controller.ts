@@ -93,7 +93,7 @@ export class CalendarController {
       'Get calendar view for a date range. Blocks, bookings, and closed time in the business timezone. Recurring blocks are expanded onto each occurrence.',
   })
   @ApiOkResponse({ type: ApiResponse(GetCalendarResponseDto) })
-  @Permissions(Permission.CALENDAR_READ)
+  @Permissions(Permission.BOOKING_READ)
   @Get()
   async getCalendar(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -109,7 +109,7 @@ export class CalendarController {
   })
   @ApiOkResponse({ type: ApiResponse(CalendarEventResponseDto) })
   @ApiNotFoundResponse({ description: 'Calendar event not found' })
-  @Permissions(Permission.CALENDAR_READ)
+  @Permissions(Permission.BOOKING_READ)
   @Get(':eventId')
   async getEvent(
     @Param('locationId', ParseUUIDPipe) locationId: string,

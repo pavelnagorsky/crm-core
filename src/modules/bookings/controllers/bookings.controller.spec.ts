@@ -30,7 +30,7 @@ describe('Manual booking API permissions', () => {
     const token = tokenPayload('STAFF');
     token.permissions!['L:location-1'] = token.permissions![
       'L:location-1'
-    ].filter((p) => p !== Permission.ORDER_UPDATE);
+    ].filter((p) => p !== Permission.ORDER_MANAGE);
     const dto = {
       products: [{ productId: 'product', quantity: '1' }],
     } as ManualCreateBookingDto;
@@ -40,13 +40,13 @@ describe('Manual booking API permissions', () => {
     expect(create.createManualBooking).not.toHaveBeenCalled();
   });
 
-  it('passes explicit creation choices without passing the JWT to the service', async () => {
+  it('allows booking without client management and passes only the financial creation choice', async () => {
     const token = tokenPayload('STAFF');
     token.permissions!['L:location-1'] = token.permissions![
       'L:location-1'
-    ].filter((p) => p !== Permission.ORDER_CONFIRM);
+    ].filter((p) => p !== Permission.ORDER_MANAGE);
     token.permissions!['G:brand-1'] = token.permissions!['G:brand-1'].filter(
-      (p) => p !== Permission.CLIENT_CREATE,
+      (p) => p !== Permission.CLIENT_MANAGE,
     );
     const dto = {} as ManualCreateBookingDto;
     await controller.createManual('location-1', dto, token);
@@ -54,7 +54,6 @@ describe('Manual booking API permissions', () => {
       'location-1',
       dto,
       expect.objectContaining({ id: token.sub }),
-      false,
       false,
     );
   });

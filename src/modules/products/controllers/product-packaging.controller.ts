@@ -30,7 +30,7 @@ export class ProductPackagingController {
   constructor(private readonly packagings: ProductPackagingService) {}
 
   @Post()
-  @Permissions(Permission.PRODUCT_PACKAGING_MANAGE)
+  @Permissions(Permission.PRODUCT_CATALOG_MANAGE)
   @ApiOperation({
     summary:
       'Create an immutable product packaging; packagings are included in product details',
@@ -54,7 +54,7 @@ export class ProductPackagingController {
   }
 
   @Patch(':packagingId/status')
-  @Permissions(Permission.PRODUCT_PACKAGING_MANAGE)
+  @Permissions(Permission.PRODUCT_CATALOG_MANAGE)
   @ApiOperation({ summary: 'Archive or reactivate a product packaging' })
   @ApiOkResponse({ type: ApiResponse(ProductPackagingResponseDto) })
   async changeStatus(

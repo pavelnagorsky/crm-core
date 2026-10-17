@@ -63,7 +63,7 @@ export class ClientsController {
   @ApiOperation({ summary: 'Create a client' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
   @ApiConflictResponse({ description: 'Phone number already in use' })
-  @Permissions(Permission.CLIENT_CREATE)
+  @Permissions(Permission.CLIENT_MANAGE)
   @Post()
   async create(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -126,7 +126,7 @@ export class ClientsController {
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Client not found' })
   @ApiConflictResponse({ description: 'Phone number already in use' })
-  @Permissions(Permission.CLIENT_UPDATE)
+  @Permissions(Permission.CLIENT_MANAGE)
   @Put(':id')
   async update(
     @Param('brandId', ParseUUIDPipe) brandId: string,

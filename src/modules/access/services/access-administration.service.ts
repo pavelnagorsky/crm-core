@@ -78,11 +78,13 @@ export class AccessAdministrationService {
         return Object.values(Permission)
           .filter(
             (permission) =>
-              !locationId ||
-              PERMISSION_REGISTRY[permission].scope ===
-                PermissionScope.LOCATION ||
-              PERMISSION_REGISTRY[permission].scope ===
-                PermissionScope.BRAND_OR_LOCATION,
+              PERMISSION_REGISTRY[permission].configurable.includes(role) &&
+              permission !== Permission.FILE_BRAND_MANAGE &&
+              (!locationId ||
+                PERMISSION_REGISTRY[permission].scope ===
+                  PermissionScope.LOCATION ||
+                PERMISSION_REGISTRY[permission].scope ===
+                  PermissionScope.BRAND_OR_LOCATION),
           )
           .map((permission) => {
             const definition = PERMISSION_REGISTRY[permission];

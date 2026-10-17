@@ -79,7 +79,6 @@ export class BookingCreateFacade {
     locationId: string,
     dto: ManualCreateBookingDto,
     actor: AuditActor,
-    canCreateClient = true,
     canComplete = true,
   ): Promise<BookingWithItems> {
     const source =
@@ -95,7 +94,6 @@ export class BookingCreateFacade {
       },
       actor,
       dto,
-      canCreateClient,
       canComplete,
     );
     this.logger.log(
@@ -118,7 +116,6 @@ export class BookingCreateFacade {
     attribution: BookingAttribution,
     actor: AuditActor | null,
     dto: CreateBookingDto | ManualCreateBookingDto,
-    canCreateClient = true,
     canComplete = true,
   ): Promise<BookingCreationResult> {
     const location = await this.locationService.findById(locationId);
@@ -184,7 +181,6 @@ export class BookingCreateFacade {
         location.brandId,
         attribution.source,
         dto,
-        canCreateClient,
       ));
 
     const booking = await this.reservations.reserve({
@@ -277,7 +273,6 @@ export class BookingCreateFacade {
     brandId: string,
     source: BookingSource,
     dto: CreateBookingDto | ManualCreateBookingDto,
-    canCreateClient = true,
   ): Promise<ResolvedBookingClient> {
     if (this.isAnonymousManualBooking(source, dto)) {
       return {
@@ -301,7 +296,6 @@ export class BookingCreateFacade {
       firstName,
       dto.lastName?.trim() || '',
       dto.email,
-      canCreateClient,
     );
     return {
       id: client.id,
