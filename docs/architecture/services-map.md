@@ -37,7 +37,8 @@
 | OrderPricingCalculator / OrderStateRules | Чистые расчёты и проверки состояния; приватны для OrdersModule. Общая арифметика строк находится в shared/money/line-pricing.ts. |
 | OrderAuditService | Публикация событий аудита заказов. События в памяти процесса не являются durable outbox. |
 | [InventoryFacade](../../src/modules/inventory/inventory.facade.ts) | Публичные операции склада. |
-| InventoryReadService | Поиск документов, остатков и движений. |
+| InventoryReadService | Поиск документов/движений и делегирование чтения остатков. |
+| InventoryStockReadService | Страницы и счётчики остатков через InventoryStockView в БД. |
 | InventoryDocumentService / InventoryDocumentMovementService | Черновики, проведение/аннулирование документов и формирование движений. |
 | InventorySalesService / InventorySaleReversalService | Движения продаж и возвратов. |
 | InventoryBalanceLockService | Блокировка остатков перед изменением. |
@@ -64,6 +65,7 @@
 | BrandService / LocationService | Бренды и филиалы. Изменения членства принадлежат AccessModule. |
 | StaffService | Сотрудники, смены, выполняемые услуги и привязка профиля к доступу. |
 | ClientsService | Клиенты, запреты публичной записи, поиск и разрешение клиента для бронирования. |
+| ServiceCatalogReadService / ServiceCatalogItemFactory | Выбор страницы из ServiceCatalogView и построение карточек из данных владельцев. |
 | ServiceCatalogFacade / ServicesService / ServiceBundleService | Объединённый каталог, услуги/категории и bundles соответственно. |
 | ProductsService | Товары, категории и настройки товаров по филиалам. |
 | DashboardFacade / DashboardContextService | Координация виджетов и загрузка необходимых агрегатов. |

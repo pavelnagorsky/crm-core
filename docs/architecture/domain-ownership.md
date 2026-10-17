@@ -27,6 +27,11 @@
 | `AuditLog`                                                                            | `AuditService`                                               | `AuditService` / `AUDIT_EVENT`                                                             | События AUDIT_EVENT обрабатываются AuditService; durable outbox пока отсутствует.                       |
 | `File`                                                                                | `FilesService`                                               | `FilesService`                                                                             | Booking pages используют файлы для cover/media.                                           |
 
+| Представление | Владелец | Публичный API | Назначение |
+| --- | --- | --- | --- |
+| InventoryStockView | InventoryStockReadService | InventoryFacade | Read-only представление склада; объединение метаданных товаров и остатков находится в определении view. |
+| ServiceCatalogView | ServiceCatalogReadService | ServiceCatalogFacade | Общие ключи/метрики каталога; подробности страницы загружаются через владельцев услуг/bundles. |
+
 ## Границы модулей
 
 - BookingCreateFacade делегирует выбор услуг BookingSelectionService, который использует ServiceCatalogFacade. Чужие таблицы из bookings не запрашиваются.

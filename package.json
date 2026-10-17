@@ -61,6 +61,9 @@
     "sanitize-html": "^2.18.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.10",
+    "@electric-sql/pglite-icu-full": "^0.1.0",
+    "@electric-sql/pglite-socket": "0.2.13",
     "@nestjs/cli": "^12.0.0",
     "@nestjs/mau": "^0.2.6",
     "@nestjs/schematics": "^12.0.0",

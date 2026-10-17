@@ -16,12 +16,14 @@ import { InventoryExportService } from './services/inventory-export.service.js';
 import { InventoryReadService } from './services/inventory-read.service.js';
 import { InventorySaleReversalService } from './services/inventory-sale-reversal.service.js';
 import { InventorySalesService } from './services/inventory-sales.service.js';
+import { InventoryStockReadService } from './services/inventory-stock-read.service.js';
 
 @Module({
   imports: [LocationModule, ProductsModule, SuppliersModule, I18nModule],
   controllers: [InventoryController],
   providers: [
     InventoryReadService,
+    InventoryStockReadService,
     InventoryDocumentMovementService,
     InventorySalesService,
     InventoryDocumentService,

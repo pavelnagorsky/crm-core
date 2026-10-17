@@ -673,28 +673,29 @@ model InventoryMovement {
 }
 
 model Order {
-  id              String      @id @default(uuid())
-  locationId      String
-  bookingId       String?     @unique
-  clientId        String?
-  clientName      String?     @db.VarChar(201)
-  clientPhone     String?     @db.VarChar(30)
-  currency        String      @db.VarChar(3)
-  status          OrderStatus @default(ACTIVE)
-  version         Int         @default(1)
-  occurredAt      DateTime
-  listTotalAmount Decimal     @default(0) @db.Decimal(12, 2)
-  subtotalAmount  Decimal     @default(0) @db.Decimal(12, 2)
-  discountTotal   Decimal     @default(0) @db.Decimal(12, 2)
-  totalAmount     Decimal     @default(0) @db.Decimal(12, 2)
-  note            String?     @db.VarChar(1000)
-  idempotencyKey  String?
-  createdById     String?
-  createdByName   String      @db.VarChar(300)
-  voidedAt        DateTime?
-  voidReason      String?     @db.VarChar(500)
-  createdAt       DateTime    @default(now())
-  updatedAt       DateTime    @updatedAt
+  id                  String      @id @default(uuid())
+  locationId          String
+  bookingId           String?     @unique
+  clientId            String?
+  clientName          String?     @db.VarChar(201)
+  clientPhone         String?     @db.VarChar(30)
+  currency            String      @db.VarChar(3)
+  status              OrderStatus @default(ACTIVE)
+  version             Int         @default(1)
+  occurredAt          DateTime
+  listTotalAmount     Decimal     @default(0) @db.Decimal(12, 2)
+  subtotalAmount      Decimal     @default(0) @db.Decimal(12, 2)
+  discountTotal       Decimal     @default(0) @db.Decimal(12, 2)
+  totalAmount         Decimal     @default(0) @db.Decimal(12, 2)
+  note                String?     @db.VarChar(1000)
+  idempotencyKey      String?
+  creationRequestHash String?     @db.Char(64)
+  createdById         String?
+  createdByName       String      @db.VarChar(300)
+  voidedAt            DateTime?
+  voidReason          String?     @db.VarChar(500)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
 
   location   Location            @relation(fields: [locationId], references: [id], onDelete: Restrict)
   booking    Booking?            @relation(fields: [bookingId], references: [id], onDelete: SetNull)

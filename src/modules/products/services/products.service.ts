@@ -525,14 +525,6 @@ export class ProductsService {
     return { items: items as LocationProductView[], totalItems };
   }
 
-  listTrackedForInventory(locationId: string): Promise<LocationProductView[]> {
-    return this.db.productLocation.findMany({
-      where: { locationId, trackInventory: true },
-      include: locationProductInclude,
-      orderBy: [{ product: { name: 'asc' } }, { id: 'asc' }],
-    }) as Promise<LocationProductView[]>;
-  }
-
   resolveForInventory(
     locationId: string,
     productIds: string[],

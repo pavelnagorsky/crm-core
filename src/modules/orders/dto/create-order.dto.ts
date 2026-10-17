@@ -1,8 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
-  ArrayMinSize,
   ArrayMaxSize,
+  ArrayMinSize,
   IsArray,
   IsBoolean,
   IsDateString,
@@ -57,7 +57,8 @@ export class CreateOrderDto {
     maxLength: 100,
     required: false,
     nullable: true,
-    description: 'Required when confirmImmediately is true.',
+    description:
+      'Required when confirmImmediately is true. Reuse for retries of the same sale. A different request with the same key returns ORDER_IDEMPOTENCY_CONFLICT (409).',
   })
   @IsOptional()
   @IsString()

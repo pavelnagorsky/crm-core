@@ -34,10 +34,8 @@ import { UpdateServiceCategoryDto } from './dto/update-service-category.dto.js';
 import { UpdateServiceDto } from './dto/update-service.dto.js';
 import { ServiceFilter } from './interfaces/service-filter.interface.js';
 import { ServiceForCatalog } from './interfaces/service-for-catalog.interface.js';
-import { ServiceStatusCount } from './interfaces/service-status-count.interface.js';
 import { ServiceWithImage } from './interfaces/service-with-image.interface.js';
 import { ServiceWithStaffCount } from './interfaces/service-with-staff-count.interface.js';
-import { catalogWhere } from './utils/catalog-where.js';
 
 const serviceAuditInclude = {
   imageFile: true,
@@ -344,33 +342,16 @@ export class ServicesService {
     return service;
   }
 
-  async listForCatalog(
+  async resolveCatalogEntries(
     locationId: string,
-    filter: ServiceFilter,
+    ids: string[],
+    tx: Prisma.TransactionClient,
   ): Promise<ServiceForCatalog[]> {
-    return this.db.service.findMany({
-      where: catalogWhere(locationId, filter),
+    if (ids.length === 0) return [];
+    return tx.service.findMany({
+      where: { locationId, id: { in: ids } },
       include: serviceCatalogInclude,
     });
-  }
-
-  async countForCatalog(
-    locationId: string,
-    filter: ServiceFilter,
-  ): Promise<number> {
-    return this.db.service.count({ where: catalogWhere(locationId, filter) });
-  }
-
-  async countByStatusForCatalog(
-    locationId: string,
-    filter: ServiceFilter,
-  ): Promise<ServiceStatusCount[]> {
-    const rows = await this.db.service.groupBy({
-      by: ['status'],
-      where: catalogWhere(locationId, filter),
-      _count: { _all: true },
-    });
-    return rows.map((row) => ({ status: row.status, count: row._count._all }));
   }
 
   async assertIdsInLocation(locationId: string, ids: string[]): Promise<void> {

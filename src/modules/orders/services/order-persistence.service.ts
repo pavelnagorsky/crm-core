@@ -95,7 +95,7 @@ export class OrderPersistenceService {
     // Lock the request key before checking for an order: there is no row to lock
     // on the first attempt, and Prisma cannot atomically upsert nested order items.
     const key = JSON.stringify(['order-sale', locationId, idempotencyKey]);
-    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`;
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`;
   }
 
   async incrementVersionIfCurrent(

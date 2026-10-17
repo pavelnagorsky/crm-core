@@ -57,6 +57,10 @@ export class OrdersController {
     summary: 'Create an active product order, optionally confirmed immediately',
   })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
+  @ApiConflictResponse({
+    description:
+      'ORDER_IDEMPOTENCY_CONFLICT: the sale key has a different or unknown original request. responseValue.orderId identifies the existing order.',
+  })
   @Permissions(Permission.ORDER_CREATE)
   @Post()
   async create(

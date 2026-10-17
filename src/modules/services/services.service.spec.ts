@@ -62,7 +62,7 @@ describe('ServiceResponseDto', () => {
   });
 });
 
-describe('ServicesService.listForCatalog', () => {
+describe('ServicesService.resolveCatalogEntries', () => {
   const findMany = vi.fn();
   const service = new ServicesService(
     { service: { findMany } } as never,
@@ -75,15 +75,14 @@ describe('ServicesService.listForCatalog', () => {
     findMany.mockResolvedValue([]);
   });
 
-  it('matches title and description only', async () => {
-    await service.listForCatalog('business-1', { search: '  окрашивание  ' });
+  it('loads only selected catalog entries in the caller transaction', async () => {
+    await service.resolveCatalogEntries('business-1', ['selected'], {
+      service: { findMany },
+    } as never);
 
     expect(findMany.mock.calls[0][0].where).toEqual({
       locationId: 'business-1',
-      OR: [
-        { title: { contains: 'окрашивание', mode: 'insensitive' } },
-        { description: { contains: 'окрашивание', mode: 'insensitive' } },
-      ],
+      id: { in: ['selected'] },
     });
     expect(findMany.mock.calls[0][0].include).toEqual({
       imageFile: true,

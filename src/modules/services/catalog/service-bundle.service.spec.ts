@@ -13,15 +13,14 @@ describe('ServiceBundleService', () => {
     findMany.mockResolvedValue([]);
   });
 
-  it('catalog search matches title and description only', async () => {
-    await service.listForCatalog('business-1', { search: '  комплекс  ' });
+  it('catalog search loads only selected catalog entries in the caller transaction', async () => {
+    await service.resolveCatalogEntries('business-1', ['selected'], {
+      serviceBundle: { findMany },
+    } as never);
 
     expect(findMany.mock.calls[0][0].where).toEqual({
       locationId: 'business-1',
-      OR: [
-        { title: { contains: 'комплекс', mode: 'insensitive' } },
-        { description: { contains: 'комплекс', mode: 'insensitive' } },
-      ],
+      id: { in: ['selected'] },
     });
     expect(findMany.mock.calls[0][0].include.category).toEqual({
       select: { name: true },

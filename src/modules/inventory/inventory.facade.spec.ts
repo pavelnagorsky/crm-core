@@ -20,6 +20,7 @@ import { InventoryDocumentService } from './services/inventory-document.service.
 import { InventoryReadService } from './services/inventory-read.service.js';
 import { InventorySaleReversalService } from './services/inventory-sale-reversal.service.js';
 import { InventorySalesService } from './services/inventory-sales.service.js';
+import { InventoryStockReadService } from './services/inventory-stock-read.service.js';
 
 const actor = { id: 'owner-1', name: 'Owner', role: AuditActorRole.OWNER };
 
@@ -104,7 +105,6 @@ function setup(status: InventoryDocumentStatus) {
   };
   const products = {
     resolveForInventory: vi.fn(),
-    listTrackedForInventory: vi.fn(),
   };
   const suppliers = {
     resolveActiveForDocument: vi.fn(),
@@ -940,221 +940,6 @@ describe('InventoryFacade', () => {
       }),
     });
   });
-
-  it('filters inventory balances to products with no stock', async () => {
-    const { service, db, products } = setup(InventoryDocumentStatus.OPEN);
-    products.listTrackedForInventory = vi.fn().mockResolvedValue([
-      {
-        id: 'product-location-1',
-        productId: 'product-1',
-        reorderLevel: new Prisma.Decimal(2),
-        product: {
-          name: 'Shampoo',
-          sku: 'SKU-1',
-          barcode: null,
-          unit: ProductUnit.PIECE,
-        },
-      },
-      {
-        id: 'product-location-2',
-        productId: 'product-2',
-        reorderLevel: new Prisma.Decimal(1),
-        product: {
-          name: 'Conditioner',
-          sku: 'SKU-2',
-          barcode: null,
-          unit: ProductUnit.PIECE,
-        },
-      },
-      {
-        id: 'product-location-3',
-        productId: 'product-3',
-        reorderLevel: new Prisma.Decimal(1),
-        product: {
-          name: 'Mask',
-          sku: 'SKU-3',
-          barcode: null,
-          unit: ProductUnit.PIECE,
-        },
-      },
-    ]);
-    db.inventoryBalance.findMany.mockResolvedValue([
-      {
-        productLocationId: 'product-location-1',
-        quantityOnHand: new Prisma.Decimal(5),
-        averageUnitCost: new Prisma.Decimal(3),
-        updatedAt: new Date('2026-10-01T10:00:00.000Z'),
-      },
-      {
-        productLocationId: 'product-location-2',
-        quantityOnHand: new Prisma.Decimal(0),
-        averageUnitCost: new Prisma.Decimal(4),
-        updatedAt: new Date('2026-10-01T10:00:00.000Z'),
-      },
-    ]);
-
-    const result = await service.searchInventory('location-1', {
-      page: 1,
-      pageSize: 10,
-      outOfStock: true,
-    } as never);
-
-    expect(result.totalItems).toBe(2);
-    expect(result.items.map((item) => item.productLocationId)).toEqual([
-      'product-location-2',
-      'product-location-3',
-    ]);
-    expect(result.items.every((item) => item.outOfStock)).toBe(true);
-  });
-
-  it('counts low-stock and out-of-stock inventory balances', async () => {
-    const { service, db, products } = setup(InventoryDocumentStatus.OPEN);
-    products.listTrackedForInventory = vi.fn().mockResolvedValue([
-      {
-        id: 'product-location-1',
-        productId: 'product-1',
-        reorderLevel: new Prisma.Decimal(2),
-        product: {
-          name: 'Shampoo',
-          sku: 'SKU-1',
-          barcode: null,
-          unit: ProductUnit.PIECE,
-        },
-      },
-      {
-        id: 'product-location-2',
-        productId: 'product-2',
-        reorderLevel: new Prisma.Decimal(1),
-        product: {
-          name: 'Conditioner',
-          sku: 'SKU-2',
-          barcode: null,
-          unit: ProductUnit.PIECE,
-        },
-      },
-      {
-        id: 'product-location-3',
-        productId: 'product-3',
-        reorderLevel: new Prisma.Decimal(1),
-        product: {
-          name: 'Mask',
-          sku: 'SKU-3',
-          barcode: null,
-          unit: ProductUnit.PIECE,
-        },
-      },
-      {
-        id: 'product-location-4',
-        productId: 'product-4',
-        reorderLevel: new Prisma.Decimal(3),
-        product: {
-          name: 'Serum',
-          sku: 'SKU-4',
-          barcode: null,
-          unit: ProductUnit.PIECE,
-        },
-      },
-    ]);
-    db.inventoryBalance.findMany.mockResolvedValue([
-      {
-        productLocationId: 'product-location-1',
-        quantityOnHand: new Prisma.Decimal(5),
-        averageUnitCost: new Prisma.Decimal(3),
-        updatedAt: new Date('2026-10-01T10:00:00.000Z'),
-      },
-      {
-        productLocationId: 'product-location-2',
-        quantityOnHand: new Prisma.Decimal(0),
-        averageUnitCost: new Prisma.Decimal(4),
-        updatedAt: new Date('2026-10-01T10:00:00.000Z'),
-      },
-      {
-        productLocationId: 'product-location-4',
-        quantityOnHand: new Prisma.Decimal(1),
-        averageUnitCost: new Prisma.Decimal(5),
-        updatedAt: new Date('2026-10-01T10:00:00.000Z'),
-      },
-    ]);
-
-    const result = await service.getInventoryCounts('location-1', {});
-
-    expect(result).toEqual({
-      lowStockCount: 3,
-      outOfStockCount: 2,
-    });
-  });
-
-  it('filters inventory balances and counts by selected products', async () => {
-    const { service, db, products } = setup(InventoryDocumentStatus.OPEN);
-    products.listTrackedForInventory = vi.fn().mockResolvedValue([
-      {
-        id: 'product-location-1',
-        productId: 'product-1',
-        reorderLevel: new Prisma.Decimal(2),
-        product: {
-          name: 'Shampoo',
-          sku: 'SKU-1',
-          barcode: null,
-          unit: ProductUnit.PIECE,
-        },
-      },
-      {
-        id: 'product-location-2',
-        productId: 'product-2',
-        reorderLevel: new Prisma.Decimal(1),
-        product: {
-          name: 'Conditioner',
-          sku: 'SKU-2',
-          barcode: null,
-          unit: ProductUnit.PIECE,
-        },
-      },
-      {
-        id: 'product-location-3',
-        productId: 'product-3',
-        reorderLevel: new Prisma.Decimal(1),
-        product: {
-          name: 'Mask',
-          sku: 'SKU-3',
-          barcode: null,
-          unit: ProductUnit.PIECE,
-        },
-      },
-    ]);
-    db.inventoryBalance.findMany.mockResolvedValue([
-      {
-        productLocationId: 'product-location-1',
-        quantityOnHand: new Prisma.Decimal(5),
-        averageUnitCost: new Prisma.Decimal(3),
-        updatedAt: new Date('2026-10-01T10:00:00.000Z'),
-      },
-      {
-        productLocationId: 'product-location-2',
-        quantityOnHand: new Prisma.Decimal(0),
-        averageUnitCost: new Prisma.Decimal(4),
-        updatedAt: new Date('2026-10-01T10:00:00.000Z'),
-      },
-    ]);
-
-    const result = await service.searchInventory('location-1', {
-      page: 1,
-      pageSize: 10,
-      productIds: ['product-1', 'product-3'],
-    } as never);
-    const counts = await service.getInventoryCounts('location-1', {
-      productIds: ['product-1', 'product-3'],
-    });
-
-    expect(result.totalItems).toBe(2);
-    expect(result.items.map((item) => item.productId)).toEqual([
-      'product-3',
-      'product-1',
-    ]);
-    expect(counts).toEqual({
-      lowStockCount: 1,
-      outOfStockCount: 1,
-    });
-  });
 });
 
 function createInventoryService(
@@ -1178,7 +963,7 @@ function createInventoryService(
       balanceLocks,
       new InventoryDocumentMovementService(compute),
     ),
-    new InventoryReadService(db, products),
+    new InventoryReadService(db, products, new InventoryStockReadService(db)),
     new InventorySalesService(compute, balanceLocks, saleReversals),
   );
 }

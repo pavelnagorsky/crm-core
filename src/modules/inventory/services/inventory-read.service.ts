@@ -26,17 +26,18 @@ import { InventoryMovementSearchRequestDto } from '../dto/inventory-movement-sea
 import { InventorySearchRequestDto } from '../dto/inventory-search-request.dto.js';
 import { InventoryDocumentOrderBy } from '../enums/inventory-document-order-by.enum.js';
 import { InventoryMovementOrderBy } from '../enums/inventory-movement-order-by.enum.js';
-import { InventorySearchOrderBy } from '../enums/inventory-search-order-by.enum.js';
 import { InventoryBalanceView } from '../interfaces/inventory-balance-view.interface.js';
 import { InventoryCountsView } from '../interfaces/inventory-counts-view.interface.js';
 import { InventoryDocumentStatusCount } from '../interfaces/inventory-document-status-count.interface.js';
 import { InventoryDocumentWithItems } from '../interfaces/inventory-document-with-items.interface.js';
+import { InventoryStockReadService } from './inventory-stock-read.service.js';
 
 @Injectable()
 export class InventoryReadService {
   constructor(
     private readonly db: DatabaseService,
     private readonly products: ProductsService,
+    private readonly stock: InventoryStockReadService,
   ) {}
   async findDocument(
     locationId: string,
@@ -95,96 +96,17 @@ export class InventoryReadService {
     }));
   }
 
-  async searchInventory(
+  searchInventory(
     locationId: string,
     dto: InventorySearchRequestDto,
   ): Promise<PaginatedResult<InventoryBalanceView>> {
-    let items = await this.getInventoryBalanceViews(
-      locationId,
-      dto.search,
-      dto.productIds,
-    );
-    if (dto.lowStock !== undefined) {
-      items = items.filter((item) => item.lowStock === dto.lowStock);
-    }
-    if (dto.outOfStock !== undefined) {
-      items = items.filter((item) => item.outOfStock === dto.outOfStock);
-    }
-    this.sortInventory(items, dto);
-    const totalItems = items.length;
-    if (!dto.isExport) {
-      items = items.slice(
-        (dto.page - 1) * dto.pageSize,
-        dto.page * dto.pageSize,
-      );
-    }
-    return { items, totalItems };
+    return this.stock.search(locationId, dto);
   }
-
-  async getInventoryCounts(
+  getInventoryCounts(
     locationId: string,
     dto: InventoryCountsRequestDto,
   ): Promise<InventoryCountsView> {
-    const items = await this.getInventoryBalanceViews(
-      locationId,
-      dto.search,
-      dto.productIds,
-    );
-    return {
-      lowStockCount: items.filter((item) => item.lowStock).length,
-      outOfStockCount: items.filter((item) => item.outOfStock).length,
-    };
-  }
-
-  private async getInventoryBalanceViews(
-    locationId: string,
-    searchValue?: string,
-    productIds?: string[],
-  ): Promise<InventoryBalanceView[]> {
-    const locationProducts =
-      await this.products.listTrackedForInventory(locationId);
-    const balances = await this.db.inventoryBalance.findMany({
-      where: {
-        productLocationId: { in: locationProducts.map((row) => row.id) },
-      },
-    });
-    const byProductLocation = new Map(
-      balances.map((balance) => [balance.productLocationId, balance]),
-    );
-    const zero = new Prisma.Decimal(0);
-    const search = searchValue?.trim().toLocaleLowerCase();
-    let items = locationProducts.map((row): InventoryBalanceView => {
-      const balance = byProductLocation.get(row.id);
-      const quantity = balance?.quantityOnHand ?? zero;
-      const averageCost = balance?.averageUnitCost ?? zero;
-      return {
-        productLocationId: row.id,
-        productId: row.productId,
-        name: row.product.name,
-        sku: row.product.sku,
-        barcode: row.product.barcode,
-        unit: row.product.unit,
-        quantityOnHand: quantity,
-        averageUnitCost: averageCost,
-        stockValue: balance?.stockValue ?? zero,
-        reorderLevel: row.reorderLevel,
-        lowStock: quantity.lte(row.reorderLevel),
-        outOfStock: quantity.lte(zero),
-        updatedAt: balance?.updatedAt ?? null,
-      };
-    });
-    if (productIds?.length) {
-      const selected = new Set(productIds);
-      items = items.filter((item) => selected.has(item.productId));
-    }
-    if (search) {
-      items = items.filter((item) =>
-        [item.name, item.sku, item.barcode].some((value) =>
-          value?.toLocaleLowerCase().includes(search),
-        ),
-      );
-    }
-    return items;
+    return this.stock.counts(locationId, dto);
   }
 
   async searchMovements(
@@ -225,31 +147,6 @@ export class InventoryReadService {
       this.db.inventoryMovement.count({ where }),
     ]);
     return { items, totalItems };
-  }
-
-  private sortInventory(
-    items: InventoryBalanceView[],
-    dto: InventorySearchRequestDto,
-  ): void {
-    const field = dto.orderBy ?? InventorySearchOrderBy.NAME;
-    const factor =
-      (dto.orderDirection ?? OrderDirection.ASC) === OrderDirection.ASC
-        ? 1
-        : -1;
-    items.sort((left, right) => {
-      let result: number;
-      if (field === InventorySearchOrderBy.NAME) {
-        result = left.name.localeCompare(right.name);
-      } else if (field === InventorySearchOrderBy.UPDATED_AT) {
-        result =
-          (left.updatedAt?.getTime() ?? 0) - (right.updatedAt?.getTime() ?? 0);
-      } else {
-        result = left[field].comparedTo(right[field]);
-      }
-      return result === 0
-        ? left.productLocationId.localeCompare(right.productLocationId)
-        : result * factor;
-    });
   }
 
   private documentWhere(

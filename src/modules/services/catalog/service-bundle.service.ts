@@ -29,9 +29,6 @@ import { UpdateServiceBundleDto } from '../dto/update-service-bundle.dto.js';
 import { BundlePricingMode } from '../enums/bundle-pricing-mode.enum.js';
 import { ServiceBundleForCatalog } from '../interfaces/service-bundle-for-catalog.interface.js';
 import { ServiceBundleView } from '../interfaces/service-bundle-view.interface.js';
-import { ServiceFilter } from '../interfaces/service-filter.interface.js';
-import { ServiceStatusCount } from '../interfaces/service-status-count.interface.js';
-import { catalogWhere } from '../utils/catalog-where.js';
 
 const serviceBundleInclude = {
   imageFile: true,
@@ -231,35 +228,16 @@ export class ServiceBundleService {
     return bundle;
   }
 
-  async listForCatalog(
+  async resolveCatalogEntries(
     locationId: string,
-    filter: ServiceFilter,
+    ids: string[],
+    tx: Prisma.TransactionClient,
   ): Promise<ServiceBundleForCatalog[]> {
-    return this.db.serviceBundle.findMany({
-      where: catalogWhere(locationId, filter),
+    if (ids.length === 0) return [];
+    return tx.serviceBundle.findMany({
+      where: { locationId, id: { in: ids } },
       include: serviceBundleCatalogInclude,
-    }) as Promise<ServiceBundleForCatalog[]>;
-  }
-
-  async countForCatalog(
-    locationId: string,
-    filter: ServiceFilter,
-  ): Promise<number> {
-    return this.db.serviceBundle.count({
-      where: catalogWhere(locationId, filter),
     });
-  }
-
-  async countByStatusForCatalog(
-    locationId: string,
-    filter: ServiceFilter,
-  ): Promise<ServiceStatusCount[]> {
-    const rows = await this.db.serviceBundle.groupBy({
-      by: ['status'],
-      where: catalogWhere(locationId, filter),
-      _count: { _all: true },
-    });
-    return rows.map((row) => ({ status: row.status, count: row._count._all }));
   }
 
   async changeStatus(

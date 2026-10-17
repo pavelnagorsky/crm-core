@@ -16,6 +16,7 @@ import { OrderTargetStatus } from './enums/order-target-status.enum.js';
 import { OrderWithItems } from './interfaces/order-with-items.interface.js';
 import { OrdersFacade } from './orders.facade.js';
 import { OrderStateRules } from './rules/order-state.rules.js';
+import { saleRequestHash } from './rules/sale-request-hash.js';
 import { OrderAuditService } from './services/order-audit.service.js';
 import { OrderBookingSyncService } from './services/order-booking-sync.service.js';
 import { OrderCreationService } from './services/order-creation.service.js';
@@ -38,6 +39,7 @@ function order(
     locationId: 'location-1',
     bookingId: null,
     idempotencyKey: null,
+    creationRequestHash: null,
     clientId: null,
     clientName: null,
     clientPhone: null,
@@ -92,6 +94,7 @@ function order(
 
 function setup() {
   const tx = {
+    $executeRaw: vi.fn().mockResolvedValue(1),
     $queryRaw: vi.fn().mockResolvedValue([]),
     order: {
       create: vi.fn(),
@@ -590,7 +593,7 @@ describe('OrdersFacade', () => {
         }),
       }),
     );
-    expect(tx.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(tx.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(
       tx.order.findFirst.mock.invocationCallOrder[0],
     );
     expect(inventory.postSale).toHaveBeenCalledWith(
@@ -671,6 +674,9 @@ describe('OrdersFacade', () => {
     const existing = {
       ...order(OrderStatus.ACTIVE, OrderItemStatus.CONFIRMED),
       idempotencyKey: 'sale-key-1',
+      creationRequestHash: saleRequestHash('location-1', {
+        items: [{ productId: 'product-1', quantity: '1.000' }],
+      }),
     };
     tx.order.findFirst.mockResolvedValueOnce(existing);
 
@@ -692,6 +698,37 @@ describe('OrdersFacade', () => {
     expect(earnings.recordForProductOrder).not.toHaveBeenCalled();
     expect(events.emit).not.toHaveBeenCalled();
   });
+
+  it.each([null, 'different-request-hash'])(
+    'rejects a reused sale key with an unknown or different request (%s)',
+    async (creationRequestHash) => {
+      const { service, tx, inventory, earnings, events } = setup();
+      tx.order.findFirst.mockResolvedValueOnce({
+        ...order(OrderStatus.ACTIVE, OrderItemStatus.CONFIRMED),
+        creationRequestHash,
+      });
+      await expect(
+        service.create(
+          'location-1',
+          {
+            confirmImmediately: true,
+            idempotencyKey: 'sale-key-1',
+            items: [{ productId: 'product-1', quantity: '2.000' }],
+          },
+          owner,
+          true,
+        ),
+      ).rejects.toMatchObject({
+        errorCode: 'ORDER_IDEMPOTENCY_CONFLICT',
+        status: 409,
+        payload: { orderId: 'order-1' },
+      });
+      expect(tx.order.create).not.toHaveBeenCalled();
+      expect(inventory.postSale).not.toHaveBeenCalled();
+      expect(earnings.recordForProductOrder).not.toHaveBeenCalled();
+      expect(events.emit).not.toHaveBeenCalled();
+    },
+  );
 
   it('requires an idempotency key for immediate product sales', async () => {
     const { service, tx } = setup();

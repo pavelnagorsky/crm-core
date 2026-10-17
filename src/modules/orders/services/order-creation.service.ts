@@ -1,15 +1,19 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, HttpStatus, Injectable } from '@nestjs/common';
 import { DatabaseService } from '../../../database/database.service.js';
+import { AppException } from '../../../shared/exceptions/app.exception.js';
+import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { AuditActionType } from '../../audit/enums/audit-action-type.enum.js';
 import { AuditEvent } from '../../audit/enums/audit-event.enum.js';
 import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
 import { orderInclude } from '../constants/order-include.constant.js';
 import { CreateOrderDto } from '../dto/create-order.dto.js';
 import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
+import { saleRequestHash } from '../rules/sale-request-hash.js';
 import { OrderAuditService } from './order-audit.service.js';
 import { OrderDraftService } from './order-draft.service.js';
 import { OrderPersistenceService } from './order-persistence.service.js';
 import { OrderProductTransitionService } from './order-product-transition.service.js';
+
 @Injectable()
 export class OrderCreationService {
   constructor(
@@ -83,13 +87,25 @@ export class OrderCreationService {
         'idempotencyKey is required for confirmed product sales',
       );
     }
+    const requestHash = saleRequestHash(locationId, dto);
     const result = await this.persistence.inTransaction(async (tx) => {
       await this.persistence.lockSaleRequest(tx, locationId, idempotencyKey);
       const existing = await tx.order.findFirst({
         where: { locationId, idempotencyKey },
         include: orderInclude,
       });
-      if (existing) return { order: existing, draft: null, created: false };
+      if (existing) {
+        // Older sales have no original request hash. Their current, editable items
+        // cannot prove a match, so fail without creating or conducting another sale.
+        if (existing.creationRequestHash !== requestHash) {
+          throw new AppException(
+            ErrorCode.ORDER_IDEMPOTENCY_CONFLICT,
+            HttpStatus.CONFLICT,
+            { orderId: existing.id },
+          );
+        }
+        return { order: existing, draft: null, created: false };
+      }
       const draft = await this.drafts.resolveDraft(
         locationId,
         dto,
@@ -110,6 +126,7 @@ export class OrderCreationService {
           occurredAt: draft.occurredAt,
           note: draft.note,
           idempotencyKey,
+          creationRequestHash: requestHash,
           createdById: actor.id ?? null,
           createdByName: actor.name,
           ...draft.totals,
