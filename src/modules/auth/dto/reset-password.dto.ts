@@ -10,7 +10,7 @@ export class ResetPasswordDto {
 
   @ApiProperty({ type: String })
   @IsString()
-  @Matches(/^\d{6}$/)
+  @Matches(regularExpressions.passwordResetCode)
   code: string;
 
   @ApiProperty({ type: String })

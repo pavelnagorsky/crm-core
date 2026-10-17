@@ -1,11 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createTransport, Transporter } from 'nodemailer';
-import { IMailerConfig } from '../../../../config/configuration.js';
-import { AbstractChannel } from '../abstract.channel.js';
-import { AbstractNotification } from '../../notifications/abstract.notification.js';
+import { IMailerConfig } from '../../../../config/interfaces/mailer-config.interface.js';
 import { HasEmailChannel } from '../../interfaces/has-email-channel.interface.js';
-import { EmailRendererService } from './email-renderer.service.js';
+import { AbstractNotification } from '../../messages/abstract.notification.js';
+import { AbstractChannel } from '../abstract.channel.js';
+import { EmailRenderer } from './email.renderer.js';
 
 @Injectable()
 export class EmailChannel extends AbstractChannel {
@@ -16,7 +16,7 @@ export class EmailChannel extends AbstractChannel {
 
   constructor(
     private readonly config: ConfigService,
-    private readonly renderer: EmailRendererService,
+    private readonly renderer: EmailRenderer,
   ) {
     super();
     const cfg = this.config.get<IMailerConfig>('emailConfig')!;

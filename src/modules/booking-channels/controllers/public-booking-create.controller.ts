@@ -15,13 +15,14 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import type { Request } from 'express';
-import {
-  ApiResponse,
-  BaseResponseDto,
-} from '../../../shared/dto/base-response.dto.js';
+import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
+import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../../shared/dto/id-response.dto.js';
-import { clientIp, requestOrigin } from '../../../shared/http/request-context.js';
-import { BookingCreateService } from '../../bookings/services/booking-create.service.js';
+import {
+  clientIp,
+  requestOrigin,
+} from '../../../shared/http/request-context.js';
+import { BookingCreateFacade } from '../../bookings/booking-create.facade.js';
 import { CreateBookingDto } from '../../bookings/dto/create-booking.dto.js';
 import { BookingChannelAttributionService } from '../services/booking-channel-attribution.service.js';
 
@@ -30,7 +31,7 @@ import { BookingChannelAttributionService } from '../services/booking-channel-at
 export class PublicBookingCreateController {
   constructor(
     private readonly attribution: BookingChannelAttributionService,
-    private readonly bookingCreateService: BookingCreateService,
+    private readonly bookingCreateService: BookingCreateFacade,
   ) {}
 
   @ApiOperation({ summary: 'Book an appointment (public / client-facing)' })

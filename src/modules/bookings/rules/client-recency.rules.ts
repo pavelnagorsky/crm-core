@@ -1,4 +1,4 @@
-import { TimeService } from '../../../shared/time/time.service.js';
+import { TimeUtils } from '../../../shared/time/time.utils.js';
 import { ClientRecencyBucket } from '../enums/client-recency-bucket.enum.js';
 import { ClientRecencyBound } from '../interfaces/client-recency-bound.interface.js';
 
@@ -26,7 +26,7 @@ export function recencyCutoff(
   days: number,
   timezone: string,
 ): Date {
-  return TimeService.addDaysInTz(asOf, 1 - days, timezone);
+  return TimeUtils.addDaysInTz(asOf, 1 - days, timezone);
 }
 
 /**

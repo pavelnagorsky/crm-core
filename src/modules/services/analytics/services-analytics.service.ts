@@ -1,20 +1,20 @@
 import { Injectable } from '@nestjs/common';
 import { BookingStatus, Prisma } from '@prisma/client';
-import { MoneyService } from '../../../shared/money/money.service.js';
-import { BookingsAggregatesService } from '../../bookings/aggregates/bookings-aggregates.service.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
+import { BookingsAggregatesService } from '../../bookings/aggregates/services/bookings-aggregates.service.js';
 import { AggregateRange } from '../../bookings/interfaces/aggregate-range.interface.js';
 import { AggregateSnapshot } from '../../bookings/interfaces/aggregate-snapshot.interface.js';
-import { ServiceCount } from '../../bookings/interfaces/service-count.interface.js';
 import { SeriesRow } from '../../bookings/interfaces/series-row.interface.js';
+import { ServiceCount } from '../../bookings/interfaces/service-count.interface.js';
 import { WidgetBreakdownItemDto } from '../../dashboard/dto/widget-breakdown-item.dto.js';
-import { WidgetDto } from '../../dashboard/dto/widget.dto.js';
 import { WidgetMetaDto } from '../../dashboard/dto/widget-meta.dto.js';
+import { WidgetDto } from '../../dashboard/dto/widget.dto.js';
 import { MetricUnit } from '../../dashboard/enums/metric-unit.enum.js';
 import { WidgetKind } from '../../dashboard/enums/widget-kind.enum.js';
-import { DashboardBucketService } from '../../dashboard/services/dashboard-bucket.service.js';
-import { DashboardMetricFactory } from '../../dashboard/services/dashboard-metric.factory.js';
+import { DashboardBucketFactory } from '../../dashboard/factories/dashboard-bucket.factory.js';
+import { DashboardMetricFactory } from '../../dashboard/factories/dashboard-metric.factory.js';
+import { DashboardSeriesFactory } from '../../dashboard/factories/dashboard-series.factory.js';
 import { DashboardRangeService } from '../../dashboard/services/dashboard-range.service.js';
-import { DashboardSeriesFactory } from '../../dashboard/services/dashboard-series.factory.js';
 import { ServicesAnalyticsRequestDto } from './dto/services-analytics-request.dto.js';
 import { ServicesAnalyticsWidgetKey } from './enums/services-analytics-widget-key.enum.js';
 import { ServicesAnalyticsContext } from './interfaces/services-analytics-context.interface.js';
@@ -29,7 +29,7 @@ export class ServicesAnalyticsService {
     private readonly aggregates: BookingsAggregatesService,
     private readonly metricFactory: DashboardMetricFactory,
     private readonly seriesFactory: DashboardSeriesFactory,
-    private readonly buckets: DashboardBucketService,
+    private readonly buckets: DashboardBucketFactory,
   ) {}
 
   async getWidgets(
@@ -263,7 +263,7 @@ function revenueFor(
   snap: AggregateSnapshot,
   statuses: BookingStatus[],
 ): Prisma.Decimal {
-  let sum = MoneyService.decimal(0);
+  let sum = MoneyUtils.decimal(0);
   for (const s of statuses) sum = sum.plus(snap.byStatus.get(s)?.revenue ?? 0);
   return sum;
 }
@@ -285,8 +285,8 @@ function revenuePerHour(
   const durationMinutes = durationFor(snap, statuses);
   if (durationMinutes <= 0) return 0;
   return Number(
-    MoneyService.format(
-      MoneyService.quantize(revenue.mul(60).div(durationMinutes)),
+    MoneyUtils.format(
+      MoneyUtils.quantize(revenue.mul(60).div(durationMinutes)),
     ),
   );
 }
@@ -303,7 +303,7 @@ function breakdownItem(
     id: row.serviceId,
     label: row.serviceTitle,
     value: row.count,
-    secondaryValue: Number(MoneyService.format(row.revenue)),
+    secondaryValue: Number(MoneyUtils.format(row.revenue)),
     sharePct: sharePct(row.count, total),
   };
 }
@@ -312,7 +312,7 @@ function emptySnapshot(): AggregateSnapshot {
   return {
     byStatus: new Map(),
     totalCount: 0,
-    totalRevenue: MoneyService.decimal(0),
+    totalRevenue: MoneyUtils.decimal(0),
     totalDuration: 0,
   };
 }

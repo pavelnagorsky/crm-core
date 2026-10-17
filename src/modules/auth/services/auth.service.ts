@@ -1,0 +1,297 @@
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { JwtService, JwtSignOptions } from '@nestjs/jwt';
+import { Prisma, User } from '@prisma/client';
+import { compare, hash } from 'bcrypt';
+import { createHash, randomUUID } from 'crypto';
+import { IFrontendConfig } from '../../../config/interfaces/frontend-config.interface.js';
+import { IJwtConfig } from '../../../config/interfaces/jwt-config.interface.js';
+import {
+  jwtExpirationConfig,
+  REFRESH_TOKEN_TTL_MS,
+} from '../../../config/token-expiration.config.js';
+import { DatabaseService } from '../../../database/database.service.js';
+import { AppException } from '../../../shared/exceptions/app.exception.js';
+import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
+import { AccessService } from '../../access/services/access.service.js';
+import { ConfirmEmailNotification } from '../../notifications/messages/confirm-email.notification.js';
+import { NOTIFICATION_EVENT } from '../../notifications/services/notifications.service.js';
+import { UserService } from '../../user/services/user.service.js';
+import { PASSWORD_HASH_ROUNDS } from '../constants/auth.constants.js';
+import { LoginDto } from '../dto/login.dto.js';
+import { OAuthResponseDto } from '../dto/oauth-response.dto.js';
+import { RegisterDto } from '../dto/register.dto.js';
+import { ResetPasswordRequestDto } from '../dto/reset-password-request.dto.js';
+import { ResetPasswordDto } from '../dto/reset-password.dto.js';
+import { TokenPayloadDto } from '../dto/token-payload.dto.js';
+import { LoginErrorEnum } from '../enums/login-error.enum.js';
+import { ITokens } from '../interfaces/tokens.interface.js';
+import { loginErrorCode } from '../utils/login-error-code.js';
+import { PasswordResetService } from './password-reset.service.js';
+import { TokenEpochRegistryService } from './token-epoch-registry.service.js';
+
+const MAX_TOKENS_PER_USER = 10;
+
+@Injectable()
+export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly userService: UserService,
+    private readonly jwtService: JwtService,
+    private readonly eventEmitter: EventEmitter2,
+    private readonly config: ConfigService,
+    private readonly tokenEpochRegistry: TokenEpochRegistryService,
+    private readonly access: AccessService,
+    private readonly passwordReset: PasswordResetService,
+  ) {}
+
+  async register(dto: RegisterDto): Promise<void> {
+    const existing = await this.userService.findByEmail(dto.email);
+    if (existing)
+      throw new AppException(
+        ErrorCode.EMAIL_ALREADY_IN_USE,
+        HttpStatus.CONFLICT,
+      );
+
+    if (dto.phone) {
+      const existingPhone = await this.userService.findByPhone(dto.phone);
+      if (existingPhone)
+        throw new AppException(
+          ErrorCode.PHONE_ALREADY_IN_USE,
+          HttpStatus.CONFLICT,
+        );
+    }
+
+    const passwordHash = await hash(dto.password, PASSWORD_HASH_ROUNDS);
+    const user = await this.userService.create({
+      email: dto.email,
+      passwordHash,
+      firstName: dto.firstName,
+      lastName: dto.lastName,
+      phone: dto.phone ?? null,
+    });
+
+    const token = await this.generateEmailToken(user);
+    const cfg = this.config.get<IFrontendConfig>('frontend')!;
+    this.eventEmitter.emit(
+      NOTIFICATION_EVENT,
+      new ConfirmEmailNotification(
+        user.email!,
+        `${cfg.domain}/auth/confirm-email?token=${token}`,
+      ),
+    );
+    this.logger.log(`register: user=${user.id} email=${user.email}`);
+  }
+
+  async login(dto: LoginDto, userAgent: string | null): Promise<ITokens> {
+    const user = await this.userService.findByEmail(dto.email);
+
+    if (!user) {
+      this.logger.warn(
+        `login failed: email=${dto.email} reason=USER_NOT_FOUND`,
+      );
+      throw new AppException(
+        loginErrorCode(LoginErrorEnum.INVALID_DATA),
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+    if (!user.passwordHash) {
+      this.logger.warn(
+        `login failed: userId=${user.id} reason=PASSWORD_NOT_SET`,
+      );
+      throw new AppException(
+        loginErrorCode(LoginErrorEnum.PASSWORD_NOT_SET),
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+    if (!user.emailVerifiedAt) {
+      this.logger.warn(
+        `login failed: userId=${user.id} reason=EMAIL_NOT_CONFIRMED`,
+      );
+      throw new AppException(
+        loginErrorCode(LoginErrorEnum.EMAIL_NOT_CONFIRMED),
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+
+    const valid = await compare(dto.password, user.passwordHash);
+    if (!valid) {
+      this.logger.warn(
+        `login failed: userId=${user.id} reason=INVALID_PASSWORD`,
+      );
+      throw new AppException(
+        loginErrorCode(LoginErrorEnum.INVALID_DATA),
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+
+    this.logger.log(`login success: userId=${user.id}`);
+    return this.issueTokens(user, userAgent);
+  }
+
+  async logout(userId: string, refreshToken: string): Promise<void> {
+    await this.db.refreshToken.deleteMany({
+      where: { tokenHash: this.hashRefreshToken(refreshToken), userId },
+    });
+    this.logger.log(`logout: userId=${userId}`);
+  }
+
+  async refresh(
+    userId: string,
+    refreshToken: string,
+    userAgent: string | null,
+  ): Promise<ITokens> {
+    const { count } = await this.db.refreshToken.deleteMany({
+      where: {
+        tokenHash: this.hashRefreshToken(refreshToken),
+        userId,
+        expiryDate: { gt: new Date() },
+      },
+    });
+    if (count !== 1) {
+      throw new AppException(ErrorCode.UNAUTHORIZED, HttpStatus.UNAUTHORIZED);
+    }
+
+    const user = await this.userService.findById(userId);
+    return this.issueTokens(user, userAgent);
+  }
+
+  async confirmEmail(userId: string): Promise<void> {
+    await this.userService.update(userId, { emailVerifiedAt: new Date() });
+  }
+  resetPasswordRequest(dto: ResetPasswordRequestDto): Promise<void> {
+    return this.passwordReset.request(dto);
+  }
+
+  resetPassword(dto: ResetPasswordDto): Promise<void> {
+    return this.passwordReset.reset(dto);
+  }
+
+  async handleOAuth(
+    dto: OAuthResponseDto,
+    userAgent: string | null,
+  ): Promise<ITokens> {
+    let user = await this.userService.findByEmail(dto.email);
+    if (!user) {
+      user = await this.userService.create({
+        email: dto.email,
+        emailVerifiedAt: new Date(),
+      });
+      this.logger.log(
+        `oauth register: userId=${user.id} email=${user.email} provider=${dto.providerType}`,
+      );
+    } else {
+      this.logger.log(
+        `oauth login: userId=${user.id} provider=${dto.providerType}`,
+      );
+    }
+    return this.issueTokens(user, userAgent);
+  }
+
+  private async issueTokens(
+    user: User,
+    userAgent: string | null,
+  ): Promise<ITokens> {
+    const [accessToken, refreshToken] = await Promise.all([
+      this.generateAccessToken(user),
+      this.generateRefreshToken(user),
+    ]);
+    await this.saveRefreshToken(user.id, refreshToken, userAgent);
+    return { accessToken, refreshToken };
+  }
+
+  private async saveRefreshToken(
+    userId: string,
+    token: string,
+    userAgent: string | null,
+  ): Promise<void> {
+    const expiryDate = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
+
+    await this.db.refreshToken.create({
+      data: {
+        userId,
+        tokenHash: this.hashRefreshToken(token),
+        userAgent,
+        expiryDate,
+      },
+    });
+
+    // keep only the newest MAX_TOKENS_PER_USER, drop expired ones
+    const all = await this.db.refreshToken.findMany({
+      where: { userId },
+      orderBy: { expiryDate: 'desc' },
+      select: { id: true },
+    });
+    const toDelete = all.slice(MAX_TOKENS_PER_USER).map((t) => t.id);
+    await this.db.refreshToken.deleteMany({
+      where: {
+        OR: [
+          { id: { in: toDelete } },
+          { userId, expiryDate: { lt: new Date() } },
+        ],
+      },
+    });
+  }
+
+  private sign(
+    payload: Record<string, unknown>,
+    secret: string,
+    expiresIn: NonNullable<JwtSignOptions['expiresIn']>,
+  ): Promise<string> {
+    return this.jwtService.signAsync(payload, {
+      secret,
+      expiresIn,
+    });
+  }
+
+  async resolveTokenPayload(
+    userId: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<TokenPayloadDto> {
+    const tokenEpoch = await this.tokenEpochRegistry.get(userId, tx);
+    const user = await this.userService.findById(userId, tx);
+    const permissions = await this.access.resolvePermissions(userId, tx);
+    return {
+      sub: user.id,
+      role: user.role,
+      firstName: user.firstName ?? undefined,
+      lastName: user.lastName ?? undefined,
+      tokenEpoch,
+      ...permissions,
+    };
+  }
+
+  private async generateAccessToken(user: User): Promise<string> {
+    const cfg = this.config.get<IJwtConfig>('jwt')!;
+    return this.sign(
+      { ...(await this.resolveTokenPayload(user.id)) },
+      cfg.accessTokenSecret,
+      jwtExpirationConfig.accessToken,
+    );
+  }
+
+  private generateRefreshToken(user: User): Promise<string> {
+    const cfg = this.config.get<IJwtConfig>('jwt')!;
+    return this.sign(
+      { sub: user.id, jti: randomUUID() },
+      cfg.refreshTokenSecret,
+      jwtExpirationConfig.refreshToken,
+    );
+  }
+
+  private hashRefreshToken(token: string): string {
+    return createHash('sha256').update(token).digest('hex');
+  }
+
+  private generateEmailToken(user: User): Promise<string> {
+    const cfg = this.config.get<IJwtConfig>('jwt')!;
+    return this.sign(
+      { sub: user.id },
+      cfg.emailTokenSecret,
+      jwtExpirationConfig.emailToken,
+    );
+  }
+}

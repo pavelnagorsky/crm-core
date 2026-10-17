@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { IJwtConfig } from '../../../config/configuration.js';
+import { IJwtConfig } from '../../../config/interfaces/jwt-config.interface.js';
 import { BookingClientTokenPayloadDto } from '../dto/booking-client-token-payload.dto.js';
 
 export const BOOKING_CLIENT_JWT_STRATEGY = 'booking-client-jwt';

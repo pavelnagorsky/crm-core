@@ -6,16 +6,16 @@ import {
   StaffEarningType,
 } from '@prisma/client';
 import { AppException } from '../../../../shared/exceptions/app.exception.js';
-import { MoneyService } from '../../../../shared/money/money.service.js';
+import { MoneyUtils } from '../../../../shared/money/money.utils.js';
 import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
 import { AuditActor } from '../../../audit/interfaces/audit-actor.interface.js';
-import { EarningCalculatorService } from './earning-calculator.service.js';
+import { EarningCalculator } from '../calculators/earning.calculator.js';
 import { StaffEarningWriterService } from './staff-earning-writer.service.js';
 
 @Injectable()
 export class ProductSaleEarningReversalService {
   constructor(
-    private readonly calculator: EarningCalculatorService,
+    private readonly calculator: EarningCalculator,
     private readonly writer: StaffEarningWriterService,
   ) {}
 
@@ -52,7 +52,7 @@ export class ProductSaleEarningReversalService {
       });
       const reversedBaseAmount = existingReversals.reduce(
         (total, reversal) =>
-          total.plus(MoneyService.decimal(reversal.baseAmount).abs()),
+          total.plus(MoneyUtils.decimal(reversal.baseAmount).abs()),
         new Prisma.Decimal(0),
       );
       const remainingBaseAmount = original.baseAmount.minus(reversedBaseAmount);

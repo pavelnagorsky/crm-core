@@ -7,9 +7,9 @@ import {
 } from '@prisma/client';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
 import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
-import { MoneyService } from '../../../shared/money/money.service.js';
-import { BundleMetrics } from '../../services/utils/bundle-metrics.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { ServiceCatalogKind } from '../../services/enums/service-catalog-kind.enum.js';
+import { BundleMetrics } from '../../services/utils/bundle-metrics.js';
 import { BookingExecutionMode } from '../enums/booking-execution-mode.enum.js';
 
 export class BookingSetupBundleDto {
@@ -58,7 +58,7 @@ export class BookingSetupBundleDto {
     dto.image = bundle.imageFile
       ? FileResponseDto.fromEntity(bundle.imageFile)
       : null;
-    dto.price = MoneyService.format(BundleMetrics.price(bundle));
+    dto.price = MoneyUtils.format(BundleMetrics.price(bundle));
     dto.durationMinutes = BundleMetrics.durationMinutes(bundle);
     dto.executionMode = bundle.executionMode as BookingExecutionMode;
     dto.serviceIds = bundle.items.map((item) => item.serviceId);

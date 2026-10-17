@@ -1,11 +1,11 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
-import { ExtractJwt, Strategy } from 'passport-jwt';
 import { Request } from 'express';
-import { IJwtConfig } from '../../../config/configuration.js';
-import { CookiesEnum } from '../enums/cookies.enum.js';
+import { ExtractJwt, Strategy } from 'passport-jwt';
+import { IJwtConfig } from '../../../config/interfaces/jwt-config.interface.js';
 import { TokenPayloadDto } from '../dto/token-payload.dto.js';
+import { CookiesEnum } from '../enums/cookies.enum.js';
 
 @Injectable()
 export class JwtRefreshStrategy extends PassportStrategy(

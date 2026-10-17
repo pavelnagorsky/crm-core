@@ -1,16 +1,16 @@
 import { Injectable } from '@nestjs/common';
-import { XlsxColumn } from '../../../shared/xlsx/interfaces/xlsx-column.interface.js';
-import { XlsxFile } from '../../../shared/xlsx/interfaces/xlsx-file.interface.js';
-import { XlsxService } from '../../../shared/xlsx/xlsx.service.js';
+import { labelOf } from '../../../shared/i18n/label-of.js';
 import {
   DEFAULT_LANG,
   LocaleService,
 } from '../../../shared/i18n/locale.service.js';
-import { labelOf } from '../../../shared/i18n/label-of.js';
 import { I18nLocale } from '../../../shared/interfaces/i18n-locale.interface.js';
-import { StaffService } from '../staff.service.js';
+import { XlsxColumn } from '../../../shared/xlsx/interfaces/xlsx-column.interface.js';
+import { XlsxFile } from '../../../shared/xlsx/interfaces/xlsx-file.interface.js';
+import { XlsxUtils } from '../../../shared/xlsx/xlsx.utils.js';
 import { StaffExportRequestDto } from '../dto/staff-export-request.dto.js';
 import { StaffWithAvatar } from '../interfaces/staff-with-avatar.interface.js';
+import { StaffService } from './staff.service.js';
 
 type StaffRow = {
   id: string;
@@ -58,7 +58,7 @@ export class StaffExportService {
       isExport: true,
     });
     const rows = items.map((staff) => this.toRow(staff, messages));
-    return XlsxService.table(rows, columns, 'staff', text.staff.sheet);
+    return XlsxUtils.table(rows, columns, 'staff', text.staff.sheet);
   }
 
   private toRow(staff: StaffWithAvatar, messages: I18nLocale): StaffRow {

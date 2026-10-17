@@ -3,12 +3,7 @@ import {
   ValidationArguments,
   ValidationOptions,
 } from 'class-validator';
-
-interface ShiftsRangeDto {
-  from?: string;
-  to?: string;
-  shifts?: { date: string }[];
-}
+import { ShiftsRangeDto } from '../interfaces/shifts-range.interface.js';
 
 export function ShiftsWithinRange(options?: ValidationOptions) {
   return function (target: Function) {

@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
-import { MoneyService } from '../../../../shared/money/money.service.js';
+import { MoneyUtils } from '../../../../shared/money/money.utils.js';
 import { CalendarBookingFeed } from '../../../calendar/interfaces/calendar-booking-feed.interface.js';
 import { CalendarBookingView } from '../../../calendar/interfaces/calendar-booking-view.interface.js';
 import { BookingStatus } from '../../enums/booking-status.enum.js';
@@ -60,9 +60,7 @@ export class BookingCalendarReadService {
 
     return {
       bookings: this.toViews(
-        rows.filter((row) =>
-          CALENDAR_VISIBLE_STATUSES.has(row.booking.status),
-        ),
+        rows.filter((row) => CALENDAR_VISIBLE_STATUSES.has(row.booking.status)),
       ),
       linkedEventIds: rows.flatMap((row) =>
         row.calendarEventId ? [row.calendarEventId] : [],
@@ -169,7 +167,7 @@ export class BookingCalendarReadService {
     );
     const price = ordered.reduce(
       (sum, row) => sum.plus(row.customPrice ?? row.chargedPrice),
-      MoneyService.decimal(0),
+      MoneyUtils.decimal(0),
     );
     return {
       id,
@@ -178,7 +176,7 @@ export class BookingCalendarReadService {
       staffName:
         ordered.map((row) => row.staffName.trim()).find((name) => name) ?? '',
       serviceTitles: ordered.map((row) => row.serviceTitle),
-      price: MoneyService.format(price),
+      price: MoneyUtils.format(price),
       startAt: ordered.reduce(
         (min, row) => (row.startAt < min ? row.startAt : min),
         ordered[0].startAt,

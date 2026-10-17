@@ -1,4 +1,3 @@
-import { createHash } from 'crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
@@ -8,9 +7,10 @@ import {
   Prisma,
   ProductUnit,
 } from '@prisma/client';
+import { createHash } from 'crypto';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
-import { MoneyService } from '../../../shared/money/money.service.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { AUDIT_EVENT } from '../../audit/constants/audit.constants.js';
 import { AuditActionType } from '../../audit/enums/audit-action-type.enum.js';
@@ -18,23 +18,23 @@ import { AuditEntity } from '../../audit/enums/audit-entity.enum.js';
 import { AuditEvent } from '../../audit/enums/audit-event.enum.js';
 import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../../audit/interfaces/audit-log-event.interface.js';
-import { InventoryService } from '../../inventory/inventory.service.js';
-import { LocationService } from '../../location/location.service.js';
-import { StaffEarningsService } from '../../payroll/earnings/staff-earnings.service.js';
+import { InventoryFacade } from '../../inventory/inventory.facade.js';
+import { LocationService } from '../../location/services/location.service.js';
+import { StaffEarningsService } from '../../payroll/earnings/services/staff-earnings.service.js';
+import { OrderPricingCalculator } from '../calculators/order-pricing.calculator.js';
 import { CreateOrderReturnDto } from '../dto/create-order-return.dto.js';
 import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
-import { OrderComputeService } from './order-compute.service.js';
+import { OrderStateRules } from '../rules/order-state.rules.js';
 import { OrderPersistenceService } from './order-persistence.service.js';
-import { OrderStateAssertionService } from './order-state-assertion.service.js';
 
 @Injectable()
 export class OrderReturnService {
   constructor(
-    private readonly inventory: InventoryService,
+    private readonly inventory: InventoryFacade,
     private readonly earnings: StaffEarningsService,
     private readonly persistence: OrderPersistenceService,
-    private readonly compute: OrderComputeService,
-    private readonly stateAssertions: OrderStateAssertionService,
+    private readonly compute: OrderPricingCalculator,
+    private readonly stateAssertions: OrderStateRules,
     private readonly locations: LocationService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
@@ -222,7 +222,7 @@ export class OrderReturnService {
         lineCostSnapshot:
           orderItem.lineCostSnapshot == null
             ? null
-            : MoneyService.allocateCumulative(
+            : MoneyUtils.allocateCumulative(
                 orderItem.lineCostSnapshot,
                 orderItem.quantity,
                 quantity,

@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
 import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
-import { MoneyService } from '../../../shared/money/money.service.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { ServiceCatalogKind } from '../enums/service-catalog-kind.enum.js';
 import { ServiceStatus } from '../enums/service-status.enum.js';
 import { ServiceCatalogItem } from '../interfaces/service-catalog-item.js';
@@ -58,7 +58,7 @@ export class ServiceCatalogItemBaseDto {
       : null;
     dto.title = item.title;
     dto.description = item.description;
-    dto.price = MoneyService.format(item.price);
+    dto.price = MoneyUtils.format(item.price);
     dto.durationMinutes = item.durationMinutes;
     dto.status = item.status;
     dto.sortOrder = item.sortOrder;

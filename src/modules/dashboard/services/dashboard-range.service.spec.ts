@@ -1,4 +1,4 @@
-import { LocationService } from '../../location/location.service.js';
+import { LocationService } from '../../location/services/location.service.js';
 import { DashboardRangeDto } from '../dto/dashboard-range.dto.js';
 import { DashboardPeriod } from '../enums/dashboard-period.enum.js';
 import { SeriesGranularity } from '../enums/series-granularity.enum.js';

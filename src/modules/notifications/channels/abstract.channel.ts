@@ -1,4 +1,4 @@
-import { AbstractNotification } from '../notifications/abstract.notification.js';
+import { AbstractNotification } from '../messages/abstract.notification.js';
 
 export abstract class AbstractChannel {
   abstract readonly name: string;

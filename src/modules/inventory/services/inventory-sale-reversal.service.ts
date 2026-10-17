@@ -5,15 +5,15 @@ import {
   Prisma,
 } from '@prisma/client';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
-import { MoneyService } from '../../../shared/money/money.service.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
+import { InventoryValuationCalculator } from '../calculators/inventory-valuation.calculator.js';
 import { InventoryBalanceLockService } from './inventory-balance-lock.service.js';
-import { InventoryComputeService } from './inventory-compute.service.js';
 
 @Injectable()
 export class InventorySaleReversalService {
   constructor(
-    private readonly compute: InventoryComputeService,
+    private readonly compute: InventoryValuationCalculator,
     private readonly balanceLocks: InventoryBalanceLockService,
   ) {}
 
@@ -92,7 +92,7 @@ export class InventorySaleReversalService {
         pendingMovement;
       const movementOrderItemId = movement.orderItemId!;
       const balance = balances.get(movement.productLocationId)!;
-      const totalCost = MoneyService.allocateCumulative(
+      const totalCost = MoneyUtils.allocateCumulative(
         movement.totalCost.neg(),
         soldQuantity,
         quantity,

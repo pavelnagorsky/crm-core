@@ -1,5 +1,5 @@
 import { Prisma } from '@prisma/client';
-import { MoneyService } from '../../../../shared/money/money.service.js';
+import { MoneyUtils } from '../../../../shared/money/money.utils.js';
 import type { PayrollResultResponseDto } from '../../periods/dto/payroll-result-response.dto.js';
 import { PayrollReportAttentionDto } from '../dto/payroll-report-attention.dto.js';
 import { PayrollReportTotalsDto } from '../dto/payroll-report-totals.dto.js';
@@ -9,15 +9,15 @@ type FundLine = Pick<PayrollResultResponseDto, FundField | 'totalAmount'>;
 
 export function summarizePayrollReport(lines: readonly FundLine[]) {
   const sums: Record<FundField, Prisma.Decimal> = {
-    fixedSalaryTotal: MoneyService.decimal(0),
-    hourlyTotal: MoneyService.decimal(0),
-    serviceCommissionTotal: MoneyService.decimal(0),
-    productCommissionTotal: MoneyService.decimal(0),
-    bonusTotal: MoneyService.decimal(0),
-    deductionTotal: MoneyService.decimal(0),
-    correctionTotal: MoneyService.decimal(0),
+    fixedSalaryTotal: MoneyUtils.decimal(0),
+    hourlyTotal: MoneyUtils.decimal(0),
+    serviceCommissionTotal: MoneyUtils.decimal(0),
+    productCommissionTotal: MoneyUtils.decimal(0),
+    bonusTotal: MoneyUtils.decimal(0),
+    deductionTotal: MoneyUtils.decimal(0),
+    correctionTotal: MoneyUtils.decimal(0),
   };
-  let grand = MoneyService.decimal(0);
+  let grand = MoneyUtils.decimal(0);
   let staffWithDeductions = 0;
   let staffWithCorrections = 0;
 
@@ -26,15 +26,15 @@ export function summarizePayrollReport(lines: readonly FundLine[]) {
       sums[field] = sums[field].plus(line[field]);
     }
     grand = grand.plus(line.totalAmount);
-    if (!MoneyService.decimal(line.deductionTotal).isZero())
+    if (!MoneyUtils.decimal(line.deductionTotal).isZero())
       staffWithDeductions += 1;
-    if (!MoneyService.decimal(line.correctionTotal).isZero())
+    if (!MoneyUtils.decimal(line.correctionTotal).isZero())
       staffWithCorrections += 1;
   }
 
   const totals = new PayrollReportTotalsDto();
   for (const field of Object.keys(sums) as FundField[])
-    totals[field] = MoneyService.format(sums[field]);
+    totals[field] = MoneyUtils.format(sums[field]);
 
   const attention = new PayrollReportAttentionDto();
   attention.staffWithDeductions = staffWithDeductions;
@@ -43,7 +43,7 @@ export function summarizePayrollReport(lines: readonly FundLine[]) {
   return {
     totals,
     attention,
-    grandTotal: MoneyService.format(grand),
+    grandTotal: MoneyUtils.format(grand),
     staffCount: lines.length,
   };
 }

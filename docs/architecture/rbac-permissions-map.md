@@ -15,7 +15,7 @@
 
 ## audit
 
-[Исходник](../../src/modules/audit/audit.controller.ts)
+[Исходник](../../src/modules/audit/controllers/audit.controller.ts)
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
@@ -24,7 +24,7 @@
 
 ## auth
 
-[Исходник](../../src/modules/auth/auth.controller.ts)
+[Исходник](../../src/modules/auth/controllers/auth.controller.ts)
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
@@ -85,7 +85,7 @@
 
 ## bookings-analytics
 
-[Исходник](../../src/modules/bookings/analytics/bookings-analytics.controller.ts)
+[Исходник](../../src/modules/bookings/analytics/controllers/bookings-analytics.controller.ts)
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
@@ -93,7 +93,7 @@
 
 ## bookings
 
-[Исходник](../../src/modules/bookings/bookings.controller.ts)
+[Исходник](../../src/modules/bookings/controllers/bookings.controller.ts)
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
@@ -117,7 +117,7 @@
 
 ## brand
 
-[Исходник](../../src/modules/brand/brand.controller.ts)
+[Исходник](../../src/modules/brand/controllers/brand.controller.ts)
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
@@ -130,7 +130,7 @@
 
 ## calendar
 
-[Исходник](../../src/modules/calendar/api/calendar.controller.ts)
+[Исходник](../../src/modules/calendar/api/controllers/calendar.controller.ts)
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
@@ -145,7 +145,7 @@
 
 ## clients-analytics
 
-[Исходник](../../src/modules/clients/analytics/clients-analytics.controller.ts)
+[Исходник](../../src/modules/clients/analytics/controllers/clients-analytics.controller.ts)
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
@@ -153,7 +153,7 @@
 
 ## clients
 
-[Исходник](../../src/modules/clients/clients.controller.ts)
+[Исходник](../../src/modules/clients/controllers/clients.controller.ts)
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
@@ -167,7 +167,7 @@
 
 ## dashboard
 
-[Исходник](../../src/modules/dashboard/dashboard.controller.ts)
+[Исходник](../../src/modules/dashboard/controllers/dashboard.controller.ts)
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
@@ -175,7 +175,7 @@
 
 ## files
 
-[Исходник](../../src/modules/files/files.controller.ts)
+[Исходник](../../src/modules/files/controllers/files.controller.ts)
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
@@ -186,7 +186,7 @@
 
 ## health
 
-[Исходник](../../src/modules/health/health.controller.ts)
+[Исходник](../../src/modules/health/controllers/health.controller.ts)
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
@@ -194,7 +194,7 @@
 
 ## inventory-analytics
 
-[Исходник](../../src/modules/inventory/analytics/inventory-analytics.controller.ts)
+[Исходник](../../src/modules/inventory/analytics/controllers/inventory-analytics.controller.ts)
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
@@ -202,7 +202,7 @@
 
 ## inventory
 
-[Исходник](../../src/modules/inventory/inventory.controller.ts)
+[Исходник](../../src/modules/inventory/controllers/inventory.controller.ts)
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
@@ -223,7 +223,7 @@
 
 ## location
 
-[Исходник](../../src/modules/location/location.controller.ts)
+[Исходник](../../src/modules/location/controllers/location.controller.ts)
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
@@ -238,7 +238,7 @@
 
 ## orders
 
-[Исходник](../../src/modules/orders/orders.controller.ts)
+[Исходник](../../src/modules/orders/controllers/orders.controller.ts)
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
@@ -257,7 +257,7 @@
 
 ## staff-compensation
 
-[Исходник](../../src/modules/payroll/compensation/staff-compensation.controller.ts)
+[Исходник](../../src/modules/payroll/compensation/controllers/staff-compensation.controller.ts)
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
@@ -267,7 +267,7 @@
 
 ## staff-earnings
 
-[Исходник](../../src/modules/payroll/earnings/staff-earnings.controller.ts)
+[Исходник](../../src/modules/payroll/earnings/controllers/staff-earnings.controller.ts)
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
@@ -278,7 +278,7 @@
 
 ## payroll
 
-[Исходник](../../src/modules/payroll/periods/payroll.controller.ts)
+[Исходник](../../src/modules/payroll/periods/controllers/payroll-periods.controller.ts)
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
@@ -299,7 +299,7 @@
 
 ## products-analytics
 
-[Исходник](../../src/modules/products/analytics/products-analytics.controller.ts)
+[Исходник](../../src/modules/products/analytics/controllers/products-analytics.controller.ts)
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
@@ -307,7 +307,7 @@
 
 ## product-packaging
 
-[Исходник](../../src/modules/products/product-packaging.controller.ts)
+[Исходник](../../src/modules/products/controllers/product-packaging.controller.ts)
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
@@ -316,7 +316,7 @@
 
 ## products
 
-[Исходник](../../src/modules/products/products.controller.ts)
+[Исходник](../../src/modules/products/controllers/products.controller.ts)
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
@@ -336,7 +336,7 @@
 
 ## services-analytics
 
-[Исходник](../../src/modules/services/analytics/services-analytics.controller.ts)
+[Исходник](../../src/modules/services/analytics/controllers/services-analytics.controller.ts)
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
@@ -344,7 +344,7 @@
 
 ## services
 
-[Исходник](../../src/modules/services/services.controller.ts)
+[Исходник](../../src/modules/services/controllers/services.controller.ts)
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
@@ -367,7 +367,7 @@
 
 ## staff-kpi
 
-[Исходник](../../src/modules/staff/kpi/staff-kpi.controller.ts)
+[Исходник](../../src/modules/staff/kpi/controllers/staff-kpi.controller.ts)
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
@@ -375,7 +375,7 @@
 
 ## staff
 
-[Исходник](../../src/modules/staff/staff.controller.ts)
+[Исходник](../../src/modules/staff/controllers/staff.controller.ts)
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
@@ -389,12 +389,10 @@
 | `DELETE /locations/:locationId/staff/:id` | `delete` | L: `staff.manage` | — |
 | `GET /locations/:locationId/staff/:id/shifts` | `getShifts` | L: `staff.read` | — |
 | `PUT /locations/:locationId/staff/:id/shifts` | `replaceShifts` | L: `staff.manage` | — |
-| `POST /locations/:locationId/staff/:id/invitations` | `createInvitation` | L: `access.staff.manage` | Временный совместимый маршрут к единому сервису приглашений. |
-| `POST /staff/invitations/accept` | `acceptInvitation` | U: `invitation-token` | Временный alias единого принятия; текущий пользователь + токен. |
 
 ## suppliers
 
-[Исходник](../../src/modules/suppliers/suppliers.controller.ts)
+[Исходник](../../src/modules/suppliers/controllers/suppliers.controller.ts)
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
@@ -407,7 +405,7 @@
 
 ## user
 
-[Исходник](../../src/modules/user/user.controller.ts)
+[Исходник](../../src/modules/user/controllers/user.controller.ts)
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |

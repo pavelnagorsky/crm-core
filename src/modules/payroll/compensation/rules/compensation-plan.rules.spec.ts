@@ -1,6 +1,6 @@
-import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
 import { AppException } from '../../../../shared/exceptions/app.exception.js';
-import { TimeService } from '../../../../shared/time/time.service.js';
+import { TimeUtils } from '../../../../shared/time/time.utils.js';
+import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
 import {
   assertCompensationVersionStart,
   planCoversDate,
@@ -9,7 +9,7 @@ import {
 describe('compensation plan rules', () => {
   it('allows the first version', () => {
     expect(() =>
-      assertCompensationVersionStart(null, TimeService.dateOnly('2026-09-01')),
+      assertCompensationVersionStart(null, TimeUtils.dateOnly('2026-09-01')),
     ).not.toThrow();
   });
 
@@ -17,19 +17,19 @@ describe('compensation plan rules', () => {
     expect(() =>
       assertCompensationVersionStart(
         {
-          effectiveFrom: TimeService.dateOnly('2026-09-01'),
+          effectiveFrom: TimeUtils.dateOnly('2026-09-01'),
           effectiveTo: null,
         },
-        TimeService.dateOnly('2026-09-01'),
+        TimeUtils.dateOnly('2026-09-01'),
       ),
     ).toThrow(AppException);
     try {
       assertCompensationVersionStart(
         {
-          effectiveFrom: TimeService.dateOnly('2026-09-10'),
+          effectiveFrom: TimeUtils.dateOnly('2026-09-10'),
           effectiveTo: null,
         },
-        TimeService.dateOnly('2026-09-01'),
+        TimeUtils.dateOnly('2026-09-01'),
       );
     } catch (e) {
       expect((e as AppException).errorCode).toBe(
@@ -42,10 +42,10 @@ describe('compensation plan rules', () => {
     expect(() =>
       assertCompensationVersionStart(
         {
-          effectiveFrom: TimeService.dateOnly('2026-09-01'),
-          effectiveTo: TimeService.dateOnly('2026-10-31'),
+          effectiveFrom: TimeUtils.dateOnly('2026-09-01'),
+          effectiveTo: TimeUtils.dateOnly('2026-10-31'),
         },
-        TimeService.dateOnly('2026-10-15'),
+        TimeUtils.dateOnly('2026-10-15'),
       ),
     ).toThrow(AppException);
   });
@@ -54,23 +54,21 @@ describe('compensation plan rules', () => {
     expect(() =>
       assertCompensationVersionStart(
         {
-          effectiveFrom: TimeService.dateOnly('2026-09-01'),
-          effectiveTo: TimeService.dateOnly('2026-09-30'),
+          effectiveFrom: TimeUtils.dateOnly('2026-09-01'),
+          effectiveTo: TimeUtils.dateOnly('2026-09-30'),
         },
-        TimeService.dateOnly('2026-10-01'),
+        TimeUtils.dateOnly('2026-10-01'),
       ),
     ).not.toThrow();
   });
 
   it('treats effectiveTo as inclusive', () => {
     const plan = {
-      effectiveFrom: TimeService.dateOnly('2026-09-01'),
-      effectiveTo: TimeService.dateOnly('2026-09-30'),
+      effectiveFrom: TimeUtils.dateOnly('2026-09-01'),
+      effectiveTo: TimeUtils.dateOnly('2026-09-30'),
     };
-    expect(planCoversDate(plan, TimeService.dateOnly('2026-09-01'))).toBe(true);
-    expect(planCoversDate(plan, TimeService.dateOnly('2026-09-30'))).toBe(true);
-    expect(planCoversDate(plan, TimeService.dateOnly('2026-10-01'))).toBe(
-      false,
-    );
+    expect(planCoversDate(plan, TimeUtils.dateOnly('2026-09-01'))).toBe(true);
+    expect(planCoversDate(plan, TimeUtils.dateOnly('2026-09-30'))).toBe(true);
+    expect(planCoversDate(plan, TimeUtils.dateOnly('2026-10-01'))).toBe(false);
   });
 });

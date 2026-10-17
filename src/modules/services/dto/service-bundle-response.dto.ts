@@ -1,12 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
 import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
-import { MoneyService } from '../../../shared/money/money.service.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { BookingExecutionMode } from '../../bookings/enums/booking-execution-mode.enum.js';
-import { ServiceStatus } from '../enums/service-status.enum.js';
 import { BundlePricingMode } from '../enums/bundle-pricing-mode.enum.js';
-import { BundleMetrics } from '../utils/bundle-metrics.js';
+import { ServiceStatus } from '../enums/service-status.enum.js';
 import { ServiceBundleView } from '../interfaces/service-bundle-view.interface.js';
+import { BundleMetrics } from '../utils/bundle-metrics.js';
 import { ServiceBundleItemResponseDto } from './service-bundle-item-response.dto.js';
 
 export class ServiceBundleResponseDto {
@@ -71,8 +71,8 @@ export class ServiceBundleResponseDto {
     dto.executionMode = bundle.executionMode as BookingExecutionMode;
     dto.pricingMode = bundle.pricingMode as BundlePricingMode;
     dto.fixedPrice =
-      bundle.fixedPrice == null ? null : MoneyService.format(bundle.fixedPrice);
-    dto.price = MoneyService.format(BundleMetrics.price(bundle));
+      bundle.fixedPrice == null ? null : MoneyUtils.format(bundle.fixedPrice);
+    dto.price = MoneyUtils.format(BundleMetrics.price(bundle));
     dto.durationMinutes = BundleMetrics.durationMinutes(bundle);
     dto.status = bundle.status;
     dto.sortOrder = bundle.sortOrder;

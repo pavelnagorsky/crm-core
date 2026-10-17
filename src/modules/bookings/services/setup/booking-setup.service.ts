@@ -1,11 +1,11 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AppException } from '../../../../shared/exceptions/app.exception.js';
-import { MoneyService } from '../../../../shared/money/money.service.js';
+import { MoneyUtils } from '../../../../shared/money/money.utils.js';
 import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
-import { StaffService } from '../../../staff/staff.service.js';
-import { ServiceCatalogService } from '../../../services/catalog/service-catalog.service.js';
+import { ServiceCatalogFacade } from '../../../services/catalog/service-catalog.facade.js';
 import { BundleMetrics } from '../../../services/utils/bundle-metrics.js';
+import { StaffService } from '../../../staff/services/staff.service.js';
 import { BookingResolveRequestDto } from '../../dto/booking-resolve-request.dto.js';
 import { BookingResolveResponseDto } from '../../dto/booking-resolve-response.dto.js';
 import { BookingSetupCategoryDto } from '../../dto/booking-setup-category.dto.js';
@@ -17,7 +17,7 @@ import { StaffSelectionMode } from '../../enums/staff-selection-mode.enum.js';
 @Injectable()
 export class BookingSetupService {
   constructor(
-    private readonly serviceCatalog: ServiceCatalogService,
+    private readonly serviceCatalog: ServiceCatalogFacade,
     private readonly staffService: StaffService,
   ) {}
 
@@ -114,7 +114,7 @@ export class BookingSetupService {
         staffSelection: StaffSelectionMode.SINGLE,
         executionMode: BookingExecutionMode.SEQUENTIAL,
         totalDuration: 0,
-        totalListPrice: MoneyService.format(0),
+        totalListPrice: MoneyUtils.format(0),
       };
     }
 
@@ -141,7 +141,7 @@ export class BookingSetupService {
         : StaffSelectionMode.NONE,
       executionMode,
       totalDuration,
-      totalListPrice: MoneyService.format(totalListPrice),
+      totalListPrice: MoneyUtils.format(totalListPrice),
     };
   }
 }

@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { BookingItem } from '@prisma/client';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
-import { MoneyService } from '../../../shared/money/money.service.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
 
 export class BookingItemResponseDto {
   @ApiProperty({ type: String })
@@ -46,10 +46,10 @@ export class BookingItemResponseDto {
     dto.serviceId = item.serviceId;
     dto.serviceTitle = item.serviceTitle;
     dto.serviceDuration = item.serviceDuration;
-    dto.listPrice = MoneyService.format(item.listPrice);
-    dto.chargedPrice = MoneyService.format(item.chargedPrice);
+    dto.listPrice = MoneyUtils.format(item.listPrice);
+    dto.chargedPrice = MoneyUtils.format(item.chargedPrice);
     dto.customPrice =
-      item.customPrice == null ? null : MoneyService.format(item.customPrice);
+      item.customPrice == null ? null : MoneyUtils.format(item.customPrice);
     dto.staffId = item.staffId;
     dto.staffName = item.staffName;
     dto.startAt = item.startAt;

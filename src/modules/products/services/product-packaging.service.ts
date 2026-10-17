@@ -1,9 +1,9 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma, ProductPackaging, ProductUnit } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { Prisma, ProductPackaging, ProductUnit } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
-import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
 import { fitsDecimal } from '../../../shared/database/fits-decimal.js';
+import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { AUDIT_EVENT } from '../../audit/constants/audit.constants.js';
@@ -13,7 +13,7 @@ import { AuditEvent } from '../../audit/enums/audit-event.enum.js';
 import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../../audit/interfaces/audit-log-event.interface.js';
 import { CreateProductPackagingDto } from '../dto/create-product-packaging.dto.js';
-import { ProductsService } from '../products.service.js';
+import { ProductsService } from './products.service.js';
 
 @Injectable()
 export class ProductPackagingService {

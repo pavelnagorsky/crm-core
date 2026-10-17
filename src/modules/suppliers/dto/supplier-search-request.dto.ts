@@ -1,5 +1,4 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsEnum,
@@ -8,6 +7,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { PaginationRequestDto } from '../../../shared/dto/pagination-request.dto.js';
+import { ParseBoolean } from '../../../shared/transforms/parse-boolean.transform.js';
 import { SupplierSearchOrderBy } from '../enums/supplier-search-order-by.enum.js';
 
 export class SupplierSearchRequestDto extends PaginationRequestDto<SupplierSearchOrderBy> {
@@ -20,7 +20,7 @@ export class SupplierSearchRequestDto extends PaginationRequestDto<SupplierSearc
   @ApiProperty({ type: Boolean, required: false })
   @IsOptional()
   @IsBoolean()
-  @Type(() => Boolean)
+  @ParseBoolean()
   isActive?: boolean;
 
   @ApiProperty({

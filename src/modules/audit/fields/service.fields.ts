@@ -1,6 +1,6 @@
 import { Prisma, type Service } from '@prisma/client';
-import { MoneyService } from '../../../shared/money/money.service.js';
-import type { FieldDescriptor } from '../utils/diff-fields.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
+import type { FieldDescriptor } from '../interfaces/field-descriptor.interface.js';
 
 export type ServiceAuditShape = {
   title: Service['title'];
@@ -46,7 +46,7 @@ export const SERVICE_AUDIT_FIELDS: FieldDescriptor<ServiceAuditShape>[] = [
   { key: 'title' },
   {
     key: 'price',
-    format: (v) => (v == null ? '—' : MoneyService.format(v as Prisma.Decimal)),
+    format: (v) => (v == null ? '—' : MoneyUtils.format(v as Prisma.Decimal)),
   },
   { key: 'durationMinutes' },
   { key: 'bufferMinutes' },

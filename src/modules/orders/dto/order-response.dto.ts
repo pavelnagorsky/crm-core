@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
-import { MoneyService } from '../../../shared/money/money.service.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { OrderStatus } from '../enums/order-status.enum.js';
 import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
 import { OrderItemResponseDto } from './order-item-response.dto.js';
@@ -81,10 +81,10 @@ export class OrderResponseDto {
     dto.status = entity.status;
     dto.version = entity.version;
     dto.occurredAt = entity.occurredAt;
-    dto.listTotalAmount = MoneyService.format(entity.listTotalAmount);
-    dto.subtotalAmount = MoneyService.format(entity.subtotalAmount);
-    dto.discountTotal = MoneyService.format(entity.discountTotal);
-    dto.totalAmount = MoneyService.format(entity.totalAmount);
+    dto.listTotalAmount = MoneyUtils.format(entity.listTotalAmount);
+    dto.subtotalAmount = MoneyUtils.format(entity.subtotalAmount);
+    dto.discountTotal = MoneyUtils.format(entity.discountTotal);
+    dto.totalAmount = MoneyUtils.format(entity.totalAmount);
     dto.note = entity.note;
     dto.createdByName = entity.createdByName;
     dto.voidedAt = entity.voidedAt;

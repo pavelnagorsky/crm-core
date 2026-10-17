@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
-import { MoneyService } from '../../../shared/money/money.service.js';
-import { QuantityService } from '../../../shared/quantity/quantity.service.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
+import { QuantityUtils } from '../../../shared/quantity/quantity.utils.js';
 import { OrderItemType } from '../../orders/enums/order-item-type.enum.js';
 import { OrderPricingLine } from '../../orders/interfaces/order-pricing-line.interface.js';
 import { ProductUnit } from '../../products/enums/product-unit.enum.js';
@@ -48,17 +48,17 @@ export class BookingPricingItemResponseDto {
 
   static fromLine(line: OrderPricingLine): BookingPricingItemResponseDto {
     return Object.assign(new BookingPricingItemResponseDto(), line, {
-      quantity: QuantityService.format(line.quantity),
-      listUnitPrice: MoneyService.format(line.listUnitPrice),
-      listLineTotal: MoneyService.format(line.listLineTotal),
+      quantity: QuantityUtils.format(line.quantity),
+      listUnitPrice: MoneyUtils.format(line.listUnitPrice),
+      listLineTotal: MoneyUtils.format(line.listLineTotal),
       customUnitPrice:
         line.customUnitPrice == null
           ? null
-          : MoneyService.format(line.customUnitPrice),
-      unitPrice: MoneyService.format(line.unitPrice),
-      lineSubtotal: MoneyService.format(line.lineSubtotal),
-      discountTotal: MoneyService.format(line.discountTotal),
-      lineTotal: MoneyService.format(line.lineTotal),
+          : MoneyUtils.format(line.customUnitPrice),
+      unitPrice: MoneyUtils.format(line.unitPrice),
+      lineSubtotal: MoneyUtils.format(line.lineSubtotal),
+      discountTotal: MoneyUtils.format(line.discountTotal),
+      lineTotal: MoneyUtils.format(line.lineTotal),
     });
   }
 }

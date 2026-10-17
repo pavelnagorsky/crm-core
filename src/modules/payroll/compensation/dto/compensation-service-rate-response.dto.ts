@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { StaffCompensationServiceRate } from '@prisma/client';
 import { ApiPercent } from '../../../../shared/decorators/api-decimal.decorator.js';
-import { MoneyService } from '../../../../shared/money/money.service.js';
+import { MoneyUtils } from '../../../../shared/money/money.utils.js';
 
 export class CompensationServiceRateResponseDto {
   @ApiProperty({ type: String })
@@ -19,7 +19,7 @@ export class CompensationServiceRateResponseDto {
     const dto = new CompensationServiceRateResponseDto();
     dto.id = rate.id;
     dto.serviceId = rate.serviceId;
-    dto.commissionPercent = MoneyService.format(rate.commissionPercent);
+    dto.commissionPercent = MoneyUtils.format(rate.commissionPercent);
     return dto;
   }
 }

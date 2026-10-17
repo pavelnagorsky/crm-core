@@ -1,5 +1,5 @@
 import { BookingExecutionMode, Prisma } from '@prisma/client';
-import { MoneyService } from '../../../shared/money/money.service.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
 
 export class BundleMetrics {
   static price(bundle: {
@@ -10,7 +10,7 @@ export class BundleMetrics {
       bundle.fixedPrice ??
       bundle.items.reduce(
         (sum, item) => sum.plus(item.service.price),
-        MoneyService.decimal(0),
+        MoneyUtils.decimal(0),
       )
     );
   }

@@ -4,9 +4,9 @@ import {
   ApiPrice,
   ApiSignedAmount,
 } from '../../../../shared/decorators/api-decimal.decorator.js';
+import { MoneyUtils } from '../../../../shared/money/money.utils.js';
 import { StaffEmploymentType } from '../../../staff/enums/staff-employment-type.enum.js';
 import { StaffPayoutMethod } from '../../../staff/enums/staff-payout-method.enum.js';
-import { MoneyService } from '../../../../shared/money/money.service.js';
 
 export class PayrollResultResponseDto {
   @ApiProperty({ type: String })
@@ -90,18 +90,18 @@ export class PayrollResultResponseDto {
     dto.payoutMethod = result.payoutMethod;
     dto.payoutNote = result.payoutNote;
     dto.currency = result.currency;
-    dto.fixedSalaryTotal = MoneyService.format(result.fixedSalaryTotal);
-    dto.hourlyTotal = MoneyService.format(result.hourlyTotal);
-    dto.serviceCommissionTotal = MoneyService.format(
+    dto.fixedSalaryTotal = MoneyUtils.format(result.fixedSalaryTotal);
+    dto.hourlyTotal = MoneyUtils.format(result.hourlyTotal);
+    dto.serviceCommissionTotal = MoneyUtils.format(
       result.serviceCommissionTotal,
     );
-    dto.productCommissionTotal = MoneyService.format(
+    dto.productCommissionTotal = MoneyUtils.format(
       result.productCommissionTotal,
     );
-    dto.bonusTotal = MoneyService.format(result.bonusTotal);
-    dto.deductionTotal = MoneyService.format(result.deductionTotal);
-    dto.correctionTotal = MoneyService.format(result.correctionTotal);
-    dto.totalAmount = MoneyService.format(result.totalAmount);
+    dto.bonusTotal = MoneyUtils.format(result.bonusTotal);
+    dto.deductionTotal = MoneyUtils.format(result.deductionTotal);
+    dto.correctionTotal = MoneyUtils.format(result.correctionTotal);
+    dto.totalAmount = MoneyUtils.format(result.totalAmount);
     dto.earningsCount = result.earningsCount;
     return dto;
   }

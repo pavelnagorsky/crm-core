@@ -93,7 +93,7 @@ Oct 10, 2026 · @Pavel
 
 Перед применением diff сервер делает compare-and-bump версии внутри той же `$transaction`: `UPDATE Order WHERE id = :id AND version = :dto.version SET version = version + 1` (в Prisma — `updateMany`). Если затронуто `0` строк, версия уже изменилась и сервер возвращает `409 ORDER_CHANGED`; фронт показывает: «Заказ изменился другим пользователем. Обновите данные.» После успешного bump строка заказа удерживается транзакцией до `COMMIT`, поэтому параллельный editor-save не может применить старый desired-state. `refreshTotals` в этом flow пересчитывает суммы без повторного инкремента версии; остальные мутации заказа (добавление items, confirm/reverse, sync booking services, cleanup draft-products, void) также инкрементят `version`.
 
-`OrdersService.update` применяет diff по `OrderItem.id`, а не «delete all + create again»:
+`OrdersFacade.update` применяет diff по `OrderItem.id`, а не «delete all + create again»:
 
 1. `findInTransaction` читает заказ с items.
 2. `assertActive` — заказ должен быть `ACTIVE`; **`assertDraftItems` не используется**.

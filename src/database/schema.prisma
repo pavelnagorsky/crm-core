@@ -19,13 +19,6 @@ enum BusinessRole {
   STAFF
 }
 
-enum StaffInvitationStatus {
-  PENDING
-  ACCEPTED
-  EXPIRED
-  REVOKED
-}
-
 enum CalendarEventType {
   BLOCK
   BOOKING
@@ -345,6 +338,7 @@ model User {
   phone                    String?              @unique @db.VarChar(30)
   email                    String?              @unique @db.VarChar(254)
   passwordHash             String?
+  tokenEpoch               Int                  @default(0)
   phoneVerifiedAt          DateTime?
   emailVerifiedAt          DateTime?
   isMarketingEmailsEnabled Boolean              @default(true)
@@ -371,55 +365,56 @@ model RefreshToken {
 }
 
 model PasswordResetCode {
-  id        String   @id @default(uuid())
-  userId    String   @unique
-  codeHash  String   @db.VarChar(255)
-  expiresAt DateTime
-  createdAt DateTime @default(now())
+  id             String   @id @default(uuid())
+  userId         String   @unique
+  codeHash       String   @db.VarChar(255)
+  failedAttempts Int      @default(0)
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Brand {
-  accessState AccessState?
+  accessState         AccessState?
   permissionOverrides BrandPermissionOverride[]
-  accessInvitations AccessInvitation[]
-  id                String            @id @default(uuid())
-  name              String            @db.VarChar(255)
-  logoFileId        String?
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
-  deletedAt         DateTime?
-  restoredAt        DateTime?
-  logoFile          File?             @relation(fields: [logoFileId], references: [id], onDelete: Restrict)
-  brandMemberships  BrandMembership[]
-  clients           Client[]
-  locations         Location[]
-  productCategories ProductCategory[]
-  products          Product[]
-  suppliers         Supplier[]
+  accessInvitations   AccessInvitation[]
+  id                  String                    @id @default(uuid())
+  name                String                    @db.VarChar(255)
+  logoFileId          String?
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  deletedAt           DateTime?
+  restoredAt          DateTime?
+  logoFile            File?                     @relation(fields: [logoFileId], references: [id], onDelete: Restrict)
+  brandMemberships    BrandMembership[]
+  clients             Client[]
+  locations           Location[]
+  productCategories   ProductCategory[]
+  products            Product[]
+  suppliers           Supplier[]
 
   @@index([deletedAt])
 }
 
 model Location {
-  permissionOverrides LocationPermissionOverride[]
-  id                            String            @id @default(uuid())
+  permissionOverrides           LocationPermissionOverride[]
+  id                            String                       @id @default(uuid())
   brandId                       String
-  name                          String            @db.VarChar(255)
-  countryCode                   String            @db.VarChar(2)
-  currency                      String            @db.VarChar(3)
-  timezone                      String            @db.VarChar(64)
+  name                          String                       @db.VarChar(255)
+  countryCode                   String                       @db.VarChar(2)
+  currency                      String                       @db.VarChar(3)
+  timezone                      String                       @db.VarChar(64)
   businessType                  BusinessType?
-  city                          String?           @db.VarChar(120)
-  addressLine                   String?           @db.VarChar(255)
-  advanceBookingWindowDays      Int               @default(60)
-  slotIntervalMinutes           Int               @default(30)
-  minimumBookingNoticeMinutes   Int               @default(0)
-  bookingVisibility             BookingVisibility @default(PUBLIC)
-  isBookingConfirmationRequired Boolean           @default(false)
-  createdAt                     DateTime          @default(now())
-  updatedAt                     DateTime          @updatedAt
+  city                          String?                      @db.VarChar(120)
+  addressLine                   String?                      @db.VarChar(255)
+  advanceBookingWindowDays      Int                          @default(60)
+  slotIntervalMinutes           Int                          @default(30)
+  minimumBookingNoticeMinutes   Int                          @default(0)
+  bookingVisibility             BookingVisibility            @default(PUBLIC)
+  isBookingConfirmationRequired Boolean                      @default(false)
+  createdAt                     DateTime                     @default(now())
+  updatedAt                     DateTime                     @updatedAt
   deletedAt                     DateTime?
   restoredAt                    DateTime?
 
@@ -428,7 +423,6 @@ model Location {
   serviceCategories          ServiceCategory[]
   services                   Service[]
   staff                      Staff[]
-  staffInvitations           StaffInvitation[]
   calendarEvents             CalendarEvent[]
   bookings                   Booking[]
   compensationPlans          StaffCompensationPlan[]
@@ -1001,7 +995,6 @@ model Staff {
   user              User?                   @relation(fields: [userId], references: [id], onDelete: SetNull)
   avatarFile        File?                   @relation(fields: [avatarFileId], references: [id], onDelete: Restrict)
   staffServices     StaffService[]
-  invitations       StaffInvitation[]
   shifts            StaffShift[]
   calendarEvents    CalendarEvent[]
   bookingItems      BookingItem[]
@@ -1010,8 +1003,8 @@ model Staff {
   payrollResults    PayrollResult[]
   soldOrderItems    OrderItem[]
 
-  @@index([locationId])
   @@unique([locationId, userId])
+  @@index([locationId])
 }
 
 model File {
@@ -1033,26 +1026,6 @@ model File {
   bookingPageCovers   BookingPage[]
 
   @@index([userId])
-}
-
-model StaffInvitation {
-  id         String                @id @default(uuid())
-  staffId    String
-  locationId String
-  tokenHash  String                @unique @db.VarChar(255)
-  status     StaffInvitationStatus @default(PENDING)
-  expiresAt  DateTime
-  acceptedAt DateTime?
-  createdAt  DateTime              @default(now())
-  updatedAt  DateTime              @updatedAt
-
-  staff    Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
-  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
-
-  @@index([staffId])
-  @@index([locationId])
-  @@index([status])
-  @@index([expiresAt])
 }
 
 model StaffService {
@@ -1454,67 +1427,72 @@ model PayrollResult {
 }
 
 model AccessState {
-  brandId String @id
-  revision Int @default(0)
-  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  brandId  String @id
+  revision Int    @default(0)
+  brand    Brand  @relation(fields: [brandId], references: [id], onDelete: Cascade)
 }
 
 model BrandPermissionOverride {
-  id String @id @default(uuid())
-  brandId String
-  role BusinessRole
-  permission String @db.VarChar(100)
-  allowed Boolean
-  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  id         String       @id @default(uuid())
+  brandId    String
+  role       BusinessRole
+  permission String       @db.VarChar(100)
+  allowed    Boolean
+  brand      Brand        @relation(fields: [brandId], references: [id], onDelete: Cascade)
+
   @@unique([brandId, role, permission])
 }
 
 model LocationPermissionOverride {
-  id String @id @default(uuid())
+  id         String       @id @default(uuid())
   locationId String
-  role BusinessRole
-  permission String @db.VarChar(100)
-  allowed Boolean
-  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  role       BusinessRole
+  permission String       @db.VarChar(100)
+  allowed    Boolean
+  location   Location     @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
   @@unique([locationId, role, permission])
 }
 
 model AccessInvitation {
-  id String @id @default(uuid())
-  brandId String
-  issuerId String
-  tokenHash String @unique @db.VarChar(64)
-  expiresAt DateTime
-  revokedAt DateTime?
-  acceptedAt DateTime?
+  id           String                  @id @default(uuid())
+  brandId      String
+  issuerId     String
+  tokenHash    String                  @unique @db.VarChar(64)
+  expiresAt    DateTime
+  revokedAt    DateTime?
+  acceptedAt   DateTime?
   acceptedById String?
-  createdAt DateTime @default(now())
-  version Int @default(0)
-  brand Brand @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  grants AccessInvitationGrant[]
+  createdAt    DateTime                @default(now())
+  version      Int                     @default(0)
+  brand        Brand                   @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  grants       AccessInvitationGrant[]
+
   @@index([brandId, createdAt])
 }
 
 model AccessInvitationGrant {
-  id String @id @default(uuid())
+  id           String           @id @default(uuid())
   invitationId String
-  scopeId String
-  locationId String?
-  role BusinessRole
-  staffId String?
-  invitation AccessInvitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+  scopeId      String
+  locationId   String?
+  role         BusinessRole
+  staffId      String?
+  invitation   AccessInvitation @relation(fields: [invitationId], references: [id], onDelete: Cascade)
+
   @@unique([invitationId, scopeId])
   @@index([staffId])
 }
 
 model AccessAudit {
-  id String @id @default(uuid())
-  brandId String
+  id         String   @id @default(uuid())
+  brandId    String
   locationId String?
-  actorId String
-  action String @db.VarChar(100)
-  targetId String?
-  payload Json
-  createdAt DateTime @default(now())
+  actorId    String
+  action     String   @db.VarChar(100)
+  targetId   String?
+  payload    Json
+  createdAt  DateTime @default(now())
+
   @@index([brandId, createdAt])
 }

@@ -1,12 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { Cron, CronExpression } from '@nestjs/schedule';
 import { DatabaseService } from '../../../database/database.service.js';
 import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
-import { NOTIFICATION_EVENT } from '../../notifications/notifications.service.js';
-import { BookingReminderNotification } from '../../notifications/notifications/booking-reminder.notification.js';
-import { LocationService } from '../../location/location.service.js';
-import { BookingsService } from '../bookings.service.js';
+import { LocationService } from '../../location/services/location.service.js';
+import { BookingReminderNotification } from '../../notifications/messages/booking-reminder.notification.js';
+import { NOTIFICATION_EVENT } from '../../notifications/services/notifications.service.js';
+import { BookingsFacade } from '../bookings.facade.js';
 import {
   AUTO_COMPLETABLE_STATUSES,
   reminderWindow,
@@ -18,7 +18,7 @@ export class BookingCronService {
 
   constructor(
     private readonly db: DatabaseService,
-    private readonly bookings: BookingsService,
+    private readonly bookings: BookingsFacade,
     private readonly eventEmitter: EventEmitter2,
     private readonly locationService: LocationService,
   ) {}
@@ -51,25 +51,28 @@ export class BookingCronService {
       bookings.map(async (booking) => {
         const locale = locales.get(booking.locationId);
         if (!locale) return;
-        await this.db.$transaction(async (tx) => {
+        const claimed = await this.db.$transaction(async (tx) => {
           if (
             !(await this.locationService.acquireActiveOperationLock(
               booking.locationId,
               tx,
             ))
           )
-            return;
+            return false;
           const { count } = await tx.booking.updateMany({
             where: {
               id: booking.id,
               deletedAt: null,
               reminderSentAt: null,
+              updatedAt: booking.updatedAt,
               status: { in: [...AUTO_COMPLETABLE_STATUSES] },
               location: ACTIVE_LOCATION_WHERE,
             },
             data: { reminderSentAt: now },
           });
-          if (count === 0) return;
+          return count === 1;
+        });
+        if (claimed)
           this.eventEmitter.emit(
             NOTIFICATION_EVENT,
             new BookingReminderNotification({
@@ -88,7 +91,6 @@ export class BookingCronService {
               timezone: locale.timezone,
             }),
           );
-        });
       }),
     );
   }

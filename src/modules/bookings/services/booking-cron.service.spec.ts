@@ -1,10 +1,10 @@
-import { Test } from '@nestjs/testing';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { Test } from '@nestjs/testing';
 import { BookingStatus } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
-import { LocationService } from '../../location/location.service.js';
+import { LocationService } from '../../location/services/location.service.js';
+import { BookingsFacade } from '../bookings.facade.js';
 import { BookingCronService } from './booking-cron.service.js';
-import { BookingsService } from '../bookings.service.js';
 
 describe('BookingCronService.sendReminders', () => {
   const db = {
@@ -39,7 +39,7 @@ describe('BookingCronService.sendReminders', () => {
       providers: [
         BookingCronService,
         { provide: DatabaseService, useValue: database },
-        { provide: BookingsService, useValue: bookings },
+        { provide: BookingsFacade, useValue: bookings },
         { provide: EventEmitter2, useValue: emitter },
         { provide: LocationService, useValue: business },
       ],
@@ -87,6 +87,7 @@ describe('BookingCronService.sendReminders', () => {
         id: 'b1',
         deletedAt: null,
         reminderSentAt: null,
+        updatedAt: undefined,
         status: { in: [BookingStatus.PENDING, BookingStatus.CONFIRMED] },
         location: { deletedAt: null, brand: { deletedAt: null } },
       },

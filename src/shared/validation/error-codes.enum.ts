@@ -1,7 +1,4 @@
-export interface ErrorCodeEntry {
-  code: string;
-  message: string;
-}
+import { ErrorCodeEntry } from '../interfaces/error-code-entry.interface.js';
 
 export const ErrorCode = {
   // system
@@ -136,24 +133,6 @@ export const ErrorCode = {
     code: 'STAFF_HAS_BOOKINGS',
     message:
       'Staff member cannot be deleted because they have associated bookings',
-  },
-
-  // staff invitations
-  STAFF_INVITATION_NOT_FOUND: {
-    code: 'STAFF_INVITATION_NOT_FOUND',
-    message: 'Invitation not found or already used',
-  },
-  STAFF_INVITATION_EXPIRED: {
-    code: 'STAFF_INVITATION_EXPIRED',
-    message: 'Invitation has expired',
-  },
-  STAFF_ALREADY_LINKED: {
-    code: 'STAFF_ALREADY_LINKED',
-    message: 'This staff member is already linked to a user account',
-  },
-  STAFF_USER_ALREADY_MEMBER: {
-    code: 'STAFF_USER_ALREADY_MEMBER',
-    message: 'You are already a member of this business',
   },
 
   // files
@@ -307,6 +286,10 @@ export const ErrorCode = {
   PAYROLL_PERIOD_OVERLAP: {
     code: 'PAYROLL_PERIOD_OVERLAP',
     message: 'Payroll period overlaps an existing period for this business',
+  },
+  PAYROLL_PERIOD_CONCURRENT_UPDATE: {
+    code: 'PAYROLL_PERIOD_CONCURRENT_UPDATE',
+    message: 'Payroll period has changed; reload and retry',
   },
   PAYROLL_PERIOD_NOT_FOUND: {
     code: 'PAYROLL_PERIOD_NOT_FOUND',

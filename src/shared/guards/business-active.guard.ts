@@ -6,8 +6,8 @@ import {
 } from '@nestjs/common';
 import { isUUID } from 'class-validator';
 import type { Request } from 'express';
-import { BrandService } from '../../modules/brand/brand.service.js';
-import { LocationService } from '../../modules/location/location.service.js';
+import { BrandService } from '../../modules/brand/services/brand.service.js';
+import { LocationService } from '../../modules/location/services/location.service.js';
 
 @Injectable()
 export class BusinessActiveGuard implements CanActivate {

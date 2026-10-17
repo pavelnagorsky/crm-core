@@ -1,6 +1,6 @@
 import { BusinessRole, UserRole } from '@prisma/client';
+import { PermissionCalculator } from '../../src/modules/access/calculators/permission.calculator.js';
 import { TokenPayloadDto } from '../../src/modules/auth/dto/token-payload.dto.js';
-import { PermissionComputeService } from '../../src/modules/access/services/permission-compute.service.js';
 
 export function tokenPayload(
   role: BusinessRole = BusinessRole.OWNER,
@@ -27,7 +27,7 @@ export function authorizeTestToken(token: TokenPayloadDto): TokenPayloadDto {
   }));
   return {
     ...token,
-    permissions: new PermissionComputeService().claims(
+    permissions: new PermissionCalculator().claims(
       token.brandMemberships,
       token.locationMemberships,
       locations,

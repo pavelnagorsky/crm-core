@@ -22,19 +22,17 @@ import {
   ApiTags,
   ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
-import {
-  ApiResponse,
-  ApiResponseArray,
-  BaseResponseDto,
-} from '../../../shared/dto/base-response.dto.js';
-import { BookingPagesService } from '../services/booking-pages.service.js';
-import { SaveBookingPageDto } from '../dto/save-booking-page.dto.js';
-import { BookingPageResponseDto } from '../dto/booking-page-response.dto.js';
-import { UpdateBookingChannelStatusDto } from '../dto/update-booking-channel-status.dto.js';
-import { SlugAvailabilityQueryDto } from '../dto/slug-availability-query.dto.js';
-import { SlugAvailabilityResponseDto } from '../dto/slug-availability-response.dto.js';
+import { ApiResponseArray } from '../../../shared/dto/api-response-array.dto.js';
+import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
+import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
 import { Permission } from '../../access/enums/permission.enum.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
+import { BookingPageResponseDto } from '../dto/booking-page-response.dto.js';
+import { SaveBookingPageDto } from '../dto/save-booking-page.dto.js';
+import { SlugAvailabilityQueryDto } from '../dto/slug-availability-query.dto.js';
+import { SlugAvailabilityResponseDto } from '../dto/slug-availability-response.dto.js';
+import { UpdateBookingChannelStatusDto } from '../dto/update-booking-channel-status.dto.js';
+import { BookingPagesService } from '../services/booking-pages.service.js';
 
 @ApiTags('Booking pages')
 @Controller('locations/:locationId/booking-pages')

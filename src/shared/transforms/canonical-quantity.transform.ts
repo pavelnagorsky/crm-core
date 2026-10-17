@@ -1,5 +1,5 @@
 import { Transform } from 'class-transformer';
-import { QuantityService } from '../quantity/quantity.service.js';
+import { QuantityUtils } from '../quantity/quantity.utils.js';
 
 export const CanonicalQuantity = () =>
-  Transform(({ value }) => QuantityService.canonical(value));
+  Transform(({ value }) => QuantityUtils.canonical(value));

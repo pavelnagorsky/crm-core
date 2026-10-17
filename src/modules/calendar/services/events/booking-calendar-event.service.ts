@@ -8,6 +8,7 @@ import {
 import { DatabaseService } from '../../../../database/database.service.js';
 import { BookingCalendarEventInput } from '../../interfaces/booking-calendar-event-input.interface.js';
 import { CalendarEventWithCancellations } from '../../interfaces/calendar-types.interface.js';
+import { blockingEventsWhere } from '../../rules/blocking-events-where.js';
 
 @Injectable()
 export class BookingCalendarEventService {
@@ -22,14 +23,13 @@ export class BookingCalendarEventService {
     tx?: Prisma.TransactionClient,
   ): Promise<CalendarEventWithCancellations[]> {
     return (tx ?? this.db).calendarEvent.findMany({
-      where: {
+      where: blockingEventsWhere(
         locationId,
-        OR: [{ staffId: null }, { staffId: { in: staffIds } }],
-        repeatType: CalendarEventRepeatType.NONE,
-        startDateTime: { lte: endAt },
-        endDateTime: { gte: startAt },
-        ...(excludedEventIds.length ? { id: { notIn: excludedEventIds } } : {}),
-      },
+        staffIds,
+        startAt,
+        endAt,
+        excludedEventIds,
+      ),
       include: { cancelledOccurrences: { select: { occurrenceDate: true } } },
     });
   }

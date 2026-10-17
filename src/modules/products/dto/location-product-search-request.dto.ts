@@ -1,5 +1,4 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
 import {
   IsBoolean,
   IsEnum,
@@ -9,6 +8,7 @@ import {
   MaxLength,
 } from 'class-validator';
 import { PaginationRequestDto } from '../../../shared/dto/pagination-request.dto.js';
+import { ParseBoolean } from '../../../shared/transforms/parse-boolean.transform.js';
 import { ProductLocationSearchOrderBy } from '../enums/product-location-search-order-by.enum.js';
 import { ProductStatus } from '../enums/product-status.enum.js';
 
@@ -36,7 +36,7 @@ export class LocationProductSearchRequestDto extends PaginationRequestDto<Produc
   @ApiProperty({ type: Boolean, required: false })
   @IsOptional()
   @IsBoolean()
-  @Type(() => Boolean)
+  @ParseBoolean()
   trackInventory?: boolean;
 
   @ApiProperty({

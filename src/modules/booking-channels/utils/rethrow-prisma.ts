@@ -1,7 +1,7 @@
 import { HttpStatus } from '@nestjs/common';
-import { AppException } from '../../../shared/exceptions/app.exception.js';
-import { ErrorCodeEntry } from '../../../shared/validation/error-codes.enum.js';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
+import { AppException } from '../../../shared/exceptions/app.exception.js';
+import { ErrorCodeEntry } from '../../../shared/interfaces/error-code-entry.interface.js';
 
 export function rethrowPrisma(
   error: unknown,

@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
-import { MoneyService } from '../../../shared/money/money.service.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { BookingPricingResult } from '../interfaces/booking-pricing-result.interface.js';
 import { BookingPricingItemResponseDto } from './booking-pricing-item-response.dto.js';
 
@@ -40,12 +40,12 @@ export class BookingPricingResponseDto {
       currency: result.currency,
       bundleId: result.bundleId,
       bundleTitle: result.bundleTitle,
-      serviceTotal: MoneyService.format(result.serviceTotal),
-      productTotal: MoneyService.format(result.productTotal),
-      listTotalAmount: MoneyService.format(result.listTotalAmount),
-      subtotalAmount: MoneyService.format(result.subtotalAmount),
-      discountTotal: MoneyService.format(result.discountTotal),
-      totalAmount: MoneyService.format(result.totalAmount),
+      serviceTotal: MoneyUtils.format(result.serviceTotal),
+      productTotal: MoneyUtils.format(result.productTotal),
+      listTotalAmount: MoneyUtils.format(result.listTotalAmount),
+      subtotalAmount: MoneyUtils.format(result.subtotalAmount),
+      discountTotal: MoneyUtils.format(result.discountTotal),
+      totalAmount: MoneyUtils.format(result.totalAmount),
       items: result.items.map(BookingPricingItemResponseDto.fromLine),
     });
   }

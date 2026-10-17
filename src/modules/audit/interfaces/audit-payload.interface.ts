@@ -1,177 +1,30 @@
+import { BookingCancelledPayload } from './booking-cancelled-payload.interface.js';
+import { BookingCreatedPayload } from './booking-created-payload.interface.js';
+import { BookingDeletedPayload } from './booking-deleted-payload.interface.js';
+import { BookingStatusChangedPayload } from './booking-status-changed-payload.interface.js';
+import { BookingUpdatedPayload } from './booking-updated-payload.interface.js';
+import { BrandUpdatedPayload } from './brand-updated-payload.interface.js';
+import { ClientCreatedPayload } from './client-created-payload.interface.js';
+import { ClientDeletedPayload } from './client-deleted-payload.interface.js';
+import { ClientUpdatedPayload } from './client-updated-payload.interface.js';
+import { PayrollPeriodAuditPayload } from './payroll-period-audit-payload.interface.js';
 import { ProductPackagingAuditPayload } from './product-packaging-audit-payload.interface.js';
-
-export interface AuditFieldChange {
-  field: string;
-  from: string;
-  to: string;
-}
-
-// ─── Booking ────────────────────────────────────────────────────────────────
-
-interface BookingCreatedItemPayload {
-  serviceName: string;
-  staffName: string;
-  price: string;
-}
-
-interface BookingCreatedPayload {
-  items?: BookingCreatedItemPayload[];
-  serviceName?: string;
-  staffName?: string;
-  startTime: string;
-  endTime: string;
-  price?: string;
-  totalPrice?: string;
-  currency: string;
-  source?: string;
-  executionMode?: string;
-  bundleTitle?: string;
-}
-
-interface BookingUpdatedPayload {
-  changes: AuditFieldChange[];
-  currency?: string;
-}
-
-interface BookingCancelledPayload {
-  cancelledBy: string;
-  reason?: string;
-}
-
-interface BookingStatusChangedPayload {
-  from: string;
-  to: string;
-  reason?: string;
-}
-
-interface BookingDeletedPayload {
-  serviceTitles?: string;
-}
-
-// ─── Client ─────────────────────────────────────────────────────────────────
-
-interface ClientCreatedPayload {
-  fullName: string;
-  phone: string;
-}
-
-interface ClientUpdatedPayload {
-  changes: AuditFieldChange[];
-}
-
-interface ClientDeletedPayload {
-  fullName: string;
-}
-
-// ─── Staff ──────────────────────────────────────────────────────────────────
-
-interface StaffCreatedPayload {
-  name: string;
-}
-
-interface StaffUpdatedPayload {
-  changes: AuditFieldChange[];
-}
-
-interface StaffDeletedPayload {
-  name: string;
-}
-
-interface StaffShiftsUpdatedPayload {
-  startDate: string;
-  endDate: string;
-}
-
-interface StaffBlockCreatedPayload {
-  startDateTime: string;
-  endDateTime: string;
-  title: string | null;
-  reason: string | null;
-}
-
-// ─── Service ────────────────────────────────────────────────────────────────
-
-interface ServiceCreatedPayload {
-  title: string;
-  price: string;
-  durationMinutes: number;
-  currency: string;
-  categoryName?: string;
-  imageName?: string;
-}
-
-interface ServiceCategoryCreatedPayload {
-  name: string;
-  description?: string;
-}
-
-interface ServiceCategoryUpdatedPayload {
-  changes: AuditFieldChange[];
-}
-
-interface ServiceCategoryDeletedPayload {
-  name: string;
-}
-
-interface ServiceBundleCreatedPayload {
-  title: string;
-  pricingMode: string;
-  executionMode: string;
-  itemTitles: string;
-  fixedPrice?: string;
-  currency?: string;
-}
-
-interface ServiceBundleUpdatedPayload {
-  changes: AuditFieldChange[];
-  currency?: string;
-}
-
-interface ServiceBundleDeletedPayload {
-  title: string;
-}
-
-interface ServiceUpdatedPayload {
-  changes: AuditFieldChange[];
-  currency?: string;
-}
-
-interface ServiceDeletedPayload {
-  title: string;
-}
-
-// ─── Brand ─────────────────────────────────────────────────────────────────
-
-interface BrandUpdatedPayload {
-  changes: AuditFieldChange[];
-}
-
-interface StaffCompensationUpdatedPayload {
-  effectiveFrom: string;
-  serviceCommissionPercent: string | null;
-  productCommissionPercent: string | null;
-  fixedSalaryAmount: string | null;
-  hourlyRate: string | null;
-  salaryMode: string;
-  currency: string;
-}
-
-interface StaffEarningAuditPayload {
-  type?: string;
-  amount: string;
-  currency: string;
-  reason?: string;
-  bookingId?: string;
-  bookingItemId?: string | null;
-  externalId?: string;
-  staffId?: string;
-}
-
-interface PayrollPeriodAuditPayload {
-  startDate?: string;
-  endDate?: string;
-  staffCount?: number;
-}
+import { ServiceBundleCreatedPayload } from './service-bundle-created-payload.interface.js';
+import { ServiceBundleDeletedPayload } from './service-bundle-deleted-payload.interface.js';
+import { ServiceBundleUpdatedPayload } from './service-bundle-updated-payload.interface.js';
+import { ServiceCategoryCreatedPayload } from './service-category-created-payload.interface.js';
+import { ServiceCategoryDeletedPayload } from './service-category-deleted-payload.interface.js';
+import { ServiceCategoryUpdatedPayload } from './service-category-updated-payload.interface.js';
+import { ServiceCreatedPayload } from './service-created-payload.interface.js';
+import { ServiceDeletedPayload } from './service-deleted-payload.interface.js';
+import { ServiceUpdatedPayload } from './service-updated-payload.interface.js';
+import { StaffBlockCreatedPayload } from './staff-block-created-payload.interface.js';
+import { StaffCompensationUpdatedPayload } from './staff-compensation-updated-payload.interface.js';
+import { StaffCreatedPayload } from './staff-created-payload.interface.js';
+import { StaffDeletedPayload } from './staff-deleted-payload.interface.js';
+import { StaffEarningAuditPayload } from './staff-earning-audit-payload.interface.js';
+import { StaffShiftsUpdatedPayload } from './staff-shifts-updated-payload.interface.js';
+import { StaffUpdatedPayload } from './staff-updated-payload.interface.js';
 
 // ─── Union ───────────────────────────────────────────────────────────────────
 

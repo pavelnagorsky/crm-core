@@ -1,7 +1,7 @@
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { ServicesService } from './services.service.js';
+import { LocationService } from '../location/services/location.service.js';
 import { ServiceResponseDto } from './dto/service-response.dto.js';
-import { LocationService } from '../location/location.service.js';
+import { ServicesService } from './services.service.js';
 
 describe('ServicesService.findIdsByFilter', () => {
   const findMany = vi.fn();

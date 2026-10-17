@@ -1,110 +1,75 @@
-# Карта Сервисов
+# Карта компонентов
 
-Практическая карта текущих сервисов. Колонка "Прямые данные" означает прямой Prisma-доступ, найденный в сервисе; это не всегда то же самое, что идеальное владение доменом.
+Актуализировано 2026-10-17. Начинай с публичного API домена, затем переходи к исполнителю конкретной операции. Экспортируемые провайдеры перечислены в соответствующем NestJS-модуле; расположение файла само по себе не делает его публичным.
 
-## Identity И Access
+## Бронирования и календарь
 
-| Сервис                      | Назначение                                                                           | Прямые данные                                                     | Зависит от                                               |
-| --------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------- | -------------------------------------------------------- |
-| `UserService`               | Пользователи: поиск, создание, обновление профиля, чтение вместе с memberships.      | `user`                                                            | `DatabaseService`                                        |
-| `AuthService`               | Регистрация, login, refresh/logout, email confirmation, password reset, OAuth login. | `refreshToken`, `passwordResetCode`, memberships, location lookup | `UserService`, `JwtService`, `TokenEpochRegistryService` |
-| `TokenEpochRegistryService` | Cache-backed token invalidation epoch по пользователю.                               | cache only                                                        | none                                                     |
-| `AuthCleanupService`        | Scheduled cleanup просроченных refresh token.                                        | `refreshToken`                                                    | `DatabaseService`                                        |
-| `BrandService`              | Brand CRUD и brand membership lookup.                                                | `brand`, `brandMembership`                                        | `UserService`, `TokenEpochRegistryService`               |
-| `LocationService`           | Location CRUD, public profile, locale lookup, список locations внутри brand.         | `location`                                                        | `BrandService`, `TokenEpochRegistryService`              |
+| Компонент | Ответственность |
+| --- | --- |
+| [BookingsFacade](../../src/modules/bookings/bookings.facade.ts) | Публичные операции чтения, настройки и изменения бронирований. |
+| [BookingCreateFacade](../../src/modules/bookings/booking-create.facade.ts) | Публичное и ручное создание: права, выбор услуг, расписание, резервирование и уведомления. |
+| BookingSelectionService | Выбор услуг/bundle и расчёт цен через публичный API каталога. |
+| BookingSchedulingService | Интервалы услуг и подбор сотрудников. |
+| BookingReservationService | Транзакция создания, блокировки слотов, календарь, заказ и начисления. |
+| BookingMutationService | Редактирование клиента, заметок, цен и добавление товаров; перенос и жизненный цикл делегируются отдельным исполнителям. |
+| BookingRescheduleService | Перенос интервалов и восстановление календарных событий при повторном открытии брони. |
+| BookingLifecycleService | Статусы, завершение, отмена и удаление с финансовыми последствиями. |
+| BookingSlotLockService / BookingWriteLockService | Блокировки сотрудников/дней и защита от устаревших изменений. |
+| [CalendarFacade](../../src/modules/calendar/calendar.facade.ts) | Публичный API календарных событий и доступности. |
+| CalendarAvailabilityService | Загрузка смен/событий и проверка доступности через вычислитель. |
+| CalendarCalculator | Чистая обработка повторений, блокировок и свободных интервалов. Приватен для CalendarModule. |
+| CalendarViewFacade | Сборка HTTP-представления календаря с данными бронирований через публичные API. |
 
-## Staff И Каталог Услуг
+Подробности: [booking-write-flows.md](./booking-write-flows.md).
 
-| Сервис                     | Назначение                                                                                                     | Прямые данные                                                  | Зависит от                                                          |
-| -------------------------- | -------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------- |
-| `StaffService`             | Staff CRUD, invitations, shifts, status, проверка staff-service capability, staff resolution для booking/sale. | `staff`, `staffInvitation`, `staffShift`, `locationMembership` | `LocationService`, `ConfigService`                                  |
-| `StaffKpiService`          | KPI/cards по сотрудникам.                                                                                      | `staff`, `staffService`                                        | `ServicesService`                                                   |
-| `StaffExportService`       | Экспорт staff; данные получает через `StaffService`.                                                           | none                                                           | `StaffService`, `LocaleService`                                     |
-| `StaffCleanupService`      | Scheduled expiration staff invitations.                                                                        | `staffInvitation`                                              | `DatabaseService`                                                   |
-| `ServicesService`          | Service/category CRUD, status changes, booking/catalog lookup, active-service resolution.                      | `service`, `serviceCategory`                                   | `LocationService`                                                   |
-| `ServiceBundleService`     | Bundle CRUD/status и lookup bundle для catalog/booking.                                                        | `service`, `serviceBundle`                                     | `LocationService`                                                   |
-| `ServiceCatalogService`    | Единый facade каталога поверх services и bundles.                                                              | none                                                           | `ServicesService`, `ServiceBundleService`                           |
-| `ServicesAnalyticsService` | Analytics widgets по услугам.                                                                                  | aggregate reads через зависимости                              | `BookingsAggregatesService`, dashboard factories                    |
+## Заказы, склад и зарплата
 
-## Calendar И Booking
+| Компонент | Ответственность |
+| --- | --- |
+| [OrdersFacade](../../src/modules/orders/orders.facade.ts) | Публичные операции заказов и координация исполнителей. |
+| OrderCreationService | Создание черновика или атомарное создание и проведение продажи. Повторы сериализуются по ключу запроса. |
+| OrderDraftMutationService | Редактирование и удаление черновиков, добавление товаров, аудит после commit. |
+| OrderDraftService | Проверка каталога/продавцов/клиентов и подготовка строк заказа. |
+| OrderPersistenceService | Поиск, блокировки заказов и запросов, версии и пересчёт итогов. Приватен для OrdersModule. |
+| OrderProductTransitionService | Проведение, сторнирование и аннулирование с движениями склада и начислениями. |
+| OrderBookingSyncService | Согласование заказа с завершением или отменой бронирования. |
+| OrderReturnService | Частичные возвраты товаров и соответствующие складские/зарплатные изменения. |
+| OrderPricingCalculator / OrderStateRules | Чистые расчёты и проверки состояния; приватны для OrdersModule. Общая арифметика строк находится в shared/money/line-pricing.ts. |
+| OrderAuditService | Публикация событий аудита заказов. События в памяти процесса не являются durable outbox. |
+| [InventoryFacade](../../src/modules/inventory/inventory.facade.ts) | Публичные операции склада. |
+| InventoryReadService | Поиск документов, остатков и движений. |
+| InventoryDocumentService / InventoryDocumentMovementService | Черновики, проведение/аннулирование документов и формирование движений. |
+| InventorySalesService / InventorySaleReversalService | Движения продаж и возвратов. |
+| InventoryBalanceLockService | Блокировка остатков перед изменением. |
+| InventoryValuationCalculator / InventoryDocumentItemCalculator | Чистые расчёты остатков, себестоимости и строк документов. |
+| [PayrollPeriodService](../../src/modules/payroll/periods/services/payroll-period.service.ts) | Периоды, расчёт, утверждение, оплата и корректировки. |
+| PayrollCalculationService | Подготовка исходных данных, материализация начислений и результатов. |
+| PayrollPeriodLockService | Защита пересекающихся периодов и проверка версии после получения блокировки. |
+| StaffEarningsService | Доменные операции начислений; публичный API PayrollModule. |
+| StaffEarningWriterService | Идемпотентная вставка начислений и проверка закрытых дат. |
+| ProductSaleEarningReversalService | Сторнирование комиссий с учётом частичных возвратов. |
+| StaffCompensationService | Планы оплаты, ставки и история условий. |
+| PayrollCalculator / EarningCalculator | Чистые денежные расчёты, приватные для PayrollModule. |
 
-| Сервис                        | Назначение                                                                                   | Прямые данные                                       | Зависит от                                                                                                                                                                             |
-| ----------------------------- | -------------------------------------------------------------------------------------------- | --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CalendarService`             | Публичный calendar facade: events, availability, booking-event sync, calendar view.          | none                                                | calendar sub-services                                                                                                                                                                  |
-| `CalendarEventService`        | Manual calendar event CRUD и occurrence changes.                                             | `calendarEvent`, `calendarEventCancelledOccurrence` | `DatabaseService`                                                                                                                                                                      |
-| `BookingCalendarEventService` | Calendar events, связанные с bookings.                                                       | `calendarEvent`                                     | `DatabaseService`                                                                                                                                                                      |
-| `CalendarAvailabilityService` | Поиск слотов, фильтр доступных сотрудников, проверка свободного слота.                       | `calendarEvent`                                     | `StaffService`, `LocationService`, `ServicesService`, `ServiceBundleService`, `CalendarComputeService`                                                                                 |
-| `CalendarViewBuilderService`  | Сборка calendar view: events, shifts, closed time.                                           | `calendarEvent`                                     | `StaffService`, `LocationService`, `CalendarComputeService`                                                                                                                            |
-| `CalendarComputeService`      | Приватная вычислительная логика календаря: intervals, recurrence expansion, slot generation. | none                                                | none                                                                                                                                                                                   |
-| `CalendarViewService`         | API-level adapter для `CalendarController`.                                                  | none                                                | `CalendarService`, `BookingCalendarReadService`, `LocationService`                                                                                                                     |
-| `BookingsService`             | Booking facade для controllers: search/read/update/cancel/status/setup.                      | none                                                | `BookingReadService`, `BookingMutationService`, `BookingSetupService`                                                                                                                  |
-| `BookingCreateService`        | Создание manual/public booking и pricing.                                                    | `booking`, `bookingItem`, `location`                | `CalendarService`, `ClientsService`, `StaffService`, `ServicesService`, `ServiceBundleService`, `OrdersService`, `OrderComputeService`, `StaffEarningsService`, `BookingClientService` |
-| `BookingMutationService`      | Booking updates, cancellation, status transitions, добавление products, deletion.            | `booking`, `bookingItem`                            | `BookingReadService`, `CalendarService`, `LocationService`, `OrdersService`, `StaffEarningsService`, `StaffService`, `AuditService`                                                    |
-| `BookingReadService`          | Booking search, status counts, detail lookup.                                                | `booking`                                           | `DatabaseService`                                                                                                                                                                      |
-| `BookingCalendarReadService`  | Booking data для calendar views и linked event lookup.                                       | `booking`, `bookingItem`                            | `DatabaseService`                                                                                                                                                                      |
-| `BookingSetupService`         | Booking setup и selection resolution для UI/public flows.                                    | none                                                | `ServiceCatalogService`, `StaffService`                                                                                                                                                |
-| `BookingClientService`        | Генерация booking-client JWT.                                                                | none                                                | `JwtService`, `ConfigService`                                                                                                                                                          |
-| `BookingCronService`          | Scheduled booking completion и reminders.                                                    | `booking`                                           | `BookingsService`, `LocationService`                                                                                                                                                   |
-| `BookingsExportService`       | Экспорт bookings.                                                                            | none                                                | `BookingsService`, `LocaleService`                                                                                                                                                     |
-| `BookingsAggregatesService`   | Shared aggregate read model по bookings для dashboards/analytics.                            | `booking`                                           | `DatabaseService`                                                                                                                                                                      |
-| `BookingsAnalyticsService`    | Booking analytics widgets.                                                                   | aggregate reads через зависимости                   | `BookingsAggregatesService`, dashboard factories, `StaffService`                                                                                                                       |
+## Доступ, каталог, аналитика и инфраструктура
 
-## Clients И Booking Channels
-
-| Сервис                             | Назначение                                                                 | Прямые данные                     | Зависит от                                                                  |
-| ---------------------------------- | -------------------------------------------------------------------------- | --------------------------------- | --------------------------------------------------------------------------- |
-| `ClientsService`                   | Client CRUD/search, import insertion, ban flag, booking client resolution. | `client`                          | `DatabaseService`                                                           |
-| `ClientsImportService`             | Оркестрация client import.                                                 | none                              | `ClientsService`, `ClientsSheetService`                                     |
-| `ClientsSheetService`              | XLSX parsing для client imports.                                           | none                              | none                                                                        |
-| `ClientsExportService`             | Экспорт clients.                                                           | none                              | `ClientsService`, `LocaleService`                                           |
-| `ClientsAnalyticsService`          | Client analytics widgets.                                                  | aggregate reads через зависимости | `BookingsAggregatesService`, `OrdersAggregatesService`, dashboard factories |
-| `BookingPagesService`              | Public booking-page CRUD, publishing, slug lookup.                         | `bookingPage`                     | `FilesService`, `BookingChannelPublishService`                              |
-| `BookingWidgetsService`            | Public booking-widget CRUD и publishing.                                   | `bookingWidget`                   | `BookingChannelPublishService`                                              |
-| `BookingChannelPublishService`     | Проверяет publishing transitions через состояние location/catalog.         | none                              | `LocationService`, `ServicesService`                                        |
-| `BookingChannelAttributionService` | Резолвит attribution из public booking page/widget.                        | `bookingPage`, `bookingWidget`    | `DatabaseService`                                                           |
-
-## Products, Inventory, Orders
-
-| Сервис                          | Назначение                                                                                          | Прямые данные                                                                         | Зависит от                                                                                               |
-| ------------------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `ProductsService`               | Product/category CRUD, location product settings, product resolution для inventory/sale.            | `product`, `productCategory`, `productLocation`                                       | `LocationService`                                                                                        |
-| `ProductsAnalyticsService`      | Product sales analytics widgets.                                                                    | aggregate reads через зависимости                                                     | `OrdersAggregatesService`, `BookingsAggregatesService`, dashboard factories                              |
-| `InventoryService`              | Inventory documents, status transitions, balances, movements, sale posting/reversal.                | `inventoryBalance`, `inventoryDocument`, `inventoryDocumentItem`, `inventoryMovement` | `ProductsService`, `LocationService`, inventory helpers                                                  |
-| `InventoryBalanceLockService`   | Блокирует inventory balance rows для безопасного изменения остатков.                                | `inventoryBalance`                                                                    | none                                                                                                     |
-| `InventoryComputeService`       | Чистые inventory state/delta calculations.                                                          | none                                                                                  | none                                                                                                     |
-| `InventorySaleReversalService`  | Откатывает inventory movements, созданные продажами.                                                | `inventoryBalance`, `inventoryMovement`                                               | `InventoryBalanceLockService`, `InventoryComputeService`                                                 |
-| `InventoryReportService`        | Inventory reports и exports.                                                                        | report reads                                                                          | `LocationService`, `LocaleService`                                                                       |
-| `InventoryAnalyticsService`     | Inventory KPI/replenishment analytics.                                                              | analytics reads                                                                       | `DatabaseService`                                                                                        |
-| `OrdersService`                 | Orders facade: create/search/update/status, draft items, confirmation, returns, booking-order sync. | `order`, `orderItem`                                                                  | order helpers, `LocationService`                                                                         |
-| `OrderDraftService`             | Резолвит draft product/service items и pricing inputs.                                              | none                                                                                  | `ProductsService`, `StaffService`, `ClientsService`, `LocationService`, `OrderComputeService`            |
-| `OrderPersistenceService`       | Persistence, locking, search, totals refresh, version checks для orders.                            | `order`                                                                               | `OrderComputeService`                                                                                    |
-| `OrderProductTransitionService` | Product item confirmation, reversal, voiding, inventory и earning side effects.                     | `order`, `orderItem`, `orderOperation`                                                | `ProductsService`, `InventoryService`, `StaffService`, `StaffEarningsService`, `OrderPersistenceService` |
-| `OrderBookingSyncService`       | Создает/откатывает order state, связанный с booking completion/cancellation.                        | `order`, `orderItem`                                                                  | `OrderDraftService`, `OrderPersistenceService`, `OrderAuditService`, `OrderComputeService`               |
-| `OrderReturnService`            | Создает product returns и координирует inventory/earning reversal.                                  | `orderReturn`                                                                         | `InventoryService`, `StaffEarningsService`, order helpers                                                |
-| `OrderAuditService`             | Audit payloads и audit writes для orders.                                                           | none                                                                                  | `AuditService`                                                                                           |
-| `OrderStateAssertionService`    | Чистые assertions состояния order.                                                                  | none                                                                                  | none                                                                                                     |
-| `OrderComputeService`           | Чистые order pricing и totals.                                                                      | none                                                                                  | none                                                                                                     |
-| `OrdersAggregatesService`       | Shared aggregate read model по orders для dashboards/analytics.                                     | aggregate reads                                                                       | `BookingsAggregatesService`, `DatabaseService`                                                           |
-
-## Payroll, Dashboard, Shared Infrastructure
-
-| Сервис                              | Назначение                                                                                        | Прямые данные                     | Зависит от                                                                                                     |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `StaffCompensationService`          | Staff compensation plans, history, overlap checks, service commission resolution.                 | `staffCompensationPlan`           | `StaffService`, `ServicesService`, `LocationService`                                                           |
-| `StaffEarningsService`              | Earnings search/manual entries, booking/product-sale earnings, period materialization, reversals. | `staffEarning`, `payrollResult`   | `StaffCompensationService`, `EarningCalculatorService`, `StaffService`, `LocationService`, earning helpers     |
-| `EarningCalculatorService`          | Чистые earning calculations: commission, hourly, salary share, manual amounts.                    | none                              | none                                                                                                           |
-| `StaffEarningWriterService`         | Низкоуровневые earning insert/idempotency/unlocked-date checks.                                   | `staffEarning`                    | `DatabaseService`                                                                                              |
-| `ProductSaleEarningReversalService` | Откатывает earnings для product sale reversals.                                                   | `staffEarning`                    | `EarningCalculatorService`, `StaffEarningWriterService`                                                        |
-| `PayrollService`                    | Payroll periods, calculation, approval, payment, corrections, locked ranges.                      | `payrollPeriod`, `payrollResult`  | `StaffEarningsService`, `StaffCompensationService`, `PayrollComputeService`, `StaffService`, `LocationService` |
-| `PayrollComputeService`             | Чистые payroll totals и salary proration.                                                         | none                              | `EarningCalculatorService`                                                                                     |
-| `PayrollReportService`              | Payroll reports и exports.                                                                        | none                              | `PayrollService`, `StaffEarningsService`, `LocationService`, `LocaleService`                                   |
-| `DashboardService`                  | Общая orchestration dashboard widgets.                                                            | aggregate reads через зависимости | `BookingsAggregatesService`, `OrdersAggregatesService`, dashboard factories                                    |
-| `DashboardRangeService`             | Резолвит current/previous date ranges и timezone context location.                                | none                              | `LocationService`                                                                                              |
-| `DashboardBucketService`            | Date bucket generation и period DTO helpers.                                                      | none                              | none                                                                                                           |
-| `DashboardMetricFactory`            | Создание dashboard metric DTO.                                                                    | none                              | none                                                                                                           |
-| `DashboardSeriesFactory`            | Создание dashboard series DTO.                                                                    | none                              | `DashboardBucketService`                                                                                       |
-| `AuditService`                      | Audit history reads, event handling и транзакционные audit writes.                                | `auditLog`, `location`            | `AuditRendererService`                                                                                         |
-| `AuditRendererService`              | Рендерит localized audit event titles/descriptions.                                               | none                              | templates                                                                                                      |
-| `FilesService`                      | Upload/delete/list files и storage integration.                                                   | `file`                            | `ConfigService`                                                                                                |
-| `NotificationsService`              | Обрабатывает domain notification events и dispatches channels.                                    | none                              | `EmailChannel`                                                                                                 |
-| `EmailRendererService`              | Рендерит email templates.                                                                         | none                              | `ConfigService`                                                                                                |
+| Компонент | Ответственность |
+| --- | --- |
+| AccessManagementFacade | Пользовательские операции доступа, generic invitations и grants. |
+| AccessService / AccessAdministrationService | Чтение эффективных прав и изменение политик/участников с проверкой полномочий. |
+| PermissionCalculator | Чистый расчёт permissions, overrides и зависимостей. |
+| AuthService / PasswordResetService | Сессии/OAuth и отдельный сценарий сброса пароля. |
+| TokenEpochRegistryService | Отзыв JWT через атомарную версию в User; состояние сохраняется между перезапусками и узлами. |
+| UserService | Пользователи и сохранённая версия токенов. |
+| BrandService / LocationService | Бренды и филиалы. Изменения членства принадлежат AccessModule. |
+| StaffService | Сотрудники, смены, выполняемые услуги и привязка профиля к доступу. |
+| ClientsService | Клиенты, запреты публичной записи, поиск и разрешение клиента для бронирования. |
+| ServiceCatalogFacade / ServicesService / ServiceBundleService | Объединённый каталог, услуги/категории и bundles соответственно. |
+| ProductsService | Товары, категории и настройки товаров по филиалам. |
+| DashboardFacade / DashboardContextService | Координация виджетов и загрузка необходимых агрегатов. |
+| DashboardWidgetFactory / DashboardMetricFactory / DashboardSeriesFactory / DashboardBucketFactory | Построение представлений и календарных интервалов без обращений к БД. |
+| BookingsAggregatesService / OrdersAggregatesService | Read models аналитики принадлежащих им доменов. |
+| AuditService / AuditRenderer | Хранение/чтение аудита и локализованное представление событий. |
+| NotificationsService / EmailChannel / EmailRenderer | Обработка событий уведомлений, доставка email и рендеринг шаблонов. |
+| FilesService | Метаданные файлов и интеграция с хранилищем. |
+| MoneyUtils / UnitCostUtils / QuantityUtils / TimeUtils / XlsxUtils | Статические утилиты, не DI-сервисы. |

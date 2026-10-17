@@ -1,5 +1,5 @@
 import { Prisma, ProductUnit } from '@prisma/client';
-import { MoneyService } from '../../../shared/money/money.service.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { InventoryDocumentStatus } from '../enums/inventory-document-status.enum.js';
 import { InventoryDocumentType } from '../enums/inventory-document-type.enum.js';
 import { InventoryDocumentWithItems } from '../interfaces/inventory-document-with-items.interface.js';
@@ -24,7 +24,7 @@ function item(
     totalCost:
       unitCost == null
         ? null
-        : MoneyService.quantize(new Prisma.Decimal(quantity).mul(unitCost)),
+        : MoneyUtils.quantize(new Prisma.Decimal(quantity).mul(unitCost)),
     packagingId: null,
     packagingName: null,
     packagingFactor: null,
@@ -37,7 +37,7 @@ function item(
 
 function document(
   items: InventoryDocumentWithItems['items'],
-  status = InventoryDocumentStatus.OPEN,
+  status: InventoryDocumentStatus = InventoryDocumentStatus.OPEN,
 ): InventoryDocumentWithItems {
   return {
     id: 'document-1',

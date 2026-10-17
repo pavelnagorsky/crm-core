@@ -4,40 +4,40 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
   Prisma,
   ServiceCategory,
   ServiceStatus,
   StaffStatus,
 } from '@prisma/client';
-import { EventEmitter2 } from '@nestjs/event-emitter';
 import { DatabaseService } from '../../database/database.service.js';
-import { CreateServiceCategoryDto } from './dto/create-service-category.dto.js';
-import { UpdateServiceCategoryDto } from './dto/update-service-category.dto.js';
-import { CreateServiceDto } from './dto/create-service.dto.js';
-import { UpdateServiceDto } from './dto/update-service.dto.js';
-import { ServiceFilter } from './interfaces/service-filter.interface.js';
+import { PrismaErrorCode } from '../../shared/database/prisma-error-codes.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
-import { PrismaErrorCode } from '../../shared/database/prisma-error-codes.js';
 import { AUDIT_EVENT } from '../audit/constants/audit.constants.js';
-import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
-import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js';
+import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
 import { AuditEntity } from '../audit/enums/audit-entity.enum.js';
 import { AuditEvent } from '../audit/enums/audit-event.enum.js';
-import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
-import { diffFields } from '../audit/utils/diff-fields.js';
+import { SERVICE_CATEGORY_AUDIT_FIELDS } from '../audit/fields/service-category.fields.js';
 import {
   SERVICE_AUDIT_FIELDS,
   toServiceAuditShape,
 } from '../audit/fields/service.fields.js';
-import { SERVICE_CATEGORY_AUDIT_FIELDS } from '../audit/fields/service-category.fields.js';
-import { LocationService } from '../location/location.service.js';
+import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
+import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js';
+import { diffFields } from '../audit/utils/diff-fields.js';
+import { LocationService } from '../location/services/location.service.js';
+import { CreateServiceCategoryDto } from './dto/create-service-category.dto.js';
+import { CreateServiceDto } from './dto/create-service.dto.js';
+import { UpdateServiceCategoryDto } from './dto/update-service-category.dto.js';
+import { UpdateServiceDto } from './dto/update-service.dto.js';
+import { ServiceFilter } from './interfaces/service-filter.interface.js';
+import { ServiceForCatalog } from './interfaces/service-for-catalog.interface.js';
+import { ServiceStatusCount } from './interfaces/service-status-count.interface.js';
 import { ServiceWithImage } from './interfaces/service-with-image.interface.js';
 import { ServiceWithStaffCount } from './interfaces/service-with-staff-count.interface.js';
 import { catalogWhere } from './utils/catalog-where.js';
-import { ServiceForCatalog } from './interfaces/service-for-catalog.interface.js';
-import { ServiceStatusCount } from './interfaces/service-status-count.interface.js';
 
 const serviceAuditInclude = {
   imageFile: true,

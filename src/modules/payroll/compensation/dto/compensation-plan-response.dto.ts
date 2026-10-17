@@ -3,11 +3,11 @@ import {
   ApiPercent,
   ApiPrice,
 } from '../../../../shared/decorators/api-decimal.decorator.js';
-import { CompensationPlanWithRates } from '../interfaces/compensation-plan-with-rates.interface.js';
+import { MoneyUtils } from '../../../../shared/money/money.utils.js';
+import { TimeUtils } from '../../../../shared/time/time.utils.js';
 import { CompensationSalaryMode } from '../enums/compensation-salary-mode.enum.js';
+import { CompensationPlanWithRates } from '../interfaces/compensation-plan-with-rates.interface.js';
 import { CompensationServiceRateResponseDto } from './compensation-service-rate-response.dto.js';
-import { MoneyService } from '../../../../shared/money/money.service.js';
-import { TimeService } from '../../../../shared/time/time.service.js';
 
 export class CompensationPlanResponseDto {
   @ApiProperty({ type: String })
@@ -58,23 +58,23 @@ export class CompensationPlanResponseDto {
     const dto = new CompensationPlanResponseDto();
     dto.id = plan.id;
     dto.staffId = plan.staffId;
-    dto.effectiveFrom = TimeService.dateOnlyStr(plan.effectiveFrom);
+    dto.effectiveFrom = TimeUtils.dateOnlyStr(plan.effectiveFrom);
     dto.effectiveTo = plan.effectiveTo
-      ? TimeService.dateOnlyStr(plan.effectiveTo)
+      ? TimeUtils.dateOnlyStr(plan.effectiveTo)
       : null;
     dto.fixedSalaryAmount =
       plan.fixedSalaryAmount !== null
-        ? MoneyService.format(plan.fixedSalaryAmount)
+        ? MoneyUtils.format(plan.fixedSalaryAmount)
         : null;
     dto.hourlyRate =
-      plan.hourlyRate !== null ? MoneyService.format(plan.hourlyRate) : null;
+      plan.hourlyRate !== null ? MoneyUtils.format(plan.hourlyRate) : null;
     dto.serviceCommissionPercent =
       plan.serviceCommissionPercent !== null
-        ? MoneyService.format(plan.serviceCommissionPercent)
+        ? MoneyUtils.format(plan.serviceCommissionPercent)
         : null;
     dto.productCommissionPercent =
       plan.productCommissionPercent !== null
-        ? MoneyService.format(plan.productCommissionPercent)
+        ? MoneyUtils.format(plan.productCommissionPercent)
         : null;
     dto.salaryMode = plan.salaryMode;
     dto.note = plan.note;

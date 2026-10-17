@@ -1,4 +1,3 @@
-import { PassThrough } from 'stream';
 import {
   InventoryMovementSourceType,
   InventoryMovementType,
@@ -6,13 +5,14 @@ import {
   ProductUnit,
 } from '@prisma/client';
 import ExcelJS from 'exceljs';
+import { PassThrough } from 'stream';
 import { OrderDirection } from '../../../shared/enums/order-direction.enum.js';
 import { LocaleService } from '../../../shared/i18n/locale.service.js';
-import { XlsxService } from '../../../shared/xlsx/xlsx.service.js';
+import { XlsxUtils } from '../../../shared/xlsx/xlsx.utils.js';
 import { InventoryMovementOrderBy } from '../enums/inventory-movement-order-by.enum.js';
 import { InventorySearchOrderBy } from '../enums/inventory-search-order-by.enum.js';
 import { InventoryBalanceView } from '../interfaces/inventory-balance-view.interface.js';
-import { InventoryService } from '../inventory.service.js';
+import { InventoryFacade } from '../inventory.facade.js';
 import { InventoryExportService } from './inventory-export.service.js';
 
 function collect(stream: PassThrough): Promise<Buffer> {
@@ -47,22 +47,20 @@ function balance(
 
 describe('InventoryExportService', () => {
   const inventory = {
-    searchInventory: vi.fn<InventoryService['searchInventory']>(),
-    searchMovements: vi.fn<InventoryService['searchMovements']>(),
+    searchInventory: vi.fn<InventoryFacade['searchInventory']>(),
+    searchMovements: vi.fn<InventoryFacade['searchMovements']>(),
   };
   const locations = {
-    findById: vi
-      .fn()
-      .mockResolvedValue({
-        id: 'location-1',
-        name: 'Main warehouse',
-        currency: 'BYN',
-      }),
+    findById: vi.fn().mockResolvedValue({
+      id: 'location-1',
+      name: 'Main warehouse',
+      currency: 'BYN',
+    }),
   };
   const locale = new LocaleService();
   locale.onModuleInit();
   const service = new InventoryExportService(
-    inventory as unknown as InventoryService,
+    inventory as unknown as InventoryFacade,
     locations as never,
     locale,
   );
@@ -123,7 +121,7 @@ describe('InventoryExportService', () => {
     );
 
     const buffer = await collect(file.stream);
-    const grid = await XlsxService.read(buffer);
+    const grid = await XlsxUtils.read(buffer);
     expect(grid).not.toBeNull();
     if (!grid) return;
     expect(grid.rowCount).toBe(3);
@@ -174,6 +172,9 @@ describe('InventoryExportService', () => {
           quantityDelta: new Prisma.Decimal(5),
           quantityBefore: new Prisma.Decimal(0),
           quantityAfter: new Prisma.Decimal(5),
+          stockValueBefore: new Prisma.Decimal(0),
+          stockValueAfter: new Prisma.Decimal(15),
+          sequence: 1n,
           averageUnitCostBefore: new Prisma.Decimal(0),
           averageUnitCostAfter: new Prisma.Decimal(3),
           unitCost: new Prisma.Decimal(3),
@@ -217,7 +218,7 @@ describe('InventoryExportService', () => {
     );
 
     const buffer = await collect(file.stream);
-    const grid = await XlsxService.read(buffer);
+    const grid = await XlsxUtils.read(buffer);
     expect(grid).not.toBeNull();
     if (!grid) return;
     expect(grid.rowCount).toBe(2);
@@ -277,7 +278,7 @@ describe('InventoryExportService', () => {
     );
 
     const buffer = await collect(file.stream);
-    const grid = await XlsxService.read(buffer);
+    const grid = await XlsxUtils.read(buffer);
     expect(grid).not.toBeNull();
     if (!grid) return;
     expect(grid.row(1).text(1)).toBe('Инвентаризационная ведомость');

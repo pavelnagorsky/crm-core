@@ -1,9 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
-import { ServiceWithStaffCount } from '../interfaces/service-with-staff-count.interface.js';
 import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
-import { MoneyService } from '../../../shared/money/money.service.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { ServiceStatus } from '../enums/service-status.enum.js';
+import { ServiceWithStaffCount } from '../interfaces/service-with-staff-count.interface.js';
 
 export class ServiceResponseDto {
   @ApiProperty({ type: String })
@@ -58,7 +58,7 @@ export class ServiceResponseDto {
       : null;
     dto.title = service.title;
     dto.description = service.description;
-    dto.price = MoneyService.format(service.price);
+    dto.price = MoneyUtils.format(service.price);
     dto.durationMinutes = service.durationMinutes;
     dto.bufferMinutes = service.bufferMinutes;
     dto.status = service.status;

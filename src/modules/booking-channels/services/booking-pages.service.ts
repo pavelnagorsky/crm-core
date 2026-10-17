@@ -4,20 +4,20 @@ import { DatabaseService } from '../../../database/database.service.js';
 import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
-import { FilesService } from '../../files/files.service.js';
+import { FilesService } from '../../files/services/files.service.js';
+import { SaveBookingPageDto } from '../dto/save-booking-page.dto.js';
 import { BookingChannelStatus } from '../enums/booking-channel-status.enum.js';
 import { SlugAvailabilityReason } from '../enums/slug-availability-reason.enum.js';
 import { BookingPageWithCover } from '../interfaces/booking-page-with-cover.interface.js';
 import { SlugAvailability } from '../interfaces/slug-availability.interface.js';
-import { SaveBookingPageDto } from '../dto/save-booking-page.dto.js';
-import { classifySlug } from '../rules/booking-page-slug.js';
-import { sanitizeBookingHtml } from '../rendering/booking-html.js';
 import { toBookingFormColumns } from '../rendering/booking-form.js';
+import { sanitizeBookingHtml } from '../rendering/booking-html.js';
+import { classifySlug } from '../rules/booking-page-slug.js';
+import { rethrowPrisma } from '../utils/rethrow-prisma.js';
 import {
   BookingChannelPublishService,
   publishedAtFor,
 } from './booking-channel-publish.service.js';
-import { rethrowPrisma } from '../utils/rethrow-prisma.js';
 
 const COVER_MIME_TYPES = new Set([
   'image/jpeg',

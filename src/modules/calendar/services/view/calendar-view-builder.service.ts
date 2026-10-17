@@ -1,14 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { CalendarEventRepeatType } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
-import { TimeService } from '../../../../shared/time/time.service.js';
-import { LocationService } from '../../../location/location.service.js';
-import { StaffService } from '../../../staff/staff.service.js';
+import { TimeUtils } from '../../../../shared/time/time.utils.js';
+import { LocationService } from '../../../location/services/location.service.js';
+import { StaffService } from '../../../staff/services/staff.service.js';
+import { CalendarCalculator } from '../../calculators/calendar.calculator.js';
 import { CalendarEventItemDto } from '../../dto/calendar-event-item.dto.js';
 import { GetCalendarRequestDto } from '../../dto/get-calendar-request.dto.js';
 import { GetCalendarResponseDto } from '../../dto/get-calendar-response.dto.js';
 import { CalendarBookingFeed } from '../../interfaces/calendar-booking-feed.interface.js';
-import { CalendarComputeService } from '../calendar-compute.service.js';
 
 @Injectable()
 export class CalendarViewBuilderService {
@@ -16,7 +16,7 @@ export class CalendarViewBuilderService {
     private readonly db: DatabaseService,
     private readonly staff: StaffService,
     private readonly locationService: LocationService,
-    private readonly compute: CalendarComputeService,
+    private readonly compute: CalendarCalculator,
   ) {}
 
   async getCalendar(
@@ -26,17 +26,14 @@ export class CalendarViewBuilderService {
   ): Promise<GetCalendarResponseDto> {
     const { timezone } = await this.locationService.getLocale(locationId);
 
-    const rangeStart = TimeService.dateOnly(dto.from);
-    const rangeEnd = TimeService.dateOnly(dto.to);
-    const windowStart = TimeService.localToUtc(
-      `${dto.from}T00:00:00`,
+    const rangeStart = TimeUtils.dateOnly(dto.from);
+    const rangeEnd = TimeUtils.dateOnly(dto.to);
+    const windowStart = TimeUtils.localToUtc(`${dto.from}T00:00:00`, timezone);
+    const windowEnd = TimeUtils.localToUtc(
+      `${TimeUtils.addDaysStr(dto.to, 1)}T00:00:00`,
       timezone,
     );
-    const windowEnd = TimeService.localToUtc(
-      `${TimeService.addDaysStr(dto.to, 1)}T00:00:00`,
-      timezone,
-    );
-    const dates = TimeService.enumerateDates(dto.from, dto.to);
+    const dates = TimeUtils.enumerateDates(dto.from, dto.to);
     const queryStart = new Date(rangeStart.getTime() - 86_400_000);
     const queryEnd = new Date(rangeEnd.getTime() + 2 * 86_400_000 - 1);
 

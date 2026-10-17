@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { CalendarEventRepeatType, CalendarEventType } from '@prisma/client';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
-import { TimeService } from '../../../shared/time/time.service.js';
+import { TimeUtils } from '../../../shared/time/time.utils.js';
 import { CalendarBookingView } from '../interfaces/calendar-booking-view.interface.js';
 
 export class CalendarEventItemDto {
@@ -122,8 +122,8 @@ export class CalendarEventItemDto {
     booking: CalendarBookingView,
     timezone: string,
   ): CalendarEventItemDto {
-    const start = TimeService.toZonedParts(booking.startAt, timezone);
-    const end = TimeService.toZonedParts(booking.endAt, timezone);
+    const start = TimeUtils.toZonedParts(booking.startAt, timezone);
+    const end = TimeUtils.toZonedParts(booking.endAt, timezone);
     const dto = new CalendarEventItemDto();
     dto.id = booking.id;
     dto.type = CalendarEventType.BOOKING;
@@ -133,9 +133,9 @@ export class CalendarEventItemDto {
     dto.title = null;
     dto.subtitle = serviceSubtitle(booking.serviceTitles);
     dto.price = booking.price;
-    dto.date = TimeService.zonedDateStr(booking.startAt, timezone);
-    dto.startTime = TimeService.minutesToHHmm(start.hour * 60 + start.minute);
-    dto.endTime = TimeService.minutesToHHmm(end.hour * 60 + end.minute);
+    dto.date = TimeUtils.zonedDateStr(booking.startAt, timezone);
+    dto.startTime = TimeUtils.minutesToHHmm(start.hour * 60 + start.minute);
+    dto.endTime = TimeUtils.minutesToHHmm(end.hour * 60 + end.minute);
     dto.editable = false;
     dto.repeating = false;
     return dto;
@@ -183,7 +183,6 @@ function serviceCountWord(count: number): string {
   const mod10 = count % 10;
   const mod100 = count % 100;
   if (mod10 === 1 && mod100 !== 11) return 'услуга';
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14))
-    return 'услуги';
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return 'услуги';
   return 'услуг';
 }

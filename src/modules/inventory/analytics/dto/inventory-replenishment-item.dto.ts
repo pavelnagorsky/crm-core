@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ApiPrice } from '../../../../shared/decorators/api-decimal.decorator.js';
-import { MoneyService } from '../../../../shared/money/money.service.js';
-import { QuantityService } from '../../../../shared/quantity/quantity.service.js';
+import { MoneyUtils } from '../../../../shared/money/money.utils.js';
+import { QuantityUtils } from '../../../../shared/quantity/quantity.utils.js';
 import { ProductUnit } from '../../../products/enums/product-unit.enum.js';
 import { InventoryReplenishmentItemView } from '../interfaces/inventory-replenishment-item-view.interface.js';
 
@@ -43,10 +43,10 @@ export class InventoryReplenishmentItemDto {
     entity: InventoryReplenishmentItemView,
   ): InventoryReplenishmentItemDto {
     return Object.assign(new InventoryReplenishmentItemDto(), entity, {
-      quantityOnHand: QuantityService.format(entity.quantityOnHand),
-      reorderLevel: QuantityService.format(entity.reorderLevel),
-      missingQuantity: QuantityService.format(entity.missingQuantity),
-      stockValue: MoneyService.format(entity.stockValue),
+      quantityOnHand: QuantityUtils.format(entity.quantityOnHand),
+      reorderLevel: QuantityUtils.format(entity.reorderLevel),
+      missingQuantity: QuantityUtils.format(entity.missingQuantity),
+      stockValue: MoneyUtils.format(entity.stockValue),
       updatedAt: entity.updatedAt?.toISOString() ?? null,
     });
   }

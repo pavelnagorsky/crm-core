@@ -12,7 +12,7 @@ import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard.js';
 import { PermissionGuard } from '../../auth/guards/permission.guard.js';
 import { TokenEpochGuard } from '../../auth/guards/token-epoch.guard.js';
-import { SuppliersController } from '../suppliers.controller.js';
+import { SuppliersController } from '../controllers/suppliers.controller.js';
 
 function payload(overrides: Partial<TokenPayloadDto> = {}): TokenPayloadDto {
   return authorizeTestToken({

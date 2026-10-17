@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Prisma } from '@prisma/client';
 import { ApiSignedAmount } from '../../../shared/decorators/api-decimal.decorator.js';
-import { MoneyService } from '../../../shared/money/money.service.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { InventoryDocumentStatus } from '../enums/inventory-document-status.enum.js';
 import { InventoryDocumentType } from '../enums/inventory-document-type.enum.js';
 import { InventoryDocumentWithItems } from '../interfaces/inventory-document-with-items.interface.js';
@@ -111,5 +111,5 @@ function documentTotalCost(
     if (item.totalCost == null) return null;
     total = total.plus(item.totalCost);
   }
-  return MoneyService.format(total);
+  return MoneyUtils.format(total);
 }

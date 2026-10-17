@@ -1,6 +1,6 @@
 import { Prisma } from '@prisma/client';
-import { MoneyService } from '../../../shared/money/money.service.js';
-import type { FieldDescriptor } from '../utils/diff-fields.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
+import type { FieldDescriptor } from '../interfaces/field-descriptor.interface.js';
 
 export type ServiceBundleAuditShape = {
   title: string;
@@ -55,8 +55,7 @@ export const SERVICE_BUNDLE_AUDIT_FIELDS: FieldDescriptor<ServiceBundleAuditShap
     { key: 'pricingMode', i18n: 'bundlePricingMode' },
     {
       key: 'fixedPrice',
-      format: (v) =>
-        v == null ? '—' : MoneyService.format(v as Prisma.Decimal),
+      format: (v) => (v == null ? '—' : MoneyUtils.format(v as Prisma.Decimal)),
     },
     { key: 'status' },
     { key: 'sortOrder' },

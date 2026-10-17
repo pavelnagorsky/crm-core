@@ -2,7 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { File, Service } from '@prisma/client';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
 import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
-import { MoneyService } from '../../../shared/money/money.service.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { ServiceCatalogKind } from '../../services/enums/service-catalog-kind.enum.js';
 
 export class BookingSetupServiceDto {
@@ -42,7 +42,7 @@ export class BookingSetupServiceDto {
     dto.image = service.imageFile
       ? FileResponseDto.fromEntity(service.imageFile)
       : null;
-    dto.price = MoneyService.format(service.price);
+    dto.price = MoneyUtils.format(service.price);
     dto.durationMinutes = service.durationMinutes;
     return dto;
   }

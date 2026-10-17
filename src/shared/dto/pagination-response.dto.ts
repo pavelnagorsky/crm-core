@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 
 export abstract class PaginationResponseDto {
-  abstract items: any[];
+  abstract items: unknown[];
 
   @ApiProperty({ type: Number })
   page: number;

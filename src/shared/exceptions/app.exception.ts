@@ -1,5 +1,5 @@
 import { HttpException, HttpStatus } from '@nestjs/common';
-import { ErrorCodeEntry } from '../validation/error-codes.enum.js';
+import { ErrorCodeEntry } from '../interfaces/error-code-entry.interface.js';
 
 export class AppException extends HttpException {
   readonly errorCode: string;

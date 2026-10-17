@@ -1,8 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { InventoryMovementType } from '@prisma/client';
 import { ApiSignedAmount } from '../../../../shared/decorators/api-decimal.decorator.js';
-import { MoneyService } from '../../../../shared/money/money.service.js';
-import { QuantityService } from '../../../../shared/quantity/quantity.service.js';
+import { MoneyUtils } from '../../../../shared/money/money.utils.js';
+import { QuantityUtils } from '../../../../shared/quantity/quantity.utils.js';
 import { ProductUnit } from '../../../products/enums/product-unit.enum.js';
 import { InventoryTurnoverLine } from '../interfaces/inventory-turnover-line.interface.js';
 import { INVENTORY_MOVEMENT_COLUMNS } from '../utils/inventory-turnover-lines.js';
@@ -51,17 +51,17 @@ export class InventoryTurnoverLineDto {
       name: entity.name,
       sku: entity.sku,
       unit: entity.unit,
-      openingQuantity: QuantityService.format(entity.openingQuantity),
-      openingValue: MoneyService.format(entity.openingValue),
+      openingQuantity: QuantityUtils.format(entity.openingQuantity),
+      openingValue: MoneyUtils.format(entity.openingValue),
       quantities: Object.fromEntries(
         INVENTORY_MOVEMENT_COLUMNS.map((type) => [
           type,
-          QuantityService.format(entity.quantities[type]),
+          QuantityUtils.format(entity.quantities[type]),
         ]),
       ) as Record<InventoryMovementType, string>,
-      periodValue: MoneyService.format(entity.periodValue),
-      closingQuantity: QuantityService.format(entity.closingQuantity),
-      closingValue: MoneyService.format(entity.closingValue),
+      periodValue: MoneyUtils.format(entity.periodValue),
+      closingQuantity: QuantityUtils.format(entity.closingQuantity),
+      closingValue: MoneyUtils.format(entity.closingValue),
     });
   }
 }

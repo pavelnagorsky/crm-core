@@ -1,8 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ProductLocation } from '@prisma/client';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
-import { QuantityService } from '../../../shared/quantity/quantity.service.js';
-import { MoneyService } from '../../../shared/money/money.service.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
+import { QuantityUtils } from '../../../shared/quantity/quantity.utils.js';
 import { ProductStatus } from '../enums/product-status.enum.js';
 
 export class ProductLocationResponseDto {
@@ -35,8 +35,8 @@ export class ProductLocationResponseDto {
 
   static fromEntity(entity: ProductLocation): ProductLocationResponseDto {
     return Object.assign(new ProductLocationResponseDto(), entity, {
-      retailPrice: MoneyService.format(entity.retailPrice),
-      reorderLevel: QuantityService.format(entity.reorderLevel),
+      retailPrice: MoneyUtils.format(entity.retailPrice),
+      reorderLevel: QuantityUtils.format(entity.reorderLevel),
     });
   }
 }

@@ -1,10 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Prisma } from '@prisma/client';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
-import { MoneyService } from '../../../shared/money/money.service.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
+import { BookingExecutionMode } from '../enums/booking-execution-mode.enum.js';
 import { BookingSource } from '../enums/booking-source.enum.js';
 import { BookingStatus } from '../enums/booking-status.enum.js';
-import { BookingExecutionMode } from '../enums/booking-execution-mode.enum.js';
 import { BookingWithItems } from '../interfaces/booking-with-items.interface.js';
 import { BookingItemResponseDto } from './booking-item-response.dto.js';
 
@@ -88,13 +88,13 @@ export class BookingResponseDto {
     dto.clientPhone = booking.clientPhone;
     dto.clientEmail = booking.clientEmail;
     dto.items = booking.items.map(BookingItemResponseDto.fromEntity);
-    dto.totalListPrice = MoneyService.format(
+    dto.totalListPrice = MoneyUtils.format(
       booking.items.reduce(
         (sum, item) => sum.plus(item.listPrice),
         new Prisma.Decimal(0),
       ),
     );
-    dto.totalChargedPrice = MoneyService.format(
+    dto.totalChargedPrice = MoneyUtils.format(
       booking.items.reduce(
         (sum, item) => sum.plus(item.customPrice ?? item.chargedPrice),
         new Prisma.Decimal(0),

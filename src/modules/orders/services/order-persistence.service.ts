@@ -9,14 +9,14 @@ import { DatabaseService } from '../../../database/database.service.js';
 import { stableOrderBy } from '../../../shared/database/stable-order-by.js';
 import { OrderDirection } from '../../../shared/enums/order-direction.enum.js';
 import { PaginatedResult } from '../../../shared/interfaces/paginated-result.interface.js';
+import regularExpressions from '../../../shared/regular-expressions.js';
+import { OrderPricingCalculator } from '../calculators/order-pricing.calculator.js';
+import { orderInclude } from '../constants/order-include.constant.js';
 import { OrderSearchRequestDto } from '../dto/order-search-request.dto.js';
 import { OrderStatusCountsRequestDto } from '../dto/order-status-counts-request.dto.js';
 import { OrderSearchOrderBy } from '../enums/order-search-order-by.enum.js';
 import { OrderStatusCount } from '../interfaces/order-status-count.interface.js';
 import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
-import { orderInclude } from '../constants/order-include.constant.js';
-import { OrderComputeService } from './order-compute.service.js';
-import regularExpressions from '../../../shared/regular-expressions.js';
 
 const ORDER_STATUSES = [OrderStatus.ACTIVE, OrderStatus.VOIDED];
 
@@ -24,7 +24,7 @@ const ORDER_STATUSES = [OrderStatus.ACTIVE, OrderStatus.VOIDED];
 export class OrderPersistenceService {
   constructor(
     private readonly db: DatabaseService,
-    private readonly compute: OrderComputeService,
+    private readonly compute: OrderPricingCalculator,
   ) {}
 
   findById(locationId: string, orderId: string): Promise<OrderWithItems> {
@@ -85,6 +85,17 @@ export class OrderPersistenceService {
     return tx.$queryRaw(Prisma.sql`
       SELECT "id" FROM "Order" WHERE "id" = ${orderId} FOR UPDATE
     `);
+  }
+
+  async lockSaleRequest(
+    tx: Prisma.TransactionClient,
+    locationId: string,
+    idempotencyKey: string,
+  ): Promise<void> {
+    // Lock the request key before checking for an order: there is no row to lock
+    // on the first attempt, and Prisma cannot atomically upsert nested order items.
+    const key = JSON.stringify(['order-sale', locationId, idempotencyKey]);
+    await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${key}, 0))`;
   }
 
   async incrementVersionIfCurrent(

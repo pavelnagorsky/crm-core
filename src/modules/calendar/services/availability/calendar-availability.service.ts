@@ -1,23 +1,21 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
-import {
-  BookingVisibility,
-  CalendarEventRepeatType,
-} from '@prisma/client';
-import { AppException } from '../../../../shared/exceptions/app.exception.js';
-import { TimeService } from '../../../../shared/time/time.service.js';
-import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
+import { BookingVisibility } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
-import { LocationService } from '../../../location/location.service.js';
+import { AppException } from '../../../../shared/exceptions/app.exception.js';
+import { TimeUtils } from '../../../../shared/time/time.utils.js';
+import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
+import { LocationService } from '../../../location/services/location.service.js';
 import { ServiceBundleService } from '../../../services/catalog/service-bundle.service.js';
 import { ServicesService } from '../../../services/services.service.js';
-import { StaffService } from '../../../staff/staff.service.js';
+import { StaffService } from '../../../staff/services/staff.service.js';
+import { CalendarCalculator } from '../../calculators/calendar.calculator.js';
 import { AvailableSlotsDayDto } from '../../dto/available-slots-day.dto.js';
 import { AvailableSlotsRequestDto } from '../../dto/available-slots-request.dto.js';
 import { ManualAvailableSlotsRequestDto } from '../../dto/manual-available-slots-request.dto.js';
 import { CalendarSlotCandidate } from '../../interfaces/calendar-slot-candidate.interface.js';
 import { CalendarSlotItem } from '../../interfaces/calendar-slot-item.interface.js';
 import { CalendarEventWithCancellations } from '../../interfaces/calendar-types.interface.js';
-import { CalendarComputeService } from '../calendar-compute.service.js';
+import { blockingEventsWhere } from '../../rules/blocking-events-where.js';
 
 const MANUAL_AVAILABLE_SLOTS_MAX_DAYS = 62;
 
@@ -29,7 +27,7 @@ export class CalendarAvailabilityService {
     private readonly locationService: LocationService,
     private readonly services: ServicesService,
     private readonly bundles: ServiceBundleService,
-    private readonly compute: CalendarComputeService,
+    private readonly compute: CalendarCalculator,
   ) {}
 
   async getAvailableSlots(
@@ -86,7 +84,7 @@ export class CalendarAvailabilityService {
     } = await this.loadSlotCandidates(locationId, dto);
     if (candidateStaff.length === 0) return [];
 
-    const todayStr = TimeService.zonedDateStr(new Date(), business.timezone);
+    const todayStr = TimeUtils.zonedDateStr(new Date(), business.timezone);
     const effectiveFrom = from < todayStr ? todayStr : from;
     if (effectiveFrom > to) return [];
     return this.collectSlotDays({
@@ -100,7 +98,7 @@ export class CalendarAvailabilityService {
       candidatesByService,
       todayStr,
       earliestMinuteToday: 0,
-      rangeStart: TimeService.dateOnly(effectiveFrom),
+      rangeStart: TimeUtils.dateOnly(effectiveFrom),
       rangeEnd: new Date(`${to}T23:59:59.999Z`),
       excludedCalendarEventIds,
     });
@@ -120,13 +118,7 @@ export class CalendarAvailabilityService {
     const [shifts, blockEvents] = await Promise.all([
       this.staff.listShiftsForStaff(staffIds, date, date),
       this.db.calendarEvent.findMany({
-        where: {
-          locationId,
-          OR: [{ staffId: null }, { staffId: { in: staffIds } }],
-          repeatType: CalendarEventRepeatType.NONE,
-          startDateTime: { lte: endAt },
-          endDateTime: { gte: startAt },
-        },
+        where: blockingEventsWhere(locationId, staffIds, startAt, endAt),
         include: { cancelledOccurrences: { select: { occurrenceDate: true } } },
       }),
     ]);
@@ -155,13 +147,26 @@ export class CalendarAvailabilityService {
     timezone: string,
   ): boolean {
     if (!shift) return false;
+    if (
+      endAt <= startAt ||
+      TimeUtils.zonedDateStr(startAt, timezone) !== dateStr
+    )
+      return false;
+    const nextMidnight = TimeUtils.localToUtc(
+      `${TimeUtils.addDaysStr(dateStr, 1)}T00:00:00`,
+      timezone,
+    );
+    if (endAt > nextMidnight) return false;
 
-    const slotStart = TimeService.dateToMinutes(startAt, timezone);
-    const slotEnd = TimeService.dateToMinutes(endAt, timezone);
+    const slotStart = TimeUtils.dateToMinutes(startAt, timezone);
+    const slotEnd =
+      endAt.getTime() === nextMidnight.getTime()
+        ? 1440
+        : TimeUtils.dateToMinutes(endAt, timezone);
 
     if (
-      slotStart < TimeService.timeToMinutes(shift.startTime) ||
-      slotEnd > TimeService.timeToMinutes(shift.endTime)
+      slotStart < TimeUtils.timeToMinutes(shift.startTime) ||
+      slotEnd > TimeUtils.timeToMinutes(shift.endTime)
     ) {
       return false;
     }
@@ -239,7 +244,8 @@ export class CalendarAvailabilityService {
       : dto.serviceId
         ? [dto.serviceId]
         : [];
-    if (serviceIds.length === 0) throw new NotFoundException('Service not found');
+    if (serviceIds.length === 0)
+      throw new NotFoundException('Service not found');
     const ordered = await this.services.resolveActiveForBooking(
       locationId,
       serviceIds,
@@ -314,8 +320,7 @@ export class CalendarAvailabilityService {
     const from = fromRaw.slice(0, 10);
     const to = toRaw.slice(0, 10);
     const span =
-      (TimeService.dateOnly(to).getTime() -
-        TimeService.dateOnly(from).getTime()) /
+      (TimeUtils.dateOnly(to).getTime() - TimeUtils.dateOnly(from).getTime()) /
         86_400_000 +
       1;
     if (span > MANUAL_AVAILABLE_SLOTS_MAX_DAYS) {
@@ -349,10 +354,11 @@ export class CalendarAvailabilityService {
       input.rangeStart,
       input.rangeEnd,
       input.excludedCalendarEventIds ?? [],
+      input.timezone,
     );
 
     const dates = [
-      ...new Set(shifts.map((shift) => TimeService.dateOnlyStr(shift.date))),
+      ...new Set(shifts.map((shift) => TimeUtils.dateOnlyStr(shift.date))),
     ].sort();
     const shiftsByStaffDate = this.compute.groupShiftsByStaffDate(shifts);
     const blockedByStaffDate = this.compute.expandBlockEvents(
@@ -393,7 +399,7 @@ export class CalendarAvailabilityService {
             {
               date,
               slots: slots.map((start) => ({
-                time: TimeService.minutesToHHmm(start),
+                time: TimeUtils.minutesToHHmm(start),
               })),
             },
           ]
@@ -405,9 +411,9 @@ export class CalendarAvailabilityService {
     timezone: string;
     advanceBookingWindowDays: number;
   }) {
-    const nowParts = TimeService.toZonedParts(new Date(), business.timezone);
-    const todayStr = TimeService.zonedDateStr(new Date(), business.timezone);
-    const endStr = TimeService.addDaysStr(
+    const nowParts = TimeUtils.toZonedParts(new Date(), business.timezone);
+    const todayStr = TimeUtils.zonedDateStr(new Date(), business.timezone);
+    const endStr = TimeUtils.addDaysStr(
       todayStr,
       business.advanceBookingWindowDays - 1,
     );
@@ -424,36 +430,27 @@ export class CalendarAvailabilityService {
     staffIds: string[],
     rangeStart: Date,
     rangeEnd: Date,
-    excludedCalendarEventIds: string[] = [],
+    excludedCalendarEventIds: string[],
+    timezone: string,
   ) {
+    const windowStart = TimeUtils.localToUtc(
+      `${TimeUtils.dateOnlyStr(rangeStart)}T00:00:00`,
+      timezone,
+    );
+    const windowEnd = TimeUtils.localToUtc(
+      `${TimeUtils.addDaysStr(TimeUtils.dateOnlyStr(rangeEnd), 1)}T00:00:00`,
+      timezone,
+    );
     return Promise.all([
       this.staff.listShiftsForStaff(staffIds, rangeStart, rangeEnd),
       this.db.calendarEvent.findMany({
-        where: {
+        where: blockingEventsWhere(
           locationId,
-          AND: [
-            ...(excludedCalendarEventIds.length
-              ? [{ id: { notIn: excludedCalendarEventIds } }]
-              : []),
-            { OR: [{ staffId: null }, { staffId: { in: staffIds } }] },
-            {
-              OR: [
-                {
-                  repeatType: CalendarEventRepeatType.NONE,
-                  startDateTime: { lte: rangeEnd },
-                  endDateTime: { gte: rangeStart },
-                },
-                {
-                  repeatType: { not: CalendarEventRepeatType.NONE },
-                  OR: [
-                    { repeatUntil: null },
-                    { repeatUntil: { gte: rangeStart } },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
+          staffIds,
+          windowStart,
+          windowEnd,
+          excludedCalendarEventIds,
+        ),
         include: { cancelledOccurrences: { select: { occurrenceDate: true } } },
       }),
     ]);

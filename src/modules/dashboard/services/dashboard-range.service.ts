@@ -1,8 +1,8 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
+import { TimeUtils } from '../../../shared/time/time.utils.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
-import { LocationService } from '../../location/location.service.js';
-import { TimeService } from '../../../shared/time/time.service.js';
+import { LocationService } from '../../location/services/location.service.js';
 import { DashboardRangeDto } from '../dto/dashboard-range.dto.js';
 import { DashboardPeriod } from '../enums/dashboard-period.enum.js';
 import { SeriesGranularity } from '../enums/series-granularity.enum.js';
@@ -35,7 +35,7 @@ export class DashboardRangeService {
     const currencies = new Set(locations.map((location) => location.currency));
     const timezones = new Set(locations.map((location) => location.timezone));
     const requestedTimezone =
-      dto.timezone && TimeService.isValidIanaTimezone(dto.timezone)
+      dto.timezone && TimeUtils.isValidIanaTimezone(dto.timezone)
         ? dto.timezone
         : undefined;
     if (currencies.size > 1 || (!requestedTimezone && timezones.size > 1)) {
@@ -60,7 +60,7 @@ export class DashboardRangeService {
     currency: string,
   ): ResolvedRange {
     const timezone =
-      dto.timezone && TimeService.isValidIanaTimezone(dto.timezone)
+      dto.timezone && TimeUtils.isValidIanaTimezone(dto.timezone)
         ? dto.timezone
         : defaultTimezone;
 
@@ -94,15 +94,15 @@ export class DashboardRangeService {
       // Both dates are treated as inclusive calendar days in the business timezone.
       // "from" is the start of that day, "to" is the start of the day AFTER the end day
       // so the half-open [from, to) window covers the end day in full.
-      const fromParts = TimeService.toZonedParts(new Date(dto.from), timezone);
-      const toParts = TimeService.toZonedParts(new Date(dto.to), timezone);
-      const from = TimeService.zonedDayStart(
+      const fromParts = TimeUtils.toZonedParts(new Date(dto.from), timezone);
+      const toParts = TimeUtils.toZonedParts(new Date(dto.to), timezone);
+      const from = TimeUtils.zonedDayStart(
         fromParts.year,
         fromParts.month,
         fromParts.day,
         timezone,
       );
-      const to = TimeService.zonedDayStart(
+      const to = TimeUtils.zonedDayStart(
         toParts.year,
         toParts.month,
         toParts.day + 1,
@@ -116,31 +116,31 @@ export class DashboardRangeService {
       return { from, to };
     }
 
-    const today = TimeService.toZonedParts(new Date(), timezone);
-    const startOfToday = TimeService.zonedDayStart(
+    const today = TimeUtils.toZonedParts(new Date(), timezone);
+    const startOfToday = TimeUtils.zonedDayStart(
       today.year,
       today.month,
       today.day,
       timezone,
     );
-    const startOfTomorrow = TimeService.addDaysInTz(startOfToday, 1, timezone);
+    const startOfTomorrow = TimeUtils.addDaysInTz(startOfToday, 1, timezone);
 
     switch (dto.period) {
       case DashboardPeriod.TODAY:
         return { from: startOfToday, to: startOfTomorrow };
       case DashboardPeriod.YESTERDAY:
         return {
-          from: TimeService.addDaysInTz(startOfToday, -1, timezone),
+          from: TimeUtils.addDaysInTz(startOfToday, -1, timezone),
           to: startOfToday,
         };
       case DashboardPeriod.LAST_7D:
         return {
-          from: TimeService.addDaysInTz(startOfToday, -6, timezone),
+          from: TimeUtils.addDaysInTz(startOfToday, -6, timezone),
           to: startOfTomorrow,
         };
       case DashboardPeriod.LAST_30D:
         return {
-          from: TimeService.addDaysInTz(startOfToday, -29, timezone),
+          from: TimeUtils.addDaysInTz(startOfToday, -29, timezone),
           to: startOfTomorrow,
         };
       case DashboardPeriod.LAST_3M:
@@ -160,12 +160,12 @@ export class DashboardRangeService {
         };
       case DashboardPeriod.MTD:
         return {
-          from: TimeService.zonedDayStart(today.year, today.month, 1, timezone),
+          from: TimeUtils.zonedDayStart(today.year, today.month, 1, timezone),
           to: startOfTomorrow,
         };
       case DashboardPeriod.YTD:
         return {
-          from: TimeService.zonedDayStart(today.year, 1, 1, timezone),
+          from: TimeUtils.zonedDayStart(today.year, 1, 1, timezone),
           to: startOfTomorrow,
         };
       default:
@@ -183,8 +183,8 @@ export class DashboardRangeService {
     months: number,
     timezone: string,
   ): Date {
-    return TimeService.addDaysInTz(
-      TimeService.addMonthsInTz(startOfToday, -months, timezone),
+    return TimeUtils.addDaysInTz(
+      TimeUtils.addMonthsInTz(startOfToday, -months, timezone),
       1,
       timezone,
     );

@@ -6,7 +6,7 @@ import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
-import { AccessService } from '../access.service.js';
+import { PermissionCalculator } from '../calculators/permission.calculator.js';
 import { PERMISSION_REGISTRY } from '../constants/permission-registry.js';
 import { InvitationGrantDto } from '../dto/invitation-grant.dto.js';
 import { PermissionChangeDto } from '../dto/permission-change.dto.js';
@@ -14,14 +14,14 @@ import { AccessScope } from '../enums/access-scope.enum.js';
 import { PermissionValue } from '../enums/permission-value.enum.js';
 import { Permission } from '../enums/permission.enum.js';
 import { assertPermission, hasPermission } from '../utils/assert-permission.js';
-import { PermissionComputeService } from './permission-compute.service.js';
+import { AccessService } from './access.service.js';
 
 @Injectable()
 export class AccessAdministrationService {
   constructor(
     private readonly db: DatabaseService,
     private readonly access: AccessService,
-    private readonly compute: PermissionComputeService,
+    private readonly compute: PermissionCalculator,
   ) {}
 
   rolePermission(role: BusinessRole): Permission {

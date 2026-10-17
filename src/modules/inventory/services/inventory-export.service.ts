@@ -1,24 +1,24 @@
-import { PassThrough } from 'stream';
 import { Injectable } from '@nestjs/common';
 import { InventoryMovement } from '@prisma/client';
 import ExcelJS from 'exceljs';
+import { PassThrough } from 'stream';
+import { labelOf } from '../../../shared/i18n/label-of.js';
 import {
   DEFAULT_LANG,
   LocaleService,
 } from '../../../shared/i18n/locale.service.js';
-import { labelOf } from '../../../shared/i18n/label-of.js';
 import { productUnitLabelOf } from '../../../shared/i18n/product-unit-label.js';
 import { I18nLocale } from '../../../shared/interfaces/i18n-locale.interface.js';
-import { MoneyService } from '../../../shared/money/money.service.js';
-import { QuantityService } from '../../../shared/quantity/quantity.service.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
+import { QuantityUtils } from '../../../shared/quantity/quantity.utils.js';
 import { XlsxColumn } from '../../../shared/xlsx/interfaces/xlsx-column.interface.js';
 import { XlsxFile } from '../../../shared/xlsx/interfaces/xlsx-file.interface.js';
-import { XlsxService } from '../../../shared/xlsx/xlsx.service.js';
-import { LocationService } from '../../location/location.service.js';
+import { XlsxUtils } from '../../../shared/xlsx/xlsx.utils.js';
+import { LocationService } from '../../location/services/location.service.js';
 import { InventoryExportRequestDto } from '../dto/inventory-export-request.dto.js';
 import { InventoryMovementExportRequestDto } from '../dto/inventory-movement-export-request.dto.js';
 import { InventoryBalanceView } from '../interfaces/inventory-balance-view.interface.js';
-import { InventoryService } from '../inventory.service.js';
+import { InventoryFacade } from '../inventory.facade.js';
 
 type InventoryBalanceRow = {
   name: string;
@@ -55,7 +55,7 @@ type InventoryMovementRow = {
 @Injectable()
 export class InventoryExportService {
   constructor(
-    private readonly inventory: InventoryService,
+    private readonly inventory: InventoryFacade,
     private readonly locations: LocationService,
     private readonly locale: LocaleService,
   ) {}
@@ -88,7 +88,7 @@ export class InventoryExportService {
         isExport: true,
       }),
     ]);
-    return XlsxService.table(
+    return XlsxUtils.table(
       items.map((item) => this.toRow(item, messages, location.currency)),
       columns,
       'inventory-balances',
@@ -128,7 +128,7 @@ export class InventoryExportService {
         isExport: true,
       }),
     ]);
-    return XlsxService.table(
+    return XlsxUtils.table(
       items.map((item) =>
         this.toMovementRow(item, messages, location.currency),
       ),
@@ -205,7 +205,7 @@ export class InventoryExportService {
         item.name,
         item.sku ?? '',
         productUnitLabelOf(messages.productUnit, item.unit),
-        QuantityService.format(item.quantityOnHand),
+        QuantityUtils.format(item.quantityOnHand),
         '',
       ]);
       this.applyInventoryStatementTableStyle(row);
@@ -251,11 +251,11 @@ export class InventoryExportService {
         item.unit,
         item.quantityOnHand,
       ),
-      quantityOnHand: QuantityService.format(item.quantityOnHand),
-      averageUnitCost: MoneyService.format(item.averageUnitCost),
-      stockValue: MoneyService.format(item.stockValue),
+      quantityOnHand: QuantityUtils.format(item.quantityOnHand),
+      averageUnitCost: MoneyUtils.format(item.averageUnitCost),
+      stockValue: MoneyUtils.format(item.stockValue),
       currency,
-      reorderLevel: QuantityService.format(item.reorderLevel),
+      reorderLevel: QuantityUtils.format(item.reorderLevel),
       lowStock: item.lowStock ? inventory.yes : inventory.no,
       outOfStock: item.outOfStock ? inventory.yes : inventory.no,
       updatedAt: item.updatedAt ?? '',
@@ -272,12 +272,12 @@ export class InventoryExportService {
       type: labelOf(messages.inventoryMovementType, item.type),
       productName: item.productName,
       productSku: item.productSku ?? '',
-      quantityDelta: QuantityService.format(item.quantityDelta),
-      unitCost: MoneyService.format(item.unitCost),
-      totalCost: MoneyService.format(item.totalCost),
+      quantityDelta: QuantityUtils.format(item.quantityDelta),
+      unitCost: MoneyUtils.format(item.unitCost),
+      totalCost: MoneyUtils.format(item.totalCost),
       currency,
-      quantityBefore: QuantityService.format(item.quantityBefore),
-      quantityAfter: QuantityService.format(item.quantityAfter),
+      quantityBefore: QuantityUtils.format(item.quantityBefore),
+      quantityAfter: QuantityUtils.format(item.quantityAfter),
       documentId: item.documentId ?? '',
       orderId: item.orderId ?? '',
       id: item.id,

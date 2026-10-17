@@ -35,29 +35,3 @@ export class BaseResponseDto<T = unknown> {
     return res;
   }
 }
-
-/**
- * Creates a concrete typed subclass so Swagger can reflect the `responseValue` type.
- * Usage: @ApiOkResponse({ type: ApiResponse(UserResponseDto) })
- */
-export function ApiResponse<T>(ValueType: new (...args: any[]) => T) {
-  class TypedResponse extends BaseResponseDto<T> {
-    @ApiProperty({ type: () => ValueType, nullable: true })
-    declare responseValue: T | null;
-  }
-  Object.defineProperty(TypedResponse, 'name', {
-    value: `${ValueType.name}Response`,
-  });
-  return TypedResponse;
-}
-
-export function ApiResponseArray<T>(ValueType: new (...args: any[]) => T) {
-  class TypedResponse extends BaseResponseDto<T[]> {
-    @ApiProperty({ type: () => ValueType, isArray: true, nullable: true })
-    declare responseValue: T[] | null;
-  }
-  Object.defineProperty(TypedResponse, 'name', {
-    value: `${ValueType.name}ArrayResponse`,
-  });
-  return TypedResponse;
-}

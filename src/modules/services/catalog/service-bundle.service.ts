@@ -4,14 +4,13 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma, ServiceStatus } from '@prisma/client';
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { Prisma, ServiceStatus } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
-import { AppException } from '../../../shared/exceptions/app.exception.js';
-import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
-import { MoneyService } from '../../../shared/money/money.service.js';
-import { MULTI_SERVICE_MAX_ITEMS } from '../constants/multi-service.constants.js';
+import { AppException } from '../../../shared/exceptions/app.exception.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
+import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { AUDIT_EVENT } from '../../audit/constants/audit.constants.js';
 import { AuditActionType } from '../../audit/enums/audit-action-type.enum.js';
 import { AuditEntity } from '../../audit/enums/audit-entity.enum.js';
@@ -23,15 +22,16 @@ import {
 import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../../audit/interfaces/audit-log-event.interface.js';
 import { diffFields } from '../../audit/utils/diff-fields.js';
-import { LocationService } from '../../location/location.service.js';
+import { LocationService } from '../../location/services/location.service.js';
+import { MULTI_SERVICE_MAX_ITEMS } from '../constants/multi-service.constants.js';
 import { CreateServiceBundleDto } from '../dto/create-service-bundle.dto.js';
 import { UpdateServiceBundleDto } from '../dto/update-service-bundle.dto.js';
 import { BundlePricingMode } from '../enums/bundle-pricing-mode.enum.js';
-import { catalogWhere } from '../utils/catalog-where.js';
-import { ServiceBundleView } from '../interfaces/service-bundle-view.interface.js';
 import { ServiceBundleForCatalog } from '../interfaces/service-bundle-for-catalog.interface.js';
+import { ServiceBundleView } from '../interfaces/service-bundle-view.interface.js';
 import { ServiceFilter } from '../interfaces/service-filter.interface.js';
 import { ServiceStatusCount } from '../interfaces/service-status-count.interface.js';
+import { catalogWhere } from '../utils/catalog-where.js';
 
 const serviceBundleInclude = {
   imageFile: true,
@@ -116,7 +116,7 @@ export class ServiceBundleService {
         itemTitles: bundle.items.map((item) => item.service.title).join(', '),
         ...(bundle.fixedPrice == null
           ? {}
-          : { fixedPrice: MoneyService.format(bundle.fixedPrice), currency }),
+          : { fixedPrice: MoneyUtils.format(bundle.fixedPrice), currency }),
       },
     };
     this.eventEmitter.emit(AUDIT_EVENT, event);

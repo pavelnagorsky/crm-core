@@ -1,14 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { ApiUnitCost } from '../../../shared/decorators/api-unit-cost.decorator.js';
-import { UnitCostService } from '../../../shared/money/unit-cost.service.js';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
+import { ApiUnitCost } from '../../../shared/decorators/api-unit-cost.decorator.js';
 import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
-import { MoneyService } from '../../../shared/money/money.service.js';
-import { QuantityService } from '../../../shared/quantity/quantity.service.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
+import { UnitCostUtils } from '../../../shared/money/unit-cost.utils.js';
+import { QuantityUtils } from '../../../shared/quantity/quantity.utils.js';
 import { ProductUnit } from '../../products/enums/product-unit.enum.js';
 import { OrderItemStatus } from '../enums/order-item-status.enum.js';
-import { OrderReturnStatus } from '../enums/order-return-status.enum.js';
 import { OrderItemType } from '../enums/order-item-type.enum.js';
+import { OrderReturnStatus } from '../enums/order-return-status.enum.js';
 import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
 
 export class OrderItemResponseDto {
@@ -92,14 +92,11 @@ export class OrderItemResponseDto {
   ): OrderItemResponseDto {
     const returnedQuantity = entity.returnItems
       .filter((item) => item.return.status === OrderReturnStatus.POSTED)
-      .reduce(
-        (sum, item) => sum.plus(item.quantity),
-        QuantityService.decimal(0),
-      );
+      .reduce((sum, item) => sum.plus(item.quantity), QuantityUtils.decimal(0));
     const returnableQuantity =
       entity.status === OrderItemStatus.CONFIRMED
         ? entity.quantity.minus(returnedQuantity)
-        : QuantityService.decimal(0);
+        : QuantityUtils.decimal(0);
     const dto = new OrderItemResponseDto();
     dto.id = entity.id;
     dto.type = entity.type;
@@ -113,26 +110,26 @@ export class OrderItemResponseDto {
       ? FileResponseDto.fromEntity(entity.productLocation.product.imageFile)
       : null;
     dto.unit = entity.unit;
-    dto.quantity = QuantityService.format(entity.quantity);
-    dto.returnedQuantity = QuantityService.format(returnedQuantity);
-    dto.returnableQuantity = QuantityService.format(returnableQuantity);
-    dto.listUnitPrice = MoneyService.format(entity.listUnitPrice);
+    dto.quantity = QuantityUtils.format(entity.quantity);
+    dto.returnedQuantity = QuantityUtils.format(returnedQuantity);
+    dto.returnableQuantity = QuantityUtils.format(returnableQuantity);
+    dto.listUnitPrice = MoneyUtils.format(entity.listUnitPrice);
     dto.customUnitPrice =
       entity.customUnitPrice == null
         ? null
-        : MoneyService.format(entity.customUnitPrice);
-    dto.unitPrice = MoneyService.format(entity.unitPrice);
-    dto.lineSubtotal = MoneyService.format(entity.lineSubtotal);
-    dto.discountTotal = MoneyService.format(entity.discountTotal);
-    dto.lineTotal = MoneyService.format(entity.lineTotal);
+        : MoneyUtils.format(entity.customUnitPrice);
+    dto.unitPrice = MoneyUtils.format(entity.unitPrice);
+    dto.lineSubtotal = MoneyUtils.format(entity.lineSubtotal);
+    dto.discountTotal = MoneyUtils.format(entity.discountTotal);
+    dto.lineTotal = MoneyUtils.format(entity.lineTotal);
     dto.unitCostSnapshot =
       entity.unitCostSnapshot == null
         ? null
-        : UnitCostService.format(entity.unitCostSnapshot);
+        : UnitCostUtils.format(entity.unitCostSnapshot);
     dto.lineCostSnapshot =
       entity.lineCostSnapshot == null
         ? null
-        : MoneyService.format(entity.lineCostSnapshot);
+        : MoneyUtils.format(entity.lineCostSnapshot);
     dto.sellerStaffId = entity.sellerStaffId;
     dto.sellerName = entity.sellerName;
     dto.confirmedAt = entity.confirmedAt;

@@ -1,13 +1,13 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { InventoryDocumentItem } from '@prisma/client';
-import { UnitCostService } from '../../../shared/money/unit-cost.service.js';
-import { ApiUnitCost } from '../../../shared/decorators/api-unit-cost.decorator.js';
 import {
   ApiPrice,
   ApiSignedAmount,
 } from '../../../shared/decorators/api-decimal.decorator.js';
-import { MoneyService } from '../../../shared/money/money.service.js';
-import { QuantityService } from '../../../shared/quantity/quantity.service.js';
+import { ApiUnitCost } from '../../../shared/decorators/api-unit-cost.decorator.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
+import { UnitCostUtils } from '../../../shared/money/unit-cost.utils.js';
+import { QuantityUtils } from '../../../shared/quantity/quantity.utils.js';
 import { ProductUnit } from '../../products/enums/product-unit.enum.js';
 
 export class InventoryDocumentItemResponseDto {
@@ -59,25 +59,25 @@ export class InventoryDocumentItemResponseDto {
     dto.productName = entity.productName;
     dto.productSku = entity.productSku;
     dto.productUnit = entity.productUnit;
-    dto.quantity = QuantityService.format(entity.quantity);
+    dto.quantity = QuantityUtils.format(entity.quantity);
     dto.unitCost =
-      entity.unitCost == null ? null : UnitCostService.format(entity.unitCost);
+      entity.unitCost == null ? null : UnitCostUtils.format(entity.unitCost);
     dto.totalCost =
-      entity.totalCost == null ? null : MoneyService.format(entity.totalCost);
+      entity.totalCost == null ? null : MoneyUtils.format(entity.totalCost);
     dto.packagingId = entity.packagingId;
     dto.packagingName = entity.packagingName;
     dto.packagingFactor =
       entity.packagingFactor == null
         ? null
-        : QuantityService.format(entity.packagingFactor);
+        : QuantityUtils.format(entity.packagingFactor);
     dto.packageQuantity =
       entity.packageQuantity == null
         ? null
-        : QuantityService.format(entity.packageQuantity);
+        : QuantityUtils.format(entity.packageQuantity);
     dto.packageUnitCost =
       entity.packageUnitCost == null
         ? null
-        : MoneyService.format(entity.packageUnitCost);
+        : MoneyUtils.format(entity.packageUnitCost);
     return dto;
   }
 }

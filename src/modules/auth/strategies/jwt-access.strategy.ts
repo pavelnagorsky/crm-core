@@ -2,10 +2,10 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { IJwtConfig } from '../../../config/configuration.js';
-import { TokenPayloadDto } from '../dto/token-payload.dto.js';
+import { IJwtConfig } from '../../../config/interfaces/jwt-config.interface.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
+import { TokenPayloadDto } from '../dto/token-payload.dto.js';
 
 @Injectable()
 export class JwtAccessStrategy extends PassportStrategy(

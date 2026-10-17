@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { TimeService } from '../../../../shared/time/time.service.js';
+import { TimeUtils } from '../../../../shared/time/time.utils.js';
 
 export class LockedPayrollRangeDto {
   @ApiProperty({ type: String, example: '2026-09-01' })
@@ -13,8 +13,8 @@ export class LockedPayrollRangeDto {
     endDate: Date;
   }): LockedPayrollRangeDto {
     const dto = new LockedPayrollRangeDto();
-    dto.startDate = TimeService.dateOnlyStr(range.startDate);
-    dto.endDate = TimeService.dateOnlyStr(range.endDate);
+    dto.startDate = TimeUtils.dateOnlyStr(range.startDate);
+    dto.endDate = TimeUtils.dateOnlyStr(range.endDate);
     return dto;
   }
 }

@@ -1,31 +1,26 @@
-import { CACHE_MANAGER, Cache } from '@nestjs/cache-manager';
-import { Inject, Injectable } from '@nestjs/common';
-
-const TOKEN_EPOCH_KEY_PREFIX = 'auth:token-epoch:';
+import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { UserService } from '../../user/services/user.service.js';
 
 @Injectable()
 export class TokenEpochRegistryService {
-  private lastEpoch = 0;
-  constructor(@Inject(CACHE_MANAGER) private readonly cache: Cache) {}
+  constructor(private readonly users: UserService) {}
 
-  async get(userId: string): Promise<number> {
-    return (await this.cache.get<number>(this.key(userId))) ?? 0;
+  get(userId: string, tx?: Prisma.TransactionClient): Promise<number> {
+    return this.users.getTokenEpoch(userId, tx);
   }
 
-  async bump(userId: string): Promise<number> {
-    const epoch = Math.max(Date.now(), this.lastEpoch + 1);
-    this.lastEpoch = epoch;
-    // This in-memory cache is single-instance correct only. Multi-instance deployments
-    // must replace it with a shared store such as Redis or stale tokens can survive on another node.
-    await this.cache.set(this.key(userId), epoch, 0);
-    return epoch;
+  bump(userId: string, tx?: Prisma.TransactionClient): Promise<number> {
+    // Persisted atomic increments survive restarts and concurrent changes on other nodes.
+    return this.users.invalidateTokens(userId, tx);
   }
 
-  async bumpMany(userIds: string[]): Promise<void> {
-    await Promise.all([...new Set(userIds)].map((userId) => this.bump(userId)));
-  }
-
-  private key(userId: string): string {
-    return `${TOKEN_EPOCH_KEY_PREFIX}${userId}`;
+  async bumpMany(
+    userIds: string[],
+    tx?: Prisma.TransactionClient,
+  ): Promise<void> {
+    await Promise.all(
+      [...new Set(userIds)].map((userId) => this.bump(userId, tx)),
+    );
   }
 }

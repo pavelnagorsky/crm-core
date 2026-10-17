@@ -1,8 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsDateString, IsEnum, IsOptional } from 'class-validator';
 import { PaginationRequestDto } from '../../../../shared/dto/pagination-request.dto.js';
+import { StaffEarningSearchOrderBy } from '../enums/staff-earning-search-order-by.enum.js';
 import { StaffEarningType } from '../enums/staff-earning-type.enum.js';
-import { StaffEarningSearchOrderBy } from './staff-earning-search-request.dto.js';
 
 export class StaffEarningsByStaffRequestDto extends PaginationRequestDto<StaffEarningSearchOrderBy> {
   @ApiProperty({

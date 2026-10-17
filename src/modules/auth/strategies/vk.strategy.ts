@@ -1,31 +1,23 @@
+import { HttpService } from '@nestjs/axios';
 import {
   BadRequestException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
-import { PassportStrategy } from '@nestjs/passport';
 import { ConfigService } from '@nestjs/config';
-import { HttpService } from '@nestjs/axios';
-import { Strategy } from 'passport-custom';
+import { PassportStrategy } from '@nestjs/passport';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
+import { Request } from 'express';
+import { Strategy } from 'passport-custom';
 import { firstValueFrom } from 'rxjs';
-import { IFrontendConfig, IVKConfig } from '../../../config/configuration.js';
-import { VkOauthRequestDto } from '../dto/vk-oauth-request.dto.js';
+import { IFrontendConfig } from '../../../config/interfaces/frontend-config.interface.js';
+import { IVKConfig } from '../../../config/interfaces/vk-config.interface.js';
 import { OAuthResponseDto } from '../dto/oauth-response.dto.js';
+import { VkOauthRequestDto } from '../dto/vk-oauth-request.dto.js';
 import { OAuthProviderEnum } from '../enums/oauth-provider.enum.js';
-
-interface VkTokensResponse {
-  access_token: string;
-  refresh_token: string;
-  user_id: number;
-  error?: string;
-  error_description?: string;
-}
-
-interface VkUserResponse {
-  user: { id: number; first_name: string; last_name: string; email: string };
-}
+import { VkTokensResponse } from '../interfaces/vk-tokens-response.interface.js';
+import { VkUserResponse } from '../interfaces/vk-user-response.interface.js';
 
 @Injectable()
 export class VkOAuthStrategy extends PassportStrategy(Strategy, 'vk-oauth') {
@@ -36,9 +28,11 @@ export class VkOAuthStrategy extends PassportStrategy(Strategy, 'vk-oauth') {
     super();
   }
 
-  async validate(req: Request): Promise<OAuthResponseDto> {
+  async validate(
+    req: Request<Record<string, string>, unknown, unknown>,
+  ): Promise<OAuthResponseDto> {
     try {
-      const dto = plainToInstance(VkOauthRequestDto, (req as any).body);
+      const dto = plainToInstance(VkOauthRequestDto, req.body);
       const errors = await validate(dto);
       if (errors.length) throw new BadRequestException();
 
@@ -55,7 +49,10 @@ export class VkOAuthStrategy extends PassportStrategy(Strategy, 'vk-oauth') {
             device_id: dto.deviceId,
             state: dto.state,
             code_verifier: vk.codeVerifier,
-            redirect_uri: `https://${frontend.domain}/auth/oauth/callback`,
+            redirect_uri: new URL(
+              '/auth/oauth/callback',
+              frontend.domain,
+            ).toString(),
           },
           { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
         ),
@@ -77,8 +74,8 @@ export class VkOAuthStrategy extends PassportStrategy(Strategy, 'vk-oauth') {
         providerType: OAuthProviderEnum.VK,
         email: profile.user.email,
       });
-    } catch (e: any) {
-      throw new UnauthorizedException(e?.message ?? 'VK OAuth failed');
+    } catch {
+      throw new UnauthorizedException('VK OAuth failed');
     }
   }
 }

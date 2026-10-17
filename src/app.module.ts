@@ -1,37 +1,36 @@
 import { Module } from '@nestjs/common';
-import { APP_GUARD } from '@nestjs/core';
-import { BusinessActiveGuard } from './shared/guards/business-active.guard.js';
 import { ConfigModule } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { EventEmitterModule } from '@nestjs/event-emitter';
-import configuration from './config/configuration.js';
-import { CacheModule } from '@nestjs/cache-manager';
 import { ScheduleModule } from '@nestjs/schedule';
+import configuration from './config/configuration.js';
 import { DatabaseModule } from './database/database.module.js';
+import { AccessManagementModule } from './modules/access-management/access-management.module.js';
+import { AuditModule } from './modules/audit/audit.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
-import { NotificationsModule } from './modules/notifications/notifications.module.js';
-import { BrandModule } from './modules/brand/brand.module.js';
-import { LocationModule } from './modules/location/location.module.js';
-import { StaffModule } from './modules/staff/staff.module.js';
-import { ServicesModule } from './modules/services/services.module.js';
-import { ServicesAnalyticsModule } from './modules/services/analytics/services-analytics.module.js';
-import { CalendarApiModule } from './modules/calendar/api/calendar-api.module.js';
-import { ClientsModule } from './modules/clients/clients.module.js';
-import { ClientsAnalyticsModule } from './modules/clients/analytics/clients-analytics.module.js';
-import { BookingsModule } from './modules/bookings/bookings.module.js';
 import { BookingChannelsModule } from './modules/booking-channels/booking-channels.module.js';
 import { BookingsAnalyticsModule } from './modules/bookings/analytics/bookings-analytics.module.js';
-import { AuditModule } from './modules/audit/audit.module.js';
-import { HealthModule } from './modules/health/health.module.js';
-import { FilesModule } from './modules/files/files.module.js';
+import { BookingsModule } from './modules/bookings/bookings.module.js';
+import { BrandModule } from './modules/brand/brand.module.js';
+import { CalendarApiModule } from './modules/calendar/api/calendar-api.module.js';
+import { ClientsAnalyticsModule } from './modules/clients/analytics/clients-analytics.module.js';
+import { ClientsModule } from './modules/clients/clients.module.js';
 import { DashboardModule } from './modules/dashboard/dashboard.module.js';
-import { PayrollModule } from './modules/payroll/payroll.module.js';
-import { ProductsModule } from './modules/products/products.module.js';
-import { ProductsAnalyticsModule } from './modules/products/analytics/products-analytics.module.js';
-import { SuppliersModule } from './modules/suppliers/suppliers.module.js';
-import { InventoryModule } from './modules/inventory/inventory.module.js';
+import { FilesModule } from './modules/files/files.module.js';
+import { HealthModule } from './modules/health/health.module.js';
 import { InventoryAnalyticsModule } from './modules/inventory/analytics/inventory-analytics.module.js';
+import { InventoryModule } from './modules/inventory/inventory.module.js';
+import { LocationModule } from './modules/location/location.module.js';
+import { NotificationsModule } from './modules/notifications/notifications.module.js';
 import { OrdersModule } from './modules/orders/orders.module.js';
-import { AccessManagementModule } from './modules/access-management/access-management.module.js';
+import { PayrollModule } from './modules/payroll/payroll.module.js';
+import { ProductsAnalyticsModule } from './modules/products/analytics/products-analytics.module.js';
+import { ProductsModule } from './modules/products/products.module.js';
+import { ServicesAnalyticsModule } from './modules/services/analytics/services-analytics.module.js';
+import { ServicesModule } from './modules/services/services.module.js';
+import { StaffModule } from './modules/staff/staff.module.js';
+import { SuppliersModule } from './modules/suppliers/suppliers.module.js';
+import { BusinessActiveGuard } from './shared/guards/business-active.guard.js';
 
 @Module({
   imports: [
@@ -40,10 +39,6 @@ import { AccessManagementModule } from './modules/access-management/access-manag
       load: [configuration],
       isGlobal: true,
       cache: true,
-    }),
-    CacheModule.register({
-      isGlobal: true,
-      ttl: 3 * 60 * 60 * 1000, // 3h
     }),
     ScheduleModule.forRoot(),
     EventEmitterModule.forRoot({ wildcard: true }),

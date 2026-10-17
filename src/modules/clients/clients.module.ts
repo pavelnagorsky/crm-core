@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
-import { ClientsService } from './clients.service.js';
-import { ClientsSheetService } from './clients-import/clients-sheet.service.js';
-import { ClientsImportService } from './clients-import/clients-import.service.js';
-import { ClientImportFileInterceptor } from './clients-import/client-import-file.interceptor.js';
-import { ClientsExportService } from './clients-export/clients-export.service.js';
-import { ClientsController } from './clients.controller.js';
 import { I18nModule } from '../../shared/i18n/i18n.module.js';
+import { ClientsExportService } from './clients-export/services/clients-export.service.js';
+import { ClientsController } from './controllers/clients.controller.js';
+import { ClientImportFileInterceptor } from './import/client-import-file.interceptor.js';
+import { ClientsImportService } from './import/services/clients-import.service.js';
+import { ClientsSheetService } from './import/services/clients-sheet.service.js';
+import { ClientsService } from './services/clients.service.js';
 
 @Module({
   imports: [I18nModule],

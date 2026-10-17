@@ -20,17 +20,15 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import {
-  ApiResponse,
-  ApiResponseArray,
-  BaseResponseDto,
-} from '../../../shared/dto/base-response.dto.js';
-import { BookingWidgetsService } from '../services/booking-widgets.service.js';
-import { SaveBookingWidgetDto } from '../dto/save-booking-widget.dto.js';
-import { BookingWidgetResponseDto } from '../dto/booking-widget-response.dto.js';
-import { UpdateBookingChannelStatusDto } from '../dto/update-booking-channel-status.dto.js';
+import { ApiResponseArray } from '../../../shared/dto/api-response-array.dto.js';
+import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
+import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
 import { Permission } from '../../access/enums/permission.enum.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
+import { BookingWidgetResponseDto } from '../dto/booking-widget-response.dto.js';
+import { SaveBookingWidgetDto } from '../dto/save-booking-widget.dto.js';
+import { UpdateBookingChannelStatusDto } from '../dto/update-booking-channel-status.dto.js';
+import { BookingWidgetsService } from '../services/booking-widgets.service.js';
 
 @ApiTags('Booking widgets')
 @Controller('locations/:locationId/booking-widgets')

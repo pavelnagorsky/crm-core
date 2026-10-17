@@ -15,24 +15,54 @@ import { AuditEvent } from '../../audit/enums/audit-event.enum.js';
 import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../../audit/interfaces/audit-log-event.interface.js';
 import { BookingWithItems } from '../../bookings/interfaces/booking-with-items.interface.js';
-import { LocationService } from '../../location/location.service.js';
-import { OrderProductItemDto } from '../dto/order-product-item.dto.js';
+import { LocationService } from '../../location/services/location.service.js';
+import { OrderPricingCalculator } from '../calculators/order-pricing.calculator.js';
 import { orderInclude } from '../constants/order-include.constant.js';
+import { OrderProductItemDto } from '../dto/order-product-item.dto.js';
 import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
-import { OrderComputeService } from './order-compute.service.js';
+import { orderItemSnapshot } from '../utils/order-item-snapshot.js';
 import { OrderDraftService } from './order-draft.service.js';
 import { OrderPersistenceService } from './order-persistence.service.js';
-import { orderItemSnapshot } from '../utils/order-item-snapshot.js';
 
 @Injectable()
 export class OrderBookingSyncService {
   constructor(
     private readonly locations: LocationService,
-    private readonly compute: OrderComputeService,
+    private readonly compute: OrderPricingCalculator,
     private readonly drafts: OrderDraftService,
     private readonly persistence: OrderPersistenceService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
+
+  async removeDraftProductsForBooking(
+    booking: BookingWithItems,
+    tx: Prisma.TransactionClient,
+  ): Promise<Record<string, unknown>[]> {
+    const order = await tx.order.findUnique({
+      where: { bookingId: booking.id },
+      include: orderInclude,
+    });
+    if (!order || order.locationId !== booking.locationId) return [];
+    const draftProducts = order.items.filter(
+      (item) =>
+        item.type === OrderItemType.PRODUCT &&
+        item.status === OrderItemStatus.DRAFT,
+    );
+    if (draftProducts.length === 0) return [];
+    await tx.orderItem.deleteMany({
+      where: {
+        orderId: order.id,
+        id: { in: draftProducts.map((item) => item.id) },
+        type: OrderItemType.PRODUCT,
+        status: OrderItemStatus.DRAFT,
+      },
+    });
+    await this.persistence.refreshTotals(tx, booking.locationId, order.id);
+    return draftProducts.map((item) => ({
+      orderItemId: item.id,
+      ...orderItemSnapshot(item),
+    }));
+  }
 
   async syncCompletedBooking(
     booking: BookingWithItems,

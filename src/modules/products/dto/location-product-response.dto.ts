@@ -1,8 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
 import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
-import { MoneyService } from '../../../shared/money/money.service.js';
-import { QuantityService } from '../../../shared/quantity/quantity.service.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
+import { QuantityUtils } from '../../../shared/quantity/quantity.utils.js';
 import { ProductStatus } from '../enums/product-status.enum.js';
 import { ProductUnit } from '../enums/product-unit.enum.js';
 import { LocationProductView } from '../interfaces/location-product-view.interface.js';
@@ -67,10 +67,10 @@ export class LocationProductResponseDto {
       packagings: entity.product.packagings.map(
         ProductPackagingResponseDto.fromEntity,
       ),
-      retailPrice: MoneyService.format(entity.retailPrice),
+      retailPrice: MoneyUtils.format(entity.retailPrice),
       status: entity.status,
       trackInventory: entity.trackInventory,
-      reorderLevel: QuantityService.format(entity.reorderLevel),
+      reorderLevel: QuantityUtils.format(entity.reorderLevel),
     });
   }
 }

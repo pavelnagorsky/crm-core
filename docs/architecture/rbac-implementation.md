@@ -99,12 +99,12 @@ flowchart LR
 
 | Компонент | Ответственность |
 | --- | --- |
-| [AuthService](../../src/modules/auth/auth.service.ts) | Выпуск JWT с ролями, permissions и epoch. |
+| [AuthService](../../src/modules/auth/services/auth.service.ts) | Выпуск JWT с ролями, permissions и epoch. |
 | [PermissionGuard](../../src/modules/auth/guards/permission.guard.ts) | Проверка готовых claims без БД. |
-| [AccessService](../../src/modules/access/access.service.ts) | Загрузка назначений и настроек для claims, операции первого OWNER и отзыва STAFF, блокировка и журнал изменений доступа. |
-| [PermissionComputeService](../../src/modules/access/services/permission-compute.service.ts) | Чистое вычисление defaults, overrides, зависимостей и объединения источников; приватен для AccessModule. |
+| [AccessService](../../src/modules/access/services/access.service.ts) | Загрузка назначений и настроек для claims, операции первого OWNER и отзыва STAFF, блокировка и журнал изменений доступа. |
+| [PermissionCalculator](../../src/modules/access/calculators/permission.calculator.ts) | Чистое вычисление defaults, overrides, зависимостей и объединения источников; приватен для AccessModule. |
 | [AccessAdministrationService](../../src/modules/access/services/access-administration.service.ts) | Правила управления ролями, политиками и приглашениями. |
-| [AccessManagementService](../../src/modules/access-management/access-management.service.ts) | Объединение операций доступа с Brand/Location/Staff/User в транзакции, уведомления и инвалидация токенов. |
+| [AccessManagementFacade](../../src/modules/access-management/access-management.facade.ts) | Объединение операций доступа с Brand/Location/Staff/User в транзакции, уведомления и инвалидация токенов. |
 
 BrandService вызывает AccessService для назначения первого OWNER, StaffService — для отзыва доступа при деактивации/удалении. Эти зависимости нужны для изменения назначений, а не для авторизации обычных операций. В остальных операционных сервисах изменения связаны с конкретными флагами, аудитом и защитой от конкурентного изменения документов.
 

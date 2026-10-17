@@ -6,14 +6,14 @@ import {
 } from '@prisma/client';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
-import { LocationService } from '../../location/location.service.js';
-import { ProductsService } from '../../products/products.service.js';
+import { LocationService } from '../../location/services/location.service.js';
 import { ProductPackagingService } from '../../products/services/product-packaging.service.js';
-import { SuppliersService } from '../../suppliers/suppliers.service.js';
+import { ProductsService } from '../../products/services/products.service.js';
+import { SuppliersService } from '../../suppliers/services/suppliers.service.js';
+import { InventoryDocumentItemCalculator } from '../calculators/inventory-document-item.calculator.js';
 import { CreateInventoryDocumentDto } from '../dto/create-inventory-document.dto.js';
 import { InventoryDocumentDraft } from '../interfaces/inventory-document-draft.interface.js';
 import { InventoryPackaging } from '../interfaces/inventory-packaging.interface.js';
-import { InventoryDocumentItemComputeService } from './inventory-document-item-compute.service.js';
 
 @Injectable()
 export class InventoryDocumentDraftService {
@@ -22,7 +22,7 @@ export class InventoryDocumentDraftService {
     private readonly packagings: ProductPackagingService,
     private readonly suppliers: SuppliersService,
     private readonly locations: LocationService,
-    private readonly itemCompute: InventoryDocumentItemComputeService,
+    private readonly itemCompute: InventoryDocumentItemCalculator,
   ) {}
 
   async prepare(

@@ -1,4 +1,3 @@
-import { createHash } from 'crypto';
 import { BadRequestException, HttpStatus, Injectable } from '@nestjs/common';
 import {
   OrderItemStatus,
@@ -7,19 +6,20 @@ import {
   OrderStatus,
   Prisma,
 } from '@prisma/client';
+import { createHash } from 'crypto';
 import { DatabaseService } from '../../../database/database.service.js';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
-import { InventoryService } from '../../inventory/inventory.service.js';
 import { InventorySaleLine } from '../../inventory/interfaces/inventory-sale-line.interface.js';
+import { InventoryFacade } from '../../inventory/inventory.facade.js';
 import { ProductOrderCommissionLine } from '../../payroll/earnings/interfaces/product-order-commission-line.interface.js';
-import { StaffEarningsService } from '../../payroll/earnings/staff-earnings.service.js';
-import { ProductsService } from '../../products/products.service.js';
-import { StaffService } from '../../staff/staff.service.js';
-import { ConfirmOrderItemsDto } from '../dto/confirm-order-items.dto.js';
+import { StaffEarningsService } from '../../payroll/earnings/services/staff-earnings.service.js';
+import { ProductsService } from '../../products/services/products.service.js';
+import { StaffService } from '../../staff/services/staff.service.js';
 import { orderInclude } from '../constants/order-include.constant.js';
+import { ConfirmOrderItemsDto } from '../dto/confirm-order-items.dto.js';
 import { OrderTransition } from '../interfaces/order-transition.interface.js';
 import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
 import { OrderPersistenceService } from './order-persistence.service.js';
@@ -31,7 +31,7 @@ export class OrderProductTransitionService {
   constructor(
     private readonly db: DatabaseService,
     private readonly products: ProductsService,
-    private readonly inventory: InventoryService,
+    private readonly inventory: InventoryFacade,
     private readonly staff: StaffService,
     private readonly earnings: StaffEarningsService,
     private readonly persistence: OrderPersistenceService,
@@ -260,6 +260,60 @@ export class OrderProductTransitionService {
       options.order ??
       (await this.persistence.findInTransaction(tx, locationId, orderId));
     this.assertActive(order.status);
+    const pending = this.pendingProductItems(
+      order,
+      orderItemIds,
+      options.allowAlreadyConfirmed,
+    );
+    if (pending.length === 0) return { order, changed: false };
+    const saleLines = await this.resolveSaleLines(locationId, pending, tx);
+    const costs = await this.inventory.postSale(
+      locationId,
+      orderId,
+      occurredAt,
+      saleLines,
+      tx,
+    );
+    for (const cost of costs) {
+      await tx.orderItem.update({
+        where: { id: cost.orderItemId },
+        data: {
+          unitCostSnapshot: cost.unitCost,
+          lineCostSnapshot: cost.lineCost,
+        },
+      });
+    }
+    await this.recordProductCommissions(
+      locationId,
+      orderId,
+      order,
+      pending,
+      occurredAt,
+      tx,
+    );
+    await tx.orderItem.updateMany({
+      where: { id: { in: pending.map((item) => item.id) } },
+      data: {
+        status: OrderItemStatus.CONFIRMED,
+        confirmedAt: occurredAt,
+        occurredAt,
+      },
+    });
+    await tx.order.update({
+      where: { id: orderId },
+      data: { version: { increment: 1 } },
+    });
+    return {
+      order: await this.persistence.findInTransaction(tx, locationId, orderId),
+      changed: true,
+    };
+  }
+
+  private pendingProductItems(
+    order: OrderWithItems,
+    orderItemIds: string[],
+    allowAlreadyConfirmed = false,
+  ): OrderWithItems['items'] {
     const targetIds = new Set(orderItemIds);
     const items = order.items.filter((row) => targetIds.has(row.id));
     if (items.length !== targetIds.size) {
@@ -270,14 +324,8 @@ export class OrderProductTransitionService {
     }
     const pending: OrderWithItems['items'] = [];
     for (const item of items) {
-      if (!item) {
-        throw new AppException(
-          ErrorCode.ORDER_ITEM_NOT_FOUND,
-          HttpStatus.NOT_FOUND,
-        );
-      }
       if (item.status === OrderItemStatus.CONFIRMED) {
-        if (options.allowAlreadyConfirmed) continue;
+        if (allowAlreadyConfirmed) continue;
         throw new AppException(
           ErrorCode.ORDER_ITEM_NOT_DRAFT,
           HttpStatus.CONFLICT,
@@ -295,9 +343,15 @@ export class OrderProductTransitionService {
       }
       pending.push(item);
     }
-    if (pending.length === 0) return { order, changed: false };
+    return pending;
+  }
 
-    const productIds = pending.map((item) => item.catalogItemId!);
+  private async resolveSaleLines(
+    locationId: string,
+    pending: OrderWithItems['items'],
+    tx: Prisma.TransactionClient,
+  ): Promise<InventorySaleLine[]> {
+    const productIds = [...new Set(pending.map((item) => item.catalogItemId!))];
     const products = await this.products.resolveForSale(
       locationId,
       productIds,
@@ -341,22 +395,18 @@ export class OrderProductTransitionService {
         trackInventory: product.trackInventory,
       };
     });
-    const costs = await this.inventory.postSale(
-      locationId,
-      orderId,
-      occurredAt,
-      saleLines,
-      tx,
-    );
-    for (const cost of costs) {
-      await tx.orderItem.update({
-        where: { id: cost.orderItemId },
-        data: {
-          unitCostSnapshot: cost.unitCost,
-          lineCostSnapshot: cost.lineCost,
-        },
-      });
-    }
+
+    return saleLines;
+  }
+
+  private async recordProductCommissions(
+    locationId: string,
+    orderId: string,
+    order: OrderWithItems,
+    pending: OrderWithItems['items'],
+    occurredAt: Date,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
     const commissionLines: ProductOrderCommissionLine[] = pending.flatMap(
       (item) =>
         item.sellerStaffId
@@ -378,22 +428,6 @@ export class OrderProductTransitionService {
       commissionLines,
       tx,
     );
-    await tx.orderItem.updateMany({
-      where: { id: { in: pending.map((item) => item.id) } },
-      data: {
-        status: OrderItemStatus.CONFIRMED,
-        confirmedAt: occurredAt,
-        occurredAt,
-      },
-    });
-    await tx.order.update({
-      where: { id: orderId },
-      data: { version: { increment: 1 } },
-    });
-    return {
-      order: await this.persistence.findInTransaction(tx, locationId, orderId),
-      changed: true,
-    };
   }
 
   private assertUniqueOrderItemIds(orderItemIds: string[]): void {

@@ -1,14 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ApiSignedAmount } from '../../../../shared/decorators/api-decimal.decorator.js';
-import { PayrollPeriodStatus } from '../../periods/enums/payroll-period-status.enum.js';
 import { PayrollResultResponseDto } from '../../periods/dto/payroll-result-response.dto.js';
+import { PayrollPeriodStatus } from '../../periods/enums/payroll-period-status.enum.js';
+import { PayrollPayslipDto } from './payroll-payslip.dto.js';
 import { PayrollReportAttentionDto } from './payroll-report-attention.dto.js';
 import { PayrollReportTotalsDto } from './payroll-report-totals.dto.js';
-
-export class PayrollPayslipDto {
-  @ApiProperty({ type: () => PayrollResultResponseDto })
-  result: PayrollResultResponseDto;
-}
 
 export class PayrollReportResponseDto {
   @ApiProperty({ type: String })

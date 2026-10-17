@@ -7,17 +7,15 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import type { Request } from 'express';
-import {
-  ApiResponse,
-  BaseResponseDto,
-} from '../../../shared/dto/base-response.dto.js';
+import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
+import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
 import { requestOrigin } from '../../../shared/http/request-context.js';
-import { BookingsService } from '../../bookings/bookings.service.js';
-import { LocationService } from '../../location/location.service.js';
-import { BookingPagesService } from '../services/booking-pages.service.js';
-import { BookingWidgetsService } from '../services/booking-widgets.service.js';
+import { BookingsFacade } from '../../bookings/bookings.facade.js';
+import { LocationService } from '../../location/services/location.service.js';
 import { PublicBookingPageResponseDto } from '../dto/public-booking-page-response.dto.js';
 import { PublicBookingWidgetResponseDto } from '../dto/public-booking-widget-response.dto.js';
+import { BookingPagesService } from '../services/booking-pages.service.js';
+import { BookingWidgetsService } from '../services/booking-widgets.service.js';
 
 @ApiTags('Public booking')
 @Controller('public')
@@ -26,7 +24,7 @@ export class PublicBookingChannelsController {
     private readonly pages: BookingPagesService,
     private readonly widgets: BookingWidgetsService,
     private readonly locationService: LocationService,
-    private readonly bookingsService: BookingsService,
+    private readonly bookings: BookingsFacade,
   ) {}
 
   @ApiOperation({ summary: 'Get a published booking page by slug' })
@@ -39,7 +37,7 @@ export class PublicBookingChannelsController {
     const page = await this.pages.getPublishedBySlug(slug);
     const [location, setup] = await Promise.all([
       this.locationService.findPublicProfile(page.locationId),
-      this.bookingsService.getBookingSetup(page.locationId),
+      this.bookings.getBookingSetup(page.locationId),
     ]);
     return BaseResponseDto.success(
       PublicBookingPageResponseDto.from(page, location, setup),
@@ -65,7 +63,7 @@ export class PublicBookingChannelsController {
     );
     const [location, setup] = await Promise.all([
       this.locationService.findPublicProfile(widget.locationId),
-      this.bookingsService.getBookingSetup(widget.locationId),
+      this.bookings.getBookingSetup(widget.locationId),
     ]);
     return BaseResponseDto.success(
       PublicBookingWidgetResponseDto.from(widget, location, setup),

@@ -1,9 +1,9 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { BookingVisibility } from '@prisma/client';
-import { LocationService } from '../../location/location.service.js';
-import { ServicesService } from '../../services/services.service.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
+import { LocationService } from '../../location/services/location.service.js';
+import { ServicesService } from '../../services/services.service.js';
 import { BookingChannelStatus } from '../enums/booking-channel-status.enum.js';
 
 export function publishedAtFor(status: BookingChannelStatus): Date | null {

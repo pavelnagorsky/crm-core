@@ -1,14 +1,10 @@
 import { Module } from '@nestjs/common';
-import { AccessService } from './access.service.js';
+import { PermissionCalculator } from './calculators/permission.calculator.js';
 import { AccessAdministrationService } from './services/access-administration.service.js';
-import { PermissionComputeService } from './services/permission-compute.service.js';
+import { AccessService } from './services/access.service.js';
 
 @Module({
-  providers: [
-    AccessService,
-    PermissionComputeService,
-    AccessAdministrationService,
-  ],
+  providers: [AccessService, PermissionCalculator, AccessAdministrationService],
   exports: [AccessService, AccessAdministrationService],
 })
 export class AccessModule {}

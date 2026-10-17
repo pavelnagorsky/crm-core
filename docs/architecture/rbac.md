@@ -34,7 +34,7 @@
 | Передача владения, выход из членства, отзыв членства | Отдельного API нет. Защита последнего владельца в таких сценариях не реализована. |
 | Назначение платформенного `ADMIN` | Отдельного API в текущих контроллерах нет. |
 
-Источники: [создание бренда](../../src/modules/brand/brand.service.ts), [приглашения](../../src/modules/staff/staff.service.ts), [DTO приглашения](../../src/modules/staff/dto/create-invitation.dto.ts), [ограничения членства](../../src/database/schema.prisma).
+Источники: [создание бренда](../../src/modules/brand/services/brand.service.ts), legacy приглашения и их DTO удалены при переходе на generic grants, [ограничения членства](../../src/database/schema.prisma).
 
 ## Как читать матрицу
 
@@ -63,7 +63,7 @@ Guard контроллера заказов допускает все три б�
 - `auditActorFromToken` преобразует платформенного `ADMIN` в `SUPPORT`, бизнес-владельца — в `OWNER`, остальных — в `STAFF`. При наличии членства бренда оно имеет приоритет над членством локации. Поэтому сочетание `MANAGER` бренда + `OWNER` локации проходит owner-проверку RBAC локации, но не проходит эти дополнительные проверки заказа. В обратном сочетании `OWNER` бренда + `MANAGER` локации права владельца сохраняются.
 - Таким образом, `AuditActorRole` формально описывает участника аудита, но в текущем коде также используется для двух проверок доступа к заказам. Значения: `CLIENT`, `STAFF`, `OWNER`, `SUPPORT`, `SYSTEM`, `INTEGRATION`; это не назначаемые бизнес-роли.
 
-Источники: [OrdersService.changeStatus](../../src/modules/orders/orders.service.ts), [OrderDraftService](../../src/modules/orders/services/order-draft.service.ts), [OrderBookingSyncService](../../src/modules/orders/services/order-booking-sync.service.ts), [BookingCreateService](../../src/modules/bookings/services/booking-create.service.ts), [BookingMutationService](../../src/modules/bookings/services/mutation/booking-mutation.service.ts), [auditActorFromToken](../../src/modules/audit/utils/audit-actor-from-token.ts).
+Источники: [OrdersFacade.changeStatus](../../src/modules/orders/orders.facade.ts), [OrderDraftService](../../src/modules/orders/services/order-draft.service.ts), [OrderBookingSyncService](../../src/modules/orders/services/order-booking-sync.service.ts), [BookingCreateFacade](../../src/modules/bookings/booking-create.facade.ts), [BookingMutationService](../../src/modules/bookings/services/mutation/booking-mutation.service.ts), [auditActorFromToken](../../src/modules/audit/utils/audit-actor-from-token.ts).
 
 ### Область данных и токены
 
@@ -74,7 +74,7 @@ Guard контроллера заказов допускает все три б�
 - Глобальный `BusinessActiveGuard` проверяет `brandId`/`locationId` из пути, в том числе на публичных маршрутах. Бизнес-роль не отменяет проверку активности бренда и локации.
 - В мутациях бронирований часть проверок находится в `BookingMutationService`, поэтому одного просмотра декораторов контроллера недостаточно для определения прав.
 
-Источники: [TokenEpochGuard](../../src/modules/auth/guards/token-epoch.guard.ts), [BusinessActiveGuard](../../src/shared/guards/business-active.guard.ts), [BookingMutationService](../../src/modules/bookings/services/mutation/booking-mutation.service.ts), [BrandService.search](../../src/modules/brand/brand.service.ts).
+Источники: [TokenEpochGuard](../../src/modules/auth/guards/token-epoch.guard.ts), [BusinessActiveGuard](../../src/shared/guards/business-active.guard.ts), [BookingMutationService](../../src/modules/bookings/services/mutation/booking-mutation.service.ts), [BrandService.search](../../src/modules/brand/services/brand.service.ts).
 
 ## Матрица бизнес-действий
 
@@ -83,7 +83,7 @@ Guard контроллера заказов допускает все три б�
 
 ### Бренды
 
-Источники: [brand.controller.ts](../../src/modules/brand/brand.controller.ts).
+Источники: [brand.controller.ts](../../src/modules/brand/controllers/brand.controller.ts).
 
 | Действие / описание | Метод и путь | Область | OWNER | MANAGER | STAFF |
 | --- | --- | --- | :---: | :---: | :---: |
@@ -93,7 +93,7 @@ Guard контроллера заказов допускает все три б�
 
 ### Локации
 
-Источники: [location.controller.ts](../../src/modules/location/location.controller.ts).
+Источники: [location.controller.ts](../../src/modules/location/controllers/location.controller.ts).
 
 | Действие / описание | Метод и путь | Область | OWNER | MANAGER | STAFF |
 | --- | --- | --- | :---: | :---: | :---: |
@@ -105,7 +105,7 @@ Guard контроллера заказов допускает все три б�
 
 ### Клиенты
 
-Источники: [clients.controller.ts](../../src/modules/clients/clients.controller.ts).
+Источники: [clients.controller.ts](../../src/modules/clients/controllers/clients.controller.ts).
 
 | Действие / описание | Метод и путь | Область | OWNER | MANAGER | STAFF |
 | --- | --- | --- | :---: | :---: | :---: |
@@ -119,7 +119,7 @@ Guard контроллера заказов допускает все три б�
 
 ### Сотрудники и смены
 
-Источники: [staff.controller.ts](../../src/modules/staff/staff.controller.ts).
+Источники: [staff.controller.ts](../../src/modules/staff/controllers/staff.controller.ts).
 
 | Действие / описание | Метод и путь | Область | OWNER | MANAGER | STAFF |
 | --- | --- | --- | :---: | :---: | :---: |
@@ -137,7 +137,7 @@ Guard контроллера заказов допускает все три б�
 
 ### Услуги, категории и комплексы
 
-Источники: [services.controller.ts](../../src/modules/services/services.controller.ts).
+Источники: [services.controller.ts](../../src/modules/services/controllers/services.controller.ts).
 
 | Действие / описание | Метод и путь | Область | OWNER | MANAGER | STAFF |
 | --- | --- | --- | :---: | :---: | :---: |
@@ -160,7 +160,7 @@ Guard контроллера заказов допускает все три б�
 
 ### Календарь
 
-Источники: [calendar.controller.ts](../../src/modules/calendar/api/calendar.controller.ts).
+Источники: [calendar.controller.ts](../../src/modules/calendar/api/controllers/calendar.controller.ts).
 
 | Действие / описание | Метод и путь | Область | OWNER | MANAGER | STAFF |
 | --- | --- | --- | :---: | :---: | :---: |
@@ -174,7 +174,7 @@ Guard контроллера заказов допускает все три б�
 
 ### Бронирования
 
-Источники: [bookings.controller.ts](../../src/modules/bookings/bookings.controller.ts).
+Источники: [bookings.controller.ts](../../src/modules/bookings/controllers/bookings.controller.ts).
 
 | Действие / описание | Метод и путь | Область | OWNER | MANAGER | STAFF |
 | --- | --- | --- | :---: | :---: | :---: |
@@ -193,7 +193,7 @@ Guard контроллера заказов допускает все три б�
 
 ### Заказы и возвраты
 
-Источники: [orders.controller.ts](../../src/modules/orders/orders.controller.ts).
+Источники: [orders.controller.ts](../../src/modules/orders/controllers/orders.controller.ts).
 
 | Действие / описание | Метод и путь | Область | OWNER | MANAGER | STAFF |
 | --- | --- | --- | :---: | :---: | :---: |
@@ -212,7 +212,7 @@ Guard контроллера заказов допускает все три б�
 
 ### Товары и категории
 
-Источники: [products.controller.ts](../../src/modules/products/products.controller.ts).
+Источники: [products.controller.ts](../../src/modules/products/controllers/products.controller.ts).
 
 | Действие / описание | Метод и путь | Область | OWNER | MANAGER | STAFF |
 | --- | --- | --- | :---: | :---: | :---: |
@@ -232,7 +232,7 @@ Guard контроллера заказов допускает все три б�
 
 ### Упаковки товаров
 
-Источники: [product-packaging.controller.ts](../../src/modules/products/product-packaging.controller.ts).
+Источники: [product-packaging.controller.ts](../../src/modules/products/controllers/product-packaging.controller.ts).
 
 | Действие / описание | Метод и путь | Область | OWNER | MANAGER | STAFF |
 | --- | --- | --- | :---: | :---: | :---: |
@@ -241,7 +241,7 @@ Guard контроллера заказов допускает все три б�
 
 ### Поставщики
 
-Источники: [suppliers.controller.ts](../../src/modules/suppliers/suppliers.controller.ts).
+Источники: [suppliers.controller.ts](../../src/modules/suppliers/controllers/suppliers.controller.ts).
 
 | Действие / описание | Метод и путь | Область | OWNER | MANAGER | STAFF |
 | --- | --- | --- | :---: | :---: | :---: |
@@ -254,7 +254,7 @@ Guard контроллера заказов допускает все три б�
 
 ### Склад
 
-Источники: [inventory.controller.ts](../../src/modules/inventory/inventory.controller.ts).
+Источники: [inventory.controller.ts](../../src/modules/inventory/controllers/inventory.controller.ts).
 
 | Действие / описание | Метод и путь | Область | OWNER | MANAGER | STAFF |
 | --- | --- | --- | :---: | :---: | :---: |
@@ -275,7 +275,7 @@ Guard контроллера заказов допускает все три б�
 
 ### Условия оплаты труда
 
-Источники: [staff-compensation.controller.ts](../../src/modules/payroll/compensation/staff-compensation.controller.ts).
+Источники: [staff-compensation.controller.ts](../../src/modules/payroll/compensation/controllers/staff-compensation.controller.ts).
 
 | Действие / описание | Метод и путь | Область | OWNER | MANAGER | STAFF |
 | --- | --- | --- | :---: | :---: | :---: |
@@ -285,7 +285,7 @@ Guard контроллера заказов допускает все три б�
 
 ### Начисления
 
-Источники: [staff-earnings.controller.ts](../../src/modules/payroll/earnings/staff-earnings.controller.ts).
+Источники: [staff-earnings.controller.ts](../../src/modules/payroll/earnings/controllers/staff-earnings.controller.ts).
 
 | Действие / описание | Метод и путь | Область | OWNER | MANAGER | STAFF |
 | --- | --- | --- | :---: | :---: | :---: |
@@ -296,7 +296,7 @@ Guard контроллера заказов допускает все три б�
 
 ### Зарплатные периоды и отчёты
 
-Источники: [payroll.controller.ts](../../src/modules/payroll/periods/payroll.controller.ts).
+Источники: [payroll.controller.ts](../../src/modules/payroll/periods/controllers/payroll-periods.controller.ts).
 
 | Действие / описание | Метод и путь | Область | OWNER | MANAGER | STAFF |
 | --- | --- | --- | :---: | :---: | :---: |
@@ -344,7 +344,7 @@ Guard контроллера заказов допускает все три б�
 
 ### Аналитика и показатели
 
-Источники: [bookings-analytics.controller.ts](../../src/modules/bookings/analytics/bookings-analytics.controller.ts), [clients-analytics.controller.ts](../../src/modules/clients/analytics/clients-analytics.controller.ts), [dashboard.controller.ts](../../src/modules/dashboard/dashboard.controller.ts), [inventory-analytics.controller.ts](../../src/modules/inventory/analytics/inventory-analytics.controller.ts), [products-analytics.controller.ts](../../src/modules/products/analytics/products-analytics.controller.ts), [services-analytics.controller.ts](../../src/modules/services/analytics/services-analytics.controller.ts), [staff-kpi.controller.ts](../../src/modules/staff/kpi/staff-kpi.controller.ts).
+Источники: [bookings-analytics.controller.ts](../../src/modules/bookings/analytics/controllers/bookings-analytics.controller.ts), [clients-analytics.controller.ts](../../src/modules/clients/analytics/controllers/clients-analytics.controller.ts), [dashboard.controller.ts](../../src/modules/dashboard/controllers/dashboard.controller.ts), [inventory-analytics.controller.ts](../../src/modules/inventory/analytics/controllers/inventory-analytics.controller.ts), [products-analytics.controller.ts](../../src/modules/products/analytics/controllers/products-analytics.controller.ts), [services-analytics.controller.ts](../../src/modules/services/analytics/controllers/services-analytics.controller.ts), [staff-kpi.controller.ts](../../src/modules/staff/kpi/controllers/staff-kpi.controller.ts).
 
 | Действие / описание | Метод и путь | Область | OWNER | MANAGER | STAFF |
 | --- | --- | --- | :---: | :---: | :---: |
@@ -358,7 +358,7 @@ Guard контроллера заказов допускает все три б�
 
 ### Аудит
 
-Источники: [audit.controller.ts](../../src/modules/audit/audit.controller.ts).
+Источники: [audit.controller.ts](../../src/modules/audit/controllers/audit.controller.ts).
 
 | Действие / описание | Метод и путь | Область | OWNER | MANAGER | STAFF |
 | --- | --- | --- | :---: | :---: | :---: |
@@ -367,7 +367,7 @@ Guard контроллера заказов допускает все три б�
 
 ### Файлы
 
-Источники: [files.controller.ts](../../src/modules/files/files.controller.ts).
+Источники: [files.controller.ts](../../src/modules/files/controllers/files.controller.ts).
 
 | Действие / описание | Метод и путь | Область | OWNER | MANAGER | STAFF |
 | --- | --- | --- | :---: | :---: | :---: |
@@ -380,7 +380,7 @@ Guard контроллера заказов допускает все три б�
 
 ### Авторизация
 
-Источники: [auth.controller.ts](../../src/modules/auth/auth.controller.ts).
+Источники: [auth.controller.ts](../../src/modules/auth/controllers/auth.controller.ts).
 
 | Действие / описание | Метод и путь | Условие доступа |
 | --- | --- | --- |
@@ -397,7 +397,7 @@ Guard контроллера заказов допускает все три б�
 
 ### Аккаунт и общие операции
 
-Источники: [brand.controller.ts](../../src/modules/brand/brand.controller.ts), [files.controller.ts](../../src/modules/files/files.controller.ts), [location.controller.ts](../../src/modules/location/location.controller.ts), [staff.controller.ts](../../src/modules/staff/staff.controller.ts), [user.controller.ts](../../src/modules/user/user.controller.ts).
+Источники: [brand.controller.ts](../../src/modules/brand/controllers/brand.controller.ts), [files.controller.ts](../../src/modules/files/controllers/files.controller.ts), [location.controller.ts](../../src/modules/location/controllers/location.controller.ts), [staff.controller.ts](../../src/modules/staff/controllers/staff.controller.ts), [user.controller.ts](../../src/modules/user/controllers/user.controller.ts).
 
 | Действие / описание | Метод и путь | Условие доступа |
 | --- | --- | --- |
@@ -413,7 +413,7 @@ Guard контроллера заказов допускает все три б�
 
 ### Клиентский токен бронирования
 
-Источники: [bookings.controller.ts](../../src/modules/bookings/bookings.controller.ts).
+Источники: [bookings.controller.ts](../../src/modules/bookings/controllers/bookings.controller.ts).
 
 | Действие / описание | Метод и путь | Условие доступа |
 | --- | --- | --- |
@@ -422,7 +422,7 @@ Guard контроллера заказов допускает все три б�
 
 ### Публичные данные и онлайн-запись
 
-Источники: [public-booking-channels.controller.ts](../../src/modules/booking-channels/controllers/public-booking-channels.controller.ts), [public-booking-create.controller.ts](../../src/modules/booking-channels/controllers/public-booking-create.controller.ts), [bookings.controller.ts](../../src/modules/bookings/bookings.controller.ts), [brand.controller.ts](../../src/modules/brand/brand.controller.ts), [calendar.controller.ts](../../src/modules/calendar/api/calendar.controller.ts), [health.controller.ts](../../src/modules/health/health.controller.ts), [location.controller.ts](../../src/modules/location/location.controller.ts).
+Источники: [public-booking-channels.controller.ts](../../src/modules/booking-channels/controllers/public-booking-channels.controller.ts), [public-booking-create.controller.ts](../../src/modules/booking-channels/controllers/public-booking-create.controller.ts), [bookings.controller.ts](../../src/modules/bookings/controllers/bookings.controller.ts), [brand.controller.ts](../../src/modules/brand/controllers/brand.controller.ts), [calendar.controller.ts](../../src/modules/calendar/api/controllers/calendar.controller.ts), [health.controller.ts](../../src/modules/health/controllers/health.controller.ts), [location.controller.ts](../../src/modules/location/controllers/location.controller.ts).
 
 | Действие / описание | Метод и путь | Условие доступа |
 | --- | --- | --- |

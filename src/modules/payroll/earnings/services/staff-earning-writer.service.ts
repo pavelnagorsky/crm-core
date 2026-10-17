@@ -1,8 +1,7 @@
-import { randomUUID } from 'crypto';
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { Prisma, StaffEarning, StaffEarningType } from '@prisma/client';
+import { randomUUID } from 'crypto';
 import { DatabaseService } from '../../../../database/database.service.js';
-import { PrismaErrorCode } from '../../../../shared/database/prisma-error-codes.js';
 import { AppException } from '../../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
 import { lockedPeriodWhere } from '../../periods/utils/locked-period.js';
@@ -81,22 +80,18 @@ export class StaffEarningWriterService {
     tx?: Prisma.TransactionClient,
   ): Promise<StaffEarning> {
     const db = this.store(tx);
-    try {
-      return await db.staffEarning.create({ data });
-    } catch (e: any) {
-      if (e?.code === PrismaErrorCode.UNIQUE_CONSTRAINT_VIOLATION) {
-        const existing = await db.staffEarning.findUnique({
-          where: {
-            locationId_idempotencyKey: {
-              locationId: data.locationId,
-              idempotencyKey: data.idempotencyKey,
-            },
-          },
-        });
-        if (existing) return existing;
-      }
-      throw e;
-    }
+    // A caught uniqueness error still aborts a PostgreSQL transaction. A non-empty,
+    // identity update lets Prisma use ON CONFLICT without changing the original earning.
+    return db.staffEarning.upsert({
+      where: {
+        locationId_idempotencyKey: {
+          locationId: data.locationId,
+          idempotencyKey: data.idempotencyKey,
+        },
+      },
+      create: data,
+      update: { idempotencyKey: data.idempotencyKey },
+    });
   }
 
   private store(tx?: Prisma.TransactionClient) {

@@ -1,6 +1,6 @@
 import { InventoryMovementType, Prisma, ProductUnit } from '@prisma/client';
-import { MoneyService } from '../../../../shared/money/money.service.js';
-import { QuantityService } from '../../../../shared/quantity/quantity.service.js';
+import { MoneyUtils } from '../../../../shared/money/money.utils.js';
+import { QuantityUtils } from '../../../../shared/quantity/quantity.utils.js';
 import { InventoryTurnoverBucketRow } from '../interfaces/inventory-turnover-bucket-row.interface.js';
 import { InventoryTurnoverLine } from '../interfaces/inventory-turnover-line.interface.js';
 
@@ -28,8 +28,8 @@ export function inventoryTurnoverLines(
   for (const row of rows) {
     const line = byProduct.get(row.productLocationId) ?? emptyLine(row);
     byProduct.set(row.productLocationId, line);
-    const quantity = QuantityService.decimal(row.quantity);
-    const value = MoneyService.decimal(row.value);
+    const quantity = QuantityUtils.decimal(row.quantity);
+    const value = MoneyUtils.decimal(row.value);
     if (row.bucket === OPENING) {
       line.openingQuantity = line.openingQuantity.plus(quantity);
       line.openingValue = line.openingValue.plus(value);

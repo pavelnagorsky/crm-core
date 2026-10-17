@@ -1,12 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsDateString, IsEnum, IsOptional, IsUUID } from 'class-validator';
 import { PaginationRequestDto } from '../../../../shared/dto/pagination-request.dto.js';
+import { StaffEarningSearchOrderBy } from '../enums/staff-earning-search-order-by.enum.js';
 import { StaffEarningType } from '../enums/staff-earning-type.enum.js';
-
-export enum StaffEarningSearchOrderBy {
-  EARNED_ON = 'earnedOn',
-  CREATED_AT = 'createdAt',
-}
 
 export class StaffEarningSearchRequestDto extends PaginationRequestDto<StaffEarningSearchOrderBy> {
   @ApiProperty({ type: String, format: 'uuid', required: false })

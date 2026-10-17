@@ -1,5 +1,5 @@
 import type { Client } from '@prisma/client';
-import type { FieldDescriptor } from '../utils/diff-fields.js';
+import type { FieldDescriptor } from '../interfaces/field-descriptor.interface.js';
 
 export const CLIENT_AUDIT_FIELDS: FieldDescriptor<Client>[] = [
   { key: 'firstName' },

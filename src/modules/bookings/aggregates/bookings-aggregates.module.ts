@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
-import { BookingsAggregatesService } from './bookings-aggregates.service.js';
 import { LocationModule } from '../../location/location.module.js';
+import { BookingsAggregatesService } from './services/bookings-aggregates.service.js';
 
 @Module({
   imports: [LocationModule],

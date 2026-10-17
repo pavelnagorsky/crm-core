@@ -6,7 +6,7 @@ import {
   HttpStatus,
   Logger,
 } from '@nestjs/common';
-import { Request } from 'express';
+import { Request, Response } from 'express';
 import { BaseResponseDto } from '../dto/base-response.dto.js';
 import { AppException } from '../exceptions/app.exception.js';
 import { ErrorCode } from '../validation/error-codes.enum.js';
@@ -25,7 +25,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost): void {
     const http = host.switchToHttp();
     const req = http.getRequest<Request>();
-    const res = http.getResponse();
+    const res = http.getResponse<Response>();
     const ctx = `${req.method} ${req.url}`;
 
     if (exception instanceof AppException) {
@@ -51,7 +51,9 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       const message =
         typeof body === 'string'
           ? body
-          : ((body as any)?.message ?? exception.message);
+          : 'message' in body
+            ? body.message
+            : exception.message;
       if (status >= 500) {
         this.logger.error(`[${ctx}] HttpException ${status}: ${message}`);
       }

@@ -5,9 +5,8 @@ import { BrandModule } from '../brand/brand.module.js';
 import { LocationModule } from '../location/location.module.js';
 import { StaffModule } from '../staff/staff.module.js';
 import { UserModule } from '../user/user.module.js';
-import { AccessManagementController } from './access-management.controller.js';
-import { AccessManagementService } from './access-management.service.js';
-import { LegacyStaffInvitationsController } from './legacy-staff-invitations.controller.js';
+import { AccessManagementFacade } from './access-management.facade.js';
+import { AccessManagementController } from './controllers/access-management.controller.js';
 import { InvitationRateLimiter } from './services/invitation-rate-limiter.js';
 
 @Module({
@@ -19,7 +18,7 @@ import { InvitationRateLimiter } from './services/invitation-rate-limiter.js';
     LocationModule,
     UserModule,
   ],
-  providers: [AccessManagementService, InvitationRateLimiter],
-  controllers: [AccessManagementController, LegacyStaffInvitationsController],
+  providers: [AccessManagementFacade, InvitationRateLimiter],
+  controllers: [AccessManagementController],
 })
 export class AccessManagementModule {}

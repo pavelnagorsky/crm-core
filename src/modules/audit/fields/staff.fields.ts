@@ -1,5 +1,5 @@
 import type { Staff } from '@prisma/client';
-import type { FieldDescriptor } from '../utils/diff-fields.js';
+import type { FieldDescriptor } from '../interfaces/field-descriptor.interface.js';
 
 export const STAFF_AUDIT_FIELDS: FieldDescriptor<Staff>[] = [
   { key: 'name' },

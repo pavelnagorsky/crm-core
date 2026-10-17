@@ -8,16 +8,16 @@ import {
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
-import { ClientsService } from '../../clients/clients.service.js';
-import { LocationService } from '../../location/location.service.js';
-import { ProductsService } from '../../products/products.service.js';
-import { StaffService } from '../../staff/staff.service.js';
+import { ClientsService } from '../../clients/services/clients.service.js';
+import { LocationService } from '../../location/services/location.service.js';
+import { ProductsService } from '../../products/services/products.service.js';
+import { StaffService } from '../../staff/services/staff.service.js';
+import { OrderPricingCalculator } from '../calculators/order-pricing.calculator.js';
 import { CreateOrderDto } from '../dto/create-order.dto.js';
 import { OrderProductItemDto } from '../dto/order-product-item.dto.js';
 import { OrderPricingLine } from '../interfaces/order-pricing-line.interface.js';
 import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
 import { ResolvedOrderDraft } from '../interfaces/resolved-order-draft.interface.js';
-import { OrderComputeService } from './order-compute.service.js';
 
 @Injectable()
 export class OrderDraftService {
@@ -26,7 +26,7 @@ export class OrderDraftService {
     private readonly staff: StaffService,
     private readonly clients: ClientsService,
     private readonly locations: LocationService,
-    private readonly compute: OrderComputeService,
+    private readonly compute: OrderPricingCalculator,
   ) {}
 
   async resolveDraft(

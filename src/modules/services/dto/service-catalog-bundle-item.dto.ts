@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
-import { MoneyService } from '../../../shared/money/money.service.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { BookingExecutionMode } from '../../bookings/enums/booking-execution-mode.enum.js';
 import { BundlePricingMode } from '../enums/bundle-pricing-mode.enum.js';
 import { ServiceCatalogKind } from '../enums/service-catalog-kind.enum.js';
@@ -41,7 +41,7 @@ export class ServiceCatalogBundleItemDto extends ServiceCatalogItemBaseDto {
     dto.executionMode = item.executionMode;
     dto.pricingMode = item.pricingMode;
     dto.fixedPrice =
-      item.fixedPrice == null ? null : MoneyService.format(item.fixedPrice);
+      item.fixedPrice == null ? null : MoneyUtils.format(item.fixedPrice);
     dto.itemsCount = item.itemsCount;
     dto.itemTitles = item.itemTitles;
     dto.items = item.items.map(ServiceCatalogBundleServiceItemDto.fromEntity);

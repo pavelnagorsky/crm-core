@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ApiPrice } from '../../../../shared/decorators/api-decimal.decorator.js';
-import { MoneyService } from '../../../../shared/money/money.service.js';
+import { MoneyUtils } from '../../../../shared/money/money.utils.js';
 import { InventoryKpiView } from '../interfaces/inventory-kpi-view.interface.js';
 import { InventoryReplenishmentItemDto } from './inventory-replenishment-item.dto.js';
 
@@ -28,7 +28,7 @@ export class InventoryKpiResponseDto {
 
   static fromEntity(entity: InventoryKpiView): InventoryKpiResponseDto {
     return Object.assign(new InventoryKpiResponseDto(), entity, {
-      stockValue: MoneyService.format(entity.stockValue),
+      stockValue: MoneyUtils.format(entity.stockValue),
       topReplenishmentItems: entity.topReplenishmentItems.map(
         InventoryReplenishmentItemDto.fromEntity,
       ),

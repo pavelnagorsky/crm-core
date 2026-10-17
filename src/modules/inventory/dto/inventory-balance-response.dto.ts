@@ -1,9 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { UnitCostService } from '../../../shared/money/unit-cost.service.js';
-import { ApiUnitCost } from '../../../shared/decorators/api-unit-cost.decorator.js';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
-import { MoneyService } from '../../../shared/money/money.service.js';
-import { QuantityService } from '../../../shared/quantity/quantity.service.js';
+import { ApiUnitCost } from '../../../shared/decorators/api-unit-cost.decorator.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
+import { UnitCostUtils } from '../../../shared/money/unit-cost.utils.js';
+import { QuantityUtils } from '../../../shared/quantity/quantity.utils.js';
 import { ProductUnit } from '../../products/enums/product-unit.enum.js';
 import { InventoryBalanceView } from '../interfaces/inventory-balance-view.interface.js';
 
@@ -49,10 +49,10 @@ export class InventoryBalanceResponseDto {
 
   static fromEntity(entity: InventoryBalanceView): InventoryBalanceResponseDto {
     return Object.assign(new InventoryBalanceResponseDto(), entity, {
-      quantityOnHand: QuantityService.format(entity.quantityOnHand),
-      averageUnitCost: UnitCostService.format(entity.averageUnitCost),
-      stockValue: MoneyService.format(entity.stockValue),
-      reorderLevel: QuantityService.format(entity.reorderLevel),
+      quantityOnHand: QuantityUtils.format(entity.quantityOnHand),
+      averageUnitCost: UnitCostUtils.format(entity.averageUnitCost),
+      stockValue: MoneyUtils.format(entity.stockValue),
+      reorderLevel: QuantityUtils.format(entity.reorderLevel),
     });
   }
 }

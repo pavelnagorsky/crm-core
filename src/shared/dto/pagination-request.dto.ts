@@ -9,6 +9,7 @@ import {
   Min,
 } from 'class-validator';
 import { OrderDirection } from '../enums/order-direction.enum.js';
+import { ParseBoolean } from '../transforms/parse-boolean.transform.js';
 
 export class PaginationRequestDto<OrderBy extends string = string> {
   @ApiProperty({ type: Number, default: 1 })
@@ -44,6 +45,6 @@ export class PaginationRequestDto<OrderBy extends string = string> {
   })
   @IsOptional()
   @IsBoolean()
-  @Type(() => Boolean)
+  @ParseBoolean()
   isExport?: boolean;
 }

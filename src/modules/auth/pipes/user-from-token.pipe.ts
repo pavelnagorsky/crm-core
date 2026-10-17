@@ -1,7 +1,7 @@
 import { Injectable, PipeTransform } from '@nestjs/common';
 import { User } from '@prisma/client';
+import { UserService } from '../../user/services/user.service.js';
 import { TokenPayloadDto } from '../dto/token-payload.dto.js';
-import { UserService } from '../../user/user.service.js';
 
 @Injectable()
 export class UserFromTokenPipe implements PipeTransform<

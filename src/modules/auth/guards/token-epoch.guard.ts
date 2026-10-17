@@ -21,7 +21,7 @@ export class TokenEpochGuard implements CanActivate {
     if (!payload) throw new UnauthorizedException();
 
     const currentEpoch = await this.tokenEpochRegistry.get(payload.sub);
-    if ((payload.tokenEpoch ?? 0) < currentEpoch) {
+    if ((payload.tokenEpoch ?? 0) !== currentEpoch) {
       throw new AppException(
         ErrorCode.TOKEN_PAYLOAD_STALE,
         HttpStatus.CONFLICT,

@@ -8,13 +8,13 @@
 sequenceDiagram
   participant PublicController as PublicBookingCreateController
   participant Attribution as BookingChannelAttributionService
-  participant Create as BookingCreateService
+  participant Create as BookingCreateFacade
   participant Services as ServicesService
   participant Bundles as ServiceBundleService
   participant Clients as ClientsService
   participant Staff as StaffService
-  participant Calendar as CalendarService
-  participant Orders as OrdersService
+  participant Calendar as CalendarFacade
+  participant Orders as OrdersFacade
   participant Earnings as StaffEarningsService
   participant DB as DatabaseService
 
@@ -34,21 +34,21 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-  BookingsController --> BookingsService
-  BookingsService --> BookingReadService
-  BookingsService --> BookingMutationService
-  BookingsService --> BookingSetupService
-  BookingsController --> BookingCreateService
+  BookingsController --> BookingsFacade
+  BookingsFacade --> BookingReadService
+  BookingsFacade --> BookingMutationService
+  BookingsFacade --> BookingSetupService
+  BookingsController --> BookingCreateFacade
   BookingsController --> BookingsExportService
 
-  BookingMutationService --> CalendarService
-  BookingMutationService --> OrdersService
+  BookingMutationService --> CalendarFacade
+  BookingMutationService --> OrdersFacade
   BookingMutationService --> StaffEarningsService
-  BookingCreateService --> CalendarService
-  BookingCreateService --> ClientsService
-  BookingCreateService --> StaffService
-  BookingCreateService --> ServicesService
-  BookingCreateService --> ServiceBundleService
+  BookingCreateFacade --> CalendarFacade
+  BookingCreateFacade --> ClientsService
+  BookingCreateFacade --> StaffService
+  BookingCreateFacade --> ServicesService
+  BookingCreateFacade --> ServiceBundleService
   BookingMutationService --> AuditService
 ```
 
@@ -56,20 +56,20 @@ flowchart LR
 
 ```mermaid
 flowchart TB
-  CalendarController --> CalendarViewService
-  CalendarViewService --> CalendarService
-  CalendarViewService --> BookingCalendarReadService
+  CalendarController --> CalendarViewFacade
+  CalendarViewFacade --> CalendarFacade
+  CalendarViewFacade --> BookingCalendarReadService
 
-  CalendarService --> CalendarEventService
-  CalendarService --> BookingCalendarEventService
-  CalendarService --> CalendarAvailabilityService
-  CalendarService --> CalendarViewBuilderService
+  CalendarFacade --> CalendarEventService
+  CalendarFacade --> BookingCalendarEventService
+  CalendarFacade --> CalendarAvailabilityService
+  CalendarFacade --> CalendarViewBuilderService
 
   CalendarAvailabilityService --> StaffService
   CalendarAvailabilityService --> ServicesService
   CalendarAvailabilityService --> ServiceBundleService
-  CalendarAvailabilityService --> CalendarComputeService
-  CalendarViewBuilderService --> CalendarComputeService
+  CalendarAvailabilityService --> CalendarCalculator
+  CalendarViewBuilderService --> CalendarCalculator
 ```
 
 ## Заказ С Продажей Товара
@@ -77,10 +77,10 @@ flowchart TB
 ```mermaid
 sequenceDiagram
   participant Controller as OrdersController
-  participant Orders as OrdersService
+  participant Orders as OrdersFacade
   participant Draft as OrderDraftService
   participant Transition as OrderProductTransitionService
-  participant Inventory as InventoryService
+  participant Inventory as InventoryFacade
   participant Earnings as StaffEarningsService
   participant Persistence as OrderPersistenceService
   participant Audit as OrderAuditService
@@ -101,9 +101,9 @@ sequenceDiagram
 
 ```mermaid
 sequenceDiagram
-  participant Orders as OrdersService
+  participant Orders as OrdersFacade
   participant Return as OrderReturnService
-  participant Inventory as InventoryService
+  participant Inventory as InventoryFacade
   participant Earnings as StaffEarningsService
   participant Persistence as OrderPersistenceService
   participant Audit as OrderAuditService
@@ -122,34 +122,34 @@ sequenceDiagram
 
 ```mermaid
 flowchart LR
-  PayrollController --> PayrollService
-  PayrollController --> PayrollReportService
-  PayrollController --> StaffEarningsService
+  PayrollPeriodsController --> PayrollPeriodService
+  PayrollPeriodsController --> PayrollReportService
+  PayrollPeriodsController --> StaffEarningsService
 
-  PayrollService --> StaffEarningsService
-  PayrollService --> StaffCompensationService
-  PayrollService --> PayrollComputeService
-  PayrollService --> StaffService
-  PayrollService --> LocationService
+  PayrollPeriodService --> StaffEarningsService
+  PayrollPeriodService --> StaffCompensationService
+  PayrollPeriodService --> PayrollCalculator
+  PayrollPeriodService --> StaffService
+  PayrollPeriodService --> LocationService
 
   StaffEarningsService --> StaffCompensationService
-  StaffEarningsService --> EarningCalculatorService
+  StaffEarningsService --> EarningCalculator
   StaffEarningsService --> StaffEarningWriterService
-  PayrollComputeService --> EarningCalculatorService
+  PayrollCalculator --> EarningCalculator
 ```
 
 ## Паттерн Аналитики
 
 ```mermaid
 flowchart TB
-  DashboardController --> DashboardService
+  DashboardController --> DashboardFacade
   ServicesAnalyticsController --> ServicesAnalyticsService
   BookingsAnalyticsController --> BookingsAnalyticsService
   ClientsAnalyticsController --> ClientsAnalyticsService
   ProductsAnalyticsController --> ProductsAnalyticsService
 
-  DashboardService --> BookingsAggregatesService
-  DashboardService --> OrdersAggregatesService
+  DashboardFacade --> BookingsAggregatesService
+  DashboardFacade --> OrdersAggregatesService
 
   ServicesAnalyticsService --> BookingsAggregatesService
   BookingsAnalyticsService --> BookingsAggregatesService
@@ -157,7 +157,7 @@ flowchart TB
   ClientsAnalyticsService --> OrdersAggregatesService
   ProductsAnalyticsService --> OrdersAggregatesService
 
-  DashboardService --> DashboardRangeService
+  DashboardFacade --> DashboardRangeService
   ServicesAnalyticsService --> DashboardRangeService
   BookingsAnalyticsService --> DashboardRangeService
   ClientsAnalyticsService --> DashboardRangeService

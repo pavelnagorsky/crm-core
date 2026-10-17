@@ -1,67 +1,12 @@
-import 'reflect-metadata';
-import { Controller, Get, Module } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import {
-  ApiOkResponse,
-  ApiProperty,
   DocumentBuilder,
   SwaggerModule,
   type SchemaObject,
 } from '@nestjs/swagger';
-import { IsSignedAmount } from './is-signed-amount.decorator.js';
-import {
-  ApiDecimal,
-  ApiPercent,
-  ApiPrice,
-  ApiSignedAmount,
-  registerDecimalSchemas,
-} from './api-decimal.decorator.js';
-
-class MoneySampleDto {
-  @ApiPrice()
-  price: string;
-
-  @ApiPrice({ nullable: true })
-  customPrice: string | null;
-
-  @ApiPrice({ required: false, nullable: true })
-  draftPrice?: string;
-
-  @ApiSignedAmount()
-  amount: string;
-
-  @ApiPercent()
-  commissionPercent: string;
-
-  @ApiDecimal({ nullable: true })
-  quantity: string | null;
-
-  @ApiProperty({
-    example: '1500.00',
-    description: 'Bonus must be positive.',
-  })
-  @IsSignedAmount()
-  manualAmount: string;
-}
-
-@Controller('money')
-class MoneySampleController {
-  @Get()
-  @ApiOkResponse({ type: MoneySampleDto })
-  get(): MoneySampleDto {
-    return {
-      price: '49.99',
-      customPrice: null,
-      amount: '-150.00',
-      commissionPercent: '30.00',
-      quantity: null,
-      manualAmount: '1500.00',
-    };
-  }
-}
-
-@Module({ controllers: [MoneySampleController] })
-class MoneySampleModule {}
+import 'reflect-metadata';
+import { MoneySampleModule } from '../../../test/fixtures/decimal/money-sample.module.js';
+import { registerDecimalSchemas } from './api-decimal.decorator.js';
 
 describe('decimal swagger schemas', () => {
   it('documents monetary strings as named decimal schemas', async () => {

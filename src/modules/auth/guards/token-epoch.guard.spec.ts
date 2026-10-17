@@ -31,16 +31,19 @@ function payload(overrides: Partial<TokenPayloadDto> = {}): TokenPayloadDto {
 }
 
 describe('TokenEpochGuard', () => {
-  it('signals a stale token when the registry epoch is newer', async () => {
-    const registry = {
-      get: vi.fn().mockResolvedValue(200),
-    } as unknown as TokenEpochRegistryService;
-    const guard = new TokenEpochGuard(registry);
+  it.each([0, 1000])(
+    'rejects an epoch of %s when the persisted epoch differs',
+    async (tokenEpoch) => {
+      const registry = {
+        get: vi.fn().mockResolvedValue(200),
+      } as unknown as TokenEpochRegistryService;
+      const guard = new TokenEpochGuard(registry);
 
-    await expect(
-      guard.canActivate(context(payload({ tokenEpoch: 100 }), {})),
-    ).rejects.toMatchObject({
-      errorCode: 'TOKEN_PAYLOAD_STALE',
-    });
-  });
+      await expect(
+        guard.canActivate(context(payload({ tokenEpoch }), {})),
+      ).rejects.toMatchObject({
+        errorCode: 'TOKEN_PAYLOAD_STALE',
+      });
+    },
+  );
 });

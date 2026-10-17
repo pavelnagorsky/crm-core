@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ProductPackaging } from '@prisma/client';
-import { QuantityService } from '../../../shared/quantity/quantity.service.js';
+import { QuantityUtils } from '../../../shared/quantity/quantity.utils.js';
 
 export class ProductPackagingResponseDto {
   @ApiProperty({ type: String, format: 'uuid' })
@@ -19,7 +19,7 @@ export class ProductPackagingResponseDto {
     return Object.assign(new ProductPackagingResponseDto(), {
       id: entity.id,
       name: entity.name,
-      quantityInBaseUnit: QuantityService.format(entity.quantityInBaseUnit),
+      quantityInBaseUnit: QuantityUtils.format(entity.quantityInBaseUnit),
       isActive: entity.isActive,
     });
   }

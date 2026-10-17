@@ -6,10 +6,10 @@ import {
   ApiPrice,
   ApiSignedAmount,
 } from '../../../../shared/decorators/api-decimal.decorator.js';
+import { MoneyUtils } from '../../../../shared/money/money.utils.js';
+import { TimeUtils } from '../../../../shared/time/time.utils.js';
 import { StaffEarningSource } from '../enums/staff-earning-source.enum.js';
 import { StaffEarningType } from '../enums/staff-earning-type.enum.js';
-import { MoneyService } from '../../../../shared/money/money.service.js';
-import { TimeService } from '../../../../shared/time/time.service.js';
 
 export class StaffEarningResponseDto {
   @ApiProperty({ type: String })
@@ -87,23 +87,23 @@ export class StaffEarningResponseDto {
     dto.staffId = earning.staffId;
     dto.type = earning.type;
     dto.source = earning.source;
-    dto.earnedOn = TimeService.dateOnlyStr(earning.earnedOn);
-    dto.amount = MoneyService.format(earning.amount);
+    dto.earnedOn = TimeUtils.dateOnlyStr(earning.earnedOn);
+    dto.amount = MoneyUtils.format(earning.amount);
     dto.currency = earning.currency;
     dto.baseAmount =
       earning.baseAmount !== null
-        ? MoneyService.format(earning.baseAmount)
+        ? MoneyUtils.format(earning.baseAmount)
         : null;
     dto.ratePercent =
       earning.ratePercent !== null
-        ? MoneyService.format(earning.ratePercent)
+        ? MoneyUtils.format(earning.ratePercent)
         : null;
     dto.rateAmount =
       earning.rateAmount !== null
-        ? MoneyService.format(earning.rateAmount)
+        ? MoneyUtils.format(earning.rateAmount)
         : null;
     dto.quantity =
-      earning.quantity !== null ? MoneyService.format(earning.quantity) : null;
+      earning.quantity !== null ? MoneyUtils.format(earning.quantity) : null;
     dto.description = earning.description;
     dto.reason = earning.reason;
     dto.actorName = earning.actorName;

@@ -1,35 +1,39 @@
 import { Module } from '@nestjs/common';
+import { I18nModule } from '../../shared/i18n/i18n.module.js';
 import { LocationModule } from '../location/location.module.js';
 import { ServicesModule } from '../services/services.module.js';
 import { StaffModule } from '../staff/staff.module.js';
-import { StaffCompensationController } from './compensation/staff-compensation.controller.js';
-import { StaffCompensationService } from './compensation/staff-compensation.service.js';
-import { EarningCalculatorService } from './earnings/services/earning-calculator.service.js';
+import { StaffCompensationController } from './compensation/controllers/staff-compensation.controller.js';
+import { StaffCompensationService } from './compensation/services/staff-compensation.service.js';
+import { EarningCalculator } from './earnings/calculators/earning.calculator.js';
+import { StaffEarningsController } from './earnings/controllers/staff-earnings.controller.js';
 import { ProductSaleEarningReversalService } from './earnings/services/product-sale-earning-reversal.service.js';
 import { StaffEarningWriterService } from './earnings/services/staff-earning-writer.service.js';
-import { StaffEarningsController } from './earnings/staff-earnings.controller.js';
-import { StaffEarningsService } from './earnings/staff-earnings.service.js';
-import { PayrollComputeService } from './periods/services/payroll-compute.service.js';
-import { PayrollController } from './periods/payroll.controller.js';
-import { PayrollService } from './periods/payroll.service.js';
-import { PayrollReportService } from './report/payroll-report.service.js';
-import { I18nModule } from '../../shared/i18n/i18n.module.js';
+import { StaffEarningsService } from './earnings/services/staff-earnings.service.js';
+import { PayrollCalculator } from './periods/calculators/payroll.calculator.js';
+import { PayrollPeriodsController } from './periods/controllers/payroll-periods.controller.js';
+import { PayrollCalculationService } from './periods/services/payroll-calculation.service.js';
+import { PayrollPeriodLockService } from './periods/services/payroll-period-lock.service.js';
+import { PayrollPeriodService } from './periods/services/payroll-period.service.js';
+import { PayrollReportService } from './report/services/payroll-report.service.js';
 
 @Module({
   imports: [StaffModule, LocationModule, ServicesModule, I18nModule],
   controllers: [
     StaffCompensationController,
     StaffEarningsController,
-    PayrollController,
+    PayrollPeriodsController,
   ],
   providers: [
-    EarningCalculatorService,
+    PayrollCalculationService,
+    PayrollPeriodLockService,
+    EarningCalculator,
     StaffEarningWriterService,
     ProductSaleEarningReversalService,
-    PayrollComputeService,
+    PayrollCalculator,
     StaffCompensationService,
     StaffEarningsService,
-    PayrollService,
+    PayrollPeriodService,
     PayrollReportService,
   ],
   exports: [StaffEarningsService],

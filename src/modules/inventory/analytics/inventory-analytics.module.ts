@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
-import { InventoryAnalyticsController } from './inventory-analytics.controller.js';
-import { InventoryAnalyticsService } from './inventory-analytics.service.js';
+import { InventoryAnalyticsController } from './controllers/inventory-analytics.controller.js';
+import { InventoryAnalyticsService } from './services/inventory-analytics.service.js';
 
 @Module({
   controllers: [InventoryAnalyticsController],

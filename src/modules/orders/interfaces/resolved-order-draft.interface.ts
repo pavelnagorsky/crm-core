@@ -1,5 +1,5 @@
 import { Location, Prisma } from '@prisma/client';
-import { OrderTotals } from './order-totals.interface.js';
+import { PriceTotals } from '../../../shared/money/interfaces/price-totals.interface.js';
 
 export interface ResolvedOrderDraft {
   location: Location;
@@ -10,5 +10,5 @@ export interface ResolvedOrderDraft {
   occurredAt: Date;
   note: string | null;
   items: Prisma.OrderItemCreateWithoutOrderInput[];
-  totals: OrderTotals;
+  totals: PriceTotals;
 }

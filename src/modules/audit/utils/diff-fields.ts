@@ -1,14 +1,7 @@
-import { AuditFieldChange } from '../interfaces/audit-payload.interface.js';
+import { AuditFieldChange } from '../interfaces/audit-field-change.interface.js';
+import { FieldDescriptor } from '../interfaces/field-descriptor.interface.js';
 
 export type FieldType = 'date' | 'datetime';
-
-export interface FieldDescriptor<T> {
-  key: keyof T;
-  type?: FieldType;
-  /** Locale dictionary used to translate stored enum values, e.g. `staffStatus`. */
-  i18n?: string;
-  format?: (v: unknown) => string;
-}
 
 const defaultFormat = (v: unknown): string => {
   if (v == null) return '—';

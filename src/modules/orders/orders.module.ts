@@ -6,16 +6,19 @@ import { LocationModule } from '../location/location.module.js';
 import { PayrollModule } from '../payroll/payroll.module.js';
 import { ProductsModule } from '../products/products.module.js';
 import { StaffModule } from '../staff/staff.module.js';
-import { OrdersAggregatesService } from './analytics/orders-aggregates.service.js';
+import { OrdersAggregatesService } from './analytics/services/orders-aggregates.service.js';
+import { OrderPricingCalculator } from './calculators/order-pricing.calculator.js';
+import { OrdersController } from './controllers/orders.controller.js';
+import { OrdersFacade } from './orders.facade.js';
+import { OrderStateRules } from './rules/order-state.rules.js';
+import { OrderAuditService } from './services/order-audit.service.js';
 import { OrderBookingSyncService } from './services/order-booking-sync.service.js';
-import { OrderComputeService } from './services/order-compute.service.js';
+import { OrderCreationService } from './services/order-creation.service.js';
+import { OrderDraftMutationService } from './services/order-draft-mutation.service.js';
 import { OrderDraftService } from './services/order-draft.service.js';
 import { OrderPersistenceService } from './services/order-persistence.service.js';
 import { OrderProductTransitionService } from './services/order-product-transition.service.js';
 import { OrderReturnService } from './services/order-return.service.js';
-import { OrderStateAssertionService } from './services/order-state-assertion.service.js';
-import { OrdersController } from './orders.controller.js';
-import { OrdersService } from './orders.service.js';
 
 @Module({
   imports: [
@@ -29,16 +32,19 @@ import { OrdersService } from './orders.service.js';
   ],
   controllers: [OrdersController],
   providers: [
-    OrdersService,
-    OrderComputeService,
+    OrdersFacade,
+    OrderAuditService,
+    OrderDraftMutationService,
+    OrderCreationService,
+    OrderPricingCalculator,
     OrderPersistenceService,
     OrderDraftService,
     OrderBookingSyncService,
     OrderProductTransitionService,
     OrderReturnService,
-    OrderStateAssertionService,
+    OrderStateRules,
     OrdersAggregatesService,
   ],
-  exports: [OrdersService, OrderComputeService, OrdersAggregatesService],
+  exports: [OrdersFacade, OrdersAggregatesService],
 })
 export class OrdersModule {}

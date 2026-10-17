@@ -1,4 +1,5 @@
-import { TimeService } from '../../../shared/time/time.service.js';
+import { TimeUtils } from '../../../shared/time/time.utils.js';
+import { ClientRecencyBucket } from '../enums/client-recency-bucket.enum.js';
 import {
   CLIENT_RECENCY_BOUNDS,
   DORMANT_CLIENT_MIN_DAYS,
@@ -6,7 +7,6 @@ import {
   matchesRecencyBound,
   recencyCutoff,
 } from './client-recency.rules.js';
-import { ClientRecencyBucket } from '../enums/client-recency-bucket.enum.js';
 
 const TZ = 'Europe/Moscow';
 
@@ -29,8 +29,8 @@ describe('client recency bounds', () => {
   });
 
   it('puts a visit on the 30th calendar day into 30–60, not outside the chart', () => {
-    const asOf = TimeService.zonedDayStart(2026, 10, 1, 'UTC');
-    const visit = TimeService.zonedHourStart(2026, 9, 1, 15, 'UTC');
+    const asOf = TimeUtils.zonedDayStart(2026, 10, 1, 'UTC');
+    const visit = TimeUtils.zonedHourStart(2026, 9, 1, 15, 'UTC');
     const matched = CLIENT_RECENCY_BOUNDS.filter((bound) =>
       matchesRecencyBound(visit, asOf, bound, 'UTC'),
     );
@@ -41,7 +41,7 @@ describe('client recency bounds', () => {
   });
 
   it('treats the cutoff instant as not yet old enough', () => {
-    const asOf = TimeService.zonedDayStart(2026, 10, 1, 'UTC');
+    const asOf = TimeUtils.zonedDayStart(2026, 10, 1, 'UTC');
     const cutoff = recencyCutoff(asOf, 30, 'UTC');
     const bound = CLIENT_RECENCY_BOUNDS[0];
     expect(matchesRecencyBound(cutoff, asOf, bound, 'UTC')).toBe(false);
@@ -51,9 +51,9 @@ describe('client recency bounds', () => {
   });
 
   it('assigns each past calendar day to one bucket once the client has been quiet for 30 days', () => {
-    const asOf = TimeService.zonedDayStart(2026, 10, 1, TZ);
+    const asOf = TimeUtils.zonedDayStart(2026, 10, 1, TZ);
     for (let daysAgo = 0; daysAgo <= 120; daysAgo++) {
-      const visit = TimeService.zonedHourStart(2026, 10, 1 - daysAgo, 15, TZ);
+      const visit = TimeUtils.zonedHourStart(2026, 10, 1 - daysAgo, 15, TZ);
       const matched = CLIENT_RECENCY_BOUNDS.filter((bound) =>
         matchesRecencyBound(visit, asOf, bound, TZ),
       );
