@@ -229,6 +229,27 @@ describe('ProductsService', () => {
     );
   });
 
+  it('filters location products by product ids', async () => {
+    const { db, service } = setup();
+    db.productLocation.findMany.mockResolvedValue([]);
+    db.productLocation.count.mockResolvedValue(0);
+
+    await service.searchLocation('location-1', {
+      page: 1,
+      pageSize: 25,
+      productIds: ['product-1', 'product-2'],
+    });
+
+    expect(db.productLocation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          locationId: 'location-1',
+          productId: { in: ['product-1', 'product-2'] },
+        }),
+      }),
+    );
+  });
+
   it('does not allow inventory tracking to be disabled after activation', async () => {
     const { db, locations, service } = setup();
     locations.findById.mockResolvedValue({

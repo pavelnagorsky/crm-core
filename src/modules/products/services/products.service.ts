@@ -514,6 +514,7 @@ export class ProductsService {
     if (dto.trackInventory !== undefined) {
       where.trackInventory = dto.trackInventory;
     }
+    if (dto.productIds?.length) where.productId = { in: dto.productIds };
     const direction = dto.orderDirection ?? OrderDirection.DESC;
     const orderBy = this.locationOrder(
       dto.orderBy ?? ProductLocationSearchOrderBy.UPDATED_AT,
