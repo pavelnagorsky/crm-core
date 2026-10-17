@@ -9,8 +9,8 @@ sequenceDiagram
   participant PublicController as PublicBookingCreateController
   participant Attribution as BookingChannelAttributionService
   participant Create as BookingCreateFacade
-  participant Services as ServicesService
-  participant Bundles as ServiceBundleService
+  participant Selection as BookingSelectionService
+  participant Catalog as ServiceCatalogFacade
   participant Clients as ClientsService
   participant Staff as StaffService
   participant Calendar as CalendarFacade
@@ -20,8 +20,8 @@ sequenceDiagram
 
   PublicController->>Attribution: resolve(page/widget)
   PublicController->>Create: createPublicBooking()
-  Create->>Services: resolveActiveForBooking()
-  Create->>Bundles: resolveActiveForBooking()
+  Create->>Selection: resolve()
+  Selection->>Catalog: resolveServicesForBooking() / resolveBundleForBooking()
   Create->>Clients: resolveForBooking()
   Create->>Staff: resolveStaffingForServices()
   Create->>Calendar: isSlotFree() / createBookingEvent()
@@ -47,8 +47,8 @@ flowchart LR
   BookingCreateFacade --> CalendarFacade
   BookingCreateFacade --> ClientsService
   BookingCreateFacade --> StaffService
-  BookingCreateFacade --> ServicesService
-  BookingCreateFacade --> ServiceBundleService
+  BookingCreateFacade --> BookingSelectionService
+  BookingSelectionService --> ServiceCatalogFacade
   BookingMutationService --> AuditService
 ```
 
@@ -66,8 +66,7 @@ flowchart TB
   CalendarFacade --> CalendarViewBuilderService
 
   CalendarAvailabilityService --> StaffService
-  CalendarAvailabilityService --> ServicesService
-  CalendarAvailabilityService --> ServiceBundleService
+  CalendarAvailabilityService --> ServiceCatalogFacade
   CalendarAvailabilityService --> CalendarCalculator
   CalendarViewBuilderService --> CalendarCalculator
 ```

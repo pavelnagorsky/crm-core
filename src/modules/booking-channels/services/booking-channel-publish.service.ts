@@ -3,7 +3,7 @@ import { BookingVisibility } from '@prisma/client';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { LocationService } from '../../location/services/location.service.js';
-import { ServicesService } from '../../services/services.service.js';
+import { ServiceCatalogFacade } from '../../services/catalog/service-catalog.facade.js';
 import { BookingChannelStatus } from '../enums/booking-channel-status.enum.js';
 
 export function publishedAtFor(status: BookingChannelStatus): Date | null {
@@ -14,7 +14,7 @@ export function publishedAtFor(status: BookingChannelStatus): Date | null {
 export class BookingChannelPublishService {
   constructor(
     private readonly locationService: LocationService,
-    private readonly servicesService: ServicesService,
+    private readonly serviceCatalog: ServiceCatalogFacade,
   ) {}
 
   async assertTransition(
@@ -40,7 +40,8 @@ export class BookingChannelPublishService {
         HttpStatus.CONFLICT,
       );
     }
-    const bookable = await this.servicesService.countBookable(locationId);
+    const bookable =
+      await this.serviceCatalog.countBookableServices(locationId);
     if (bookable === 0) {
       throw new AppException(
         ErrorCode.BOOKING_CHANNEL_NOT_BOOKABLE,

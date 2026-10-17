@@ -2,7 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { ServiceStatus, StaffStatus } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
 import { MetricUnit } from '../../../dashboard/enums/metric-unit.enum.js';
-import { ServicesService } from '../../../services/services.service.js';
+import { ServiceCatalogFacade } from '../../../services/catalog/service-catalog.facade.js';
 import { StaffKpiCardDto } from '../dto/staff-kpi-card.dto.js';
 import { StaffWidgetsRequestDto } from '../dto/staff-widgets-request.dto.js';
 import { StaffWidgetKey } from '../enums/staff-widget-key.enum.js';
@@ -14,7 +14,7 @@ const DEACTIVATION_WINDOW_DAYS = 30;
 export class StaffKpiService {
   constructor(
     private readonly db: DatabaseService,
-    private readonly servicesService: ServicesService,
+    private readonly serviceCatalog: ServiceCatalogFacade,
   ) {}
 
   async getWidgets(
@@ -146,7 +146,7 @@ export class StaffKpiService {
     // The `service` table belongs to the services domain; get the active service ids through
     // its owning service rather than querying it here. Coverage denominator is all active
     // services (staff-name filters narrow staff, not the service catalogue).
-    const activeServiceIds = await this.servicesService.findIdsByFilter(
+    const activeServiceIds = await this.serviceCatalog.findServiceIdsByFilter(
       locationId,
       { status: ServiceStatus.ACTIVE },
     );

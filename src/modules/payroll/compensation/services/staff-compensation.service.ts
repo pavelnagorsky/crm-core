@@ -13,7 +13,7 @@ import { AuditEvent } from '../../../audit/enums/audit-event.enum.js';
 import { AuditActor } from '../../../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../../../audit/interfaces/audit-log-event.interface.js';
 import { LocationService } from '../../../location/services/location.service.js';
-import { ServicesService } from '../../../services/services.service.js';
+import { ServiceCatalogFacade } from '../../../services/catalog/service-catalog.facade.js';
 import { StaffService } from '../../../staff/services/staff.service.js';
 import { ReplaceCompensationPlanDto } from '../dto/replace-compensation-plan.dto.js';
 import { CompensationSalaryMode } from '../enums/compensation-salary-mode.enum.js';
@@ -25,7 +25,7 @@ export class StaffCompensationService {
   constructor(
     private readonly db: DatabaseService,
     private readonly staffService: StaffService,
-    private readonly servicesService: ServicesService,
+    private readonly serviceCatalog: ServiceCatalogFacade,
     private readonly locationService: LocationService,
     private readonly eventEmitter: EventEmitter2,
   ) {}
@@ -104,7 +104,7 @@ export class StaffCompensationService {
   ): Promise<StaffCompensationPlan> {
     const staff = await this.staffService.findById(staffId);
     const serviceIds = (dto.serviceRates ?? []).map((rate) => rate.serviceId);
-    await this.servicesService.assertIdsInLocation(
+    await this.serviceCatalog.assertServiceIdsInLocation(
       staff.locationId,
       serviceIds,
     );

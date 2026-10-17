@@ -11,6 +11,7 @@
 - [rbac-target.md](./rbac-target.md) описывает реализованные permissions, готовые наборы ролей и настройки.
 - [rbac-permissions-map.md](./rbac-permissions-map.md) сопоставляет API-маршруты с целевыми permissions.
 - [rbac-contracts.md](./rbac-contracts.md) задаёт контракты настройки прав, управления участниками и единых приглашений.
+- [services-catalog.md](./services-catalog.md) — иерархия каталога услуг, границы записи и развёртывание SQL view на пустой базе.
 - [services-map.md](./services-map.md) отвечает на вопрос: "Какой сервис открыть первым?"
 - [domain-ownership.md](./domain-ownership.md) отвечает на вопрос: "Кто владеет этими данными и кто может читать их напрямую?"
 - [flows.md](./flows.md) отвечает на вопрос: "Что происходит в основных бизнес-сценариях?"
@@ -24,6 +25,12 @@ flowchart LR
   AppModule --> LocationModule
   AppModule --> StaffModule
   AppModule --> ServicesModule
+  ServicesModule --> ServiceCatalogModule
+  ServicesModule --> ServiceWriteModule
+  ServicesModule --> ServiceBundleWriteModule
+  ServicesModule --> ServicesAnalyticsModule
+  ServiceCatalogModule --> ServiceCategoriesModule
+  ServiceBundleWriteModule --> ServiceCatalogModule
   AppModule --> CalendarApiModule
   AppModule --> ClientsModule
   AppModule --> BookingsModule
@@ -37,11 +44,11 @@ flowchart LR
   AppModule --> FilesModule
 
   LocationModule --> BrandModule
-  StaffModule --> ServicesModule
+  StaffModule --> ServiceCatalogModule
   StaffModule --> LocationModule
   CalendarModule --> LocationModule
   CalendarModule --> StaffModule
-  CalendarModule --> ServicesModule
+  CalendarModule --> ServiceCatalogModule
   CalendarApiModule --> CalendarModule
   CalendarApiModule --> BookingsModule
   CalendarApiModule --> LocationModule
@@ -51,11 +58,11 @@ flowchart LR
   BookingsModule --> ClientsModule
   BookingsModule --> StaffModule
   BookingsModule --> PayrollModule
-  BookingsModule --> ServicesModule
+  BookingsModule --> ServiceCatalogModule
   BookingsModule --> OrdersModule
 
   BookingChannelsModule --> LocationModule
-  BookingChannelsModule --> ServicesModule
+  BookingChannelsModule --> ServiceCatalogModule
   BookingChannelsModule --> FilesModule
   BookingChannelsModule --> BookingsModule
 
@@ -70,7 +77,7 @@ flowchart LR
   InventoryModule --> LocationModule
   PayrollModule --> StaffModule
   PayrollModule --> LocationModule
-  PayrollModule --> ServicesModule
+  PayrollModule --> ServiceCatalogModule
 ```
 
 ## Слои
@@ -137,11 +144,11 @@ flowchart TB
 
 InventoryStockReadService читает InventoryStockView — принадлежащее Inventory представление товаров и остатков. Представление соединяет ProductLocation, Product и InventoryBalance на уровне БД; прикладной сервис не запрашивает чужие таблицы и не загружает весь каталог через ProductsService. Товар без InventoryBalance имеет нулевые остаток, стоимость и себестоимость, updatedAt остаётся null. Поиск, фильтры, сортировка, count и LIMIT/OFFSET выполняются в БД. Счётчики дефицита вычисляются отдельной агрегирующей выборкой.
 
-ServiceCatalogReadService выбирает ключи страницы из ServiceCatalogView, объединяющего услуги и bundles. Цена набора равна fixedPrice, когда она задана, иначе сумме цен услуг. Длительность набора включает buffers: сумма для последовательного выполнения и максимум для параллельного. Полные карточки выбранных записей загружаются через ServicesService и ServiceBundleService, затем собираются ServiceCatalogItemFactory. Фильтрация, сортировка и пагинация происходят до загрузки карточек. Count, ключи и карточки читаются в одной транзакции RepeatableRead. Счётчики по статусу и типу строятся одним агрегирующим запросом к тому же представлению с теми же правилами поиска; каждый счётчик игнорирует фильтр своей группы.
+ServiceCatalogReadService выбирает ключи страницы из ServiceCatalogView, объединяющего услуги и bundles. Цена набора равна fixedPrice, когда она задана, иначе сумме цен услуг. Длительность набора включает buffers: сумма для последовательного выполнения и максимум для параллельного. Полные карточки выбранных записей загружаются через приватные ServiceReadService и ServiceBundleReadService, затем собираются ServiceCatalogItemFactory. Фильтрация, сортировка и пагинация происходят до загрузки карточек. Count, ключи и карточки читаются в одной транзакции RepeatableRead. Счётчики по статусу и типу строятся одним агрегирующим запросом к тому же представлению с теми же правилами поиска; каждый счётчик игнорирует фильтр своей группы.
 
 При равенстве основного поля порядок фиксирует ID; для одинакового ID разных типов услуга идёт перед набором. Строки без категории остаются последними в обоих направлениях. Текст сортируется по явной русской ICU-collation catalog_ru, независимо от locale хоста/БД. Поиск считает проценты и подчёркивания обычными символами. Экспорт по прежнему возвращает все подходящие записи.
 
-Миграция 20261017160000_catalog_read_views создаёт обычные представления, без материализации и синхронизации копий. Изменения товаров, остатков и услуг видны сразу. Требуется PostgreSQL с поддержкой ICU; при её отсутствии миграция завершится ошибкой. На исходных таблицах уже есть индексы по филиалу и связям; отдельные индексы для представлений не создаются. Большие OFFSET и общий count по прежнему требуют работы БД, но приложение получает только выбранную страницу. Интеграционные проверки включают наборы по 5000 товаров и услуг.
+Миграция 20261017160000_catalog_read_views создаёт обычные представления, без материализации и синхронизации копий. Изменения товаров, остатков и услуг видны сразу. Требуется PostgreSQL с поддержкой ICU; при её отсутствии миграция завершится ошибкой. На исходных таблицах уже есть индексы по филиалу и связям; отдельные индексы для представлений не создаются. Большие OFFSET и общий count по прежнему требуют работы БД, но приложение получает только выбранную страницу. Восстановление на пустой базе и запись/чтение каталога проверяются в test/database/catalog-read-models.spec.ts. Команды развёртывания и проверки view описаны в [services-catalog.md](./services-catalog.md#пустая-база-и-восстановление-view).
 
 ## Ключ создания продажи
 

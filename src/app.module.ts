@@ -26,7 +26,6 @@ import { OrdersModule } from './modules/orders/orders.module.js';
 import { PayrollModule } from './modules/payroll/payroll.module.js';
 import { ProductsAnalyticsModule } from './modules/products/analytics/products-analytics.module.js';
 import { ProductsModule } from './modules/products/products.module.js';
-import { ServicesAnalyticsModule } from './modules/services/analytics/services-analytics.module.js';
 import { ServicesModule } from './modules/services/services.module.js';
 import { StaffModule } from './modules/staff/staff.module.js';
 import { SuppliersModule } from './modules/suppliers/suppliers.module.js';
@@ -49,7 +48,6 @@ import { BusinessActiveGuard } from './shared/guards/business-active.guard.js';
     LocationModule,
     StaffModule,
     ServicesModule,
-    ServicesAnalyticsModule,
     CalendarApiModule,
     ClientsModule,
     ClientsAnalyticsModule,

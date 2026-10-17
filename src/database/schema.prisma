@@ -2,6 +2,11 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// SQL-managed read views: ServiceCatalogView and InventoryStockView.
+// Definitions and catalog_ru collation: migrations/20261017160000_catalog_read_views/migration.sql.
+// Provision empty databases with prisma migrate deploy; db push does not create these views.
+// See ../../docs/architecture/services-catalog.md for restoration and verification.
+
 datasource db {
   provider = "postgresql"
 }

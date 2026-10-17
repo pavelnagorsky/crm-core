@@ -6,7 +6,7 @@ import { Permission } from '../../../access/enums/permission.enum.js';
 import { Permissions } from '../../../auth/decorators/permissions.decorator.js';
 import { ServicesAnalyticsRequestDto } from '../dto/services-analytics-request.dto.js';
 import { ServicesAnalyticsResponseDto } from '../dto/services-analytics-response.dto.js';
-import { ServicesAnalyticsService } from '../services-analytics.service.js';
+import { ServicesAnalyticsService } from '../services/services-analytics.service.js';
 
 @ApiTags('Services')
 @Controller('locations/:locationId')

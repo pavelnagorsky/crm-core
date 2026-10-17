@@ -5,8 +5,7 @@ import { AppException } from '../../../../shared/exceptions/app.exception.js';
 import { TimeUtils } from '../../../../shared/time/time.utils.js';
 import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
 import { LocationService } from '../../../location/services/location.service.js';
-import { ServiceBundleService } from '../../../services/catalog/service-bundle.service.js';
-import { ServicesService } from '../../../services/services.service.js';
+import { ServiceCatalogFacade } from '../../../services/catalog/service-catalog.facade.js';
 import { StaffService } from '../../../staff/services/staff.service.js';
 import { CalendarCalculator } from '../../calculators/calendar.calculator.js';
 import { AvailableSlotsDayDto } from '../../dto/available-slots-day.dto.js';
@@ -25,8 +24,7 @@ export class CalendarAvailabilityService {
     private readonly db: DatabaseService,
     private readonly staff: StaffService,
     private readonly locationService: LocationService,
-    private readonly services: ServicesService,
-    private readonly bundles: ServiceBundleService,
+    private readonly serviceCatalog: ServiceCatalogFacade,
     private readonly compute: CalendarCalculator,
   ) {}
 
@@ -210,7 +208,7 @@ export class CalendarAvailabilityService {
       );
     }
     if (dto.bundleId) {
-      const bundle = await this.bundles.resolveActiveForBooking(
+      const bundle = await this.serviceCatalog.resolveBundleForBooking(
         locationId,
         dto.bundleId,
       );
@@ -246,7 +244,7 @@ export class CalendarAvailabilityService {
         : [];
     if (serviceIds.length === 0)
       throw new NotFoundException('Service not found');
-    const ordered = await this.services.resolveActiveForBooking(
+    const ordered = await this.serviceCatalog.resolveServicesForBooking(
       locationId,
       serviceIds,
     );

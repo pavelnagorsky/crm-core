@@ -1,0 +1,318 @@
+import { Injectable } from '@nestjs/common';
+import { BookingStatus, Prisma } from '@prisma/client';
+import { MoneyUtils } from '../../../../shared/money/money.utils.js';
+import { BookingsAggregatesService } from '../../../bookings/aggregates/services/bookings-aggregates.service.js';
+import { AggregateRange } from '../../../bookings/interfaces/aggregate-range.interface.js';
+import { AggregateSnapshot } from '../../../bookings/interfaces/aggregate-snapshot.interface.js';
+import { SeriesRow } from '../../../bookings/interfaces/series-row.interface.js';
+import { ServiceCount } from '../../../bookings/interfaces/service-count.interface.js';
+import { WidgetBreakdownItemDto } from '../../../dashboard/dto/widget-breakdown-item.dto.js';
+import { WidgetMetaDto } from '../../../dashboard/dto/widget-meta.dto.js';
+import { WidgetDto } from '../../../dashboard/dto/widget.dto.js';
+import { MetricUnit } from '../../../dashboard/enums/metric-unit.enum.js';
+import { WidgetKind } from '../../../dashboard/enums/widget-kind.enum.js';
+import { DashboardBucketFactory } from '../../../dashboard/factories/dashboard-bucket.factory.js';
+import { DashboardMetricFactory } from '../../../dashboard/factories/dashboard-metric.factory.js';
+import { DashboardSeriesFactory } from '../../../dashboard/factories/dashboard-series.factory.js';
+import { DashboardRangeService } from '../../../dashboard/services/dashboard-range.service.js';
+import { ServicesAnalyticsRequestDto } from '../dto/services-analytics-request.dto.js';
+import { ServicesAnalyticsWidgetKey } from '../enums/services-analytics-widget-key.enum.js';
+import { ServicesAnalyticsContext } from '../interfaces/services-analytics-context.interface.js';
+
+const COMPLETED_STATUSES: BookingStatus[] = [BookingStatus.COMPLETED];
+const DEMAND_TOP_N = 5;
+
+@Injectable()
+export class ServicesAnalyticsService {
+  constructor(
+    private readonly rangeService: DashboardRangeService,
+    private readonly aggregates: BookingsAggregatesService,
+    private readonly metricFactory: DashboardMetricFactory,
+    private readonly seriesFactory: DashboardSeriesFactory,
+    private readonly buckets: DashboardBucketFactory,
+  ) {}
+
+  async getWidgets(
+    locationId: string,
+    dto: ServicesAnalyticsRequestDto,
+  ): Promise<WidgetDto[]> {
+    const ctx = await this.buildContext(locationId, dto);
+    return dto.keys.map((key) => this.buildWidget(key, ctx));
+  }
+
+  private buildWidget(
+    key: ServicesAnalyticsWidgetKey,
+    ctx: ServicesAnalyticsContext,
+  ): WidgetDto {
+    switch (key) {
+      case ServicesAnalyticsWidgetKey.SERVICES_COMPLETED_COUNT:
+        return this.completedCountMetric(key, ctx);
+      case ServicesAnalyticsWidgetKey.REVENUE_PER_HOUR:
+        return this.revenuePerHourMetric(key, ctx);
+      case ServicesAnalyticsWidgetKey.SERVICES_DEMAND_BREAKDOWN:
+        return this.demandBreakdown(key, ctx);
+      default: {
+        const _exhaustive: never = key;
+        throw new Error(
+          `Unhandled services-analytics widget key: ${_exhaustive}`,
+        );
+      }
+    }
+  }
+
+  // ── widgets ──────────────────────────────────────────────────────────────
+
+  private completedCountMetric(
+    key: ServicesAnalyticsWidgetKey,
+    ctx: ServicesAnalyticsContext,
+  ): WidgetDto {
+    const value = countFor(ctx.currentSnapshot, COMPLETED_STATUSES);
+    const previousValue = ctx.previousSnapshot
+      ? countFor(ctx.previousSnapshot, COMPLETED_STATUSES)
+      : undefined;
+    return {
+      key,
+      kind: WidgetKind.METRIC,
+      metric: this.metricFactory.build({
+        value,
+        previousValue,
+        unit: MetricUnit.COUNT,
+        higherIsBetter: true,
+        spark: this.seriesFactory.spark(ctx.range, ctx.currentSeries, 'count'),
+      }),
+      meta: this.buildMeta(ctx, false),
+    };
+  }
+
+  private revenuePerHourMetric(
+    key: ServicesAnalyticsWidgetKey,
+    ctx: ServicesAnalyticsContext,
+  ): WidgetDto {
+    const value = revenuePerHour(ctx.currentSnapshot, COMPLETED_STATUSES);
+    const previousValue = ctx.previousSnapshot
+      ? revenuePerHour(ctx.previousSnapshot, COMPLETED_STATUSES)
+      : undefined;
+    return {
+      key,
+      kind: WidgetKind.METRIC,
+      metric: this.metricFactory.build({
+        value,
+        previousValue,
+        unit: MetricUnit.CURRENCY,
+        higherIsBetter: true,
+        spark: this.buildRevenuePerHourSpark(ctx),
+      }),
+      meta: this.buildMeta(ctx, true),
+    };
+  }
+
+  private demandBreakdown(
+    key: ServicesAnalyticsWidgetKey,
+    ctx: ServicesAnalyticsContext,
+  ): WidgetDto {
+    const rows = ctx.currentServiceCounts ?? [];
+    const sorted = [...rows].sort((a, b) => b.count - a.count);
+    const total = sorted.reduce((s, r) => s + r.count, 0);
+
+    const head = sorted.slice(0, DEMAND_TOP_N);
+    const items: WidgetBreakdownItemDto[] = head.map((r) =>
+      breakdownItem(r, total),
+    );
+
+    const tail = sorted.slice(DEMAND_TOP_N);
+    if (tail.length > 0) {
+      const tailCount = tail.reduce((s, r) => s + r.count, 0);
+      items.push({
+        id: null,
+        label: 'Other',
+        value: tailCount,
+        sharePct: sharePct(tailCount, total),
+      });
+    }
+
+    return {
+      key,
+      kind: WidgetKind.BREAKDOWN,
+      breakdown: { dimension: 'service', items, total },
+      meta: this.buildMeta(ctx, false),
+    };
+  }
+
+  // ── data plumbing ────────────────────────────────────────────────────────
+
+  private async buildContext(
+    locationId: string,
+    dto: ServicesAnalyticsRequestDto,
+  ): Promise<ServicesAnalyticsContext> {
+    const range = await this.rangeService.resolve(locationId, dto);
+    const currentRange: AggregateRange = {
+      locationId,
+      from: range.from,
+      to: range.to,
+    };
+    const previousRange: AggregateRange = {
+      locationId,
+      from: range.previousFrom,
+      to: range.previousTo,
+    };
+
+    const needsCurrentSnapshot = this.needsAnyMetric(dto.keys);
+    const needsPreviousSnapshot =
+      needsCurrentSnapshot && range.compareWithPrevious;
+    const needsSeries = this.needsAnySpark(dto.keys);
+    const needsBreakdown = dto.keys.includes(
+      ServicesAnalyticsWidgetKey.SERVICES_DEMAND_BREAKDOWN,
+    );
+
+    const [
+      currentSnapshot,
+      previousSnapshot,
+      currentSeries,
+      currentServiceCounts,
+    ] = await Promise.all([
+      needsCurrentSnapshot
+        ? this.aggregates.snapshot(currentRange)
+        : Promise.resolve(emptySnapshot()),
+      needsPreviousSnapshot
+        ? this.aggregates.snapshot(previousRange)
+        : Promise.resolve(undefined),
+      needsSeries
+        ? this.aggregates.series(
+            {
+              ...currentRange,
+              granularity: range.granularity,
+              timezone: range.timezone,
+              statuses: COMPLETED_STATUSES,
+            },
+            false,
+          )
+        : Promise.resolve([] as SeriesRow[]),
+      needsBreakdown
+        ? this.aggregates.countByService(currentRange, COMPLETED_STATUSES)
+        : Promise.resolve(undefined),
+    ]);
+
+    return {
+      locationId,
+      range,
+      currentSnapshot,
+      previousSnapshot,
+      currentSeries,
+      currentServiceCounts,
+    };
+  }
+
+  private buildRevenuePerHourSpark(ctx: ServicesAnalyticsContext): number[] {
+    // Delegate bucket alignment to the factory so empty buckets get zeros just like count-based
+    // sparks; each bucket's ratio is revenue / (duration_minutes / 60).
+    const revenueByBucket = this.seriesFactory.spark(
+      ctx.range,
+      ctx.currentSeries,
+      'revenue',
+    );
+    const durationByBucket = this.buildDurationSpark(ctx);
+    return revenueByBucket.map((rev, i) => {
+      const durationMinutes = durationByBucket[i] ?? 0;
+      return durationMinutes > 0 ? rev / (durationMinutes / 60) : 0;
+    });
+  }
+
+  private buildDurationSpark(ctx: ServicesAnalyticsContext): number[] {
+    // seriesFactory.spark only understands 'revenue' | 'count'; project duration ourselves
+    // using the same bucket set the factory uses so both arrays line up positionally.
+    const bucketStarts = this.buckets.bucketStarts(ctx.range);
+    const byBucket = new Map<number, number>();
+    for (const r of ctx.currentSeries)
+      byBucket.set(r.bucket.getTime(), r.duration);
+    return bucketStarts.map((b) => byBucket.get(b.getTime()) ?? 0);
+  }
+
+  private needsAnyMetric(keys: ServicesAnalyticsWidgetKey[]): boolean {
+    return keys.some(
+      (k) =>
+        k === ServicesAnalyticsWidgetKey.SERVICES_COMPLETED_COUNT ||
+        k === ServicesAnalyticsWidgetKey.REVENUE_PER_HOUR,
+    );
+  }
+
+  private needsAnySpark(keys: ServicesAnalyticsWidgetKey[]): boolean {
+    return this.needsAnyMetric(keys);
+  }
+
+  private buildMeta(
+    ctx: ServicesAnalyticsContext,
+    withCurrency: boolean,
+  ): WidgetMetaDto {
+    return {
+      period: this.buckets.periodDto(ctx.range),
+      previousPeriod: ctx.range.compareWithPrevious
+        ? this.buckets.previousPeriodDto(ctx.range)
+        : undefined,
+      currency: withCurrency ? ctx.range.currency : undefined,
+    };
+  }
+}
+
+function countFor(snap: AggregateSnapshot, statuses: BookingStatus[]): number {
+  let sum = 0;
+  for (const s of statuses) sum += snap.byStatus.get(s)?.count ?? 0;
+  return sum;
+}
+
+function revenueFor(
+  snap: AggregateSnapshot,
+  statuses: BookingStatus[],
+): Prisma.Decimal {
+  let sum = MoneyUtils.decimal(0);
+  for (const s of statuses) sum = sum.plus(snap.byStatus.get(s)?.revenue ?? 0);
+  return sum;
+}
+
+function durationFor(
+  snap: AggregateSnapshot,
+  statuses: BookingStatus[],
+): number {
+  let sum = 0;
+  for (const s of statuses) sum += snap.byStatus.get(s)?.duration ?? 0;
+  return sum;
+}
+
+function revenuePerHour(
+  snap: AggregateSnapshot,
+  statuses: BookingStatus[],
+): number {
+  const revenue = revenueFor(snap, statuses);
+  const durationMinutes = durationFor(snap, statuses);
+  if (durationMinutes <= 0) return 0;
+  return Number(
+    MoneyUtils.format(
+      MoneyUtils.quantize(revenue.mul(60).div(durationMinutes)),
+    ),
+  );
+}
+
+function sharePct(part: number, total: number): number {
+  return total > 0 ? +((part / total) * 100).toFixed(1) : 0;
+}
+
+function breakdownItem(
+  row: ServiceCount,
+  total: number,
+): WidgetBreakdownItemDto {
+  return {
+    id: row.serviceId,
+    label: row.serviceTitle,
+    value: row.count,
+    secondaryValue: Number(MoneyUtils.format(row.revenue)),
+    sharePct: sharePct(row.count, total),
+  };
+}
+
+function emptySnapshot(): AggregateSnapshot {
+  return {
+    byStatus: new Map(),
+    totalCount: 0,
+    totalRevenue: MoneyUtils.decimal(0),
+    totalDuration: 0,
+  };
+}

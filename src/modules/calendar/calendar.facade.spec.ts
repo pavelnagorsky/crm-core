@@ -11,8 +11,7 @@ import { DatabaseService } from '../../database/database.service.js';
 import { TimeUtils } from '../../shared/time/time.utils.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { LocationService } from '../location/services/location.service.js';
-import { ServiceBundleService } from '../services/catalog/service-bundle.service.js';
-import { ServicesService } from '../services/services.service.js';
+import { ServiceCatalogFacade } from '../services/catalog/service-catalog.facade.js';
 import { StaffService } from '../staff/services/staff.service.js';
 import { CalendarCalculator } from './calculators/calendar.calculator.js';
 import { CalendarFacade } from './calendar.facade.js';
@@ -87,8 +86,7 @@ describe('CalendarFacade.update', () => {
         { provide: DatabaseService, useValue: db },
         { provide: StaffService, useValue: {} },
         { provide: LocationService, useValue: {} },
-        { provide: ServicesService, useValue: {} },
-        { provide: ServiceBundleService, useValue: {} },
+        { provide: ServiceCatalogFacade, useValue: {} },
         { provide: CalendarCalculator, useValue: {} },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
       ],
@@ -170,8 +168,7 @@ describe('CalendarFacade.moveOccurrence', () => {
         { provide: DatabaseService, useValue: db },
         { provide: StaffService, useValue: {} },
         { provide: LocationService, useValue: {} },
-        { provide: ServicesService, useValue: {} },
-        { provide: ServiceBundleService, useValue: {} },
+        { provide: ServiceCatalogFacade, useValue: {} },
         { provide: CalendarCalculator, useValue: {} },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
       ],
@@ -272,7 +269,7 @@ describe('CalendarFacade.getManualAvailableSlots', () => {
   };
   const location = { findById: vi.fn(() => db.location.findUnique()) };
   const services = {
-    resolveActiveForBooking: vi.fn(() => db.service.findMany()),
+    resolveServicesForBooking: vi.fn(() => db.service.findMany()),
   };
   const compute = {
     groupShiftsByStaffDate: vi.fn().mockReturnValue(new Map()),
@@ -317,8 +314,7 @@ describe('CalendarFacade.getManualAvailableSlots', () => {
         { provide: DatabaseService, useValue: db },
         { provide: StaffService, useValue: staff },
         { provide: LocationService, useValue: location },
-        { provide: ServicesService, useValue: services },
-        { provide: ServiceBundleService, useValue: {} },
+        { provide: ServiceCatalogFacade, useValue: services },
         { provide: CalendarCalculator, useValue: compute },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
       ],
@@ -488,8 +484,7 @@ describe('CalendarFacade.getCalendar', () => {
         { provide: DatabaseService, useValue: db },
         { provide: StaffService, useValue: staff },
         { provide: LocationService, useValue: business },
-        { provide: ServicesService, useValue: {} },
-        { provide: ServiceBundleService, useValue: {} },
+        { provide: ServiceCatalogFacade, useValue: {} },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
       ],
     }).compile();

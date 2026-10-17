@@ -66,7 +66,11 @@
 | StaffService | Сотрудники, смены, выполняемые услуги и привязка профиля к доступу. |
 | ClientsService | Клиенты, запреты публичной записи, поиск и разрешение клиента для бронирования. |
 | ServiceCatalogReadService / ServiceCatalogItemFactory | Выбор страницы из ServiceCatalogView и построение карточек из данных владельцев. |
-| ServiceCatalogFacade / ServicesService / ServiceBundleService | Объединённый каталог, услуги/категории и bundles соответственно. |
+| [ServiceCatalogFacade](../../src/modules/services/catalog/service-catalog.facade.ts) | Единый публичный API чтения каталога для других доменов. |
+| ServiceReadService / ServiceBundleReadService | Приватное чтение услуг и бандлов в ServiceCatalogModule. |
+| ServiceCategoriesService | Чтение и изменение категорий, аудит; используется каталогом. |
+| ServiceWriteService / ServiceBundleWriteService | Запись услуг и бандлов, статусы, удаление и аудит; не экспортируются. |
+| ServicesAnalyticsService | Виджеты услуг через агрегаты бронирований; дочерний сценарий ServicesModule. |
 | ProductsService | Товары, категории и настройки товаров по филиалам. |
 | DashboardFacade / DashboardContextService | Координация виджетов и загрузка необходимых агрегатов. |
 | DashboardWidgetFactory / DashboardMetricFactory / DashboardSeriesFactory / DashboardBucketFactory | Построение представлений и календарных интервалов без обращений к БД. |
@@ -75,3 +79,5 @@
 | NotificationsService / EmailChannel / EmailRenderer | Обработка событий уведомлений, доставка email и рендеринг шаблонов. |
 | FilesService | Метаданные файлов и интеграция с хранилищем. |
 | MoneyUtils / UnitCostUtils / QuantityUtils / TimeUtils / XlsxUtils | Статические утилиты, не DI-сервисы. |
+
+Иерархия модулей и восстановление SQL view: [services-catalog.md](./services-catalog.md).

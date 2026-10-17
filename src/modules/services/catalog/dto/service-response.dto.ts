@@ -1,0 +1,71 @@
+import { ApiProperty } from '@nestjs/swagger';
+import { ApiPrice } from '../../../../shared/decorators/api-decimal.decorator.js';
+import { FileResponseDto } from '../../../../shared/dto/file-response.dto.js';
+import { MoneyUtils } from '../../../../shared/money/money.utils.js';
+import { ServiceStatus } from '../../enums/service-status.enum.js';
+import { ServiceWithStaffCount } from '../interfaces/service-with-staff-count.interface.js';
+
+export class ServiceResponseDto {
+  @ApiProperty({ type: String })
+  id: string;
+
+  @ApiProperty({ type: String })
+  locationId: string;
+
+  @ApiProperty({ type: String, nullable: true })
+  categoryId: string | null;
+
+  @ApiProperty({ type: () => FileResponseDto, nullable: true })
+  image: FileResponseDto | null;
+
+  @ApiProperty({ type: String })
+  title: string;
+
+  @ApiProperty({ type: String, nullable: true })
+  description: string | null;
+
+  @ApiPrice()
+  price: string;
+
+  @ApiProperty({ type: Number })
+  durationMinutes: number;
+
+  @ApiProperty({ type: Number })
+  bufferMinutes: number;
+
+  @ApiProperty({ enum: ServiceStatus, enumName: 'ServiceStatus' })
+  status: ServiceStatus;
+
+  @ApiProperty({ type: Boolean })
+  hasNoStaff: boolean;
+
+  @ApiProperty({ type: Number })
+  sortOrder: number;
+
+  @ApiProperty({ type: Date })
+  createdAt: Date;
+
+  @ApiProperty({ type: Date })
+  updatedAt: Date;
+
+  static fromEntity(service: ServiceWithStaffCount): ServiceResponseDto {
+    const dto = new ServiceResponseDto();
+    dto.id = service.id;
+    dto.locationId = service.locationId;
+    dto.categoryId = service.categoryId;
+    dto.image = service.imageFile
+      ? FileResponseDto.fromEntity(service.imageFile)
+      : null;
+    dto.title = service.title;
+    dto.description = service.description;
+    dto.price = MoneyUtils.format(service.price);
+    dto.durationMinutes = service.durationMinutes;
+    dto.bufferMinutes = service.bufferMinutes;
+    dto.status = service.status;
+    dto.hasNoStaff = service._count.staffServices === 0;
+    dto.sortOrder = service.sortOrder;
+    dto.createdAt = service.createdAt;
+    dto.updatedAt = service.updatedAt;
+    return dto;
+  }
+}

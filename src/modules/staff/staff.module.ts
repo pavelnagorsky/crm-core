@@ -2,7 +2,7 @@ import { Module } from '@nestjs/common';
 import { I18nModule } from '../../shared/i18n/i18n.module.js';
 import { AccessModule } from '../access/access.module.js';
 import { LocationModule } from '../location/location.module.js';
-import { ServicesModule } from '../services/services.module.js';
+import { ServiceCatalogModule } from '../services/catalog/service-catalog.module.js';
 import { UserModule } from '../user/user.module.js';
 import { StaffController } from './controllers/staff.controller.js';
 import { StaffKpiController } from './kpi/controllers/staff-kpi.controller.js';
@@ -12,7 +12,7 @@ import { StaffService } from './services/staff.service.js';
 
 @Module({
   imports: [
-    ServicesModule,
+    ServiceCatalogModule,
     LocationModule,
     I18nModule,
     AccessModule,

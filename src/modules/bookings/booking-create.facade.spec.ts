@@ -60,10 +60,10 @@ type CatalogServiceRow = {
 function catalogDeps(db: {
   service: { findMany: () => Promise<CatalogServiceRow[]> };
   location: { findUnique: () => Promise<unknown> };
-}): [never, never, never] {
+}): [never, never] {
   return [
     {
-      resolveActiveForBooking: vi.fn(
+      resolveServicesForBooking: vi.fn(
         async (_locationId: string, serviceIds: string[]) => {
           const rows = await db.service.findMany();
           const byId = new Map(rows.map((row) => [row.id, row]));
@@ -71,7 +71,6 @@ function catalogDeps(db: {
         },
       ),
     } as never,
-    { resolveActiveForBooking: vi.fn() } as never,
     {
       findById: vi.fn(() => db.location.findUnique()),
       acquireActiveOperationLock: vi.fn().mockResolvedValue(true),
@@ -1006,7 +1005,6 @@ function createBookingService(
   compute: OrderPricingCalculator,
   earnings: ConstructorParameters<typeof BookingReservationService>[5],
   services: ConstructorParameters<typeof BookingSelectionService>[1],
-  bundles: ConstructorParameters<typeof BookingSelectionService>[2],
   location: ConstructorParameters<typeof BookingReservationService>[1],
 ): BookingCreateFacade {
   const slots = new BookingSlotLockService(staff, calendar);
@@ -1014,7 +1012,7 @@ function createBookingService(
     clients,
     limiter,
     location,
-    new BookingSelectionService(location, services, bundles, orders),
+    new BookingSelectionService(location, services, orders),
     new BookingSchedulingService(db, staff, calendar),
     new BookingEventsService(emitter, clientTokens, location),
     new BookingReservationService(

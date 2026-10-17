@@ -12,8 +12,9 @@
 | `Location`                                                      | `LocationService` / guards доступа                           | `LocationService`                                                                          | Членство и permissions принадлежат AccessModule.                 |
 | `BrandMembership`, `LocationMembership`, permission overrides, `AccessInvitation`, grants | `AccessModule` | `AccessService`, `AccessAdministrationService` через `AccessManagementFacade` | Изменения выполняются с проверкой актуальных прав под блокировкой. |
 | `Client`                                                                              | `ClientsService`                                             | `ClientsService`                                                                           | Booking/order flow должны резолвить клиента через `ClientsService`.                       |
-| `ServiceCategory`, `Service`                                                          | `ServicesService`                                            | `ServicesService`, `ServiceCatalogFacade`                                                 | Для каталога лучше использовать `ServiceCatalogFacade`.                                  |
-| `ServiceBundle`, `ServiceBundleItem`                                                  | `ServiceBundleService`                                       | `ServiceBundleService`, `ServiceCatalogFacade`                                            | Booking setup не должен вручную пересобирать правила каталога bundle.                     |
+| `ServiceCategory` | `ServiceCategoriesService` | `ServiceCatalogFacade` для каталога бронирования | Категории управляются в ServiceCategoriesModule. |
+| `Service` | `ServiceReadService`, `ServiceWriteService` | `ServiceCatalogFacade` | Чтение приватно для каталога; запись приватна для ServiceWriteModule. |
+| `ServiceBundle`, `ServiceBundleItem` | `ServiceBundleReadService`, `ServiceBundleWriteService` | `ServiceCatalogFacade` | Чтение приватно для каталога; запись и проверка состава находятся в ServiceBundleWriteModule. |
 | `Staff`, `StaffShift`, `StaffService`                              | `StaffService`                                               | `StaffService`                                                                             | KPI/export/cleanup helpers остаются внутри Staff module.                                  |
 | `CalendarEvent`, `CalendarEventCancelledOccurrence`                                   | `CalendarFacade` facade, реализация в calendar sub-services | `CalendarFacade`                                                                          | `CalendarCalculator` приватный для Calendar и не экспортируется.                      |
 | `Booking`, `BookingItem`                                                              | `BookingsFacade` facade, реализация в booking sub-services  | `BookingsFacade`, `BookingCreateFacade`, `BookingCalendarReadService` где экспортированы | Создание, мутации и чтение разделены внутри модуля.                                       |
@@ -46,8 +47,7 @@
 ```mermaid
 flowchart LR
   StaffService[StaffService\nstaff, shifts, staff services]
-  ServicesService[ServicesService\nservices, categories]
-  ServiceBundleService[ServiceBundleService\nbundles]
+  ServiceCatalogFacade[ServiceCatalogFacade\nservices, categories, bundles]
   CalendarFacade[CalendarFacade\ncalendar events and availability]
   ClientsService[ClientsService\nclients]
   BookingsFacade[BookingsFacade\nbooking facade]
@@ -59,14 +59,13 @@ flowchart LR
   BookingCreateFacade --> CalendarFacade
   BookingCreateFacade --> ClientsService
   BookingCreateFacade --> StaffService
-  BookingCreateFacade --> ServicesService
-  BookingCreateFacade --> ServiceBundleService
+  BookingCreateFacade --> BookingSelectionService
+  BookingSelectionService --> ServiceCatalogFacade
   BookingCreateFacade --> OrdersFacade
   BookingCreateFacade --> StaffEarningsService
 
   CalendarFacade --> StaffService
-  CalendarFacade --> ServicesService
-  CalendarFacade --> ServiceBundleService
+  CalendarFacade --> ServiceCatalogFacade
 
   OrdersFacade --> InventoryFacade
   OrdersFacade --> StaffEarningsService

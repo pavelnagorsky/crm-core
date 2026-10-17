@@ -11,8 +11,7 @@ import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { LocationService } from '../../location/services/location.service.js';
 import { OrderPricingLine } from '../../orders/interfaces/order-pricing-line.interface.js';
 import { OrdersFacade } from '../../orders/orders.facade.js';
-import { ServiceBundleService } from '../../services/catalog/service-bundle.service.js';
-import { ServicesService } from '../../services/services.service.js';
+import { ServiceCatalogFacade } from '../../services/catalog/service-catalog.facade.js';
 import { BookingPricingRequestDto } from '../dto/booking-pricing-request.dto.js';
 import { ManualBookingItemDto } from '../dto/manual-booking-item.dto.js';
 import { BookingPricingResult } from '../interfaces/booking-pricing-result.interface.js';
@@ -24,8 +23,7 @@ import { ResolvedBookingSelection } from '../interfaces/resolved-booking-selecti
 export class BookingSelectionService {
   constructor(
     private readonly locationService: LocationService,
-    private readonly servicesService: ServicesService,
-    private readonly serviceBundles: ServiceBundleService,
+    private readonly serviceCatalog: ServiceCatalogFacade,
     private readonly orders: OrdersFacade,
   ) {}
 
@@ -81,7 +79,7 @@ export class BookingSelectionService {
     }
 
     if (dto.bundleId) {
-      const bundle = await this.serviceBundles.resolveActiveForBooking(
+      const bundle = await this.serviceCatalog.resolveBundleForBooking(
         locationId,
         dto.bundleId,
       );
@@ -124,7 +122,7 @@ export class BookingSelectionService {
         HttpStatus.NOT_FOUND,
       );
 
-    const services = await this.servicesService.resolveActiveForBooking(
+    const services = await this.serviceCatalog.resolveServicesForBooking(
       locationId,
       serviceIds,
     );
