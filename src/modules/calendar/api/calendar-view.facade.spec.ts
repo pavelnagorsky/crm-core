@@ -55,6 +55,11 @@ describe('CalendarViewFacade', () => {
 
     await service.getManualAvailableSlots('location-1', dto);
 
+    expect(bookings.linkedCalendarEventIdsForBooking).toHaveBeenCalledWith(
+      'location-1',
+      'booking-1',
+      undefined,
+    );
     expect(calendar.getManualAvailableSlots).toHaveBeenCalledWith(
       'location-1',
       dto,

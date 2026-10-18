@@ -103,8 +103,9 @@ export class BookingsFacade {
   async search(
     locationId: string,
     dto: BookingSearchRequestDto,
+    participantStaffId?: string,
   ): Promise<PaginatedResult<BookingWithItems>> {
-    return this.read.search(locationId, dto);
+    return this.read.search(locationId, dto, participantStaffId);
   }
 
   async cancel(
@@ -129,7 +130,8 @@ export class BookingsFacade {
 
   async getStatusCounts(
     locationId: string,
+    participantStaffId?: string,
   ): Promise<{ status: BookingStatus; count: number }[]> {
-    return this.read.getStatusCounts(locationId);
+    return this.read.getStatusCounts(locationId, participantStaffId);
   }
 }

@@ -42,7 +42,7 @@ describe('Editable access policy', () => {
       policy.entries.some(
         (entry) => entry.permission === Permission.CLIENT_READ,
       ),
-    ).toBe(false);
+    ).toBe(true);
   });
 
   it('limits location settings to configurable local permissions', async () => {

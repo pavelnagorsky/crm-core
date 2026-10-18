@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
@@ -28,6 +29,7 @@ import { auditActorFromToken } from '../../../audit/utils/audit-actor-from-token
 import { Permissions } from '../../../auth/decorators/permissions.decorator.js';
 import { TokenPayload } from '../../../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../../../auth/dto/token-payload.dto.js';
+import { BookingAccessService } from '../../../bookings/services/booking-access.service.js';
 import { CalendarFacade } from '../../calendar.facade.js';
 import { AvailableSlotsDayDto } from '../../dto/available-slots-day.dto.js';
 import { AvailableSlotsRequestDto } from '../../dto/available-slots-request.dto.js';
@@ -47,6 +49,7 @@ export class CalendarController {
   constructor(
     private readonly calendar: CalendarFacade,
     private readonly calendarView: CalendarViewFacade,
+    private readonly access: BookingAccessService,
   ) {}
 
   // ─── Public ──────────────────────────────────────────────────────────────────
@@ -73,15 +76,17 @@ export class CalendarController {
   @ApiOkResponse({ type: ApiResponseArray(AvailableSlotsDayDto) })
   @ApiNotFoundResponse({ description: 'Location or service not found' })
   @ApiBadRequestResponse({ description: 'Date range is longer than 62 days' })
-  @Permissions(Permission.BOOKING_READ)
+  @Permissions([Permission.BOOKING_READ, Permission.BOOKING_READ_OWN])
   @Get('available-slots')
   async getManualAvailableSlots(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Query() dto: ManualAvailableSlotsRequestDto,
+    @TokenPayload() token: TokenPayloadDto,
   ): Promise<BaseResponseDto<AvailableSlotsDayDto[]>> {
     const days = await this.calendarView.getManualAvailableSlots(
       locationId,
       dto,
+      await this.access.readStaffId(token, locationId),
     );
     return BaseResponseDto.success(days);
   }
@@ -93,13 +98,18 @@ export class CalendarController {
       'Get calendar view for a date range. Blocks, bookings, and closed time in the business timezone. Recurring blocks are expanded onto each occurrence.',
   })
   @ApiOkResponse({ type: ApiResponse(GetCalendarResponseDto) })
-  @Permissions(Permission.BOOKING_READ)
+  @Permissions([Permission.BOOKING_READ, Permission.BOOKING_READ_OWN])
   @Get()
   async getCalendar(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Query() dto: GetCalendarRequestDto,
+    @TokenPayload() token: TokenPayloadDto,
   ): Promise<BaseResponseDto<GetCalendarResponseDto>> {
-    const result = await this.calendarView.getCalendar(locationId, dto);
+    const staffId = await this.access.readStaffId(token, locationId);
+    const result = await this.calendarView.getCalendar(
+      locationId,
+      staffId ? { ...dto, staffIds: [staffId] } : dto,
+    );
     return BaseResponseDto.success(result);
   }
 
@@ -109,13 +119,17 @@ export class CalendarController {
   })
   @ApiOkResponse({ type: ApiResponse(CalendarEventResponseDto) })
   @ApiNotFoundResponse({ description: 'Calendar event not found' })
-  @Permissions(Permission.BOOKING_READ)
+  @Permissions([Permission.BOOKING_READ, Permission.BOOKING_READ_OWN])
   @Get(':eventId')
   async getEvent(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('eventId', ParseUUIDPipe) eventId: string,
+    @TokenPayload() token: TokenPayloadDto,
   ): Promise<BaseResponseDto<CalendarEventResponseDto>> {
+    const staffId = await this.access.readStaffId(token, locationId);
     const event = await this.calendar.findInLocation(locationId, eventId);
+    if (staffId && event.staffId !== null && event.staffId !== staffId)
+      throw new ForbiddenException('Access denied');
     return BaseResponseDto.success(CalendarEventResponseDto.fromEntity(event));
   }
 

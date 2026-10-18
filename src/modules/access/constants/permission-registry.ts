@@ -62,20 +62,32 @@ export const PERMISSION_REGISTRY: Readonly<
   [Permission.CALENDAR_BLOCKS_MANAGE]: {
     scope: PermissionScope.LOCATION,
     defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER, BusinessRole.STAFF],
+    configurable: [BusinessRole.MANAGER],
     dependencies: [Permission.BOOKING_READ],
   },
   [Permission.BOOKING_READ]: {
     scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF],
+    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
+    configurable: [BusinessRole.STAFF],
+    dependencies: [],
+  },
+  [Permission.BOOKING_READ_OWN]: {
+    scope: PermissionScope.LOCATION,
+    defaults: [BusinessRole.OWNER, BusinessRole.STAFF],
     configurable: [BusinessRole.STAFF],
     dependencies: [],
   },
   [Permission.BOOKING_MANAGE]: {
     scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF],
-    configurable: [BusinessRole.MANAGER, BusinessRole.STAFF],
+    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
+    configurable: [BusinessRole.MANAGER],
     dependencies: [Permission.BOOKING_READ],
+  },
+  [Permission.BOOKING_MANAGE_OWN]: {
+    scope: PermissionScope.LOCATION,
+    defaults: [BusinessRole.OWNER, BusinessRole.STAFF],
+    configurable: [BusinessRole.STAFF],
+    dependencies: [Permission.BOOKING_READ_OWN],
   },
   [Permission.BOOKING_DELETE]: {
     scope: PermissionScope.LOCATION,
@@ -86,55 +98,55 @@ export const PERMISSION_REGISTRY: Readonly<
   [Permission.BOOKING_EXPORT]: {
     scope: PermissionScope.LOCATION,
     defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER, BusinessRole.STAFF],
+    configurable: [BusinessRole.MANAGER],
     dependencies: [Permission.BOOKING_READ],
   },
   [Permission.BOOKING_CLIENT_TOKEN_ISSUE]: {
     scope: PermissionScope.LOCATION,
     defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER, BusinessRole.STAFF],
+    configurable: [BusinessRole.MANAGER],
     dependencies: [Permission.BOOKING_READ],
   },
   [Permission.ORDER_READ]: {
     scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF],
-    configurable: [BusinessRole.STAFF],
+    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
+    configurable: [],
     dependencies: [],
   },
   [Permission.ORDER_MANAGE]: {
     scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF],
-    configurable: [BusinessRole.MANAGER, BusinessRole.STAFF],
+    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
+    configurable: [BusinessRole.MANAGER],
     dependencies: [Permission.ORDER_READ],
   },
   [Permission.ORDER_RETURN]: {
     scope: PermissionScope.LOCATION,
     defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER, BusinessRole.STAFF],
+    configurable: [BusinessRole.MANAGER],
     dependencies: [Permission.ORDER_READ],
   },
   [Permission.ORDER_VOID]: {
     scope: PermissionScope.LOCATION,
     defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER, BusinessRole.STAFF],
+    configurable: [BusinessRole.MANAGER],
     dependencies: [Permission.ORDER_READ],
   },
   [Permission.SALE_PRICE_OVERRIDE]: {
     scope: PermissionScope.LOCATION,
     defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER, BusinessRole.STAFF],
+    configurable: [BusinessRole.MANAGER],
     dependencies: [],
   },
   [Permission.CLIENT_READ]: {
     scope: PermissionScope.SHARED,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF],
-    configurable: [],
+    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
+    configurable: [BusinessRole.STAFF],
     dependencies: [],
   },
   [Permission.CLIENT_MANAGE]: {
     scope: PermissionScope.SHARED,
     defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER, BusinessRole.STAFF],
+    configurable: [BusinessRole.MANAGER],
     dependencies: [Permission.CLIENT_READ],
   },
   [Permission.CLIENT_BAN]: {
@@ -152,7 +164,7 @@ export const PERMISSION_REGISTRY: Readonly<
   [Permission.CLIENT_EXPORT]: {
     scope: PermissionScope.SHARED,
     defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER, BusinessRole.STAFF],
+    configurable: [BusinessRole.MANAGER],
     dependencies: [Permission.CLIENT_READ],
   },
   [Permission.PRODUCT_READ]: {
@@ -194,7 +206,7 @@ export const PERMISSION_REGISTRY: Readonly<
   [Permission.SUPPLIER_READ]: {
     scope: PermissionScope.SHARED,
     defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER, BusinessRole.STAFF],
+    configurable: [BusinessRole.MANAGER],
     dependencies: [],
   },
   [Permission.SUPPLIER_MANAGE]: {
@@ -206,7 +218,7 @@ export const PERMISSION_REGISTRY: Readonly<
   [Permission.INVENTORY_READ]: {
     scope: PermissionScope.LOCATION,
     defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER, BusinessRole.STAFF],
+    configurable: [BusinessRole.MANAGER],
     dependencies: [],
   },
   [Permission.INVENTORY_MANAGE]: {
@@ -218,13 +230,19 @@ export const PERMISSION_REGISTRY: Readonly<
   [Permission.INVENTORY_EXPORT]: {
     scope: PermissionScope.LOCATION,
     defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER, BusinessRole.STAFF],
+    configurable: [BusinessRole.MANAGER],
     dependencies: [Permission.INVENTORY_READ],
   },
   [Permission.STAFF_READ]: {
     scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF],
+    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
     configurable: [],
+    dependencies: [],
+  },
+  [Permission.STAFF_READ_OWN]: {
+    scope: PermissionScope.LOCATION,
+    defaults: [BusinessRole.OWNER, BusinessRole.STAFF],
+    configurable: [BusinessRole.STAFF],
     dependencies: [],
   },
   [Permission.STAFF_MANAGE]: {
@@ -236,7 +254,7 @@ export const PERMISSION_REGISTRY: Readonly<
   [Permission.STAFF_EXPORT]: {
     scope: PermissionScope.LOCATION,
     defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER, BusinessRole.STAFF],
+    configurable: [BusinessRole.MANAGER],
     dependencies: [Permission.STAFF_READ],
   },
   [Permission.PAYROLL_READ]: {
@@ -245,10 +263,16 @@ export const PERMISSION_REGISTRY: Readonly<
     configurable: [BusinessRole.MANAGER],
     dependencies: [],
   },
+  [Permission.PAYROLL_READ_OWN]: {
+    scope: PermissionScope.LOCATION,
+    defaults: [BusinessRole.OWNER, BusinessRole.STAFF],
+    configurable: [BusinessRole.STAFF],
+    dependencies: [],
+  },
   [Permission.PAYROLL_MANAGE]: {
     scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
+    defaults: [BusinessRole.OWNER],
+    configurable: [],
     dependencies: [Permission.PAYROLL_READ],
   },
   [Permission.PAYROLL_EXPORT]: {
@@ -260,7 +284,7 @@ export const PERMISSION_REGISTRY: Readonly<
   [Permission.BOOKING_CHANNEL_READ]: {
     scope: PermissionScope.LOCATION,
     defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER, BusinessRole.STAFF],
+    configurable: [BusinessRole.MANAGER],
     dependencies: [],
   },
   [Permission.BOOKING_CHANNEL_MANAGE]: {
@@ -272,7 +296,7 @@ export const PERMISSION_REGISTRY: Readonly<
   [Permission.ANALYTICS_LOCATION_READ]: {
     scope: PermissionScope.LOCATION,
     defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER, BusinessRole.STAFF],
+    configurable: [BusinessRole.MANAGER],
     dependencies: [],
   },
   [Permission.ANALYTICS_BRAND_READ]: {
@@ -296,7 +320,7 @@ export const PERMISSION_REGISTRY: Readonly<
   [Permission.FILE_BRAND_MANAGE]: {
     scope: PermissionScope.SHARED,
     defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER, BusinessRole.STAFF],
+    configurable: [BusinessRole.MANAGER],
     dependencies: [],
   },
 };

@@ -124,6 +124,20 @@ export class StaffService {
       where: { location: ACTIVE_LOCATION_WHERE, userId, status: 'ACTIVE' },
     });
   }
+
+  async resolveOwnProfile(locationId: string, userId: string): Promise<Staff> {
+    const profile = await this.db.staff.findFirst({
+      where: {
+        location: ACTIVE_LOCATION_WHERE,
+        locationId,
+        userId,
+        status: StaffStatus.ACTIVE,
+      },
+    });
+    if (!profile)
+      throw new ForbiddenException('An active staff profile is required');
+    return profile;
+  }
   constructor(
     private readonly db: DatabaseService,
     private readonly eventEmitter: EventEmitter2,

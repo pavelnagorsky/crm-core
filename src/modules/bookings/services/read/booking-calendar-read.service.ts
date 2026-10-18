@@ -73,6 +73,7 @@ export class BookingCalendarReadService {
   async linkedCalendarEventIdsForBooking(
     locationId: string,
     bookingId: string,
+    participantStaffId?: string,
   ): Promise<string[]> {
     const booking = await this.db.booking.findFirst({
       where: {
@@ -80,6 +81,9 @@ export class BookingCalendarReadService {
         id: bookingId,
         locationId,
         deletedAt: null,
+        ...(participantStaffId
+          ? { items: { some: { staffId: participantStaffId } } }
+          : {}),
       },
       select: { items: { select: { calendarEventId: true } } },
     });

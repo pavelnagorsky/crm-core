@@ -91,7 +91,7 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `POST /locations/:locationId/bookings/analytics` | `analytics` | L: `analytics.location.read` | Дополнительных проверок payroll.read/inventory.read по показателям нет. |
+| `POST /locations/:locationId/bookings/analytics` | `analytics` | L: `analytics.location.read` или `booking.read.own` | При own-чтении сервер принудительно выбирает собственного исполнителя; общий booking.read это ограничение не снимает. |
 
 ## bookings
 
@@ -105,16 +105,16 @@
 | `GET /public/bookings/me` | `getByClientToken` | P: `booking-client-token` | Токен только этой записи; бизнес-роль не требуется. |
 | `POST /public/bookings/me/cancel` | `cancelByClientToken` | P: `booking-client-token` | Действующая клиентская политика отмены; не обход к возврату произвольного заказа. |
 | `POST /locations/:locationId/bookings/manual` | `createManual` | L: `booking.manage` | Произвольная цена: также sale.price.override. Товары: order.manage. Клиент находится или создаётся автоматически независимо от client.manage. WALK_IN с немедленным COMPLETED: order.manage. |
-| `GET /locations/:locationId/bookings/status-counts` | `getStatusCounts` | L: `booking.read` | — |
+| `GET /locations/:locationId/bookings/status-counts` | `getStatusCounts` | L: `booking.read` или `booking.read.own` | При own-чтении обязательно участие в записи; списки и счётчики ограничены до пагинации. |
 | `GET /locations/:locationId/bookings/export` | `export` | L: `booking.export` | — |
-| `GET /locations/:locationId/bookings/:id` | `findById` | L: `booking.read` | — |
-| `GET /locations/:locationId/bookings` | `search` | L: `booking.read` | — |
-| `PUT /locations/:locationId/bookings/:id` | `update` | L: `booking.manage` | Изменение/сброс произвольной цены: также sale.price.override. Меняет сведения клиента в записи, не создаёт и не редактирует общую карточку клиента. |
-| `PATCH /locations/:locationId/bookings/:id/status` | `updateStatus` | L: `booking.manage` | При проведении также order.manage; при сторнировании проведённого — order.return. |
+| `GET /locations/:locationId/bookings/:id` | `findById` | L: `booking.read` или `booking.read.own` | При own-чтении обязательно участие в записи; списки и счётчики ограничены до пагинации. |
+| `GET /locations/:locationId/bookings` | `search` | L: `booking.read` или `booking.read.own` | При own-чтении обязательно участие в записи; списки и счётчики ограничены до пагинации. |
+| `PUT /locations/:locationId/bookings/:id` | `update` | L: `booking.manage` или `booking.manage.own` | При own-праве достаточно участия в одной услуге; действие над всей записью. Изменение цены требует sale.price.override; завершённую запись STAFF не редактирует. |
+| `PATCH /locations/:locationId/bookings/:id/status` | `updateStatus` | L: `booking.manage` или `booking.manage.own` | При own-праве достаточно участия в одной услуге. Завершение проводит услуги/начисления без order.manage; отмена или откат завершённого требуют order.return. |
 | `POST /locations/:locationId/bookings/:id/products` | `addProduct` | L: `booking.read` + `order.manage` | Произвольная цена: также sale.price.override. Клиента не создаёт. |
 | `POST /locations/:locationId/bookings/:id/items` | `addItems` | L: `booking.read` + `order.manage` | Произвольная цена: также sale.price.override. Клиента не создаёт. |
 | `POST /locations/:locationId/bookings/:id/client-token` | `generateClientToken` | L: `booking.client-token.issue` | — |
-| `POST /locations/:locationId/bookings/:id/cancel` | `cancel` | L: `booking.manage` | При сторнировании проведённого — также order.return. |
+| `POST /locations/:locationId/bookings/:id/cancel` | `cancel` | L: `booking.manage` или `booking.manage.own` | При own-праве достаточно участия в одной услуге. Завершение проводит услуги/начисления без order.manage; отмена или откат завершённого требуют order.return. |
 | `DELETE /locations/:locationId/bookings/:id` | `delete` | L: `booking.delete` | При сторнировании проведённого — также order.return. |
 
 ## brand
@@ -137,9 +137,9 @@
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
 | `GET /locations/:locationId/calendar/public/available-slots` | `getAvailableSlots` | P: `public` | — |
-| `GET /locations/:locationId/calendar/available-slots` | `getManualAvailableSlots` | L: `booking.read` | — |
-| `GET /locations/:locationId/calendar` | `getCalendar` | L: `booking.read` | — |
-| `GET /locations/:locationId/calendar/:eventId` | `getEvent` | L: `booking.read` | — |
+| `GET /locations/:locationId/calendar/available-slots` | `getManualAvailableSlots` | L: `booking.read` или `booking.read.own` | При own-чтении свой календарь и общие блокировки; чужой блок по ID закрыт. Исключение событий при переносе требует участия в редактируемой записи. |
+| `GET /locations/:locationId/calendar` | `getCalendar` | L: `booking.read` или `booking.read.own` | При own-чтении свой календарь и общие блокировки; чужой блок по ID закрыт. Исключение событий при переносе требует участия в редактируемой записи. |
+| `GET /locations/:locationId/calendar/:eventId` | `getEvent` | L: `booking.read` или `booking.read.own` | При own-чтении свой календарь и общие блокировки; чужой блок по ID закрыт. Исключение событий при переносе требует участия в редактируемой записи. |
 | `POST /locations/:locationId/calendar` | `create` | L: `calendar.blocks.manage` | — |
 | `PUT /locations/:locationId/calendar/:eventId/occurrence` | `moveOccurrence` | L: `calendar.blocks.manage` | — |
 | `PUT /locations/:locationId/calendar/:eventId` | `update` | L: `calendar.blocks.manage` | — |
@@ -244,7 +244,7 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `POST /locations/:locationId/orders` | `create` | L: `order.manage` | Произвольная цена: также sale.price.override. confirmImmediately: также order.manage. Принимает существующий clientId; новый клиент создаётся отдельным API с G:client.create. |
+| `POST /locations/:locationId/orders` | `create` | L: `order.manage` | Произвольная цена: также sale.price.override. confirmImmediately: также order.manage. Принимает существующий clientId; новый клиент создаётся отдельным API с G:client.manage. |
 | `GET /locations/:locationId/orders` | `search` | L: `order.read` | — |
 | `GET /locations/:locationId/orders/status-counts` | `getStatusCounts` | L: `order.read` | — |
 | `GET /locations/:locationId/orders/:orderId` | `findById` | L: `order.read` | — |
@@ -273,8 +273,8 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `GET /locations/:locationId/payroll/earnings` | `search` | L: `payroll.read` | — |
-| `GET /locations/:locationId/staff/:id/earnings` | `listForStaff` | L: `payroll.read` | — |
+| `GET /locations/:locationId/payroll/earnings` | `search` | L: `payroll.read` или `payroll.read.own` | Own: принудительно свои начисления в списке; адресный запрос другого сотрудника запрещён. |
+| `GET /locations/:locationId/staff/:id/earnings` | `listForStaff` | L: `payroll.read` или `payroll.read.own` | Own: принудительно свои начисления в списке; адресный запрос другого сотрудника запрещён. |
 | `POST /locations/:locationId/staff/:id/earnings` | `createManual` | L: `payroll.manage` | — |
 | `POST /locations/:locationId/payroll/product-sales` | `recordProductSale` | L: `payroll.manage` | Создание комиссии без склада: payroll.manage, а не право обычной продажи. |
 
@@ -381,15 +381,16 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
+| `GET /locations/:locationId/staff/directory` | `directory` | L: `booking.read` или `booking.read.own` | Только id/name/roleTitle/status коллег; кадровые и контактные данные не возвращаются. |
 | `POST /locations/:locationId/staff` | `create` | L: `staff.manage` | — |
 | `PUT /locations/:locationId/staff/:id` | `update` | L: `staff.manage` | — |
 | `GET /locations/:locationId/staff/status-counts` | `getStatusCounts` | L: `staff.read` | — |
 | `GET /locations/:locationId/staff/export` | `export` | L: `staff.export` | — |
-| `GET /locations/:locationId/staff/:id` | `findById` | L: `staff.read` | — |
+| `GET /locations/:locationId/staff/:id` | `findById` | L: `staff.read` или `staff.read.own` | Own: только собственный активный профиль или его смены. |
 | `GET /locations/:locationId/staff` | `search` | L: `staff.read` | — |
 | `PATCH /locations/:locationId/staff/:id/status` | `changeStatus` | L: `staff.manage` | — |
 | `DELETE /locations/:locationId/staff/:id` | `delete` | L: `staff.manage` | — |
-| `GET /locations/:locationId/staff/:id/shifts` | `getShifts` | L: `staff.read` | — |
+| `GET /locations/:locationId/staff/:id/shifts` | `getShifts` | L: `staff.read` или `staff.read.own` | Own: только собственный активный профиль или его смены. |
 | `PUT /locations/:locationId/staff/:id/shifts` | `replaceShifts` | L: `staff.manage` | — |
 
 ## suppliers

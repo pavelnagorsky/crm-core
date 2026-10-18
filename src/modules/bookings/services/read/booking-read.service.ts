@@ -50,8 +50,9 @@ export class BookingReadService {
   async search(
     locationId: string,
     dto: BookingSearchRequestDto,
+    participantStaffId?: string,
   ): Promise<PaginatedResult<BookingWithItems>> {
-    const where = this.buildSearchWhere(locationId, dto);
+    const where = this.buildSearchWhere(locationId, dto, participantStaffId);
     const direction = dto.orderDirection ?? OrderDirection.DESC;
     const orderBy = dto.orderBy ?? BookingSearchOrderBy.START_AT;
 
@@ -79,10 +80,11 @@ export class BookingReadService {
 
   async getStatusCounts(
     locationId: string,
+    participantStaffId?: string,
   ): Promise<{ status: BookingStatus; count: number }[]> {
     const rows = await this.db.booking.groupBy({
       by: ['status'],
-      where: { deletedAt: null, location: ACTIVE_LOCATION_WHERE, locationId },
+      where: this.buildSearchWhere(locationId, {}, participantStaffId),
       _count: { _all: true },
     });
     return rows.map((r) => ({
@@ -105,7 +107,8 @@ export class BookingReadService {
 
   private buildSearchWhere(
     locationId: string,
-    dto: BookingSearchRequestDto,
+    dto: Partial<BookingSearchRequestDto>,
+    participantStaffId?: string,
   ): Prisma.BookingWhereInput {
     const where: Prisma.BookingWhereInput = {
       location: ACTIVE_LOCATION_WHERE,
@@ -120,6 +123,8 @@ export class BookingReadService {
       dto.catalogItemIds,
     );
     if (catalogFilter) where.AND = [catalogFilter];
+    if (participantStaffId)
+      where.items = { some: { staffId: participantStaffId } };
     if (dto.startFrom || dto.startTo) {
       where.startAt = {};
       if (dto.startFrom) {

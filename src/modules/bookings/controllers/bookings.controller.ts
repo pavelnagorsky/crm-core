@@ -66,6 +66,7 @@ import { BookingStatus } from '../enums/booking-status.enum.js';
 import { BookingExportRequestDto } from '../export/dto/booking-export-request.dto.js';
 import { BookingsExportService } from '../export/services/bookings-export.service.js';
 import { JwtBookingClientGuard } from '../guards/jwt-booking-client.guard.js';
+import { BookingAccessService } from '../services/booking-access.service.js';
 import { BookingClientTokenService } from '../services/booking-client-token.service.js';
 
 @ApiTags('Bookings')
@@ -76,6 +77,7 @@ export class BookingsController {
     private readonly bookingCreateService: BookingCreateFacade,
     private readonly bookingClientService: BookingClientTokenService,
     private readonly bookingsExportService: BookingsExportService,
+    private readonly access: BookingAccessService,
   ) {}
 
   // ─── Public ──────────────────────────────────────────────────────────────────
@@ -161,7 +163,7 @@ export class BookingsController {
 
   // ─── Owner / Staff ────────────────────────────────────────────────────────────
 
-  @ApiOperation({ summary: 'Create a booking manually (owner / staff)' })
+  @ApiOperation({ summary: 'Create a booking manually' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Location, service, or staff not found' })
   @ApiConflictResponse({ description: 'Slot is no longer available' })
@@ -194,12 +196,16 @@ export class BookingsController {
 
   @ApiOperation({ summary: 'Get booking count per status' })
   @ApiOkResponse({ type: ApiResponseArray(BookingStatusCountResponseDto) })
-  @Permissions(Permission.BOOKING_READ)
+  @Permissions([Permission.BOOKING_READ, Permission.BOOKING_READ_OWN])
   @Get('locations/:locationId/bookings/status-counts')
   async getStatusCounts(
     @Param('locationId', ParseUUIDPipe) locationId: string,
+    @TokenPayload() token: TokenPayloadDto,
   ): Promise<BaseResponseDto<BookingStatusCountResponseDto[]>> {
-    const counts = await this.bookings.getStatusCounts(locationId);
+    const counts = await this.bookings.getStatusCounts(
+      locationId,
+      await this.access.readStaffId(token, locationId),
+    );
     return BaseResponseDto.success(
       counts.map((r) => Object.assign(new BookingStatusCountResponseDto(), r)),
     );
@@ -227,25 +233,32 @@ export class BookingsController {
   @ApiOperation({ summary: 'Get booking by ID' })
   @ApiOkResponse({ type: ApiResponse(BookingResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking not found' })
-  @Permissions(Permission.BOOKING_READ)
+  @Permissions([Permission.BOOKING_READ, Permission.BOOKING_READ_OWN])
   @Get('locations/:locationId/bookings/:id')
   async findById(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
+    @TokenPayload() token: TokenPayloadDto,
   ): Promise<BaseResponseDto<BookingResponseDto>> {
     const booking = await this.bookings.findByIdInLocation(locationId, id);
+    await this.access.assertRead(token, booking);
     return BaseResponseDto.success(BookingResponseDto.fromEntity(booking));
   }
 
   @ApiOperation({ summary: 'Search bookings' })
   @ApiOkResponse({ type: ApiResponse(BookingSearchResponseDto) })
-  @Permissions(Permission.BOOKING_READ)
+  @Permissions([Permission.BOOKING_READ, Permission.BOOKING_READ_OWN])
   @Get('locations/:locationId/bookings')
   async search(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Query() dto: BookingSearchRequestDto,
+    @TokenPayload() token: TokenPayloadDto,
   ): Promise<BaseResponseDto<BookingSearchResponseDto>> {
-    const { items, totalItems } = await this.bookings.search(locationId, dto);
+    const { items, totalItems } = await this.bookings.search(
+      locationId,
+      dto,
+      await this.access.readStaffId(token, locationId),
+    );
     return BaseResponseDto.success(
       new BookingSearchResponseDto(
         items.map(BookingResponseDto.fromEntity),
@@ -257,11 +270,11 @@ export class BookingsController {
     );
   }
 
-  @ApiOperation({ summary: 'Update booking (owner / staff)' })
+  @ApiOperation({ summary: 'Update an accessible booking' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking not found' })
   @ApiConflictResponse({ description: 'Slot is no longer available' })
-  @Permissions(Permission.BOOKING_MANAGE)
+  @Permissions([Permission.BOOKING_MANAGE, Permission.BOOKING_MANAGE_OWN])
   @Put('locations/:locationId/bookings/:id')
   async update(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -270,6 +283,7 @@ export class BookingsController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
     const current = await this.bookings.findByIdInLocation(locationId, id);
+    await this.access.assertEdit(tokenPayload, current);
     if (
       dto.items?.some((patch) => {
         const previous = current.items.find(
@@ -296,7 +310,7 @@ export class BookingsController {
   @ApiOperation({ summary: 'Update booking status' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking not found' })
-  @Permissions(Permission.BOOKING_MANAGE)
+  @Permissions([Permission.BOOKING_MANAGE, Permission.BOOKING_MANAGE_OWN])
   @Patch('locations/:locationId/bookings/:id/status')
   async updateStatus(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -305,16 +319,12 @@ export class BookingsController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
     const current = await this.bookings.findByIdInLocation(locationId, id);
+    await this.access.assertManage(tokenPayload, current);
     if (
       current.status === BookingStatus.COMPLETED &&
       dto.status !== BookingStatus.COMPLETED
     )
       assertPermission(tokenPayload, Permission.ORDER_RETURN, locationId);
-    if (
-      current.status !== BookingStatus.COMPLETED &&
-      dto.status === BookingStatus.COMPLETED
-    )
-      assertPermission(tokenPayload, Permission.ORDER_MANAGE, locationId);
     const booking = await this.bookings.updateStatus(
       current,
       auditActorFromToken(tokenPayload, locationId),
@@ -385,7 +395,7 @@ export class BookingsController {
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking not found' })
   @ApiConflictResponse({ description: 'Booking is already cancelled' })
-  @Permissions(Permission.BOOKING_MANAGE)
+  @Permissions([Permission.BOOKING_MANAGE, Permission.BOOKING_MANAGE_OWN])
   @Post('locations/:locationId/bookings/:id/cancel')
   async cancel(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -394,6 +404,7 @@ export class BookingsController {
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
     const current = await this.bookings.findByIdInLocation(locationId, id);
+    await this.access.assertManage(tokenPayload, current);
     if (current.status === BookingStatus.COMPLETED)
       assertPermission(tokenPayload, Permission.ORDER_RETURN, locationId);
     const booking = await this.bookings.cancel(

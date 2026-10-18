@@ -22,6 +22,7 @@ import { auditActorFromToken } from '../../../audit/utils/audit-actor-from-token
 import { Permissions } from '../../../auth/decorators/permissions.decorator.js';
 import { TokenPayload } from '../../../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../../../auth/dto/token-payload.dto.js';
+import { StaffAccessService } from '../../../staff/services/staff-access.service.js';
 import { CreateManualEarningDto } from '../dto/create-manual-earning.dto.js';
 import { RecordProductSaleDto } from '../dto/record-product-sale.dto.js';
 import { StaffEarningResponseDto } from '../dto/staff-earning-response.dto.js';
@@ -33,17 +34,30 @@ import { StaffEarningsService } from '../services/staff-earnings.service.js';
 @ApiTags('Payroll')
 @Controller()
 export class StaffEarningsController {
-  constructor(private readonly earnings: StaffEarningsService) {}
+  constructor(
+    private readonly earnings: StaffEarningsService,
+    private readonly access: StaffAccessService,
+  ) {}
 
   @ApiOperation({ summary: 'Search staff earnings' })
   @ApiOkResponse({ type: ApiResponse(StaffEarningSearchResponseDto) })
-  @Permissions(Permission.PAYROLL_READ)
+  @Permissions([Permission.PAYROLL_READ, Permission.PAYROLL_READ_OWN])
   @Get('locations/:locationId/payroll/earnings')
   async search(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Query() dto: StaffEarningSearchRequestDto,
+    @TokenPayload() token: TokenPayloadDto,
   ): Promise<BaseResponseDto<StaffEarningSearchResponseDto>> {
-    const { items, totalItems } = await this.earnings.search(locationId, dto);
+    const staffId = await this.access.resolveStaffId(
+      token,
+      locationId,
+      Permission.PAYROLL_READ,
+      Permission.PAYROLL_READ_OWN,
+    );
+    const { items, totalItems } = await this.earnings.search(
+      locationId,
+      staffId ? { ...dto, staffId } : dto,
+    );
     return BaseResponseDto.success(
       new StaffEarningSearchResponseDto(
         items.map(StaffEarningResponseDto.fromEntity),
@@ -57,13 +71,21 @@ export class StaffEarningsController {
 
   @ApiOperation({ summary: 'List earnings for a staff member' })
   @ApiOkResponse({ type: ApiResponse(StaffEarningSearchResponseDto) })
-  @Permissions(Permission.PAYROLL_READ)
+  @Permissions([Permission.PAYROLL_READ, Permission.PAYROLL_READ_OWN])
   @Get('locations/:locationId/staff/:id/earnings')
   async listForStaff(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Query() dto: StaffEarningsByStaffRequestDto,
+    @TokenPayload() token: TokenPayloadDto,
   ): Promise<BaseResponseDto<StaffEarningSearchResponseDto>> {
+    await this.access.assertStaff(
+      token,
+      locationId,
+      id,
+      Permission.PAYROLL_READ,
+      Permission.PAYROLL_READ_OWN,
+    );
     const { items, totalItems } = await this.earnings.search(locationId, {
       ...dto,
       staffId: id,

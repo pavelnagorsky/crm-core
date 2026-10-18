@@ -9,6 +9,7 @@ import { StaffAnalyticsController } from './analytics/controllers/staff-analytic
 import { StaffAnalyticsService } from './analytics/services/staff-analytics.service.js';
 import { StaffExportService } from './export/services/staff-export.service.js';
 import { StaffService } from './services/staff.service.js';
+import { StaffAccessService } from './services/staff-access.service.js';
 
 @Module({
   imports: [
@@ -19,7 +20,12 @@ import { StaffService } from './services/staff.service.js';
     UserModule,
   ],
   controllers: [StaffAnalyticsController, StaffController],
-  providers: [StaffService, StaffAnalyticsService, StaffExportService],
-  exports: [StaffService],
+  providers: [
+    StaffService,
+    StaffAccessService,
+    StaffAnalyticsService,
+    StaffExportService,
+  ],
+  exports: [StaffService, StaffAccessService],
 })
 export class StaffModule {}

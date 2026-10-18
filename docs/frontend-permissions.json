@@ -1,0 +1,719 @@
+{
+  "schemaVersion": 1,
+  "roles": {
+    "OWNER": "Владелец",
+    "MANAGER": "Администратор / управляющий",
+    "STAFF": "Мастер"
+  },
+  "permissions": {
+    "brand.read": {
+      "label": "Просмотр бренда",
+      "group": "Бизнес и доступы",
+      "scope": "B",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [],
+      "dependencies": []
+    },
+    "brand.settings.manage": {
+      "label": "Настройки и удаление бренда",
+      "group": "Бизнес и доступы",
+      "scope": "B",
+      "defaultRoles": [
+        "OWNER"
+      ],
+      "configurableRoles": [],
+      "dependencies": []
+    },
+    "location.create": {
+      "label": "Создание филиалов",
+      "group": "Бизнес и доступы",
+      "scope": "B",
+      "defaultRoles": [
+        "OWNER"
+      ],
+      "configurableRoles": [],
+      "dependencies": []
+    },
+    "location.read": {
+      "label": "Просмотр филиала",
+      "group": "Бизнес и доступы",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER",
+        "STAFF"
+      ],
+      "configurableRoles": [],
+      "dependencies": []
+    },
+    "location.settings.manage": {
+      "label": "Настройки и удаление филиала",
+      "group": "Бизнес и доступы",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER"
+      ],
+      "configurableRoles": [],
+      "dependencies": []
+    },
+    "access.staff.manage": {
+      "label": "Доступ мастеров",
+      "group": "Бизнес и доступы",
+      "scope": "B/L",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": []
+    },
+    "access.manager.manage": {
+      "label": "Доступ администраторов и управляющих",
+      "group": "Бизнес и доступы",
+      "scope": "B/L",
+      "defaultRoles": [
+        "OWNER"
+      ],
+      "configurableRoles": [],
+      "dependencies": []
+    },
+    "access.owner.manage": {
+      "label": "Доступ владельцев",
+      "group": "Бизнес и доступы",
+      "scope": "B/L",
+      "defaultRoles": [
+        "OWNER"
+      ],
+      "configurableRoles": [],
+      "dependencies": []
+    },
+    "access.policy.manage": {
+      "label": "Настройка прав ролей",
+      "group": "Бизнес и доступы",
+      "scope": "B/L",
+      "defaultRoles": [
+        "OWNER"
+      ],
+      "configurableRoles": [],
+      "dependencies": []
+    },
+    "calendar.blocks.manage": {
+      "label": "Блокировки календаря",
+      "group": "Записи и календарь",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": [
+        "booking.read"
+      ]
+    },
+    "booking.read": {
+      "label": "Все записи и календарь филиала",
+      "group": "Записи и календарь",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "STAFF"
+      ],
+      "dependencies": [],
+      "description": "Все записи филиала, полные карточки с контактами клиентов и календарь. Само по себе не разрешает менять чужие записи."
+    },
+    "booking.read.own": {
+      "label": "Свои записи и календарь",
+      "group": "Записи и календарь",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "STAFF"
+      ],
+      "configurableRoles": [
+        "STAFF"
+      ],
+      "dependencies": [],
+      "description": "Запись доступна целиком при назначении хотя бы на одну её услугу. Календарь показывает свои события и общие блокировки. Аналитика визитов ограничена своим исполнителем."
+    },
+    "booking.manage": {
+      "label": "Создание и управление всеми записями",
+      "group": "Записи и календарь",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": [
+        "booking.read"
+      ]
+    },
+    "booking.manage.own": {
+      "label": "Управление записями со своим участием",
+      "group": "Записи и календарь",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "STAFF"
+      ],
+      "configurableRoles": [
+        "STAFF"
+      ],
+      "dependencies": [
+        "booking.read.own"
+      ],
+      "description": "Подтверждение, перенос, смена исполнителей, отмена незавершённого визита, неявка и завершение всей записи. Завершение проводит услуги и начисления всем исполнителям. Не разрешает ручное создание, цены, возвраты или изменения завершённого визита."
+    },
+    "booking.delete": {
+      "label": "Удаление записей",
+      "group": "Записи и календарь",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER"
+      ],
+      "configurableRoles": [],
+      "dependencies": [
+        "booking.read"
+      ]
+    },
+    "booking.export": {
+      "label": "Экспорт записей в XLSX",
+      "group": "Записи и календарь",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": [
+        "booking.read"
+      ]
+    },
+    "booking.client-token.issue": {
+      "label": "Ссылка управления записью для клиента",
+      "group": "Записи и календарь",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": [
+        "booking.read"
+      ]
+    },
+    "order.read": {
+      "label": "Просмотр заказов",
+      "group": "Продажи",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [],
+      "dependencies": []
+    },
+    "order.manage": {
+      "label": "Продажи и проведение заказов",
+      "group": "Продажи",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": [
+        "order.read"
+      ]
+    },
+    "order.return": {
+      "label": "Возвраты и сторнирование",
+      "group": "Продажи",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": [
+        "order.read"
+      ]
+    },
+    "order.void": {
+      "label": "Аннулирование заказов",
+      "group": "Продажи",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": [
+        "order.read"
+      ]
+    },
+    "sale.price.override": {
+      "label": "Произвольные цены и скидки",
+      "group": "Продажи",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": []
+    },
+    "client.read": {
+      "label": "Клиентская база бренда",
+      "group": "Клиенты",
+      "scope": "G",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "STAFF"
+      ],
+      "dependencies": [],
+      "description": "Список, поиск и полные карточки клиентов всего бренда, включая заметки и причину бана. Настраивается только в политике бренда. Не разрешает изменение, экспорт, импорт или бан."
+    },
+    "client.manage": {
+      "label": "Создание и редактирование клиентов",
+      "group": "Клиенты",
+      "scope": "G",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": [
+        "client.read"
+      ]
+    },
+    "client.ban": {
+      "label": "Запрет онлайн-записи клиенту",
+      "group": "Клиенты",
+      "scope": "G",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": [
+        "client.read"
+      ]
+    },
+    "client.import": {
+      "label": "Импорт клиентов",
+      "group": "Клиенты",
+      "scope": "G",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": [
+        "client.read"
+      ]
+    },
+    "client.export": {
+      "label": "Экспорт клиентов в XLSX",
+      "group": "Клиенты",
+      "scope": "G",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": [
+        "client.read"
+      ]
+    },
+    "product.read": {
+      "label": "Просмотр каталога товаров",
+      "group": "Товары и услуги",
+      "scope": "G",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER",
+        "STAFF"
+      ],
+      "configurableRoles": [],
+      "dependencies": []
+    },
+    "product.catalog.manage": {
+      "label": "Изменение каталога товаров",
+      "group": "Товары и услуги",
+      "scope": "G",
+      "defaultRoles": [
+        "OWNER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": [
+        "product.read"
+      ]
+    },
+    "product.location.read": {
+      "label": "Просмотр товаров филиала",
+      "group": "Товары и услуги",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER",
+        "STAFF"
+      ],
+      "configurableRoles": [],
+      "dependencies": []
+    },
+    "product.location.manage": {
+      "label": "Товары и цены филиала",
+      "group": "Товары и услуги",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": [
+        "product.location.read"
+      ]
+    },
+    "service.read": {
+      "label": "Просмотр услуг",
+      "group": "Товары и услуги",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER",
+        "STAFF"
+      ],
+      "configurableRoles": [],
+      "dependencies": []
+    },
+    "service.manage": {
+      "label": "Изменение услуг и комплексов",
+      "group": "Товары и услуги",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": [
+        "service.read"
+      ]
+    },
+    "supplier.read": {
+      "label": "Просмотр поставщиков",
+      "group": "Склад и поставщики",
+      "scope": "G",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": []
+    },
+    "supplier.manage": {
+      "label": "Изменение поставщиков",
+      "group": "Склад и поставщики",
+      "scope": "G",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": [
+        "supplier.read"
+      ]
+    },
+    "inventory.read": {
+      "label": "Просмотр склада",
+      "group": "Склад и поставщики",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": []
+    },
+    "inventory.manage": {
+      "label": "Складские документы",
+      "group": "Склад и поставщики",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": [
+        "inventory.read"
+      ]
+    },
+    "inventory.export": {
+      "label": "Экспорт склада в XLSX",
+      "group": "Склад и поставщики",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": [
+        "inventory.read"
+      ]
+    },
+    "staff.read": {
+      "label": "Кадровые данные всех сотрудников",
+      "group": "Персонал",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [],
+      "dependencies": []
+    },
+    "staff.read.own": {
+      "label": "Собственная карточка и смены",
+      "group": "Персонал",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "STAFF"
+      ],
+      "configurableRoles": [
+        "STAFF"
+      ],
+      "dependencies": [],
+      "description": "Собственная кадровая карточка и рабочие смены. Справочник имён коллег доступен отдельно по чтению записей."
+    },
+    "staff.manage": {
+      "label": "Сотрудники и рабочие графики",
+      "group": "Персонал",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": [
+        "staff.read"
+      ]
+    },
+    "staff.export": {
+      "label": "Экспорт сотрудников в XLSX",
+      "group": "Персонал",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": [
+        "staff.read"
+      ]
+    },
+    "payroll.read": {
+      "label": "Просмотр зарплат филиала",
+      "group": "Зарплата",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": []
+    },
+    "payroll.read.own": {
+      "label": "Свои начисления",
+      "group": "Зарплата",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "STAFF"
+      ],
+      "configurableRoles": [
+        "STAFF"
+      ],
+      "dependencies": [],
+      "description": "Собственные начисления. Не открывает общие ведомости, периоды, условия оплаты и зарплатные экспорты."
+    },
+    "payroll.manage": {
+      "label": "Условия оплаты, расчёт и выплата зарплат",
+      "group": "Зарплата",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER"
+      ],
+      "configurableRoles": [],
+      "dependencies": [
+        "payroll.read"
+      ],
+      "description": "Только владелец. Включает условия оплаты, ручные начисления, расчёт, утверждение и выплату зарплат."
+    },
+    "payroll.export": {
+      "label": "Экспорт зарплатных документов",
+      "group": "Зарплата",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": [
+        "payroll.read"
+      ]
+    },
+    "booking-channel.read": {
+      "label": "Просмотр страниц и виджетов записи",
+      "group": "Онлайн-запись",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": []
+    },
+    "booking-channel.manage": {
+      "label": "Настройка страниц и виджетов записи",
+      "group": "Онлайн-запись",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": [
+        "booking-channel.read"
+      ]
+    },
+    "analytics.location.read": {
+      "label": "Отчёты филиала",
+      "group": "Аналитика и история",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": []
+    },
+    "analytics.brand.read": {
+      "label": "Отчёты бренда",
+      "group": "Аналитика и история",
+      "scope": "B",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": []
+    },
+    "audit.location.read": {
+      "label": "История изменений филиала",
+      "group": "Аналитика и история",
+      "scope": "L",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": []
+    },
+    "audit.brand.read": {
+      "label": "История изменений бренда",
+      "group": "Аналитика и история",
+      "scope": "B",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": []
+    },
+    "file.brand.manage": {
+      "label": "Файлы бренда",
+      "group": "Файлы",
+      "scope": "G",
+      "defaultRoles": [
+        "OWNER",
+        "MANAGER"
+      ],
+      "configurableRoles": [
+        "MANAGER"
+      ],
+      "dependencies": []
+    }
+  }
+}

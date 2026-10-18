@@ -12,7 +12,8 @@ import {
 } from '../guards/permission.guard.js';
 import { Auth } from './auth.decorator.js';
 
-export function Permissions(...permissions: Permission[]) {
+// Each argument is required; an array accepts any one of its permissions.
+export function Permissions(...permissions: (Permission | Permission[])[]) {
   return applyDecorators(
     Auth(),
     SetMetadata(PERMISSIONS_KEY, permissions),

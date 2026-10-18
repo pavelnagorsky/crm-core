@@ -13,72 +13,105 @@ describe('Permissions compiled into JWT', () => {
   const local = [
     { locationId: 'location-1', brandId: 'brand-1', role: BusinessRole.STAFF },
   ];
-  it('gives staff operational defaults and shared reads within its scopes', () => {
+  it('gives staff own access without administrative or financial permissions', () => {
     const token = tokenPayload(BusinessRole.STAFF);
     for (const permission of [
-      Permission.BOOKING_MANAGE,
-      Permission.BOOKING_READ,
-      Permission.ORDER_MANAGE,
+      Permission.BOOKING_READ_OWN,
+      Permission.BOOKING_MANAGE_OWN,
+      Permission.STAFF_READ_OWN,
+      Permission.PAYROLL_READ_OWN,
+      Permission.LOCATION_READ,
     ])
       expect(hasPermission(token, permission, 'location-1')).toBe(true);
     for (const permission of [
+      Permission.BOOKING_READ,
+      Permission.BOOKING_MANAGE,
+      Permission.ORDER_READ,
+      Permission.ORDER_MANAGE,
       Permission.PAYROLL_READ,
+      Permission.STAFF_READ,
       Permission.STAFF_MANAGE,
-      Permission.LOCATION_SETTINGS_MANAGE,
       Permission.SALE_PRICE_OVERRIDE,
       Permission.ORDER_RETURN,
       Permission.ORDER_VOID,
       Permission.CALENDAR_BLOCKS_MANAGE,
       Permission.BOOKING_DELETE,
+      Permission.ANALYTICS_LOCATION_READ,
     ])
       expect(hasPermission(token, permission, 'location-1')).toBe(false);
-    expect(hasPermission(token, Permission.CLIENT_READ, 'brand-1')).toBe(true);
-    expect(hasPermission(token, Permission.CLIENT_MANAGE, 'brand-1')).toBe(
-      false,
-    );
+    expect(hasPermission(token, Permission.CLIENT_READ, 'brand-1')).toBe(false);
     expect(hasPermission(token, Permission.PRODUCT_READ, 'brand-1')).toBe(true);
-    expect(hasPermission(token, Permission.ORDER_READ, 'location-2')).toBe(
-      false,
-    );
-    expect(hasPermission(token, Permission.CLIENT_READ, 'other')).toBe(false);
+    expect(
+      hasPermission(token, Permission.BOOKING_READ_OWN, 'location-2'),
+    ).toBe(false);
   });
-  it('delegates returns independently from annulling a whole order', () => {
+
+  it('allows broader calendar and client reading without broader mutations', () => {
     const token = tokenPayload(BusinessRole.STAFF);
     token.permissions = compute.claims(
       [],
       local,
       locations,
-      [],
       [
         {
-          id: 'return-only',
+          id: 'clients',
+          brandId: 'brand-1',
+          role: BusinessRole.STAFF,
+          permission: Permission.CLIENT_READ,
+          allowed: true,
+        },
+      ],
+      [
+        {
+          id: 'calendar',
           locationId: 'location-1',
           role: BusinessRole.STAFF,
-          permission: Permission.ORDER_RETURN,
+          permission: Permission.BOOKING_READ,
           allowed: true,
         },
       ],
     );
-    expect(hasPermission(token, Permission.ORDER_RETURN, 'location-1')).toBe(
+    expect(hasPermission(token, Permission.BOOKING_READ, 'location-1')).toBe(
       true,
     );
-    expect(hasPermission(token, Permission.ORDER_VOID, 'location-1')).toBe(
+    expect(hasPermission(token, Permission.CLIENT_READ, 'brand-1')).toBe(true);
+    expect(hasPermission(token, Permission.BOOKING_MANAGE, 'location-1')).toBe(
       false,
     );
+    expect(hasPermission(token, Permission.CLIENT_MANAGE, 'brand-1')).toBe(
+      false,
+    );
+    expect(hasPermission(token, Permission.CLIENT_READ, 'other')).toBe(false);
   });
-  it('allows owners to delegate returns, voids and calendar blocks to staff explicitly', () => {
-    const permissions = [
+
+  it('ignores obsolete staff overrides for administrative and financial actions', () => {
+    const token = tokenPayload(BusinessRole.STAFF);
+    const forbidden = [
+      Permission.BOOKING_MANAGE,
+      Permission.ORDER_MANAGE,
+      Permission.ORDER_READ,
       Permission.ORDER_RETURN,
       Permission.ORDER_VOID,
+      Permission.SALE_PRICE_OVERRIDE,
       Permission.CALENDAR_BLOCKS_MANAGE,
+      Permission.STAFF_READ,
+      Permission.STAFF_MANAGE,
+      Permission.PAYROLL_MANAGE,
+      Permission.PAYROLL_READ,
+      Permission.ANALYTICS_LOCATION_READ,
     ];
-    const token = tokenPayload(BusinessRole.STAFF);
     token.permissions = compute.claims(
       [],
       local,
       locations,
-      [],
-      permissions.map((permission) => ({
+      forbidden.map((permission) => ({
+        id: permission,
+        brandId: 'brand-1',
+        role: BusinessRole.STAFF,
+        permission,
+        allowed: true,
+      })),
+      forbidden.map((permission) => ({
         id: permission,
         locationId: 'location-1',
         role: BusinessRole.STAFF,
@@ -86,8 +119,54 @@ describe('Permissions compiled into JWT', () => {
         allowed: true,
       })),
     );
-    for (const permission of permissions)
-      expect(hasPermission(token, permission, 'location-1')).toBe(true);
+    for (const permission of forbidden)
+      expect(hasPermission(token, permission, 'location-1')).toBe(false);
+  });
+
+  it('keeps financial management exclusive to owners despite manager overrides', () => {
+    const token = tokenPayload(BusinessRole.MANAGER);
+    token.permissions = compute.claims(
+      [],
+      [{ ...local[0], role: BusinessRole.MANAGER }],
+      locations,
+      [],
+      [
+        {
+          id: 'old',
+          locationId: 'location-1',
+          role: BusinessRole.MANAGER,
+          permission: Permission.PAYROLL_MANAGE,
+          allowed: true,
+        },
+      ],
+    );
+    expect(hasPermission(token, Permission.PAYROLL_READ, 'location-1')).toBe(
+      true,
+    );
+    expect(hasPermission(token, Permission.PAYROLL_MANAGE, 'location-1')).toBe(
+      false,
+    );
+    expect(
+      hasPermission(
+        tokenPayload(BusinessRole.OWNER),
+        Permission.PAYROLL_MANAGE,
+        'location-1',
+      ),
+    ).toBe(true);
+  });
+
+  it('disables own mutations when own reading is denied', () => {
+    const permissions = compute.rolePermissions(BusinessRole.STAFF, [
+      {
+        id: 'deny',
+        brandId: 'brand-1',
+        role: BusinessRole.STAFF,
+        permission: Permission.BOOKING_READ_OWN,
+        allowed: false,
+      },
+    ]);
+    expect(permissions.has(Permission.BOOKING_READ_OWN)).toBe(false);
+    expect(permissions.has(Permission.BOOKING_MANAGE_OWN)).toBe(false);
   });
 
   it.each([BusinessRole.MANAGER, BusinessRole.STAFF])(

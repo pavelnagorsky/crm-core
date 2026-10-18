@@ -13,6 +13,7 @@ describe('Manual booking API permissions', () => {
     create as never,
     {} as never,
     {} as never,
+    {} as never,
   );
   beforeEach(() => vi.clearAllMocks());
 
@@ -27,7 +28,7 @@ describe('Manual booking API permissions', () => {
   });
 
   it('rejects adding products when order editing was disabled', async () => {
-    const token = tokenPayload('STAFF');
+    const token = tokenPayload('MANAGER');
     token.permissions!['L:location-1'] = token.permissions![
       'L:location-1'
     ].filter((p) => p !== Permission.ORDER_MANAGE);
@@ -41,7 +42,7 @@ describe('Manual booking API permissions', () => {
   });
 
   it('allows booking without client management and passes only the financial creation choice', async () => {
-    const token = tokenPayload('STAFF');
+    const token = tokenPayload('MANAGER');
     token.permissions!['L:location-1'] = token.permissions![
       'L:location-1'
     ].filter((p) => p !== Permission.ORDER_MANAGE);

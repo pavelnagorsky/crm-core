@@ -38,11 +38,13 @@ export class CalendarViewFacade {
   async getManualAvailableSlots(
     locationId: string,
     dto: ManualAvailableSlotsRequestDto,
+    participantStaffId?: string,
   ): Promise<AvailableSlotsDayDto[]> {
     const excludedCalendarEventIds = dto.bookingId
       ? await this.bookings.linkedCalendarEventIdsForBooking(
           locationId,
           dto.bookingId,
+          participantStaffId,
         )
       : [];
     return this.calendar.getManualAvailableSlots(

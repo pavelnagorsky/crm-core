@@ -13,6 +13,7 @@ import { BookingsFacade } from './bookings.facade.js';
 import { BookingsController } from './controllers/bookings.controller.js';
 import { BookingsExportService } from './export/services/bookings-export.service.js';
 import { BookingClientTokenService } from './services/booking-client-token.service.js';
+import { BookingAccessService } from './services/booking-access.service.js';
 import { BookingCronService } from './services/booking-cron.service.js';
 import { BookingEventsService } from './services/booking-events.service.js';
 import { BookingReservationService } from './services/booking-reservation.service.js';
@@ -43,6 +44,7 @@ import { JwtBookingClientStrategy } from './strategies/jwt-booking-client.strate
   ],
   controllers: [BookingsController],
   providers: [
+    BookingAccessService,
     BookingReservationService,
     BookingSelectionService,
     BookingSchedulingService,
@@ -64,6 +66,11 @@ import { JwtBookingClientStrategy } from './strategies/jwt-booking-client.strate
     PublicBookingRateLimiter,
     JwtBookingClientStrategy,
   ],
-  exports: [BookingCalendarReadService, BookingCreateFacade, BookingsFacade],
+  exports: [
+    BookingCalendarReadService,
+    BookingCreateFacade,
+    BookingsFacade,
+    BookingAccessService,
+  ],
 })
 export class BookingsModule {}

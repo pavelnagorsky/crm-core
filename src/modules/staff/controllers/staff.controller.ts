@@ -46,8 +46,10 @@ import { StaffResponseDto } from '../dto/staff-response.dto.js';
 import { StaffSearchRequestDto } from '../dto/staff-search-request.dto.js';
 import { StaffSearchResponseDto } from '../dto/staff-search-response.dto.js';
 import { StaffStatusCountResponseDto } from '../dto/staff-status-count-response.dto.js';
+import { StaffDirectoryItemDto } from '../dto/staff-directory-item.dto.js';
 import { UpdateStaffDto } from '../dto/update-staff.dto.js';
 import { StaffExportService } from '../export/services/staff-export.service.js';
+import { StaffAccessService } from '../services/staff-access.service.js';
 import { StaffService } from '../services/staff.service.js';
 
 @ApiTags('Staff')
@@ -56,7 +58,21 @@ export class StaffController {
   constructor(
     private readonly staffService: StaffService,
     private readonly staffExportService: StaffExportService,
+    private readonly access: StaffAccessService,
   ) {}
+
+  @ApiOperation({
+    summary: 'List staff names for the booking calendar and reassignment',
+  })
+  @ApiOkResponse({ type: ApiResponseArray(StaffDirectoryItemDto) })
+  @Permissions([Permission.BOOKING_READ, Permission.BOOKING_READ_OWN])
+  @Get('locations/:locationId/staff/directory')
+  async directory(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+  ): Promise<BaseResponseDto<StaffDirectoryItemDto[]>> {
+    const staff = await this.staffService.listInLocation(locationId);
+    return BaseResponseDto.success(staff.map(StaffDirectoryItemDto.fromEntity));
+  }
 
   @ApiOperation({ summary: 'Create a staff member' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
@@ -127,12 +143,20 @@ export class StaffController {
   @ApiOperation({ summary: 'Get staff member by ID' })
   @ApiOkResponse({ type: ApiResponse(StaffResponseDto) })
   @ApiNotFoundResponse({ description: 'Staff member not found' })
-  @Permissions(Permission.STAFF_READ)
+  @Permissions([Permission.STAFF_READ, Permission.STAFF_READ_OWN])
   @Get('locations/:locationId/staff/:id')
   async findById(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
+    @TokenPayload() token: TokenPayloadDto,
   ): Promise<BaseResponseDto<StaffResponseDto>> {
+    await this.access.assertStaff(
+      token,
+      locationId,
+      id,
+      Permission.STAFF_READ,
+      Permission.STAFF_READ_OWN,
+    );
     const staff = await this.staffService.findWithServiceCountInLocation(
       locationId,
       id,
@@ -208,13 +232,21 @@ export class StaffController {
   })
   @ApiOkResponse({ type: ApiResponse(ShiftsResponseDto) })
   @ApiNotFoundResponse({ description: 'Staff member not found' })
-  @Permissions(Permission.STAFF_READ)
+  @Permissions([Permission.STAFF_READ, Permission.STAFF_READ_OWN])
   @Get('locations/:locationId/staff/:id/shifts')
   async getShifts(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @Query() dto: GetShiftsRequestDto,
+    @TokenPayload() token: TokenPayloadDto,
   ): Promise<BaseResponseDto<ShiftsResponseDto>> {
+    await this.access.assertStaff(
+      token,
+      locationId,
+      id,
+      Permission.STAFF_READ,
+      Permission.STAFF_READ_OWN,
+    );
     const shifts = await this.staffService.getShifts(locationId, id, dto);
     return BaseResponseDto.success(
       new ShiftsResponseDto(
