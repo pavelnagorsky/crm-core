@@ -5,7 +5,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { BusinessRole, Prisma, UserRole } from '@prisma/client';
-import { createHash, randomBytes } from 'node:crypto';
 import { DatabaseService } from '../../../database/database.service.js';
 import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
@@ -21,6 +20,7 @@ import { PermissionValue } from '../enums/permission-value.enum.js';
 import { Permission } from '../enums/permission.enum.js';
 import { assertPermission, hasPermission } from '../utils/assert-permission.js';
 import { AccessService } from './access.service.js';
+import { AccessInvitationTokenService } from './access-invitation-token.service.js';
 
 @Injectable()
 export class AccessAdministrationService {
@@ -28,6 +28,7 @@ export class AccessAdministrationService {
     private readonly db: DatabaseService,
     private readonly access: AccessService,
     private readonly compute: PermissionCalculator,
+    private readonly invitationTokens: AccessInvitationTokenService,
   ) {}
 
   private rolePermission(role: BusinessRole): Permission {
@@ -52,38 +53,26 @@ export class AccessAdministrationService {
     );
   }
 
-  private async policy(
-    brandId: string,
-    locationId?: string,
-    tx: Prisma.TransactionClient = this.db,
-  ) {
-    const [version, brandOverrides, locationOverrides] = await Promise.all([
-      this.version(brandId, tx),
-      tx.brandPermissionOverride.findMany({ where: { brandId } }),
-      locationId
-        ? tx.locationPermissionOverride.findMany({ where: { locationId } })
-        : Promise.resolve([]),
-    ]);
-    return { version, brandOverrides, locationOverrides };
-  }
-
   async version(brandId: string, tx: Prisma.TransactionClient = this.db) {
     const state = await tx.accessState.findUnique({ where: { brandId } });
     return state?.revision ?? 0;
   }
 
   async describePolicy(brandId: string, locationId?: string) {
-    const policy = await this.policy(brandId, locationId);
+    const version = await this.version(brandId);
+    const [brandOverrides, locationOverrides] = await Promise.all([
+      this.db.brandPermissionOverride.findMany({ where: { brandId } }),
+      locationId
+        ? this.db.locationPermissionOverride.findMany({ where: { locationId } })
+        : Promise.resolve([]),
+    ]);
     const entries = [BusinessRole.MANAGER, BusinessRole.STAFF].flatMap(
       (role) => {
-        const inherited = this.compute.rolePermissions(
-          role,
-          policy.brandOverrides,
-        );
+        const inherited = this.compute.rolePermissions(role, brandOverrides);
         const effective = this.compute.rolePermissions(
           role,
-          policy.brandOverrides,
-          policy.locationOverrides,
+          brandOverrides,
+          locationOverrides,
         );
         return Object.values(Permission)
           .filter(
@@ -99,7 +88,7 @@ export class AccessAdministrationService {
           .map((permission) => {
             const definition = PERMISSION_REGISTRY[permission];
             const override = (
-              locationId ? policy.locationOverrides : policy.brandOverrides
+              locationId ? locationOverrides : brandOverrides
             ).find((row) => row.role === role && row.permission === permission);
             return {
               role,
@@ -116,7 +105,7 @@ export class AccessAdministrationService {
           });
       },
     );
-    return { version: policy.version, entries };
+    return { version, entries };
   }
 
   async changePolicy(
@@ -367,12 +356,13 @@ export class AccessAdministrationService {
       scopes.add(scopeId);
       this.assertRole(actor, brandId, grant.role, grant.locationId);
     }
-    const token = randomBytes(32).toString('hex');
+    const { token, tokenHash, tokenEncrypted } = this.invitationTokens.create();
     const invitation = await tx.accessInvitation.create({
       data: {
         brandId,
         issuerId: actor.sub,
-        tokenHash: this.hash(token),
+        tokenHash,
+        tokenEncrypted,
         expiresAt: new Date(Date.now() + 7 * 86400000),
         grants: {
           create: grants.map((grant) => ({
@@ -398,7 +388,7 @@ export class AccessAdministrationService {
 
   invitationByToken(token: string, tx: Prisma.TransactionClient = this.db) {
     return tx.accessInvitation.findUnique({
-      where: { tokenHash: this.hash(token) },
+      where: { tokenHash: this.invitationTokens.hash(token) },
       include: { grants: true },
     });
   }
@@ -458,18 +448,13 @@ export class AccessAdministrationService {
       );
   }
 
-  async reissue(
+  async invitationLink(
     actor: TokenPayloadDto,
     brandId: string,
     id: string,
     tx: Prisma.TransactionClient,
   ) {
     const row = await this.invitation(brandId, id, tx);
-    if (row.acceptedAt || row.revokedAt)
-      throw new AppException(
-        ErrorCode.ACCESS_INVITATION_INVALID,
-        HttpStatus.CONFLICT,
-      );
     for (const grant of row.grants)
       this.assertRole(
         actor,
@@ -477,26 +462,8 @@ export class AccessAdministrationService {
         grant.role,
         grant.locationId ?? undefined,
       );
-    const token = randomBytes(32).toString('hex');
-    const invitation = await tx.accessInvitation.update({
-      where: { id },
-      data: {
-        tokenHash: this.hash(token),
-        issuerId: actor.sub,
-        expiresAt: new Date(Date.now() + 7 * 86400000),
-        version: { increment: 1 },
-      },
-      include: { grants: true },
-    });
-    await this.access.recordChange(
-      brandId,
-      actor.sub,
-      'INVITATION_REISSUED',
-      id,
-      {},
-      tx,
-    );
-    return { invitation, token };
+    this.assertPending(row);
+    return { invitation: row, token: this.invitationTokens.restore(row) };
   }
 
   async revokeInvitation(
@@ -518,6 +485,7 @@ export class AccessAdministrationService {
         ErrorCode.ACCESS_INVITATION_INVALID,
         HttpStatus.CONFLICT,
       );
+    if (row.revokedAt) return;
     await tx.accessInvitation.update({
       where: { id },
       data: { revokedAt: new Date() },
@@ -665,8 +633,5 @@ export class AccessAdministrationService {
       ErrorCode.ACCESS_GRANT_INVALID,
       HttpStatus.BAD_REQUEST,
     );
-  }
-  private hash(token: string) {
-    return createHash('sha256').update(token).digest('hex');
   }
 }

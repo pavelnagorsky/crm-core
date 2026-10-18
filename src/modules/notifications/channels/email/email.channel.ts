@@ -7,6 +7,8 @@ import { AbstractNotification } from '../../messages/abstract.notification.js';
 import { AbstractChannel } from '../abstract.channel.js';
 import { EmailRenderer } from './email.renderer.js';
 
+const SMTP_TIMEOUT_MS = 15_000;
+
 @Injectable()
 export class EmailChannel extends AbstractChannel {
   readonly name = 'EmailChannel';
@@ -15,16 +17,19 @@ export class EmailChannel extends AbstractChannel {
   private readonly from: string;
 
   constructor(
-    private readonly config: ConfigService,
+    config: ConfigService,
     private readonly renderer: EmailRenderer,
   ) {
     super();
-    const cfg = this.config.get<IMailerConfig>('emailConfig')!;
+    const cfg = config.get<IMailerConfig>('emailConfig')!;
     this.from = cfg.email;
     this.transporter = createTransport({
       host: 'smtp.hoster.by',
       port: 465,
       secure: true,
+      connectionTimeout: SMTP_TIMEOUT_MS,
+      greetingTimeout: SMTP_TIMEOUT_MS,
+      socketTimeout: SMTP_TIMEOUT_MS,
       auth: { user: cfg.email, pass: cfg.emailPw },
     });
   }

@@ -24,11 +24,18 @@ describe('Access management transactions', () => {
     membership: vi.fn(),
     changeMembership: vi.fn(),
     createInvitation: vi.fn(),
+    invitationLink: vi.fn(),
+    invitationByToken: vi.fn(),
+    assertPending: vi.fn(),
+    assertRole: vi.fn(),
+    grantMembership: vi.fn(),
+    markAccepted: vi.fn(),
   };
   const auth = { resolveTokenPayload: vi.fn() };
   const epochs = { bumpMany: vi.fn() };
   const staff = { bindAccessProfile: vi.fn(), releaseAccessProfile: vi.fn() };
-  const brands = { acquireActiveOperationLock: vi.fn() };
+  const brands = { acquireActiveOperationLock: vi.fn(), findById: vi.fn() };
+  const notifications = { sendEmail: vi.fn() };
   const users = { findById: vi.fn() };
   const service = new AccessManagementFacade(
     db as never,
@@ -40,8 +47,10 @@ describe('Access management transactions', () => {
     {} as never,
     brands as never,
     users as never,
-    {} as never,
-    {} as never,
+    {
+      get: vi.fn().mockReturnValue({ domain: 'https://crm.example' }),
+    } as never,
+    notifications as never,
   );
   const signed = tokenPayload();
   const fresh = { ...signed, tokenEpoch: 7 };
@@ -59,10 +68,11 @@ describe('Access management transactions', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     committed = false;
+    access.lockBrand.mockResolvedValue(undefined);
     brands.acquireActiveOperationLock.mockResolvedValue(true);
-    auth.resolveTokenPayload.mockImplementation(async () => {
+    auth.resolveTokenPayload.mockImplementation(async (userId) => {
       expect(access.lockBrand).toHaveBeenCalledWith('brand-1', tx);
-      return fresh;
+      return { ...fresh, sub: userId };
     });
     access.affectedUserIds.mockResolvedValue([
       'brand-member',
@@ -76,6 +86,8 @@ describe('Access management transactions', () => {
     administration.changeMembership.mockResolvedValue({ id: 'membership' });
     users.findById.mockResolvedValue({ id: 'employee', role: UserRole.USER });
     epochs.bumpMany.mockResolvedValue(undefined);
+    brands.findById.mockResolvedValue({ name: 'Brand' });
+    notifications.sendEmail.mockResolvedValue(undefined);
   });
 
   it('rechecks current authority under the lock and invalidates all affected tokens in the transaction', async () => {
@@ -102,6 +114,69 @@ describe('Access management transactions', () => {
       tx,
     );
     expect(committed).toBe(true);
+  });
+
+  it('sends the same link only after closing the database transaction', async () => {
+    administration.invitationLink.mockResolvedValue({
+      invitation: { id: 'invitation' },
+      token: 'same-token',
+    });
+    notifications.sendEmail.mockImplementation(async (notification) => {
+      expect(committed).toBe(true);
+      expect(notification.toEmail()).toMatchObject({
+        to: 'member@example.com',
+        data: {
+          invitationLink: 'https://crm.example/invitation#token=same-token',
+        },
+      });
+    });
+    await service.sendInvitationEmail(
+      signed,
+      'brand-1',
+      'invitation',
+      'member@example.com',
+    );
+    expect(administration.invitationLink).toHaveBeenCalledExactlyOnceWith(
+      fresh,
+      'brand-1',
+      'invitation',
+      tx,
+    );
+    expect(administration.createInvitation).not.toHaveBeenCalled();
+    expect(epochs.bumpMany).not.toHaveBeenCalled();
+  });
+
+  it('preserves a copyable link after email delivery fails', async () => {
+    const result = { invitation: { id: 'invitation' }, token: 'same-token' };
+    administration.invitationLink.mockResolvedValue(result);
+    notifications.sendEmail.mockRejectedValue(new Error('SMTP failed'));
+    await expect(
+      service.sendInvitationEmail(
+        signed,
+        'brand-1',
+        'invitation',
+        'member@example.com',
+      ),
+    ).rejects.toThrow('SMTP failed');
+    expect(
+      await service.invitationLink(signed, 'brand-1', 'invitation'),
+    ).toEqual(result);
+    expect(administration.createInvitation).not.toHaveBeenCalled();
+  });
+
+  it('does not send an email when invitation access is denied', async () => {
+    administration.invitationLink.mockRejectedValueOnce(
+      new ForbiddenException(),
+    );
+    await expect(
+      service.sendInvitationEmail(
+        signed,
+        'brand-1',
+        'invitation',
+        'member@example.com',
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(notifications.sendEmail).not.toHaveBeenCalled();
   });
 
   it('also invalidates tokens when resetting a role policy', async () => {
@@ -144,6 +219,63 @@ describe('Access management transactions', () => {
     expect(administration.changePolicy).not.toHaveBeenCalled();
     expect(epochs.bumpMany).not.toHaveBeenCalled();
     expect(committed).toBe(false);
+  });
+
+  it('returns 404 for a missing brand before creating access state', async () => {
+    brands.acquireActiveOperationLock.mockResolvedValue(false);
+    access.lockBrand.mockRejectedValue(new Error('Foreign key violation'));
+
+    await expect(
+      service.invitationLink(signed, 'missing-brand', 'invitation'),
+    ).rejects.toMatchObject({ status: 404 });
+    expect(access.lockBrand).not.toHaveBeenCalled();
+    expect(auth.resolveTokenPayload).not.toHaveBeenCalled();
+    expect(administration.invitationLink).not.toHaveBeenCalled();
+  });
+
+  it('invalidates the recipient JWT only when an invitation is accepted for the first time', async () => {
+    const invitation = {
+      id: 'invitation',
+      brandId: 'brand-1',
+      issuerId: 'issuer',
+      acceptedById: null,
+      grants: [{ role: BusinessRole.MANAGER, locationId: null, staffId: null }],
+    };
+    const accepted = { ...invitation, acceptedById: signed.sub };
+    administration.invitationByToken.mockResolvedValue(invitation);
+    administration.markAccepted.mockResolvedValue(accepted);
+
+    expect(await service.accept(signed, 'invitation-token')).toEqual(accepted);
+    expect(administration.grantMembership).toHaveBeenCalledExactlyOnceWith(
+      'brand-1',
+      signed.sub,
+      BusinessRole.MANAGER,
+      null,
+      tx,
+    );
+    expect(epochs.bumpMany).toHaveBeenCalledExactlyOnceWith([signed.sub], tx);
+    expect(committed).toBe(true);
+  });
+
+  it('does not revoke JWT or regrant access when retrying an already accepted invitation', async () => {
+    const accepted = {
+      id: 'invitation',
+      brandId: 'brand-1',
+      issuerId: 'issuer',
+      acceptedById: signed.sub,
+      acceptedAt: new Date('2020-01-01T00:00:00Z'),
+      expiresAt: new Date('2020-01-08T00:00:00Z'),
+      grants: [{ role: BusinessRole.MANAGER, locationId: null, staffId: null }],
+    };
+    administration.invitationByToken.mockResolvedValue(accepted);
+
+    expect(await service.accept(signed, 'invitation-token')).toEqual(accepted);
+    expect(administration.grantMembership).not.toHaveBeenCalled();
+    expect(administration.markAccepted).not.toHaveBeenCalled();
+    expect(administration.assertPending).not.toHaveBeenCalled();
+    expect(epochs.bumpMany).not.toHaveBeenCalled();
+    expect(users.findById).not.toHaveBeenCalled();
+    expect(committed).toBe(true);
   });
 
   it('invalidates only the membership target and releases a revoked staff binding', async () => {
@@ -217,6 +349,7 @@ describe('Access management transactions', () => {
 
     expect(epochs.bumpMany).not.toHaveBeenCalled();
     expect(access.affectedUserIds).not.toHaveBeenCalled();
+    expect(notifications.sendEmail).not.toHaveBeenCalled();
     expect(committed).toBe(true);
   });
 });

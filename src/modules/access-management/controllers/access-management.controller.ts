@@ -4,6 +4,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   Headers,
   HttpCode,
   HttpStatus,
@@ -39,6 +40,7 @@ import { CreateAccessInvitationDto } from '../../access/dto/create-access-invita
 import { InvitationPreviewDto } from '../../access/dto/invitation-preview.dto.js';
 import { InvitationTokenDto } from '../../access/dto/invitation-token.dto.js';
 import { ReplaceOwnerDto } from '../../access/dto/replace-owner.dto.js';
+import { SendAccessInvitationDto } from '../../access/dto/send-access-invitation.dto.js';
 import { UpdatePolicyDto } from '../../access/dto/update-policy.dto.js';
 import { UserAccessResponseDto } from '../../access/dto/user-access-response.dto.js';
 import { Permission } from '../../access/enums/permission.enum.js';
@@ -48,6 +50,7 @@ import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 import { TokenPayload } from '../../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
 import { StaffService } from '../../staff/services/staff.service.js';
+import { UserService } from '../../user/services/user.service.js';
 import { AccessManagementFacade } from '../access-management.facade.js';
 import { InvitationRateLimiter } from '../services/invitation-rate-limiter.js';
 
@@ -59,6 +62,7 @@ export class AccessManagementController {
     private readonly administration: AccessAdministrationService,
     private readonly staff: StaffService,
     private readonly rateLimiter: InvitationRateLimiter,
+    private readonly users: UserService,
   ) {}
 
   @Auth()
@@ -152,15 +156,25 @@ export class AccessManagementController {
     @Param('locationId') location?: string,
   ): Promise<BaseResponseDto<AccessMembershipSearchResponseDto>> {
     const scope = await this.management.scope(brand, location);
+    const version = await this.administration.version(scope.brandId);
     const rows = await this.management.members(
       token,
       scope.brandId,
       scope.locationId,
     );
-    const version = await this.administration.version(scope.brandId);
+    const page = this.page(rows, dto);
+    const users = await this.users.findAccessParticipants(
+      page.map((row) => row.userId),
+    );
+    const usersById = new Map(users.map((user) => [user.id, user]));
     return BaseResponseDto.success(
       new AccessMembershipSearchResponseDto(
-        this.page(rows, dto).map(AccessMembershipResponseDto.fromEntity),
+        page.map((row) =>
+          AccessMembershipResponseDto.fromEntity(
+            row,
+            usersById.get(row.userId),
+          ),
+        ),
         dto.page,
         dto.pageSize,
         rows.length,
@@ -229,7 +243,7 @@ export class AccessManagementController {
     @Body() dto: CreateAccessInvitationDto,
   ): Promise<BaseResponseDto<AccessInvitationLinkDto>> {
     return BaseResponseDto.success(
-      this.invitationLink(
+      this.invitationLinkResponse(
         await this.management.createInvitation(token, brandId, dto),
       ),
     );
@@ -260,16 +274,33 @@ export class AccessManagementController {
   }
 
   @Auth()
-  @Post('brands/:brandId/access/invitations/:invitationId/reissue')
-  @ApiCreatedResponse({ type: ApiResponse(AccessInvitationLinkDto) })
-  async reissue(
+  @Get('brands/:brandId/access/invitations/:invitationId/link')
+  @Header('Cache-Control', 'no-store')
+  @ApiOkResponse({ type: ApiResponse(AccessInvitationLinkDto) })
+  async invitationLink(
     @TokenPayload() token: TokenPayloadDto,
     @Param('brandId', ParseUUIDPipe) brandId: string,
     @Param('invitationId', ParseUUIDPipe) id: string,
   ): Promise<BaseResponseDto<AccessInvitationLinkDto>> {
     return BaseResponseDto.success(
-      this.invitationLink(await this.management.reissue(token, brandId, id)),
+      this.invitationLinkResponse(
+        await this.management.invitationLink(token, brandId, id),
+      ),
     );
+  }
+
+  @Auth()
+  @Post('brands/:brandId/access/invitations/:invitationId/send-email')
+  @HttpCode(HttpStatus.OK)
+  @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
+  async sendInvitationEmail(
+    @TokenPayload() token: TokenPayloadDto,
+    @Param('brandId', ParseUUIDPipe) brandId: string,
+    @Param('invitationId', ParseUUIDPipe) id: string,
+    @Body() dto: SendAccessInvitationDto,
+  ): Promise<BaseResponseDto<IdResponseDto>> {
+    await this.management.sendInvitationEmail(token, brandId, id, dto.email);
+    return BaseResponseDto.success({ id });
   }
 
   @Auth()
@@ -347,7 +378,7 @@ export class AccessManagementController {
       ),
     });
   }
-  private invitationLink(
+  private invitationLinkResponse(
     result: Awaited<ReturnType<AccessManagementFacade['createInvitation']>>,
   ) {
     return Object.assign(new AccessInvitationLinkDto(), {

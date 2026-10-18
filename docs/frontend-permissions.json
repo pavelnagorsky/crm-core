@@ -70,7 +70,9 @@
       "configurableRoles": [
         "MANAGER"
       ],
-      "dependencies": []
+      "dependencies": [
+        "staff.read"
+      ]
     },
     "access.manager.manage": {
       "label": "Доступ администраторов и управляющих",

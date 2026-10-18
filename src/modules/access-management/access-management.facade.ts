@@ -5,7 +5,6 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { EventEmitter2 } from '@nestjs/event-emitter';
 import { BusinessRole, Prisma, UserRole } from '@prisma/client';
 import { IFrontendConfig } from '../../config/interfaces/frontend-config.interface.js';
 import { DatabaseService } from '../../database/database.service.js';
@@ -22,7 +21,7 @@ import { TokenEpochRegistryService } from '../auth/services/token-epoch-registry
 import { BrandService } from '../brand/services/brand.service.js';
 import { LocationService } from '../location/services/location.service.js';
 import { AccessInvitationNotification } from '../notifications/messages/access-invitation.notification.js';
-import { NOTIFICATION_EVENT } from '../notifications/services/notifications.service.js';
+import { NotificationsService } from '../notifications/services/notifications.service.js';
 import { StaffService } from '../staff/services/staff.service.js';
 import { UserService } from '../user/services/user.service.js';
 import { AccessChangeOptions } from './interfaces/access-change-options.interface.js';
@@ -40,7 +39,7 @@ export class AccessManagementFacade {
     private readonly brands: BrandService,
     private readonly users: UserService,
     private readonly config: ConfigService,
-    private readonly events: EventEmitter2,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async scope(brandId?: string, locationId?: string) {
@@ -55,7 +54,7 @@ export class AccessManagementFacade {
     return { brandId, locationId: undefined };
   }
 
-  private async change<T>(
+  private async withAccessLock<T>(
     token: TokenPayloadDto,
     brandId: string,
     operation: (
@@ -66,10 +65,9 @@ export class AccessManagementFacade {
   ): Promise<T> {
     return this.db.$transaction(
       async (tx) => {
-        await this.access.lockBrand(brandId, tx);
         if (!(await this.brands.acquireActiveOperationLock(brandId, tx)))
           throw new NotFoundException('Brand not found');
-        // Access administration rechecks authority under its transaction lock, including the last-owner invariant.
+        await this.access.lockBrand(brandId, tx);
         const current = await this.auth.resolveTokenPayload(token.sub, tx);
         const result = await operation(current, tx);
         const affected = options.invalidateBrandTokens
@@ -88,7 +86,7 @@ export class AccessManagementFacade {
     locationId: string | undefined,
     dto: UpdatePolicyDto,
   ) {
-    return this.change(
+    return this.withAccessLock(
       token,
       brandId,
       (actor, tx) =>
@@ -111,7 +109,7 @@ export class AccessManagementFacade {
     role: BusinessRole,
     version: number,
   ) {
-    return this.change(
+    return this.withAccessLock(
       token,
       brandId,
       (actor, tx) =>
@@ -140,7 +138,7 @@ export class AccessManagementFacade {
     version: number,
   ) {
     const affected: string[] = [];
-    return this.change(
+    return this.withAccessLock(
       token,
       brandId,
       async (actor, tx) => {
@@ -191,7 +189,7 @@ export class AccessManagementFacade {
     brandId: string,
     dto: CreateAccessInvitationDto,
   ) {
-    const result = await this.change(token, brandId, async (actor, tx) => {
+    return this.withAccessLock(token, brandId, async (actor, tx) => {
       for (const grant of dto.grants) {
         if (grant.locationId) {
           const location = await this.locations.findById(grant.locationId, tx);
@@ -215,32 +213,37 @@ export class AccessManagementFacade {
         tx,
       );
     });
-    if (dto.deliveryEmail) {
-      const brand = await this.brands.findById(brandId);
-      this.events.emit(
-        NOTIFICATION_EVENT,
-        new AccessInvitationNotification(
-          dto.deliveryEmail,
-          this.link(result.token),
-          brand.name,
-        ),
-      );
-    }
-    return result;
   }
 
   invitations(token: TokenPayloadDto, brandId: string, locationId?: string) {
     return this.administration.invitations(token, brandId, locationId);
   }
 
-  reissue(token: TokenPayloadDto, brandId: string, id: string) {
-    return this.change(token, brandId, (actor, tx) =>
-      this.administration.reissue(actor, brandId, id, tx),
+  invitationLink(token: TokenPayloadDto, brandId: string, id: string) {
+    return this.withAccessLock(token, brandId, (actor, tx) =>
+      this.administration.invitationLink(actor, brandId, id, tx),
+    );
+  }
+
+  async sendInvitationEmail(
+    token: TokenPayloadDto,
+    brandId: string,
+    id: string,
+    email: string,
+  ): Promise<void> {
+    const result = await this.invitationLink(token, brandId, id);
+    const brand = await this.brands.findById(brandId);
+    await this.notifications.sendEmail(
+      new AccessInvitationNotification(
+        email,
+        this.link(result.token),
+        brand.name,
+      ),
     );
   }
 
   revoke(token: TokenPayloadDto, brandId: string, id: string) {
-    return this.change(token, brandId, (actor, tx) =>
+    return this.withAccessLock(token, brandId, (actor, tx) =>
       this.administration.revokeInvitation(actor, brandId, id, tx),
     );
   }
@@ -278,7 +281,8 @@ export class AccessManagementFacade {
         ErrorCode.ACCESS_INVITATION_INVALID,
         HttpStatus.NOT_FOUND,
       );
-    return this.change(
+    const affectedUserIds: string[] = [];
+    return this.withAccessLock(
       token,
       found.brandId,
       async (actor, tx) => {
@@ -337,14 +341,16 @@ export class AccessManagementFacade {
             tx,
           );
         }
-        return this.administration.markAccepted(
+        const accepted = await this.administration.markAccepted(
           invitation.brandId,
           invitation.id,
           actor.sub,
           tx,
         );
+        affectedUserIds.push(actor.sub);
+        return accepted;
       },
-      { affectedUserIds: [token.sub] },
+      { affectedUserIds },
     );
   }
 
@@ -355,7 +361,7 @@ export class AccessManagementFacade {
     newUserId: string,
     reason: string,
   ) {
-    return this.change(
+    return this.withAccessLock(
       token,
       brandId,
       async (actor, tx) => {

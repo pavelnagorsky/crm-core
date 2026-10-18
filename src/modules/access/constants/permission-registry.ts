@@ -39,7 +39,7 @@ export const PERMISSION_REGISTRY: Readonly<
     scope: PermissionScope.BRAND_OR_LOCATION,
     defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
     configurable: [BusinessRole.MANAGER],
-    dependencies: [],
+    dependencies: [Permission.STAFF_READ],
   },
   [Permission.ACCESS_MANAGER_MANAGE]: {
     scope: PermissionScope.BRAND_OR_LOCATION,

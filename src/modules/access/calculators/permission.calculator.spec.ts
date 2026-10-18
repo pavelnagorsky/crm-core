@@ -169,6 +169,72 @@ describe('Permissions compiled into JWT', () => {
     expect(permissions.has(Permission.BOOKING_MANAGE_OWN)).toBe(false);
   });
 
+  it.each(['brand', 'location'] as const)(
+    'keeps staff invitations and reading together without profile management for a %s manager',
+    (source) => {
+      const role = BusinessRole.MANAGER;
+      const changes = [
+        { permission: Permission.ACCESS_STAFF_MANAGE, allowed: true },
+        { permission: Permission.STAFF_MANAGE, allowed: false },
+        { permission: Permission.STAFF_READ, allowed: false },
+      ];
+      const token = tokenPayload(role);
+      token.permissions = compute.claims(
+        source === 'brand' ? [{ brandId: 'brand-1', role }] : [],
+        source === 'location' ? [{ ...local[0], role }] : [],
+        locations,
+        source === 'brand'
+          ? changes.map((change) => ({
+              id: change.permission,
+              brandId: 'brand-1',
+              role,
+              ...change,
+            }))
+          : [],
+        source === 'location'
+          ? changes.map((change) => ({
+              id: change.permission,
+              locationId: 'location-1',
+              role,
+              ...change,
+            }))
+          : [],
+      );
+
+      for (const locationId of source === 'brand'
+        ? ['location-1', 'location-2']
+        : ['location-1']) {
+        expect(
+          hasPermission(
+            token,
+            Permission.ACCESS_STAFF_MANAGE,
+            locationId,
+            true,
+          ),
+        ).toBe(true);
+        expect(hasPermission(token, Permission.STAFF_READ, locationId)).toBe(
+          true,
+        );
+        expect(hasPermission(token, Permission.STAFF_MANAGE, locationId)).toBe(
+          false,
+        );
+      }
+      if (source === 'location') {
+        expect(
+          hasPermission(
+            token,
+            Permission.ACCESS_STAFF_MANAGE,
+            'location-2',
+            true,
+          ),
+        ).toBe(false);
+        expect(hasPermission(token, Permission.STAFF_READ, 'location-2')).toBe(
+          false,
+        );
+      }
+    },
+  );
+
   it.each([BusinessRole.MANAGER, BusinessRole.STAFF])(
     'keeps booking deletion unavailable to %s despite stored overrides',
     (role) => {

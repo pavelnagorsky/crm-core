@@ -42,6 +42,7 @@ describe('Access administration', () => {
     db as never,
     access as never,
     new PermissionCalculator(),
+    {} as never,
   );
 
   beforeEach(() => {
@@ -174,6 +175,40 @@ describe('Access administration', () => {
     });
     expect(db.locationPermissionOverride.upsert).not.toHaveBeenCalled();
   });
+
+  it.each([undefined, 'location-1'])(
+    'rejects enabling invitations while disabling fixed staff reading in scope %s',
+    async (locationId) => {
+      const owner = authorizeTestToken({
+        ...tokenPayload(),
+        brandMemberships: [{ brandId: 'brand-1', role: BusinessRole.OWNER }],
+      });
+      await expect(
+        service.changePolicy(
+          owner,
+          'brand-1',
+          locationId,
+          3,
+          [
+            {
+              role: BusinessRole.MANAGER,
+              permission: Permission.ACCESS_STAFF_MANAGE,
+              value: PermissionValue.ALLOW,
+            },
+            {
+              role: BusinessRole.MANAGER,
+              permission: Permission.STAFF_READ,
+              value: PermissionValue.DENY,
+            },
+          ],
+          db as never,
+        ),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(db.brandPermissionOverride.upsert).not.toHaveBeenCalled();
+      expect(db.locationPermissionOverride.upsert).not.toHaveBeenCalled();
+      expect(access.recordChange).not.toHaveBeenCalled();
+    },
+  );
 
   it('rejects an outdated version before writing', async () => {
     db.accessState.findUnique.mockResolvedValue({ revision: 4 });

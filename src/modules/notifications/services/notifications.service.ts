@@ -1,10 +1,13 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { OnEvent } from '@nestjs/event-emitter';
 import { INotificationsConfig } from '../../../config/interfaces/notifications-config.interface.js';
+import { AppException } from '../../../shared/exceptions/app.exception.js';
+import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { AbstractChannel } from '../channels/abstract.channel.js';
 import { EmailChannel } from '../channels/email/email.channel.js';
 import { DeliveryStrategy } from '../enums/delivery-strategy.enum.js';
+import { HasEmailChannel } from '../interfaces/has-email-channel.interface.js';
 import { AbstractNotification } from '../messages/abstract.notification.js';
 
 export const NOTIFICATION_EVENT = 'notification';
@@ -39,6 +42,24 @@ export class NotificationsService {
       this.logger.error(
         `Unhandled error delivering ${notification.constructor.name}: ${e.message}`,
         e.stack,
+      );
+    }
+  }
+
+  async sendEmail(
+    notification: AbstractNotification & HasEmailChannel,
+  ): Promise<void> {
+    if (!this.enabled)
+      throw new AppException(
+        ErrorCode.EMAIL_DELIVERY_FAILED,
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
+    try {
+      await this.emailChannel.send(notification);
+    } catch {
+      throw new AppException(
+        ErrorCode.EMAIL_DELIVERY_FAILED,
+        HttpStatus.BAD_GATEWAY,
       );
     }
   }

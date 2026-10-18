@@ -15,6 +15,7 @@ describe('Editable access policy', () => {
     db as never,
     {} as never,
     new PermissionCalculator(),
+    {} as never,
   );
 
   it('exposes configurable role permissions without fixed or internal file controls', async () => {
@@ -57,4 +58,42 @@ describe('Editable access policy', () => {
       expect(entry.configurable).toBe(true);
     }
   });
+
+  it('does not attach a newer access version to overrides fetched before a concurrent change', async () => {
+    let revision = 3;
+    db.accessState.findUnique.mockImplementationOnce(async () => {
+      await Promise.resolve();
+      return { revision };
+    });
+    db.brandPermissionOverride.findMany.mockImplementationOnce(async () => {
+      revision = 4;
+      return [];
+    });
+
+    const policy = await service.describePolicy('brand-1');
+
+    expect(policy.version).toBe(3);
+    expect(revision).toBe(4);
+  });
+
+  it.each([undefined, 'location-1'])(
+    'describes staff reading as a prerequisite for invitations in scope %s',
+    async (locationId) => {
+      const policy = await service.describePolicy('brand-1', locationId);
+
+      expect(policy.entries).toContainEqual(
+        expect.objectContaining({
+          role: BusinessRole.MANAGER,
+          permission: Permission.ACCESS_STAFF_MANAGE,
+          dependencies: [Permission.STAFF_READ],
+          allowed: true,
+        }),
+      );
+      expect(
+        policy.entries.some(
+          (entry) => entry.permission === Permission.STAFF_READ,
+        ),
+      ).toBe(false);
+    },
+  );
 });

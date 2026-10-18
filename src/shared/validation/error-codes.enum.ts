@@ -572,6 +572,10 @@ export const ErrorCode = {
     message:
       'Invitation is unavailable, expired, or already accepted by another account',
   },
+  EMAIL_DELIVERY_FAILED: {
+    code: 'EMAIL_DELIVERY_FAILED',
+    message: 'Email could not be sent; please try again',
+  },
   ACCESS_GRANT_INVALID: {
     code: 'ACCESS_GRANT_INVALID',
     message: 'Invalid role, scope, or staff binding',

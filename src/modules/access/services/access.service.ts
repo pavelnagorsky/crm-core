@@ -107,16 +107,13 @@ export class AccessService {
   async lockBrand(
     brandId: string,
     tx: Prisma.TransactionClient,
-  ): Promise<number> {
+  ): Promise<void> {
     await tx.accessState.upsert({
       where: { brandId },
       create: { brandId },
       update: {},
     });
-    const rows = await tx.$queryRaw<
-      { revision: number }[]
-    >`SELECT "revision" FROM "AccessState" WHERE "brandId" = ${brandId} FOR UPDATE`;
-    return rows[0].revision;
+    await tx.$queryRaw`SELECT "brandId" FROM "AccessState" WHERE "brandId" = ${brandId} FOR UPDATE`;
   }
 
   async recordChange(

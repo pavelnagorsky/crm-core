@@ -3,6 +3,7 @@ import { AccessModule } from '../access/access.module.js';
 import { AuthModule } from '../auth/auth.module.js';
 import { BrandModule } from '../brand/brand.module.js';
 import { LocationModule } from '../location/location.module.js';
+import { NotificationsModule } from '../notifications/notifications.module.js';
 import { StaffModule } from '../staff/staff.module.js';
 import { UserModule } from '../user/user.module.js';
 import { AccessManagementFacade } from './access-management.facade.js';
@@ -17,6 +18,7 @@ import { InvitationRateLimiter } from './services/invitation-rate-limiter.js';
     BrandModule,
     LocationModule,
     UserModule,
+    NotificationsModule,
   ],
   providers: [AccessManagementFacade, InvitationRateLimiter],
   controllers: [AccessManagementController],

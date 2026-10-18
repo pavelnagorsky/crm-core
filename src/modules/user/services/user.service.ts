@@ -26,6 +26,14 @@ export class UserService {
     return this.db.user.findFirst({ where: { phone } });
   }
 
+  async findAccessParticipants(userIds: string[]) {
+    if (!userIds.length) return [];
+    return this.db.user.findMany({
+      where: { id: { in: [...new Set(userIds)] } },
+      select: { id: true, firstName: true, lastName: true, email: true },
+    });
+  }
+
   create(data: Prisma.UserCreateInput): Promise<User> {
     return this.db.user.create({ data });
   }

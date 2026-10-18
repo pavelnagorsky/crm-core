@@ -1462,18 +1462,18 @@ model LocationPermissionOverride {
 }
 
 model AccessInvitation {
-  id           String                  @id @default(uuid())
-  brandId      String
-  issuerId     String
-  tokenHash    String                  @unique @db.VarChar(64)
-  expiresAt    DateTime
-  revokedAt    DateTime?
-  acceptedAt   DateTime?
-  acceptedById String?
-  createdAt    DateTime                @default(now())
-  version      Int                     @default(0)
-  brand        Brand                   @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  grants       AccessInvitationGrant[]
+  id             String                  @id @default(uuid())
+  brandId        String
+  issuerId       String
+  tokenHash      String                  @unique @db.VarChar(64)
+  tokenEncrypted String                  @db.VarChar(160)
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  acceptedAt     DateTime?
+  acceptedById   String?
+  createdAt      DateTime                @default(now())
+  brand          Brand                   @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  grants         AccessInvitationGrant[]
 
   @@index([brandId, createdAt])
 }
