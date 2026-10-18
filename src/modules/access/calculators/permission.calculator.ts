@@ -4,12 +4,12 @@ import {
   BusinessRole,
   LocationPermissionOverride,
 } from '@prisma/client';
-import { BrandMembershipPayloadDto } from '../../auth/dto/brand-membership-payload.dto.js';
-import { LocationMembershipPayloadDto } from '../../auth/dto/location-membership-payload.dto.js';
 import { PERMISSION_REGISTRY } from '../constants/permission-registry.js';
 import { PermissionScope } from '../enums/permission-scope.enum.js';
 import { Permission } from '../enums/permission.enum.js';
 import { AccessLocation } from '../interfaces/access-location.interface.js';
+import { BrandAccessMembership } from '../interfaces/brand-access-membership.interface.js';
+import { LocationAccessMembership } from '../interfaces/location-access-membership.interface.js';
 
 @Injectable()
 export class PermissionCalculator {
@@ -58,8 +58,8 @@ export class PermissionCalculator {
   }
 
   claims(
-    brands: BrandMembershipPayloadDto[],
-    memberships: LocationMembershipPayloadDto[],
+    brands: BrandAccessMembership[],
+    memberships: LocationAccessMembership[],
     locations: AccessLocation[],
     brandOverrides: BrandPermissionOverride[],
     locationOverrides: LocationPermissionOverride[],

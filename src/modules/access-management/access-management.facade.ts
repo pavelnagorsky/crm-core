@@ -14,11 +14,8 @@ import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { ChangeMembershipDto } from '../access/dto/change-membership.dto.js';
 import { CreateAccessInvitationDto } from '../access/dto/create-access-invitation.dto.js';
 import { UpdatePolicyDto } from '../access/dto/update-policy.dto.js';
-import { Permission } from '../access/enums/permission.enum.js';
 import { AccessService } from '../access/services/access.service.js';
-
 import { AccessAdministrationService } from '../access/services/access-administration.service.js';
-import { hasPermission } from '../access/utils/assert-permission.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 import { AuthService } from '../auth/services/auth.service.js';
 import { TokenEpochRegistryService } from '../auth/services/token-epoch-registry.service.js';
@@ -28,6 +25,7 @@ import { AccessInvitationNotification } from '../notifications/messages/access-i
 import { NOTIFICATION_EVENT } from '../notifications/services/notifications.service.js';
 import { StaffService } from '../staff/services/staff.service.js';
 import { UserService } from '../user/services/user.service.js';
+import { AccessChangeOptions } from './interfaces/access-change-options.interface.js';
 
 @Injectable()
 export class AccessManagementFacade {
@@ -64,40 +62,24 @@ export class AccessManagementFacade {
       token: TokenPayloadDto,
       tx: Prisma.TransactionClient,
     ) => Promise<T>,
-    invalidatesTokens: boolean | string[] = false,
+    options: AccessChangeOptions = {},
   ): Promise<T> {
-    let affected: string[] = Array.isArray(invalidatesTokens)
-      ? invalidatesTokens
-      : [];
-    const result = await this.db.$transaction(
+    return this.db.$transaction(
       async (tx) => {
         await this.access.lockBrand(brandId, tx);
         if (!(await this.brands.acquireActiveOperationLock(brandId, tx)))
           throw new NotFoundException('Brand not found');
-        const locationIds =
-          invalidatesTokens === true
-            ? (await this.locations.listByBrand(brandId)).map((row) => row.id)
-            : [];
-        if (invalidatesTokens === true)
-          affected = await this.access.affectedUserIds(
-            brandId,
-            locationIds,
-            tx,
-          );
         // Access administration rechecks authority under its transaction lock, including the last-owner invariant.
         const current = await this.auth.resolveTokenPayload(token.sub, tx);
         const result = await operation(current, tx);
-        if (invalidatesTokens === true)
-          affected.push(
-            ...(await this.access.affectedUserIds(brandId, locationIds, tx)),
-            token.sub,
-          );
-        if (invalidatesTokens) await this.epochs.bumpMany(affected, tx);
+        const affected = options.invalidateBrandTokens
+          ? [...(await this.access.affectedUserIds(brandId, tx)), token.sub]
+          : (options.affectedUserIds ?? []);
+        if (affected.length) await this.epochs.bumpMany(affected, tx);
         return result;
       },
       { timeout: 15000 },
     );
-    return result;
   }
 
   updatePolicy(
@@ -118,7 +100,7 @@ export class AccessManagementFacade {
           dto.changes,
           tx,
         ),
-      true,
+      { invalidateBrandTokens: true },
     );
   }
 
@@ -141,43 +123,12 @@ export class AccessManagementFacade {
           version,
           tx,
         ),
-      true,
+      { invalidateBrandTokens: true },
     );
   }
 
-  async members(token: TokenPayloadDto, brandId: string, locationId?: string) {
-    const actor = this.listActor(token, brandId, locationId);
-    return this.administration.memberships(actor, brandId, locationId);
-  }
-
-  private listActor(
-    token: TokenPayloadDto,
-    brandId: string,
-    locationId?: string,
-  ) {
-    if (!token) throw new ForbiddenException();
-    const actor = token;
-    const scopes = locationId
-      ? [locationId]
-      : [
-          brandId,
-          ...actor.locationMemberships
-            .filter((row) => row.brandId === brandId)
-            .map((row) => row.locationId),
-        ];
-    if (
-      !scopes.some((scopeId) =>
-        [
-          Permission.ACCESS_STAFF_MANAGE,
-          Permission.ACCESS_MANAGER_MANAGE,
-          Permission.ACCESS_OWNER_MANAGE,
-        ].some((permission) =>
-          hasPermission(actor, permission, scopeId, scopeId !== brandId),
-        ),
-      )
-    )
-      throw new ForbiddenException();
-    return actor;
+  members(token: TokenPayloadDto, brandId: string, locationId?: string) {
+    return this.administration.memberships(token, brandId, locationId);
   }
 
   async changeMember(
@@ -201,6 +152,15 @@ export class AccessManagementFacade {
         );
         await this.protectAdmin(actor.sub, membership.userId, tx);
         affected.push(membership.userId);
+        const result = await this.administration.changeMembership(
+          actor,
+          brandId,
+          locationId,
+          id,
+          dto?.role ?? null,
+          version,
+          tx,
+        );
         if (dto?.role === BusinessRole.STAFF) {
           if (!locationId || !dto.staffId)
             throw new AppException(
@@ -214,15 +174,6 @@ export class AccessManagementFacade {
             tx,
           );
         }
-        const result = await this.administration.changeMembership(
-          actor,
-          brandId,
-          locationId,
-          id,
-          dto?.role ?? null,
-          version,
-          tx,
-        );
         if (!dto && locationId && membership.role === BusinessRole.STAFF)
           await this.staff.releaseAccessProfile(
             locationId,
@@ -231,7 +182,7 @@ export class AccessManagementFacade {
           );
         return result;
       },
-      affected,
+      { affectedUserIds: affected },
     );
   }
 
@@ -278,16 +229,8 @@ export class AccessManagementFacade {
     return result;
   }
 
-  async invitations(
-    token: TokenPayloadDto,
-    brandId: string,
-    locationId?: string,
-  ) {
-    return this.administration.invitations(
-      this.listActor(token, brandId, locationId),
-      brandId,
-      locationId,
-    );
+  invitations(token: TokenPayloadDto, brandId: string, locationId?: string) {
+    return this.administration.invitations(token, brandId, locationId);
   }
 
   reissue(token: TokenPayloadDto, brandId: string, id: string) {
@@ -401,7 +344,7 @@ export class AccessManagementFacade {
           tx,
         );
       },
-      [token.sub],
+      { affectedUserIds: [token.sub] },
     );
   }
 
@@ -429,7 +372,7 @@ export class AccessManagementFacade {
           tx,
         );
       },
-      [previousUserId, newUserId],
+      { affectedUserIds: [previousUserId, newUserId] },
     );
   }
 

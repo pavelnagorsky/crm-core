@@ -192,7 +192,6 @@ export class AccessService {
 
   async affectedUserIds(
     brandId: string,
-    locationIds: string[],
     tx: Prisma.TransactionClient = this.db,
   ) {
     const [brands, locations] = await Promise.all([
@@ -201,7 +200,7 @@ export class AccessService {
         select: { userId: true },
       }),
       tx.locationMembership.findMany({
-        where: { locationId: { in: locationIds } },
+        where: { location: { ...ACTIVE_LOCATION_WHERE, brandId } },
         select: { userId: true },
       }),
     ]);

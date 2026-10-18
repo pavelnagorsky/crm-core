@@ -157,17 +157,14 @@ export class AccessManagementController {
       scope.brandId,
       scope.locationId,
     );
-    const policy = await this.administration.policy(
-      scope.brandId,
-      scope.locationId,
-    );
+    const version = await this.administration.version(scope.brandId);
     return BaseResponseDto.success(
       new AccessMembershipSearchResponseDto(
         this.page(rows, dto).map(AccessMembershipResponseDto.fromEntity),
         dto.page,
         dto.pageSize,
         rows.length,
-        policy.version,
+        version,
         dto.isExport,
       ),
     );

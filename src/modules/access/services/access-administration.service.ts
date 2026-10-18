@@ -1,4 +1,9 @@
-import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  HttpStatus,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { BusinessRole, Prisma, UserRole } from '@prisma/client';
 import { createHash, randomBytes } from 'node:crypto';
 import { DatabaseService } from '../../../database/database.service.js';
@@ -25,7 +30,7 @@ export class AccessAdministrationService {
     private readonly compute: PermissionCalculator,
   ) {}
 
-  rolePermission(role: BusinessRole): Permission {
+  private rolePermission(role: BusinessRole): Permission {
     return {
       OWNER: Permission.ACCESS_OWNER_MANAGE,
       MANAGER: Permission.ACCESS_MANAGER_MANAGE,
@@ -47,19 +52,24 @@ export class AccessAdministrationService {
     );
   }
 
-  async policy(
+  private async policy(
     brandId: string,
     locationId?: string,
     tx: Prisma.TransactionClient = this.db,
   ) {
-    const [state, brandOverrides, locationOverrides] = await Promise.all([
-      tx.accessState.findUnique({ where: { brandId } }),
+    const [version, brandOverrides, locationOverrides] = await Promise.all([
+      this.version(brandId, tx),
       tx.brandPermissionOverride.findMany({ where: { brandId } }),
       locationId
         ? tx.locationPermissionOverride.findMany({ where: { locationId } })
         : Promise.resolve([]),
     ]);
-    return { version: state?.revision ?? 0, brandOverrides, locationOverrides };
+    return { version, brandOverrides, locationOverrides };
+  }
+
+  async version(brandId: string, tx: Prisma.TransactionClient = this.db) {
+    const state = await tx.accessState.findUnique({ where: { brandId } });
+    return state?.revision ?? 0;
   }
 
   async describePolicy(brandId: string, locationId?: string) {
@@ -123,8 +133,7 @@ export class AccessAdministrationService {
       locationId ?? brandId,
       !!locationId,
     );
-    const policy = await this.policy(brandId, locationId, tx);
-    this.assertVersion(policy.version, expectedVersion);
+    this.assertVersion(await this.version(brandId, tx), expectedVersion);
     const seen = new Set<string>();
     for (const change of changes) {
       const definition = PERMISSION_REGISTRY[change.permission];
@@ -139,6 +148,8 @@ export class AccessAdministrationService {
       )
         this.invalidPolicy();
       seen.add(key);
+    }
+    for (const change of changes) {
       if (locationId) {
         const where = {
           locationId_role_permission: {
@@ -183,34 +194,6 @@ export class AccessAdministrationService {
           });
       }
     }
-    const updated = await this.policy(brandId, locationId, tx);
-    for (const role of new Set(changes.map((row) => row.role))) {
-      const resolved = this.compute.rolePermissions(
-        role,
-        updated.brandOverrides,
-        updated.locationOverrides,
-      );
-      for (const [key, definition] of Object.entries(PERMISSION_REGISTRY)) {
-        const permission = key as Permission;
-        if (
-          locationId &&
-          definition.scope !== PermissionScope.LOCATION &&
-          definition.scope !== PermissionScope.BRAND_OR_LOCATION
-        )
-          continue;
-        const local = updated.locationOverrides.find(
-          (row) => row.role === role && row.permission === key,
-        );
-        const brand = updated.brandOverrides.find(
-          (row) => row.role === role && row.permission === key,
-        );
-        const enabled =
-          local?.allowed ??
-          brand?.allowed ??
-          definition.defaults.includes(role);
-        if (enabled && !resolved.has(permission)) this.invalidPolicy();
-      }
-    }
     await this.access.recordChange(
       brandId,
       actor.sub,
@@ -220,7 +203,6 @@ export class AccessAdministrationService {
       tx,
       locationId,
     );
-    return this.policy(brandId, locationId, tx);
   }
 
   async resetPolicy(
@@ -239,8 +221,7 @@ export class AccessAdministrationService {
     );
     if (role !== BusinessRole.MANAGER && role !== BusinessRole.STAFF)
       this.invalidPolicy();
-    const policy = await this.policy(brandId, locationId, tx);
-    this.assertVersion(policy.version, expectedVersion);
+    this.assertVersion(await this.version(brandId, tx), expectedVersion);
     if (locationId)
       await tx.locationPermissionOverride.deleteMany({
         where: { locationId, role },
@@ -263,6 +244,7 @@ export class AccessAdministrationService {
     brandId: string,
     locationId?: string,
   ) {
+    this.assertCanList(actor, brandId, locationId);
     const localIds = actor.locationMemberships
       .filter(
         (row) =>
@@ -328,10 +310,7 @@ export class AccessAdministrationService {
     expectedVersion: number,
     tx: Prisma.TransactionClient,
   ) {
-    this.assertVersion(
-      (await this.policy(brandId, locationId, tx)).version,
-      expectedVersion,
-    );
+    this.assertVersion(await this.version(brandId, tx), expectedVersion);
     const row = await this.membership(brandId, locationId, id, tx);
     this.assertRole(actor, brandId, row.role, locationId);
     if (role) this.assertRole(actor, brandId, role, locationId);
@@ -442,6 +421,7 @@ export class AccessAdministrationService {
     brandId: string,
     locationId?: string,
   ) {
+    this.assertCanList(actor, brandId, locationId);
     const rows = await this.db.accessInvitation.findMany({
       where: {
         brandId,
@@ -646,13 +626,34 @@ export class AccessAdministrationService {
     );
   }
 
-  assertVersion(actual: number, expected: number) {
+  private assertVersion(actual: number, expected: number) {
     if (actual !== expected)
       throw new AppException(
         ErrorCode.ACCESS_VERSION_CONFLICT,
         HttpStatus.CONFLICT,
       );
   }
+
+  private assertCanList(
+    actor: TokenPayloadDto,
+    brandId: string,
+    locationId?: string,
+  ): void {
+    const locationIds = locationId
+      ? [locationId]
+      : actor.locationMemberships
+          .filter((row) => row.brandId === brandId)
+          .map((row) => row.locationId);
+    const allowed = Object.values(BusinessRole).some((role) => {
+      const permission = this.rolePermission(role);
+      return (
+        (!locationId && hasPermission(actor, permission, brandId)) ||
+        locationIds.some((id) => hasPermission(actor, permission, id, true))
+      );
+    });
+    if (!allowed) throw new ForbiddenException('Access denied');
+  }
+
   private invalidPolicy(): never {
     throw new AppException(
       ErrorCode.ACCESS_POLICY_INVALID,
