@@ -1,8 +1,12 @@
 import { ForbiddenException } from '@nestjs/common';
+import { Permission } from '../interfaces/permission.interface.js';
 import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
-import { PERMISSION_REGISTRY } from '../constants/permission-registry.js';
+import {
+  PERMISSION_REGISTRY,
+  isRegisteredPermission,
+} from '../constants/permission-registry.js';
 import { PermissionScope } from '../enums/permission-scope.enum.js';
-import { Permission } from '../enums/permission.enum.js';
+import { hasGrant } from './permission.js';
 import { hasGlobalPermission } from './has-global-permission.js';
 
 export function hasPermission(
@@ -11,8 +15,8 @@ export function hasPermission(
   scopeId: string,
   locationScope = false,
 ): boolean {
-  const definition = PERMISSION_REGISTRY[permission];
-  if (!token || !Object.hasOwn(PERMISSION_REGISTRY, permission)) return false;
+  if (!token || !scopeId || !isRegisteredPermission(permission)) return false;
+  const definition = PERMISSION_REGISTRY[permission.claim];
   if (hasGlobalPermission(token.permissions)) return true;
   const scope =
     definition.scope === PermissionScope.BRAND_OR_LOCATION
@@ -20,9 +24,8 @@ export function hasPermission(
         ? PermissionScope.LOCATION
         : PermissionScope.BRAND
       : definition.scope;
-  return (
-    token.permissions?.[`${scope}:${scopeId}`]?.includes(permission) ?? false
-  );
+  const grants = token.permissions?.[`${scope}:${scopeId}`];
+  return !!grants && !Array.isArray(grants) && hasGrant(grants, permission);
 }
 
 export function assertPermission(

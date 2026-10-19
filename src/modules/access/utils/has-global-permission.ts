@@ -3,5 +3,6 @@ import { PermissionClaims } from '../interfaces/permission-claims.interface.js';
 export function hasGlobalPermission(
   permissions: PermissionClaims | undefined,
 ): boolean {
-  return permissions?.['*']?.includes('*') ?? false;
+  const global = permissions?.['*'];
+  return Array.isArray(global) && global.length === 1 && global[0] === '*';
 }

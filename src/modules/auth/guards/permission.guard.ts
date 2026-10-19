@@ -6,9 +6,12 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { PERMISSION_REGISTRY } from '../../access/constants/permission-registry.js';
+import { Permission } from '../../access/interfaces/permission.interface.js';
+import {
+  PERMISSION_REGISTRY,
+  isRegisteredPermission,
+} from '../../access/constants/permission-registry.js';
 import { PermissionScope } from '../../access/enums/permission-scope.enum.js';
-import { Permission } from '../../access/enums/permission.enum.js';
 import { hasPermission } from '../../access/utils/assert-permission.js';
 import { AuthenticatedRequest } from '../interfaces/authenticated-request.interface.js';
 
@@ -30,7 +33,8 @@ export class PermissionGuard implements CanActivate {
         ? requirement
         : [requirement];
       const allowed = alternatives.some((permission) => {
-        const scope = PERMISSION_REGISTRY[permission]?.scope;
+        if (!isRegisteredPermission(permission)) return false;
+        const scope = PERMISSION_REGISTRY[permission.claim].scope;
         const local =
           scope === PermissionScope.LOCATION ||
           (scope === PermissionScope.BRAND_OR_LOCATION &&
@@ -39,9 +43,7 @@ export class PermissionGuard implements CanActivate {
           ? request.params.locationId
           : request.params.brandId;
         return (
-          !!scope &&
-          !!scopeId &&
-          hasPermission(request.user, permission, scopeId, local)
+          !!scopeId && hasPermission(request.user, permission, scopeId, local)
         );
       });
       if (!allowed) throw new ForbiddenException('Access denied');

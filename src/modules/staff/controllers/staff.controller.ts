@@ -25,12 +25,13 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import type { Response } from 'express';
+import { Claim } from '../../access/enums/claim.enum.js';
+import { Read, Write } from '../../access/utils/permission.js';
 import { ApiResponseArray } from '../../../shared/dto/api-response-array.dto.js';
 import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../../shared/dto/id-response.dto.js';
 import { XlsxUtils } from '../../../shared/xlsx/xlsx.utils.js';
-import { Permission } from '../../access/enums/permission.enum.js';
 import { auditActorFromToken } from '../../audit/utils/audit-actor-from-token.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 import { TokenPayload } from '../../auth/decorators/token-payload.decorator.js';
@@ -65,7 +66,7 @@ export class StaffController {
     summary: 'List staff names for the booking calendar and reassignment',
   })
   @ApiOkResponse({ type: ApiResponseArray(StaffDirectoryItemDto) })
-  @Permissions([Permission.BOOKING_READ, Permission.BOOKING_READ_OWN])
+  @Permissions([Read(Claim.BOOKING), Read(Claim.BOOKING_OWN)])
   @Get('locations/:locationId/staff/directory')
   async directory(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -76,7 +77,7 @@ export class StaffController {
 
   @ApiOperation({ summary: 'Create a staff member' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
-  @Permissions(Permission.STAFF_MANAGE)
+  @Permissions(Write(Claim.STAFF))
   @Post('locations/:locationId/staff')
   async create(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -94,7 +95,7 @@ export class StaffController {
   @ApiOperation({ summary: 'Update a staff member' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Staff member not found' })
-  @Permissions(Permission.STAFF_MANAGE)
+  @Permissions(Write(Claim.STAFF))
   @Put('locations/:locationId/staff/:id')
   async update(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -113,7 +114,7 @@ export class StaffController {
 
   @ApiOperation({ summary: 'Get staff count per status' })
   @ApiOkResponse({ type: ApiResponseArray(StaffStatusCountResponseDto) })
-  @Permissions(Permission.STAFF_READ)
+  @Permissions(Read(Claim.STAFF))
   @Get('locations/:locationId/staff/status-counts')
   async getStatusCounts(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -125,7 +126,7 @@ export class StaffController {
   @ApiOperation({ summary: 'Export staff members as XLSX' })
   @ApiProduces(XlsxUtils.mimeType)
   @ApiOkResponse({ description: 'File stream' })
-  @Permissions(Permission.STAFF_EXPORT)
+  @Permissions(Read(Claim.STAFF_EXPORT))
   @Get('locations/:locationId/staff/export')
   async export(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -143,7 +144,7 @@ export class StaffController {
   @ApiOperation({ summary: 'Get staff member by ID' })
   @ApiOkResponse({ type: ApiResponse(StaffResponseDto) })
   @ApiNotFoundResponse({ description: 'Staff member not found' })
-  @Permissions([Permission.STAFF_READ, Permission.STAFF_READ_OWN])
+  @Permissions([Read(Claim.STAFF), Read(Claim.STAFF_OWN)])
   @Get('locations/:locationId/staff/:id')
   async findById(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -154,8 +155,8 @@ export class StaffController {
       token,
       locationId,
       id,
-      Permission.STAFF_READ,
-      Permission.STAFF_READ_OWN,
+      Read(Claim.STAFF),
+      Read(Claim.STAFF_OWN),
     );
     const staff = await this.staffService.findWithServiceCountInLocation(
       locationId,
@@ -166,7 +167,7 @@ export class StaffController {
 
   @ApiOperation({ summary: 'Search staff members' })
   @ApiOkResponse({ type: ApiResponse(StaffSearchResponseDto) })
-  @Permissions(Permission.STAFF_READ)
+  @Permissions(Read(Claim.STAFF))
   @Get('locations/:locationId/staff')
   async search(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -191,7 +192,7 @@ export class StaffController {
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Staff member not found' })
   @ApiConflictResponse({ description: 'Staff member already has this status' })
-  @Permissions(Permission.STAFF_MANAGE)
+  @Permissions(Write(Claim.STAFF))
   @Patch('locations/:locationId/staff/:id/status')
   @HttpCode(HttpStatus.NO_CONTENT)
   async changeStatus(
@@ -212,7 +213,7 @@ export class StaffController {
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Staff member not found' })
   @ApiConflictResponse({ description: 'Staff member has associated bookings' })
-  @Permissions(Permission.STAFF_MANAGE)
+  @Permissions(Write(Claim.STAFF))
   @Delete('locations/:locationId/staff/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(
@@ -232,7 +233,7 @@ export class StaffController {
   })
   @ApiOkResponse({ type: ApiResponse(ShiftsResponseDto) })
   @ApiNotFoundResponse({ description: 'Staff member not found' })
-  @Permissions([Permission.STAFF_READ, Permission.STAFF_READ_OWN])
+  @Permissions([Read(Claim.STAFF), Read(Claim.STAFF_OWN)])
   @Get('locations/:locationId/staff/:id/shifts')
   async getShifts(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -244,8 +245,8 @@ export class StaffController {
       token,
       locationId,
       id,
-      Permission.STAFF_READ,
-      Permission.STAFF_READ_OWN,
+      Read(Claim.STAFF),
+      Read(Claim.STAFF_OWN),
     );
     const shifts = await this.staffService.getShifts(locationId, id, dto);
     return BaseResponseDto.success(
@@ -262,7 +263,7 @@ export class StaffController {
   })
   @ApiOkResponse({ type: ApiResponse(ShiftsResponseDto) })
   @ApiNotFoundResponse({ description: 'Staff member not found' })
-  @Permissions(Permission.STAFF_MANAGE)
+  @Permissions(Write(Claim.STAFF))
   @Put('locations/:locationId/staff/:id/shifts')
   async replaceShifts(
     @Param('locationId', ParseUUIDPipe) locationId: string,

@@ -14,10 +14,11 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { Claim } from '../../../access/enums/claim.enum.js';
+import { Read, Write } from '../../../access/utils/permission.js';
 import { ApiResponse } from '../../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../../../shared/dto/id-response.dto.js';
-import { Permission } from '../../../access/enums/permission.enum.js';
 import { auditActorFromToken } from '../../../audit/utils/audit-actor-from-token.js';
 import { Permissions } from '../../../auth/decorators/permissions.decorator.js';
 import { TokenPayload } from '../../../auth/decorators/token-payload.decorator.js';
@@ -41,7 +42,7 @@ export class StaffEarningsController {
 
   @ApiOperation({ summary: 'Search staff earnings' })
   @ApiOkResponse({ type: ApiResponse(StaffEarningSearchResponseDto) })
-  @Permissions([Permission.PAYROLL_READ, Permission.PAYROLL_READ_OWN])
+  @Permissions([Read(Claim.PAYROLL), Read(Claim.PAYROLL_OWN)])
   @Get('locations/:locationId/payroll/earnings')
   async search(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -51,8 +52,8 @@ export class StaffEarningsController {
     const staffId = await this.access.resolveStaffId(
       token,
       locationId,
-      Permission.PAYROLL_READ,
-      Permission.PAYROLL_READ_OWN,
+      Read(Claim.PAYROLL),
+      Read(Claim.PAYROLL_OWN),
     );
     const { items, totalItems } = await this.earnings.search(
       locationId,
@@ -71,7 +72,7 @@ export class StaffEarningsController {
 
   @ApiOperation({ summary: 'List earnings for a staff member' })
   @ApiOkResponse({ type: ApiResponse(StaffEarningSearchResponseDto) })
-  @Permissions([Permission.PAYROLL_READ, Permission.PAYROLL_READ_OWN])
+  @Permissions([Read(Claim.PAYROLL), Read(Claim.PAYROLL_OWN)])
   @Get('locations/:locationId/staff/:id/earnings')
   async listForStaff(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -83,8 +84,8 @@ export class StaffEarningsController {
       token,
       locationId,
       id,
-      Permission.PAYROLL_READ,
-      Permission.PAYROLL_READ_OWN,
+      Read(Claim.PAYROLL),
+      Read(Claim.PAYROLL_OWN),
     );
     const { items, totalItems } = await this.earnings.search(locationId, {
       ...dto,
@@ -104,7 +105,7 @@ export class StaffEarningsController {
   @ApiOperation({ summary: 'Add a manual bonus, deduction, or correction' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Staff member not found' })
-  @Permissions(Permission.PAYROLL_MANAGE)
+  @Permissions(Write(Claim.PAYROLL))
   @Post('locations/:locationId/staff/:id/earnings')
   async createManual(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -123,7 +124,7 @@ export class StaffEarningsController {
 
   @ApiOperation({ summary: 'Record a product sale commission (no inventory)' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
-  @Permissions(Permission.PAYROLL_MANAGE)
+  @Permissions(Write(Claim.PAYROLL))
   @Post('locations/:locationId/payroll/product-sales')
   async recordProductSale(
     @Param('locationId', ParseUUIDPipe) locationId: string,

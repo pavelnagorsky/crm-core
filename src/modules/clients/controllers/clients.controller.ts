@@ -29,11 +29,12 @@ import {
   ApiTags,
   ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
+import { Claim } from '../../access/enums/claim.enum.js';
+import { Read, Write } from '../../access/utils/permission.js';
 import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../../shared/dto/id-response.dto.js';
 import { XlsxUtils } from '../../../shared/xlsx/xlsx.utils.js';
-import { Permission } from '../../access/enums/permission.enum.js';
 import { auditActorFromToken } from '../../audit/utils/audit-actor-from-token.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 import { TokenPayload } from '../../auth/decorators/token-payload.decorator.js';
@@ -63,7 +64,7 @@ export class ClientsController {
   @ApiOperation({ summary: 'Create a client' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
   @ApiConflictResponse({ description: 'Phone number already in use' })
-  @Permissions(Permission.CLIENT_MANAGE)
+  @Permissions(Write(Claim.CLIENT))
   @Post()
   async create(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -100,7 +101,7 @@ export class ClientsController {
   @ApiUnprocessableEntityResponse({
     description: 'Import file is not an .xlsx spreadsheet',
   })
-  @Permissions(Permission.CLIENT_IMPORT)
+  @Permissions(Write(Claim.CLIENT_IMPORT))
   @ClientImportFile()
   @Post('import')
   async import(
@@ -126,7 +127,7 @@ export class ClientsController {
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Client not found' })
   @ApiConflictResponse({ description: 'Phone number already in use' })
-  @Permissions(Permission.CLIENT_MANAGE)
+  @Permissions(Write(Claim.CLIENT))
   @Put(':id')
   async update(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -147,7 +148,7 @@ export class ClientsController {
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Client not found' })
   @ApiConflictResponse({ description: 'Client ban is already in this state' })
-  @Permissions(Permission.CLIENT_BAN)
+  @Permissions(Write(Claim.CLIENT_BAN))
   @Patch(':id/ban')
   @HttpCode(HttpStatus.NO_CONTENT)
   async setBan(
@@ -167,7 +168,7 @@ export class ClientsController {
   @ApiOperation({ summary: 'Export clients as XLSX' })
   @ApiProduces(XlsxUtils.mimeType)
   @ApiOkResponse({ description: 'File stream' })
-  @Permissions(Permission.CLIENT_EXPORT)
+  @Permissions(Read(Claim.CLIENT_EXPORT))
   @Get('export')
   async export(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -186,7 +187,7 @@ export class ClientsController {
   @ApiOperation({ summary: 'Get client by ID' })
   @ApiOkResponse({ type: ApiResponse(ClientResponseDto) })
   @ApiNotFoundResponse({ description: 'Client not found' })
-  @Permissions(Permission.CLIENT_READ)
+  @Permissions(Read(Claim.CLIENT))
   @Get(':id')
   async findById(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -198,7 +199,7 @@ export class ClientsController {
 
   @ApiOperation({ summary: 'Search clients' })
   @ApiOkResponse({ type: ApiResponse(ClientSearchResponseDto) })
-  @Permissions(Permission.CLIENT_READ)
+  @Permissions(Read(Claim.CLIENT))
   @Get()
   async search(
     @Param('brandId', ParseUUIDPipe) brandId: string,

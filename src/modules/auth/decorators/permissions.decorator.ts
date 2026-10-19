@@ -5,7 +5,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiForbiddenResponse } from '@nestjs/swagger';
-import { Permission } from '../../access/enums/permission.enum.js';
+import { Permission } from '../../access/interfaces/permission.interface.js';
 import {
   PermissionGuard,
   PERMISSIONS_KEY,

@@ -1,326 +1,364 @@
 import { BusinessRole } from '@prisma/client';
+import { Claim } from '../enums/claim.enum.js';
+import { PermissionAccess } from '../enums/permission-access.enum.js';
 import { PermissionScope } from '../enums/permission-scope.enum.js';
-import { Permission } from '../enums/permission.enum.js';
+import { PermissionActionDefinition } from '../interfaces/permission-action-definition.interface.js';
 import { PermissionDefinition } from '../interfaces/permission-definition.interface.js';
+import { Permission } from '../interfaces/permission.interface.js';
+import { Read } from '../utils/permission.js';
+
+function action(
+  configurable: readonly BusinessRole[] = [],
+  dependencies: readonly Permission[] = [],
+): PermissionActionDefinition {
+  return { configurable, dependencies };
+}
+
 export const PERMISSION_REGISTRY: Readonly<
-  Record<Permission, PermissionDefinition>
+  Record<Claim, PermissionDefinition>
 > = {
-  [Permission.BRAND_READ]: {
+  [Claim.BRAND]: {
     scope: PermissionScope.BRAND,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [],
-    dependencies: [],
+    actions: {
+      [PermissionAccess.READ]: action(),
+    },
   },
-  [Permission.BRAND_SETTINGS_MANAGE]: {
+  [Claim.BRAND_SETTINGS]: {
     scope: PermissionScope.BRAND,
-    defaults: [BusinessRole.OWNER],
-    configurable: [],
-    dependencies: [],
+    actions: {
+      [PermissionAccess.WRITE]: action(),
+    },
   },
-  [Permission.LOCATION_CREATE]: {
+  [Claim.LOCATION_CREATE]: {
     scope: PermissionScope.BRAND,
-    defaults: [BusinessRole.OWNER],
-    configurable: [],
-    dependencies: [],
+    actions: {
+      [PermissionAccess.WRITE]: action(),
+    },
   },
-  [Permission.LOCATION_READ]: {
+  [Claim.LOCATION]: {
     scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF],
-    configurable: [],
-    dependencies: [],
+    actions: {
+      [PermissionAccess.READ]: action(),
+    },
   },
-  [Permission.LOCATION_SETTINGS_MANAGE]: {
+  [Claim.LOCATION_SETTINGS]: {
     scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER],
-    configurable: [],
-    dependencies: [],
+    actions: {
+      [PermissionAccess.WRITE]: action(),
+    },
   },
-  [Permission.ACCESS_STAFF_MANAGE]: {
+  [Claim.ACCESS_STAFF]: {
     scope: PermissionScope.BRAND_OR_LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [Permission.STAFF_READ],
+    actions: {
+      [PermissionAccess.WRITE]: action(
+        [BusinessRole.MANAGER],
+        [Read(Claim.STAFF)],
+      ),
+    },
   },
-  [Permission.ACCESS_MANAGER_MANAGE]: {
+  [Claim.ACCESS_MANAGER]: {
     scope: PermissionScope.BRAND_OR_LOCATION,
-    defaults: [BusinessRole.OWNER],
-    configurable: [],
-    dependencies: [],
+    actions: {
+      [PermissionAccess.WRITE]: action(),
+    },
   },
-  [Permission.ACCESS_OWNER_MANAGE]: {
+  [Claim.ACCESS_OWNER]: {
     scope: PermissionScope.BRAND_OR_LOCATION,
-    defaults: [BusinessRole.OWNER],
-    configurable: [],
-    dependencies: [],
+    actions: {
+      [PermissionAccess.WRITE]: action(),
+    },
   },
-  [Permission.ACCESS_POLICY_MANAGE]: {
+  [Claim.ACCESS_POLICY]: {
     scope: PermissionScope.BRAND_OR_LOCATION,
-    defaults: [BusinessRole.OWNER],
-    configurable: [],
-    dependencies: [],
+    actions: {
+      [PermissionAccess.WRITE]: action(),
+    },
   },
-  [Permission.CALENDAR_BLOCKS_MANAGE]: {
+  [Claim.CALENDAR_BLOCKS]: {
     scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [Permission.BOOKING_READ],
+    actions: {
+      [PermissionAccess.WRITE]: action(
+        [BusinessRole.MANAGER],
+        [Read(Claim.BOOKING)],
+      ),
+    },
   },
-  [Permission.BOOKING_READ]: {
+  [Claim.BOOKING]: {
     scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.STAFF],
-    dependencies: [],
+    actions: {
+      [PermissionAccess.READ]: action([BusinessRole.STAFF]),
+      [PermissionAccess.WRITE]: action(
+        [BusinessRole.MANAGER],
+        [Read(Claim.BOOKING)],
+      ),
+    },
   },
-  [Permission.BOOKING_READ_OWN]: {
+  [Claim.BOOKING_OWN]: {
     scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.STAFF],
-    configurable: [BusinessRole.STAFF],
-    dependencies: [],
+    actions: {
+      [PermissionAccess.READ]: action([BusinessRole.STAFF]),
+      [PermissionAccess.WRITE]: action(
+        [BusinessRole.STAFF],
+        [Read(Claim.BOOKING_OWN)],
+      ),
+    },
   },
-  [Permission.BOOKING_MANAGE]: {
+  [Claim.BOOKING_DELETE]: {
     scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [Permission.BOOKING_READ],
+    actions: {
+      [PermissionAccess.WRITE]: action([], [Read(Claim.BOOKING)]),
+    },
   },
-  [Permission.BOOKING_MANAGE_OWN]: {
+  [Claim.BOOKING_EXPORT]: {
     scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.STAFF],
-    configurable: [BusinessRole.STAFF],
-    dependencies: [Permission.BOOKING_READ_OWN],
+    actions: {
+      [PermissionAccess.READ]: action(
+        [BusinessRole.MANAGER],
+        [Read(Claim.BOOKING)],
+      ),
+    },
   },
-  [Permission.BOOKING_DELETE]: {
+  [Claim.BOOKING_CLIENT_TOKEN]: {
     scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER],
-    configurable: [],
-    dependencies: [Permission.BOOKING_READ],
+    actions: {
+      [PermissionAccess.WRITE]: action(
+        [BusinessRole.MANAGER],
+        [Read(Claim.BOOKING)],
+      ),
+    },
   },
-  [Permission.BOOKING_EXPORT]: {
+  [Claim.ORDER]: {
     scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [Permission.BOOKING_READ],
+    actions: {
+      [PermissionAccess.READ]: action(),
+      [PermissionAccess.WRITE]: action(
+        [BusinessRole.MANAGER],
+        [Read(Claim.ORDER)],
+      ),
+    },
   },
-  [Permission.BOOKING_CLIENT_TOKEN_ISSUE]: {
+  [Claim.ORDER_RETURN]: {
     scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [Permission.BOOKING_READ],
+    actions: {
+      [PermissionAccess.WRITE]: action(
+        [BusinessRole.MANAGER],
+        [Read(Claim.ORDER)],
+      ),
+    },
   },
-  [Permission.ORDER_READ]: {
+  [Claim.ORDER_VOID]: {
     scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [],
-    dependencies: [],
+    actions: {
+      [PermissionAccess.WRITE]: action(
+        [BusinessRole.MANAGER],
+        [Read(Claim.ORDER)],
+      ),
+    },
   },
-  [Permission.ORDER_MANAGE]: {
+  [Claim.SALE_PRICE_OVERRIDE]: {
     scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [Permission.ORDER_READ],
+    actions: {
+      [PermissionAccess.WRITE]: action([BusinessRole.MANAGER]),
+    },
   },
-  [Permission.ORDER_RETURN]: {
-    scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [Permission.ORDER_READ],
-  },
-  [Permission.ORDER_VOID]: {
-    scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [Permission.ORDER_READ],
-  },
-  [Permission.SALE_PRICE_OVERRIDE]: {
-    scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [],
-  },
-  [Permission.CLIENT_READ]: {
+  [Claim.CLIENT]: {
     scope: PermissionScope.SHARED,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.STAFF],
-    dependencies: [],
+    actions: {
+      [PermissionAccess.READ]: action([BusinessRole.STAFF]),
+      [PermissionAccess.WRITE]: action(
+        [BusinessRole.MANAGER],
+        [Read(Claim.CLIENT)],
+      ),
+    },
   },
-  [Permission.CLIENT_MANAGE]: {
+  [Claim.CLIENT_BAN]: {
     scope: PermissionScope.SHARED,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [Permission.CLIENT_READ],
+    actions: {
+      [PermissionAccess.WRITE]: action(
+        [BusinessRole.MANAGER],
+        [Read(Claim.CLIENT)],
+      ),
+    },
   },
-  [Permission.CLIENT_BAN]: {
+  [Claim.CLIENT_IMPORT]: {
     scope: PermissionScope.SHARED,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [Permission.CLIENT_READ],
+    actions: {
+      [PermissionAccess.WRITE]: action(
+        [BusinessRole.MANAGER],
+        [Read(Claim.CLIENT)],
+      ),
+    },
   },
-  [Permission.CLIENT_IMPORT]: {
+  [Claim.CLIENT_EXPORT]: {
     scope: PermissionScope.SHARED,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [Permission.CLIENT_READ],
+    actions: {
+      [PermissionAccess.READ]: action(
+        [BusinessRole.MANAGER],
+        [Read(Claim.CLIENT)],
+      ),
+    },
   },
-  [Permission.CLIENT_EXPORT]: {
+  [Claim.PRODUCT_CATALOG]: {
     scope: PermissionScope.SHARED,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [Permission.CLIENT_READ],
+    actions: {
+      [PermissionAccess.READ]: action(),
+      [PermissionAccess.WRITE]: action(
+        [BusinessRole.MANAGER],
+        [Read(Claim.PRODUCT_CATALOG)],
+      ),
+    },
   },
-  [Permission.PRODUCT_READ]: {
+  [Claim.PRODUCT_LOCATION]: {
+    scope: PermissionScope.LOCATION,
+    actions: {
+      [PermissionAccess.READ]: action(),
+      [PermissionAccess.WRITE]: action(
+        [BusinessRole.MANAGER],
+        [Read(Claim.PRODUCT_LOCATION)],
+      ),
+    },
+  },
+  [Claim.SERVICE]: {
+    scope: PermissionScope.LOCATION,
+    actions: {
+      [PermissionAccess.READ]: action(),
+      [PermissionAccess.WRITE]: action(
+        [BusinessRole.MANAGER],
+        [Read(Claim.SERVICE)],
+      ),
+    },
+  },
+  [Claim.SUPPLIER]: {
     scope: PermissionScope.SHARED,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF],
-    configurable: [],
-    dependencies: [],
+    actions: {
+      [PermissionAccess.READ]: action([BusinessRole.MANAGER]),
+      [PermissionAccess.WRITE]: action(
+        [BusinessRole.MANAGER],
+        [Read(Claim.SUPPLIER)],
+      ),
+    },
   },
-  [Permission.PRODUCT_CATALOG_MANAGE]: {
-    scope: PermissionScope.SHARED,
-    defaults: [BusinessRole.OWNER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [Permission.PRODUCT_READ],
-  },
-  [Permission.PRODUCT_LOCATION_READ]: {
+  [Claim.INVENTORY]: {
     scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF],
-    configurable: [],
-    dependencies: [],
+    actions: {
+      [PermissionAccess.READ]: action([BusinessRole.MANAGER]),
+      [PermissionAccess.WRITE]: action(
+        [BusinessRole.MANAGER],
+        [Read(Claim.INVENTORY)],
+      ),
+    },
   },
-  [Permission.PRODUCT_LOCATION_MANAGE]: {
+  [Claim.INVENTORY_EXPORT]: {
     scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [Permission.PRODUCT_LOCATION_READ],
+    actions: {
+      [PermissionAccess.READ]: action(
+        [BusinessRole.MANAGER],
+        [Read(Claim.INVENTORY)],
+      ),
+    },
   },
-  [Permission.SERVICE_READ]: {
+  [Claim.STAFF]: {
     scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER, BusinessRole.STAFF],
-    configurable: [],
-    dependencies: [],
+    actions: {
+      [PermissionAccess.READ]: action(),
+      [PermissionAccess.WRITE]: action(
+        [BusinessRole.MANAGER],
+        [Read(Claim.STAFF)],
+      ),
+    },
   },
-  [Permission.SERVICE_MANAGE]: {
+  [Claim.STAFF_OWN]: {
     scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [Permission.SERVICE_READ],
+    actions: {
+      [PermissionAccess.READ]: action([BusinessRole.STAFF]),
+    },
   },
-  [Permission.SUPPLIER_READ]: {
-    scope: PermissionScope.SHARED,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [],
-  },
-  [Permission.SUPPLIER_MANAGE]: {
-    scope: PermissionScope.SHARED,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [Permission.SUPPLIER_READ],
-  },
-  [Permission.INVENTORY_READ]: {
+  [Claim.STAFF_EXPORT]: {
     scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [],
+    actions: {
+      [PermissionAccess.READ]: action(
+        [BusinessRole.MANAGER],
+        [Read(Claim.STAFF)],
+      ),
+    },
   },
-  [Permission.INVENTORY_MANAGE]: {
+  [Claim.PAYROLL]: {
     scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [Permission.INVENTORY_READ],
+    actions: {
+      [PermissionAccess.READ]: action([BusinessRole.MANAGER]),
+      [PermissionAccess.WRITE]: action([], [Read(Claim.PAYROLL)]),
+    },
   },
-  [Permission.INVENTORY_EXPORT]: {
+  [Claim.PAYROLL_OWN]: {
     scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [Permission.INVENTORY_READ],
+    actions: {
+      [PermissionAccess.READ]: action([BusinessRole.STAFF]),
+    },
   },
-  [Permission.STAFF_READ]: {
+  [Claim.PAYROLL_EXPORT]: {
     scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [],
-    dependencies: [],
+    actions: {
+      [PermissionAccess.READ]: action(
+        [BusinessRole.MANAGER],
+        [Read(Claim.PAYROLL)],
+      ),
+    },
   },
-  [Permission.STAFF_READ_OWN]: {
+  [Claim.BOOKING_CHANNEL]: {
     scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.STAFF],
-    configurable: [BusinessRole.STAFF],
-    dependencies: [],
+    actions: {
+      [PermissionAccess.READ]: action([BusinessRole.MANAGER]),
+      [PermissionAccess.WRITE]: action(
+        [BusinessRole.MANAGER],
+        [Read(Claim.BOOKING_CHANNEL)],
+      ),
+    },
   },
-  [Permission.STAFF_MANAGE]: {
+  [Claim.ANALYTICS_LOCATION]: {
     scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [Permission.STAFF_READ],
+    actions: {
+      [PermissionAccess.READ]: action([BusinessRole.MANAGER]),
+    },
   },
-  [Permission.STAFF_EXPORT]: {
-    scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [Permission.STAFF_READ],
-  },
-  [Permission.PAYROLL_READ]: {
-    scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [],
-  },
-  [Permission.PAYROLL_READ_OWN]: {
-    scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.STAFF],
-    configurable: [BusinessRole.STAFF],
-    dependencies: [],
-  },
-  [Permission.PAYROLL_MANAGE]: {
-    scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER],
-    configurable: [],
-    dependencies: [Permission.PAYROLL_READ],
-  },
-  [Permission.PAYROLL_EXPORT]: {
-    scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [Permission.PAYROLL_READ],
-  },
-  [Permission.BOOKING_CHANNEL_READ]: {
-    scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [],
-  },
-  [Permission.BOOKING_CHANNEL_MANAGE]: {
-    scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [Permission.BOOKING_CHANNEL_READ],
-  },
-  [Permission.ANALYTICS_LOCATION_READ]: {
-    scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [],
-  },
-  [Permission.ANALYTICS_BRAND_READ]: {
+  [Claim.ANALYTICS_BRAND]: {
     scope: PermissionScope.BRAND,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [],
+    actions: {
+      [PermissionAccess.READ]: action([BusinessRole.MANAGER]),
+    },
   },
-  [Permission.AUDIT_LOCATION_READ]: {
+  [Claim.AUDIT_LOCATION]: {
     scope: PermissionScope.LOCATION,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [],
+    actions: {
+      [PermissionAccess.READ]: action([BusinessRole.MANAGER]),
+    },
   },
-  [Permission.AUDIT_BRAND_READ]: {
+  [Claim.AUDIT_BRAND]: {
     scope: PermissionScope.BRAND,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [],
+    actions: {
+      [PermissionAccess.READ]: action([BusinessRole.MANAGER]),
+    },
   },
-  [Permission.FILE_BRAND_MANAGE]: {
+  [Claim.FILE_BRAND]: {
     scope: PermissionScope.SHARED,
-    defaults: [BusinessRole.OWNER, BusinessRole.MANAGER],
-    configurable: [BusinessRole.MANAGER],
-    dependencies: [],
+    actions: {
+      [PermissionAccess.WRITE]: action([BusinessRole.MANAGER]),
+    },
   },
 };
+
+export const REGISTERED_PERMISSIONS = Object.values(Claim).flatMap((claim) =>
+  ([PermissionAccess.READ, PermissionAccess.WRITE] as const)
+    .filter((access) => !!PERMISSION_REGISTRY[claim].actions[access])
+    .map((access) => ({ claim, access })),
+);
+
+export function isRegisteredPermission(permission: Permission): boolean {
+  if (!permission || !Object.hasOwn(PERMISSION_REGISTRY, permission.claim))
+    return false;
+  const actions = PERMISSION_REGISTRY[permission.claim].actions;
+  return permission.access === PermissionAccess.READ_WRITE
+    ? !!actions.read && !!actions.write
+    : (permission.access === PermissionAccess.READ ||
+        permission.access === PermissionAccess.WRITE) &&
+        !!actions[permission.access];
+}

@@ -20,12 +20,13 @@ import {
   ApiProduces,
   ApiTags,
 } from '@nestjs/swagger';
+import { Claim } from '../../access/enums/claim.enum.js';
+import { Read, Write } from '../../access/utils/permission.js';
 import { ApiResponseArray } from '../../../shared/dto/api-response-array.dto.js';
 import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../../shared/dto/id-response.dto.js';
 import { XlsxUtils } from '../../../shared/xlsx/xlsx.utils.js';
-import { Permission } from '../../access/enums/permission.enum.js';
 import { assertPermission } from '../../access/utils/assert-permission.js';
 import { auditActorFromToken } from '../../audit/utils/audit-actor-from-token.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
@@ -68,7 +69,7 @@ export class InventoryController {
 
   @ApiOperation({ summary: 'Search current inventory balances' })
   @ApiOkResponse({ type: ApiResponse(InventorySearchResponseDto) })
-  @Permissions(Permission.INVENTORY_READ)
+  @Permissions(Read(Claim.INVENTORY))
   @Get()
   async search(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -91,7 +92,7 @@ export class InventoryController {
 
   @ApiOperation({ summary: 'Get inventory table counts' })
   @ApiOkResponse({ type: ApiResponse(InventoryCountsResponseDto) })
-  @Permissions(Permission.INVENTORY_READ)
+  @Permissions(Read(Claim.INVENTORY))
   @Get('counts')
   async getCounts(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -107,7 +108,7 @@ export class InventoryController {
   @ApiOperation({ summary: 'Export current inventory balances as XLSX' })
   @ApiProduces(XlsxUtils.mimeType)
   @ApiOkResponse({ description: 'File stream' })
-  @Permissions(Permission.INVENTORY_EXPORT)
+  @Permissions(Read(Claim.INVENTORY_EXPORT))
   @Get('export')
   async exportBalances(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -122,7 +123,7 @@ export class InventoryController {
 
   @ApiOperation({ summary: 'Search inventory turnover statement lines' })
   @ApiOkResponse({ type: ApiResponse(InventoryTurnoverSearchResponseDto) })
-  @Permissions(Permission.INVENTORY_READ)
+  @Permissions(Read(Claim.INVENTORY))
   @Get('vedomost')
   async searchVedomost(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -149,7 +150,7 @@ export class InventoryController {
   })
   @ApiProduces(XlsxUtils.mimeType)
   @ApiOkResponse({ description: 'File stream' })
-  @Permissions(Permission.INVENTORY_EXPORT)
+  @Permissions(Read(Claim.INVENTORY_EXPORT))
   @Get('export/inventory-statement')
   async exportInventoryStatement(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -165,7 +166,7 @@ export class InventoryController {
   @ApiOperation({ summary: 'Export inventory turnover statement as XLSX' })
   @ApiProduces(XlsxUtils.mimeType)
   @ApiOkResponse({ description: 'File stream' })
-  @Permissions(Permission.INVENTORY_EXPORT)
+  @Permissions(Read(Claim.INVENTORY_EXPORT))
   @Get('export/vedomost')
   async exportVedomost(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -183,7 +184,7 @@ export class InventoryController {
 
   @ApiOperation({ summary: 'Search inventory movements for a product' })
   @ApiOkResponse({ type: ApiResponse(InventoryMovementSearchResponseDto) })
-  @Permissions(Permission.INVENTORY_READ)
+  @Permissions(Read(Claim.INVENTORY))
   @Get(':productId/movements')
   async searchMovements(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -209,7 +210,7 @@ export class InventoryController {
   @ApiOperation({ summary: 'Export inventory movements for a product as XLSX' })
   @ApiProduces(XlsxUtils.mimeType)
   @ApiOkResponse({ description: 'File stream' })
-  @Permissions(Permission.INVENTORY_EXPORT)
+  @Permissions(Read(Claim.INVENTORY_EXPORT))
   @Get(':productId/movements/export')
   async exportMovements(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -233,7 +234,7 @@ export class InventoryController {
       'Use quantity and unitCost for base units. Receipt lines may instead use packagingId, packageQuantity (whole packages), and packageUnitCost. A product may have multiple lines. Responses always expose quantity and unitCost in base units, plus the saved packaging input.',
   })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
-  @Permissions(Permission.INVENTORY_MANAGE)
+  @Permissions(Write(Claim.INVENTORY))
   @Post('documents')
   async createDocument(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -243,7 +244,7 @@ export class InventoryController {
     if (dto.destinationLocationId)
       assertPermission(
         token,
-        Permission.INVENTORY_MANAGE,
+        Write(Claim.INVENTORY),
         dto.destinationLocationId,
       );
     const document = await this.inventory.createDocument(
@@ -256,7 +257,7 @@ export class InventoryController {
 
   @ApiOperation({ summary: 'Search inventory documents' })
   @ApiOkResponse({ type: ApiResponse(InventoryDocumentSearchResponseDto) })
-  @Permissions(Permission.INVENTORY_READ)
+  @Permissions(Read(Claim.INVENTORY))
   @Get('documents')
   async searchDocuments(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -281,7 +282,7 @@ export class InventoryController {
   @ApiOkResponse({
     type: ApiResponseArray(InventoryDocumentStatusCountResponseDto),
   })
-  @Permissions(Permission.INVENTORY_READ)
+  @Permissions(Read(Claim.INVENTORY))
   @Get('documents/status-counts')
   async getDocumentStatusCounts(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -301,7 +302,7 @@ export class InventoryController {
   @ApiOperation({ summary: 'Get an inventory document' })
   @ApiOkResponse({ type: ApiResponse(InventoryDocumentResponseDto) })
   @ApiNotFoundResponse({ description: 'Inventory document not found' })
-  @Permissions(Permission.INVENTORY_READ)
+  @Permissions(Read(Claim.INVENTORY))
   @Get('documents/:documentId')
   async findDocument(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -317,7 +318,7 @@ export class InventoryController {
   @ApiOperation({ summary: 'Replace an open inventory document' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiConflictResponse({ description: 'Inventory document is immutable' })
-  @Permissions(Permission.INVENTORY_MANAGE)
+  @Permissions(Write(Claim.INVENTORY))
   @Put('documents/:documentId')
   async updateDocument(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -329,13 +330,13 @@ export class InventoryController {
     if (current.destinationLocationId)
       assertPermission(
         token,
-        Permission.INVENTORY_MANAGE,
+        Write(Claim.INVENTORY),
         current.destinationLocationId,
       );
     if (dto.destinationLocationId)
       assertPermission(
         token,
-        Permission.INVENTORY_MANAGE,
+        Write(Claim.INVENTORY),
         dto.destinationLocationId,
       );
     const document = await this.inventory.updateDocument(
@@ -349,7 +350,7 @@ export class InventoryController {
   @ApiOperation({ summary: 'Post or void an inventory document' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiConflictResponse({ description: 'Inventory status transition rejected' })
-  @Permissions(Permission.INVENTORY_MANAGE)
+  @Permissions(Write(Claim.INVENTORY))
   @Patch('documents/:documentId/status')
   async changeDocumentStatus(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -361,7 +362,7 @@ export class InventoryController {
     if (current.destinationLocationId)
       assertPermission(
         token,
-        Permission.INVENTORY_MANAGE,
+        Write(Claim.INVENTORY),
         current.destinationLocationId,
       );
     const document = await this.inventory.changeDocumentStatus(

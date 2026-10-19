@@ -1,12 +1,14 @@
 import { ForbiddenException } from '@nestjs/common';
 import { BusinessRole, UserRole } from '@prisma/client';
+import { Claim } from '../enums/claim.enum.js';
+import { Read, Write } from '../utils/permission.js';
 import {
   authorizeTestToken,
   tokenPayload,
 } from '../../auth/testing/factories/token-payload.factory.js';
 import { PermissionCalculator } from '../calculators/permission.calculator.js';
-import { PermissionValue } from '../enums/permission-value.enum.js';
-import { Permission } from '../enums/permission.enum.js';
+import { PermissionEffect } from '../enums/permission-effect.enum.js';
+import { PermissionAccess } from '../enums/permission-access.enum.js';
 import { AccessAdministrationService } from './access-administration.service.js';
 
 describe('Access administration', () => {
@@ -71,18 +73,20 @@ describe('Access administration', () => {
   it.each([
     {
       role: BusinessRole.MANAGER,
-      permission: Permission.INVENTORY_READ,
-      dependent: Permission.INVENTORY_MANAGE,
+      permission: Read(Claim.INVENTORY),
+      dependent: Write(Claim.INVENTORY),
     },
     {
       role: BusinessRole.STAFF,
-      permission: Permission.BOOKING_READ_OWN,
-      dependent: Permission.BOOKING_MANAGE_OWN,
+      permission: Read(Claim.BOOKING_OWN),
+      dependent: Write(Claim.BOOKING_OWN),
     },
   ])(
     'allows disabling $permission without extra changes',
     async ({ role, permission, dependent }) => {
-      await changePolicy([{ role, permission, value: PermissionValue.DENY }]);
+      await changePolicy([
+        { role, ...permission, effect: PermissionEffect.DENY },
+      ]);
 
       expect(db.locationPermissionOverride.upsert).toHaveBeenCalledOnce();
       const saved = {
@@ -94,7 +98,7 @@ describe('Access administration', () => {
       expect(policy.entries).toContainEqual(
         expect.objectContaining({
           role,
-          permission: dependent,
+          ...dependent,
           override: null,
           allowed: false,
         }),
@@ -109,15 +113,15 @@ describe('Access administration', () => {
       id: 'read',
       brandId: 'brand-1',
       role,
-      permission: Permission.INVENTORY_READ,
+      ...Read(Claim.INVENTORY),
       allowed: false,
     };
     db.brandPermissionOverride.findMany.mockResolvedValue([denyRead]);
     await changePolicy([
       {
         role,
-        permission: Permission.INVENTORY_MANAGE,
-        value: PermissionValue.ALLOW,
+        ...Write(Claim.INVENTORY),
+        effect: PermissionEffect.ALLOW,
       },
     ]);
     db.locationPermissionOverride.findMany.mockResolvedValue([
@@ -125,14 +129,16 @@ describe('Access administration', () => {
         id: 'manage',
         locationId: 'location-1',
         role,
-        permission: Permission.INVENTORY_MANAGE,
+        ...Write(Claim.INVENTORY),
         allowed: true,
       },
     ]);
     const entry = async () =>
       (await service.describePolicy('brand-1', 'location-1')).entries.find(
         (row) =>
-          row.role === role && row.permission === Permission.INVENTORY_MANAGE,
+          row.role === role &&
+          row.claim === Claim.INVENTORY &&
+          row.access === PermissionAccess.WRITE,
       );
 
     expect(await entry()).toMatchObject({ override: true, allowed: false });
@@ -141,10 +147,10 @@ describe('Access administration', () => {
   });
 
   it.each([
-    { role: BusinessRole.OWNER, permission: Permission.ORDER_RETURN },
-    { role: BusinessRole.STAFF, permission: Permission.ORDER_RETURN },
-    { role: BusinessRole.MANAGER, permission: Permission.CLIENT_MANAGE },
-    { role: BusinessRole.MANAGER, permission: 'unknown' as Permission },
+    { role: BusinessRole.OWNER, ...Write(Claim.ORDER_RETURN) },
+    { role: BusinessRole.STAFF, ...Write(Claim.ORDER_RETURN) },
+    { role: BusinessRole.MANAGER, ...Write(Claim.CLIENT) },
+    { role: BusinessRole.MANAGER, ...Write('unknown' as Claim) },
   ])(
     'rejects an invalid local change for $role/$permission before writing',
     async (invalid) => {
@@ -152,10 +158,10 @@ describe('Access administration', () => {
         changePolicy([
           {
             role: BusinessRole.MANAGER,
-            permission: Permission.ORDER_RETURN,
-            value: PermissionValue.DENY,
+            ...Write(Claim.ORDER_RETURN),
+            effect: PermissionEffect.DENY,
           },
-          { ...invalid, value: PermissionValue.ALLOW },
+          { ...invalid, effect: PermissionEffect.ALLOW },
         ]),
       ).rejects.toMatchObject({ status: 400 });
       expect(db.brandPermissionOverride.upsert).not.toHaveBeenCalled();
@@ -167,14 +173,81 @@ describe('Access administration', () => {
   it('rejects duplicate changes before writing', async () => {
     const change = {
       role: BusinessRole.MANAGER,
-      permission: Permission.ORDER_RETURN,
-      value: PermissionValue.DENY,
+      ...Write(Claim.ORDER_RETURN),
+      effect: PermissionEffect.DENY,
     };
     await expect(changePolicy([change, change])).rejects.toMatchObject({
       status: 400,
     });
     expect(db.locationPermissionOverride.upsert).not.toHaveBeenCalled();
   });
+
+  it.each([
+    { ...Read(Claim.ORDER_RETURN), effect: PermissionEffect.ALLOW },
+    {
+      claim: Claim.INVENTORY,
+      access: PermissionAccess.READ_WRITE,
+      effect: PermissionEffect.ALLOW,
+    },
+    { ...Write(Claim.ORDER_RETURN), effect: 'invalid' as PermissionEffect },
+  ])(
+    'rejects unsupported actions and effects before writing',
+    async (change) => {
+      await expect(
+        changePolicy([{ role: BusinessRole.MANAGER, ...change }]),
+      ).rejects.toMatchObject({ status: 400 });
+      expect(db.locationPermissionOverride.upsert).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each([undefined, 'location-1'])(
+    'stores reading separately while resetting writing in scope %s',
+    async (locationId) => {
+      const owner = authorizeTestToken({
+        ...tokenPayload(),
+        brandMemberships: [{ brandId: 'brand-1', role: BusinessRole.OWNER }],
+      });
+      await service.changePolicy(
+        owner,
+        'brand-1',
+        locationId,
+        3,
+        [
+          {
+            role: BusinessRole.MANAGER,
+            ...Read(Claim.INVENTORY),
+            effect: PermissionEffect.DENY,
+          },
+          {
+            role: BusinessRole.MANAGER,
+            ...Write(Claim.INVENTORY),
+            effect: PermissionEffect.INHERIT,
+          },
+        ],
+        db as never,
+      );
+      const storage = locationId
+        ? db.locationPermissionOverride
+        : db.brandPermissionOverride;
+      expect(storage.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({
+            claim: Claim.INVENTORY,
+            access: PermissionAccess.READ,
+            allowed: false,
+          }),
+        }),
+      );
+      expect(storage.deleteMany).toHaveBeenCalledWith({
+        where: {
+          ...(locationId ? { locationId } : { brandId: 'brand-1' }),
+          role: BusinessRole.MANAGER,
+          claim: Claim.INVENTORY,
+          access: PermissionAccess.WRITE,
+        },
+      });
+    },
+  );
 
   it.each([undefined, 'location-1'])(
     'rejects enabling invitations while disabling fixed staff reading in scope %s',
@@ -192,13 +265,13 @@ describe('Access administration', () => {
           [
             {
               role: BusinessRole.MANAGER,
-              permission: Permission.ACCESS_STAFF_MANAGE,
-              value: PermissionValue.ALLOW,
+              ...Write(Claim.ACCESS_STAFF),
+              effect: PermissionEffect.ALLOW,
             },
             {
               role: BusinessRole.MANAGER,
-              permission: Permission.STAFF_READ,
-              value: PermissionValue.DENY,
+              ...Read(Claim.STAFF),
+              effect: PermissionEffect.DENY,
             },
           ],
           db as never,
@@ -216,8 +289,8 @@ describe('Access administration', () => {
       changePolicy([
         {
           role: BusinessRole.MANAGER,
-          permission: Permission.ORDER_RETURN,
-          value: PermissionValue.DENY,
+          ...Write(Claim.ORDER_RETURN),
+          effect: PermissionEffect.DENY,
         },
       ]),
     ).rejects.toMatchObject({ status: 409 });
@@ -237,8 +310,8 @@ describe('Access administration', () => {
       [
         {
           role: BusinessRole.MANAGER,
-          permission: Permission.SUPPLIER_READ,
-          value: PermissionValue.DENY,
+          ...Read(Claim.SUPPLIER),
+          effect: PermissionEffect.DENY,
         },
       ],
       db as never,
@@ -304,6 +377,130 @@ describe('Access administration', () => {
       ).rejects.toMatchObject({ status: 409 });
       expect(db.brandMembership.update).not.toHaveBeenCalled();
       expect(db.brandMembership.delete).not.toHaveBeenCalled();
+    },
+  );
+
+  describe.each([undefined, 'location-1'])(
+    'owner protection in %s',
+    (locationId) => {
+      const owner = authorizeTestToken({
+        ...tokenPayload(),
+        brandMemberships: [{ brandId: 'brand-1', role: BusinessRole.OWNER }],
+      });
+      const admin = authorizeTestToken({
+        ...tokenPayload(),
+        role: UserRole.ADMIN,
+      });
+      const membership = locationId
+        ? db.locationMembership
+        : db.brandMembership;
+      const change = (actor: typeof owner, role: BusinessRole | null) =>
+        service.changeMembership(
+          actor,
+          'brand-1',
+          locationId,
+          'membership',
+          role,
+          3,
+          db as never,
+        );
+
+      beforeEach(() => {
+        membership.findFirst.mockResolvedValue({
+          id: 'membership',
+          role: BusinessRole.OWNER,
+          userId: 'other-owner',
+        });
+        db.brandMembership.count.mockResolvedValue(2);
+      });
+
+      it.each([null, BusinessRole.MANAGER, BusinessRole.STAFF])(
+        'rejects changing another owner to %s without side effects',
+        async (role) => {
+          await expect(change(owner, role)).rejects.toMatchObject({
+            status: 403,
+            errorCode: 'ACCESS_OWNER_PROTECTED',
+          });
+          expect(membership.update).not.toHaveBeenCalled();
+          expect(membership.delete).not.toHaveBeenCalled();
+          expect(access.recordChange).not.toHaveBeenCalled();
+        },
+      );
+
+      it.each([null, BusinessRole.MANAGER])(
+        'allows voluntarily changing own role to %s',
+        async (role) => {
+          membership.findFirst.mockResolvedValue({
+            id: 'membership',
+            role: BusinessRole.OWNER,
+            userId: owner.sub,
+          });
+          await change(owner, role);
+          expect(
+            role ? membership.update : membership.delete,
+          ).toHaveBeenCalledOnce();
+          expect(access.recordChange).toHaveBeenCalledOnce();
+        },
+      );
+
+      it.each([null, BusinessRole.MANAGER])(
+        'allows an administrator to change another owner to %s',
+        async (role) => {
+          await change(admin, role);
+          expect(
+            role ? membership.update : membership.delete,
+          ).toHaveBeenCalledOnce();
+          expect(access.recordChange).toHaveBeenCalledOnce();
+        },
+      );
+
+      it('allows promoting another member to owner', async () => {
+        membership.findFirst.mockResolvedValue({
+          id: 'membership',
+          role: BusinessRole.MANAGER,
+          userId: 'other-owner',
+        });
+        await change(owner, BusinessRole.OWNER);
+        expect(membership.update).toHaveBeenCalledWith({
+          where: { id: 'membership' },
+          data: { role: BusinessRole.OWNER },
+        });
+      });
+
+      it('allows keeping another owner role unchanged', async () => {
+        await change(owner, BusinessRole.OWNER);
+        expect(membership.update).toHaveBeenCalledOnce();
+      });
+    },
+  );
+
+  it.each([null, BusinessRole.MANAGER])(
+    'protects the last brand owner from an administrator changing it to %s',
+    async (role) => {
+      const admin = authorizeTestToken({
+        ...tokenPayload(),
+        role: UserRole.ADMIN,
+      });
+      db.brandMembership.findFirst.mockResolvedValue({
+        id: 'membership',
+        role: BusinessRole.OWNER,
+        userId: 'other-owner',
+      });
+      db.brandMembership.count.mockResolvedValue(1);
+      await expect(
+        service.changeMembership(
+          admin,
+          'brand-1',
+          undefined,
+          'membership',
+          role,
+          3,
+          db as never,
+        ),
+      ).rejects.toMatchObject({ status: 409, errorCode: 'ACCESS_LAST_OWNER' });
+      expect(db.brandMembership.update).not.toHaveBeenCalled();
+      expect(db.brandMembership.delete).not.toHaveBeenCalled();
+      expect(access.recordChange).not.toHaveBeenCalled();
     },
   );
 

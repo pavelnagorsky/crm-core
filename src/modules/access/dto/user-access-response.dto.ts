@@ -1,8 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Staff } from '@prisma/client';
+import { PermissionAccess } from '../enums/permission-access.enum.js';
 import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
 import { PermissionScope } from '../enums/permission-scope.enum.js';
-import { Permission } from '../enums/permission.enum.js';
 import type { PermissionClaims } from '../interfaces/permission-claims.interface.js';
 import { AccessScopeResponseDto } from './access-scope-response.dto.js';
 
@@ -10,7 +10,7 @@ export class UserAccessResponseDto {
   @ApiProperty({
     type: 'object',
     description:
-      'Signed permission claims keyed by B:<brandId>, G:<brandId>, or L:<locationId>. The global grant { "*": ["*"] } allows every registered permission in every scope.',
+      'Claim-to-access maps keyed by B:<brandId>, G:<brandId>, or L:<locationId>. The global grant { "*": ["*"] } allows every registered permission in every scope.',
     properties: {
       '*': {
         type: 'array',
@@ -20,8 +20,11 @@ export class UserAccessResponseDto {
       },
     },
     additionalProperties: {
-      type: 'array',
-      items: { type: 'string', enum: Object.values(Permission) },
+      type: 'object',
+      additionalProperties: {
+        type: 'string',
+        enum: Object.values(PermissionAccess),
+      },
     },
     example: { '*': ['*'] },
   })
@@ -52,9 +55,9 @@ export class UserAccessResponseDto {
             inheritedRole: null,
             staffId: null,
             permissions:
-              token.permissions?.[`${PermissionScope.BRAND}:${brandId}`] ?? [],
+              token.permissions?.[`${PermissionScope.BRAND}:${brandId}`] ?? {},
             sharedPermissions:
-              token.permissions?.[`${PermissionScope.SHARED}:${brandId}`] ?? [],
+              token.permissions?.[`${PermissionScope.SHARED}:${brandId}`] ?? {},
           }),
         ),
         ...[
@@ -80,8 +83,8 @@ export class UserAccessResponseDto {
             permissions:
               token.permissions?.[
                 `${PermissionScope.LOCATION}:${location.locationId}`
-              ] ?? [],
-            sharedPermissions: [],
+              ] ?? {},
+            sharedPermissions: {},
           }),
         ),
       ],

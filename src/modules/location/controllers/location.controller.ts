@@ -19,12 +19,13 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { BusinessType } from '@prisma/client';
+import { Claim } from '../../access/enums/claim.enum.js';
+import { Read, Write } from '../../access/utils/permission.js';
 import { ApiResponseArray } from '../../../shared/dto/api-response-array.dto.js';
 import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../../shared/dto/id-response.dto.js';
 import { COUNTRY_DEFAULTS } from '../../../shared/geo/country-defaults.js';
-import { Permission } from '../../access/enums/permission.enum.js';
 import { hasPermission } from '../../access/utils/assert-permission.js';
 import { Auth } from '../../auth/decorators/auth.decorator.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
@@ -74,7 +75,7 @@ export class LocationController {
 
   @ApiOperation({ summary: 'Create a location in a brand' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
-  @Permissions(Permission.LOCATION_CREATE)
+  @Permissions(Write(Claim.LOCATION_CREATE))
   @Post('brands/:brandId/locations')
   async create(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -96,7 +97,7 @@ export class LocationController {
     return BaseResponseDto.success(
       locations
         .filter((location) =>
-          hasPermission(token, Permission.LOCATION_READ, location.id),
+          hasPermission(token, Read(Claim.LOCATION), location.id),
         )
         .map(LocationResponseDto.fromEntity),
     );
@@ -104,7 +105,7 @@ export class LocationController {
 
   @ApiOperation({ summary: 'Get location details' })
   @ApiOkResponse({ type: ApiResponse(LocationResponseDto) })
-  @Permissions(Permission.LOCATION_READ)
+  @Permissions(Read(Claim.LOCATION))
   @Get('locations/:locationId')
   async findById(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -118,7 +119,7 @@ export class LocationController {
 
   @ApiOperation({ summary: 'Update location' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
-  @Permissions(Permission.LOCATION_SETTINGS_MANAGE)
+  @Permissions(Write(Claim.LOCATION_SETTINGS))
   @Put('locations/:locationId')
   async update(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -152,7 +153,7 @@ export class LocationController {
       'BUSINESS_HAS_OPEN_BOOKINGS: cancel or complete open current and upcoming bookings first; responseValue.openBookingsCount contains the count',
   })
   @ApiNoContentResponse()
-  @Permissions(Permission.LOCATION_SETTINGS_MANAGE)
+  @Permissions(Write(Claim.LOCATION_SETTINGS))
   @Delete('locations/:locationId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(

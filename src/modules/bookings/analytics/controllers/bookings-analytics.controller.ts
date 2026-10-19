@@ -1,8 +1,9 @@
 import { Body, Controller, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Claim } from '../../../access/enums/claim.enum.js';
+import { Read } from '../../../access/utils/permission.js';
 import { ApiResponse } from '../../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../../shared/dto/base-response.dto.js';
-import { Permission } from '../../../access/enums/permission.enum.js';
 import { Permissions } from '../../../auth/decorators/permissions.decorator.js';
 import { TokenPayload } from '../../../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../../../auth/dto/token-payload.dto.js';
@@ -21,10 +22,7 @@ export class BookingsAnalyticsController {
 
   @ApiOperation({ summary: 'Fetch analytics widgets for the bookings page' })
   @ApiOkResponse({ type: ApiResponse(BookingsAnalyticsResponseDto) })
-  @Permissions([
-    Permission.ANALYTICS_LOCATION_READ,
-    Permission.BOOKING_READ_OWN,
-  ])
+  @Permissions([Read(Claim.ANALYTICS_LOCATION), Read(Claim.BOOKING_OWN)])
   @Post('bookings/analytics')
   async analytics(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -34,8 +32,8 @@ export class BookingsAnalyticsController {
     const staffId = await this.access.resolveStaffId(
       token,
       locationId,
-      Permission.ANALYTICS_LOCATION_READ,
-      Permission.BOOKING_READ_OWN,
+      Read(Claim.ANALYTICS_LOCATION),
+      Read(Claim.BOOKING_OWN),
     );
     const widgets = await this.analyticsService.getWidgets(
       locationId,

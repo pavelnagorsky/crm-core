@@ -28,12 +28,13 @@ import {
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { CancelledBy } from '@prisma/client';
+import { Claim } from '../../access/enums/claim.enum.js';
+import { Read, Write } from '../../access/utils/permission.js';
 import { ApiResponseArray } from '../../../shared/dto/api-response-array.dto.js';
 import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../../shared/dto/id-response.dto.js';
 import { XlsxUtils } from '../../../shared/xlsx/xlsx.utils.js';
-import { Permission } from '../../access/enums/permission.enum.js';
 import {
   assertPermission,
   hasPermission,
@@ -167,7 +168,7 @@ export class BookingsController {
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Location, service, or staff not found' })
   @ApiConflictResponse({ description: 'Slot is no longer available' })
-  @Permissions(Permission.BOOKING_MANAGE)
+  @Permissions(Write(Claim.BOOKING))
   @Post('locations/:locationId/bookings/manual')
   async createManual(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -180,23 +181,23 @@ export class BookingsController {
     )
       assertPermission(
         tokenPayload,
-        Permission.SALE_PRICE_OVERRIDE,
+        Write(Claim.SALE_PRICE_OVERRIDE),
         locationId,
       );
     if (dto.products?.length)
-      assertPermission(tokenPayload, Permission.ORDER_MANAGE, locationId);
+      assertPermission(tokenPayload, Write(Claim.ORDER), locationId);
     const booking = await this.bookingCreateService.createManualBooking(
       locationId,
       dto,
       auditActorFromToken(tokenPayload, locationId),
-      hasPermission(tokenPayload, Permission.ORDER_MANAGE, locationId),
+      hasPermission(tokenPayload, Write(Claim.ORDER), locationId),
     );
     return BaseResponseDto.success({ id: booking.id });
   }
 
   @ApiOperation({ summary: 'Get booking count per status' })
   @ApiOkResponse({ type: ApiResponseArray(BookingStatusCountResponseDto) })
-  @Permissions([Permission.BOOKING_READ, Permission.BOOKING_READ_OWN])
+  @Permissions([Read(Claim.BOOKING), Read(Claim.BOOKING_OWN)])
   @Get('locations/:locationId/bookings/status-counts')
   async getStatusCounts(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -214,7 +215,7 @@ export class BookingsController {
   @ApiOperation({ summary: 'Export bookings as XLSX' })
   @ApiProduces(XlsxUtils.mimeType)
   @ApiOkResponse({ description: 'File stream' })
-  @Permissions(Permission.BOOKING_EXPORT)
+  @Permissions(Read(Claim.BOOKING_EXPORT))
   @Get('locations/:locationId/bookings/export')
   async export(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -233,7 +234,7 @@ export class BookingsController {
   @ApiOperation({ summary: 'Get booking by ID' })
   @ApiOkResponse({ type: ApiResponse(BookingResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking not found' })
-  @Permissions([Permission.BOOKING_READ, Permission.BOOKING_READ_OWN])
+  @Permissions([Read(Claim.BOOKING), Read(Claim.BOOKING_OWN)])
   @Get('locations/:locationId/bookings/:id')
   async findById(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -247,7 +248,7 @@ export class BookingsController {
 
   @ApiOperation({ summary: 'Search bookings' })
   @ApiOkResponse({ type: ApiResponse(BookingSearchResponseDto) })
-  @Permissions([Permission.BOOKING_READ, Permission.BOOKING_READ_OWN])
+  @Permissions([Read(Claim.BOOKING), Read(Claim.BOOKING_OWN)])
   @Get('locations/:locationId/bookings')
   async search(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -274,7 +275,7 @@ export class BookingsController {
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking not found' })
   @ApiConflictResponse({ description: 'Slot is no longer available' })
-  @Permissions([Permission.BOOKING_MANAGE, Permission.BOOKING_MANAGE_OWN])
+  @Permissions([Write(Claim.BOOKING), Write(Claim.BOOKING_OWN)])
   @Put('locations/:locationId/bookings/:id')
   async update(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -296,7 +297,7 @@ export class BookingsController {
     )
       assertPermission(
         tokenPayload,
-        Permission.SALE_PRICE_OVERRIDE,
+        Write(Claim.SALE_PRICE_OVERRIDE),
         locationId,
       );
     const booking = await this.bookings.update(
@@ -310,7 +311,7 @@ export class BookingsController {
   @ApiOperation({ summary: 'Update booking status' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking not found' })
-  @Permissions([Permission.BOOKING_MANAGE, Permission.BOOKING_MANAGE_OWN])
+  @Permissions([Write(Claim.BOOKING), Write(Claim.BOOKING_OWN)])
   @Patch('locations/:locationId/bookings/:id/status')
   async updateStatus(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -324,7 +325,7 @@ export class BookingsController {
       current.status === BookingStatus.COMPLETED &&
       dto.status !== BookingStatus.COMPLETED
     )
-      assertPermission(tokenPayload, Permission.ORDER_RETURN, locationId);
+      assertPermission(tokenPayload, Write(Claim.ORDER_RETURN), locationId);
     const booking = await this.bookings.updateStatus(
       current,
       auditActorFromToken(tokenPayload, locationId),
@@ -337,7 +338,7 @@ export class BookingsController {
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking or product not found' })
   @ApiConflictResponse({ description: 'Product cannot be added' })
-  @Permissions(Permission.BOOKING_READ, Permission.ORDER_MANAGE)
+  @Permissions(Read(Claim.BOOKING), Write(Claim.ORDER))
   @Post('locations/:locationId/bookings/:id/products')
   async addProduct(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -350,7 +351,7 @@ export class BookingsController {
       id,
       auditActorFromToken(tokenPayload, locationId),
       dto,
-      hasPermission(tokenPayload, Permission.SALE_PRICE_OVERRIDE, locationId),
+      hasPermission(tokenPayload, Write(Claim.SALE_PRICE_OVERRIDE), locationId),
     );
     return BaseResponseDto.success({ id: order.id });
   }
@@ -359,7 +360,7 @@ export class BookingsController {
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking or product not found' })
   @ApiConflictResponse({ description: 'Product cannot be added' })
-  @Permissions(Permission.BOOKING_READ, Permission.ORDER_MANAGE)
+  @Permissions(Read(Claim.BOOKING), Write(Claim.ORDER))
   @Post('locations/:locationId/bookings/:id/items')
   async addItems(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -372,7 +373,7 @@ export class BookingsController {
       id,
       auditActorFromToken(tokenPayload, locationId),
       dto,
-      hasPermission(tokenPayload, Permission.SALE_PRICE_OVERRIDE, locationId),
+      hasPermission(tokenPayload, Write(Claim.SALE_PRICE_OVERRIDE), locationId),
     );
     return BaseResponseDto.success({ id: order.id });
   }
@@ -380,7 +381,7 @@ export class BookingsController {
   @ApiOperation({ summary: 'Generate client management token for a booking' })
   @ApiOkResponse({ type: ApiResponse(ClientLinkResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking not found' })
-  @Permissions(Permission.BOOKING_CLIENT_TOKEN_ISSUE)
+  @Permissions(Write(Claim.BOOKING_CLIENT_TOKEN))
   @Post('locations/:locationId/bookings/:id/client-token')
   async generateClientToken(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -395,7 +396,7 @@ export class BookingsController {
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking not found' })
   @ApiConflictResponse({ description: 'Booking is already cancelled' })
-  @Permissions([Permission.BOOKING_MANAGE, Permission.BOOKING_MANAGE_OWN])
+  @Permissions([Write(Claim.BOOKING), Write(Claim.BOOKING_OWN)])
   @Post('locations/:locationId/bookings/:id/cancel')
   async cancel(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -406,7 +407,7 @@ export class BookingsController {
     const current = await this.bookings.findByIdInLocation(locationId, id);
     await this.access.assertManage(tokenPayload, current);
     if (current.status === BookingStatus.COMPLETED)
-      assertPermission(tokenPayload, Permission.ORDER_RETURN, locationId);
+      assertPermission(tokenPayload, Write(Claim.ORDER_RETURN), locationId);
     const booking = await this.bookings.cancel(
       current,
       auditActorFromToken(tokenPayload, locationId),
@@ -419,7 +420,7 @@ export class BookingsController {
   @ApiOperation({ summary: 'Delete a booking' })
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Booking not found' })
-  @Permissions(Permission.BOOKING_DELETE)
+  @Permissions(Write(Claim.BOOKING_DELETE))
   @Delete('locations/:locationId/bookings/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(
@@ -429,7 +430,7 @@ export class BookingsController {
   ): Promise<void> {
     const current = await this.bookings.findByIdInLocation(locationId, id);
     if (current.status === BookingStatus.COMPLETED)
-      assertPermission(tokenPayload, Permission.ORDER_RETURN, locationId);
+      assertPermission(tokenPayload, Write(Claim.ORDER_RETURN), locationId);
     await this.bookings.delete(
       current,
       auditActorFromToken(tokenPayload, locationId),

@@ -1,5 +1,6 @@
 import { ExecutionContext, ForbiddenException } from '@nestjs/common';
-import { Permission } from '../../access/enums/permission.enum.js';
+import { Claim } from '../../access/enums/claim.enum.js';
+import { Read, Write } from '../../access/utils/permission.js';
 import { tokenPayload } from '../testing/factories/token-payload.factory.js';
 import { TokenPayloadDto } from '../dto/token-payload.dto.js';
 import { PermissionGuard } from './permission.guard.js';
@@ -21,15 +22,15 @@ describe('Permission alternatives', () => {
 
   it('accepts own or full reading', () => {
     reflector.getAllAndOverride.mockReturnValue([
-      [Permission.BOOKING_READ, Permission.BOOKING_READ_OWN],
+      [Read(Claim.BOOKING), Read(Claim.BOOKING_OWN)],
     ]);
     expect(guard.canActivate(context())).toBe(true);
   });
 
   it('still requires every argument outside the alternative group', () => {
     reflector.getAllAndOverride.mockReturnValue([
-      [Permission.BOOKING_READ, Permission.BOOKING_READ_OWN],
-      Permission.ORDER_MANAGE,
+      [Read(Claim.BOOKING), Read(Claim.BOOKING_OWN)],
+      Write(Claim.ORDER),
     ]);
     expect(() => guard.canActivate(context())).toThrow(ForbiddenException);
   });
@@ -38,7 +39,7 @@ describe('Permission alternatives', () => {
     { requirements: [] },
     { requirements: [[]] },
     { requirements: [['unknown']] },
-    { requirements: [Permission.BOOKING_READ] },
+    { requirements: [Read(Claim.BOOKING)] },
   ])('fails closed for requirements $requirements', ({ requirements }) => {
     reflector.getAllAndOverride.mockReturnValue(requirements);
     expect(() => guard.canActivate(context())).toThrow(ForbiddenException);
@@ -46,7 +47,7 @@ describe('Permission alternatives', () => {
 
   it('requires permissions in the requested location', () => {
     reflector.getAllAndOverride.mockReturnValue([
-      [Permission.BOOKING_READ, Permission.BOOKING_READ_OWN],
+      [Read(Claim.BOOKING), Read(Claim.BOOKING_OWN)],
     ]);
     expect(() => guard.canActivate(context({ locationId: 'other' }))).toThrow(
       ForbiddenException,
@@ -61,7 +62,7 @@ describe('Permission alternatives', () => {
       ...tokenPayload('STAFF'),
       permissions: { '*': ['*'] },
     } as TokenPayloadDto;
-    reflector.getAllAndOverride.mockReturnValue([Permission.ORDER_MANAGE]);
+    reflector.getAllAndOverride.mockReturnValue([Write(Claim.ORDER)]);
     expect(
       guard.canActivate(context({ locationId: 'unrelated-location' }, token)),
     ).toBe(true);
@@ -72,7 +73,7 @@ describe('Permission alternatives', () => {
       ...tokenPayload(),
       permissions: { '*': ['*'] },
     } as TokenPayloadDto;
-    reflector.getAllAndOverride.mockReturnValue([Permission.ORDER_MANAGE]);
+    reflector.getAllAndOverride.mockReturnValue([Write(Claim.ORDER)]);
     expect(() => guard.canActivate(context({ locationId: '' }, token))).toThrow(
       ForbiddenException,
     );

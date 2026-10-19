@@ -40,6 +40,28 @@ describe('Access JWT claim migration', () => {
     expect(strategy.validate(token)).toBe(token);
   });
 
+  it.each([undefined, 1, 3])(
+    'refreshes an unsupported permissions format %s even with empty or global grants',
+    (version) => {
+      for (const permissions of [{}, { '*': ['*'] }]) {
+        const token = {
+          ...tokenPayload(),
+          permissions: permissions as never,
+          permissionsVersion: version,
+        };
+        expect(() => strategy.validate(token)).toThrow(
+          expect.objectContaining({
+            status: 409,
+            payload: {
+              action: 'REFRESH_ACCESS_TOKEN',
+              reason: 'PERMISSIONS_FORMAT_CHANGED',
+            },
+          }),
+        );
+      }
+    },
+  );
+
   it('continues to require refresh for tokens with no permissions field', () => {
     const token = tokenPayload();
     delete token.permissions;

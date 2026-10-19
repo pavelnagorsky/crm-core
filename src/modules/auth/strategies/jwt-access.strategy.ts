@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { UserRole } from '@prisma/client';
 import { ExtractJwt, Strategy } from 'passport-jwt';
+import { PERMISSIONS_VERSION } from '../../access/constants/permissions-version.js';
 import { IJwtConfig } from '../../../config/interfaces/jwt-config.interface.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
@@ -37,6 +38,15 @@ export class JwtAccessStrategy extends PassportStrategy(
         ErrorCode.TOKEN_PAYLOAD_STALE,
         HttpStatus.CONFLICT,
         { action: 'REFRESH_ACCESS_TOKEN', reason: 'GLOBAL_PERMISSION_MISSING' },
+      );
+    if (payload.permissionsVersion !== PERMISSIONS_VERSION)
+      throw new AppException(
+        ErrorCode.TOKEN_PAYLOAD_STALE,
+        HttpStatus.CONFLICT,
+        {
+          action: 'REFRESH_ACCESS_TOKEN',
+          reason: 'PERMISSIONS_FORMAT_CHANGED',
+        },
       );
     return payload;
   }

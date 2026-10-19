@@ -1,5 +1,6 @@
 import { ForbiddenException } from '@nestjs/common';
-import { Permission } from '../../../access/enums/permission.enum.js';
+import { Claim } from '../../../access/enums/claim.enum.js';
+import { Read, addGrant } from '../../../access/utils/permission.js';
 import { tokenPayload } from '../../../auth/testing/factories/token-payload.factory.js';
 import { BookingAccessService } from '../../../bookings/services/booking-access.service.js';
 import { StaffAccessService } from '../../../staff/services/staff-access.service.js';
@@ -37,7 +38,7 @@ describe('Staff calendar visibility', () => {
 
   it('keeps caller filters when broader calendar reading is enabled', async () => {
     const token = tokenPayload('STAFF');
-    token.permissions!['L:location-1'].push(Permission.BOOKING_READ);
+    addGrant(token.permissions!['L:location-1'], Read(Claim.BOOKING));
     const dto = { ...range, staffIds: ['boris'] };
     await controller.getCalendar('location-1', dto, token);
     expect(view.getCalendar).toHaveBeenCalledWith('location-1', dto);

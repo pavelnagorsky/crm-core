@@ -1,6 +1,7 @@
 import { ForbiddenException } from '@nestjs/common';
+import { Claim } from '../../access/enums/claim.enum.js';
+import { Write, removeGrant } from '../../access/utils/permission.js';
 import { tokenPayload } from '../../auth/testing/factories/token-payload.factory.js';
-import { Permission } from '../../access/enums/permission.enum.js';
 import { ManualCreateBookingDto } from '../dto/manual-create-booking.dto.js';
 import { BookingsController } from './bookings.controller.js';
 
@@ -29,9 +30,7 @@ describe('Manual booking API permissions', () => {
 
   it('rejects adding products when order editing was disabled', async () => {
     const token = tokenPayload('MANAGER');
-    token.permissions!['L:location-1'] = token.permissions![
-      'L:location-1'
-    ].filter((p) => p !== Permission.ORDER_MANAGE);
+    removeGrant(token.permissions!['L:location-1'], Write(Claim.ORDER));
     const dto = {
       products: [{ productId: 'product', quantity: '1' }],
     } as ManualCreateBookingDto;
@@ -43,12 +42,8 @@ describe('Manual booking API permissions', () => {
 
   it('allows booking without client management and passes only the financial creation choice', async () => {
     const token = tokenPayload('MANAGER');
-    token.permissions!['L:location-1'] = token.permissions![
-      'L:location-1'
-    ].filter((p) => p !== Permission.ORDER_MANAGE);
-    token.permissions!['G:brand-1'] = token.permissions!['G:brand-1'].filter(
-      (p) => p !== Permission.CLIENT_MANAGE,
-    );
+    removeGrant(token.permissions!['L:location-1'], Write(Claim.ORDER));
+    removeGrant(token.permissions!['G:brand-1'], Write(Claim.CLIENT));
     const dto = {} as ManualCreateBookingDto;
     await controller.createManual('location-1', dto, token);
     expect(create.createManualBooking).toHaveBeenCalledWith(

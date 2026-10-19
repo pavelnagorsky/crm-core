@@ -563,6 +563,11 @@ export const ErrorCode = {
     code: 'ACCESS_POLICY_INVALID',
     message: 'Invalid permission settings or dependencies',
   },
+  ACCESS_OWNER_PROTECTED: {
+    code: 'ACCESS_OWNER_PROTECTED',
+    message:
+      'Only a platform administrator can revoke or downgrade another owner',
+  },
   ACCESS_LAST_OWNER: {
     code: 'ACCESS_LAST_OWNER',
     message: 'A brand must retain at least one owner',

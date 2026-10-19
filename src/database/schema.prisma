@@ -1443,22 +1443,24 @@ model BrandPermissionOverride {
   id         String       @id @default(uuid())
   brandId    String
   role       BusinessRole
-  permission String       @db.VarChar(100)
+  claim      String       @db.VarChar(100)
+  access     String       @db.VarChar(10)
   allowed    Boolean
   brand      Brand        @relation(fields: [brandId], references: [id], onDelete: Cascade)
 
-  @@unique([brandId, role, permission])
+  @@unique([brandId, role, claim, access])
 }
 
 model LocationPermissionOverride {
   id         String       @id @default(uuid())
   locationId String
   role       BusinessRole
-  permission String       @db.VarChar(100)
+  claim      String       @db.VarChar(100)
+  access     String       @db.VarChar(10)
   allowed    Boolean
   location   Location     @relation(fields: [locationId], references: [id], onDelete: Cascade)
 
-  @@unique([locationId, role, permission])
+  @@unique([locationId, role, claim, access])
 }
 
 model AccessInvitation {

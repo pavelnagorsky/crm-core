@@ -5,9 +5,10 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { Claim } from '../../../access/enums/claim.enum.js';
+import { Read } from '../../../access/utils/permission.js';
 import { ApiResponse } from '../../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../../shared/dto/base-response.dto.js';
-import { Permission } from '../../../access/enums/permission.enum.js';
 import { Permissions } from '../../../auth/decorators/permissions.decorator.js';
 import { ServiceBundleResponseDto } from '../dto/service-bundle-response.dto.js';
 import { ServiceCatalogCountsRequestDto } from '../dto/service-catalog-counts-request.dto.js';
@@ -25,7 +26,7 @@ export class ServiceCatalogController {
 
   @ApiOperation({ summary: 'Get unified service catalog counts' })
   @ApiOkResponse({ type: ApiResponse(ServiceCatalogCountsResponseDto) })
-  @Permissions(Permission.SERVICE_READ)
+  @Permissions(Read(Claim.SERVICE))
   @Get('service-catalog/counts')
   async getCatalogCounts(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -39,7 +40,7 @@ export class ServiceCatalogController {
 
   @ApiOperation({ summary: 'Search the unified service catalog' })
   @ApiOkResponse({ type: ApiResponse(ServiceCatalogSearchResponseDto) })
-  @Permissions(Permission.SERVICE_READ)
+  @Permissions(Read(Claim.SERVICE))
   @Get('service-catalog')
   async searchCatalog(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -63,7 +64,7 @@ export class ServiceCatalogController {
   @ApiOperation({ summary: 'Get service by ID' })
   @ApiOkResponse({ type: ApiResponse(ServiceResponseDto) })
   @ApiNotFoundResponse({ description: 'Service not found' })
-  @Permissions(Permission.SERVICE_READ)
+  @Permissions(Read(Claim.SERVICE))
   @Get('services/:id')
   async findById(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -76,7 +77,7 @@ export class ServiceCatalogController {
   @ApiOperation({ summary: 'Get service bundle by ID' })
   @ApiOkResponse({ type: ApiResponse(ServiceBundleResponseDto) })
   @ApiNotFoundResponse({ description: 'Service bundle not found' })
-  @Permissions(Permission.SERVICE_READ)
+  @Permissions(Read(Claim.SERVICE))
   @Get('service-bundles/:id')
   async findBundleById(
     @Param('locationId', ParseUUIDPipe) locationId: string,

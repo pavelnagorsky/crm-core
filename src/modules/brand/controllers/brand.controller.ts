@@ -20,11 +20,12 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { Claim } from '../../access/enums/claim.enum.js';
+import { Read, Write } from '../../access/utils/permission.js';
 import { ApiResponseArray } from '../../../shared/dto/api-response-array.dto.js';
 import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../../shared/dto/id-response.dto.js';
-import { Permission } from '../../access/enums/permission.enum.js';
 import { hasGlobalPermission } from '../../access/utils/has-global-permission.js';
 import { AuditActorRole } from '../../audit/enums/audit-actor-role.enum.js';
 import { auditActorFromToken } from '../../audit/utils/audit-actor-from-token.js';
@@ -103,7 +104,7 @@ export class BrandController {
   @ApiOperation({ summary: 'Get brand details' })
   @ApiOkResponse({ type: ApiResponse(BrandResponseDto) })
   @ApiNotFoundResponse({ description: 'Brand not found' })
-  @Permissions(Permission.BRAND_READ)
+  @Permissions(Read(Claim.BRAND))
   @Get(':brandId')
   async findById(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -115,7 +116,7 @@ export class BrandController {
 
   @ApiOperation({ summary: 'Update brand' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
-  @Permissions(Permission.BRAND_SETTINGS_MANAGE)
+  @Permissions(Write(Claim.BRAND_SETTINGS))
   @Put(':brandId')
   async update(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -149,7 +150,7 @@ export class BrandController {
       'BUSINESS_HAS_OPEN_BOOKINGS: cancel or complete open current and upcoming bookings in active locations first; responseValue.openBookingsCount contains the count',
   })
   @ApiNoContentResponse()
-  @Permissions(Permission.BRAND_SETTINGS_MANAGE)
+  @Permissions(Write(Claim.BRAND_SETTINGS))
   @Delete(':brandId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(

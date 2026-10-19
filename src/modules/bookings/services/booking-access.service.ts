@@ -1,5 +1,6 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
-import { Permission } from '../../access/enums/permission.enum.js';
+import { Claim } from '../../access/enums/claim.enum.js';
+import { Read, Write } from '../../access/utils/permission.js';
 import { hasPermission } from '../../access/utils/assert-permission.js';
 import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
 import { StaffAccessService } from '../../staff/services/staff-access.service.js';
@@ -17,8 +18,8 @@ export class BookingAccessService {
     return this.staffAccess.resolveStaffId(
       token,
       locationId,
-      Permission.BOOKING_READ,
-      Permission.BOOKING_READ_OWN,
+      Read(Claim.BOOKING),
+      Read(Claim.BOOKING_OWN),
     );
   }
 
@@ -39,8 +40,8 @@ export class BookingAccessService {
     const staffId = await this.staffAccess.resolveStaffId(
       token,
       booking.locationId,
-      Permission.BOOKING_MANAGE,
-      Permission.BOOKING_MANAGE_OWN,
+      Write(Claim.BOOKING),
+      Write(Claim.BOOKING_OWN),
     );
     this.assertParticipant(booking, staffId);
   }
@@ -52,7 +53,7 @@ export class BookingAccessService {
     await this.assertManage(token, booking);
     if (
       booking.status === BookingStatus.COMPLETED &&
-      !hasPermission(token, Permission.BOOKING_MANAGE, booking.locationId)
+      !hasPermission(token, Write(Claim.BOOKING), booking.locationId)
     ) {
       throw new ForbiddenException(
         'Completed bookings can only be edited by a manager or owner',

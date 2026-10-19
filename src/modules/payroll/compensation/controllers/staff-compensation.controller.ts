@@ -13,11 +13,12 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { Claim } from '../../../access/enums/claim.enum.js';
+import { Read, Write } from '../../../access/utils/permission.js';
 import { ApiResponseArray } from '../../../../shared/dto/api-response-array.dto.js';
 import { ApiResponse } from '../../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../../../shared/dto/id-response.dto.js';
-import { Permission } from '../../../access/enums/permission.enum.js';
 import { auditActorFromToken } from '../../../audit/utils/audit-actor-from-token.js';
 import { Permissions } from '../../../auth/decorators/permissions.decorator.js';
 import { TokenPayload } from '../../../auth/decorators/token-payload.decorator.js';
@@ -38,7 +39,7 @@ export class StaffCompensationController {
   @ApiOperation({ summary: 'Get current compensation plan for a staff member' })
   @ApiOkResponse({ type: ApiResponse(CompensationPlanResponseDto) })
   @ApiNotFoundResponse({ description: 'Staff member not found' })
-  @Permissions(Permission.PAYROLL_READ)
+  @Permissions(Read(Claim.PAYROLL))
   @Get(':id/compensation/current')
   async current(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -55,7 +56,7 @@ export class StaffCompensationController {
 
   @ApiOperation({ summary: 'Get compensation plan history for a staff member' })
   @ApiOkResponse({ type: ApiResponseArray(CompensationPlanResponseDto) })
-  @Permissions(Permission.PAYROLL_READ)
+  @Permissions(Read(Claim.PAYROLL))
   @Get(':id/compensation')
   async history(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -76,7 +77,7 @@ export class StaffCompensationController {
       'Closes the current version and opens a new one from effectiveFrom. Omit serviceRates to keep previous service overrides; send [] to clear them.',
   })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
-  @Permissions(Permission.PAYROLL_MANAGE)
+  @Permissions(Write(Claim.PAYROLL))
   @Put(':id/compensation')
   async replace(
     @Param('locationId', ParseUUIDPipe) locationId: string,

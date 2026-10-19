@@ -1,5 +1,6 @@
 import { ForbiddenException } from '@nestjs/common';
-import { Permission } from '../../access/enums/permission.enum.js';
+import { Claim } from '../../access/enums/claim.enum.js';
+import { Read, Write, addGrant } from '../../access/utils/permission.js';
 import { tokenPayload } from '../../auth/testing/factories/token-payload.factory.js';
 import { StaffAccessService } from '../../staff/services/staff-access.service.js';
 import { BookingStatus } from '../enums/booking-status.enum.js';
@@ -47,7 +48,7 @@ describe('Booking access by participation', () => {
 
   it('broadens reading independently from editing', async () => {
     const token = tokenPayload('STAFF');
-    token.permissions!['L:location-1'].push(Permission.BOOKING_READ);
+    addGrant(token.permissions!['L:location-1'], Read(Claim.BOOKING));
     await expect(
       service.readStaffId(token, 'location-1'),
     ).resolves.toBeUndefined();
@@ -60,10 +61,8 @@ describe('Booking access by participation', () => {
   it('uses inherited manager permissions even with a direct staff membership', async () => {
     const token = tokenPayload('STAFF');
     token.brandMemberships = [{ brandId: 'brand-1', role: 'MANAGER' }];
-    token.permissions!['L:location-1'].push(
-      Permission.BOOKING_READ,
-      Permission.BOOKING_MANAGE,
-    );
+    addGrant(token.permissions!['L:location-1'], Read(Claim.BOOKING));
+    addGrant(token.permissions!['L:location-1'], Write(Claim.BOOKING));
     await expect(service.assertManage(token, other)).resolves.toBeUndefined();
     await expect(
       service.readStaffId(token, 'location-1'),

@@ -21,11 +21,12 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { Claim } from '../../access/enums/claim.enum.js';
+import { Read, Write } from '../../access/utils/permission.js';
 import { ApiResponseArray } from '../../../shared/dto/api-response-array.dto.js';
 import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../../shared/dto/id-response.dto.js';
-import { Permission } from '../../access/enums/permission.enum.js';
 import { hasPermission } from '../../access/utils/assert-permission.js';
 import { auditActorFromToken } from '../../audit/utils/audit-actor-from-token.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
@@ -55,7 +56,7 @@ export class ProductsController {
 
   @ApiOperation({ summary: 'Create a product category' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
-  @Permissions(Permission.PRODUCT_CATALOG_MANAGE)
+  @Permissions(Write(Claim.PRODUCT_CATALOG))
   @Post('brands/:brandId/product-categories')
   async createCategory(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -72,7 +73,7 @@ export class ProductsController {
 
   @ApiOperation({ summary: 'List product categories' })
   @ApiOkResponse({ type: ApiResponseArray(ProductCategoryResponseDto) })
-  @Permissions(Permission.PRODUCT_READ)
+  @Permissions(Read(Claim.PRODUCT_CATALOG))
   @Get('brands/:brandId/product-categories')
   async listCategories(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -86,7 +87,7 @@ export class ProductsController {
   @ApiOperation({ summary: 'Update a product category' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiConflictResponse({ description: 'Category name already exists' })
-  @Permissions(Permission.PRODUCT_CATALOG_MANAGE)
+  @Permissions(Write(Claim.PRODUCT_CATALOG))
   @Put('brands/:brandId/product-categories/:categoryId')
   async updateCategory(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -105,7 +106,7 @@ export class ProductsController {
 
   @ApiOperation({ summary: 'Delete a product category' })
   @ApiNoContentResponse()
-  @Permissions(Permission.PRODUCT_CATALOG_MANAGE)
+  @Permissions(Write(Claim.PRODUCT_CATALOG))
   @Delete('brands/:brandId/product-categories/:categoryId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteCategory(
@@ -123,7 +124,7 @@ export class ProductsController {
   @ApiOperation({ summary: 'Create a product' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
   @ApiConflictResponse({ description: 'SKU or barcode already exists' })
-  @Permissions(Permission.PRODUCT_CATALOG_MANAGE)
+  @Permissions(Write(Claim.PRODUCT_CATALOG))
   @Post('brands/:brandId/products')
   async create(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -140,7 +141,7 @@ export class ProductsController {
 
   @ApiOperation({ summary: 'Search brand products' })
   @ApiOkResponse({ type: ApiResponse(ProductSearchResponseDto) })
-  @Permissions(Permission.PRODUCT_READ)
+  @Permissions(Read(Claim.PRODUCT_CATALOG))
   @Get('brands/:brandId/products')
   async search(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -156,7 +157,7 @@ export class ProductsController {
             locations: item.locations.filter((location) =>
               hasPermission(
                 token,
-                Permission.PRODUCT_LOCATION_READ,
+                Read(Claim.PRODUCT_LOCATION),
                 location.locationId,
               ),
             ),
@@ -172,7 +173,7 @@ export class ProductsController {
 
   @ApiOperation({ summary: 'Get product count per status' })
   @ApiOkResponse({ type: ApiResponseArray(ProductStatusCountResponseDto) })
-  @Permissions(Permission.PRODUCT_READ)
+  @Permissions(Read(Claim.PRODUCT_CATALOG))
   @Get('brands/:brandId/products/status-counts')
   async getStatusCounts(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -189,7 +190,7 @@ export class ProductsController {
   @ApiOperation({ summary: 'Get product details' })
   @ApiOkResponse({ type: ApiResponse(ProductResponseDto) })
   @ApiNotFoundResponse({ description: 'Product not found' })
-  @Permissions(Permission.PRODUCT_READ)
+  @Permissions(Read(Claim.PRODUCT_CATALOG))
   @Get('brands/:brandId/products/:productId')
   async findById(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -203,7 +204,7 @@ export class ProductsController {
         locations: product.locations.filter((location) =>
           hasPermission(
             token,
-            Permission.PRODUCT_LOCATION_READ,
+            Read(Claim.PRODUCT_LOCATION),
             location.locationId,
           ),
         ),
@@ -213,7 +214,7 @@ export class ProductsController {
 
   @ApiOperation({ summary: 'Update a product' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
-  @Permissions(Permission.PRODUCT_CATALOG_MANAGE)
+  @Permissions(Write(Claim.PRODUCT_CATALOG))
   @Put('brands/:brandId/products/:productId')
   async update(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -232,7 +233,7 @@ export class ProductsController {
 
   @ApiOperation({ summary: 'Change product status' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
-  @Permissions(Permission.PRODUCT_CATALOG_MANAGE)
+  @Permissions(Write(Claim.PRODUCT_CATALOG))
   @Patch('brands/:brandId/products/:productId/status')
   async changeStatus(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -251,7 +252,7 @@ export class ProductsController {
 
   @ApiOperation({ summary: 'Delete an unused product' })
   @ApiNoContentResponse()
-  @Permissions(Permission.PRODUCT_CATALOG_MANAGE)
+  @Permissions(Write(Claim.PRODUCT_CATALOG))
   @Delete('brands/:brandId/products/:productId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(
@@ -270,7 +271,7 @@ export class ProductsController {
     summary: 'Create or replace product settings for a location',
   })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
-  @Permissions(Permission.PRODUCT_LOCATION_MANAGE)
+  @Permissions(Write(Claim.PRODUCT_LOCATION))
   @Put('locations/:locationId/products/:productId')
   async upsertLocation(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -289,7 +290,7 @@ export class ProductsController {
 
   @ApiOperation({ summary: 'Search products enabled for a location' })
   @ApiOkResponse({ type: ApiResponse(LocationProductSearchResponseDto) })
-  @Permissions(Permission.PRODUCT_LOCATION_READ)
+  @Permissions(Read(Claim.PRODUCT_LOCATION))
   @Get('locations/:locationId/products')
   async searchLocation(
     @Param('locationId', ParseUUIDPipe) locationId: string,

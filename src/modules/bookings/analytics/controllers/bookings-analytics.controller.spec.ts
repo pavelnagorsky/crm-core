@@ -1,4 +1,5 @@
-import { Permission } from '../../../access/enums/permission.enum.js';
+import { Claim } from '../../../access/enums/claim.enum.js';
+import { Read, addGrant } from '../../../access/utils/permission.js';
 import { tokenPayload } from '../../../auth/testing/factories/token-payload.factory.js';
 import { StaffAccessService } from '../../../staff/services/staff-access.service.js';
 import { BookingsAnalyticsRequestDto } from '../dto/bookings-analytics-request.dto.js';
@@ -23,7 +24,7 @@ describe('Personal booking results', () => {
 
   it('keeps results personal even when reading all bookings is allowed', async () => {
     const token = tokenPayload('STAFF');
-    token.permissions!['L:location-1'].push(Permission.BOOKING_READ);
+    addGrant(token.permissions!['L:location-1'], Read(Claim.BOOKING));
     await controller.analytics('location-1', dto, token);
     expect(analytics.getWidgets).toHaveBeenCalledWith('location-1', {
       ...dto,

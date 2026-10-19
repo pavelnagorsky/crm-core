@@ -21,10 +21,11 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { Claim } from '../../../access/enums/claim.enum.js';
+import { Read, Write } from '../../../access/utils/permission.js';
 import { ApiResponseArray } from '../../../../shared/dto/api-response-array.dto.js';
 import { ApiResponse } from '../../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../../shared/dto/base-response.dto.js';
-import { Permission } from '../../../access/enums/permission.enum.js';
 import { auditActorFromToken } from '../../../audit/utils/audit-actor-from-token.js';
 import { Permissions } from '../../../auth/decorators/permissions.decorator.js';
 import { TokenPayload } from '../../../auth/decorators/token-payload.decorator.js';
@@ -76,7 +77,7 @@ export class CalendarController {
   @ApiOkResponse({ type: ApiResponseArray(AvailableSlotsDayDto) })
   @ApiNotFoundResponse({ description: 'Location or service not found' })
   @ApiBadRequestResponse({ description: 'Date range is longer than 62 days' })
-  @Permissions([Permission.BOOKING_READ, Permission.BOOKING_READ_OWN])
+  @Permissions([Read(Claim.BOOKING), Read(Claim.BOOKING_OWN)])
   @Get('available-slots')
   async getManualAvailableSlots(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -98,7 +99,7 @@ export class CalendarController {
       'Get calendar view for a date range. Blocks, bookings, and closed time in the business timezone. Recurring blocks are expanded onto each occurrence.',
   })
   @ApiOkResponse({ type: ApiResponse(GetCalendarResponseDto) })
-  @Permissions([Permission.BOOKING_READ, Permission.BOOKING_READ_OWN])
+  @Permissions([Read(Claim.BOOKING), Read(Claim.BOOKING_OWN)])
   @Get()
   async getCalendar(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -119,7 +120,7 @@ export class CalendarController {
   })
   @ApiOkResponse({ type: ApiResponse(CalendarEventResponseDto) })
   @ApiNotFoundResponse({ description: 'Calendar event not found' })
-  @Permissions([Permission.BOOKING_READ, Permission.BOOKING_READ_OWN])
+  @Permissions([Read(Claim.BOOKING), Read(Claim.BOOKING_OWN)])
   @Get(':eventId')
   async getEvent(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -138,7 +139,7 @@ export class CalendarController {
       'Create a block. Pass staffIds to create one per staff member; omit for a business-wide block.',
   })
   @ApiCreatedResponse({ type: ApiResponseArray(CalendarEventResponseDto) })
-  @Permissions(Permission.CALENDAR_BLOCKS_MANAGE)
+  @Permissions(Write(Claim.CALENDAR_BLOCKS))
   @Post()
   async create(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -161,7 +162,7 @@ export class CalendarController {
   })
   @ApiOkResponse({ type: ApiResponse(CalendarEventResponseDto) })
   @ApiNotFoundResponse({ description: 'Calendar event not found' })
-  @Permissions(Permission.CALENDAR_BLOCKS_MANAGE)
+  @Permissions(Write(Claim.CALENDAR_BLOCKS))
   @Put(':eventId/occurrence')
   async moveOccurrence(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -178,7 +179,7 @@ export class CalendarController {
   })
   @ApiOkResponse({ type: ApiResponse(CalendarEventResponseDto) })
   @ApiNotFoundResponse({ description: 'Calendar event not found' })
-  @Permissions(Permission.CALENDAR_BLOCKS_MANAGE)
+  @Permissions(Write(Claim.CALENDAR_BLOCKS))
   @Put(':eventId')
   async update(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -195,7 +196,7 @@ export class CalendarController {
   })
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Calendar event not found' })
-  @Permissions(Permission.CALENDAR_BLOCKS_MANAGE)
+  @Permissions(Write(Claim.CALENDAR_BLOCKS))
   @Delete(':eventId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(

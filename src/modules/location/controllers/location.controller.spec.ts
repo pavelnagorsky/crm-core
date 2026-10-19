@@ -4,6 +4,7 @@ import { PassportModule } from '@nestjs/passport';
 import { Test } from '@nestjs/testing';
 import { BusinessType, UserRole } from '@prisma/client';
 import request from 'supertest';
+import { PERMISSIONS_VERSION } from '../../access/constants/permissions-version.js';
 import { TokenEpochGuard } from '../../auth/guards/token-epoch.guard.js';
 import { TokenEpochRegistryService } from '../../auth/services/token-epoch-registry.service.js';
 import { JwtAccessStrategy } from '../../auth/strategies/jwt-access.strategy.js';
@@ -23,6 +24,7 @@ describe('Location reference endpoints (HTTP)', () => {
       locationMemberships: [],
       tokenEpoch: 0,
       permissions: {},
+      permissionsVersion: PERMISSIONS_VERSION,
     },
     { secret, expiresIn: '1h' },
   );

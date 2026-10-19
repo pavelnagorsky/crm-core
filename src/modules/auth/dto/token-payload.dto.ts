@@ -5,6 +5,7 @@ import type { PermissionClaims } from '../../access/interfaces/permission-claims
 
 export class TokenPayloadDto {
   permissions?: PermissionClaims;
+  permissionsVersion?: number;
   sub: string;
   role: UserRole;
   firstName?: string;

@@ -5,9 +5,19 @@ import {
   LocationPermissionOverride,
   UserRole,
 } from '@prisma/client';
-import { PERMISSION_REGISTRY } from '../constants/permission-registry.js';
+import { PermissionGrants } from '../interfaces/permission-grants.interface.js';
+import { ROLE_BAGS } from '../constants/role-bags.js';
+import {
+  addGrant,
+  removeGrant,
+  hasGrant,
+  includesAccess,
+} from '../utils/permission.js';
+import {
+  PERMISSION_REGISTRY,
+  REGISTERED_PERMISSIONS,
+} from '../constants/permission-registry.js';
 import { PermissionScope } from '../enums/permission-scope.enum.js';
-import { Permission } from '../enums/permission.enum.js';
 import { AccessLocation } from '../interfaces/access-location.interface.js';
 import { BrandAccessMembership } from '../interfaces/brand-access-membership.interface.js';
 import { LocationAccessMembership } from '../interfaces/location-access-membership.interface.js';
@@ -19,39 +29,44 @@ export class PermissionCalculator {
     role: BusinessRole,
     brandOverrides: BrandPermissionOverride[],
     locationOverrides: LocationPermissionOverride[] = [],
-  ): Set<Permission> {
-    const result = new Set<Permission>();
-    for (const permission of Object.values(Permission)) {
-      const definition = PERMISSION_REGISTRY[permission];
-      let allowed = definition.defaults.includes(role);
-      if (
-        role !== BusinessRole.OWNER &&
-        definition.configurable.includes(role)
-      ) {
-        const brand = brandOverrides.find(
-          (row) => row.role === role && row.permission === permission,
-        );
+  ): PermissionGrants {
+    const result: PermissionGrants = {};
+    for (const permission of REGISTERED_PERMISSIONS) {
+      const definition = PERMISSION_REGISTRY[permission.claim];
+      const action = definition.actions[permission.access]!;
+      let allowed = ROLE_BAGS[role].some(
+        (grant) =>
+          grant.claim === permission.claim &&
+          includesAccess(grant.access, permission.access),
+      );
+      if (role !== BusinessRole.OWNER && action.configurable.includes(role)) {
+        const matches = (
+          row: BrandPermissionOverride | LocationPermissionOverride,
+        ) =>
+          row.role === role &&
+          row.claim === permission.claim &&
+          row.access === permission.access;
+        const brand = brandOverrides.find(matches);
         const local =
           definition.scope === PermissionScope.LOCATION ||
           definition.scope === PermissionScope.BRAND_OR_LOCATION
-            ? locationOverrides.find(
-                (row) => row.role === role && row.permission === permission,
-              )
+            ? locationOverrides.find(matches)
             : undefined;
         allowed = local?.allowed ?? brand?.allowed ?? allowed;
       }
-      if (allowed) result.add(permission);
+      if (allowed) addGrant(result, permission);
     }
     let changed = true;
     while (changed) {
       changed = false;
-      for (const permission of result) {
+      for (const permission of REGISTERED_PERMISSIONS) {
+        if (!hasGrant(result, permission)) continue;
+        const action =
+          PERMISSION_REGISTRY[permission.claim].actions[permission.access]!;
         if (
-          PERMISSION_REGISTRY[permission].dependencies.some(
-            (required) => !result.has(required),
-          )
+          action.dependencies.some((required) => !hasGrant(result, required))
         ) {
-          result.delete(permission);
+          removeGrant(result, permission);
           changed = true;
         }
       }
@@ -71,23 +86,22 @@ export class PermissionCalculator {
       platformRole === UserRole.ADMIN ? { '*': ['*'] } : {};
     const add = (
       scopeId: string,
-      permissions: Set<Permission>,
+      permissions: PermissionGrants,
       scope: Exclude<PermissionScope, PermissionScope.BRAND_OR_LOCATION>,
     ) => {
       const key = `${scope}:${scopeId}` as const;
-      claims[key] = [
-        ...new Set([
-          ...(claims[key] ?? []),
-          ...[...permissions].filter((permission) => {
-            const declared = PERMISSION_REGISTRY[permission].scope;
-            return (
-              declared === scope ||
-              (declared === PermissionScope.BRAND_OR_LOCATION &&
-                scope !== PermissionScope.SHARED)
-            );
-          }),
-        ]),
-      ];
+      const grants = (claims[key] ??= {});
+      for (const permission of REGISTERED_PERMISSIONS) {
+        const declared = PERMISSION_REGISTRY[permission.claim].scope;
+        if (
+          hasGrant(permissions, permission) &&
+          (declared === scope ||
+            (declared === PermissionScope.BRAND_OR_LOCATION &&
+              scope !== PermissionScope.SHARED))
+        ) {
+          addGrant(grants, permission);
+        }
+      }
     };
     for (const membership of brands) {
       if (membership.role === BusinessRole.STAFF) continue;

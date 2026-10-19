@@ -5,19 +5,26 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { BusinessRole, Prisma } from '@prisma/client';
+import { PermissionAccess } from '../enums/permission-access.enum.js';
+import { Claim } from '../enums/claim.enum.js';
+import { Write, hasGrant } from '../utils/permission.js';
+import { Permission } from '../interfaces/permission.interface.js';
 import { DatabaseService } from '../../../database/database.service.js';
 import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
 import { PermissionCalculator } from '../calculators/permission.calculator.js';
-import { PERMISSION_REGISTRY } from '../constants/permission-registry.js';
+import {
+  PERMISSION_REGISTRY,
+  REGISTERED_PERMISSIONS,
+  isRegisteredPermission,
+} from '../constants/permission-registry.js';
 import { InvitationGrantDto } from '../dto/invitation-grant.dto.js';
 import { PermissionChangeDto } from '../dto/permission-change.dto.js';
 import { AccessScope } from '../enums/access-scope.enum.js';
 import { PermissionScope } from '../enums/permission-scope.enum.js';
-import { PermissionValue } from '../enums/permission-value.enum.js';
-import { Permission } from '../enums/permission.enum.js';
+import { PermissionEffect } from '../enums/permission-effect.enum.js';
 import { assertPermission, hasPermission } from '../utils/assert-permission.js';
 import { hasGlobalPermission } from '../utils/has-global-permission.js';
 import { AccessService } from './access.service.js';
@@ -34,9 +41,9 @@ export class AccessAdministrationService {
 
   private rolePermission(role: BusinessRole): Permission {
     return {
-      OWNER: Permission.ACCESS_OWNER_MANAGE,
-      MANAGER: Permission.ACCESS_MANAGER_MANAGE,
-      STAFF: Permission.ACCESS_STAFF_MANAGE,
+      OWNER: Write(Claim.ACCESS_OWNER),
+      MANAGER: Write(Claim.ACCESS_MANAGER),
+      STAFF: Write(Claim.ACCESS_STAFF),
     }[role];
   }
 
@@ -69,41 +76,49 @@ export class AccessAdministrationService {
     ]);
     const entries = [BusinessRole.MANAGER, BusinessRole.STAFF].flatMap(
       (role) => {
+        const defaults = this.compute.rolePermissions(role, []);
         const inherited = this.compute.rolePermissions(role, brandOverrides);
         const effective = this.compute.rolePermissions(
           role,
           brandOverrides,
           locationOverrides,
         );
-        return Object.values(Permission)
-          .filter(
-            (permission) =>
-              PERMISSION_REGISTRY[permission].configurable.includes(role) &&
-              permission !== Permission.FILE_BRAND_MANAGE &&
-              (!locationId ||
-                PERMISSION_REGISTRY[permission].scope ===
-                  PermissionScope.LOCATION ||
-                PERMISSION_REGISTRY[permission].scope ===
-                  PermissionScope.BRAND_OR_LOCATION),
-          )
-          .map((permission) => {
-            const definition = PERMISSION_REGISTRY[permission];
-            const override = (
-              locationId ? locationOverrides : brandOverrides
-            ).find((row) => row.role === role && row.permission === permission);
-            return {
+        return REGISTERED_PERMISSIONS.filter((permission) => {
+          const definition = PERMISSION_REGISTRY[permission.claim];
+          return (
+            definition.actions[permission.access]!.configurable.includes(
               role,
-              permission,
-              defaultAllowed: definition.defaults.includes(role),
-              inheritedAllowed: locationId
-                ? inherited.has(permission)
-                : definition.defaults.includes(role),
-              override: override?.allowed ?? null,
-              allowed: effective.has(permission),
-              configurable: definition.configurable.includes(role),
-              dependencies: [...definition.dependencies],
-            };
-          });
+            ) &&
+            permission.claim !== Claim.FILE_BRAND &&
+            (!locationId ||
+              definition.scope === PermissionScope.LOCATION ||
+              definition.scope === PermissionScope.BRAND_OR_LOCATION)
+          );
+        }).map((permission) => {
+          const action =
+            PERMISSION_REGISTRY[permission.claim].actions[permission.access]!;
+          const override = (
+            locationId ? locationOverrides : brandOverrides
+          ).find(
+            (row) =>
+              row.role === role &&
+              row.claim === permission.claim &&
+              row.access === permission.access,
+          );
+          const defaultAllowed = hasGrant(defaults, permission);
+          return {
+            role,
+            ...permission,
+            defaultAllowed,
+            inheritedAllowed: locationId
+              ? hasGrant(inherited, permission)
+              : defaultAllowed,
+            override: override?.allowed ?? null,
+            allowed: hasGrant(effective, permission),
+            configurable: true,
+            dependencies: [...action.dependencies],
+          };
+        });
       },
     );
     return { version, entries };
@@ -119,18 +134,24 @@ export class AccessAdministrationService {
   ) {
     assertPermission(
       actor,
-      Permission.ACCESS_POLICY_MANAGE,
+      Write(Claim.ACCESS_POLICY),
       locationId ?? brandId,
       !!locationId,
     );
     this.assertVersion(await this.version(brandId, tx), expectedVersion);
     const seen = new Set<string>();
     for (const change of changes) {
-      const definition = PERMISSION_REGISTRY[change.permission];
-      const key = `${change.role}:${change.permission}`;
       if (
-        !definition ||
-        !definition.configurable.includes(change.role) ||
+        !isRegisteredPermission(change) ||
+        change.access === PermissionAccess.READ_WRITE ||
+        !Object.values(PermissionEffect).includes(change.effect)
+      )
+        this.invalidPolicy();
+      const definition = PERMISSION_REGISTRY[change.claim];
+      const action = definition.actions[change.access]!;
+      const key = `${change.role}:${change.claim}:${change.access}`;
+      if (
+        !action.configurable.includes(change.role) ||
         (locationId &&
           definition.scope !== PermissionScope.LOCATION &&
           definition.scope !== PermissionScope.BRAND_OR_LOCATION) ||
@@ -142,45 +163,47 @@ export class AccessAdministrationService {
     for (const change of changes) {
       if (locationId) {
         const where = {
-          locationId_role_permission: {
+          locationId_role_claim_access: {
             locationId,
             role: change.role,
-            permission: change.permission,
+            claim: change.claim,
+            access: change.access,
           },
         };
-        if (change.value === PermissionValue.INHERIT)
+        if (change.effect === PermissionEffect.INHERIT)
           await tx.locationPermissionOverride.deleteMany({
-            where: where.locationId_role_permission,
+            where: where.locationId_role_claim_access,
           });
         else
           await tx.locationPermissionOverride.upsert({
             where,
             create: {
-              ...where.locationId_role_permission,
-              allowed: change.value === PermissionValue.ALLOW,
+              ...where.locationId_role_claim_access,
+              allowed: change.effect === PermissionEffect.ALLOW,
             },
-            update: { allowed: change.value === PermissionValue.ALLOW },
+            update: { allowed: change.effect === PermissionEffect.ALLOW },
           });
       } else {
         const where = {
-          brandId_role_permission: {
+          brandId_role_claim_access: {
             brandId,
             role: change.role,
-            permission: change.permission,
+            claim: change.claim,
+            access: change.access,
           },
         };
-        if (change.value === PermissionValue.INHERIT)
+        if (change.effect === PermissionEffect.INHERIT)
           await tx.brandPermissionOverride.deleteMany({
-            where: where.brandId_role_permission,
+            where: where.brandId_role_claim_access,
           });
         else
           await tx.brandPermissionOverride.upsert({
             where,
             create: {
-              ...where.brandId_role_permission,
-              allowed: change.value === PermissionValue.ALLOW,
+              ...where.brandId_role_claim_access,
+              allowed: change.effect === PermissionEffect.ALLOW,
             },
-            update: { allowed: change.value === PermissionValue.ALLOW },
+            update: { allowed: change.effect === PermissionEffect.ALLOW },
           });
       }
     }
@@ -205,7 +228,7 @@ export class AccessAdministrationService {
   ) {
     assertPermission(
       actor,
-      Permission.ACCESS_POLICY_MANAGE,
+      Write(Claim.ACCESS_POLICY),
       locationId ?? brandId,
       !!locationId,
     );
@@ -304,6 +327,17 @@ export class AccessAdministrationService {
     const row = await this.membership(brandId, locationId, id, tx);
     this.assertRole(actor, brandId, row.role, locationId);
     if (role) this.assertRole(actor, brandId, role, locationId);
+    if (
+      row.role === BusinessRole.OWNER &&
+      role !== BusinessRole.OWNER &&
+      row.userId !== actor.sub &&
+      !hasGlobalPermission(actor.permissions)
+    ) {
+      throw new AppException(
+        ErrorCode.ACCESS_OWNER_PROTECTED,
+        HttpStatus.FORBIDDEN,
+      );
+    }
     if (!locationId && role === BusinessRole.STAFF) this.invalidGrant();
     if (
       !locationId &&

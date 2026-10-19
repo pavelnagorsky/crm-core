@@ -24,6 +24,8 @@ import {
 } from '@nestjs/swagger';
 import { BusinessRole } from '@prisma/client';
 import type { Request } from 'express';
+import { Claim } from '../../access/enums/claim.enum.js';
+import { Write } from '../../access/utils/permission.js';
 import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../../shared/dto/id-response.dto.js';
@@ -43,7 +45,6 @@ import { ReplaceOwnerDto } from '../../access/dto/replace-owner.dto.js';
 import { SendAccessInvitationDto } from '../../access/dto/send-access-invitation.dto.js';
 import { UpdatePolicyDto } from '../../access/dto/update-policy.dto.js';
 import { UserAccessResponseDto } from '../../access/dto/user-access-response.dto.js';
-import { Permission } from '../../access/enums/permission.enum.js';
 import { AccessAdministrationService } from '../../access/services/access-administration.service.js';
 import { Auth } from '../../auth/decorators/auth.decorator.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
@@ -79,7 +80,7 @@ export class AccessManagementController {
     );
   }
 
-  @Permissions(Permission.ACCESS_POLICY_MANAGE)
+  @Permissions(Write(Claim.ACCESS_POLICY))
   @Get([
     'brands/:brandId/access/policies',
     'locations/:locationId/access/policies',

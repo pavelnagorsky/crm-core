@@ -1,5 +1,6 @@
 import { ForbiddenException } from '@nestjs/common';
-import { Permission } from '../../access/enums/permission.enum.js';
+import { Claim } from '../../access/enums/claim.enum.js';
+import { Read } from '../../access/utils/permission.js';
 import { tokenPayload } from '../../auth/testing/factories/token-payload.factory.js';
 import { StaffAccessService } from './staff-access.service.js';
 import { StaffService } from './staff.service.js';
@@ -26,8 +27,8 @@ describe('Own staff data access', () => {
       service.resolveStaffId(
         tokenPayload('STAFF'),
         'location-1',
-        Permission.STAFF_READ,
-        Permission.STAFF_READ_OWN,
+        Read(Claim.STAFF),
+        Read(Claim.STAFF_OWN),
       ),
     ).resolves.toBe('anna');
     expect(db.staff.findFirst).toHaveBeenCalledWith({
@@ -45,8 +46,8 @@ describe('Own staff data access', () => {
       service.resolveStaffId(
         tokenPayload('STAFF'),
         'location-1',
-        Permission.STAFF_READ,
-        Permission.STAFF_READ_OWN,
+        Read(Claim.STAFF),
+        Read(Claim.STAFF_OWN),
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
@@ -57,8 +58,8 @@ describe('Own staff data access', () => {
         tokenPayload('STAFF'),
         'location-1',
         'boris',
-        Permission.STAFF_READ,
-        Permission.STAFF_READ_OWN,
+        Read(Claim.STAFF),
+        Read(Claim.STAFF_OWN),
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
     await expect(
@@ -66,8 +67,8 @@ describe('Own staff data access', () => {
         tokenPayload('STAFF'),
         'location-1',
         'anna',
-        Permission.STAFF_READ,
-        Permission.STAFF_READ_OWN,
+        Read(Claim.STAFF),
+        Read(Claim.STAFF_OWN),
       ),
     ).resolves.toBeUndefined();
   });
@@ -78,8 +79,8 @@ describe('Own staff data access', () => {
         tokenPayload('MANAGER'),
         'location-1',
         'boris',
-        Permission.STAFF_READ,
-        Permission.STAFF_READ_OWN,
+        Read(Claim.STAFF),
+        Read(Claim.STAFF_OWN),
       ),
     ).resolves.toBeUndefined();
     expect(db.staff.findFirst).not.toHaveBeenCalled();

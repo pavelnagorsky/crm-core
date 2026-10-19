@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { BusinessRole, Prisma, UserRole } from '@prisma/client';
+import { PERMISSIONS_VERSION } from '../constants/permissions-version.js';
 import { DatabaseService } from '../../../database/database.service.js';
 import {
   ACTIVE_BRAND_WHERE,
@@ -90,6 +91,7 @@ export class AccessService {
     return {
       brandMemberships,
       permissions,
+      permissionsVersion: PERMISSIONS_VERSION,
       locationMemberships: [
         ...locationMemberships,
         ...locations.flatMap((location) =>

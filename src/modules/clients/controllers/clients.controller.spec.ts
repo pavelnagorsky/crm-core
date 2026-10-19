@@ -1,6 +1,7 @@
 import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { Permission } from '../../access/enums/permission.enum.js';
+import { Claim } from '../../access/enums/claim.enum.js';
+import { Read, addGrant } from '../../access/utils/permission.js';
 import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
 import { PermissionGuard } from '../../auth/guards/permission.guard.js';
 import { tokenPayload } from '../../auth/testing/factories/token-payload.factory.js';
@@ -27,7 +28,7 @@ describe('Configurable staff client reading', () => {
       expect(() => guard.canActivate(context(operation, token))).toThrow(
         ForbiddenException,
       );
-      token.permissions!['G:brand-1'].push(Permission.CLIENT_READ);
+      addGrant(token.permissions!['G:brand-1'], Read(Claim.CLIENT));
       expect(guard.canActivate(context(operation, token))).toBe(true);
     },
   );
@@ -36,7 +37,7 @@ describe('Configurable staff client reading', () => {
     'does not grant %s through client reading',
     (operation) => {
       const token = tokenPayload('STAFF');
-      token.permissions!['G:brand-1'].push(Permission.CLIENT_READ);
+      addGrant(token.permissions!['G:brand-1'], Read(Claim.CLIENT));
       expect(() => guard.canActivate(context(operation, token))).toThrow(
         ForbiddenException,
       );

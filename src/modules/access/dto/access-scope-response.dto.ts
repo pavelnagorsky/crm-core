@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { BusinessRole } from '@prisma/client';
-import { Permission } from '../enums/permission.enum.js';
+import { PermissionAccess } from '../enums/permission-access.enum.js';
+import type { PermissionGrants } from '../interfaces/permission-grants.interface.js';
 
 export class AccessScopeResponseDto {
   @ApiProperty() brandId: string;
@@ -10,7 +11,20 @@ export class AccessScopeResponseDto {
   @ApiProperty({ enum: BusinessRole, nullable: true })
   inheritedRole: BusinessRole | null;
   @ApiProperty({ type: String, nullable: true }) staffId: string | null;
-  @ApiProperty({ enum: Permission, isArray: true }) permissions: Permission[];
-  @ApiProperty({ enum: Permission, isArray: true })
-  sharedPermissions: Permission[];
+  @ApiProperty({
+    type: 'object',
+    additionalProperties: {
+      type: 'string',
+      enum: Object.values(PermissionAccess),
+    },
+  })
+  permissions: PermissionGrants;
+  @ApiProperty({
+    type: 'object',
+    additionalProperties: {
+      type: 'string',
+      enum: Object.values(PermissionAccess),
+    },
+  })
+  sharedPermissions: PermissionGrants;
 }

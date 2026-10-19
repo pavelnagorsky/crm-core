@@ -1,5 +1,5 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
-import { Permission } from '../../access/enums/permission.enum.js';
+import { Permission } from '../../access/interfaces/permission.interface.js';
 import {
   assertPermission,
   hasPermission,

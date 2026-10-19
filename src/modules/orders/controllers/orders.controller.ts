@@ -21,11 +21,12 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { Claim } from '../../access/enums/claim.enum.js';
+import { Read, Write } from '../../access/utils/permission.js';
 import { ApiResponseArray } from '../../../shared/dto/api-response-array.dto.js';
 import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../../shared/dto/id-response.dto.js';
-import { Permission } from '../../access/enums/permission.enum.js';
 import { hasPermission } from '../../access/utils/assert-permission.js';
 import { auditActorFromToken } from '../../audit/utils/audit-actor-from-token.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
@@ -58,7 +59,7 @@ export class OrdersController {
     description:
       'ORDER_IDEMPOTENCY_CONFLICT: the sale key has a different or unknown original request. responseValue.orderId identifies the existing order.',
   })
-  @Permissions(Permission.ORDER_MANAGE)
+  @Permissions(Write(Claim.ORDER))
   @Post()
   async create(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -69,14 +70,14 @@ export class OrdersController {
       locationId,
       dto,
       auditActorFromToken(token, locationId),
-      hasPermission(token, Permission.SALE_PRICE_OVERRIDE, locationId),
+      hasPermission(token, Write(Claim.SALE_PRICE_OVERRIDE), locationId),
     );
     return BaseResponseDto.success({ id: order.id });
   }
 
   @ApiOperation({ summary: 'Search internal orders' })
   @ApiOkResponse({ type: ApiResponse(OrderSearchResponseDto) })
-  @Permissions(Permission.ORDER_READ)
+  @Permissions(Read(Claim.ORDER))
   @Get()
   async search(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -96,7 +97,7 @@ export class OrdersController {
 
   @ApiOperation({ summary: 'Get order count per status' })
   @ApiOkResponse({ type: ApiResponseArray(OrderStatusCountResponseDto) })
-  @Permissions(Permission.ORDER_READ)
+  @Permissions(Read(Claim.ORDER))
   @Get('status-counts')
   async getStatusCounts(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -113,7 +114,7 @@ export class OrdersController {
   @ApiOperation({ summary: 'Get an internal order' })
   @ApiOkResponse({ type: ApiResponse(OrderResponseDto) })
   @ApiNotFoundResponse({ description: 'Order not found' })
-  @Permissions(Permission.ORDER_READ)
+  @Permissions(Read(Claim.ORDER))
   @Get(':orderId')
   async findById(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -129,7 +130,7 @@ export class OrdersController {
   @ApiOperation({ summary: 'Replace draft items in an active order' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiConflictResponse({ description: 'Order is immutable' })
-  @Permissions(Permission.ORDER_MANAGE)
+  @Permissions(Write(Claim.ORDER))
   @Put(':orderId')
   async update(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -142,7 +143,7 @@ export class OrdersController {
       orderId,
       dto,
       auditActorFromToken(token, locationId),
-      hasPermission(token, Permission.SALE_PRICE_OVERRIDE, locationId),
+      hasPermission(token, Write(Claim.SALE_PRICE_OVERRIDE), locationId),
     );
     return BaseResponseDto.success({ id: order.id });
   }
@@ -150,7 +151,7 @@ export class OrdersController {
   @ApiOperation({ summary: 'Void an internal order' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiConflictResponse({ description: 'Order status transition rejected' })
-  @Permissions(Permission.ORDER_VOID)
+  @Permissions(Write(Claim.ORDER_VOID))
   @Patch(':orderId/status')
   async changeStatus(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -171,7 +172,7 @@ export class OrdersController {
   @ApiOperation({ summary: 'Confirm a draft order item' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiConflictResponse({ description: 'Order item cannot be confirmed' })
-  @Permissions(Permission.ORDER_MANAGE)
+  @Permissions(Write(Claim.ORDER))
   @Patch(':orderId/items/:orderItemId/confirm')
   async confirmItem(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -191,7 +192,7 @@ export class OrdersController {
   @ApiOperation({ summary: 'Add draft product items to an active order' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiConflictResponse({ description: 'Product cannot be added' })
-  @Permissions(Permission.ORDER_MANAGE)
+  @Permissions(Write(Claim.ORDER))
   @Post(':orderId/items')
   async addItems(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -204,7 +205,7 @@ export class OrdersController {
       orderId,
       dto,
       auditActorFromToken(token, locationId),
-      hasPermission(token, Permission.SALE_PRICE_OVERRIDE, locationId),
+      hasPermission(token, Write(Claim.SALE_PRICE_OVERRIDE), locationId),
     );
     return BaseResponseDto.success({ id: order.id });
   }
@@ -212,7 +213,7 @@ export class OrdersController {
   @ApiOperation({ summary: 'Confirm multiple draft product order items' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiConflictResponse({ description: 'Order items cannot be confirmed' })
-  @Permissions(Permission.ORDER_MANAGE)
+  @Permissions(Write(Claim.ORDER))
   @Post(':orderId/items/confirm')
   async confirmItems(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -232,7 +233,7 @@ export class OrdersController {
   @ApiOperation({ summary: 'Reverse a confirmed order item' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiConflictResponse({ description: 'Order item cannot be reversed' })
-  @Permissions(Permission.ORDER_RETURN)
+  @Permissions(Write(Claim.ORDER_RETURN))
   @Patch(':orderId/items/:orderItemId/reverse')
   async reverseItem(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -254,7 +255,7 @@ export class OrdersController {
   @ApiOperation({ summary: 'Create a product return for an active order' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
   @ApiConflictResponse({ description: 'Order item cannot be returned' })
-  @Permissions(Permission.ORDER_RETURN)
+  @Permissions(Write(Claim.ORDER_RETURN))
   @Post(':orderId/returns')
   async createReturn(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -273,7 +274,7 @@ export class OrdersController {
 
   @ApiOperation({ summary: 'Delete an active draft order' })
   @ApiNoContentResponse()
-  @Permissions(Permission.ORDER_MANAGE)
+  @Permissions(Write(Claim.ORDER))
   @Delete(':orderId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(

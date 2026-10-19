@@ -1,8 +1,9 @@
 import { Body, Controller, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Claim } from '../../access/enums/claim.enum.js';
+import { Read } from '../../access/utils/permission.js';
 import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
-import { Permission } from '../../access/enums/permission.enum.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 import { DashboardFacade } from '../dashboard.facade.js';
 import { DashboardWidgetsRequestDto } from '../dto/dashboard-widgets-request.dto.js';
@@ -15,7 +16,7 @@ export class DashboardController {
 
   @ApiOperation({ summary: 'Fetch a set of dashboard widgets by key' })
   @ApiOkResponse({ type: ApiResponse(DashboardWidgetsResponseDto) })
-  @Permissions(Permission.ANALYTICS_LOCATION_READ)
+  @Permissions(Read(Claim.ANALYTICS_LOCATION))
   @Post('widgets')
   async getWidgets(
     @Param('locationId', ParseUUIDPipe) locationId: string,

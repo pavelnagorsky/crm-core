@@ -1,7 +1,8 @@
 import { ForbiddenException } from '@nestjs/common';
 import { BusinessRole, UserRole } from '@prisma/client';
-import { PermissionValue } from '../access/enums/permission-value.enum.js';
-import { Permission } from '../access/enums/permission.enum.js';
+import { Claim } from '../access/enums/claim.enum.js';
+import { Write } from '../access/utils/permission.js';
+import { PermissionEffect } from '../access/enums/permission-effect.enum.js';
 import { tokenPayload } from '../auth/testing/factories/token-payload.factory.js';
 import { AccessManagementFacade } from './access-management.facade.js';
 
@@ -60,8 +61,8 @@ describe('Access management transactions', () => {
     changes: [
       {
         role: BusinessRole.MANAGER,
-        permission: Permission.ORDER_RETURN,
-        value: PermissionValue.DENY,
+        ...Write(Claim.ORDER_RETURN),
+        effect: PermissionEffect.DENY,
       },
     ],
   };

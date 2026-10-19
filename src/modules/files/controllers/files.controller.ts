@@ -21,9 +21,10 @@ import {
   ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
 import { memoryStorage } from 'multer';
+import { Claim } from '../../access/enums/claim.enum.js';
+import { Write } from '../../access/utils/permission.js';
 import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
-import { Permission } from '../../access/enums/permission.enum.js';
 import { Auth } from '../../auth/decorators/auth.decorator.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 import { TokenPayload } from '../../auth/decorators/token-payload.decorator.js';
@@ -37,7 +38,7 @@ export class FilesController {
   constructor(private readonly filesService: FilesService) {}
 
   @Post('brands/:brandId/files')
-  @Permissions(Permission.FILE_BRAND_MANAGE)
+  @Permissions(Write(Claim.FILE_BRAND))
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
   @ApiOperation({ summary: 'Upload a brand file to Google Cloud Storage' })
   @ApiConsumes('multipart/form-data')
@@ -92,7 +93,7 @@ export class FilesController {
   }
 
   @Delete('brands/:brandId/files/:fileId')
-  @Permissions(Permission.FILE_BRAND_MANAGE)
+  @Permissions(Write(Claim.FILE_BRAND))
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a brand file' })
   @ApiNoContentResponse({ description: 'File deleted' })

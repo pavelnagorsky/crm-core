@@ -1,6 +1,8 @@
 import { BusinessRole, UserRole } from '@prisma/client';
+import { REGISTERED_PERMISSIONS } from '../constants/permission-registry.js';
+import { Claim } from '../enums/claim.enum.js';
+import { Read, Write, hasGrant } from '../utils/permission.js';
 import { tokenPayload } from '../../auth/testing/factories/token-payload.factory.js';
-import { Permission } from '../enums/permission.enum.js';
 import { hasPermission } from '../utils/assert-permission.js';
 import { PermissionCalculator } from './permission.calculator.js';
 
@@ -16,34 +18,36 @@ describe('Permissions compiled into JWT', () => {
   it('gives staff own access without administrative or financial permissions', () => {
     const token = tokenPayload(BusinessRole.STAFF);
     for (const permission of [
-      Permission.BOOKING_READ_OWN,
-      Permission.BOOKING_MANAGE_OWN,
-      Permission.STAFF_READ_OWN,
-      Permission.PAYROLL_READ_OWN,
-      Permission.LOCATION_READ,
+      Read(Claim.BOOKING_OWN),
+      Write(Claim.BOOKING_OWN),
+      Read(Claim.STAFF_OWN),
+      Read(Claim.PAYROLL_OWN),
+      Read(Claim.LOCATION),
     ])
       expect(hasPermission(token, permission, 'location-1')).toBe(true);
     for (const permission of [
-      Permission.BOOKING_READ,
-      Permission.BOOKING_MANAGE,
-      Permission.ORDER_READ,
-      Permission.ORDER_MANAGE,
-      Permission.PAYROLL_READ,
-      Permission.STAFF_READ,
-      Permission.STAFF_MANAGE,
-      Permission.SALE_PRICE_OVERRIDE,
-      Permission.ORDER_RETURN,
-      Permission.ORDER_VOID,
-      Permission.CALENDAR_BLOCKS_MANAGE,
-      Permission.BOOKING_DELETE,
-      Permission.ANALYTICS_LOCATION_READ,
+      Read(Claim.BOOKING),
+      Write(Claim.BOOKING),
+      Read(Claim.ORDER),
+      Write(Claim.ORDER),
+      Read(Claim.PAYROLL),
+      Read(Claim.STAFF),
+      Write(Claim.STAFF),
+      Write(Claim.SALE_PRICE_OVERRIDE),
+      Write(Claim.ORDER_RETURN),
+      Write(Claim.ORDER_VOID),
+      Write(Claim.CALENDAR_BLOCKS),
+      Write(Claim.BOOKING_DELETE),
+      Read(Claim.ANALYTICS_LOCATION),
     ])
       expect(hasPermission(token, permission, 'location-1')).toBe(false);
-    expect(hasPermission(token, Permission.CLIENT_READ, 'brand-1')).toBe(false);
-    expect(hasPermission(token, Permission.PRODUCT_READ, 'brand-1')).toBe(true);
-    expect(
-      hasPermission(token, Permission.BOOKING_READ_OWN, 'location-2'),
-    ).toBe(false);
+    expect(hasPermission(token, Read(Claim.CLIENT), 'brand-1')).toBe(false);
+    expect(hasPermission(token, Read(Claim.PRODUCT_CATALOG), 'brand-1')).toBe(
+      true,
+    );
+    expect(hasPermission(token, Read(Claim.BOOKING_OWN), 'location-2')).toBe(
+      false,
+    );
   });
 
   it('allows broader calendar and client reading without broader mutations', () => {
@@ -57,7 +61,7 @@ describe('Permissions compiled into JWT', () => {
           id: 'clients',
           brandId: 'brand-1',
           role: BusinessRole.STAFF,
-          permission: Permission.CLIENT_READ,
+          ...Read(Claim.CLIENT),
           allowed: true,
         },
       ],
@@ -66,56 +70,52 @@ describe('Permissions compiled into JWT', () => {
           id: 'calendar',
           locationId: 'location-1',
           role: BusinessRole.STAFF,
-          permission: Permission.BOOKING_READ,
+          ...Read(Claim.BOOKING),
           allowed: true,
         },
       ],
     );
-    expect(hasPermission(token, Permission.BOOKING_READ, 'location-1')).toBe(
-      true,
-    );
-    expect(hasPermission(token, Permission.CLIENT_READ, 'brand-1')).toBe(true);
-    expect(hasPermission(token, Permission.BOOKING_MANAGE, 'location-1')).toBe(
+    expect(hasPermission(token, Read(Claim.BOOKING), 'location-1')).toBe(true);
+    expect(hasPermission(token, Read(Claim.CLIENT), 'brand-1')).toBe(true);
+    expect(hasPermission(token, Write(Claim.BOOKING), 'location-1')).toBe(
       false,
     );
-    expect(hasPermission(token, Permission.CLIENT_MANAGE, 'brand-1')).toBe(
-      false,
-    );
-    expect(hasPermission(token, Permission.CLIENT_READ, 'other')).toBe(false);
+    expect(hasPermission(token, Write(Claim.CLIENT), 'brand-1')).toBe(false);
+    expect(hasPermission(token, Read(Claim.CLIENT), 'other')).toBe(false);
   });
 
   it('ignores obsolete staff overrides for administrative and financial actions', () => {
     const token = tokenPayload(BusinessRole.STAFF);
     const forbidden = [
-      Permission.BOOKING_MANAGE,
-      Permission.ORDER_MANAGE,
-      Permission.ORDER_READ,
-      Permission.ORDER_RETURN,
-      Permission.ORDER_VOID,
-      Permission.SALE_PRICE_OVERRIDE,
-      Permission.CALENDAR_BLOCKS_MANAGE,
-      Permission.STAFF_READ,
-      Permission.STAFF_MANAGE,
-      Permission.PAYROLL_MANAGE,
-      Permission.PAYROLL_READ,
-      Permission.ANALYTICS_LOCATION_READ,
+      Write(Claim.BOOKING),
+      Write(Claim.ORDER),
+      Read(Claim.ORDER),
+      Write(Claim.ORDER_RETURN),
+      Write(Claim.ORDER_VOID),
+      Write(Claim.SALE_PRICE_OVERRIDE),
+      Write(Claim.CALENDAR_BLOCKS),
+      Read(Claim.STAFF),
+      Write(Claim.STAFF),
+      Write(Claim.PAYROLL),
+      Read(Claim.PAYROLL),
+      Read(Claim.ANALYTICS_LOCATION),
     ];
     token.permissions = compute.claims(
       [],
       local,
       locations,
       forbidden.map((permission) => ({
-        id: permission,
+        id: `${permission.claim}:${permission.access}`,
         brandId: 'brand-1',
         role: BusinessRole.STAFF,
-        permission,
+        ...permission,
         allowed: true,
       })),
       forbidden.map((permission) => ({
-        id: permission,
+        id: `${permission.claim}:${permission.access}`,
         locationId: 'location-1',
         role: BusinessRole.STAFF,
-        permission,
+        ...permission,
         allowed: true,
       })),
     );
@@ -135,21 +135,19 @@ describe('Permissions compiled into JWT', () => {
           id: 'old',
           locationId: 'location-1',
           role: BusinessRole.MANAGER,
-          permission: Permission.PAYROLL_MANAGE,
+          ...Write(Claim.PAYROLL),
           allowed: true,
         },
       ],
     );
-    expect(hasPermission(token, Permission.PAYROLL_READ, 'location-1')).toBe(
-      true,
-    );
-    expect(hasPermission(token, Permission.PAYROLL_MANAGE, 'location-1')).toBe(
+    expect(hasPermission(token, Read(Claim.PAYROLL), 'location-1')).toBe(true);
+    expect(hasPermission(token, Write(Claim.PAYROLL), 'location-1')).toBe(
       false,
     );
     expect(
       hasPermission(
         tokenPayload(BusinessRole.OWNER),
-        Permission.PAYROLL_MANAGE,
+        Write(Claim.PAYROLL),
         'location-1',
       ),
     ).toBe(true);
@@ -161,12 +159,12 @@ describe('Permissions compiled into JWT', () => {
         id: 'deny',
         brandId: 'brand-1',
         role: BusinessRole.STAFF,
-        permission: Permission.BOOKING_READ_OWN,
+        ...Read(Claim.BOOKING_OWN),
         allowed: false,
       },
     ]);
-    expect(permissions.has(Permission.BOOKING_READ_OWN)).toBe(false);
-    expect(permissions.has(Permission.BOOKING_MANAGE_OWN)).toBe(false);
+    expect(hasGrant(permissions, Read(Claim.BOOKING_OWN))).toBe(false);
+    expect(hasGrant(permissions, Write(Claim.BOOKING_OWN))).toBe(false);
   });
 
   it.each(['brand', 'location'] as const)(
@@ -174,9 +172,9 @@ describe('Permissions compiled into JWT', () => {
     (source) => {
       const role = BusinessRole.MANAGER;
       const changes = [
-        { permission: Permission.ACCESS_STAFF_MANAGE, allowed: true },
-        { permission: Permission.STAFF_MANAGE, allowed: false },
-        { permission: Permission.STAFF_READ, allowed: false },
+        { ...Write(Claim.ACCESS_STAFF), allowed: true },
+        { ...Write(Claim.STAFF), allowed: false },
+        { ...Read(Claim.STAFF), allowed: false },
       ];
       const token = tokenPayload(role);
       token.permissions = compute.claims(
@@ -185,7 +183,7 @@ describe('Permissions compiled into JWT', () => {
         locations,
         source === 'brand'
           ? changes.map((change) => ({
-              id: change.permission,
+              id: `${change.claim}:${change.access}`,
               brandId: 'brand-1',
               role,
               ...change,
@@ -193,7 +191,7 @@ describe('Permissions compiled into JWT', () => {
           : [],
         source === 'location'
           ? changes.map((change) => ({
-              id: change.permission,
+              id: `${change.claim}:${change.access}`,
               locationId: 'location-1',
               role,
               ...change,
@@ -205,30 +203,18 @@ describe('Permissions compiled into JWT', () => {
         ? ['location-1', 'location-2']
         : ['location-1']) {
         expect(
-          hasPermission(
-            token,
-            Permission.ACCESS_STAFF_MANAGE,
-            locationId,
-            true,
-          ),
+          hasPermission(token, Write(Claim.ACCESS_STAFF), locationId, true),
         ).toBe(true);
-        expect(hasPermission(token, Permission.STAFF_READ, locationId)).toBe(
-          true,
-        );
-        expect(hasPermission(token, Permission.STAFF_MANAGE, locationId)).toBe(
+        expect(hasPermission(token, Read(Claim.STAFF), locationId)).toBe(true);
+        expect(hasPermission(token, Write(Claim.STAFF), locationId)).toBe(
           false,
         );
       }
       if (source === 'location') {
         expect(
-          hasPermission(
-            token,
-            Permission.ACCESS_STAFF_MANAGE,
-            'location-2',
-            true,
-          ),
+          hasPermission(token, Write(Claim.ACCESS_STAFF), 'location-2', true),
         ).toBe(false);
-        expect(hasPermission(token, Permission.STAFF_READ, 'location-2')).toBe(
+        expect(hasPermission(token, Read(Claim.STAFF), 'location-2')).toBe(
           false,
         );
       }
@@ -249,18 +235,18 @@ describe('Permissions compiled into JWT', () => {
             id: 'old-booking-delete',
             locationId: 'location-1',
             role,
-            permission: Permission.BOOKING_DELETE,
+            ...Write(Claim.BOOKING_DELETE),
             allowed: true,
           },
         ],
       );
       expect(
-        hasPermission(token, Permission.BOOKING_DELETE, 'location-1'),
+        hasPermission(token, Write(Claim.BOOKING_DELETE), 'location-1'),
       ).toBe(false);
       expect(
         hasPermission(
           tokenPayload(BusinessRole.OWNER),
-          Permission.BOOKING_DELETE,
+          Write(Claim.BOOKING_DELETE),
           'location-1',
         ),
       ).toBe(true);
@@ -276,17 +262,17 @@ describe('Permissions compiled into JWT', () => {
       [],
     );
     expect(
-      hasPermission(token, Permission.LOCATION_SETTINGS_MANAGE, 'location-1'),
+      hasPermission(token, Write(Claim.LOCATION_SETTINGS), 'location-1'),
     ).toBe(true);
     expect(
-      hasPermission(token, Permission.LOCATION_SETTINGS_MANAGE, 'location-2'),
+      hasPermission(token, Write(Claim.LOCATION_SETTINGS), 'location-2'),
     ).toBe(false);
-    expect(hasPermission(token, Permission.ORDER_RETURN, 'location-2')).toBe(
+    expect(hasPermission(token, Write(Claim.ORDER_RETURN), 'location-2')).toBe(
       true,
     );
-    expect(
-      hasPermission(token, Permission.ACCESS_OWNER_MANAGE, 'brand-1'),
-    ).toBe(false);
+    expect(hasPermission(token, Write(Claim.ACCESS_OWNER), 'brand-1')).toBe(
+      false,
+    );
   });
   it('applies a local deny only to the local source', () => {
     const overrides = [
@@ -294,7 +280,7 @@ describe('Permissions compiled into JWT', () => {
         id: 'o',
         locationId: 'location-1',
         role: BusinessRole.MANAGER,
-        permission: Permission.ORDER_RETURN,
+        ...Write(Claim.ORDER_RETURN),
         allowed: false,
       },
     ];
@@ -306,7 +292,7 @@ describe('Permissions compiled into JWT', () => {
       [],
       overrides,
     );
-    expect(hasPermission(token, Permission.ORDER_RETURN, 'location-1')).toBe(
+    expect(hasPermission(token, Write(Claim.ORDER_RETURN), 'location-1')).toBe(
       true,
     );
     token.permissions = compute.claims(
@@ -316,7 +302,7 @@ describe('Permissions compiled into JWT', () => {
       [],
       overrides,
     );
-    expect(hasPermission(token, Permission.ORDER_RETURN, 'location-1')).toBe(
+    expect(hasPermission(token, Write(Claim.ORDER_RETURN), 'location-1')).toBe(
       false,
     );
   });
@@ -331,7 +317,7 @@ describe('Permissions compiled into JWT', () => {
           id: 'o',
           brandId: 'brand-1',
           role: BusinessRole.STAFF,
-          permission: Permission.ORDER_READ,
+          ...Read(Claim.ORDER),
           allowed: false,
         },
       ],
@@ -340,17 +326,15 @@ describe('Permissions compiled into JWT', () => {
           id: 'bad',
           locationId: 'location-1',
           role: BusinessRole.STAFF,
-          permission: Permission.PAYROLL_READ,
+          ...Read(Claim.PAYROLL),
           allowed: true,
         },
       ],
     );
-    expect(hasPermission(token, Permission.ORDER_RETURN, 'location-1')).toBe(
+    expect(hasPermission(token, Write(Claim.ORDER_RETURN), 'location-1')).toBe(
       false,
     );
-    expect(hasPermission(token, Permission.PAYROLL_READ, 'location-1')).toBe(
-      false,
-    );
+    expect(hasPermission(token, Read(Claim.PAYROLL), 'location-1')).toBe(false);
     token.permissions = compute.claims(
       [{ brandId: 'brand-1', role: BusinessRole.STAFF }],
       [],
@@ -358,19 +342,15 @@ describe('Permissions compiled into JWT', () => {
       [],
       [],
     );
-    expect(hasPermission(token, Permission.CLIENT_READ, 'brand-1')).toBe(false);
+    expect(hasPermission(token, Read(Claim.CLIENT), 'brand-1')).toBe(false);
   });
   it('uses signed claims directly and fails closed for missing or unknown claims', () => {
     const token = tokenPayload();
     delete token.permissions;
-    expect(hasPermission(token, Permission.ORDER_READ, 'location-1')).toBe(
-      false,
-    );
+    expect(hasPermission(token, Read(Claim.ORDER), 'location-1')).toBe(false);
     token.role = UserRole.ADMIN;
-    expect(hasPermission(token, Permission.ORDER_READ, 'location-1')).toBe(
-      false,
-    );
-    expect(hasPermission(token, 'unknown' as Permission, 'location-1')).toBe(
+    expect(hasPermission(token, Read(Claim.ORDER), 'location-1')).toBe(false);
+    expect(hasPermission(token, Read('unknown' as Claim), 'location-1')).toBe(
       false,
     );
   });
@@ -390,27 +370,25 @@ describe('Permissions compiled into JWT', () => {
     token.brandMemberships = [];
     token.locationMemberships = [];
     token.permissions = compute.claims([], [], [], [], [], UserRole.ADMIN);
-    for (const permission of Object.values(Permission)) {
+    for (const permission of REGISTERED_PERMISSIONS) {
       expect(hasPermission(token, permission, 'unrelated-brand')).toBe(true);
       expect(hasPermission(token, permission, 'new-location', true)).toBe(true);
     }
     for (const permission of ['unknown', '*', 'toString', '__proto__'])
-      expect(hasPermission(token, permission as Permission, 'location-1')).toBe(
-        false,
-      );
+      expect(
+        hasPermission(token, Read(permission as Claim), 'location-1'),
+      ).toBe(false);
   });
 
   it('does not treat a scoped wildcard or a partial global grant as universal access', () => {
     const token = tokenPayload();
     for (const permissions of [
       { 'L:location-1': ['*'] },
-      { '*': [Permission.ORDER_READ] },
+      { '*': [Read(Claim.ORDER)] },
       { '*': [] },
     ]) {
       token.permissions = permissions as never;
-      expect(hasPermission(token, Permission.ORDER_READ, 'location-1')).toBe(
-        false,
-      );
+      expect(hasPermission(token, Read(Claim.ORDER), 'location-1')).toBe(false);
     }
   });
 });

@@ -1,6 +1,7 @@
 import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { Permission } from '../../access/enums/permission.enum.js';
+import { Claim } from '../../access/enums/claim.enum.js';
+import { Read, addGrant } from '../../access/utils/permission.js';
 import { PermissionGuard } from '../../auth/guards/permission.guard.js';
 import { tokenPayload } from '../../auth/testing/factories/token-payload.factory.js';
 import { StaffAccessService } from '../../staff/services/staff-access.service.js';
@@ -100,7 +101,7 @@ describe('Staff booking API', () => {
       booking({ locationId: 'location-1', item: { staffId: 'boris' } }),
     );
     const token = tokenPayload('STAFF');
-    token.permissions!['L:location-1'].push(Permission.BOOKING_READ);
+    addGrant(token.permissions!['L:location-1'], Read(Claim.BOOKING));
     await expect(
       controller.updateStatus(
         'location-1',

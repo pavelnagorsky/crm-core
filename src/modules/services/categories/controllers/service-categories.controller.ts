@@ -19,11 +19,12 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { Claim } from '../../../access/enums/claim.enum.js';
+import { Read, Write } from '../../../access/utils/permission.js';
 import { ApiResponseArray } from '../../../../shared/dto/api-response-array.dto.js';
 import { ApiResponse } from '../../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../../../shared/dto/id-response.dto.js';
-import { Permission } from '../../../access/enums/permission.enum.js';
 import { auditActorFromToken } from '../../../audit/utils/audit-actor-from-token.js';
 import { Permissions } from '../../../auth/decorators/permissions.decorator.js';
 import { TokenPayload } from '../../../auth/decorators/token-payload.decorator.js';
@@ -40,7 +41,7 @@ export class ServiceCategoriesController {
 
   @ApiOperation({ summary: 'Create a service category' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
-  @Permissions(Permission.SERVICE_MANAGE)
+  @Permissions(Write(Claim.SERVICE))
   @Post('service-categories')
   async createCategory(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -57,7 +58,7 @@ export class ServiceCategoriesController {
 
   @ApiOperation({ summary: 'List service categories for a business' })
   @ApiOkResponse({ type: ApiResponseArray(ServiceCategoryResponseDto) })
-  @Permissions(Permission.SERVICE_READ)
+  @Permissions(Read(Claim.SERVICE))
   @Get('service-categories')
   async listCategories(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -72,7 +73,7 @@ export class ServiceCategoriesController {
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Service category not found' })
   @ApiConflictResponse({ description: 'Category name already exists' })
-  @Permissions(Permission.SERVICE_MANAGE)
+  @Permissions(Write(Claim.SERVICE))
   @Put('service-categories/:categoryId')
   async updateCategory(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -92,7 +93,7 @@ export class ServiceCategoriesController {
   @ApiOperation({ summary: 'Delete a service category' })
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Service category not found' })
-  @Permissions(Permission.SERVICE_MANAGE)
+  @Permissions(Write(Claim.SERVICE))
   @Delete('service-categories/:categoryId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteCategory(

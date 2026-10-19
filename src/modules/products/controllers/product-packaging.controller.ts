@@ -12,9 +12,10 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { Claim } from '../../access/enums/claim.enum.js';
+import { Write } from '../../access/utils/permission.js';
 import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
-import { Permission } from '../../access/enums/permission.enum.js';
 import { auditActorFromToken } from '../../audit/utils/audit-actor-from-token.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 import { TokenPayload } from '../../auth/decorators/token-payload.decorator.js';
@@ -30,7 +31,7 @@ export class ProductPackagingController {
   constructor(private readonly packagings: ProductPackagingService) {}
 
   @Post()
-  @Permissions(Permission.PRODUCT_CATALOG_MANAGE)
+  @Permissions(Write(Claim.PRODUCT_CATALOG))
   @ApiOperation({
     summary:
       'Create an immutable product packaging; packagings are included in product details',
@@ -54,7 +55,7 @@ export class ProductPackagingController {
   }
 
   @Patch(':packagingId/status')
-  @Permissions(Permission.PRODUCT_CATALOG_MANAGE)
+  @Permissions(Write(Claim.PRODUCT_CATALOG))
   @ApiOperation({ summary: 'Archive or reactivate a product packaging' })
   @ApiOkResponse({ type: ApiResponse(ProductPackagingResponseDto) })
   async changeStatus(

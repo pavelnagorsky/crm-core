@@ -1,8 +1,10 @@
+import { PermissionAccess } from '../enums/permission-access.enum.js';
 import { BusinessRole } from '@prisma/client';
+import { Claim } from '../enums/claim.enum.js';
+import { Read, Write } from '../utils/permission.js';
 import { PermissionCalculator } from '../calculators/permission.calculator.js';
 import { PERMISSION_REGISTRY } from '../constants/permission-registry.js';
 import { PermissionScope } from '../enums/permission-scope.enum.js';
-import { Permission } from '../enums/permission.enum.js';
 import { AccessAdministrationService } from './access-administration.service.js';
 
 describe('Editable access policy', () => {
@@ -25,23 +27,29 @@ describe('Editable access policy', () => {
     expect(policy.entries).toContainEqual(
       expect.objectContaining({
         role: BusinessRole.STAFF,
-        permission: Permission.BOOKING_READ,
+        ...Read(Claim.BOOKING),
       }),
     );
     expect(policy.entries.every((entry) => entry.configurable)).toBe(true);
     expect(
       policy.entries.some(
-        (entry) => entry.permission === Permission.FILE_BRAND_MANAGE,
+        (entry) =>
+          entry.claim === Claim.FILE_BRAND &&
+          entry.access === PermissionAccess.WRITE,
       ),
     ).toBe(false);
     expect(
       policy.entries.some(
-        (entry) => entry.permission === Permission.BOOKING_DELETE,
+        (entry) =>
+          entry.claim === Claim.BOOKING_DELETE &&
+          entry.access === PermissionAccess.WRITE,
       ),
     ).toBe(false);
     expect(
       policy.entries.some(
-        (entry) => entry.permission === Permission.CLIENT_READ,
+        (entry) =>
+          entry.claim === Claim.CLIENT &&
+          entry.access === PermissionAccess.READ,
       ),
     ).toBe(true);
   });
@@ -54,7 +62,7 @@ describe('Editable access policy', () => {
       expect([
         PermissionScope.LOCATION,
         PermissionScope.BRAND_OR_LOCATION,
-      ]).toContain(PERMISSION_REGISTRY[entry.permission].scope);
+      ]).toContain(PERMISSION_REGISTRY[entry.claim].scope);
       expect(entry.configurable).toBe(true);
     }
   });
@@ -84,14 +92,16 @@ describe('Editable access policy', () => {
       expect(policy.entries).toContainEqual(
         expect.objectContaining({
           role: BusinessRole.MANAGER,
-          permission: Permission.ACCESS_STAFF_MANAGE,
-          dependencies: [Permission.STAFF_READ],
+          ...Write(Claim.ACCESS_STAFF),
+          dependencies: [Read(Claim.STAFF)],
           allowed: true,
         }),
       );
       expect(
         policy.entries.some(
-          (entry) => entry.permission === Permission.STAFF_READ,
+          (entry) =>
+            entry.claim === Claim.STAFF &&
+            entry.access === PermissionAccess.READ,
         ),
       ).toBe(false);
     },

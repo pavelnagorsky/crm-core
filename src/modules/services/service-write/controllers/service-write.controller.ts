@@ -19,10 +19,11 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { Claim } from '../../../access/enums/claim.enum.js';
+import { Write } from '../../../access/utils/permission.js';
 import { ApiResponse } from '../../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../../../shared/dto/id-response.dto.js';
-import { Permission } from '../../../access/enums/permission.enum.js';
 import { auditActorFromToken } from '../../../audit/utils/audit-actor-from-token.js';
 import { Permissions } from '../../../auth/decorators/permissions.decorator.js';
 import { TokenPayload } from '../../../auth/decorators/token-payload.decorator.js';
@@ -39,7 +40,7 @@ export class ServiceWriteController {
 
   @ApiOperation({ summary: 'Create a service' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
-  @Permissions(Permission.SERVICE_MANAGE)
+  @Permissions(Write(Claim.SERVICE))
   @Post('services')
   async create(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -57,7 +58,7 @@ export class ServiceWriteController {
   @ApiOperation({ summary: 'Update a service' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Service not found' })
-  @Permissions(Permission.SERVICE_MANAGE)
+  @Permissions(Write(Claim.SERVICE))
   @Put('services/:id')
   async update(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -78,7 +79,7 @@ export class ServiceWriteController {
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Service not found' })
   @ApiConflictResponse({ description: 'Service already has this status' })
-  @Permissions(Permission.SERVICE_MANAGE)
+  @Permissions(Write(Claim.SERVICE))
   @HttpCode(HttpStatus.NO_CONTENT)
   @Patch('services/:id/status')
   async updateStatus(
@@ -101,7 +102,7 @@ export class ServiceWriteController {
   @ApiConflictResponse({
     description: 'Service is used in bookings or compensation plans',
   })
-  @Permissions(Permission.SERVICE_MANAGE)
+  @Permissions(Write(Claim.SERVICE))
   @Delete('services/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(

@@ -19,10 +19,11 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { Claim } from '../../../access/enums/claim.enum.js';
+import { Write } from '../../../access/utils/permission.js';
 import { ApiResponse } from '../../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../../../shared/dto/id-response.dto.js';
-import { Permission } from '../../../access/enums/permission.enum.js';
 import { auditActorFromToken } from '../../../audit/utils/audit-actor-from-token.js';
 import { Permissions } from '../../../auth/decorators/permissions.decorator.js';
 import { TokenPayload } from '../../../auth/decorators/token-payload.decorator.js';
@@ -39,7 +40,7 @@ export class ServiceBundleWriteController {
 
   @ApiOperation({ summary: 'Create a service bundle' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
-  @Permissions(Permission.SERVICE_MANAGE)
+  @Permissions(Write(Claim.SERVICE))
   @Post('service-bundles')
   async createBundle(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -57,7 +58,7 @@ export class ServiceBundleWriteController {
   @ApiOperation({ summary: 'Update a service bundle' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Service bundle not found' })
-  @Permissions(Permission.SERVICE_MANAGE)
+  @Permissions(Write(Claim.SERVICE))
   @Put('service-bundles/:id')
   async updateBundle(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -78,7 +79,7 @@ export class ServiceBundleWriteController {
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Service bundle not found' })
   @ApiConflictResponse({ description: 'Bundle already has this status' })
-  @Permissions(Permission.SERVICE_MANAGE)
+  @Permissions(Write(Claim.SERVICE))
   @HttpCode(HttpStatus.NO_CONTENT)
   @Patch('service-bundles/:id/status')
   async updateBundleStatus(
@@ -99,7 +100,7 @@ export class ServiceBundleWriteController {
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Service bundle not found' })
   @ApiConflictResponse({ description: 'Bundle is used in bookings' })
-  @Permissions(Permission.SERVICE_MANAGE)
+  @Permissions(Write(Claim.SERVICE))
   @Delete('service-bundles/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteBundle(

@@ -1,8 +1,10 @@
 # Permissions для API
 
-Сопоставление маршрутов с проверками backend на 2026-10-18. [Модель ролей и defaults](./rbac.md), [контракты управления доступом](./rbac-contracts.md). Permissions `*.export` закрывают только скачивание XLSX. Параметр списка `isExport=true` отключает пагинацию и доступен при том же праве чтения, что и обычный список.
+В обозначениях ниже `claim:read` / `claim:write` двоеточие отделяет действие от ключа. В API это отдельные поля `claim` и `access`; в JWT — карта `claim → read | write | readWrite`. Точки группируют имена, но не выдают дочерние права.
 
-Составные действия проверяют все перечисленные permissions и состояние документа. Аналитические endpoints ниже не проверяют permissions по содержимому выбранных показателей; дополнительное `inventory.read` явно требуется только у складского KPI.
+Сопоставление маршрутов с проверками backend на 2026-10-19. [Модель ролей и defaults](./rbac.md), [контракты управления доступом](./rbac-contracts.md). Permissions `*.export` закрывают только скачивание XLSX. Параметр списка `isExport=true` отключает пагинацию и доступен при том же праве чтения, что и обычный список.
+
+Составные действия проверяют все перечисленные permissions и состояние документа. Аналитические endpoints ниже не проверяют permissions по содержимому выбранных показателей; дополнительное `inventory:read` явно требуется только у складского KPI.
 
 Маршруты управления доступом описаны отдельно в контрактах. Эта карта дополняет OpenAPI условиями авторизации и не заменяет DTO из кода.
 
@@ -21,8 +23,8 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `GET /brands/:brandId/audit` | `getBrandHistory` | B: `audit.brand.read` | — |
-| `GET /locations/:locationId/audit` | `getLocationHistory` | L: `audit.location.read` | — |
+| `GET /brands/:brandId/audit` | `getBrandHistory` | B: `audit.brand:read` | — |
+| `GET /locations/:locationId/audit` | `getLocationHistory` | L: `audit.location:read` | — |
 
 ## auth
 
@@ -47,13 +49,13 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `GET /locations/:locationId/booking-pages/slug-availability` | `checkSlug` | L: `booking-channel.read` | — |
-| `GET /locations/:locationId/booking-pages` | `list` | L: `booking-channel.read` | — |
-| `POST /locations/:locationId/booking-pages` | `create` | L: `booking-channel.manage` | — |
-| `GET /locations/:locationId/booking-pages/:pageId` | `findById` | L: `booking-channel.read` | — |
-| `PUT /locations/:locationId/booking-pages/:pageId` | `update` | L: `booking-channel.manage` | — |
-| `PATCH /locations/:locationId/booking-pages/:pageId/status` | `updateStatus` | L: `booking-channel.manage` | — |
-| `DELETE /locations/:locationId/booking-pages/:pageId` | `delete` | L: `booking-channel.manage` | — |
+| `GET /locations/:locationId/booking-pages/slug-availability` | `checkSlug` | L: `booking-channel:read` | — |
+| `GET /locations/:locationId/booking-pages` | `list` | L: `booking-channel:read` | — |
+| `POST /locations/:locationId/booking-pages` | `create` | L: `booking-channel:write` | — |
+| `GET /locations/:locationId/booking-pages/:pageId` | `findById` | L: `booking-channel:read` | — |
+| `PUT /locations/:locationId/booking-pages/:pageId` | `update` | L: `booking-channel:write` | — |
+| `PATCH /locations/:locationId/booking-pages/:pageId/status` | `updateStatus` | L: `booking-channel:write` | — |
+| `DELETE /locations/:locationId/booking-pages/:pageId` | `delete` | L: `booking-channel:write` | — |
 
 ## booking-widgets
 
@@ -61,12 +63,12 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `GET /locations/:locationId/booking-widgets` | `list` | L: `booking-channel.read` | — |
-| `POST /locations/:locationId/booking-widgets` | `create` | L: `booking-channel.manage` | — |
-| `GET /locations/:locationId/booking-widgets/:widgetId` | `findById` | L: `booking-channel.read` | — |
-| `PUT /locations/:locationId/booking-widgets/:widgetId` | `update` | L: `booking-channel.manage` | — |
-| `PATCH /locations/:locationId/booking-widgets/:widgetId/status` | `updateStatus` | L: `booking-channel.manage` | — |
-| `DELETE /locations/:locationId/booking-widgets/:widgetId` | `delete` | L: `booking-channel.manage` | — |
+| `GET /locations/:locationId/booking-widgets` | `list` | L: `booking-channel:read` | — |
+| `POST /locations/:locationId/booking-widgets` | `create` | L: `booking-channel:write` | — |
+| `GET /locations/:locationId/booking-widgets/:widgetId` | `findById` | L: `booking-channel:read` | — |
+| `PUT /locations/:locationId/booking-widgets/:widgetId` | `update` | L: `booking-channel:write` | — |
+| `PATCH /locations/:locationId/booking-widgets/:widgetId/status` | `updateStatus` | L: `booking-channel:write` | — |
+| `DELETE /locations/:locationId/booking-widgets/:widgetId` | `delete` | L: `booking-channel:write` | — |
 
 ## public-booking-channels
 
@@ -91,7 +93,7 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `POST /locations/:locationId/bookings/analytics` | `analytics` | L: `analytics.location.read` или `booking.read.own` | При own-чтении сервер принудительно выбирает собственного исполнителя; общий booking.read это ограничение не снимает. |
+| `POST /locations/:locationId/bookings/analytics` | `analytics` | L: `analytics.location:read` или `booking.own:read` | При own-чтении сервер принудительно выбирает собственного исполнителя; общий booking:read это ограничение не снимает. |
 
 ## bookings
 
@@ -104,18 +106,18 @@
 | `POST /public/locations/:locationId/pricing` | `priceBooking` | P: `public` | — |
 | `GET /public/bookings/me` | `getByClientToken` | P: `booking-client-token` | Токен только этой записи; бизнес-роль не требуется. |
 | `POST /public/bookings/me/cancel` | `cancelByClientToken` | P: `booking-client-token` | Действующая клиентская политика отмены; не обход к возврату произвольного заказа. |
-| `POST /locations/:locationId/bookings/manual` | `createManual` | L: `booking.manage` | Произвольная цена: также sale.price.override. Товары: order.manage. Клиент находится или создаётся автоматически независимо от client.manage. WALK_IN с немедленным COMPLETED: order.manage. |
-| `GET /locations/:locationId/bookings/status-counts` | `getStatusCounts` | L: `booking.read` или `booking.read.own` | При own-чтении обязательно участие в записи; списки и счётчики ограничены до пагинации. |
-| `GET /locations/:locationId/bookings/export` | `export` | L: `booking.export` | — |
-| `GET /locations/:locationId/bookings/:id` | `findById` | L: `booking.read` или `booking.read.own` | При own-чтении обязательно участие в записи; списки и счётчики ограничены до пагинации. |
-| `GET /locations/:locationId/bookings` | `search` | L: `booking.read` или `booking.read.own` | При own-чтении обязательно участие в записи; списки и счётчики ограничены до пагинации. |
-| `PUT /locations/:locationId/bookings/:id` | `update` | L: `booking.manage` или `booking.manage.own` | При own-праве достаточно участия в одной услуге; действие над всей записью. Изменение цены требует sale.price.override; завершённую запись STAFF не редактирует. |
-| `PATCH /locations/:locationId/bookings/:id/status` | `updateStatus` | L: `booking.manage` или `booking.manage.own` | При own-праве достаточно участия в одной услуге. Завершение проводит услуги/начисления без order.manage; отмена или откат завершённого требуют order.return. |
-| `POST /locations/:locationId/bookings/:id/products` | `addProduct` | L: `booking.read` + `order.manage` | Произвольная цена: также sale.price.override. Клиента не создаёт. |
-| `POST /locations/:locationId/bookings/:id/items` | `addItems` | L: `booking.read` + `order.manage` | Произвольная цена: также sale.price.override. Клиента не создаёт. |
-| `POST /locations/:locationId/bookings/:id/client-token` | `generateClientToken` | L: `booking.client-token.issue` | — |
-| `POST /locations/:locationId/bookings/:id/cancel` | `cancel` | L: `booking.manage` или `booking.manage.own` | При own-праве достаточно участия в одной услуге. Завершение проводит услуги/начисления без order.manage; отмена или откат завершённого требуют order.return. |
-| `DELETE /locations/:locationId/bookings/:id` | `delete` | L: `booking.delete` | При сторнировании проведённого — также order.return. |
+| `POST /locations/:locationId/bookings/manual` | `createManual` | L: `booking:write` | Произвольная цена: также sale.price.override:write. Товары: order:write. Клиент находится или создаётся автоматически независимо от client:write. WALK_IN с немедленным COMPLETED: order:write. |
+| `GET /locations/:locationId/bookings/status-counts` | `getStatusCounts` | L: `booking:read` или `booking.own:read` | При own-чтении обязательно участие в записи; списки и счётчики ограничены до пагинации. |
+| `GET /locations/:locationId/bookings/export` | `export` | L: `booking.export:read` | — |
+| `GET /locations/:locationId/bookings/:id` | `findById` | L: `booking:read` или `booking.own:read` | При own-чтении обязательно участие в записи; списки и счётчики ограничены до пагинации. |
+| `GET /locations/:locationId/bookings` | `search` | L: `booking:read` или `booking.own:read` | При own-чтении обязательно участие в записи; списки и счётчики ограничены до пагинации. |
+| `PUT /locations/:locationId/bookings/:id` | `update` | L: `booking:write` или `booking.own:write` | При own-праве достаточно участия в одной услуге; действие над всей записью. Изменение цены требует sale.price.override:write; завершённую запись STAFF не редактирует. |
+| `PATCH /locations/:locationId/bookings/:id/status` | `updateStatus` | L: `booking:write` или `booking.own:write` | При own-праве достаточно участия в одной услуге. Завершение проводит услуги/начисления без order:write; отмена или откат завершённого требуют order.return:write. |
+| `POST /locations/:locationId/bookings/:id/products` | `addProduct` | L: `booking:read` + `order:write` | Произвольная цена: также sale.price.override:write. Клиента не создаёт. |
+| `POST /locations/:locationId/bookings/:id/items` | `addItems` | L: `booking:read` + `order:write` | Произвольная цена: также sale.price.override:write. Клиента не создаёт. |
+| `POST /locations/:locationId/bookings/:id/client-token` | `generateClientToken` | L: `booking.clientToken:write` | — |
+| `POST /locations/:locationId/bookings/:id/cancel` | `cancel` | L: `booking:write` или `booking.own:write` | При own-праве достаточно участия в одной услуге. Завершение проводит услуги/начисления без order:write; отмена или откат завершённого требуют order.return:write. |
+| `DELETE /locations/:locationId/bookings/:id` | `delete` | L: `booking.delete:write` | При сторнировании проведённого — также order.return:write. |
 
 ## brand
 
@@ -125,10 +127,10 @@
 | --- | --- | --- | --- |
 | `POST /brands` | `create` | U: `create-brand` | Создатель получает OWNER бренда атомарно. |
 | `GET /brands` | `search` | U: `accessible-brands` | Только доступные бренды; локальное членство также учитывается. |
-| `GET /brands/:brandId` | `findById` | B: `brand.read` | — |
-| `PUT /brands/:brandId` | `update` | B: `brand.settings.manage` | — |
+| `GET /brands/:brandId` | `findById` | B: `brand:read` | — |
+| `PUT /brands/:brandId` | `update` | B: `brand.settings:write` | — |
 | `GET /brands/:brandId/public` | `findPublic` | P: `public` | — |
-| `DELETE /brands/:brandId` | `delete` | B: `brand.settings.manage` | — |
+| `DELETE /brands/:brandId` | `delete` | B: `brand.settings:write` | — |
 
 ## calendar
 
@@ -137,13 +139,13 @@
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
 | `GET /locations/:locationId/calendar/public/available-slots` | `getAvailableSlots` | P: `public` | — |
-| `GET /locations/:locationId/calendar/available-slots` | `getManualAvailableSlots` | L: `booking.read` или `booking.read.own` | При own-чтении свой календарь и общие блокировки; чужой блок по ID закрыт. Исключение событий при переносе требует участия в редактируемой записи. |
-| `GET /locations/:locationId/calendar` | `getCalendar` | L: `booking.read` или `booking.read.own` | При own-чтении свой календарь и общие блокировки; чужой блок по ID закрыт. Исключение событий при переносе требует участия в редактируемой записи. |
-| `GET /locations/:locationId/calendar/:eventId` | `getEvent` | L: `booking.read` или `booking.read.own` | При own-чтении свой календарь и общие блокировки; чужой блок по ID закрыт. Исключение событий при переносе требует участия в редактируемой записи. |
-| `POST /locations/:locationId/calendar` | `create` | L: `calendar.blocks.manage` | — |
-| `PUT /locations/:locationId/calendar/:eventId/occurrence` | `moveOccurrence` | L: `calendar.blocks.manage` | — |
-| `PUT /locations/:locationId/calendar/:eventId` | `update` | L: `calendar.blocks.manage` | — |
-| `DELETE /locations/:locationId/calendar/:eventId` | `delete` | L: `calendar.blocks.manage` | — |
+| `GET /locations/:locationId/calendar/available-slots` | `getManualAvailableSlots` | L: `booking:read` или `booking.own:read` | При own-чтении свой календарь и общие блокировки; чужой блок по ID закрыт. Исключение событий при переносе требует участия в редактируемой записи. |
+| `GET /locations/:locationId/calendar` | `getCalendar` | L: `booking:read` или `booking.own:read` | При own-чтении свой календарь и общие блокировки; чужой блок по ID закрыт. Исключение событий при переносе требует участия в редактируемой записи. |
+| `GET /locations/:locationId/calendar/:eventId` | `getEvent` | L: `booking:read` или `booking.own:read` | При own-чтении свой календарь и общие блокировки; чужой блок по ID закрыт. Исключение событий при переносе требует участия в редактируемой записи. |
+| `POST /locations/:locationId/calendar` | `create` | L: `calendar.blocks:write` | — |
+| `PUT /locations/:locationId/calendar/:eventId/occurrence` | `moveOccurrence` | L: `calendar.blocks:write` | — |
+| `PUT /locations/:locationId/calendar/:eventId` | `update` | L: `calendar.blocks:write` | — |
+| `DELETE /locations/:locationId/calendar/:eventId` | `delete` | L: `calendar.blocks:write` | — |
 
 ## clients-analytics
 
@@ -151,7 +153,7 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `POST /brands/:brandId/clients/analytics` | `analytics` | B: `analytics.brand.read` | — |
+| `POST /brands/:brandId/clients/analytics` | `analytics` | B: `analytics.brand:read` | — |
 
 ## clients
 
@@ -159,13 +161,13 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `POST /brands/:brandId/clients` | `create` | G: `client.manage` | — |
-| `POST /brands/:brandId/clients/import` | `import` | G: `client.import` | — |
-| `PUT /brands/:brandId/clients/:id` | `update` | G: `client.manage` | — |
-| `PATCH /brands/:brandId/clients/:id/ban` | `setBan` | G: `client.ban` | — |
-| `GET /brands/:brandId/clients/export` | `export` | G: `client.export` | — |
-| `GET /brands/:brandId/clients/:id` | `findById` | G: `client.read` | — |
-| `GET /brands/:brandId/clients` | `search` | G: `client.read` | — |
+| `POST /brands/:brandId/clients` | `create` | G: `client:write` | — |
+| `POST /brands/:brandId/clients/import` | `import` | G: `client.import:write` | — |
+| `PUT /brands/:brandId/clients/:id` | `update` | G: `client:write` | — |
+| `PATCH /brands/:brandId/clients/:id/ban` | `setBan` | G: `client.ban:write` | — |
+| `GET /brands/:brandId/clients/export` | `export` | G: `client.export:read` | — |
+| `GET /brands/:brandId/clients/:id` | `findById` | G: `client:read` | — |
+| `GET /brands/:brandId/clients` | `search` | G: `client:read` | — |
 
 ## dashboard
 
@@ -173,7 +175,7 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `POST /locations/:locationId/dashboard/widgets` | `getWidgets` | L: `analytics.location.read` | Дополнительных проверок payroll.read/inventory.read по показателям нет. |
+| `POST /locations/:locationId/dashboard/widgets` | `getWidgets` | L: `analytics.location:read` | Дополнительных проверок payroll:read/inventory:read по показателям нет. |
 
 ## files
 
@@ -181,9 +183,9 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `POST /brands/:brandId/files` | `uploadForBrand` | G: `file.brand.manage` | — |
+| `POST /brands/:brandId/files` | `uploadForBrand` | G: `file.brand:write` | — |
 | `POST /users/me/files` | `uploadForUser` | U: `own-files` | Только собственные файлы. |
-| `DELETE /brands/:brandId/files/:fileId` | `deleteFromBrand` | G: `file.brand.manage` | Удаление связанного файла не должно обходить запрет изменения сущности. |
+| `DELETE /brands/:brandId/files/:fileId` | `deleteFromBrand` | G: `file.brand:write` | Удаление связанного файла не должно обходить запрет изменения сущности. |
 | `DELETE /users/me/files/:fileId` | `deleteFromUser` | U: `own-files` | Только собственные файлы. |
 
 ## health
@@ -200,7 +202,7 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `GET /locations/:locationId/inventory/kpi` | `getKpi` | L: `analytics.location.read` + `inventory.read` | — |
+| `GET /locations/:locationId/inventory/kpi` | `getKpi` | L: `analytics.location:read` + `inventory:read` | — |
 
 ## inventory
 
@@ -208,20 +210,20 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `GET /locations/:locationId/inventory` | `search` | L: `inventory.read` | — |
-| `GET /locations/:locationId/inventory/counts` | `getCounts` | L: `inventory.read` | — |
-| `GET /locations/:locationId/inventory/export` | `exportBalances` | L: `inventory.export` | — |
-| `GET /locations/:locationId/inventory/vedomost` | `searchVedomost` | L: `inventory.read` | — |
-| `GET /locations/:locationId/inventory/export/inventory-statement` | `exportInventoryStatement` | L: `inventory.export` | — |
-| `GET /locations/:locationId/inventory/export/vedomost` | `exportVedomost` | L: `inventory.export` | — |
-| `GET /locations/:locationId/inventory/:productId/movements` | `searchMovements` | L: `inventory.read` | — |
-| `GET /locations/:locationId/inventory/:productId/movements/export` | `exportMovements` | L: `inventory.export` | — |
-| `POST /locations/:locationId/inventory/documents` | `createDocument` | L: `inventory.manage` | Если задан destinationLocationId, также inventory.manage получателя. |
-| `GET /locations/:locationId/inventory/documents` | `searchDocuments` | L: `inventory.read` | — |
-| `GET /locations/:locationId/inventory/documents/status-counts` | `getDocumentStatusCounts` | L: `inventory.read` | — |
-| `GET /locations/:locationId/inventory/documents/:documentId` | `findDocument` | L: `inventory.read` | — |
-| `PUT /locations/:locationId/inventory/documents/:documentId` | `updateDocument` | L: `inventory.manage` | Также inventory.manage прежнего и нового получателя, если они заданы. |
-| `PATCH /locations/:locationId/inventory/documents/:documentId/status` | `changeDocumentStatus` | L: `inventory.manage` | Также inventory.manage сохранённого получателя, если задан. |
+| `GET /locations/:locationId/inventory` | `search` | L: `inventory:read` | — |
+| `GET /locations/:locationId/inventory/counts` | `getCounts` | L: `inventory:read` | — |
+| `GET /locations/:locationId/inventory/export` | `exportBalances` | L: `inventory.export:read` | — |
+| `GET /locations/:locationId/inventory/vedomost` | `searchVedomost` | L: `inventory:read` | — |
+| `GET /locations/:locationId/inventory/export/inventory-statement` | `exportInventoryStatement` | L: `inventory.export:read` | — |
+| `GET /locations/:locationId/inventory/export/vedomost` | `exportVedomost` | L: `inventory.export:read` | — |
+| `GET /locations/:locationId/inventory/:productId/movements` | `searchMovements` | L: `inventory:read` | — |
+| `GET /locations/:locationId/inventory/:productId/movements/export` | `exportMovements` | L: `inventory.export:read` | — |
+| `POST /locations/:locationId/inventory/documents` | `createDocument` | L: `inventory:write` | Если задан destinationLocationId, также inventory:write получателя. |
+| `GET /locations/:locationId/inventory/documents` | `searchDocuments` | L: `inventory:read` | — |
+| `GET /locations/:locationId/inventory/documents/status-counts` | `getDocumentStatusCounts` | L: `inventory:read` | — |
+| `GET /locations/:locationId/inventory/documents/:documentId` | `findDocument` | L: `inventory:read` | — |
+| `PUT /locations/:locationId/inventory/documents/:documentId` | `updateDocument` | L: `inventory:write` | Также inventory:write прежнего и нового получателя, если они заданы. |
+| `PATCH /locations/:locationId/inventory/documents/:documentId/status` | `changeDocumentStatus` | L: `inventory:write` | Также inventory:write сохранённого получателя, если задан. |
 
 ## location
 
@@ -231,12 +233,12 @@
 | --- | --- | --- | --- |
 | `GET /locations/options` | `options` | U: `reference` | — |
 | `GET /locations/business-types` | `businessTypes` | U: `reference` | — |
-| `POST /brands/:brandId/locations` | `create` | B: `location.create` | — |
+| `POST /brands/:brandId/locations` | `create` | B: `location.create:write` | — |
 | `GET /brands/:brandId/locations` | `listByBrand` | U: `accessible-locations` | Только филиалы, доступные пользователю; чужие исключаются до подсчёта и выдачи. |
-| `GET /locations/:locationId` | `findById` | L: `location.read` | — |
-| `PUT /locations/:locationId` | `update` | L: `location.settings.manage` | — |
+| `GET /locations/:locationId` | `findById` | L: `location:read` | — |
+| `PUT /locations/:locationId` | `update` | L: `location.settings:write` | — |
 | `GET /locations/:locationId/public` | `findPublic` | P: `public` | — |
-| `DELETE /locations/:locationId` | `delete` | L: `location.settings.manage` | — |
+| `DELETE /locations/:locationId` | `delete` | L: `location.settings:write` | — |
 
 ## orders
 
@@ -244,18 +246,18 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `POST /locations/:locationId/orders` | `create` | L: `order.manage` | Произвольная цена: также sale.price.override. confirmImmediately: также order.manage. Принимает существующий clientId; новый клиент создаётся отдельным API с G:client.manage. |
-| `GET /locations/:locationId/orders` | `search` | L: `order.read` | — |
-| `GET /locations/:locationId/orders/status-counts` | `getStatusCounts` | L: `order.read` | — |
-| `GET /locations/:locationId/orders/:orderId` | `findById` | L: `order.read` | — |
-| `PUT /locations/:locationId/orders/:orderId` | `update` | L: `order.manage` | Изменение/сброс произвольной цены: также sale.price.override. Клиента не создаёт. |
-| `PATCH /locations/:locationId/orders/:orderId/status` | `changeStatus` | L: `order.void` | Текущий DTO допускает только VOIDED. Новые статусы потребуют явной проверки действия. |
-| `PATCH /locations/:locationId/orders/:orderId/items/:orderItemId/confirm` | `confirmItem` | L: `order.manage` | — |
-| `POST /locations/:locationId/orders/:orderId/items` | `addItems` | L: `order.manage` | Произвольная цена: также sale.price.override. Клиента не создаёт. |
-| `POST /locations/:locationId/orders/:orderId/items/confirm` | `confirmItems` | L: `order.manage` | — |
-| `PATCH /locations/:locationId/orders/:orderId/items/:orderItemId/reverse` | `reverseItem` | L: `order.return` | — |
-| `POST /locations/:locationId/orders/:orderId/returns` | `createReturn` | L: `order.return` | — |
-| `DELETE /locations/:locationId/orders/:orderId` | `delete` | L: `order.manage` | — |
+| `POST /locations/:locationId/orders` | `create` | L: `order:write` | Произвольная цена: также sale.price.override:write. confirmImmediately: также order:write. Принимает существующий clientId; новый клиент создаётся отдельным API с G:client:write. |
+| `GET /locations/:locationId/orders` | `search` | L: `order:read` | — |
+| `GET /locations/:locationId/orders/status-counts` | `getStatusCounts` | L: `order:read` | — |
+| `GET /locations/:locationId/orders/:orderId` | `findById` | L: `order:read` | — |
+| `PUT /locations/:locationId/orders/:orderId` | `update` | L: `order:write` | Изменение/сброс произвольной цены: также sale.price.override:write. Клиента не создаёт. |
+| `PATCH /locations/:locationId/orders/:orderId/status` | `changeStatus` | L: `order.void:write` | Текущий DTO допускает только VOIDED. Новые статусы потребуют явной проверки действия. |
+| `PATCH /locations/:locationId/orders/:orderId/items/:orderItemId/confirm` | `confirmItem` | L: `order:write` | — |
+| `POST /locations/:locationId/orders/:orderId/items` | `addItems` | L: `order:write` | Произвольная цена: также sale.price.override:write. Клиента не создаёт. |
+| `POST /locations/:locationId/orders/:orderId/items/confirm` | `confirmItems` | L: `order:write` | — |
+| `PATCH /locations/:locationId/orders/:orderId/items/:orderItemId/reverse` | `reverseItem` | L: `order.return:write` | — |
+| `POST /locations/:locationId/orders/:orderId/returns` | `createReturn` | L: `order.return:write` | — |
+| `DELETE /locations/:locationId/orders/:orderId` | `delete` | L: `order:write` | — |
 
 ## staff-compensation
 
@@ -263,9 +265,9 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `GET /locations/:locationId/staff/:id/compensation/current` | `current` | L: `payroll.read` | — |
-| `GET /locations/:locationId/staff/:id/compensation` | `history` | L: `payroll.read` | — |
-| `PUT /locations/:locationId/staff/:id/compensation` | `replace` | L: `payroll.manage` | — |
+| `GET /locations/:locationId/staff/:id/compensation/current` | `current` | L: `payroll:read` | — |
+| `GET /locations/:locationId/staff/:id/compensation` | `history` | L: `payroll:read` | — |
+| `PUT /locations/:locationId/staff/:id/compensation` | `replace` | L: `payroll:write` | — |
 
 ## staff-earnings
 
@@ -273,10 +275,10 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `GET /locations/:locationId/payroll/earnings` | `search` | L: `payroll.read` или `payroll.read.own` | Own: принудительно свои начисления в списке; адресный запрос другого сотрудника запрещён. |
-| `GET /locations/:locationId/staff/:id/earnings` | `listForStaff` | L: `payroll.read` или `payroll.read.own` | Own: принудительно свои начисления в списке; адресный запрос другого сотрудника запрещён. |
-| `POST /locations/:locationId/staff/:id/earnings` | `createManual` | L: `payroll.manage` | — |
-| `POST /locations/:locationId/payroll/product-sales` | `recordProductSale` | L: `payroll.manage` | Создание комиссии без склада: payroll.manage, а не право обычной продажи. |
+| `GET /locations/:locationId/payroll/earnings` | `search` | L: `payroll:read` или `payroll.own:read` | Own: принудительно свои начисления в списке; адресный запрос другого сотрудника запрещён. |
+| `GET /locations/:locationId/staff/:id/earnings` | `listForStaff` | L: `payroll:read` или `payroll.own:read` | Own: принудительно свои начисления в списке; адресный запрос другого сотрудника запрещён. |
+| `POST /locations/:locationId/staff/:id/earnings` | `createManual` | L: `payroll:write` | — |
+| `POST /locations/:locationId/payroll/product-sales` | `recordProductSale` | L: `payroll:write` | Создание комиссии без склада: payroll:write, а не право обычной продажи. |
 
 ## payroll
 
@@ -284,20 +286,20 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `POST /locations/:locationId/payroll/periods` | `create` | L: `payroll.manage` | — |
-| `GET /locations/:locationId/payroll/locked-ranges` | `lockedRanges` | L: `payroll.read` | В текущем API это периоды блокировки ручных начислений; STAFF закрыто. |
-| `GET /locations/:locationId/payroll/periods` | `search` | L: `payroll.read` | — |
-| `GET /locations/:locationId/payroll/periods/status-counts` | `getStatusCounts` | L: `payroll.read` | — |
-| `GET /locations/:locationId/payroll/periods/:id` | `findById` | L: `payroll.read` | — |
-| `GET /locations/:locationId/payroll/periods/:id/report` | `report` | L: `payroll.read` | — |
-| `GET /locations/:locationId/payroll/periods/:id/earnings` | `listPeriodEarnings` | L: `payroll.read` | — |
-| `GET /locations/:locationId/payroll/periods/:id/export/vedomost` | `exportVedomost` | L: `payroll.export` | — |
-| `GET /locations/:locationId/payroll/periods/:id/export/payslips` | `exportPayslips` | L: `payroll.export` | — |
-| `POST /locations/:locationId/payroll/periods/:id/calculate` | `calculate` | L: `payroll.manage` | — |
-| `POST /locations/:locationId/payroll/periods/:id/approve` | `approve` | L: `payroll.manage` | — |
-| `POST /locations/:locationId/payroll/periods/:id/pay` | `pay` | L: `payroll.manage` | — |
-| `DELETE /locations/:locationId/payroll/periods/:id` | `delete` | L: `payroll.manage` | — |
-| `POST /locations/:locationId/payroll/results/:id/corrections` | `correct` | L: `payroll.manage` | — |
+| `POST /locations/:locationId/payroll/periods` | `create` | L: `payroll:write` | — |
+| `GET /locations/:locationId/payroll/locked-ranges` | `lockedRanges` | L: `payroll:read` | В текущем API это периоды блокировки ручных начислений; STAFF закрыто. |
+| `GET /locations/:locationId/payroll/periods` | `search` | L: `payroll:read` | — |
+| `GET /locations/:locationId/payroll/periods/status-counts` | `getStatusCounts` | L: `payroll:read` | — |
+| `GET /locations/:locationId/payroll/periods/:id` | `findById` | L: `payroll:read` | — |
+| `GET /locations/:locationId/payroll/periods/:id/report` | `report` | L: `payroll:read` | — |
+| `GET /locations/:locationId/payroll/periods/:id/earnings` | `listPeriodEarnings` | L: `payroll:read` | — |
+| `GET /locations/:locationId/payroll/periods/:id/export/vedomost` | `exportVedomost` | L: `payroll.export:read` | — |
+| `GET /locations/:locationId/payroll/periods/:id/export/payslips` | `exportPayslips` | L: `payroll.export:read` | — |
+| `POST /locations/:locationId/payroll/periods/:id/calculate` | `calculate` | L: `payroll:write` | — |
+| `POST /locations/:locationId/payroll/periods/:id/approve` | `approve` | L: `payroll:write` | — |
+| `POST /locations/:locationId/payroll/periods/:id/pay` | `pay` | L: `payroll:write` | — |
+| `DELETE /locations/:locationId/payroll/periods/:id` | `delete` | L: `payroll:write` | — |
+| `POST /locations/:locationId/payroll/results/:id/corrections` | `correct` | L: `payroll:write` | — |
 
 ## products-analytics
 
@@ -305,7 +307,7 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `POST /locations/:locationId/products/analytics` | `analytics` | L: `analytics.location.read` | Включая показатели валовой прибыли; дополнительных проверок payroll.read/inventory.read нет. |
+| `POST /locations/:locationId/products/analytics` | `analytics` | L: `analytics.location:read` | Включая показатели валовой прибыли; дополнительных проверок payroll:read/inventory:read нет. |
 
 ## product-packaging
 
@@ -313,8 +315,8 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `POST /brands/:brandId/products/:productId/packagings` | `create` | G: `product.catalog.manage` | — |
-| `PATCH /brands/:brandId/products/:productId/packagings/:packagingId/status` | `changeStatus` | G: `product.catalog.manage` | — |
+| `POST /brands/:brandId/products/:productId/packagings` | `create` | G: `product.catalog:write` | — |
+| `PATCH /brands/:brandId/products/:productId/packagings/:packagingId/status` | `changeStatus` | G: `product.catalog:write` | — |
 
 ## products
 
@@ -322,19 +324,19 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `POST /brands/:brandId/product-categories` | `createCategory` | G: `product.catalog.manage` | — |
-| `GET /brands/:brandId/product-categories` | `listCategories` | G: `product.read` | — |
-| `PUT /brands/:brandId/product-categories/:categoryId` | `updateCategory` | G: `product.catalog.manage` | — |
-| `DELETE /brands/:brandId/product-categories/:categoryId` | `deleteCategory` | G: `product.catalog.manage` | — |
-| `POST /brands/:brandId/products` | `create` | G: `product.catalog.manage` | — |
-| `GET /brands/:brandId/products` | `search` | G: `product.read` | — |
-| `GET /brands/:brandId/products/status-counts` | `getStatusCounts` | G: `product.read` | — |
-| `GET /brands/:brandId/products/:productId` | `findById` | G: `product.read` | — |
-| `PUT /brands/:brandId/products/:productId` | `update` | G: `product.catalog.manage` | — |
-| `PATCH /brands/:brandId/products/:productId/status` | `changeStatus` | G: `product.catalog.manage` | — |
-| `DELETE /brands/:brandId/products/:productId` | `delete` | G: `product.catalog.manage` | — |
-| `PUT /locations/:locationId/products/:productId` | `upsertLocation` | L: `product.location.manage` | — |
-| `GET /locations/:locationId/products` | `searchLocation` | L: `product.location.read` | — |
+| `POST /brands/:brandId/product-categories` | `createCategory` | G: `product.catalog:write` | — |
+| `GET /brands/:brandId/product-categories` | `listCategories` | G: `product.catalog:read` | — |
+| `PUT /brands/:brandId/product-categories/:categoryId` | `updateCategory` | G: `product.catalog:write` | — |
+| `DELETE /brands/:brandId/product-categories/:categoryId` | `deleteCategory` | G: `product.catalog:write` | — |
+| `POST /brands/:brandId/products` | `create` | G: `product.catalog:write` | — |
+| `GET /brands/:brandId/products` | `search` | G: `product.catalog:read` | — |
+| `GET /brands/:brandId/products/status-counts` | `getStatusCounts` | G: `product.catalog:read` | — |
+| `GET /brands/:brandId/products/:productId` | `findById` | G: `product.catalog:read` | — |
+| `PUT /brands/:brandId/products/:productId` | `update` | G: `product.catalog:write` | — |
+| `PATCH /brands/:brandId/products/:productId/status` | `changeStatus` | G: `product.catalog:write` | — |
+| `DELETE /brands/:brandId/products/:productId` | `delete` | G: `product.catalog:write` | — |
+| `PUT /locations/:locationId/products/:productId` | `upsertLocation` | L: `product.location:write` | — |
+| `GET /locations/:locationId/products` | `searchLocation` | L: `product.location:read` | — |
 
 ## services-analytics
 
@@ -342,7 +344,7 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `POST /locations/:locationId/services/analytics` | `analytics` | L: `analytics.location.read` | Дополнительных проверок payroll.read/inventory.read по показателям нет. |
+| `POST /locations/:locationId/services/analytics` | `analytics` | L: `analytics.location:read` | Дополнительных проверок payroll:read/inventory:read по показателям нет. |
 
 ## services
 
@@ -350,22 +352,22 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `POST /locations/:locationId/service-categories` | `createCategory` | L: `service.manage` | — |
-| `GET /locations/:locationId/service-categories` | `listCategories` | L: `service.read` | — |
-| `PUT /locations/:locationId/service-categories/:categoryId` | `updateCategory` | L: `service.manage` | — |
-| `DELETE /locations/:locationId/service-categories/:categoryId` | `deleteCategory` | L: `service.manage` | — |
-| `POST /locations/:locationId/services` | `create` | L: `service.manage` | — |
-| `PUT /locations/:locationId/services/:id` | `update` | L: `service.manage` | — |
-| `GET /locations/:locationId/service-catalog/counts` | `getCatalogCounts` | L: `service.read` | — |
-| `GET /locations/:locationId/service-catalog` | `searchCatalog` | L: `service.read` | — |
-| `POST /locations/:locationId/service-bundles` | `createBundle` | L: `service.manage` | — |
-| `GET /locations/:locationId/service-bundles/:id` | `findBundleById` | L: `service.read` | — |
-| `PUT /locations/:locationId/service-bundles/:id` | `updateBundle` | L: `service.manage` | — |
-| `PATCH /locations/:locationId/service-bundles/:id/status` | `updateBundleStatus` | L: `service.manage` | — |
-| `DELETE /locations/:locationId/service-bundles/:id` | `deleteBundle` | L: `service.manage` | — |
-| `GET /locations/:locationId/services/:id` | `findById` | L: `service.read` | — |
-| `PATCH /locations/:locationId/services/:id/status` | `updateStatus` | L: `service.manage` | — |
-| `DELETE /locations/:locationId/services/:id` | `delete` | L: `service.manage` | — |
+| `POST /locations/:locationId/service-categories` | `createCategory` | L: `service:write` | — |
+| `GET /locations/:locationId/service-categories` | `listCategories` | L: `service:read` | — |
+| `PUT /locations/:locationId/service-categories/:categoryId` | `updateCategory` | L: `service:write` | — |
+| `DELETE /locations/:locationId/service-categories/:categoryId` | `deleteCategory` | L: `service:write` | — |
+| `POST /locations/:locationId/services` | `create` | L: `service:write` | — |
+| `PUT /locations/:locationId/services/:id` | `update` | L: `service:write` | — |
+| `GET /locations/:locationId/service-catalog/counts` | `getCatalogCounts` | L: `service:read` | — |
+| `GET /locations/:locationId/service-catalog` | `searchCatalog` | L: `service:read` | — |
+| `POST /locations/:locationId/service-bundles` | `createBundle` | L: `service:write` | — |
+| `GET /locations/:locationId/service-bundles/:id` | `findBundleById` | L: `service:read` | — |
+| `PUT /locations/:locationId/service-bundles/:id` | `updateBundle` | L: `service:write` | — |
+| `PATCH /locations/:locationId/service-bundles/:id/status` | `updateBundleStatus` | L: `service:write` | — |
+| `DELETE /locations/:locationId/service-bundles/:id` | `deleteBundle` | L: `service:write` | — |
+| `GET /locations/:locationId/services/:id` | `findById` | L: `service:read` | — |
+| `PATCH /locations/:locationId/services/:id/status` | `updateStatus` | L: `service:write` | — |
+| `DELETE /locations/:locationId/services/:id` | `delete` | L: `service:write` | — |
 
 ## staff-analytics
 
@@ -373,7 +375,7 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `GET /locations/:locationId/staff/widgets` | `getWidgets` | L: `analytics.location.read` | Дополнительных проверок payroll.read/inventory.read по показателям нет. |
+| `GET /locations/:locationId/staff/widgets` | `getWidgets` | L: `analytics.location:read` | Дополнительных проверок payroll:read/inventory:read по показателям нет. |
 
 ## staff
 
@@ -381,17 +383,17 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `GET /locations/:locationId/staff/directory` | `directory` | L: `booking.read` или `booking.read.own` | Только id/name/roleTitle/status коллег; кадровые и контактные данные не возвращаются. |
-| `POST /locations/:locationId/staff` | `create` | L: `staff.manage` | — |
-| `PUT /locations/:locationId/staff/:id` | `update` | L: `staff.manage` | — |
-| `GET /locations/:locationId/staff/status-counts` | `getStatusCounts` | L: `staff.read` | — |
-| `GET /locations/:locationId/staff/export` | `export` | L: `staff.export` | — |
-| `GET /locations/:locationId/staff/:id` | `findById` | L: `staff.read` или `staff.read.own` | Own: только собственный активный профиль или его смены. |
-| `GET /locations/:locationId/staff` | `search` | L: `staff.read` | — |
-| `PATCH /locations/:locationId/staff/:id/status` | `changeStatus` | L: `staff.manage` | — |
-| `DELETE /locations/:locationId/staff/:id` | `delete` | L: `staff.manage` | — |
-| `GET /locations/:locationId/staff/:id/shifts` | `getShifts` | L: `staff.read` или `staff.read.own` | Own: только собственный активный профиль или его смены. |
-| `PUT /locations/:locationId/staff/:id/shifts` | `replaceShifts` | L: `staff.manage` | — |
+| `GET /locations/:locationId/staff/directory` | `directory` | L: `booking:read` или `booking.own:read` | Только id/name/roleTitle/status коллег; кадровые и контактные данные не возвращаются. |
+| `POST /locations/:locationId/staff` | `create` | L: `staff:write` | — |
+| `PUT /locations/:locationId/staff/:id` | `update` | L: `staff:write` | — |
+| `GET /locations/:locationId/staff/status-counts` | `getStatusCounts` | L: `staff:read` | — |
+| `GET /locations/:locationId/staff/export` | `export` | L: `staff.export:read` | — |
+| `GET /locations/:locationId/staff/:id` | `findById` | L: `staff:read` или `staff.own:read` | Own: только собственный активный профиль или его смены. |
+| `GET /locations/:locationId/staff` | `search` | L: `staff:read` | — |
+| `PATCH /locations/:locationId/staff/:id/status` | `changeStatus` | L: `staff:write` | — |
+| `DELETE /locations/:locationId/staff/:id` | `delete` | L: `staff:write` | — |
+| `GET /locations/:locationId/staff/:id/shifts` | `getShifts` | L: `staff:read` или `staff.own:read` | Own: только собственный активный профиль или его смены. |
+| `PUT /locations/:locationId/staff/:id/shifts` | `replaceShifts` | L: `staff:write` | — |
 
 ## suppliers
 
@@ -399,12 +401,12 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `POST /brands/:brandId/suppliers` | `create` | G: `supplier.manage` | — |
-| `GET /brands/:brandId/suppliers` | `search` | G: `supplier.read` | — |
-| `GET /brands/:brandId/suppliers/options` | `listOptions` | G: `supplier.read` | — |
-| `GET /brands/:brandId/suppliers/:supplierId` | `findById` | G: `supplier.read` | — |
-| `PUT /brands/:brandId/suppliers/:supplierId` | `update` | G: `supplier.manage` | — |
-| `DELETE /brands/:brandId/suppliers/:supplierId` | `deactivate` | G: `supplier.manage` | — |
+| `POST /brands/:brandId/suppliers` | `create` | G: `supplier:write` | — |
+| `GET /brands/:brandId/suppliers` | `search` | G: `supplier:read` | — |
+| `GET /brands/:brandId/suppliers/options` | `listOptions` | G: `supplier:read` | — |
+| `GET /brands/:brandId/suppliers/:supplierId` | `findById` | G: `supplier:read` | — |
+| `PUT /brands/:brandId/suppliers/:supplierId` | `update` | G: `supplier:write` | — |
+| `DELETE /brands/:brandId/suppliers/:supplierId` | `deactivate` | G: `supplier:write` | — |
 
 ## user
 

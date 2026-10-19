@@ -1,8 +1,9 @@
 import { Body, Controller, Param, ParseUUIDPipe, Post } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Claim } from '../../../access/enums/claim.enum.js';
+import { Read } from '../../../access/utils/permission.js';
 import { ApiResponse } from '../../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../../shared/dto/base-response.dto.js';
-import { Permission } from '../../../access/enums/permission.enum.js';
 import { Permissions } from '../../../auth/decorators/permissions.decorator.js';
 import { ProductsAnalyticsRequestDto } from '../dto/products-analytics-request.dto.js';
 import { ProductsAnalyticsResponseDto } from '../dto/products-analytics-response.dto.js';
@@ -15,7 +16,7 @@ export class ProductsAnalyticsController {
 
   @ApiOperation({ summary: 'Fetch analytics widgets for the products page' })
   @ApiOkResponse({ type: ApiResponse(ProductsAnalyticsResponseDto) })
-  @Permissions(Permission.ANALYTICS_LOCATION_READ)
+  @Permissions(Read(Claim.ANALYTICS_LOCATION))
   @Post('products/analytics')
   async analytics(
     @Param('locationId', ParseUUIDPipe) locationId: string,

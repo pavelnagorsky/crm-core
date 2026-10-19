@@ -1,8 +1,9 @@
 import { Controller, Get, Param, ParseUUIDPipe, Query } from '@nestjs/common';
 import { ApiOkResponse, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { Claim } from '../../access/enums/claim.enum.js';
+import { Read } from '../../access/utils/permission.js';
 import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
-import { Permission } from '../../access/enums/permission.enum.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 import { AuditHistoryRequestDto } from '../dto/audit-history-request.dto.js';
 import { AuditHistoryResponseDto } from '../dto/audit-history-response.dto.js';
@@ -15,7 +16,7 @@ export class AuditController {
 
   @ApiOperation({ summary: 'Get audit history for an entity' })
   @ApiOkResponse({ type: ApiResponse(AuditHistoryResponseDto) })
-  @Permissions(Permission.AUDIT_BRAND_READ)
+  @Permissions(Read(Claim.AUDIT_BRAND))
   @Get('brands/:brandId/audit')
   async getBrandHistory(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -32,7 +33,7 @@ export class AuditController {
 
   @ApiOperation({ summary: 'Get location audit history for an entity' })
   @ApiOkResponse({ type: ApiResponse(AuditHistoryResponseDto) })
-  @Permissions(Permission.AUDIT_LOCATION_READ)
+  @Permissions(Read(Claim.AUDIT_LOCATION))
   @Get('locations/:locationId/audit')
   async getLocationHistory(
     @Param('locationId', ParseUUIDPipe) locationId: string,

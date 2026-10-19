@@ -20,11 +20,12 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import { Claim } from '../../access/enums/claim.enum.js';
+import { Read, Write } from '../../access/utils/permission.js';
 import { ApiResponseArray } from '../../../shared/dto/api-response-array.dto.js';
 import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../../shared/dto/id-response.dto.js';
-import { Permission } from '../../access/enums/permission.enum.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 import { CreateSupplierDto } from '../dto/create-supplier.dto.js';
 import { SupplierOptionDto } from '../dto/supplier-option.dto.js';
@@ -43,7 +44,7 @@ export class SuppliersController {
   @ApiOperation({ summary: 'Create a supplier' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
   @ApiConflictResponse({ description: 'Supplier name already exists' })
-  @Permissions(Permission.SUPPLIER_MANAGE)
+  @Permissions(Write(Claim.SUPPLIER))
   @Post()
   async create(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -55,7 +56,7 @@ export class SuppliersController {
 
   @ApiOperation({ summary: 'Search suppliers' })
   @ApiOkResponse({ type: ApiResponse(SupplierSearchResponseDto) })
-  @Permissions(Permission.SUPPLIER_READ)
+  @Permissions(Read(Claim.SUPPLIER))
   @Get()
   async search(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -75,7 +76,7 @@ export class SuppliersController {
 
   @ApiOperation({ summary: 'List active supplier options' })
   @ApiOkResponse({ type: ApiResponseArray(SupplierOptionDto) })
-  @Permissions(Permission.SUPPLIER_READ)
+  @Permissions(Read(Claim.SUPPLIER))
   @Get('options')
   async listOptions(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -88,7 +89,7 @@ export class SuppliersController {
   @ApiOperation({ summary: 'Get supplier details' })
   @ApiOkResponse({ type: ApiResponse(SupplierResponseDto) })
   @ApiNotFoundResponse({ description: 'Supplier not found' })
-  @Permissions(Permission.SUPPLIER_READ)
+  @Permissions(Read(Claim.SUPPLIER))
   @Get(':supplierId')
   async findById(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -105,7 +106,7 @@ export class SuppliersController {
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiConflictResponse({ description: 'Supplier name already exists' })
   @ApiNotFoundResponse({ description: 'Supplier not found' })
-  @Permissions(Permission.SUPPLIER_MANAGE)
+  @Permissions(Write(Claim.SUPPLIER))
   @Put(':supplierId')
   async update(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -119,7 +120,7 @@ export class SuppliersController {
   @ApiOperation({ summary: 'Deactivate supplier' })
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Supplier not found' })
-  @Permissions(Permission.SUPPLIER_MANAGE)
+  @Permissions(Write(Claim.SUPPLIER))
   @Delete(':supplierId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async deactivate(

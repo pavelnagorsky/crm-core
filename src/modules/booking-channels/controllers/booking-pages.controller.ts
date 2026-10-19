@@ -22,10 +22,11 @@ import {
   ApiTags,
   ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
+import { Claim } from '../../access/enums/claim.enum.js';
+import { Read, Write } from '../../access/utils/permission.js';
 import { ApiResponseArray } from '../../../shared/dto/api-response-array.dto.js';
 import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
-import { Permission } from '../../access/enums/permission.enum.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 import { BookingPageResponseDto } from '../dto/booking-page-response.dto.js';
 import { SaveBookingPageDto } from '../dto/save-booking-page.dto.js';
@@ -41,7 +42,7 @@ export class BookingPagesController {
 
   @ApiOperation({ summary: 'Check whether a booking page slug can be used' })
   @ApiOkResponse({ type: ApiResponse(SlugAvailabilityResponseDto) })
-  @Permissions(Permission.BOOKING_CHANNEL_READ)
+  @Permissions(Read(Claim.BOOKING_CHANNEL))
   @Get('slug-availability')
   async checkSlug(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -57,7 +58,7 @@ export class BookingPagesController {
 
   @ApiOperation({ summary: 'List booking pages' })
   @ApiOkResponse({ type: ApiResponseArray(BookingPageResponseDto) })
-  @Permissions(Permission.BOOKING_CHANNEL_READ)
+  @Permissions(Read(Claim.BOOKING_CHANNEL))
   @Get()
   async list(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -74,7 +75,7 @@ export class BookingPagesController {
   @ApiUnprocessableEntityResponse({
     description: 'Cover is not an image from this business',
   })
-  @Permissions(Permission.BOOKING_CHANNEL_MANAGE)
+  @Permissions(Write(Claim.BOOKING_CHANNEL))
   @Post()
   async create(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -87,7 +88,7 @@ export class BookingPagesController {
   @ApiOperation({ summary: 'Get a booking page' })
   @ApiOkResponse({ type: ApiResponse(BookingPageResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking page not found' })
-  @Permissions(Permission.BOOKING_CHANNEL_READ)
+  @Permissions(Read(Claim.BOOKING_CHANNEL))
   @Get(':pageId')
   async findById(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -106,7 +107,7 @@ export class BookingPagesController {
   @ApiUnprocessableEntityResponse({
     description: 'Cover is not an image from this business',
   })
-  @Permissions(Permission.BOOKING_CHANNEL_MANAGE)
+  @Permissions(Write(Claim.BOOKING_CHANNEL))
   @Put(':pageId')
   async update(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -124,7 +125,7 @@ export class BookingPagesController {
     description:
       'Status is already set, booking is closed, or nothing is bookable',
   })
-  @Permissions(Permission.BOOKING_CHANNEL_MANAGE)
+  @Permissions(Write(Claim.BOOKING_CHANNEL))
   @Patch(':pageId/status')
   async updateStatus(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -138,7 +139,7 @@ export class BookingPagesController {
   @ApiOperation({ summary: 'Delete a booking page' })
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Booking page not found' })
-  @Permissions(Permission.BOOKING_CHANNEL_MANAGE)
+  @Permissions(Write(Claim.BOOKING_CHANNEL))
   @Delete(':pageId')
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(

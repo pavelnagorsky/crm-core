@@ -22,12 +22,13 @@ import {
   ApiProduces,
   ApiTags,
 } from '@nestjs/swagger';
+import { Claim } from '../../../access/enums/claim.enum.js';
+import { Read, Write } from '../../../access/utils/permission.js';
 import { ApiResponseArray } from '../../../../shared/dto/api-response-array.dto.js';
 import { ApiResponse } from '../../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../../../shared/dto/id-response.dto.js';
 import { XlsxUtils } from '../../../../shared/xlsx/xlsx.utils.js';
-import { Permission } from '../../../access/enums/permission.enum.js';
 import { auditActorFromToken } from '../../../audit/utils/audit-actor-from-token.js';
 import { Permissions } from '../../../auth/decorators/permissions.decorator.js';
 import { TokenPayload } from '../../../auth/decorators/token-payload.decorator.js';
@@ -58,7 +59,7 @@ export class PayrollPeriodsController {
 
   @ApiOperation({ summary: 'Create a payroll period' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
-  @Permissions(Permission.PAYROLL_MANAGE)
+  @Permissions(Write(Claim.PAYROLL))
   @Post('periods')
   async create(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -79,7 +80,7 @@ export class PayrollPeriodsController {
       'Approved and paid periods. A manual earning whose date falls inside one of these ranges is rejected.',
   })
   @ApiOkResponse({ type: ApiResponseArray(LockedPayrollRangeDto) })
-  @Permissions(Permission.PAYROLL_READ)
+  @Permissions(Read(Claim.PAYROLL))
   @Get('locked-ranges')
   async lockedRanges(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -92,7 +93,7 @@ export class PayrollPeriodsController {
 
   @ApiOperation({ summary: 'Search payroll periods' })
   @ApiOkResponse({ type: ApiResponse(PayrollPeriodSearchResponseDto) })
-  @Permissions(Permission.PAYROLL_READ)
+  @Permissions(Read(Claim.PAYROLL))
   @Get('periods')
   async search(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -114,7 +115,7 @@ export class PayrollPeriodsController {
   @ApiOkResponse({
     type: ApiResponseArray(PayrollPeriodStatusCountResponseDto),
   })
-  @Permissions(Permission.PAYROLL_READ)
+  @Permissions(Read(Claim.PAYROLL))
   @Get('periods/status-counts')
   async getStatusCounts(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -130,7 +131,7 @@ export class PayrollPeriodsController {
   @ApiOperation({ summary: 'Get payroll period with results' })
   @ApiOkResponse({ type: ApiResponse(PayrollPeriodResponseDto) })
   @ApiNotFoundResponse({ description: 'Payroll period not found' })
-  @Permissions(Permission.PAYROLL_READ)
+  @Permissions(Read(Claim.PAYROLL))
   @Get('periods/:id')
   async findById(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -143,7 +144,7 @@ export class PayrollPeriodsController {
 
   @ApiOperation({ summary: 'Payroll report: vedomost + payslips' })
   @ApiOkResponse({ type: ApiResponse(PayrollReportResponseDto) })
-  @Permissions(Permission.PAYROLL_READ)
+  @Permissions(Read(Claim.PAYROLL))
   @Get('periods/:id/report')
   async report(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -156,7 +157,7 @@ export class PayrollPeriodsController {
 
   @ApiOperation({ summary: 'List earnings attached to a payroll period' })
   @ApiOkResponse({ type: ApiResponse(StaffEarningSearchResponseDto) })
-  @Permissions(Permission.PAYROLL_READ)
+  @Permissions(Read(Claim.PAYROLL))
   @Get('periods/:id/earnings')
   async listPeriodEarnings(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -179,7 +180,7 @@ export class PayrollPeriodsController {
 
   @ApiOperation({ summary: 'Export payment vedomost as XLSX' })
   @ApiProduces(XlsxUtils.mimeType)
-  @Permissions(Permission.PAYROLL_EXPORT)
+  @Permissions(Read(Claim.PAYROLL_EXPORT))
   @Get('periods/:id/export/vedomost')
   async exportVedomost(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -196,7 +197,7 @@ export class PayrollPeriodsController {
 
   @ApiOperation({ summary: 'Export payslips as XLSX' })
   @ApiProduces(XlsxUtils.mimeType)
-  @Permissions(Permission.PAYROLL_EXPORT)
+  @Permissions(Read(Claim.PAYROLL_EXPORT))
   @Get('periods/:id/export/payslips')
   async exportPayslips(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -213,7 +214,7 @@ export class PayrollPeriodsController {
 
   @ApiOperation({ summary: 'Calculate or recalculate a payroll period' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
-  @Permissions(Permission.PAYROLL_MANAGE)
+  @Permissions(Write(Claim.PAYROLL))
   @Post('periods/:id/calculate')
   @HttpCode(HttpStatus.OK)
   async calculate(
@@ -232,7 +233,7 @@ export class PayrollPeriodsController {
 
   @ApiOperation({ summary: 'Approve a calculated payroll period' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
-  @Permissions(Permission.PAYROLL_MANAGE)
+  @Permissions(Write(Claim.PAYROLL))
   @Post('periods/:id/approve')
   @HttpCode(HttpStatus.OK)
   async approve(
@@ -251,7 +252,7 @@ export class PayrollPeriodsController {
 
   @ApiOperation({ summary: 'Mark an approved payroll period as paid' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
-  @Permissions(Permission.PAYROLL_MANAGE)
+  @Permissions(Write(Claim.PAYROLL))
   @Post('periods/:id/pay')
   @HttpCode(HttpStatus.OK)
   async pay(
@@ -270,7 +271,7 @@ export class PayrollPeriodsController {
 
   @ApiOperation({ summary: 'Delete a draft or calculated payroll period' })
   @ApiNoContentResponse()
-  @Permissions(Permission.PAYROLL_MANAGE)
+  @Permissions(Write(Claim.PAYROLL))
   @Delete('periods/:id')
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(
@@ -290,7 +291,7 @@ export class PayrollPeriodsController {
     summary: 'Add a post-approval correction; it lands in the next open period',
   })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
-  @Permissions(Permission.PAYROLL_MANAGE)
+  @Permissions(Write(Claim.PAYROLL))
   @Post('results/:id/corrections')
   async correct(
     @Param('locationId', ParseUUIDPipe) locationId: string,
