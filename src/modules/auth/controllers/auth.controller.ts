@@ -1,6 +1,7 @@
 import { Body, Controller, Post, Res, UseGuards } from '@nestjs/common';
 import {
   ApiBody,
+  ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
   ApiQuery,
@@ -99,7 +100,11 @@ export class AuthController {
 
   @ApiOperation({ summary: 'Confirm email' })
   @ApiQuery({ name: 'token', type: String })
-  @ApiOkResponse({ type: ApiResponse(AuthDto) })
+  @ApiCreatedResponse({
+    type: BaseResponseDto,
+    description:
+      'Email confirmed successfully. responseValue is null; no tokens are returned.',
+  })
   @ApiUnauthorizedResponse({ type: UnauthorizedResponseDto })
   @UseGuards(JwtEmailGuard)
   @Post('confirm-email')
