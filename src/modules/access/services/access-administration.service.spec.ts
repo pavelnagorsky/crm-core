@@ -359,6 +359,17 @@ describe('Access administration', () => {
       locationMemberships: [],
     });
     await expect(service.memberships(admin, 'brand-1')).resolves.toEqual([]);
+    expect(db.locationMembership.findMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        where: {
+          location: {
+            deletedAt: null,
+            brand: { deletedAt: null },
+            brandId: 'brand-1',
+          },
+        },
+      }),
+    );
     await expect(service.invitations(admin, 'brand-1')).resolves.toEqual([]);
   });
 });

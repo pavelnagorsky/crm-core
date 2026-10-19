@@ -30,6 +30,7 @@ describe('Access management transactions', () => {
     assertRole: vi.fn(),
     grantMembership: vi.fn(),
     markAccepted: vi.fn(),
+    replaceOwner: vi.fn(),
   };
   const auth = { resolveTokenPayload: vi.fn() };
   const epochs = { bumpMany: vi.fn() };
@@ -88,6 +89,75 @@ describe('Access management transactions', () => {
     epochs.bumpMany.mockResolvedValue(undefined);
     brands.findById.mockResolvedValue({ name: 'Brand' });
     notifications.sendEmail.mockResolvedValue(undefined);
+  });
+
+  it('requires a freshly resolved global grant to replace an owner', async () => {
+    auth.resolveTokenPayload.mockResolvedValueOnce({
+      ...fresh,
+      permissions: { '*': ['*'] },
+    });
+    await service.replaceOwner(
+      signed,
+      'brand-1',
+      'previous-owner',
+      'new-owner',
+      'Recovery',
+    );
+    expect(auth.resolveTokenPayload).toHaveBeenCalledExactlyOnceWith(
+      signed.sub,
+      tx,
+    );
+    expect(administration.replaceOwner).toHaveBeenCalledExactlyOnceWith(
+      'brand-1',
+      signed.sub,
+      'previous-owner',
+      'new-owner',
+      'Recovery',
+      tx,
+    );
+    expect(epochs.bumpMany).toHaveBeenCalledExactlyOnceWith(
+      ['previous-owner', 'new-owner'],
+      tx,
+    );
+  });
+
+  it.each([UserRole.USER, UserRole.ADMIN])(
+    'rejects owner replacement without a current global grant even for %s',
+    async (role) => {
+      auth.resolveTokenPayload.mockResolvedValueOnce({ ...fresh, role });
+      await expect(
+        service.replaceOwner(
+          { ...signed, role: UserRole.ADMIN, permissions: { '*': ['*'] } },
+          'brand-1',
+          'previous-owner',
+          'new-owner',
+          'Recovery',
+        ),
+      ).rejects.toThrow(ForbiddenException);
+      expect(administration.replaceOwner).not.toHaveBeenCalled();
+      expect(epochs.bumpMany).not.toHaveBeenCalled();
+    },
+  );
+
+  it('preserves protection of other platform administrators with a global grant', async () => {
+    auth.resolveTokenPayload.mockResolvedValueOnce({
+      ...fresh,
+      permissions: { '*': ['*'] },
+    });
+    users.findById.mockResolvedValueOnce({
+      id: 'previous-owner',
+      role: UserRole.ADMIN,
+    });
+    await expect(
+      service.replaceOwner(
+        signed,
+        'brand-1',
+        'previous-owner',
+        'new-owner',
+        'Recovery',
+      ),
+    ).rejects.toThrow(ForbiddenException);
+    expect(administration.replaceOwner).not.toHaveBeenCalled();
   });
 
   it('rechecks current authority under the lock and invalidates all affected tokens in the transaction', async () => {

@@ -4,6 +4,8 @@ import { JwtService } from '@nestjs/jwt';
 import { User, UserRole } from '@prisma/client';
 import { createHash } from 'crypto';
 import { DatabaseService } from '../../../database/database.service.js';
+import { PermissionCalculator } from '../../access/calculators/permission.calculator.js';
+import { AccessService } from '../../access/services/access.service.js';
 import { UserService } from '../../user/services/user.service.js';
 import { AuthService } from './auth.service.js';
 import { TokenEpochRegistryService } from './token-epoch-registry.service.js';
@@ -32,6 +34,8 @@ describe('AuthService refresh token storage', () => {
     brandMembership: { findMany: vi.fn().mockResolvedValue([]) },
     locationMembership: { findMany: vi.fn().mockResolvedValue([]) },
     location: { findMany: vi.fn().mockResolvedValue([]) },
+    brandPermissionOverride: { findMany: vi.fn().mockResolvedValue([]) },
+    locationPermissionOverride: { findMany: vi.fn().mockResolvedValue([]) },
     refreshToken: {
       create: vi.fn(),
       findMany: vi.fn().mockResolvedValue([]),
@@ -68,13 +72,10 @@ describe('AuthService refresh token storage', () => {
     { emit: vi.fn() } as unknown as EventEmitter2,
     config as unknown as ConfigService,
     tokenEpoch as unknown as TokenEpochRegistryService,
-    {
-      resolvePermissions: vi.fn().mockResolvedValue({
-        brandMemberships: [],
-        locationMemberships: [],
-        permissions: {},
-      }),
-    } as never,
+    new AccessService(
+      db as unknown as DatabaseService,
+      new PermissionCalculator(),
+    ),
     {} as never,
   );
 
@@ -141,6 +142,33 @@ describe('AuthService refresh token storage', () => {
       },
     });
   });
+
+  it.each(['oauth', 'refresh'])(
+    'issues the global claim from the current platform role on %s',
+    async (method) => {
+      users.findById.mockResolvedValueOnce({ ...user, role: UserRole.ADMIN });
+      if (method === 'refresh') {
+        db.refreshToken.deleteMany.mockResolvedValueOnce({ count: 1 });
+        // Refresh reads the user before resolving the latest access-token payload.
+        users.findById.mockResolvedValueOnce({ ...user, role: UserRole.ADMIN });
+        await service.refresh(user.id, 'old-refresh-token', 'browser');
+      } else {
+        await service.handleOAuth(
+          { email: user.email!, providerType: 'GOOGLE' } as never,
+          'browser',
+        );
+      }
+      const call = jwt.signAsync.mock.calls.find(
+        ([, options]) => options.secret === 'access-secret',
+      );
+      expect(call?.[0]).toMatchObject({
+        role: UserRole.ADMIN,
+        permissions: { '*': ['*'] },
+        brandMemberships: [],
+        locationMemberships: [],
+      });
+    },
+  );
 
   it('atomically consumes a valid token before rotating it', async () => {
     db.refreshToken.deleteMany

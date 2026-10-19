@@ -1,11 +1,31 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Staff, UserRole } from '@prisma/client';
+import { Staff } from '@prisma/client';
 import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
 import { PermissionScope } from '../enums/permission-scope.enum.js';
+import { Permission } from '../enums/permission.enum.js';
+import type { PermissionClaims } from '../interfaces/permission-claims.interface.js';
 import { AccessScopeResponseDto } from './access-scope-response.dto.js';
 
 export class UserAccessResponseDto {
-  @ApiProperty() platformAdmin: boolean;
+  @ApiProperty({
+    type: 'object',
+    description:
+      'Signed permission claims keyed by B:<brandId>, G:<brandId>, or L:<locationId>. The global grant { "*": ["*"] } allows every registered permission in every scope.',
+    properties: {
+      '*': {
+        type: 'array',
+        items: { type: 'string', enum: ['*'] },
+        minItems: 1,
+        maxItems: 1,
+      },
+    },
+    additionalProperties: {
+      type: 'array',
+      items: { type: 'string', enum: Object.values(Permission) },
+    },
+    example: { '*': ['*'] },
+  })
+  permissions: PermissionClaims;
   @ApiProperty({ type: [AccessScopeResponseDto] })
   scopes: AccessScopeResponseDto[];
 
@@ -20,7 +40,7 @@ export class UserAccessResponseDto {
       ]),
     ];
     return Object.assign(new UserAccessResponseDto(), {
-      platformAdmin: token.role === UserRole.ADMIN,
+      permissions: token.permissions ?? {},
       scopes: [
         ...brandIds.map((brandId) =>
           Object.assign(new AccessScopeResponseDto(), {

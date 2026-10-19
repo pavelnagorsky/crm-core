@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { BusinessRole, Prisma } from '@prisma/client';
+import { BusinessRole, Prisma, UserRole } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import {
   ACTIVE_BRAND_WHERE,
@@ -16,6 +16,7 @@ export class AccessService {
 
   async resolvePermissions(
     userId: string,
+    platformRole: UserRole,
     tx: Prisma.TransactionClient = this.db,
   ) {
     const [brands, local] = await Promise.all([
@@ -84,6 +85,7 @@ export class AccessService {
       locations,
       brandOverrides,
       locationOverrides,
+      platformRole,
     );
     return {
       brandMemberships,

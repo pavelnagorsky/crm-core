@@ -20,12 +20,12 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { UserRole } from '@prisma/client';
 import { ApiResponseArray } from '../../../shared/dto/api-response-array.dto.js';
 import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../../shared/dto/id-response.dto.js';
 import { Permission } from '../../access/enums/permission.enum.js';
+import { hasGlobalPermission } from '../../access/utils/has-global-permission.js';
 import { AuditActorRole } from '../../audit/enums/audit-actor-role.enum.js';
 import { auditActorFromToken } from '../../audit/utils/audit-actor-from-token.js';
 import { Auth } from '../../auth/decorators/auth.decorator.js';
@@ -71,9 +71,9 @@ export class BrandController {
     @TokenPayload() payload: TokenPayloadDto,
     @Query() dto: BrandSearchRequestDto,
   ): Promise<BaseResponseDto<BrandSearchItemDto[]>> {
-    const isAdmin = payload.role === UserRole.ADMIN;
+    const hasGlobalAccess = hasGlobalPermission(payload.permissions);
     const items = await this.brandService.search(dto, {
-      brandIds: isAdmin
+      brandIds: hasGlobalAccess
         ? null
         : [
             ...new Set([
@@ -81,7 +81,7 @@ export class BrandController {
               ...payload.locationMemberships.map((row) => row.brandId),
             ]),
           ],
-      locationIds: isAdmin
+      locationIds: hasGlobalAccess
         ? null
         : [
             ...new Set(

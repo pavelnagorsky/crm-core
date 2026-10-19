@@ -4,7 +4,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { BusinessRole, Prisma, UserRole } from '@prisma/client';
+import { BusinessRole, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
@@ -19,6 +19,7 @@ import { PermissionScope } from '../enums/permission-scope.enum.js';
 import { PermissionValue } from '../enums/permission-value.enum.js';
 import { Permission } from '../enums/permission.enum.js';
 import { assertPermission, hasPermission } from '../utils/assert-permission.js';
+import { hasGlobalPermission } from '../utils/has-global-permission.js';
 import { AccessService } from './access.service.js';
 import { AccessInvitationTokenService } from './access-invitation-token.service.js';
 
@@ -251,7 +252,7 @@ export class AccessAdministrationService {
       this.db.locationMembership.findMany({
         where: {
           location: { ...ACTIVE_LOCATION_WHERE, brandId },
-          ...(actor.role === UserRole.ADMIN
+          ...(hasGlobalPermission(actor.permissions)
             ? locationId
               ? { locationId }
               : {}

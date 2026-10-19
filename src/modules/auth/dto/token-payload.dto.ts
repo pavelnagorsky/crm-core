@@ -1,10 +1,10 @@
 import { UserRole } from '@prisma/client';
 import { BrandMembershipPayloadDto } from './brand-membership-payload.dto.js';
 import { LocationMembershipPayloadDto } from './location-membership-payload.dto.js';
-import { Permission } from '../../access/enums/permission.enum.js';
+import type { PermissionClaims } from '../../access/interfaces/permission-claims.interface.js';
 
 export class TokenPayloadDto {
-  permissions?: Record<string, Permission[]>;
+  permissions?: PermissionClaims;
   sub: string;
   role: UserRole;
   firstName?: string;

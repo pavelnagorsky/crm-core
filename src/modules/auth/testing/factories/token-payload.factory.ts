@@ -33,6 +33,7 @@ export function authorizeTestToken(token: TokenPayloadDto): TokenPayloadDto {
       locations,
       [],
       [],
+      token.role,
     ),
   };
 }

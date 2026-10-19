@@ -87,6 +87,7 @@ describe('Brand search access boundaries', () => {
   it('allows platform admins to search all active brands and count all active locations', async () => {
     const token = tokenPayload();
     token.role = UserRole.ADMIN;
+    token.permissions = { '*': ['*'] };
     token.brandMemberships = [];
     token.locationMemberships = [];
 
@@ -104,17 +105,23 @@ describe('Brand search access boundaries', () => {
     ]);
   });
 
-  it('keeps empty memberships restrictive for ordinary users', async () => {
-    const token = tokenPayload();
-    token.brandMemberships = [];
-    token.locationMemberships = [];
-    findMany.mockResolvedValue([]);
+  it.each([UserRole.USER, UserRole.ADMIN])(
+    'keeps empty memberships restrictive without a global grant for %s',
+    async (role) => {
+      const token = tokenPayload();
+      token.role = role;
+      token.brandMemberships = [];
+      token.locationMemberships = [];
+      findMany.mockResolvedValue([]);
 
-    const response = await controller.search(token, {});
+      const response = await controller.search(token, {});
 
-    const query = findMany.mock.calls[0][0];
-    expect(query.where.id).toEqual({ in: [] });
-    expect(query.include._count.select.locations.where.id).toEqual({ in: [] });
-    expect(response.responseValue).toEqual([]);
-  });
+      const query = findMany.mock.calls[0][0];
+      expect(query.where.id).toEqual({ in: [] });
+      expect(query.include._count.select.locations.where.id).toEqual({
+        in: [],
+      });
+      expect(response.responseValue).toEqual([]);
+    },
+  );
 });

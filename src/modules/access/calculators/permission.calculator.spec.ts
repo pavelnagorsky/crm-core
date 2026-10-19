@@ -368,10 +368,49 @@ describe('Permissions compiled into JWT', () => {
     );
     token.role = UserRole.ADMIN;
     expect(hasPermission(token, Permission.ORDER_READ, 'location-1')).toBe(
-      true,
+      false,
     );
     expect(hasPermission(token, 'unknown' as Permission, 'location-1')).toBe(
       false,
     );
+  });
+
+  it('grants global access only to platform administrators when compiling claims', () => {
+    expect(compute.claims([], [], [], [], [], UserRole.ADMIN)).toEqual({
+      '*': ['*'],
+    });
+    expect(compute.claims([], [], [], [], [], UserRole.USER)).toEqual({});
+    expect(tokenPayload(BusinessRole.OWNER).permissions).not.toHaveProperty(
+      '*',
+    );
+  });
+
+  it('authorizes every registered permission in any scope using the global claim alone', () => {
+    const token = tokenPayload();
+    token.brandMemberships = [];
+    token.locationMemberships = [];
+    token.permissions = compute.claims([], [], [], [], [], UserRole.ADMIN);
+    for (const permission of Object.values(Permission)) {
+      expect(hasPermission(token, permission, 'unrelated-brand')).toBe(true);
+      expect(hasPermission(token, permission, 'new-location', true)).toBe(true);
+    }
+    for (const permission of ['unknown', '*', 'toString', '__proto__'])
+      expect(hasPermission(token, permission as Permission, 'location-1')).toBe(
+        false,
+      );
+  });
+
+  it('does not treat a scoped wildcard or a partial global grant as universal access', () => {
+    const token = tokenPayload();
+    for (const permissions of [
+      { 'L:location-1': ['*'] },
+      { '*': [Permission.ORDER_READ] },
+      { '*': [] },
+    ]) {
+      token.permissions = permissions as never;
+      expect(hasPermission(token, Permission.ORDER_READ, 'location-1')).toBe(
+        false,
+      );
+    }
   });
 });

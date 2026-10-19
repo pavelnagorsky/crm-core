@@ -15,6 +15,7 @@ import { CreateAccessInvitationDto } from '../access/dto/create-access-invitatio
 import { UpdatePolicyDto } from '../access/dto/update-policy.dto.js';
 import { AccessService } from '../access/services/access.service.js';
 import { AccessAdministrationService } from '../access/services/access-administration.service.js';
+import { hasGlobalPermission } from '../access/utils/has-global-permission.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 import { AuthService } from '../auth/services/auth.service.js';
 import { TokenEpochRegistryService } from '../auth/services/token-epoch-registry.service.js';
@@ -365,7 +366,8 @@ export class AccessManagementFacade {
       token,
       brandId,
       async (actor, tx) => {
-        if (actor.role !== UserRole.ADMIN) throw new ForbiddenException();
+        if (!hasGlobalPermission(actor.permissions))
+          throw new ForbiddenException();
         await this.protectAdmin(actor.sub, previousUserId, tx);
         await this.protectAdmin(actor.sub, newUserId, tx);
         await this.users.findById(newUserId, tx);

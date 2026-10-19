@@ -1,17 +1,21 @@
 import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Permission } from '../../access/enums/permission.enum.js';
 import { tokenPayload } from '../testing/factories/token-payload.factory.js';
+import { TokenPayloadDto } from '../dto/token-payload.dto.js';
 import { PermissionGuard } from './permission.guard.js';
 
 describe('Permission alternatives', () => {
   const reflector = { getAllAndOverride: vi.fn() };
   const guard = new PermissionGuard(reflector as never);
-  const context = (params = { locationId: 'location-1' }) =>
+  const context = (
+    params = { locationId: 'location-1' },
+    user: TokenPayloadDto = tokenPayload('STAFF'),
+  ) =>
     ({
       getHandler: () => undefined,
       getClass: () => undefined,
       switchToHttp: () => ({
-        getRequest: () => ({ user: tokenPayload('STAFF'), params }),
+        getRequest: () => ({ user, params }),
       }),
     }) as unknown as ExecutionContext;
 
@@ -50,5 +54,33 @@ describe('Permission alternatives', () => {
     expect(() => guard.canActivate(context({ locationId: '' }))).toThrow(
       ForbiddenException,
     );
+  });
+
+  it('accepts global claims for a location without membership', () => {
+    const token = {
+      ...tokenPayload('STAFF'),
+      permissions: { '*': ['*'] },
+    } as TokenPayloadDto;
+    reflector.getAllAndOverride.mockReturnValue([Permission.ORDER_MANAGE]);
+    expect(
+      guard.canActivate(context({ locationId: 'unrelated-location' }, token)),
+    ).toBe(true);
+  });
+
+  it('still requires scope identifiers and registered permission metadata with global access', () => {
+    const token = {
+      ...tokenPayload(),
+      permissions: { '*': ['*'] },
+    } as TokenPayloadDto;
+    reflector.getAllAndOverride.mockReturnValue([Permission.ORDER_MANAGE]);
+    expect(() => guard.canActivate(context({ locationId: '' }, token))).toThrow(
+      ForbiddenException,
+    );
+    for (const requirements of [[], ['unknown'], ['*']]) {
+      reflector.getAllAndOverride.mockReturnValue(requirements);
+      expect(() =>
+        guard.canActivate(context({ locationId: 'location-1' }, token)),
+      ).toThrow(ForbiddenException);
+    }
   });
 });

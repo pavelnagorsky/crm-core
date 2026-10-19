@@ -253,7 +253,11 @@ export class AuthService {
   ): Promise<TokenPayloadDto> {
     const tokenEpoch = await this.tokenEpochRegistry.get(userId, tx);
     const user = await this.userService.findById(userId, tx);
-    const permissions = await this.access.resolvePermissions(userId, tx);
+    const permissions = await this.access.resolvePermissions(
+      userId,
+      user.role,
+      tx,
+    );
     return {
       sub: user.id,
       role: user.role,

@@ -3,6 +3,7 @@ import {
   BrandPermissionOverride,
   BusinessRole,
   LocationPermissionOverride,
+  UserRole,
 } from '@prisma/client';
 import { PERMISSION_REGISTRY } from '../constants/permission-registry.js';
 import { PermissionScope } from '../enums/permission-scope.enum.js';
@@ -10,6 +11,7 @@ import { Permission } from '../enums/permission.enum.js';
 import { AccessLocation } from '../interfaces/access-location.interface.js';
 import { BrandAccessMembership } from '../interfaces/brand-access-membership.interface.js';
 import { LocationAccessMembership } from '../interfaces/location-access-membership.interface.js';
+import { PermissionClaims } from '../interfaces/permission-claims.interface.js';
 
 @Injectable()
 export class PermissionCalculator {
@@ -63,14 +65,16 @@ export class PermissionCalculator {
     locations: AccessLocation[],
     brandOverrides: BrandPermissionOverride[],
     locationOverrides: LocationPermissionOverride[],
-  ): Record<string, Permission[]> {
-    const claims: Record<string, Permission[]> = {};
+    platformRole: UserRole = UserRole.USER,
+  ): PermissionClaims {
+    const claims: PermissionClaims =
+      platformRole === UserRole.ADMIN ? { '*': ['*'] } : {};
     const add = (
       scopeId: string,
       permissions: Set<Permission>,
       scope: Exclude<PermissionScope, PermissionScope.BRAND_OR_LOCATION>,
     ) => {
-      const key = `${scope}:${scopeId}`;
+      const key = `${scope}:${scopeId}` as const;
       claims[key] = [
         ...new Set([
           ...(claims[key] ?? []),
