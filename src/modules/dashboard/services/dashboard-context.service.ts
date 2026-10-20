@@ -34,6 +34,9 @@ export class DashboardContextService {
   ): Promise<DashboardReadContext> {
     const selected = new Set(dto.keys);
     const compare = range.compareWithPrevious;
+    const needsRevenueBySaleType = selected.has(
+      DashboardWidgetKey.REVENUE_BY_SALE_TYPE,
+    );
     const needsBookingSnapshot = wants(selected, BOOKING_SNAPSHOT_KEYS);
     const needsBookingSeries = wants(selected, BOOKING_SERIES_KEYS);
     const needsPreviousBookingSeries =
@@ -65,7 +68,7 @@ export class DashboardContextService {
       staffCompletedRows,
       productStaffRows,
     ] = await Promise.all([
-      needsBookingSnapshot
+      needsBookingSnapshot || needsRevenueBySaleType
         ? this.bookingsAggregates.snapshot(current)
         : Promise.resolve(emptySnapshot()),
       needsBookingSnapshot && compare
@@ -91,7 +94,7 @@ export class DashboardContextService {
             true,
           )
         : Promise.resolve([]),
-      needsProductSnapshot
+      needsProductSnapshot || needsRevenueBySaleType
         ? this.ordersAggregates.productSalesSnapshot(current)
         : Promise.resolve(emptyProductSnapshot()),
       needsProductSnapshot && compare

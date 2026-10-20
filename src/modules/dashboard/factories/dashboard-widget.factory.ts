@@ -14,6 +14,7 @@ import { WidgetMetricDto } from '../dto/widget-metric.dto.js';
 import { WidgetDto } from '../dto/widget.dto.js';
 import { DashboardWidgetKey } from '../enums/dashboard-widget-key.enum.js';
 import { MetricUnit } from '../enums/metric-unit.enum.js';
+import { RevenueSaleType } from '../enums/revenue-sale-type.enum.js';
 import { WidgetKind } from '../enums/widget-kind.enum.js';
 import { DashboardReadContext } from '../interfaces/dashboard-read-context.interface.js';
 import { MetricInput } from '../interfaces/metric-input.interface.js';
@@ -46,6 +47,8 @@ export class DashboardWidgetFactory {
         return this.revenueMetric(key, ctx, REVENUE_STATUSES);
       case DashboardWidgetKey.REVENUE_COMPLETED:
         return this.revenueMetric(key, ctx, [BookingStatus.COMPLETED]);
+      case DashboardWidgetKey.REVENUE_BY_SALE_TYPE:
+        return this.revenueBySaleType(key, ctx);
       case DashboardWidgetKey.AVG_TICKET:
         return this.avgTicketMetric(key, ctx);
       case DashboardWidgetKey.REVENUE_SERIES:
@@ -151,6 +154,43 @@ export class DashboardWidgetFactory {
       },
       true,
     );
+  }
+
+  private revenueBySaleType(
+    key: DashboardWidgetKey,
+    ctx: DashboardReadContext,
+  ): WidgetDto {
+    const rows = [
+      {
+        id: RevenueSaleType.SERVICE,
+        label: 'Services',
+        revenue: sumRevenue(ctx.bookingSnapshot, [BookingStatus.COMPLETED]),
+      },
+      {
+        id: RevenueSaleType.PRODUCT,
+        label: 'Products',
+        revenue: ctx.productSnapshot.revenue,
+      },
+    ];
+    const total = chartMoney(sumDecimals(rows.map((row) => row.revenue)));
+    const items: WidgetBreakdownItemDto[] = rows.map((row) => {
+      const value = chartMoney(row.revenue);
+      return {
+        id: row.id,
+        label: row.label,
+        value,
+        sharePct: pct(value, total),
+      };
+    });
+    return {
+      key,
+      kind: WidgetKind.BREAKDOWN,
+      breakdown: { dimension: 'saleType', items, total },
+      meta: {
+        period: this.buckets.periodDto(ctx.range),
+        currency: ctx.range.currency,
+      },
+    };
   }
 
   private avgTicketMetric(

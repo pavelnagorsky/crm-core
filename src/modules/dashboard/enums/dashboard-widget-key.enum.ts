@@ -14,6 +14,14 @@ export enum DashboardWidgetKey {
   REVENUE_COMPLETED = 'REVENUE_COMPLETED',
 
   /**
+   * Pie chart of actual revenue by sale type: SERVICE (including bundles), PRODUCT.
+   * Uses completed bookings and posted product sales, matching REVENUE_COMPLETED.
+   * `breakdown.items` contains each type's amount and `sharePct`; total is their sum.
+   * Currency is `meta.currency`. No topN limit or previous-period comparison.
+   */
+  REVENUE_BY_SALE_TYPE = 'REVENUE_BY_SALE_TYPE',
+
+  /**
    * A line chart of money from confirmed/completed bookings and posted product orders.
    * Each point's value is `revenue`. `comparisonPoints` is the previous period, aligned by
    * index, not by date. There is no separate big number. Currency is `meta.currency`.

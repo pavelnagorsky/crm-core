@@ -744,13 +744,12 @@ async function ensureServiceCatalog(prisma, locations) {
       const category = await prisma.serviceCategory.upsert({
         where: { locationId_name: { locationId: location.id, name } },
         update: {
-          description: `${name} at ${location.name}`,
           sortOrder: index,
         },
         create: {
           locationId: location.id,
           name,
-          description: `${name} at ${location.name}`,
+          description: name,
           sortOrder: index,
         },
       });
@@ -766,7 +765,6 @@ async function ensureServiceCatalog(prisma, locations) {
       });
       const data = {
         categoryId: category?.id ?? null,
-        description: `${title} demo service`,
         price: decimal(28 + index * 8),
         durationMinutes: index % 3 === 0 ? 45 : index % 3 === 1 ? 60 : 90,
         bufferMinutes: 10,
@@ -777,7 +775,7 @@ async function ensureServiceCatalog(prisma, locations) {
         await prisma.service.update({ where: { id: existing.id }, data });
       else
         await prisma.service.create({
-          data: { locationId: location.id, title, ...data },
+          data: { locationId: location.id, title, description: title, ...data },
         });
     }
   }

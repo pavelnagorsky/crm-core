@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { BookingVisibility } from '@prisma/client';
+import { BookingVisibility, BusinessType } from '@prisma/client';
 import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
 import { LocationPublicProfile } from '../interfaces/location-public-profile.interface.js';
 
@@ -15,6 +15,18 @@ export class LocationPublicResponseDto {
 
   @ApiProperty({ type: String })
   name: string;
+
+  @ApiProperty({ enum: BusinessType, nullable: true })
+  businessType: BusinessType | null;
+
+  @ApiProperty({ type: String })
+  countryCode: string;
+
+  @ApiProperty({ type: String, nullable: true })
+  city: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  addressLine: string | null;
 
   @ApiProperty({ type: () => FileResponseDto, nullable: true })
   logo: FileResponseDto | null;
@@ -34,6 +46,10 @@ export class LocationPublicResponseDto {
     dto.brandId = location.brandId;
     dto.brandName = location.brand.name;
     dto.name = location.name;
+    dto.businessType = location.businessType;
+    dto.countryCode = location.countryCode;
+    dto.city = location.city;
+    dto.addressLine = location.addressLine;
     dto.logo = location.brand.logoFile
       ? FileResponseDto.fromEntity(location.brand.logoFile)
       : null;
