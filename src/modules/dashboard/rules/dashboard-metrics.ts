@@ -22,7 +22,7 @@ export function windowRange(
   to: Date,
 ) {
   return {
-    locationId,
+    locationIds: [locationId],
     from,
     to,
     staffId: dto.staffId,

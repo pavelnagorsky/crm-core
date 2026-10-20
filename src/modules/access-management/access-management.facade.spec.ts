@@ -349,24 +349,56 @@ describe('Access management transactions', () => {
     expect(committed).toBe(true);
   });
 
-  it('invalidates only the membership target and releases a revoked staff binding', async () => {
-    await service.changeMember(
-      signed,
-      'brand-1',
-      'location-1',
-      'membership',
-      null,
-      3,
-    );
+  it.each([BusinessRole.STAFF, BusinessRole.MANAGER, BusinessRole.OWNER])(
+    'releases the staff binding and invalidates only the target when revoking local %s access',
+    async (role) => {
+      administration.membership.mockResolvedValue({
+        id: 'membership',
+        userId: 'employee',
+        role,
+      });
+      await service.changeMember(
+        signed,
+        'brand-1',
+        'location-1',
+        'membership',
+        null,
+        3,
+      );
 
-    expect(staff.releaseAccessProfile).toHaveBeenCalledExactlyOnceWith(
-      'location-1',
-      'employee',
-      tx,
-    );
-    expect(epochs.bumpMany).toHaveBeenCalledExactlyOnceWith(['employee'], tx);
-    expect(access.affectedUserIds).not.toHaveBeenCalled();
-  });
+      expect(staff.releaseAccessProfile).toHaveBeenCalledExactlyOnceWith(
+        'location-1',
+        'employee',
+        tx,
+      );
+      expect(epochs.bumpMany).toHaveBeenCalledExactlyOnceWith(['employee'], tx);
+      expect(access.affectedUserIds).not.toHaveBeenCalled();
+      expect(committed).toBe(true);
+    },
+  );
+
+  it.each([BusinessRole.MANAGER, BusinessRole.OWNER])(
+    'preserves staff bindings when revoking brand %s access',
+    async (role) => {
+      administration.membership.mockResolvedValue({
+        id: 'membership',
+        userId: 'employee',
+        role,
+      });
+      await service.changeMember(
+        signed,
+        'brand-1',
+        undefined,
+        'membership',
+        null,
+        3,
+      );
+
+      expect(staff.releaseAccessProfile).not.toHaveBeenCalled();
+      expect(epochs.bumpMany).toHaveBeenCalledExactlyOnceWith(['employee'], tx);
+      expect(committed).toBe(true);
+    },
+  );
 
   it('preserves a staff profile when promoting its account to manager', async () => {
     await service.changeMember(

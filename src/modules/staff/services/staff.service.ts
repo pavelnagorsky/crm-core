@@ -550,7 +550,7 @@ export class StaffService {
       if (dto.status === StaffStatus.INACTIVE)
         await this.protectPlatformAccount(current.userId, actor.id, tx);
       if (dto.status === StaffStatus.INACTIVE) {
-        const revoked = await this.access.revokeStaffAccess(
+        await this.access.revokeStaffAccess(
           location.brandId,
           locationId,
           staffId,
@@ -558,7 +558,7 @@ export class StaffService {
           tx,
           actor.id ?? 'system',
         );
-        if (revoked && current.userId) {
+        if (current.userId) {
           await this.releaseAccessProfile(locationId, current.userId, tx);
           await this.epochs.bump(current.userId, tx);
         }

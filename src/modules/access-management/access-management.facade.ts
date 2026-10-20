@@ -173,7 +173,7 @@ export class AccessManagementFacade {
             tx,
           );
         }
-        if (!dto && locationId && membership.role === BusinessRole.STAFF)
+        if (!dto && locationId)
           await this.staff.releaseAccessProfile(
             locationId,
             membership.userId,

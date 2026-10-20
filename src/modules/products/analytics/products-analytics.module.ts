@@ -4,10 +4,11 @@ import { DashboardModule } from '../../dashboard/dashboard.module.js';
 import { OrdersModule } from '../../orders/orders.module.js';
 import { ProductsAnalyticsController } from './controllers/products-analytics.controller.js';
 import { ProductsAnalyticsService } from './services/products-analytics.service.js';
+import { ProductsAnalyticsWidgetFactory } from './factories/products-analytics-widget.factory.js';
 
 @Module({
   imports: [BookingsAggregatesModule, DashboardModule, OrdersModule],
   controllers: [ProductsAnalyticsController],
-  providers: [ProductsAnalyticsService],
+  providers: [ProductsAnalyticsService, ProductsAnalyticsWidgetFactory],
 })
 export class ProductsAnalyticsModule {}

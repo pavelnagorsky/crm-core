@@ -7,11 +7,12 @@ import { SeriesGranularity } from '../../../dashboard/enums/series-granularity.e
 import { WidgetKind } from '../../../dashboard/enums/widget-kind.enum.js';
 import { DashboardBucketFactory } from '../../../dashboard/factories/dashboard-bucket.factory.js';
 import { DashboardMetricFactory } from '../../../dashboard/factories/dashboard-metric.factory.js';
-import { ResolvedRange } from '../../../dashboard/interfaces/resolved-range.interface.js';
+import { ResolvedBrandRange } from '../../../dashboard/interfaces/resolved-brand-range.interface.js';
 import { DashboardRangeService } from '../../../dashboard/services/dashboard-range.service.js';
 import { OrdersAggregatesService } from '../../../orders/aggregates/services/orders-aggregates.service.js';
 import { ProductsAnalyticsRequestDto } from '../dto/products-analytics-request.dto.js';
 import { ProductsAnalyticsWidgetKey } from '../enums/products-analytics-widget-key.enum.js';
+import { ProductsAnalyticsWidgetFactory } from '../factories/products-analytics-widget.factory.js';
 import { ProductsAnalyticsService } from './products-analytics.service.js';
 
 function serviceSnapshot(revenue: string): AggregateSnapshot {
@@ -33,23 +34,30 @@ function serviceSnapshot(revenue: string): AggregateSnapshot {
 }
 
 describe('ProductsAnalyticsService', () => {
-  const rangeService = { resolve: vi.fn() };
+  const rangeService = { resolveForBrand: vi.fn() };
   const orders = {
     productSalesKpiSnapshot: vi.fn(),
     productSalesKpiSeries: vi.fn(),
+    productRevenue: vi.fn(),
+    productSalesSeries: vi.fn(),
   };
   const bookings = {
     snapshot: vi.fn(),
     series: vi.fn(),
   };
   const bucketService = new DashboardBucketFactory();
+  const widgetFactory = new ProductsAnalyticsWidgetFactory(
+    new DashboardMetricFactory(),
+    bucketService,
+  );
 
-  let range: ResolvedRange;
+  let range: ResolvedBrandRange;
   let service: ProductsAnalyticsService;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     range = {
+      locationIds: ['location-1', 'location-2'],
       from: new Date('2026-09-01T00:00:00.000Z'),
       to: new Date('2026-09-03T00:00:00.000Z'),
       previousFrom: new Date('2026-08-30T00:00:00.000Z'),
@@ -59,7 +67,7 @@ describe('ProductsAnalyticsService', () => {
       currency: 'USD',
       compareWithPrevious: true,
     };
-    rangeService.resolve.mockResolvedValue(range);
+    rangeService.resolveForBrand.mockResolvedValue(range);
     orders.productSalesKpiSnapshot
       .mockResolvedValueOnce({
         revenue: MoneyUtils.decimal(300),
@@ -112,18 +120,19 @@ describe('ProductsAnalyticsService', () => {
       rangeService as unknown as DashboardRangeService,
       orders as unknown as OrdersAggregatesService,
       bookings as unknown as BookingsAggregatesService,
-      new DashboardMetricFactory(),
-      bucketService,
     );
   });
 
-  async function widgets(keys: ProductsAnalyticsWidgetKey[]) {
-    return service.getWidgets('location-1', {
+  async function widgets(
+    keys: ProductsAnalyticsWidgetKey[],
+    filters: Partial<ProductsAnalyticsRequestDto> = {},
+  ) {
+    const result = await service.getAnalytics('brand-1', {
       keys,
-      productId: 'product-1',
-      categoryId: 'category-1',
       staffId: 'staff-1',
+      ...filters,
     } as ProductsAnalyticsRequestDto);
+    return widgetFactory.build(keys, result);
   }
 
   it('builds the three product KPI cards with previous-period comparison', async () => {
@@ -176,15 +185,147 @@ describe('ProductsAnalyticsService', () => {
   });
 
   it('passes product filters into order aggregate ranges', async () => {
-    await widgets([ProductsAnalyticsWidgetKey.GROSS_PROFIT]);
+    await widgets([ProductsAnalyticsWidgetKey.GROSS_PROFIT], {
+      productId: 'product-1',
+      categoryId: 'category-1',
+    });
 
     expect(orders.productSalesKpiSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({
-        locationId: 'location-1',
+        locationIds: ['location-1', 'location-2'],
         catalogItemId: 'product-1',
         categoryId: 'category-1',
         staffId: 'staff-1',
       }),
     );
+  });
+
+  it('resolves the requested brand scope and returns the actual locations', async () => {
+    range.locationIds = ['location-2'];
+    const dto = {
+      keys: [ProductsAnalyticsWidgetKey.REPEAT_PURCHASE_RATE],
+      locationIds: ['location-2'],
+    } as ProductsAnalyticsRequestDto;
+
+    const result = await service.getAnalytics('brand-1', dto);
+
+    expect(rangeService.resolveForBrand).toHaveBeenCalledWith('brand-1', dto, [
+      'location-2',
+    ]);
+    expect(result.range.locationIds).toEqual(['location-2']);
+    expect(orders.productSalesKpiSnapshot).toHaveBeenCalledTimes(2);
+    for (const [range] of orders.productSalesKpiSnapshot.mock.calls) {
+      expect(range.locationIds).toEqual(['location-2']);
+    }
+    expect(orders.productSalesKpiSeries.mock.calls[0][0].locationIds).toEqual([
+      'location-2',
+    ]);
+  });
+
+  it.each([
+    { productId: 'product-1' },
+    { categoryId: 'category-1' },
+    { productId: 'product-1', categoryId: 'category-1' },
+  ])('uses all revenue as the denominator for filters %j', async (filters) => {
+    orders.productRevenue
+      .mockResolvedValueOnce(MoneyUtils.decimal(600))
+      .mockResolvedValueOnce(MoneyUtils.decimal(400));
+    orders.productSalesSeries.mockResolvedValue([
+      { bucket: range.from, revenue: MoneyUtils.decimal(200) },
+      {
+        bucket: new Date('2026-09-02T00:00:00.000Z'),
+        revenue: MoneyUtils.decimal(400),
+      },
+    ]);
+
+    const [widget] = await widgets(
+      [ProductsAnalyticsWidgetKey.PRODUCT_REVENUE_SHARE],
+      filters,
+    );
+
+    expect(widget.metric).toMatchObject({
+      value: 23.1,
+      previousValue: 20,
+      spark: [16.6667, 28.5714],
+    });
+    for (const mock of [
+      bookings.snapshot,
+      bookings.series,
+      orders.productRevenue,
+      orders.productSalesSeries,
+    ]) {
+      for (const [aggregateRange] of mock.mock.calls) {
+        expect(aggregateRange).toMatchObject({
+          locationIds: ['location-1', 'location-2'],
+          staffId: 'staff-1',
+        });
+        expect(aggregateRange).not.toHaveProperty('catalogItemId');
+        expect(aggregateRange).not.toHaveProperty('categoryId');
+      }
+    }
+  });
+
+  it('reuses unfiltered product totals and skips comparison queries when disabled', async () => {
+    range.compareWithPrevious = false;
+    const [widget] = await widgets([
+      ProductsAnalyticsWidgetKey.PRODUCT_REVENUE_SHARE,
+    ]);
+
+    expect(orders.productRevenue).not.toHaveBeenCalled();
+    expect(orders.productSalesSeries).not.toHaveBeenCalled();
+    expect(orders.productSalesKpiSnapshot).toHaveBeenCalledTimes(1);
+    expect(bookings.snapshot).toHaveBeenCalledTimes(1);
+    expect(widget.metric).not.toHaveProperty('previousValue');
+    expect(widget.meta?.previousPeriod).toBeUndefined();
+  });
+
+  it('loads filtered revenue totals only for the current period when comparison is disabled', async () => {
+    range.compareWithPrevious = false;
+    orders.productRevenue.mockResolvedValue(MoneyUtils.decimal(600));
+    orders.productSalesSeries.mockResolvedValue([]);
+    const [widget] = await widgets(
+      [ProductsAnalyticsWidgetKey.PRODUCT_REVENUE_SHARE],
+      { categoryId: 'category-1' },
+    );
+    expect(orders.productRevenue).toHaveBeenCalledTimes(1);
+    expect(orders.productRevenue).toHaveBeenCalledWith({
+      locationIds: range.locationIds,
+      from: range.from,
+      to: range.to,
+      staffId: 'staff-1',
+    });
+    expect(widget.metric).toMatchObject({ value: 23.1 });
+    expect(widget.metric).not.toHaveProperty('previousValue');
+  });
+
+  it('keeps empty periods at zero with finite values and a previous-period comparison', async () => {
+    orders.productSalesKpiSnapshot.mockReset().mockResolvedValue({
+      revenue: MoneyUtils.decimal(0),
+      grossProfit: MoneyUtils.decimal(0),
+      buyerCount: 0,
+      repeatBuyerCount: 0,
+    });
+    orders.productSalesKpiSeries.mockResolvedValue([]);
+    bookings.snapshot.mockReset().mockResolvedValue(serviceSnapshot('0'));
+    bookings.series.mockResolvedValue([]);
+    const result = await widgets(Object.values(ProductsAnalyticsWidgetKey));
+    for (const widget of result) {
+      expect(widget.metric).toMatchObject({
+        value: 0,
+        previousValue: 0,
+        spark: [0, 0],
+      });
+    }
+  });
+
+  it('does not query aggregates when scope resolution rejects the request', async () => {
+    rangeService.resolveForBrand.mockRejectedValueOnce(
+      new Error('Invalid locations'),
+    );
+    await expect(
+      widgets([ProductsAnalyticsWidgetKey.GROSS_PROFIT]),
+    ).rejects.toThrow('Invalid locations');
+    expect(orders.productSalesKpiSnapshot).not.toHaveBeenCalled();
+    expect(bookings.snapshot).not.toHaveBeenCalled();
   });
 });

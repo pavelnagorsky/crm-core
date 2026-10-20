@@ -5,6 +5,7 @@ import {
   Prisma,
 } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
+import { SeriesGranularity } from '../../../dashboard/enums/series-granularity.enum.js';
 import { BookingsAggregatesService } from '../../../bookings/aggregates/services/bookings-aggregates.service.js';
 import { OrdersAggregatesService } from './orders-aggregates.service.js';
 
@@ -34,7 +35,7 @@ describe('OrdersAggregatesService', () => {
     ]);
 
     const result = await service.productSalesSnapshot({
-      locationId: 'location-1',
+      locationIds: ['location-1'],
       from: new Date('2026-10-01T00:00:00.000Z'),
       to: new Date('2026-10-02T00:00:00.000Z'),
       staffId: 'staff-1',
@@ -50,7 +51,7 @@ describe('OrdersAggregatesService', () => {
     expect(query.sql).not.toContain('ARRAY_AGG');
     expect(bookings.completedBookingExists).toHaveBeenCalledWith(
       expect.objectContaining({
-        locationId: 'location-1',
+        locationIds: ['location-1'],
         staffId: 'staff-1',
         catalogItemId: 'product-1',
         categoryId: 'category-1',
@@ -76,7 +77,7 @@ describe('OrdersAggregatesService', () => {
     ]);
 
     const result = await service.productSalesKpiSnapshot({
-      locationId: 'location-1',
+      locationIds: ['location-1'],
       from: new Date('2026-10-01T00:00:00.000Z'),
       to: new Date('2026-10-02T00:00:00.000Z'),
       staffId: 'staff-1',
@@ -98,6 +99,47 @@ describe('OrdersAggregatesService', () => {
     expect(result.repeatBuyerCount).toBe(2);
   });
 
+  it('sums product revenue without calculating booking or buyer counts', async () => {
+    db.$queryRaw.mockResolvedValue([{ revenue: '1234.56' }]);
+    const from = new Date('2026-10-01T00:00:00.000Z');
+    const to = new Date('2026-10-02T00:00:00.000Z');
+    const total = await service.productRevenue({
+      locationIds: ['location-1', 'location-2'],
+      from,
+      to,
+      staffId: 'staff-1',
+    });
+    const query = db.$queryRaw.mock.calls[0][0] as Prisma.Sql;
+    expect(total.toFixed(2)).toBe('1234.56');
+    expect(query.sql).toContain('SUM(i."lineTotal")');
+    expect(query.sql).toContain('o."locationId" IN (?,?)');
+    expect(query.sql).toContain('i."sellerStaffId"');
+    expect(query.values).toEqual(
+      expect.arrayContaining([
+        'location-1',
+        'location-2',
+        'staff-1',
+        from,
+        to,
+        OrderStatus.ACTIVE,
+        OrderItemStatus.CONFIRMED,
+        OrderItemType.PRODUCT,
+      ]),
+    );
+    expect(query.sql).not.toContain('COUNT(');
+    expect(bookings.completedBookingExists).not.toHaveBeenCalled();
+  });
+
+  it('returns zero revenue without querying for an empty location scope', async () => {
+    const total = await service.productRevenue({
+      locationIds: [],
+      from: new Date('2026-10-01T00:00:00.000Z'),
+      to: new Date('2026-10-02T00:00:00.000Z'),
+    });
+    expect(total.isZero()).toBe(true);
+    expect(db.$queryRaw).not.toHaveBeenCalled();
+  });
+
   it('does not query the database for an empty brand location scope', async () => {
     await expect(
       service.clientRevenue({
@@ -111,5 +153,45 @@ describe('OrdersAggregatesService', () => {
       sharedClients: 0,
     });
     expect(db.$queryRaw).not.toHaveBeenCalled();
+  });
+
+  it.each(['productSalesKpiSnapshot', 'productSalesKpiSeries'] as const)(
+    '%s deduplicates buyers across locations and looks for prior sales in the same scope',
+    async (operation) => {
+      db.$queryRaw.mockResolvedValue([]);
+      await service[operation]({
+        locationIds: ['location-1', 'location-2'],
+        from: new Date('2026-10-01T00:00:00.000Z'),
+        to: new Date('2026-10-02T00:00:00.000Z'),
+        granularity: SeriesGranularity.DAY,
+        timezone: 'UTC',
+      });
+      const query = db.$queryRaw.mock.calls[0][0] as Prisma.Sql;
+      expect(query.sql).toContain('o."locationId" IN (?,?)');
+      expect(query.sql).toContain('po."locationId" IN (?,?)');
+      expect(query.sql).toContain('COUNT(DISTINCT o."clientId")');
+      expect(query.sql).toContain('po."clientId" = o."clientId"');
+      expect(query.sql).toContain('pi."occurredAt" < i."occurredAt"');
+      expect(
+        query.values.filter((value) => value === 'location-1'),
+      ).toHaveLength(2);
+      expect(
+        query.values.filter((value) => value === 'location-2'),
+      ).toHaveLength(2);
+      expect(query.values).not.toContain(undefined);
+    },
+  );
+
+  it('uses a false predicate for an empty product location scope', async () => {
+    db.$queryRaw.mockResolvedValue([]);
+    const result = await service.productSalesKpiSnapshot({
+      locationIds: [],
+      from: new Date('2026-10-01T00:00:00.000Z'),
+      to: new Date('2026-10-02T00:00:00.000Z'),
+    });
+    const query = db.$queryRaw.mock.calls[0][0] as Prisma.Sql;
+    expect(query.sql).toContain('WHERE FALSE');
+    expect(query.sql).not.toContain('IN ()');
+    expect(result.buyerCount).toBe(0);
   });
 });

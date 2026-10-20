@@ -8,21 +8,34 @@ import { Permissions } from '../../../auth/decorators/permissions.decorator.js';
 import { ProductsAnalyticsRequestDto } from '../dto/products-analytics-request.dto.js';
 import { ProductsAnalyticsResponseDto } from '../dto/products-analytics-response.dto.js';
 import { ProductsAnalyticsService } from '../services/products-analytics.service.js';
+import { ProductsAnalyticsWidgetFactory } from '../factories/products-analytics-widget.factory.js';
 
 @ApiTags('Products')
-@Controller('locations/:locationId')
+@Controller('brands/:brandId/products')
 export class ProductsAnalyticsController {
-  constructor(private readonly analyticsService: ProductsAnalyticsService) {}
+  constructor(
+    private readonly analyticsService: ProductsAnalyticsService,
+    private readonly widgetFactory: ProductsAnalyticsWidgetFactory,
+  ) {}
 
-  @ApiOperation({ summary: 'Fetch analytics widgets for the products page' })
+  @ApiOperation({
+    summary: 'Fetch product analytics for a brand or selected locations',
+    description:
+      'Omit locationIds to include all active brand locations. Repeat buyers are unique across the selected locations. Product revenue share divides filtered product revenue by all product and completed service revenue in the same location, period and staff scope.',
+  })
   @ApiOkResponse({ type: ApiResponse(ProductsAnalyticsResponseDto) })
-  @Permissions(Read(Claim.ANALYTICS_LOCATION))
-  @Post('products/analytics')
+  @Permissions(Read(Claim.ANALYTICS_BRAND))
+  @Post('analytics')
   async analytics(
-    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Param('brandId', ParseUUIDPipe) brandId: string,
     @Body() dto: ProductsAnalyticsRequestDto,
   ): Promise<BaseResponseDto<ProductsAnalyticsResponseDto>> {
-    const widgets = await this.analyticsService.getWidgets(locationId, dto);
-    return BaseResponseDto.success(new ProductsAnalyticsResponseDto(widgets));
+    const context = await this.analyticsService.getAnalytics(brandId, dto);
+    return BaseResponseDto.success(
+      new ProductsAnalyticsResponseDto(
+        this.widgetFactory.build(dto.keys, context),
+        context.range.locationIds,
+      ),
+    );
   }
 }

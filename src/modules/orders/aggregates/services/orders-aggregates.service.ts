@@ -66,6 +66,21 @@ export class OrdersAggregatesService {
     };
   }
 
+  async productRevenue(range: ProductSalesRange): Promise<Prisma.Decimal> {
+    if (range.locationIds.length === 0) return MoneyUtils.decimal(0);
+    const rows = await this.db.$queryRaw<Array<{ revenue: string }>>(
+      Prisma.sql`
+        SELECT COALESCE(SUM(i."lineTotal"), 0)::text AS revenue
+        FROM "Order" o
+        JOIN "OrderItem" i ON i."orderId" = o."id"
+        WHERE ${this.baseOrderWhere(range.locationIds)}
+          AND i."type"::text = ${OrderItemType.PRODUCT}
+          AND ${this.productItemScope(range, 'i')}
+      `,
+    );
+    return MoneyUtils.decimal(rows[0]?.revenue);
+  }
+
   async productSalesKpiSnapshot(
     range: ProductSalesRange,
   ): Promise<ProductSalesKpiSnapshot> {
@@ -91,7 +106,7 @@ export class OrdersAggregatesService {
           )::bigint AS "repeatBuyerCount"
         FROM "Order" o
         JOIN "OrderItem" i ON i."orderId" = o."id"
-        WHERE ${this.baseOrderWhere(range.locationId)}
+        WHERE ${this.baseOrderWhere(range.locationIds)}
           AND i."type"::text = ${OrderItemType.PRODUCT}
           AND ${this.productItemScope(range, 'i')}
       `,
@@ -115,7 +130,7 @@ export class OrdersAggregatesService {
                COALESCE(SUM(i."lineTotal"), 0)::text AS revenue
         FROM "Order" o
         JOIN "OrderItem" i ON i."orderId" = o."id"
-        WHERE ${this.baseOrderWhere(range.locationId)}
+        WHERE ${this.baseOrderWhere(range.locationIds)}
           AND i."type"::text = ${OrderItemType.PRODUCT}
           AND ${this.productItemScope(range, 'i')}
         GROUP BY bucket
@@ -159,7 +174,7 @@ export class OrdersAggregatesService {
                )::bigint AS "repeatBuyerCount"
         FROM "Order" o
         JOIN "OrderItem" i ON i."orderId" = o."id"
-        WHERE ${this.baseOrderWhere(range.locationId)}
+        WHERE ${this.baseOrderWhere(range.locationIds)}
           AND i."type"::text = ${OrderItemType.PRODUCT}
           AND ${this.productItemScope(range, 'i')}
         GROUP BY bucket
@@ -193,7 +208,7 @@ export class OrdersAggregatesService {
                COALESCE(SUM(i."lineTotal"), 0)::text AS revenue
         FROM "Order" o
         JOIN "OrderItem" i ON i."orderId" = o."id"
-        WHERE ${this.baseOrderWhere(range.locationId)}
+        WHERE ${this.baseOrderWhere(range.locationIds)}
           AND i."type"::text = ${OrderItemType.PRODUCT}
           AND i."sellerStaffId" IS NOT NULL
           AND ${this.productItemScope(range, 'i')}
@@ -294,7 +309,7 @@ export class OrdersAggregatesService {
 
   private bookingRange(range: ProductSalesRange): AggregateRange {
     return {
-      locationId: range.locationId,
+      locationIds: range.locationIds,
       from: range.from,
       to: range.to,
       staffId: range.staffId,
@@ -305,7 +320,7 @@ export class OrdersAggregatesService {
 
   private productSalesWhere(range: ProductSalesRange): Prisma.Sql {
     return Prisma.sql`
-      ${this.baseOrderWhere(range.locationId)}
+      ${this.baseOrderWhere(range.locationIds)}
       AND EXISTS (
         SELECT 1
         FROM "OrderItem" scoped_item
@@ -316,12 +331,18 @@ export class OrdersAggregatesService {
     `;
   }
 
-  private baseOrderWhere(locationId: string): Prisma.Sql {
+  private baseOrderWhere(locationIds: string[]): Prisma.Sql {
     return Prisma.sql`
-      o."locationId" = ${locationId}
+      ${this.locationScope(locationIds, 'o')}
       AND ${activeLocationSql(Prisma.sql`o."locationId"`)}
       AND o."status"::text = ${OrderStatus.ACTIVE}
     `;
+  }
+
+  private locationScope(locationIds: string[], alias: 'o' | 'po'): Prisma.Sql {
+    return locationIds.length
+      ? Prisma.sql`${Prisma.raw(`${alias}."locationId"`)} IN (${Prisma.join(locationIds)})`
+      : Prisma.sql`FALSE`;
   }
 
   private clientSalesWhere(range: ClientSalesRange): Prisma.Sql {
@@ -424,7 +445,8 @@ export class OrdersAggregatesService {
       SELECT 1
       FROM "Order" po
       JOIN "OrderItem" pi ON pi."orderId" = po."id"
-      WHERE po."locationId" = ${range.locationId}
+      WHERE ${this.locationScope(range.locationIds, 'po')}
+        AND ${activeLocationSql(Prisma.sql`po."locationId"`)}
         AND po."status"::text = ${OrderStatus.ACTIVE}
         AND po."clientId" = o."clientId"
         AND pi."type"::text = ${OrderItemType.PRODUCT}

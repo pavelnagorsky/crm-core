@@ -321,7 +321,7 @@ export class BookingsAnalyticsService {
     range: ResolvedRange,
   ): AggregateRange {
     const occupancyRange: AggregateRange = {
-      locationId,
+      locationIds: [locationId],
       from: range.from,
       to: range.to,
     };
@@ -379,7 +379,7 @@ export class BookingsAnalyticsService {
     from: Date,
     to: Date,
   ): AggregateRange {
-    const range: AggregateRange = { locationId, from, to };
+    const range: AggregateRange = { locationIds: [locationId], from, to };
     if (dto.staffId) range.staffId = dto.staffId;
     return range;
   }

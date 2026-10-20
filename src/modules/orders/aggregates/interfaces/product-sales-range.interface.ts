@@ -1,5 +1,5 @@
 export interface ProductSalesRange {
-  locationId: string;
+  locationIds: string[];
   from: Date;
   to: Date;
   staffId?: string;

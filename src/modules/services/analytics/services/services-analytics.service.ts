@@ -146,12 +146,12 @@ export class ServicesAnalyticsService {
   ): Promise<ServicesAnalyticsContext> {
     const range = await this.rangeService.resolve(locationId, dto);
     const currentRange: AggregateRange = {
-      locationId,
+      locationIds: [locationId],
       from: range.from,
       to: range.to,
     };
     const previousRange: AggregateRange = {
-      locationId,
+      locationIds: [locationId],
       from: range.previousFrom,
       to: range.previousTo,
     };

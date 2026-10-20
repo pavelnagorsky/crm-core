@@ -1,4 +1,5 @@
-import { StaffStatus, UserRole } from '@prisma/client';
+import { BusinessRole, StaffStatus, UserRole } from '@prisma/client';
+import { AccessService } from '../../access/services/access.service.js';
 import { AuditActorRole } from '../../audit/enums/audit-actor-role.enum.js';
 import { StaffService } from './staff.service.js';
 
@@ -17,6 +18,8 @@ describe('Staff access revocation transaction', () => {
       delete: vi.fn(),
     },
     staffShift: { deleteMany: vi.fn() },
+    locationMembership: { deleteMany: vi.fn() },
+    accessInvitation: { updateMany: vi.fn() },
   };
   const db = {
     staff: { findFirst: vi.fn() },
@@ -103,11 +106,69 @@ describe('Staff access revocation transaction', () => {
     },
   );
 
-  it('does not invalidate unrelated access when deactivation revokes no STAFF membership', async () => {
+  it('releases the binding and invalidates tokens even when deactivation revokes no STAFF membership', async () => {
     access.revokeStaffAccess.mockResolvedValue(false);
 
     await revoke('deactivate');
 
+    expect(tx.staff.updateMany).toHaveBeenCalledExactlyOnceWith({
+      where: { locationId: 'location-1', userId: 'user-1' },
+      data: { userId: null },
+    });
+    expect(epochs.bump).toHaveBeenCalledExactlyOnceWith('user-1', tx);
+    expect(transactionCompleted).toBe(true);
+  });
+
+  it.each([BusinessRole.MANAGER, BusinessRole.OWNER])(
+    'releases the binding on deactivation while preserving local %s access',
+    async (role) => {
+      const membership = { locationId: 'location-1', userId: 'user-1', role };
+      let memberships = [membership];
+      const accessService = new AccessService({} as never, {} as never);
+      vi.spyOn(accessService, 'lockBrand').mockResolvedValue(undefined);
+      vi.spyOn(accessService, 'recordChange').mockResolvedValue({} as never);
+      access.revokeStaffAccess.mockImplementationOnce(
+        accessService.revokeStaffAccess.bind(accessService),
+      );
+      tx.locationMembership.deleteMany.mockImplementationOnce(({ where }) => {
+        const previousCount = memberships.length;
+        memberships = memberships.filter(
+          (item) =>
+            item.locationId !== where.locationId ||
+            item.userId !== where.userId ||
+            item.role !== where.role,
+        );
+        return { count: previousCount - memberships.length };
+      });
+
+      await revoke('deactivate');
+
+      expect(memberships).toEqual([membership]);
+      expect(tx.staff.updateMany).toHaveBeenCalledExactlyOnceWith({
+        where: { locationId: 'location-1', userId: 'user-1' },
+        data: { userId: null },
+      });
+      expect(tx.accessInvitation.updateMany).toHaveBeenCalledExactlyOnceWith({
+        where: {
+          brandId: 'brand-1',
+          acceptedAt: null,
+          revokedAt: null,
+          grants: { some: { staffId: 'staff-1' } },
+        },
+        data: { revokedAt: expect.any(Date) },
+      });
+      expect(epochs.bump).toHaveBeenCalledExactlyOnceWith('user-1', tx);
+      expect(transactionCompleted).toBe(true);
+    },
+  );
+
+  it('does not invalidate tokens when deactivating an unbound profile', async () => {
+    tx.staff.findUniqueOrThrow.mockResolvedValue({ ...staff, userId: null });
+    access.revokeStaffAccess.mockResolvedValue(false);
+
+    await revoke('deactivate');
+
+    expect(tx.staff.updateMany).not.toHaveBeenCalled();
     expect(epochs.bump).not.toHaveBeenCalled();
     expect(transactionCompleted).toBe(true);
   });

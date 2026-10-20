@@ -224,14 +224,14 @@ describe('BookingsAnalyticsService', () => {
       const passedRange: AggregateRange =
         aggregates.occupancyBookedMinutes.mock.calls[0][0];
       expect(passedRange).toMatchObject({
-        locationId: 'biz',
+        locationIds: ['biz'],
         from: range.from,
         to: range.to,
       });
       const previousRange: AggregateRange =
         aggregates.occupancyBookedMinutes.mock.calls[1][0];
       expect(previousRange).toMatchObject({
-        locationId: 'biz',
+        locationIds: ['biz'],
         from: range.previousFrom,
         to: range.previousTo,
       });
@@ -384,12 +384,12 @@ describe('BookingsAnalyticsService', () => {
       await widgets([BookingsAnalyticsWidgetKey.LOST_REVENUE]);
       expect(aggregates.lostRevenue).toHaveBeenCalledTimes(2);
       expect(aggregates.lostRevenue).toHaveBeenNthCalledWith(1, {
-        locationId: 'biz',
+        locationIds: ['biz'],
         from: range.from,
         to: range.to,
       });
       expect(aggregates.lostRevenue).toHaveBeenNthCalledWith(2, {
-        locationId: 'biz',
+        locationIds: ['biz'],
         from: range.previousFrom,
         to: range.previousTo,
       });
@@ -403,7 +403,7 @@ describe('BookingsAnalyticsService', () => {
       const [widget] = await widgets([BookingsAnalyticsWidgetKey.LOST_REVENUE]);
       expect(aggregates.lostRevenue).toHaveBeenCalledTimes(1);
       expect(aggregates.lostRevenue).toHaveBeenCalledWith({
-        locationId: 'biz',
+        locationIds: ['biz'],
         from: range.from,
         to: range.to,
       });

@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { BadRequestException, HttpStatus, Injectable } from '@nestjs/common';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { TimeUtils } from '../../../shared/time/time.utils.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
@@ -24,8 +24,27 @@ export class DashboardRangeService {
   async resolveForBrand(
     brandId: string,
     dto: DashboardRangeDto,
+    locationIds?: string[],
   ): Promise<ResolvedBrandRange> {
-    const locations = await this.locationService.listByBrand(brandId);
+    const brandLocations = await this.locationService.listByBrand(brandId);
+    if (locationIds !== undefined) {
+      const availableIds = new Set(
+        brandLocations.map((location) => location.id),
+      );
+      if (
+        locationIds.length === 0 ||
+        locationIds.some((id) => !availableIds.has(id))
+      ) {
+        throw new BadRequestException(
+          'Select active locations belonging to this brand',
+        );
+      }
+    }
+    const selectedIds =
+      locationIds === undefined ? undefined : new Set(locationIds);
+    const locations = selectedIds
+      ? brandLocations.filter((location) => selectedIds.has(location.id))
+      : brandLocations;
     if (locations.length === 0) {
       throw new AppException(
         ErrorCode.ANALYTICS_BRAND_HAS_NO_LOCATIONS,

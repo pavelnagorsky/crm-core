@@ -7,15 +7,17 @@ export enum ProductsAnalyticsWidgetKey {
   GROSS_PROFIT = 'GROSS_PROFIT',
 
   /**
-   * Big number: confirmed product revenue as a percent of completed-service revenue plus
-   * confirmed product revenue. Standalone product orders are included. More is better.
+   * Big number: filtered confirmed product revenue as a percent of all confirmed product
+   * and completed-service revenue in the same location, period and staff scope.
+   * Product/category filters apply only to the numerator. Standalone orders are included.
    */
   PRODUCT_REVENUE_SHARE = 'PRODUCT_REVENUE_SHARE',
 
   /**
    * Big number: identified clients whose in-period product purchase was not their first product
    * purchase, divided by all identified product buyers in the period. Anonymous orders are
-   * excluded from both sides. More is better.
+   * excluded from both sides. Buyers are unique across selected locations; prior purchases
+   * use the same location, product, category and staff filters. More is better.
    */
   REPEAT_PURCHASE_RATE = 'REPEAT_PURCHASE_RATE',
 }

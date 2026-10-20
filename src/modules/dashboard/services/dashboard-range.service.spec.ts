@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { LocationService } from '../../location/services/location.service.js';
 import { DashboardRangeDto } from '../dto/dashboard-range.dto.js';
 import { DashboardPeriod } from '../enums/dashboard-period.enum.js';
@@ -201,6 +202,62 @@ describe('DashboardRangeService rolling month periods', () => {
 });
 
 describe('DashboardRangeService brand scope', () => {
+  const mixedLocations = {
+    listByBrand: vi.fn().mockResolvedValue([
+      { id: 'location-1', timezone: 'Europe/Minsk', currency: 'BYN' },
+      { id: 'location-2', timezone: 'Europe/Warsaw', currency: 'PLN' },
+    ]),
+  } as unknown as LocationService;
+
+  it('checks locale compatibility only within selected locations', async () => {
+    const resolved = await new DashboardRangeService(
+      mixedLocations,
+    ).resolveForBrand('brand-1', range({ period: DashboardPeriod.LAST_7D }), [
+      'location-2',
+    ]);
+    expect(resolved.locationIds).toEqual(['location-2']);
+    expect(resolved.currency).toBe('PLN');
+    expect(resolved.timezone).toBe('Europe/Warsaw');
+  });
+
+  it.each([
+    { locationIds: [] },
+    { locationIds: ['foreign-location'] },
+    { locationIds: ['location-1', 'foreign-location'] },
+  ])(
+    'rejects empty or unavailable selections: $locationIds',
+    async ({ locationIds }) => {
+      await expect(
+        new DashboardRangeService(mixedLocations).resolveForBrand(
+          'brand-1',
+          range({ period: DashboardPeriod.LAST_7D }),
+          locationIds,
+        ),
+      ).rejects.toBeInstanceOf(BadRequestException);
+    },
+  );
+
+  it('does not combine currencies even with an explicit reporting timezone', async () => {
+    await expect(
+      new DashboardRangeService(mixedLocations).resolveForBrand(
+        'brand-1',
+        range({ period: DashboardPeriod.LAST_7D, timezone: 'UTC' }),
+      ),
+    ).rejects.toMatchObject({ errorCode: 'ANALYTICS_MIXED_LOCATION_LOCALES' });
+  });
+
+  it('rejects a brand without active locations', async () => {
+    const locations = {
+      listByBrand: vi.fn().mockResolvedValue([]),
+    } as unknown as LocationService;
+    await expect(
+      new DashboardRangeService(locations).resolveForBrand(
+        'brand-1',
+        range({ period: DashboardPeriod.LAST_7D }),
+      ),
+    ).rejects.toMatchObject({ errorCode: 'ANALYTICS_BRAND_HAS_NO_LOCATIONS' });
+  });
+
   it('returns all location ids when brand locales are compatible', async () => {
     const locationService = {
       listByBrand: vi.fn().mockResolvedValue([

@@ -307,7 +307,7 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `POST /locations/:locationId/products/analytics` | `analytics` | L: `analytics.location:read` | Включая показатели валовой прибыли; дополнительных проверок payroll:read/inventory:read нет. |
+| `POST /brands/:brandId/products/analytics` | `analytics` | B: `analytics.brand:read` | Все активные локации бренда либо выбранные `locationIds`; принадлежность локаций бренду проверяется до расчёта. Включая валовую прибыль. |
 
 ## product-packaging
 

@@ -514,7 +514,7 @@ export class BookingsAggregatesService {
     statuses?: BookingStatus[],
   ): Prisma.BookingWhereInput {
     const where: Prisma.BookingWhereInput = {
-      locationId: range.locationId,
+      locationId: { in: range.locationIds },
       deletedAt: null,
       location: ACTIVE_LOCATION_WHERE,
       startAt: { gte: range.from, lt: range.to },
@@ -537,7 +537,7 @@ export class BookingsAggregatesService {
     // `timestamp` explicitly so the comparison stays on the indexed column and doesn't
     // depend on session TIMEZONE (Prisma binds Date as timestamptz).
     const parts: Prisma.Sql[] = [
-      Prisma.sql`b."locationId" = ${range.locationId}`,
+      this.activeLocationScope(range.locationIds),
       activeLocationSql(Prisma.sql`b."locationId"`),
       Prisma.sql`b."deletedAt" IS NULL`,
       Prisma.sql`b."startAt" >= ${range.from}::timestamptz AT TIME ZONE 'UTC'`,

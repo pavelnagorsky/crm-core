@@ -160,6 +160,7 @@ flowchart TB
   BookingsAnalyticsController --> BookingsAnalyticsService
   ClientsAnalyticsController --> ClientsAnalyticsService
   ProductsAnalyticsController --> ProductsAnalyticsService
+  ProductsAnalyticsController --> ProductsAnalyticsWidgetFactory
 
   DashboardFacade --> BookingsAggregatesService
   DashboardFacade --> OrdersAggregatesService
@@ -169,6 +170,7 @@ flowchart TB
   ClientsAnalyticsService --> BookingsAggregatesService
   ClientsAnalyticsService --> OrdersAggregatesService
   ProductsAnalyticsService --> OrdersAggregatesService
+  ProductsAnalyticsService --> BookingsAggregatesService
 
   DashboardFacade --> DashboardRangeService
   ServicesAnalyticsService --> DashboardRangeService
@@ -176,3 +178,14 @@ flowchart TB
   ClientsAnalyticsService --> DashboardRangeService
   ProductsAnalyticsService --> DashboardRangeService
 ```
+
+Аналитика товаров доступна через `POST /brands/:brandId/products/analytics` с правом
+`analytics.brand:read`. `DashboardRangeService` разрешает весь бренд или выбранные
+`locationIds`, проверяет их принадлежность бренду и совместимость валют/часовых
+поясов. Агрегаты бронирований и продаж принимают обязательный список `locationIds`;
+локальные отчёты передают список из одного элемента. Пустой список в агрегатах
+означает отсутствие данных, а не снятие фильтра.
+
+`ProductsAnalyticsService` возвращает агрегаты и разрешённый контекст отчёта.
+Контроллер преобразует их в DTO через приватную для модуля
+`ProductsAnalyticsWidgetFactory`; фабрика не обращается к БД.
