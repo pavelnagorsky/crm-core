@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { BookingPalettesController } from './controllers/booking-palettes.controller.js';
 import { LocationModule } from '../location/location.module.js';
 import { ServiceCatalogModule } from '../services/catalog/service-catalog.module.js';
 import { FilesModule } from '../files/files.module.js';
@@ -15,6 +16,7 @@ import { PublicBookingCreateController } from './controllers/public-booking-crea
 @Module({
   imports: [LocationModule, ServiceCatalogModule, FilesModule, BookingsModule],
   controllers: [
+    BookingPalettesController,
     BookingPagesController,
     BookingWidgetsController,
     PublicBookingChannelsController,

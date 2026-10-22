@@ -1,4 +1,5 @@
 import { EventEmitter2 } from '@nestjs/event-emitter';
+import { NotFoundException } from '@nestjs/common';
 import { ProductStatus, ProductUnit } from '@prisma/client';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
@@ -54,6 +55,39 @@ function setup() {
 }
 
 describe('ProductsService', () => {
+  it('loads the public catalog only from active products offered by the active location', async () => {
+    const { db, locations, service } = setup();
+    locations.findById.mockResolvedValue({
+      id: 'location-1',
+      brandId: 'brand-1',
+    });
+    db.productLocation.findMany.mockResolvedValue([]);
+
+    await expect(service.listForPublicCatalog('location-1')).resolves.toEqual(
+      [],
+    );
+    expect(locations.findById).toHaveBeenCalledWith('location-1');
+    expect(db.productLocation.findMany).toHaveBeenCalledWith({
+      where: {
+        locationId: 'location-1',
+        location: { deletedAt: null, brand: { deletedAt: null } },
+        status: ProductStatus.ACTIVE,
+        product: { brandId: 'brand-1', status: ProductStatus.ACTIVE },
+      },
+      include: { product: { include: { category: true, imageFile: true } } },
+      orderBy: [{ product: { name: 'asc' } }, { productId: 'asc' }],
+    });
+  });
+
+  it('rejects an unavailable location before reading its public products', async () => {
+    const { db, locations, service } = setup();
+    locations.findById.mockRejectedValue(new NotFoundException());
+    await expect(
+      service.listForPublicCatalog('missing'),
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(db.productLocation.findMany).not.toHaveBeenCalled();
+  });
+
   it('prevents changing a base unit after locations or packaging have been configured', async () => {
     const { db, service } = setup();
     db.product.findFirst.mockResolvedValue({

@@ -1,9 +1,7 @@
-export interface BookingPalettePreset {
-  background: string;
-  surface: string;
-  text: string;
-  muted: string;
-  accent: string;
-  accentText: string;
+import { BookingPaletteTokens } from './booking-palette-tokens.interface.js';
+
+export interface BookingPalettePreset extends BookingPaletteTokens {
+  label: string;
+  description: string;
   line: string;
 }

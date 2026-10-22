@@ -3,8 +3,10 @@ import { Type } from 'class-transformer';
 import {
   ArrayMaxSize,
   IsArray,
+  IsDefined,
   IsEnum,
   IsNotEmpty,
+  IsObject,
   IsString,
   MaxLength,
   Validate,
@@ -26,6 +28,8 @@ export class SaveBookingWidgetDto {
   title: string;
 
   @ApiProperty({ type: () => BookingFormConfigDto })
+  @IsDefined()
+  @IsObject()
   @ValidateNested()
   @Type(() => BookingFormConfigDto)
   form: BookingFormConfigDto;

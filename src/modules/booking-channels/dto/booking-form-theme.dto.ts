@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { BookingPaletteTokens } from '../interfaces/booking-palette-tokens.interface.js';
 
-export class BookingFormThemeDto {
+export class BookingFormThemeDto implements BookingPaletteTokens {
   @ApiProperty({ type: String, example: '#141210' })
   background: string;
 
@@ -22,17 +23,7 @@ export class BookingFormThemeDto {
   @ApiProperty({ type: String, example: 'rgba(247,241,232,0.14)' })
   line: string;
 
-  static from(
-    tokens: {
-      background: string;
-      surface: string;
-      text: string;
-      muted: string;
-      accent: string;
-      accentText: string;
-    },
-    line: string,
-  ): BookingFormThemeDto {
+  static from(tokens: BookingPaletteTokens, line: string): BookingFormThemeDto {
     const dto = new BookingFormThemeDto();
     dto.background = tokens.background;
     dto.surface = tokens.surface;

@@ -5,7 +5,11 @@ import regularExpressions from '../../../shared/regular-expressions.js';
 
 export function IsHexColor(): PropertyDecorator {
   return (target, propertyKey) => {
-    ApiProperty({ type: String, example: '#141210' })(target, propertyKey!);
+    ApiProperty({
+      type: String,
+      pattern: regularExpressions.hexColor.source,
+      example: '#141210',
+    })(target, propertyKey!);
     Transform(({ value }) =>
       typeof value === 'string' ? value.trim().toUpperCase() : value,
     )(target, propertyKey!);

@@ -247,6 +247,7 @@ export class BookingPagesService {
     }
     return {
       title: dto.title,
+      heading: dto.heading,
       slug: dto.slug.trim().toLowerCase(),
       tagline: dto.tagline,
       html,

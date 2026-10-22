@@ -10,6 +10,9 @@ export class PublicBookingPageDetailsDto {
   @ApiProperty({ type: String })
   title: string;
 
+  @ApiProperty({ type: String, nullable: true, maxLength: 120 })
+  heading: string | null;
+
   @ApiProperty({ type: String })
   slug: string;
 
@@ -32,6 +35,7 @@ export class PublicBookingPageDetailsDto {
     const dto = new PublicBookingPageDetailsDto();
     dto.id = page.id;
     dto.title = page.title;
+    dto.heading = page.heading;
     dto.slug = page.slug;
     dto.tagline = page.tagline;
     dto.html = sanitizeBookingHtml(page.html);

@@ -13,9 +13,7 @@ const base: BookingFormColumns = {
   customAccentText: null,
   headline: 'Запись',
   caption: '',
-  buttonLabel: 'Записаться',
   showStaff: true,
-  showServiceImages: true,
   showBranding: true,
 };
 

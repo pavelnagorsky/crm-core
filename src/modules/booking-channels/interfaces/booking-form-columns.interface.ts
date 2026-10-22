@@ -10,8 +10,6 @@ export interface BookingFormColumns {
   customAccentText: string | null;
   headline: string;
   caption: string;
-  buttonLabel: string;
   showStaff: boolean;
-  showServiceImages: boolean;
   showBranding: boolean;
 }

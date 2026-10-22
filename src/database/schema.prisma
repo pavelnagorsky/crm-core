@@ -109,6 +109,16 @@ enum BookingPalette {
   LAVENDER
   CORAL
   MONO
+  BLUSH
+  LAGOON
+  HONEY
+  COCOA
+  RUBY
+  MIST
+  OLIVE
+  INDIGO
+  APRICOT
+  PINE
   CUSTOM
 }
 
@@ -1188,6 +1198,7 @@ model BookingPage {
   id              String               @id @default(uuid())
   locationId      String
   title           String               @db.VarChar(80)
+  heading         String?              @db.VarChar(120)
   slug            String               @unique @db.VarChar(48)
   status          BookingChannelStatus @default(DRAFT)
   tagline         String               @default("") @db.VarChar(120)
@@ -1205,9 +1216,7 @@ model BookingPage {
   customAccentText  String?        @db.VarChar(7)
   headline          String         @db.VarChar(80)
   caption           String         @default("") @db.VarChar(120)
-  buttonLabel       String         @db.VarChar(32)
   showStaff         Boolean
-  showServiceImages Boolean
   showBranding      Boolean
 
   publishedAt DateTime?
@@ -1241,9 +1250,7 @@ model BookingWidget {
   customAccentText  String?        @db.VarChar(7)
   headline          String         @db.VarChar(80)
   caption           String         @default("") @db.VarChar(120)
-  buttonLabel       String         @db.VarChar(32)
   showStaff         Boolean
-  showServiceImages Boolean
   showBranding      Boolean
 
   publishedAt DateTime?

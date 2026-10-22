@@ -19,6 +19,9 @@ export class BookingPageResponseDto {
   @ApiProperty({ type: String })
   title: string;
 
+  @ApiProperty({ type: String, nullable: true, maxLength: 120 })
+  heading: string | null;
+
   @ApiProperty({ type: String })
   slug: string;
 
@@ -60,6 +63,7 @@ export class BookingPageResponseDto {
     dto.id = page.id;
     dto.locationId = page.locationId;
     dto.title = page.title;
+    dto.heading = page.heading;
     dto.slug = page.slug;
     dto.status = page.status;
     dto.form = toBookingFormConfig(page);

@@ -1,7 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsDefined,
   IsNotEmpty,
+  IsObject,
   IsString,
   IsUUID,
   Matches,
@@ -10,7 +12,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import regularExpressions from '../../../shared/regular-expressions.js';
-import { Trim, TrimLower } from '../decorators/trim.decorator.js';
+import { Trim, TrimLower, TrimToNull } from '../decorators/trim.decorator.js';
 import { BookingFormConfigDto } from './booking-form-config.dto.js';
 
 export class SaveBookingPageDto {
@@ -20,6 +22,19 @@ export class SaveBookingPageDto {
   @IsNotEmpty()
   @MaxLength(80)
   title: string;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    maxLength: 120,
+    description:
+      'Public H1 as plain text. Required; trimmed; blank becomes null.',
+  })
+  @TrimToNull()
+  @ValidateIf((_, value) => value !== null)
+  @IsString()
+  @MaxLength(120)
+  heading: string | null;
 
   @ApiProperty({ type: String, maxLength: 48, example: 'north-salon' })
   @TrimLower()
@@ -60,6 +75,8 @@ export class SaveBookingPageDto {
   coverFileId: string | null;
 
   @ApiProperty({ type: () => BookingFormConfigDto })
+  @IsDefined()
+  @IsObject()
   @ValidateNested()
   @Type(() => BookingFormConfigDto)
   form: BookingFormConfigDto;

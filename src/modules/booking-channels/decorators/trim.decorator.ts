@@ -11,3 +11,9 @@ export function TrimLower(): PropertyDecorator {
     typeof value === 'string' ? value.trim().toLowerCase() : value,
   );
 }
+
+export function TrimToNull(): PropertyDecorator {
+  return Transform(({ value }) =>
+    typeof value === 'string' ? value.trim() || null : value,
+  );
+}

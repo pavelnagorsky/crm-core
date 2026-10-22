@@ -40,20 +40,9 @@ export class BookingFormConfigDto {
   @MaxLength(120)
   caption: string;
 
-  @ApiProperty({ type: String, maxLength: 32 })
-  @Trim()
-  @IsString()
-  @IsNotEmpty()
-  @MaxLength(32)
-  buttonLabel: string;
-
   @ApiProperty({ type: Boolean })
   @IsBoolean()
   showStaff: boolean;
-
-  @ApiProperty({ type: Boolean })
-  @IsBoolean()
-  showServiceImages: boolean;
 
   @ApiProperty({ type: Boolean })
   @IsBoolean()

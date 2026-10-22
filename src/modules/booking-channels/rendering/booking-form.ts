@@ -1,5 +1,6 @@
 import { BookingPalette } from '../enums/booking-palette.enum.js';
 import { BookingFormColumns } from '../interfaces/booking-form-columns.interface.js';
+import { BookingPaletteTokens } from '../interfaces/booking-palette-tokens.interface.js';
 import { BookingFormConfigDto } from '../dto/booking-form-config.dto.js';
 import { BookingFormThemeDto } from '../dto/booking-form-theme.dto.js';
 import { BOOKING_PALETTE_PRESETS } from './booking-palette.presets.js';
@@ -26,9 +27,7 @@ export function toBookingFormColumns(
     customAccentText: custom?.accentText ?? null,
     headline: form.headline.trim(),
     caption: form.caption.trim(),
-    buttonLabel: form.buttonLabel.trim(),
     showStaff: form.showStaff,
-    showServiceImages: form.showServiceImages,
     showBranding: form.showBranding,
   };
 }
@@ -40,22 +39,10 @@ export function toBookingFormConfig(
   dto.paletteId = record.palette;
   dto.headline = record.headline;
   dto.caption = record.caption;
-  dto.buttonLabel = record.buttonLabel;
   dto.showStaff = record.showStaff;
-  dto.showServiceImages = record.showServiceImages;
   dto.showBranding = record.showBranding;
-  if (record.palette !== BookingPalette.CUSTOM) {
-    dto.customPalette = null;
-    return dto;
-  }
-  dto.customPalette = {
-    background: requiredToken(record.customBackground),
-    surface: requiredToken(record.customSurface),
-    text: requiredToken(record.customText),
-    muted: requiredToken(record.customMuted),
-    accent: requiredToken(record.customAccent),
-    accentText: requiredToken(record.customAccentText),
-  };
+  dto.customPalette =
+    record.palette === BookingPalette.CUSTOM ? readCustomPalette(record) : null;
   return dto;
 }
 
@@ -63,24 +50,32 @@ export function resolveBookingFormTheme(
   record: BookingFormColumns,
 ): BookingFormThemeDto {
   if (record.palette === BookingPalette.CUSTOM) {
-    const text = requiredToken(record.customText);
-    return BookingFormThemeDto.from(
-      {
-        background: requiredToken(record.customBackground),
-        surface: requiredToken(record.customSurface),
-        text,
-        muted: requiredToken(record.customMuted),
-        accent: requiredToken(record.customAccent),
-        accentText: requiredToken(record.customAccentText),
-      },
-      lineFromText(text),
-    );
+    const custom = readCustomPalette(record);
+    return BookingFormThemeDto.from(custom, lineFromText(custom.text));
   }
-  const preset = BOOKING_PALETTE_PRESETS[record.palette];
+  return resolveBookingPresetTheme(record.palette);
+}
+
+export function resolveBookingPresetTheme(
+  palette: Exclude<BookingPalette, typeof BookingPalette.CUSTOM>,
+): BookingFormThemeDto {
+  const preset = BOOKING_PALETTE_PRESETS[palette];
+  if (!preset) throw new Error('Unknown booking palette');
   return BookingFormThemeDto.from(preset, preset.line);
 }
 
 function requiredToken(value: string | null): string {
   if (!value) throw new Error('Custom booking palette is incomplete');
   return value;
+}
+
+function readCustomPalette(record: BookingFormColumns): BookingPaletteTokens {
+  return {
+    background: requiredToken(record.customBackground),
+    surface: requiredToken(record.customSurface),
+    text: requiredToken(record.customText),
+    muted: requiredToken(record.customMuted),
+    accent: requiredToken(record.customAccent),
+    accentText: requiredToken(record.customAccentText),
+  };
 }

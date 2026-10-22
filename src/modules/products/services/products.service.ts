@@ -40,6 +40,7 @@ import { ProductSearchOrderBy } from '../enums/product-search-order-by.enum.js';
 import { LocationProductView } from '../interfaces/location-product-view.interface.js';
 import { ProductStatusCount } from '../interfaces/product-status-count.interface.js';
 import { ProductWithDetails } from '../interfaces/product-with-details.interface.js';
+import { PublicCatalogProduct } from '../interfaces/public-catalog-product.interface.js';
 
 const productDetailsInclude = {
   category: true,
@@ -534,6 +535,24 @@ export class ProductsService {
       this.db.productLocation.count({ where }),
     ]);
     return { items: items as LocationProductView[], totalItems };
+  }
+
+  async listForPublicCatalog(
+    locationId: string,
+  ): Promise<PublicCatalogProduct[]> {
+    const location = await this.locations.findById(locationId);
+    return this.db.productLocation.findMany({
+      where: {
+        locationId,
+        location: ACTIVE_LOCATION_WHERE,
+        status: ProductStatus.ACTIVE,
+        product: { brandId: location.brandId, status: ProductStatus.ACTIVE },
+      },
+      include: {
+        product: { include: { category: true, imageFile: true } },
+      },
+      orderBy: [{ product: { name: 'asc' } }, { productId: 'asc' }],
+    });
   }
 
   resolveForInventory(
