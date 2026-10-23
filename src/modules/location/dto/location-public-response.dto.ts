@@ -28,6 +28,24 @@ export class LocationPublicResponseDto {
   @ApiProperty({ type: String, nullable: true })
   addressLine: string | null;
 
+  @ApiProperty({ type: String, nullable: true })
+  phone: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  instagram: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  telegram: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  whatsapp: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  website: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  mapWidgetUrl: string | null;
+
   @ApiProperty({ type: () => FileResponseDto, nullable: true })
   logo: FileResponseDto | null;
 
@@ -40,7 +58,9 @@ export class LocationPublicResponseDto {
   @ApiProperty({ enum: BookingVisibility })
   bookingVisibility: BookingVisibility;
 
-  static fromEntity(location: LocationPublicProfile): LocationPublicResponseDto {
+  static fromEntity(
+    location: LocationPublicProfile,
+  ): LocationPublicResponseDto {
     const dto = new LocationPublicResponseDto();
     dto.id = location.id;
     dto.brandId = location.brandId;
@@ -50,6 +70,12 @@ export class LocationPublicResponseDto {
     dto.countryCode = location.countryCode;
     dto.city = location.city;
     dto.addressLine = location.addressLine;
+    dto.phone = location.phone;
+    dto.instagram = location.instagram;
+    dto.telegram = location.telegram;
+    dto.whatsapp = location.whatsapp;
+    dto.website = location.website;
+    dto.mapWidgetUrl = location.mapWidgetUrl;
     dto.logo = location.brand.logoFile
       ? FileResponseDto.fromEntity(location.brand.logoFile)
       : null;

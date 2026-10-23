@@ -1,4 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
+import {
+  OptionalContact,
+  OptionalLocationPhone,
+  OptionalMapWidgetUrl,
+} from '../decorators/contact-field.decorator.js';
 import { BookingVisibility, BusinessType } from '@prisma/client';
 import {
   IsBoolean,
@@ -33,6 +38,24 @@ export class UpdateLocationDto {
   @IsString()
   @MaxLength(255)
   addressLine?: string;
+
+  @OptionalLocationPhone()
+  phone?: string | null;
+
+  @OptionalContact()
+  instagram?: string | null;
+
+  @OptionalContact()
+  telegram?: string | null;
+
+  @OptionalContact()
+  whatsapp?: string | null;
+
+  @OptionalContact()
+  website?: string | null;
+
+  @OptionalMapWidgetUrl()
+  mapWidgetUrl?: string | null;
 
   @ApiProperty({ type: Number, required: false })
   @IsOptional()

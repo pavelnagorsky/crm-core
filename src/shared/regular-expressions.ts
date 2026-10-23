@@ -7,6 +7,9 @@ const regularExpressions = {
   whitespace: /\s+/,
   // E.164: + followed by 7–15 digits
   phone: /^\+\d{7,15}$/,
+  locationPhone: /^\+(?:375\d{9}|7\d{10})$/,
+  contactScheme: /^(?:https?:[\s\S]*|(?![a-z][a-z\d+.-]*:)[\s\S]*)$/i,
+  iframeStart: /^<iframe\b/i,
   time: /^([01]\d|2[0-3]):[0-5]\d$/,
   // Local datetime without any timezone offset or Z — e.g. 2026-09-20T10:00:00
   localDateTime: /^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d:[0-5]\d$/,

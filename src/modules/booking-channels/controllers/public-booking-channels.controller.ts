@@ -11,6 +11,7 @@ import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
 import { requestOrigin } from '../../../shared/http/request-context.js';
 import { BookingsFacade } from '../../bookings/bookings.facade.js';
+import { BookingSetupResponseDto } from '../../bookings/dto/booking-setup-response.dto.js';
 import { LocationService } from '../../location/services/location.service.js';
 import { PublicBookingPageResponseDto } from '../dto/public-booking-page-response.dto.js';
 import { PublicBookingWidgetResponseDto } from '../dto/public-booking-widget-response.dto.js';
@@ -40,7 +41,11 @@ export class PublicBookingChannelsController {
       this.bookings.getBookingSetup(page.locationId),
     ]);
     return BaseResponseDto.success(
-      PublicBookingPageResponseDto.from(page, location, setup),
+      PublicBookingPageResponseDto.from(
+        page,
+        location,
+        BookingSetupResponseDto.fromEntity(setup),
+      ),
     );
   }
 
@@ -66,7 +71,11 @@ export class PublicBookingChannelsController {
       this.bookings.getBookingSetup(widget.locationId),
     ]);
     return BaseResponseDto.success(
-      PublicBookingWidgetResponseDto.from(widget, location, setup),
+      PublicBookingWidgetResponseDto.from(
+        widget,
+        location,
+        BookingSetupResponseDto.fromEntity(setup),
+      ),
     );
   }
 }

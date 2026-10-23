@@ -29,6 +29,24 @@ export class LocationResponseDto {
   @ApiProperty({ type: String, nullable: true })
   addressLine: string | null;
 
+  @ApiProperty({ type: String, nullable: true })
+  phone: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  instagram: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  telegram: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  whatsapp: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  website: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  mapWidgetUrl: string | null;
+
   @ApiProperty({ type: Number })
   advanceBookingWindowDays: number;
 
@@ -61,6 +79,12 @@ export class LocationResponseDto {
     dto.businessType = location.businessType;
     dto.city = location.city;
     dto.addressLine = location.addressLine;
+    dto.phone = location.phone;
+    dto.instagram = location.instagram;
+    dto.telegram = location.telegram;
+    dto.whatsapp = location.whatsapp;
+    dto.website = location.website;
+    dto.mapWidgetUrl = location.mapWidgetUrl;
     dto.advanceBookingWindowDays = location.advanceBookingWindowDays;
     dto.slotIntervalMinutes = location.slotIntervalMinutes;
     dto.minimumBookingNoticeMinutes = location.minimumBookingNoticeMinutes;

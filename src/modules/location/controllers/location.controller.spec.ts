@@ -15,7 +15,7 @@ describe('Location reference endpoints (HTTP)', () => {
   let app: INestApplication;
   const secret = 'location-reference-test-secret';
   const epoch = { get: vi.fn().mockResolvedValue(0) };
-  const locations = { findById: vi.fn() };
+  const locations = { findById: vi.fn(), findPublicProfile: vi.fn() };
   const token = new JwtService().sign(
     {
       sub: 'user-without-a-brand',
@@ -64,6 +64,55 @@ describe('Location reference endpoints (HTTP)', () => {
   afterAll(async () => {
     await app?.close();
   });
+
+  it.each([null, 'populated'])(
+    'exposes contacts in the public profile without authentication: %s',
+    async (state) => {
+      const contacts =
+        state === null
+          ? {
+              phone: null,
+              instagram: null,
+              telegram: null,
+              whatsapp: null,
+              website: null,
+              mapWidgetUrl: null,
+            }
+          : {
+              phone: '+375292332000',
+              instagram: '@studio',
+              telegram: 'studio',
+              whatsapp: '+375292332000',
+              website: 'https://example.com',
+              mapWidgetUrl: 'https://yandex.ru/map-widget/v1/',
+            };
+      locations.findPublicProfile.mockResolvedValueOnce({
+        id: '11111111-1111-4111-8111-111111111111',
+        brandId: 'brand-1',
+        name: 'Location',
+        countryCode: 'BY',
+        currency: 'BYN',
+        timezone: 'Europe/Minsk',
+        businessType: null,
+        city: null,
+        addressLine: null,
+        bookingVisibility: 'PUBLIC',
+        brand: { name: 'Brand', logoFile: null },
+        ...contacts,
+      });
+      const { body } = await request(app.getHttpServer())
+        .get('/locations/11111111-1111-4111-8111-111111111111/public')
+        .expect(200);
+      expect(body.responseValue).toMatchObject({
+        brandName: 'Brand',
+        logo: null,
+        ...contacts,
+      });
+      expect(locations.findPublicProfile).toHaveBeenCalledWith(
+        '11111111-1111-4111-8111-111111111111',
+      );
+    },
+  );
 
   it.each(['/locations/options', '/locations/business-types'])(
     'requires authentication for %s',

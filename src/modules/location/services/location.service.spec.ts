@@ -1,5 +1,11 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  NotFoundException,
+  ValidationPipe,
+} from '@nestjs/common';
 import { BusinessType } from '@prisma/client';
+import { CreateLocationDto } from '../dto/create-location.dto.js';
+import { UpdateLocationDto } from '../dto/update-location.dto.js';
 import { LocationService } from './location.service.js';
 
 describe('LocationService locale and business type', () => {
@@ -38,6 +44,101 @@ describe('LocationService locale and business type', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     db.$transaction.mockImplementation((callback) => callback(db));
+  });
+
+  it('preserves stored contacts when an older client omits them', async () => {
+    const stored = {
+      ...location,
+      phone: '+375292332000',
+      instagram: '@studio',
+      telegram: 'studio',
+      whatsapp: '+375292332000',
+      website: 'https://example.com',
+      mapWidgetUrl: 'https://yandex.ru/map-widget/v1/',
+    };
+    db.location.update.mockImplementationOnce(async ({ data }) => ({
+      ...stored,
+      ...Object.fromEntries(
+        Object.entries(data).filter(([, value]) => value !== undefined),
+      ),
+    }));
+    const dto = await new ValidationPipe({
+      transform: true,
+      whitelist: true,
+    }).transform(
+      { name: 'Renamed' },
+      { type: 'body', metatype: UpdateLocationDto },
+    );
+    const result = await service.update('location-1', dto, { name: 'Renamed' });
+    expect(result).toEqual({ ...stored, name: 'Renamed' });
+    const data = db.location.update.mock.calls[0][0].data;
+    for (const field of [
+      'phone',
+      'instagram',
+      'telegram',
+      'whatsapp',
+      'website',
+      'mapWidgetUrl',
+    ]) {
+      expect(data[field]).toBeUndefined();
+    }
+  });
+
+  it.each([null, ''])(
+    'persists explicit clearing with %j as null',
+    async (value) => {
+      const fields = [
+        'phone',
+        'instagram',
+        'telegram',
+        'whatsapp',
+        'website',
+        'mapWidgetUrl',
+      ];
+      const raw = Object.fromEntries(fields.map((field) => [field, value]));
+      const dto = await new ValidationPipe({
+        transform: true,
+        whitelist: true,
+      }).transform(raw, { type: 'body', metatype: UpdateLocationDto });
+      await service.update('location-1', dto, raw);
+      expect(db.location.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining(
+            Object.fromEntries(fields.map((field) => [field, null])),
+          ),
+        }),
+      );
+    },
+  );
+
+  it('persists normalized contacts during creation', async () => {
+    const dto = await new ValidationPipe({
+      transform: true,
+      whitelist: true,
+    }).transform(
+      {
+        ...location,
+        phone: '+375292332000',
+        instagram: ' @studio ',
+        telegram: 'studio',
+        whatsapp: '',
+        website: ' https://example.com ',
+        mapWidgetUrl:
+          '<iframe src="https://yandex.ru/map-widget/v1/"></iframe>',
+      },
+      { type: 'body', metatype: CreateLocationDto },
+    );
+    await service.create('brand-1', dto);
+    expect(db.location.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        phone: '+375292332000',
+        instagram: '@studio',
+        telegram: 'studio',
+        whatsapp: null,
+        website: 'https://example.com',
+        mapWidgetUrl: 'https://yandex.ru/map-widget/v1/',
+      }),
+    });
   });
 
   it('soft-deletes only the location while preserving related data', async () => {

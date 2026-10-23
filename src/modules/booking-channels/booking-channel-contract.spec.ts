@@ -5,6 +5,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { TokenEpochGuard } from '../auth/guards/token-epoch.guard.js';
 import { PERMISSIONS_KEY } from '../auth/guards/permission.guard.js';
 import { LocationPublicProfile } from '../location/interfaces/location-public-profile.interface.js';
+import { LocationResponseDto } from '../location/dto/location-response.dto.js';
 import { BookingSetupResponseDto } from '../bookings/dto/booking-setup-response.dto.js';
 import { BookingPalettesController } from './controllers/booking-palettes.controller.js';
 import { BookingPageResponseDto } from './dto/booking-page-response.dto.js';
@@ -53,6 +54,66 @@ const location = {
   brand: { name: 'Brand', logoFile: null },
 } as LocationPublicProfile;
 const setup = new BookingSetupResponseDto();
+
+describe('Location contacts response contract', () => {
+  it.each([
+    {
+      phone: null,
+      instagram: null,
+      telegram: null,
+      whatsapp: null,
+      website: null,
+      mapWidgetUrl: null,
+    },
+    {
+      phone: '+375292332000',
+      instagram: '@studio',
+      telegram: 'studio',
+      whatsapp: '+375292332000',
+      website: 'https://example.com',
+      mapWidgetUrl: 'https://yandex.ru/map-widget/v1/',
+    },
+  ])(
+    'includes all keys in admin, booking page and widget responses: %j',
+    (contacts) => {
+      const profile = { ...location, ...contacts };
+      const page = {
+        ...pageInput,
+        ...form,
+        palette: form.paletteId,
+        id: 'page',
+        coverFile: null,
+      } as unknown as BookingPageWithCover;
+      const widget = {
+        ...widgetInput,
+        ...form,
+        palette: form.paletteId,
+        id: 'widget',
+      } as unknown as BookingWidget;
+      const pageResponse = PublicBookingPageResponseDto.from(
+        page,
+        profile,
+        setup,
+      );
+      const widgetResponse = PublicBookingWidgetResponseDto.from(
+        widget,
+        profile,
+        setup,
+      );
+      for (const response of [
+        LocationResponseDto.fromEntity(profile),
+        pageResponse.location,
+        widgetResponse.location,
+      ]) {
+        expect(JSON.parse(JSON.stringify(response))).toMatchObject(contacts);
+      }
+      for (const response of [pageResponse, widgetResponse]) {
+        for (const field of Object.keys(contacts))
+          expect(response).not.toHaveProperty(field);
+      }
+    },
+  );
+});
 
 function repository() {
   return {

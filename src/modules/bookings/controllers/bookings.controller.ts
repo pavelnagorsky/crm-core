@@ -84,7 +84,7 @@ export class BookingsController {
   // ─── Public ──────────────────────────────────────────────────────────────────
 
   @ApiOperation({
-    summary: 'Get services and staff for booking screen (public)',
+    summary: 'Get services, staff and products for booking screen (public)',
   })
   @ApiOkResponse({ type: ApiResponse(BookingSetupResponseDto) })
   @Get('public/locations/:locationId/booking-setup')
@@ -92,7 +92,9 @@ export class BookingsController {
     @Param('locationId', ParseUUIDPipe) locationId: string,
   ): Promise<BaseResponseDto<BookingSetupResponseDto>> {
     return BaseResponseDto.success(
-      await this.bookings.getBookingSetup(locationId),
+      BookingSetupResponseDto.fromEntity(
+        await this.bookings.getBookingSetup(locationId),
+      ),
     );
   }
 

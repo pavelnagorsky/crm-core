@@ -424,6 +424,12 @@ model Location {
   businessType                  BusinessType?
   city                          String?                      @db.VarChar(120)
   addressLine                   String?                      @db.VarChar(255)
+  phone                         String?                      @db.VarChar(32)
+  instagram                     String?                      @db.VarChar(255)
+  telegram                      String?                      @db.VarChar(255)
+  whatsapp                      String?                      @db.VarChar(255)
+  website                       String?                      @db.VarChar(255)
+  mapWidgetUrl                  String?                      @map("map_widget_url") @db.VarChar(2048)
   advanceBookingWindowDays      Int                          @default(60)
   slotIntervalMinutes           Int                          @default(30)
   minimumBookingNoticeMinutes   Int                          @default(0)

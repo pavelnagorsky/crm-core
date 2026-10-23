@@ -36,6 +36,7 @@ import { LocationBusinessTypesResponseDto } from '../dto/location-business-types
 import { LocationCountryOptionDto } from '../dto/location-country-option.dto.js';
 import { LocationOptionsResponseDto } from '../dto/location-options-response.dto.js';
 import { LocationResponseDto } from '../dto/location-response.dto.js';
+import { LocationPublicResponseDto } from '../dto/location-public-response.dto.js';
 import { UpdateLocationDto } from '../dto/update-location.dto.js';
 import { LocationService } from '../services/location.service.js';
 
@@ -135,14 +136,14 @@ export class LocationController {
   }
 
   @ApiOperation({ summary: 'Get public location info' })
-  @ApiOkResponse({ type: ApiResponse(LocationResponseDto) })
+  @ApiOkResponse({ type: ApiResponse(LocationPublicResponseDto) })
   @Get('locations/:locationId/public')
   async findPublic(
     @Param('locationId', ParseUUIDPipe) locationId: string,
-  ): Promise<BaseResponseDto<LocationResponseDto>> {
+  ): Promise<BaseResponseDto<LocationPublicResponseDto>> {
     return BaseResponseDto.success(
-      LocationResponseDto.fromEntity(
-        await this.locationService.findById(locationId),
+      LocationPublicResponseDto.fromEntity(
+        await this.locationService.findPublicProfile(locationId),
       ),
     );
   }

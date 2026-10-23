@@ -1,0 +1,7 @@
+ALTER TABLE "Location"
+ADD COLUMN "phone" VARCHAR(32),
+ADD COLUMN "instagram" VARCHAR(255),
+ADD COLUMN "telegram" VARCHAR(255),
+ADD COLUMN "whatsapp" VARCHAR(255),
+ADD COLUMN "website" VARCHAR(255),
+ADD COLUMN "map_widget_url" VARCHAR(2048);

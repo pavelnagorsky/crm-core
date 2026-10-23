@@ -105,11 +105,16 @@ type BookingPaletteCatalogResponse = {
 
 ## Публичный каталог товаров
 
-GET `/public/locations/{locationId}/product-catalog` доступен без авторизации.
-Frontend берёт `locationId` из ответа страницы и загружает каталог отдельным
-запросом. Каталог не добавляется в `booking-setup` или в ответ страницы.
+Каталог товаров входит в общий setup и доступен без авторизации:
 
-В стандартной оболочке API `responseValue` содержит:
+- GET `/public/locations/{locationId}/booking-setup`: `responseValue.products`.
+- GET `/public/booking-pages/{slug}`: `responseValue.setup.products`.
+- GET `/public/booking-widgets/{widgetId}`: `responseValue.setup.products`.
+
+Frontend использует каталог из ответа страницы или виджета. Прежний эндпоинт
+`/public/locations/{locationId}/product-catalog` удалён.
+
+Поле `products` всегда содержит:
 
 ```ts
 {
@@ -161,6 +166,9 @@ Frontend берёт `locationId` из ответа страницы и загр�
    и замену неизвестного кода первой темой.
 6. Нейтральное светлое окружение формы задаётся frontend. Серверная палитра
    описывает саму форму записи.
+7. Товары и их категории читать из `setup.products` ответа страницы или виджета.
+   Удалить отдельный запрос `product-catalog`. В самостоятельном ответе
+   `booking-setup` каталог находится в `responseValue.products`.
 
 Перед развёртыванием применить миграцию `20261022120000_booking_channel_contract`:
 она добавляет `BookingPage.heading`, удаляет старые колонки обеих моделей и

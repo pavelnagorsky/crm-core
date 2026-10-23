@@ -3,14 +3,13 @@ import { Prisma } from '@prisma/client';
 import { AppException } from '../../../../shared/exceptions/app.exception.js';
 import { MoneyUtils } from '../../../../shared/money/money.utils.js';
 import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
+import { ProductsService } from '../../../products/services/products.service.js';
 import { ServiceCatalogFacade } from '../../../services/catalog/service-catalog.facade.js';
 import { BundleMetrics } from '../../../services/utils/bundle-metrics.js';
 import { StaffService } from '../../../staff/services/staff.service.js';
 import { BookingResolveRequestDto } from '../../dto/booking-resolve-request.dto.js';
 import { BookingResolveResponseDto } from '../../dto/booking-resolve-response.dto.js';
-import { BookingSetupCategoryDto } from '../../dto/booking-setup-category.dto.js';
-import { BookingSetupResponseDto } from '../../dto/booking-setup-response.dto.js';
-import { BookingSetupStaffDto } from '../../dto/booking-setup-staff.dto.js';
+import { BookingSetup } from '../../interfaces/booking-setup.interface.js';
 import { BookingExecutionMode } from '../../enums/booking-execution-mode.enum.js';
 import { StaffSelectionMode } from '../../enums/staff-selection-mode.enum.js';
 
@@ -19,33 +18,16 @@ export class BookingSetupService {
   constructor(
     private readonly serviceCatalog: ServiceCatalogFacade,
     private readonly staffService: StaffService,
+    private readonly productsService: ProductsService,
   ) {}
 
-  async getBookingSetup(locationId: string): Promise<BookingSetupResponseDto> {
-    const [catalog, staff] = await Promise.all([
+  async getBookingSetup(locationId: string): Promise<BookingSetup> {
+    const [catalog, staff, products] = await Promise.all([
       this.serviceCatalog.loadForBooking(locationId),
       this.staffService.listActiveWithServices(locationId),
+      this.productsService.listForPublicCatalog(locationId),
     ]);
-    const uncategorizedServices = catalog.services.filter(
-      (service) => service.categoryId === null,
-    );
-    const uncategorizedBundles = catalog.bundles.filter(
-      (bundle) => bundle.categoryId === null,
-    );
-    const result = catalog.categories.map(BookingSetupCategoryDto.fromEntity);
-    if (uncategorizedServices.length || uncategorizedBundles.length) {
-      result.push(
-        BookingSetupCategoryDto.uncategorized(
-          uncategorizedServices,
-          uncategorizedBundles,
-        ),
-      );
-    }
-
-    return {
-      categories: result,
-      staff: staff.map(BookingSetupStaffDto.fromEntity),
-    };
+    return { catalog, staff, products };
   }
 
   async resolveBookingSelection(

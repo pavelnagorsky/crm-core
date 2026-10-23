@@ -8,7 +8,7 @@ import { OrderWithItems } from '../orders/interfaces/order-with-items.interface.
 import { BookingResolveRequestDto } from './dto/booking-resolve-request.dto.js';
 import { BookingResolveResponseDto } from './dto/booking-resolve-response.dto.js';
 import { BookingSearchRequestDto } from './dto/booking-search-request.dto.js';
-import { BookingSetupResponseDto } from './dto/booking-setup-response.dto.js';
+import { BookingSetup } from './interfaces/booking-setup.interface.js';
 import { CancelBookingDto } from './dto/cancel-booking.dto.js';
 import { UpdateBookingStatusDto } from './dto/update-booking-status.dto.js';
 import { UpdateBookingDto } from './dto/update-booking.dto.js';
@@ -26,7 +26,7 @@ export class BookingsFacade {
     private readonly mutation: BookingMutationService,
   ) {}
 
-  async getBookingSetup(locationId: string): Promise<BookingSetupResponseDto> {
+  async getBookingSetup(locationId: string): Promise<BookingSetup> {
     return this.setup.getBookingSetup(locationId);
   }
 

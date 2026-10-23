@@ -12,6 +12,7 @@ import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
 import { CalendarFacade } from '../calendar/calendar.facade.js';
 import { LocationService } from '../location/services/location.service.js';
 import { OrdersFacade } from '../orders/orders.facade.js';
+import { ProductsService } from '../products/services/products.service.js';
 import { StaffEarningsService } from '../payroll/earnings/services/staff-earnings.service.js';
 import { ServiceCatalogFacade } from '../services/catalog/service-catalog.facade.js';
 import { ServiceCatalogKind } from '../services/enums/service-catalog-kind.enum.js';
@@ -19,6 +20,7 @@ import { StaffService } from '../staff/services/staff.service.js';
 import { BookingsFacade } from './bookings.facade.js';
 import { BookingResolveRequestDto } from './dto/booking-resolve-request.dto.js';
 import { BookingSearchRequestDto } from './dto/booking-search-request.dto.js';
+import { BookingSetupResponseDto } from './dto/booking-setup-response.dto.js';
 import { BookingExecutionMode } from './enums/booking-execution-mode.enum.js';
 import { BookingSearchOrderBy } from './enums/booking-search-order-by.enum.js';
 import { BookingStatus } from './enums/booking-status.enum.js';
@@ -35,6 +37,7 @@ import { BookingReadService } from './services/read/booking-read.service.js';
 import { BookingSetupService } from './services/setup/booking-setup.service.js';
 
 const serviceCatalog = { loadForBooking: vi.fn() };
+const products = { listForPublicCatalog: vi.fn().mockResolvedValue([]) };
 
 describe('Booking mutations during business deletion', () => {
   const now = new Date('2026-09-24T09:00:00.000Z');
@@ -153,6 +156,7 @@ describe('BookingsFacade.completeElapsed', () => {
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
+        { provide: ProductsService, useValue: products },
         { provide: DatabaseService, useValue: db },
         { provide: CalendarFacade, useValue: { deleteBookingEvents: vi.fn() } },
         { provide: StaffService, useValue: {} },
@@ -299,6 +303,7 @@ describe('BookingsFacade.updateStatus transactionality', () => {
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
+        { provide: ProductsService, useValue: products },
         { provide: DatabaseService, useValue: db },
         { provide: CalendarFacade, useValue: { deleteBookingEvents: vi.fn() } },
         { provide: StaffService, useValue: {} },
@@ -357,6 +362,7 @@ describe('BookingsFacade.search', () => {
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
+        { provide: ProductsService, useValue: products },
         { provide: DatabaseService, useValue: db },
         { provide: CalendarFacade, useValue: { deleteBookingEvents: vi.fn() } },
         { provide: StaffService, useValue: {} },
@@ -783,6 +789,7 @@ describe('BookingsFacade catalog selection', () => {
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
+        { provide: ProductsService, useValue: products },
         { provide: DatabaseService, useValue: db },
         { provide: CalendarFacade, useValue: { deleteBookingEvents: vi.fn() } },
         { provide: StaffService, useValue: staff },
@@ -874,8 +881,12 @@ describe('BookingsFacade catalog selection', () => {
     ]);
     staff.listActiveWithServices.mockResolvedValue([]);
 
-    const setup = await service.getBookingSetup('biz');
+    const setup = BookingSetupResponseDto.fromEntity(
+      await service.getBookingSetup('biz'),
+    );
 
+    expect(products.listForPublicCatalog).toHaveBeenCalledWith('biz');
+    expect(setup.products).toEqual({ categories: [], items: [] });
     expect(setup).not.toHaveProperty('bundles');
     expect(
       setup.categories[0].services.map((item) => [item.id, item.kind]),
@@ -1012,6 +1023,7 @@ describe('BookingsFacade.update item prices', () => {
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
+        { provide: ProductsService, useValue: products },
         { provide: DatabaseService, useValue: db },
         { provide: CalendarFacade, useValue: { deleteBookingEvents: vi.fn() } },
         { provide: StaffService, useValue: {} },
@@ -1176,6 +1188,7 @@ describe('BookingsFacade.update manual interval', () => {
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
+        { provide: ProductsService, useValue: products },
         { provide: DatabaseService, useValue: db },
         { provide: CalendarFacade, useValue: calendar },
         { provide: StaffService, useValue: {} },
@@ -1406,6 +1419,7 @@ describe('BookingsFacade.addProduct', () => {
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
+        { provide: ProductsService, useValue: products },
         { provide: DatabaseService, useValue: db },
         { provide: CalendarFacade, useValue: { deleteBookingEvents: vi.fn() } },
         { provide: StaffService, useValue: {} },
@@ -1498,6 +1512,7 @@ describe('BookingsFacade.cancel draft product cleanup', () => {
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
+        { provide: ProductsService, useValue: products },
         { provide: DatabaseService, useValue: db },
         { provide: CalendarFacade, useValue: { deleteBookingEvents: vi.fn() } },
         { provide: StaffService, useValue: {} },
