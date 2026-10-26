@@ -139,10 +139,9 @@
     "NO_SHOW": "Не явился"
   },
   "bookingSource": {
-    "PUBLIC_PAGE": "Публичная страница",
+    "PUBLIC_PAGE": "Онлайн",
     "WIDGET": "Виджет",
-    "MANUAL": "Вручную",
-    "WALK_IN": "Без записи"
+    "MANUAL": "Вручную"
   },
   "staffStatus": {
     "ACTIVE": "Активный",

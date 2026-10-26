@@ -6,6 +6,16 @@ reserves the booking. Public client bans are checked before staff resolution;
 manual clients are resolved after completion permission checks. Audit and client
 notifications follow a successful reservation.
 
+Booking channels (`source`) are `PUBLIC_PAGE` (online), `WIDGET` and `MANUAL`.
+Walk-ins use `MANUAL`. For `POST /locations/:locationId/bookings/manual`, set
+`isWalkIn: true` instead of `source: "WALK_IN"` to create a walk-in. This optional
+flag defaults to false and only controls creation behavior; it is not a channel
+or a persisted booking field. Walk-ins accept an optional actual `endAt`, confirm
+ongoing visits and complete elapsed visits with the usual order/payroll sync and
+completion permission check. Ordinary manual bookings keep the location's
+confirmation policy. Existing walk-ins are migrated to `MANUAL` without changing
+their status or intervals.
+
 | Service | Responsibility |
 | --- | --- |
 | `BookingSelectionService` | Resolve active services or a bundle and quote service/product prices. Fixed bundle prices are allocated across services with the remainder on the final item. |

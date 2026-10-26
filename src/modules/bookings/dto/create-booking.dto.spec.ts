@@ -59,6 +59,36 @@ describe('ManualCreateBookingDto anonymous client validation', () => {
     expect(errors).toHaveLength(0);
   });
 
+  it.each([true, false])('accepts isWalkIn: %s', async (isWalkIn) => {
+    expect(await validate(manual({ isWalkIn }))).toHaveLength(0);
+  });
+
+  it('rejects a non-boolean walk-in flag', async () => {
+    const dto = Object.assign(manual(), { isWalkIn: 'true' });
+    const errors = await validate(dto);
+
+    expect(errors).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          property: 'isWalkIn',
+          constraints: expect.objectContaining({
+            isBoolean: expect.any(String),
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it('strips the former source field from manual requests', async () => {
+    const dto = Object.assign(manual({ isWalkIn: true }), {
+      source: 'WALK_IN',
+    });
+
+    expect(await validate(dto, { whitelist: true })).toHaveLength(0);
+    expect(dto).not.toHaveProperty('source');
+    expect(dto.isWalkIn).toBe(true);
+  });
+
   it('validates optional phone when anonymous manual booking provides it', async () => {
     const errors = await validate(manual({ phone: 'not-a-phone' }));
     const messages = errors.flatMap((error) =>

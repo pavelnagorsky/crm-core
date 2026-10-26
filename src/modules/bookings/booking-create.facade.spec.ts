@@ -762,6 +762,32 @@ function walkInSetup(
 }
 
 describe('BookingCreateFacade walk-in', () => {
+  it.each([undefined, false])(
+    'keeps ordinary manual creation behavior when isWalkIn is %s',
+    async (isWalkIn) => {
+      const { service, tx, orders, earnings } = walkInSetup();
+
+      const booking = await service.createManualBooking(
+        'business-1',
+        {
+          ...dto,
+          isWalkIn,
+          startAt: '2020-09-20T10:04:00',
+          endAt: '2020-09-20T10:30:00',
+        },
+        { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER },
+        false,
+      );
+
+      expect(booking.source).toBe(BookingSource.MANUAL);
+      expect(booking.status).toBe(BookingStatus.PENDING);
+      expect(booking.endAt.toISOString()).toBe('2020-09-20T08:04:00.000Z');
+      expect(tx.booking.create).toHaveBeenCalledOnce();
+      expect(orders.syncCompletedBooking).not.toHaveBeenCalled();
+      expect(earnings.recordForCompletedBooking).not.toHaveBeenCalled();
+    },
+  );
+
   it('resolves a client automatically for manual booking without a client-management flag', async () => {
     const { service, tx, clients } = walkInSetup();
 
@@ -891,7 +917,7 @@ describe('BookingCreateFacade walk-in', () => {
         'business-1',
         {
           ...dto,
-          source: BookingSource.WALK_IN,
+          isWalkIn: true,
           startAt: '2020-09-20T10:04:00',
           endAt: '2020-09-20T10:30:00',
         },
@@ -902,7 +928,7 @@ describe('BookingCreateFacade walk-in', () => {
     expect(tx.booking.create).not.toHaveBeenCalled();
   });
 
-  it('keeps an in-progress WALK_IN confirmed when the end is still ahead', async () => {
+  it('keeps an in-progress walk-in confirmed under the manual channel', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-09-20T07:10:00.000Z'));
     try {
@@ -912,7 +938,7 @@ describe('BookingCreateFacade walk-in', () => {
         'business-1',
         {
           ...dto,
-          source: BookingSource.WALK_IN,
+          isWalkIn: true,
           startAt: '2026-09-20T10:04:00',
           endAt: '2026-09-20T10:30:00',
         },
@@ -928,7 +954,7 @@ describe('BookingCreateFacade walk-in', () => {
           items: { create: { startAt: Date; endAt: Date }[] };
         };
       };
-      expect(created.data.source).toBe(BookingSource.WALK_IN);
+      expect(created.data.source).toBe(BookingSource.MANUAL);
       expect(created.data.status).toBe(BookingStatus.CONFIRMED);
       expect(created.data.startAt.toISOString()).toBe(
         '2026-09-20T07:04:00.000Z',
@@ -947,7 +973,7 @@ describe('BookingCreateFacade walk-in', () => {
     }
   });
 
-  it('rejects WALK_IN when the requested interval conflicts', async () => {
+  it('rejects a walk-in when the requested interval conflicts', async () => {
     const { service } = walkInSetup({ isSlotFree: false });
 
     const error = await service
@@ -955,7 +981,7 @@ describe('BookingCreateFacade walk-in', () => {
         'business-1',
         {
           ...dto,
-          source: BookingSource.WALK_IN,
+          isWalkIn: true,
           startAt: '2026-09-20T10:04:00',
           endAt: '2026-09-20T10:30:00',
         },
@@ -970,7 +996,7 @@ describe('BookingCreateFacade walk-in', () => {
     expect((error as AppException).errorCode).toBe('BOOKING_SLOT_UNAVAILABLE');
   });
 
-  it('completes a WALK_IN whose end is already in the past and syncs order and earnings', async () => {
+  it('completes an elapsed walk-in under the manual channel and syncs order and earnings', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-09-20T07:30:00.000Z'));
     try {
@@ -980,7 +1006,7 @@ describe('BookingCreateFacade walk-in', () => {
         'business-1',
         {
           ...dto,
-          source: BookingSource.WALK_IN,
+          isWalkIn: true,
           startAt: '2026-09-20T10:04:00',
           endAt: '2026-09-20T10:30:00',
         },
@@ -988,6 +1014,7 @@ describe('BookingCreateFacade walk-in', () => {
       );
 
       const booking = await tx.booking.create.mock.results[0].value;
+      expect(booking.source).toBe(BookingSource.MANUAL);
       expect(booking.status).toBe(BookingStatus.COMPLETED);
       expect(orders.syncCompletedBooking).toHaveBeenCalledWith(
         booking,

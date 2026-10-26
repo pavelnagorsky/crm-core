@@ -81,14 +81,10 @@ export class BookingCreateFacade {
     actor: AuditActor,
     canComplete = true,
   ): Promise<BookingWithItems> {
-    const source =
-      dto.source === BookingSource.WALK_IN
-        ? BookingSource.WALK_IN
-        : BookingSource.MANUAL;
     const { booking, timezone, currency, bundleTitle } = await this.create(
       locationId,
       {
-        source,
+        source: BookingSource.MANUAL,
         bookingPageId: null,
         bookingWidgetId: null,
       },
@@ -149,7 +145,14 @@ export class BookingCreateFacade {
       throw new AppException(ErrorCode.CLIENT_BANNED, HttpStatus.FORBIDDEN);
 
     const selection = await this.selection.resolveForBooking(locationId, dto);
-    const walkInEndAt = this.walkInEndAt(dto, location.timezone);
+    const isWalkIn =
+      this.isInternalSource(attribution.source) &&
+      'isWalkIn' in dto &&
+      dto.isWalkIn === true;
+    const walkInEndAt =
+      isWalkIn && 'endAt' in dto && dto.endAt
+        ? TimeUtils.localToUtc(dto.endAt, location.timezone)
+        : null;
     const items = await this.scheduling.resolveForBooking({
       locationId,
       services: selection.services,
@@ -167,7 +170,7 @@ export class BookingCreateFacade {
       Math.max(...items.map((item) => item.endAt.getTime())),
     );
     const status = this.initialStatus(
-      attribution.source,
+      isWalkIn,
       envelopeEnd,
       location.isBookingConfirmationRequired,
     );
@@ -230,28 +233,15 @@ export class BookingCreateFacade {
   }
 
   private isInternalSource(source: BookingSource): boolean {
-    return source === BookingSource.MANUAL || source === BookingSource.WALK_IN;
-  }
-
-  private walkInEndAt(
-    dto: CreateBookingDto | ManualCreateBookingDto,
-    timezone: string,
-  ): Date | null {
-    if (
-      !('source' in dto) ||
-      dto.source !== BookingSource.WALK_IN ||
-      !dto.endAt
-    )
-      return null;
-    return TimeUtils.localToUtc(dto.endAt, timezone);
+    return source === BookingSource.MANUAL;
   }
 
   private initialStatus(
-    source: BookingSource,
+    isWalkIn: boolean,
     endAt: Date,
     isBookingConfirmationRequired: boolean,
   ): BookingStatus {
-    if (source === BookingSource.WALK_IN) {
+    if (isWalkIn) {
       return endAt.getTime() <= Date.now()
         ? BookingStatus.COMPLETED
         : BookingStatus.CONFIRMED;

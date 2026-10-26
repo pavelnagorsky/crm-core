@@ -158,13 +158,11 @@ export function mergeRevenueSeries(
 export function sourceLabel(s: BookingSource): string {
   switch (s) {
     case BookingSource.PUBLIC_PAGE:
-      return 'Public page';
+      return 'Online';
     case BookingSource.WIDGET:
       return 'Widget';
     case BookingSource.MANUAL:
       return 'Manual';
-    case BookingSource.WALK_IN:
-      return 'Walk-in';
     default: {
       const _exhaustive: never = s;
       return _exhaustive;

@@ -1214,7 +1214,7 @@ describe('BookingsFacade.update manual interval', () => {
 
   function twoItemVisit(overrides: Partial<BookingWithItems> = {}) {
     return booking({
-      source: BookingSource.WALK_IN,
+      source: BookingSource.MANUAL,
       startAt: new Date('2026-09-24T10:00:00.000Z'),
       endAt: new Date('2026-09-24T12:00:00.000Z'),
       items: [

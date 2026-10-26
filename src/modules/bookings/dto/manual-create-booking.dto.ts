@@ -7,7 +7,6 @@ import {
   IsBoolean,
   IsArray,
   IsEnum,
-  IsIn,
   IsOptional,
   IsString,
   MaxLength,
@@ -16,7 +15,6 @@ import {
 import { MULTI_SERVICE_MAX_ITEMS } from '../../services/constants/multi-service.constants.js';
 import { BookingExecutionMode } from '../enums/booking-execution-mode.enum.js';
 import { ManualBookingItemDto } from './manual-booking-item.dto.js';
-import { BookingSource } from '../enums/booking-source.enum.js';
 import { IsLocalDateTime } from '../../../shared/time/decorators/is-local-date-time.validator.js';
 import { ManualBookingProductDto } from './manual-booking-product.dto.js';
 
@@ -33,13 +31,15 @@ export class ManualCreateBookingDto extends CreateBookingDto {
   anonymous?: boolean;
 
   @ApiProperty({
-    enum: [BookingSource.MANUAL, BookingSource.WALK_IN],
+    type: Boolean,
     required: false,
-    default: BookingSource.MANUAL,
+    default: false,
+    description:
+      'Create a walk-in as a manual booking. Confirms an ongoing visit and completes an elapsed visit automatically.',
   })
   @IsOptional()
-  @IsIn([BookingSource.MANUAL, BookingSource.WALK_IN])
-  source?: BookingSource.MANUAL | BookingSource.WALK_IN;
+  @IsBoolean()
+  isWalkIn?: boolean;
 
   @ApiProperty({
     type: () => ManualBookingItemDto,
@@ -91,7 +91,7 @@ export class ManualCreateBookingDto extends CreateBookingDto {
     example: '2026-09-20T10:30:00',
     required: false,
     description:
-      'Local datetime in location timezone. Used only for WALK_IN to override actual end time.',
+      'Local datetime in location timezone. Used only when isWalkIn is true to override actual end time.',
   })
   @IsOptional()
   @IsLocalDateTime()

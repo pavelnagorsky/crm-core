@@ -13,7 +13,6 @@ describe('isSelfBookingBlocked', () => {
 
   it('leaves internal booking open', () => {
     expect(isSelfBookingBlocked(BookingSource.MANUAL, bannedAt)).toBe(false);
-    expect(isSelfBookingBlocked(BookingSource.WALK_IN, bannedAt)).toBe(false);
   });
 
   it('does not block a client who is not banned', () => {
