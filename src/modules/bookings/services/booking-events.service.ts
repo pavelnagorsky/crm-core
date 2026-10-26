@@ -14,7 +14,10 @@ import { diffFields } from '../../audit/utils/diff-fields.js';
 import { LocationService } from '../../location/services/location.service.js';
 import { BookingNotificationData } from '../../notifications/interfaces/booking-notification-data.interface.js';
 import { BookingConfirmedNotification } from '../../notifications/messages/booking-confirmed.notification.js';
-import { BookingStatusChangedNotification } from '../../notifications/messages/booking-status-changed.notification.js';
+import {
+  BookingStatusChangedNotification,
+  BookingStatusChangedStatus,
+} from '../../notifications/messages/booking-status-changed.notification.js';
 import { NOTIFICATION_EVENT } from '../../notifications/services/notifications.service.js';
 import { BookingStatus } from '../enums/booking-status.enum.js';
 import { BookingAuditInput } from '../interfaces/booking-audit-input.interface.js';
@@ -92,7 +95,7 @@ export class BookingEventsService {
           endAt: booking.endAt,
           timezone,
         },
-        clientToken,
+        this.bookingClientService.managementUrl(clientToken),
       ),
     );
   }
@@ -163,7 +166,7 @@ export class BookingEventsService {
 
   async notifyStatus(
     booking: BookingWithItems,
-    status: 'CONFIRMED' | 'CANCELLED',
+    status: BookingStatusChangedStatus,
     reason?: string,
   ): Promise<void> {
     if (!booking.clientEmail) return;

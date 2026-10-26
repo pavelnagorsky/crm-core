@@ -446,23 +446,13 @@ export class StaffService {
     locationId: string,
     serviceId: string,
     staffId?: string,
+    tx?: Prisma.TransactionClient,
   ): Promise<{ id: string }[]> {
-    if (staffId) {
-      return this.db.staff.findMany({
-        where: {
-          location: ACTIVE_LOCATION_WHERE,
-          id: staffId,
-          locationId,
-          status: StaffStatus.ACTIVE,
-          staffServices: { some: { serviceId } },
-        },
-        select: { id: true },
-      });
-    }
-    return this.db.staff.findMany({
+    return (tx ?? this.db).staff.findMany({
       where: {
         location: ACTIVE_LOCATION_WHERE,
         locationId,
+        ...(staffId ? { id: staffId } : {}),
         status: StaffStatus.ACTIVE,
         staffServices: { some: { serviceId } },
       },

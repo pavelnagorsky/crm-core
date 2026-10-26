@@ -13,6 +13,7 @@ notifications follow a successful reservation.
 | `BookingReservationService` | Lock the location and staff days, recheck availability, create calendar events and booking items, and sync orders/payroll in one transaction. |
 | `BookingMutationService` | Update client details, notes and item prices, add products, and delegate scheduling or lifecycle changes. |
 | `BookingRescheduleService` | Prepare moved intervals and persist calendar events and booking items through one transaction path. |
+| `BookingClientService` | Client-token slot discovery, cancellation and rescheduling from the booking resolved by authentication. Preserves staff, services, durations and prices. |
 | `BookingLifecycleService` | Change status, complete elapsed bookings, cancel and soft-delete bookings with their order/payroll effects. |
 | `BookingWriteLockService` | Lock active locations and reject booking edits if status or `updatedAt` changed since reading. |
 | `BookingSlotLockService` | Acquire deduplicated staff/day advisory locks in a stable order and recheck availability using the transaction. |
@@ -27,6 +28,12 @@ active location.
 
 All helpers are private providers of `BookingsModule`. Staff, calendar, client,
 location, catalog, order and payroll data is accessed through the owning services.
+
+`BookingClientController` owns `/public/bookings/me`. Its JWT strategy resolves
+the active booking once; `ClientBooking` passes that snapshot to domain operations.
+`BookingRescheduleService.rescheduleByClient` exposes only a new start time and
+rechecks staff eligibility, availability and time restrictions before writing.
+Slot discovery is separate from the transactional move and is not rerun on save.
 
 Cancellation deletes booking calendar events and clears their item references in
 the same transaction. Reopening to pending/confirmed recreates events after a

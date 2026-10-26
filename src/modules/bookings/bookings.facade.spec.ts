@@ -1596,7 +1596,6 @@ function createMutationService(
       location,
       earnings,
       orders,
-      read,
       write,
       events,
       reschedule,

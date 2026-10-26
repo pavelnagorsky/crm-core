@@ -17,7 +17,6 @@ export const jwtExpirationConfig = {
   accessToken: '2h',
   emailToken: '5d',
   refreshToken: `${REFRESH_TOKEN_TTL_DAYS}d`,
-  bookingClientToken: '24h',
 } as const;
 
 /** How long a password-reset code stays valid after it is issued. */

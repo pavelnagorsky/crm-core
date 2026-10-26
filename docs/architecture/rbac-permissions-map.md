@@ -99,12 +99,16 @@
 
 [Исходник](../../src/modules/bookings/controllers/bookings.controller.ts)
 
+[Клиентские операции](../../src/modules/bookings/controllers/booking-client.controller.ts)
+
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
 | `GET /public/locations/:locationId/booking-setup` | `getBookingSetup` | P: `public` | — |
 | `POST /public/locations/:locationId/booking-resolve` | `resolveBooking` | P: `public` | — |
 | `POST /public/locations/:locationId/pricing` | `priceBooking` | P: `public` | — |
 | `GET /public/bookings/me` | `getByClientToken` | P: `booking-client-token` | Токен только этой записи; бизнес-роль не требуется. |
+| `GET /public/bookings/me/available-slots` | `getClientAvailableSlots` | P: `booking-client-token` | Слоты только для записи из токена, с сохранением услуг и сотрудников. |
+| `POST /public/bookings/me/reschedule` | `rescheduleByClientToken` | P: `booking-client-token` | Только предстоящая PENDING/CONFIRMED; повторная проверка слотов в транзакции. |
 | `POST /public/bookings/me/cancel` | `cancelByClientToken` | P: `booking-client-token` | Действующая клиентская политика отмены; не обход к возврату произвольного заказа. |
 | `POST /locations/:locationId/bookings/manual` | `createManual` | L: `booking:write` | Произвольная цена: также sale.price.override:write. Товары: order:write. Клиент находится или создаётся автоматически независимо от client:write. WALK_IN с немедленным COMPLETED: order:write. |
 | `GET /locations/:locationId/bookings/status-counts` | `getStatusCounts` | L: `booking:read` или `booking.own:read` | При own-чтении обязательно участие в записи; списки и счётчики ограничены до пагинации. |

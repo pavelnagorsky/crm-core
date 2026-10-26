@@ -4,7 +4,8 @@ import { ChannelPayload } from '../interfaces/channel-payload.interface.js';
 import { HasEmailChannel } from '../interfaces/has-email-channel.interface.js';
 import { AbstractNotification } from './abstract.notification.js';
 
-export type BookingStatusChangedStatus = 'CONFIRMED' | 'CANCELLED';
+export type BookingStatusChangedStatus =
+  'CONFIRMED' | 'CANCELLED' | 'RESCHEDULED';
 
 export class BookingStatusChangedNotification
   extends AbstractNotification

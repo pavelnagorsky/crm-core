@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Header,
   Param,
   ParseUUIDPipe,
   Post,
@@ -17,7 +18,8 @@ import {
 import type { Request } from 'express';
 import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
-import { IdResponseDto } from '../../../shared/dto/id-response.dto.js';
+import { PublicBookingCreatedResponseDto } from '../../bookings/dto/public-booking-created-response.dto.js';
+import { BookingClientTokenService } from '../../bookings/services/booking-client-token.service.js';
 import {
   clientIp,
   requestOrigin,
@@ -32,10 +34,11 @@ export class PublicBookingCreateController {
   constructor(
     private readonly attribution: BookingChannelAttributionService,
     private readonly bookingCreateService: BookingCreateFacade,
+    private readonly clientTokens: BookingClientTokenService,
   ) {}
 
   @ApiOperation({ summary: 'Book an appointment (public / client-facing)' })
-  @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
+  @ApiCreatedResponse({ type: ApiResponse(PublicBookingCreatedResponseDto) })
   @ApiNotFoundResponse({ description: 'Location, service, or staff not found' })
   @ApiForbiddenResponse({
     description:
@@ -43,11 +46,12 @@ export class PublicBookingCreateController {
   })
   @ApiConflictResponse({ description: 'Slot is no longer available' })
   @Post('public/locations/:locationId/bookings')
+  @Header('Cache-Control', 'no-store')
   async createPublic(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Body() dto: CreateBookingDto,
     @Req() req: Request,
-  ): Promise<BaseResponseDto<IdResponseDto>> {
+  ): Promise<BaseResponseDto<PublicBookingCreatedResponseDto>> {
     const attribution = await this.attribution.resolve(
       locationId,
       dto.bookingPageId,
@@ -60,6 +64,11 @@ export class PublicBookingCreateController {
       attribution,
       { ip: clientIp(req), origin: requestOrigin(req) },
     );
-    return BaseResponseDto.success({ id: booking.id });
+    const token = this.clientTokens.generateClientToken(booking.id);
+    return BaseResponseDto.success({
+      id: booking.id,
+      token,
+      manageUrl: this.clientTokens.managementUrl(token),
+    });
   }
 }

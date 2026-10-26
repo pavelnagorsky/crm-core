@@ -117,13 +117,6 @@ export class BookingsFacade {
     return this.mutation.cancel(booking, actor, cancelledBy, dto);
   }
 
-  async cancelByClient(
-    bookingId: string,
-    dto: CancelBookingDto,
-  ): Promise<Booking> {
-    return this.mutation.cancelByClient(bookingId, dto);
-  }
-
   async delete(booking: BookingWithItems, actor: AuditActor): Promise<void> {
     return this.mutation.delete(booking, actor);
   }

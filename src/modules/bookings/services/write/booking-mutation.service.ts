@@ -152,10 +152,6 @@ export class BookingMutationService {
     return this.lifecycle.cancel(booking, actor, cancelledBy, dto);
   }
 
-  cancelByClient(id: string, dto: CancelBookingDto): Promise<Booking> {
-    return this.lifecycle.cancelByClient(id, dto);
-  }
-
   delete(booking: BookingWithItems, actor: AuditActor): Promise<void> {
     return this.lifecycle.delete(booking, actor);
   }

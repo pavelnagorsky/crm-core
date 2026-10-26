@@ -49,7 +49,6 @@ function setup() {
     locations as never,
     earnings as never,
     orders as never,
-    {} as never,
     write as never,
     events as never,
     reschedule as never,
@@ -64,9 +63,58 @@ function setup() {
     service,
     orders,
     earnings,
+    write,
   };
 }
 describe('Booking lifecycle transaction boundaries', () => {
+  it('lets a client cancel an upcoming visit without touching completed-order operations', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-23T10:00:00Z'));
+    try {
+      const { service, old, tx, orders } = setup();
+      await service.cancelByClient(old, { reason: 'Changed plans' });
+      expect(tx.booking.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            cancelledBy: CancelledBy.CLIENT,
+            cancellationReason: 'Changed plans',
+          }),
+        }),
+      );
+      expect(orders.syncCompletedBooking).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([BookingStatus.COMPLETED, BookingStatus.NO_SHOW])(
+    'prevents client cancellation of %s',
+    async (status) => {
+      const { service, old, tx } = setup();
+      old.status = status;
+      await expect(service.cancelByClient(old, {})).rejects.toMatchObject({
+        errorCode: 'BOOKING_CLIENT_ACTION_UNAVAILABLE',
+      });
+      expect(tx.booking.update).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rechecks the start time after waiting for the booking lock', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-23T10:00:00Z'));
+    try {
+      const { service, old, write, tx } = setup();
+      write.lockUnchangedBooking.mockImplementation(() => {
+        vi.setSystemTime(old.startAt);
+      });
+      await expect(service.cancelByClient(old, {})).rejects.toMatchObject({
+        errorCode: 'BOOKING_CLIENT_ACTION_UNAVAILABLE',
+      });
+      expect(tx.booking.update).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
   it('releases cancelled calendar events and audits only after commit', async () => {
     const { service, old, tx, calendar, events } = setup();
     await service.cancel(old, actor, CancelledBy.STAFF, {});

@@ -109,10 +109,4 @@ export class BookingResponseDto {
     dto.updatedAt = booking.updatedAt;
     return dto;
   }
-
-  static fromEntityPublic(booking: BookingWithItems): BookingResponseDto {
-    const dto = BookingResponseDto.fromEntity(booking);
-    dto.internalNotes = null;
-    return dto;
-  }
 }

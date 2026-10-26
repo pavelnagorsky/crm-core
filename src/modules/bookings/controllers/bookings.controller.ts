@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Param,
@@ -13,10 +14,8 @@ import {
   Query,
   Res,
   StreamableFile,
-  UseGuards,
 } from '@nestjs/common';
 import {
-  ApiBearerAuth,
   ApiConflictResponse,
   ApiCreatedResponse,
   ApiNoContentResponse,
@@ -25,7 +24,6 @@ import {
   ApiOperation,
   ApiProduces,
   ApiTags,
-  ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import { CancelledBy } from '@prisma/client';
 import { Claim } from '../../access/enums/claim.enum.js';
@@ -47,8 +45,6 @@ import { AddOrderItemsDto } from '../../orders/dto/add-order-items.dto.js';
 import { OrderProductItemDto } from '../../orders/dto/order-product-item.dto.js';
 import { BookingCreateFacade } from '../booking-create.facade.js';
 import { BookingsFacade } from '../bookings.facade.js';
-import { BookingClientToken } from '../decorators/booking-client-token.decorator.js';
-import { BookingClientTokenPayloadDto } from '../dto/booking-client-token-payload.dto.js';
 import { BookingPricingRequestDto } from '../dto/booking-pricing-request.dto.js';
 import { BookingPricingResponseDto } from '../dto/booking-pricing-response.dto.js';
 import { BookingResolveRequestDto } from '../dto/booking-resolve-request.dto.js';
@@ -66,7 +62,6 @@ import { UpdateBookingDto } from '../dto/update-booking.dto.js';
 import { BookingStatus } from '../enums/booking-status.enum.js';
 import { BookingExportRequestDto } from '../export/dto/booking-export-request.dto.js';
 import { BookingsExportService } from '../export/services/bookings-export.service.js';
-import { JwtBookingClientGuard } from '../guards/jwt-booking-client.guard.js';
 import { BookingAccessService } from '../services/booking-access.service.js';
 import { BookingClientTokenService } from '../services/booking-client-token.service.js';
 
@@ -129,39 +124,6 @@ export class BookingsController {
     return BaseResponseDto.success(
       BookingPricingResponseDto.fromResult(pricing),
     );
-  }
-
-  @ApiOperation({ summary: 'Get booking info via client management token' })
-  @ApiOkResponse({ type: ApiResponse(BookingResponseDto) })
-  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
-  @ApiBearerAuth('booking-client-token')
-  @UseGuards(JwtBookingClientGuard)
-  @Get('public/bookings/me')
-  async getByClientToken(
-    @BookingClientToken() tokenPayload: BookingClientTokenPayloadDto,
-  ): Promise<BaseResponseDto<BookingResponseDto>> {
-    const booking = await this.bookings.findById(tokenPayload.bookingId);
-    return BaseResponseDto.success(
-      BookingResponseDto.fromEntityPublic(booking),
-    );
-  }
-
-  @ApiOperation({ summary: 'Cancel booking via client management token' })
-  @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
-  @ApiUnauthorizedResponse({ description: 'Invalid or expired token' })
-  @ApiConflictResponse({ description: 'Booking is already cancelled' })
-  @ApiBearerAuth('booking-client-token')
-  @UseGuards(JwtBookingClientGuard)
-  @Post('public/bookings/me/cancel')
-  async cancelByClientToken(
-    @BookingClientToken() tokenPayload: BookingClientTokenPayloadDto,
-    @Body() dto: CancelBookingDto,
-  ): Promise<BaseResponseDto<IdResponseDto>> {
-    const booking = await this.bookings.cancelByClient(
-      tokenPayload.bookingId,
-      dto,
-    );
-    return BaseResponseDto.success({ id: booking.id });
   }
 
   // ─── Owner / Staff ────────────────────────────────────────────────────────────
@@ -385,13 +347,18 @@ export class BookingsController {
   @ApiNotFoundResponse({ description: 'Booking not found' })
   @Permissions(Write(Claim.BOOKING_CLIENT_TOKEN))
   @Post('locations/:locationId/bookings/:id/client-token')
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'no-store')
   async generateClientToken(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<BaseResponseDto<ClientLinkResponseDto>> {
     await this.bookings.findByIdInLocation(locationId, id);
     const token = this.bookingClientService.generateClientToken(id);
-    return BaseResponseDto.success({ token });
+    return BaseResponseDto.success({
+      token,
+      manageUrl: this.bookingClientService.managementUrl(token),
+    });
   }
 
   @ApiOperation({ summary: 'Cancel a booking' })

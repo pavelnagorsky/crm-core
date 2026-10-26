@@ -12,6 +12,7 @@ import { MoveCalendarEventDto } from './dto/move-calendar-event.dto.js';
 import { UpdateCalendarEventDto } from './dto/update-calendar-event.dto.js';
 import { BookingCalendarEventInput } from './interfaces/booking-calendar-event-input.interface.js';
 import { CalendarBookingFeed } from './interfaces/calendar-booking-feed.interface.js';
+import { CalendarRescheduleItem } from './interfaces/calendar-reschedule-item.interface.js';
 import { CalendarEventWithCancellations } from './interfaces/calendar-types.interface.js';
 import { CalendarAvailabilityService } from './services/availability/calendar-availability.service.js';
 import { BookingCalendarEventService } from './services/events/booking-calendar-event.service.js';
@@ -115,6 +116,15 @@ export class CalendarFacade {
     dto: AvailableSlotsRequestDto,
   ): Promise<AvailableSlotsDayDto[]> {
     return this.availability.getAvailableSlots(locationId, dto);
+  }
+
+  getRescheduleSlots(
+    locationId: string,
+    items: CalendarRescheduleItem[],
+    from: string,
+    to: string,
+  ): Promise<AvailableSlotsDayDto[]> {
+    return this.availability.getRescheduleSlots(locationId, items, from, to);
   }
 
   getManualAvailableSlots(

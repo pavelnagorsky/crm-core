@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
+import { randomUUID } from 'node:crypto';
+import { IFrontendConfig } from '../../../config/interfaces/frontend-config.interface.js';
 import { IJwtConfig } from '../../../config/interfaces/jwt-config.interface.js';
-import { jwtExpirationConfig } from '../../../config/token-expiration.config.js';
 import { BookingClientTokenPayloadDto } from '../dto/booking-client-token-payload.dto.js';
 
 @Injectable()
@@ -20,11 +21,18 @@ export class BookingClientTokenService {
     }
 
     return this.jwtService.sign(
-      { bookingId } satisfies BookingClientTokenPayloadDto,
+      { bookingId, jti: randomUUID() } satisfies BookingClientTokenPayloadDto,
       {
         secret: jwtCfg.bookingClientTokenSecret,
-        expiresIn: jwtExpirationConfig.bookingClientToken,
+        algorithm: 'HS256',
       },
     );
+  }
+
+  managementUrl(token: string): string {
+    const domain = this.config.get<IFrontendConfig>('frontend')!.domain;
+    const url = new URL('/booking/manage', domain);
+    url.hash = new URLSearchParams({ token }).toString();
+    return url.toString();
   }
 }

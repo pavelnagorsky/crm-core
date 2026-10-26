@@ -13,6 +13,7 @@ import { AvailableSlotsRequestDto } from '../../dto/available-slots-request.dto.
 import { ManualAvailableSlotsRequestDto } from '../../dto/manual-available-slots-request.dto.js';
 import { CalendarSlotCandidate } from '../../interfaces/calendar-slot-candidate.interface.js';
 import { CalendarSlotItem } from '../../interfaces/calendar-slot-item.interface.js';
+import { CalendarRescheduleItem } from '../../interfaces/calendar-reschedule-item.interface.js';
 import { CalendarEventWithCancellations } from '../../interfaces/calendar-types.interface.js';
 import { blockingEventsWhere } from '../../rules/blocking-events-where.js';
 
@@ -100,6 +101,88 @@ export class CalendarAvailabilityService {
       rangeEnd: new Date(`${to}T23:59:59.999Z`),
       excludedCalendarEventIds,
     });
+  }
+
+  async getRescheduleSlots(
+    locationId: string,
+    items: CalendarRescheduleItem[],
+    fromRaw: string,
+    toRaw: string,
+  ): Promise<AvailableSlotsDayDto[]> {
+    const { from, to } = this.manualSlotRange(fromRaw, toRaw);
+    const location = await this.locationService.findById(locationId);
+    const now = new Date();
+    const today = TimeUtils.zonedDateStr(now, location.timezone);
+    const windowEnd = TimeUtils.addDaysStr(
+      today,
+      location.advanceBookingWindowDays - 1,
+    );
+    const first = from < today ? today : from;
+    const last = to > windowEnd ? windowEnd : to;
+    if (!items.length || first > last) return [];
+    const assignedStaff = await Promise.all(
+      items.map((item) =>
+        this.staff.resolveStaffForService(
+          locationId,
+          item.serviceId,
+          item.staffId,
+        ),
+      ),
+    );
+    if (assignedStaff.some((candidates) => candidates.length === 0)) return [];
+    const earliestStart = new Date(
+      now.getTime() +
+        Math.max(location.minimumBookingNoticeMinutes * 60_000, 1),
+    );
+    const spanDays = Math.ceil(
+      (Math.max(...items.map((item) => item.endAt.getTime())) -
+        Math.min(...items.map((item) => item.startAt.getTime()))) /
+        86_400_000,
+    );
+    const staffIds = [...new Set(items.map((item) => item.staffId))];
+    const [shifts, events] = await this.fetchSlotData(
+      locationId,
+      staffIds,
+      TimeUtils.dateOnly(first),
+      TimeUtils.dateOnly(TimeUtils.addDaysStr(last, spanDays)),
+      items.flatMap((item) =>
+        item.calendarEventId ? [item.calendarEventId] : [],
+      ),
+      location.timezone,
+    );
+    const dates = [
+      ...new Set(shifts.map((shift) => TimeUtils.dateOnlyStr(shift.date))),
+    ].sort();
+    const shiftsByStaff = this.compute.groupShiftsByStaffDate(shifts);
+    const blocked = this.compute.expandBlockEvents(
+      events,
+      dates,
+      staffIds,
+      location.timezone,
+    );
+    return dates
+      .filter((date) => date >= first && date <= last)
+      .flatMap((date) => {
+        const slots = this.compute.collectRescheduleSlotsForDate(
+          date,
+          items,
+          shiftsByStaff,
+          blocked,
+          earliestStart,
+          location.slotIntervalMinutes,
+          location.timezone,
+        );
+        return slots.length
+          ? [
+              {
+                date,
+                slots: slots.map((minute) => ({
+                  time: TimeUtils.minutesToHHmm(minute),
+                })),
+              },
+            ]
+          : [];
+      });
   }
 
   async filterAvailableStaff(

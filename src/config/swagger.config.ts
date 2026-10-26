@@ -20,4 +20,8 @@ export const swaggerConfig = new DocumentBuilder()
     name: 'refresh-token',
     description: 'JWT refresh token (HttpOnly cookie)',
   })
+  .addBearerAuth(
+    { type: 'http', scheme: 'Bearer', description: 'Booking management token' },
+    'booking-client-token',
+  )
   .build();

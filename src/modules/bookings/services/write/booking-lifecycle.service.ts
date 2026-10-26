@@ -1,9 +1,4 @@
-import {
-  ForbiddenException,
-  HttpStatus,
-  Injectable,
-  Logger,
-} from '@nestjs/common';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { Booking, CancelledBy } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
 import {
@@ -26,9 +21,9 @@ import { UpdateBookingStatusDto } from '../../dto/update-booking-status.dto.js';
 import { BookingStatus } from '../../enums/booking-status.enum.js';
 import { BookingWithItems } from '../../interfaces/booking-with-items.interface.js';
 import { AUTO_COMPLETABLE_STATUSES } from '../../rules/booking-cron.rules.js';
+import { assertClientCanManageBooking } from '../../rules/booking-client.rules.js';
 import { BookingEventsService } from '../booking-events.service.js';
 import { BookingWriteLockService } from '../booking-write-lock.service.js';
-import { BookingReadService } from '../read/booking-read.service.js';
 import { BookingRescheduleService } from './booking-reschedule.service.js';
 
 @Injectable()
@@ -40,7 +35,6 @@ export class BookingLifecycleService {
     private readonly locationService: LocationService,
     private readonly staffEarnings: StaffEarningsService,
     private readonly orders: OrdersFacade,
-    private readonly read: BookingReadService,
     private readonly write: BookingWriteLockService,
     private readonly events: BookingEventsService,
     private readonly reschedule: BookingRescheduleService,
@@ -200,14 +194,15 @@ export class BookingLifecycleService {
   }
 
   async cancelByClient(
-    bookingId: string,
+    booking: BookingWithItems,
     dto: CancelBookingDto,
   ): Promise<Booking> {
-    const booking = await this.read.findById(bookingId);
-    if (booking.status === BookingStatus.COMPLETED)
-      throw new ForbiddenException(
-        'Completed bookings cannot be cancelled with a client token',
+    if (booking.status === BookingStatus.CANCELLED)
+      throw new AppException(
+        ErrorCode.BOOKING_ALREADY_CANCELLED,
+        HttpStatus.CONFLICT,
       );
+    assertClientCanManageBooking(booking);
     const actor: AuditActor = {
       name: `${booking.clientFirstName} ${booking.clientLastName}`,
       role: AuditActorRole.CLIENT,
@@ -281,6 +276,8 @@ export class BookingLifecycleService {
     let removedDraftProductItems: Record<string, unknown>[] = [];
     const updated = await this.db.$transaction(async (tx) => {
       await this.write.lockUnchangedBooking(tx, booking);
+      if (cancelledBy === CancelledBy.CLIENT)
+        assertClientCanManageBooking(booking);
       const result = await tx.booking.update({
         where: { id: booking.id },
         data: {

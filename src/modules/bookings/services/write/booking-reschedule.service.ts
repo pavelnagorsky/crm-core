@@ -15,6 +15,11 @@ import { UpdateBookingDto } from '../../dto/update-booking.dto.js';
 import { BookingStatus } from '../../enums/booking-status.enum.js';
 import { BookingWithItems } from '../../interfaces/booking-with-items.interface.js';
 import { BookingSlotLockService } from '../booking-slot-lock.service.js';
+import {
+  assertClientCanManageBooking,
+  assertClientRescheduleTime,
+  resolveClientRescheduleStart,
+} from '../../rules/booking-client.rules.js';
 import { BookingWriteLockService } from '../booking-write-lock.service.js';
 
 @Injectable()
@@ -30,11 +35,36 @@ export class BookingRescheduleService {
     private readonly slots: BookingSlotLockService,
   ) {}
 
-  async reschedule(
+  reschedule(
     old: BookingWithItems,
     dto: UpdateBookingDto,
     data: Prisma.BookingUpdateInput,
     actor: AuditActor,
+  ): Promise<BookingWithItems> {
+    return this.moveBooking(old, dto, data, actor);
+  }
+
+  rescheduleByClient(
+    old: BookingWithItems,
+    startAt: string,
+    actor: AuditActor,
+  ): Promise<BookingWithItems> {
+    assertClientCanManageBooking(old);
+    return this.moveBooking(
+      old,
+      { startAt },
+      { reminderSentAt: null },
+      actor,
+      true,
+    );
+  }
+
+  private async moveBooking(
+    old: BookingWithItems,
+    dto: UpdateBookingDto,
+    data: Prisma.BookingUpdateInput,
+    actor: AuditActor,
+    clientInitiated = false,
   ): Promise<BookingWithItems> {
     if (old.items.length === 0)
       throw new AppException(
@@ -43,8 +73,14 @@ export class BookingRescheduleService {
       );
     const location = await this.locationService.findById(old.locationId);
     const startAt = dto.startAt
-      ? TimeUtils.localToUtc(dto.startAt, location.timezone)
+      ? clientInitiated
+        ? resolveClientRescheduleStart(dto.startAt, location.timezone)
+        : TimeUtils.localToUtc(dto.startAt, location.timezone)
       : old.startAt;
+    if (clientInitiated) {
+      if (startAt.getTime() === old.startAt.getTime()) return old;
+      assertClientRescheduleTime(startAt, location);
+    }
     const manualInterval = dto.endAt !== undefined;
     const endAt = manualInterval
       ? TimeUtils.localToUtc(dto.endAt!, location.timezone)
@@ -73,6 +109,15 @@ export class BookingRescheduleService {
         await this.write.lockActiveLocation(old.locationId, tx);
       await this.write.lockUnchangedBooking(tx, old);
       await this.slots.lockSlots(items, location.timezone, tx);
+      if (clientInitiated) {
+        for (const item of items)
+          await this.assertStaffCanPerform(
+            old.locationId,
+            item.serviceId,
+            item.staffId,
+            tx,
+          );
+      }
       if (!manualInterval)
         await this.slots.assertSlotsAvailable(
           old.locationId,
@@ -80,6 +125,10 @@ export class BookingRescheduleService {
           location.timezone,
           tx,
         );
+      if (clientInitiated) {
+        assertClientCanManageBooking(old);
+        assertClientRescheduleTime(startAt, location);
+      }
       await this.saveItemSchedule(old.locationId, items, tx);
       const updated = await tx.booking.update({
         where: { id: old.id },
@@ -157,12 +206,14 @@ export class BookingRescheduleService {
     locationId: string,
     serviceId: string,
     staffId?: string,
+    tx?: Prisma.TransactionClient,
   ): Promise<void> {
     if (!staffId) return;
     const candidates = await this.staffService.resolveStaffForService(
       locationId,
       serviceId,
       staffId,
+      tx,
     );
     if (candidates.length === 0)
       throw new AppException(

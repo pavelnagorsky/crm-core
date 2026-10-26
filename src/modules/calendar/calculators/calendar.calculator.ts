@@ -10,6 +10,7 @@ import { CalendarEventItemDto } from '../dto/calendar-event-item.dto.js';
 import { ClosedTimeItemDto } from '../dto/closed-time-item.dto.js';
 import { CalendarSlotCandidate } from '../interfaces/calendar-slot-candidate.interface.js';
 import { CalendarSlotItem } from '../interfaces/calendar-slot-item.interface.js';
+import { CalendarRescheduleItem } from '../interfaces/calendar-reschedule-item.interface.js';
 import {
   CalendarEventWithCancellations,
   EventTimes,
@@ -18,6 +19,71 @@ import {
 
 @Injectable()
 export class CalendarCalculator {
+  collectRescheduleSlotsForDate(
+    date: string,
+    items: CalendarRescheduleItem[],
+    shifts: Map<string, Map<string, StaffShift>>,
+    blocked: Map<string, Map<string, Interval[]>>,
+    earliestStart: Date,
+    slotInterval: number,
+    timezone: string,
+  ): number[] {
+    if (
+      !items.length ||
+      items.some((item, index) =>
+        items
+          .slice(index + 1)
+          .some(
+            (other) =>
+              item.staffId === other.staffId &&
+              item.startAt < other.endAt &&
+              other.startAt < item.endAt,
+          ),
+      )
+    )
+      return [];
+    const originalStart = Math.min(
+      ...items.map((item) => item.startAt.getTime()),
+    );
+    const result: number[] = [];
+    for (let minute = 0; minute < 1440; minute += slotInterval) {
+      const localStart = `${date}T${TimeUtils.minutesToHHmm(minute)}:00`;
+      const startAt = TimeUtils.localToUtc(localStart, timezone);
+      if (
+        startAt < earliestStart ||
+        TimeUtils.dateToMinutes(startAt, timezone) !== minute
+      )
+        continue;
+      const delta = startAt.getTime() - originalStart;
+      const fits = items.every((item) => {
+        const start = new Date(item.startAt.getTime() + delta);
+        const end = new Date(item.endAt.getTime() + delta);
+        const itemDate = TimeUtils.zonedDateStr(start, timezone);
+        if (end <= start) return false;
+        const midnight = TimeUtils.localToUtc(
+          `${TimeUtils.addDaysStr(itemDate, 1)}T00:00:00`,
+          timezone,
+        );
+        if (end > midnight) return false;
+        const from = TimeUtils.dateToMinutes(start, timezone);
+        const to =
+          end.getTime() === midnight.getTime()
+            ? 1440
+            : TimeUtils.dateToMinutes(end, timezone);
+        return this.isStaffFreeOnDate(
+          item.staffId,
+          itemDate,
+          from,
+          to,
+          shifts,
+          blocked,
+        );
+      });
+      if (fits) result.push(minute);
+    }
+    return result;
+  }
+
   // ─── Event expansion ──────────────────────────────────────────────────────────
 
   /**

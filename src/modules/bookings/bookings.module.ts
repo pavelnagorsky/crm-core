@@ -12,8 +12,10 @@ import { StaffModule } from '../staff/staff.module.js';
 import { BookingCreateFacade } from './booking-create.facade.js';
 import { BookingsFacade } from './bookings.facade.js';
 import { BookingsController } from './controllers/bookings.controller.js';
+import { BookingClientController } from './controllers/booking-client.controller.js';
 import { BookingsExportService } from './export/services/bookings-export.service.js';
 import { BookingClientTokenService } from './services/booking-client-token.service.js';
+import { BookingClientService } from './services/booking-client.service.js';
 import { BookingAccessService } from './services/booking-access.service.js';
 import { BookingCronService } from './services/booking-cron.service.js';
 import { BookingEventsService } from './services/booking-events.service.js';
@@ -44,8 +46,9 @@ import { JwtBookingClientStrategy } from './strategies/jwt-booking-client.strate
     OrdersModule,
     I18nModule,
   ],
-  controllers: [BookingsController],
+  controllers: [BookingsController, BookingClientController],
   providers: [
+    BookingClientService,
     BookingAccessService,
     BookingReservationService,
     BookingSelectionService,
@@ -69,6 +72,7 @@ import { JwtBookingClientStrategy } from './strategies/jwt-booking-client.strate
     JwtBookingClientStrategy,
   ],
   exports: [
+    BookingClientTokenService,
     BookingCalendarReadService,
     BookingCreateFacade,
     BookingsFacade,
