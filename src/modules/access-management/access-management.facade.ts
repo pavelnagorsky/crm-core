@@ -239,6 +239,7 @@ export class AccessManagementFacade {
         email,
         this.link(result.token),
         brand.name,
+        brand.logoFile?.url ?? null,
       ),
     );
   }

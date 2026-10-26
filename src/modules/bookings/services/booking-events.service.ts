@@ -82,6 +82,7 @@ export class BookingEventsService {
       new BookingConfirmedNotification(
         {
           id: booking.id,
+          locationId: booking.locationId,
           clientEmail: booking.clientEmail,
           clientFirstName: booking.clientFirstName,
           clientLastName: booking.clientLastName,
@@ -119,6 +120,7 @@ export class BookingEventsService {
   ): Omit<BookingNotificationData, 'clientEmail' | 'timezone'> {
     return {
       id: booking.id,
+      locationId: booking.locationId,
       clientFirstName: booking.clientFirstName,
       clientLastName: booking.clientLastName,
       serviceTitle: booking.items.map((item) => item.serviceTitle).join(', '),

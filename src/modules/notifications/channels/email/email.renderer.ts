@@ -6,6 +6,7 @@ import { join } from 'path';
 import { fileURLToPath } from 'url';
 import { IAppConfig } from '../../../../config/interfaces/app-config.interface.js';
 import { I18nLocale } from '../../../../shared/interfaces/i18n-locale.interface.js';
+import { RenderedEmail } from '../../interfaces/rendered-email.interface.js';
 
 export type EmailTemplate =
   | 'confirm-email'
@@ -36,6 +37,7 @@ export class EmailRenderer implements OnModuleInit {
   private readonly lang: string;
   private locale!: I18nLocale;
   private layoutTemplate!: CompiledTemplate;
+  private platformLogo!: Buffer;
 
   constructor(private readonly config: ConfigService) {
     this.hbs = Handlebars.create();
@@ -66,6 +68,9 @@ export class EmailRenderer implements OnModuleInit {
     this.layoutTemplate = this.hbs.compile(
       readFileSync(join(templatesDir, 'layout.hbs'), 'utf-8'),
     );
+    this.platformLogo = readFileSync(
+      join(templatesDir, '..', 'assets', 'klendo-logo.png'),
+    );
 
     for (const name of EMAIL_TEMPLATES) {
       const source = readFileSync(
@@ -79,24 +84,62 @@ export class EmailRenderer implements OnModuleInit {
   render(
     template: EmailTemplate,
     data: Record<string, unknown>,
-  ): { subject: string; html: string } {
+  ): RenderedEmail {
     const contentTemplate = this.contentTemplates.get(template);
     if (!contentTemplate)
       throw new Error(`Email template not found: ${template}`);
 
-    const subject =
+    const isPlatform =
+      template === 'confirm-email' || template === 'reset-password';
+    const senderName = isPlatform
+      ? 'Klendo'
+      : String(data.brandName ?? '').trim();
+    if (!senderName)
+      throw new Error(`Brand name required for email: ${template}`);
+    const logoUrl = isPlatform
+      ? 'cid:klendo-logo'
+      : typeof data.brandLogoUrl === 'string' &&
+          data.brandLogoUrl.startsWith('https://')
+        ? data.brandLogoUrl
+        : undefined;
+    const title =
       (this.locale.email[template]?.subject as string | undefined) ?? template;
+    const subject = `${senderName} — ${title}`;
+    const heading =
+      (this.locale.email[template]?.heading as string | undefined) ?? title;
     const ctx = { ...data, locale: this.locale, lang: this.lang };
 
     const content = contentTemplate(ctx);
     const html = this.layoutTemplate({
       subject,
+      heading,
+      senderName,
+      logoUrl,
+      isPlatform,
+      brandingClass: isPlatform ? 'platform' : 'business',
       content,
       lang: this.lang,
       locale: this.locale,
     });
 
-    return { subject, html };
+    return {
+      subject,
+      html,
+      senderName,
+      ...(isPlatform
+        ? {
+            attachments: [
+              {
+                filename: 'klendo-logo.png',
+                content: this.platformLogo,
+                contentType: 'image/png',
+                contentDisposition: 'inline' as const,
+                cid: 'klendo-logo',
+              },
+            ],
+          }
+        : {}),
+    };
   }
 
   private registerHelpers() {

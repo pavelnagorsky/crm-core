@@ -77,6 +77,7 @@ export class BookingCronService {
             NOTIFICATION_EVENT,
             new BookingReminderNotification({
               id: booking.id,
+              locationId: booking.locationId,
               clientFirstName: booking.clientFirstName,
               clientLastName: booking.clientLastName,
               clientEmail: booking.clientEmail!,

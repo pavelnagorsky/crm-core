@@ -14,6 +14,7 @@ export class AccessInvitationNotification
     private readonly email: string,
     private readonly invitationLink: string,
     private readonly brandName: string,
+    private readonly brandLogoUrl: string | null = null,
   ) {
     super();
   }
@@ -23,6 +24,7 @@ export class AccessInvitationNotification
       to: this.email,
       data: {
         brandName: this.brandName,
+        brandLogoUrl: this.brandLogoUrl,
         invitationLink: this.invitationLink,
       },
     };

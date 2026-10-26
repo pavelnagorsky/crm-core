@@ -22,6 +22,7 @@ export class BookingConfirmedNotification
     return {
       to: this.booking.clientEmail,
       data: {
+        locationId: this.booking.locationId,
         clientFirstName: this.booking.clientFirstName,
         serviceTitle: this.booking.serviceTitle,
         staffName: this.booking.staffName,
