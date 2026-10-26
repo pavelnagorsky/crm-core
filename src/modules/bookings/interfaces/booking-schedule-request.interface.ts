@@ -10,5 +10,5 @@ export interface BookingScheduleRequest {
   requestedStaffId?: string;
   timezone: string;
   manualItems: ManualBookingItemDto[];
-  walkInEndAt: Date | null;
+  customEndAt: Date | null;
 }

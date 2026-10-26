@@ -145,12 +145,12 @@ export class BookingCreateFacade {
       throw new AppException(ErrorCode.CLIENT_BANNED, HttpStatus.FORBIDDEN);
 
     const selection = await this.selection.resolveForBooking(locationId, dto);
-    const isWalkIn =
+    const isCustomTime =
       this.isInternalSource(attribution.source) &&
-      'isWalkIn' in dto &&
-      dto.isWalkIn === true;
-    const walkInEndAt =
-      isWalkIn && 'endAt' in dto && dto.endAt
+      'isCustomTime' in dto &&
+      dto.isCustomTime === true;
+    const customEndAt =
+      isCustomTime && 'endAt' in dto && dto.endAt
         ? TimeUtils.localToUtc(dto.endAt, location.timezone)
         : null;
     const items = await this.scheduling.resolveForBooking({
@@ -161,7 +161,7 @@ export class BookingCreateFacade {
       requestedStaffId: dto.staffId,
       timezone: location.timezone,
       manualItems: this.manualItems(dto),
-      walkInEndAt,
+      customEndAt,
     });
     const envelopeStart = new Date(
       Math.min(...items.map((item) => item.startAt.getTime())),
@@ -170,7 +170,7 @@ export class BookingCreateFacade {
       Math.max(...items.map((item) => item.endAt.getTime())),
     );
     const status = this.initialStatus(
-      isWalkIn,
+      isCustomTime,
       envelopeEnd,
       location.isBookingConfirmationRequired,
     );
@@ -197,6 +197,7 @@ export class BookingCreateFacade {
       startAt: envelopeStart,
       endAt: envelopeEnd,
       status,
+      isCustomTime,
       notes: dto.notes ?? null,
       internalNotes: this.manualInternalNotes(dto, attribution.source),
       products: this.manualProducts(dto, attribution.source),
@@ -237,11 +238,11 @@ export class BookingCreateFacade {
   }
 
   private initialStatus(
-    isWalkIn: boolean,
+    isCustomTime: boolean,
     endAt: Date,
     isBookingConfirmationRequired: boolean,
   ): BookingStatus {
-    if (isWalkIn) {
+    if (isCustomTime) {
       return endAt.getTime() <= Date.now()
         ? BookingStatus.COMPLETED
         : BookingStatus.CONFIRMED;

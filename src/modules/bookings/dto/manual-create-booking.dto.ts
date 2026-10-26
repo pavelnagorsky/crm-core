@@ -35,11 +35,11 @@ export class ManualCreateBookingDto extends CreateBookingDto {
     required: false,
     default: false,
     description:
-      'Create a walk-in as a manual booking. Confirms an ongoing visit and completes an elapsed visit automatically.',
+      'Create a manual booking with custom time. Confirms an ongoing visit and completes an elapsed visit automatically.',
   })
   @IsOptional()
   @IsBoolean()
-  isWalkIn?: boolean;
+  isCustomTime?: boolean;
 
   @ApiProperty({
     type: () => ManualBookingItemDto,
@@ -91,7 +91,7 @@ export class ManualCreateBookingDto extends CreateBookingDto {
     example: '2026-09-20T10:30:00',
     required: false,
     description:
-      'Local datetime in location timezone. Used only when isWalkIn is true to override actual end time.',
+      'Local datetime in location timezone. Used only when isCustomTime is true to override actual end time.',
   })
   @IsOptional()
   @IsLocalDateTime()

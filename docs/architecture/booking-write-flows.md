@@ -7,14 +7,22 @@ manual clients are resolved after completion permission checks. Audit and client
 notifications follow a successful reservation.
 
 Booking channels (`source`) are `PUBLIC_PAGE` (online), `WIDGET` and `MANUAL`.
-Walk-ins use `MANUAL`. For `POST /locations/:locationId/bookings/manual`, set
-`isWalkIn: true` instead of `source: "WALK_IN"` to create a walk-in. This optional
-flag defaults to false and only controls creation behavior; it is not a channel
-or a persisted booking field. Walk-ins accept an optional actual `endAt`, confirm
-ongoing visits and complete elapsed visits with the usual order/payroll sync and
+Manual bookings can use custom time ("Произвольное время") by setting
+`isCustomTime: true` in `POST /locations/:locationId/bookings/manual`. This
+optional flag defaults to false, is persisted on the booking and is returned in
+booking detail/search responses. The channel remains `MANUAL`.
+
+Bookings with custom time accept an optional actual `endAt`, confirm ongoing
+visits and complete elapsed visits with the usual order/payroll sync and
 completion permission check. Ordinary manual bookings keep the location's
-confirmation policy. Existing walk-ins are migrated to `MANUAL` without changing
-their status or intervals.
+confirmation policy. The migration restores `isCustomTime: true` for historical
+bookings identified by their legacy source in a `BOOKING_CREATED` audit entry.
+Other existing bookings default to false; previously unsaved flags cannot be
+inferred reliably without that evidence.
+
+`PUT /locations/:locationId/bookings/:id` accepts optional `isCustomTime`. Omitting
+it preserves the current value; true/false updates it without changing the
+channel, status or interval. Only `MANUAL` bookings can have `isCustomTime: true`.
 
 | Service | Responsibility |
 | --- | --- |

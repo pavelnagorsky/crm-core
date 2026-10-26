@@ -1127,8 +1127,9 @@ model Booking {
   executionMode BookingExecutionMode @default(SEQUENTIAL)
   bundleId      String?
 
-  status BookingStatus @default(CONFIRMED)
-  source BookingSource
+  status       BookingStatus @default(CONFIRMED)
+  source       BookingSource
+  isCustomTime Boolean       @default(false)
 
   bookingPageId   String?
   bookingWidgetId String?

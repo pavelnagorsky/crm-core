@@ -10,6 +10,7 @@ export interface BookingCreatedPayload {
   totalPrice?: string;
   currency: string;
   source?: string;
+  isCustomTime?: boolean;
   executionMode?: string;
   bundleTitle?: string;
 }

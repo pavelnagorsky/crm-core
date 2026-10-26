@@ -110,7 +110,7 @@
 | `GET /public/bookings/me/available-slots` | `getClientAvailableSlots` | P: `booking-client-token` | Слоты только для записи из токена, с сохранением услуг и сотрудников. |
 | `POST /public/bookings/me/reschedule` | `rescheduleByClientToken` | P: `booking-client-token` | Только предстоящая PENDING/CONFIRMED; повторная проверка слотов в транзакции. |
 | `POST /public/bookings/me/cancel` | `cancelByClientToken` | P: `booking-client-token` | Действующая клиентская политика отмены; не обход к возврату произвольного заказа. |
-| `POST /locations/:locationId/bookings/manual` | `createManual` | L: `booking:write` | Произвольная цена: также sale.price.override:write. Товары: order:write. Клиент находится или создаётся автоматически независимо от client:write. Живая очередь (`isWalkIn: true`, канал `MANUAL`) с немедленным COMPLETED: order:write. |
+| `POST /locations/:locationId/bookings/manual` | `createManual` | L: `booking:write` | Произвольная цена: также sale.price.override:write. Товары: order:write. Клиент находится или создаётся автоматически независимо от client:write. Произвольное время (`isCustomTime: true`, канал `MANUAL`) с немедленным COMPLETED: order:write. |
 | `GET /locations/:locationId/bookings/status-counts` | `getStatusCounts` | L: `booking:read` или `booking.own:read` | При own-чтении обязательно участие в записи; списки и счётчики ограничены до пагинации. |
 | `GET /locations/:locationId/bookings/export` | `export` | L: `booking.export:read` | — |
 | `GET /locations/:locationId/bookings/:id` | `findById` | L: `booking:read` или `booking.own:read` | При own-чтении обязательно участие в записи; списки и счётчики ограничены до пагинации. |

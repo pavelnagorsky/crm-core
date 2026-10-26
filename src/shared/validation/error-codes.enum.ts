@@ -204,6 +204,10 @@ export const ErrorCode = {
     code: 'BOOKING_INVALID_INTERVAL',
     message: 'Booking end time must be after start time',
   },
+  BOOKING_CUSTOM_TIME_MANUAL_ONLY: {
+    code: 'BOOKING_CUSTOM_TIME_MANUAL_ONLY',
+    message: 'Only manual bookings can use custom time',
+  },
   BOOKING_TIME_INVALID: {
     code: 'BOOKING_TIME_INVALID',
     message: 'Booking end time must be after start time',

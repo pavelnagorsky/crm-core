@@ -15,6 +15,7 @@ import { UpdateBookingItemPriceDto } from '../../dto/update-booking-item-price.d
 import { UpdateBookingStatusDto } from '../../dto/update-booking-status.dto.js';
 import { UpdateBookingDto } from '../../dto/update-booking.dto.js';
 import { BookingStatus } from '../../enums/booking-status.enum.js';
+import { BookingSource } from '../../enums/booking-source.enum.js';
 import { BookingWithItems } from '../../interfaces/booking-with-items.interface.js';
 import { BookingEventsService } from '../booking-events.service.js';
 import { BookingWriteLockService } from '../booking-write-lock.service.js';
@@ -41,6 +42,11 @@ export class BookingMutationService {
     dto: UpdateBookingDto,
   ): Promise<BookingWithItems> {
     const bookingId = old.id;
+    if (dto.isCustomTime === true && old.source !== BookingSource.MANUAL)
+      throw new AppException(
+        ErrorCode.BOOKING_CUSTOM_TIME_MANUAL_ONLY,
+        HttpStatus.BAD_REQUEST,
+      );
 
     const manualIntervalChanging = dto.endAt !== undefined;
     const slotChanging = dto.startAt !== undefined || dto.staffId !== undefined;
@@ -48,6 +54,7 @@ export class BookingMutationService {
     const updateArgs = {
       where: { id: bookingId },
       data: {
+        isCustomTime: dto.isCustomTime ?? undefined,
         clientFirstName: dto.firstName ?? old.clientFirstName,
         clientLastName: dto.lastName ?? old.clientLastName,
         clientPhone: dto.phone ?? old.clientPhone,

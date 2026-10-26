@@ -76,6 +76,7 @@ export class BookingReservationService {
           bundleId,
           status,
           source: attribution.source,
+          isCustomTime: input.isCustomTime,
           bookingPageId: attribution.bookingPageId,
           bookingWidgetId: attribution.bookingWidgetId,
           clientFirstName: client.firstName,

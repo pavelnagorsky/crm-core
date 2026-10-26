@@ -1,6 +1,7 @@
 import { validate } from 'class-validator';
 import { CreateBookingDto } from './create-booking.dto.js';
 import { ManualCreateBookingDto } from './manual-create-booking.dto.js';
+import { UpdateBookingDto } from './update-booking.dto.js';
 
 function booking(overrides: Partial<CreateBookingDto> = {}): CreateBookingDto {
   return Object.assign(new CreateBookingDto(), {
@@ -11,6 +12,23 @@ function booking(overrides: Partial<CreateBookingDto> = {}): CreateBookingDto {
     ...overrides,
   });
 }
+
+describe('UpdateBookingDto custom time flag', () => {
+  it.each([undefined, true, false])('accepts isCustomTime=%s', async (isCustomTime) => {
+    const dto = Object.assign(new UpdateBookingDto(), { isCustomTime });
+    expect(await validate(dto, { whitelist: true })).toHaveLength(0);
+    expect(dto.isCustomTime).toBe(isCustomTime);
+  });
+
+  it.each(['true', 'false', 0, 1])('rejects isCustomTime=%s', async (isCustomTime) => {
+    const dto = Object.assign(new UpdateBookingDto(), { isCustomTime });
+    expect(await validate(dto)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ property: 'isCustomTime' }),
+      ]),
+    );
+  });
+});
 
 describe('CreateBookingDto channel ids', () => {
   it('rejects both booking channel ids', async () => {
@@ -59,18 +77,18 @@ describe('ManualCreateBookingDto anonymous client validation', () => {
     expect(errors).toHaveLength(0);
   });
 
-  it.each([true, false])('accepts isWalkIn: %s', async (isWalkIn) => {
-    expect(await validate(manual({ isWalkIn }))).toHaveLength(0);
+  it.each([true, false])('accepts isCustomTime: %s', async (isCustomTime) => {
+    expect(await validate(manual({ isCustomTime }))).toHaveLength(0);
   });
 
-  it('rejects a non-boolean walk-in flag', async () => {
-    const dto = Object.assign(manual(), { isWalkIn: 'true' });
+  it('rejects a non-boolean custom time flag', async () => {
+    const dto = Object.assign(manual(), { isCustomTime: 'true' });
     const errors = await validate(dto);
 
     expect(errors).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          property: 'isWalkIn',
+          property: 'isCustomTime',
           constraints: expect.objectContaining({
             isBoolean: expect.any(String),
           }),
@@ -79,14 +97,14 @@ describe('ManualCreateBookingDto anonymous client validation', () => {
     );
   });
 
-  it('strips the former source field from manual requests', async () => {
-    const dto = Object.assign(manual({ isWalkIn: true }), {
-      source: 'WALK_IN',
+  it('strips the source field from manual requests', async () => {
+    const dto = Object.assign(manual({ isCustomTime: true }), {
+      source: 'MANUAL',
     });
 
     expect(await validate(dto, { whitelist: true })).toHaveLength(0);
     expect(dto).not.toHaveProperty('source');
-    expect(dto.isWalkIn).toBe(true);
+    expect(dto.isCustomTime).toBe(true);
   });
 
   it('validates optional phone when anonymous manual booking provides it', async () => {

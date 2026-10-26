@@ -86,6 +86,35 @@ describe('Staff booking API', () => {
     },
   );
 
+  it.each([true, false])(
+    'returns isCustomTime=%s in booking details and search',
+    async (isCustomTime) => {
+      const visit = booking({ locationId: 'location-1', isCustomTime });
+      bookings.findByIdInLocation.mockResolvedValueOnce(visit);
+      bookings.search.mockResolvedValueOnce({ items: [visit], totalItems: 1 });
+
+      const details = await controller.findById(
+        'location-1',
+        visit.id,
+        tokenPayload('STAFF'),
+      );
+      const search = await controller.search(
+        'location-1',
+        { page: 1, pageSize: 10 },
+        tokenPayload('STAFF'),
+      );
+
+      expect(details.responseValue).toMatchObject({
+        source: 'MANUAL',
+        isCustomTime,
+      });
+      expect(search.responseValue?.items[0]).toMatchObject({
+        source: 'MANUAL',
+        isCustomTime,
+      });
+    },
+  );
+
   it('allows cancellation before completion', async () => {
     await controller.cancel(
       'location-1',

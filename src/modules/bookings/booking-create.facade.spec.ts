@@ -464,6 +464,7 @@ describe('BookingCreateFacade calendar link', () => {
       expect.objectContaining({
         data: expect.objectContaining({
           source: BookingSource.PUBLIC_PAGE,
+          isCustomTime: false,
           bookingPageId: null,
           bookingWidgetId: null,
           clientLastName: 'Иванова',
@@ -605,7 +606,7 @@ describe('BookingCreateFacade manual item prices', () => {
   });
 });
 
-function walkInSetup(
+function customTimeSetup(
   options: {
     isSlotFree?: boolean;
     serviceDurationMinutes?: number;
@@ -667,6 +668,7 @@ function walkInSetup(
             endAt: Date;
             status: BookingStatus;
             source: BookingSource;
+            isCustomTime: boolean;
             executionMode: string;
             clientId: string | null;
             clientFirstName: string;
@@ -690,6 +692,7 @@ function walkInSetup(
             endAt: args.data.endAt,
             status: args.data.status,
             source: args.data.source,
+            isCustomTime: args.data.isCustomTime,
             executionMode: args.data.executionMode,
             bundleId: null,
             clientFirstName: args.data.clientFirstName,
@@ -761,17 +764,17 @@ function walkInSetup(
   return { service, tx, calendar, clients, orders, earnings };
 }
 
-describe('BookingCreateFacade walk-in', () => {
+describe('BookingCreateFacade custom time', () => {
   it.each([undefined, false])(
-    'keeps ordinary manual creation behavior when isWalkIn is %s',
-    async (isWalkIn) => {
-      const { service, tx, orders, earnings } = walkInSetup();
+    'keeps ordinary manual creation behavior when isCustomTime is %s',
+    async (isCustomTime) => {
+      const { service, tx, orders, earnings } = customTimeSetup();
 
       const booking = await service.createManualBooking(
         'business-1',
         {
           ...dto,
-          isWalkIn,
+          isCustomTime,
           startAt: '2020-09-20T10:04:00',
           endAt: '2020-09-20T10:30:00',
         },
@@ -780,6 +783,7 @@ describe('BookingCreateFacade walk-in', () => {
       );
 
       expect(booking.source).toBe(BookingSource.MANUAL);
+      expect(booking.isCustomTime).toBe(false);
       expect(booking.status).toBe(BookingStatus.PENDING);
       expect(booking.endAt.toISOString()).toBe('2020-09-20T08:04:00.000Z');
       expect(tx.booking.create).toHaveBeenCalledOnce();
@@ -789,7 +793,7 @@ describe('BookingCreateFacade walk-in', () => {
   );
 
   it('resolves a client automatically for manual booking without a client-management flag', async () => {
-    const { service, tx, clients } = walkInSetup();
+    const { service, tx, clients } = customTimeSetup();
 
     await service.createManualBooking(
       'business-1',
@@ -809,7 +813,7 @@ describe('BookingCreateFacade walk-in', () => {
   });
 
   it('creates anonymous manual booking without creating or linking a client', async () => {
-    const { service, tx, clients } = walkInSetup();
+    const { service, tx, clients } = customTimeSetup();
 
     await service.createManualBooking(
       'business-1',
@@ -840,7 +844,7 @@ describe('BookingCreateFacade walk-in', () => {
   });
 
   it('stores optional anonymous contact snapshot without creating a client', async () => {
-    const { service, tx, clients } = walkInSetup();
+    const { service, tx, clients } = customTimeSetup();
 
     await service.createManualBooking(
       'business-1',
@@ -869,7 +873,7 @@ describe('BookingCreateFacade walk-in', () => {
   });
 
   it('stores internal notes and draft products atomically on manual create', async () => {
-    const { service, tx, orders } = walkInSetup();
+    const { service, tx, orders } = customTimeSetup();
     const actor = { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER };
     const products = [
       {
@@ -910,14 +914,14 @@ describe('BookingCreateFacade walk-in', () => {
     );
   });
 
-  it('rejects creating a completed walk-in before writing the booking or client', async () => {
-    const { service, tx } = walkInSetup();
+  it('rejects creating a completed booking with custom time before writing the booking or client', async () => {
+    const { service, tx } = customTimeSetup();
     await expect(
       service.createManualBooking(
         'business-1',
         {
           ...dto,
-          isWalkIn: true,
+          isCustomTime: true,
           startAt: '2020-09-20T10:04:00',
           endAt: '2020-09-20T10:30:00',
         },
@@ -928,17 +932,17 @@ describe('BookingCreateFacade walk-in', () => {
     expect(tx.booking.create).not.toHaveBeenCalled();
   });
 
-  it('keeps an in-progress walk-in confirmed under the manual channel', async () => {
+  it('keeps an ongoing booking with custom time confirmed under the manual channel', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-09-20T07:10:00.000Z'));
     try {
-      const { service, tx, orders, earnings } = walkInSetup();
+      const { service, tx, orders, earnings } = customTimeSetup();
 
       await service.createManualBooking(
         'business-1',
         {
           ...dto,
-          isWalkIn: true,
+          isCustomTime: true,
           startAt: '2026-09-20T10:04:00',
           endAt: '2026-09-20T10:30:00',
         },
@@ -951,10 +955,12 @@ describe('BookingCreateFacade walk-in', () => {
           endAt: Date;
           status: BookingStatus;
           source: BookingSource;
+          isCustomTime: boolean;
           items: { create: { startAt: Date; endAt: Date }[] };
         };
       };
       expect(created.data.source).toBe(BookingSource.MANUAL);
+      expect(created.data.isCustomTime).toBe(true);
       expect(created.data.status).toBe(BookingStatus.CONFIRMED);
       expect(created.data.startAt.toISOString()).toBe(
         '2026-09-20T07:04:00.000Z',
@@ -973,15 +979,15 @@ describe('BookingCreateFacade walk-in', () => {
     }
   });
 
-  it('rejects a walk-in when the requested interval conflicts', async () => {
-    const { service } = walkInSetup({ isSlotFree: false });
+  it('rejects custom time when the requested interval conflicts', async () => {
+    const { service } = customTimeSetup({ isSlotFree: false });
 
     const error = await service
       .createManualBooking(
         'business-1',
         {
           ...dto,
-          isWalkIn: true,
+          isCustomTime: true,
           startAt: '2026-09-20T10:04:00',
           endAt: '2026-09-20T10:30:00',
         },
@@ -996,17 +1002,17 @@ describe('BookingCreateFacade walk-in', () => {
     expect((error as AppException).errorCode).toBe('BOOKING_SLOT_UNAVAILABLE');
   });
 
-  it('completes an elapsed walk-in under the manual channel and syncs order and earnings', async () => {
+  it('completes an elapsed booking with custom time under the manual channel and syncs order and earnings', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date('2026-09-20T07:30:00.000Z'));
     try {
-      const { service, tx, orders, earnings } = walkInSetup();
+      const { service, tx, orders, earnings } = customTimeSetup();
 
       await service.createManualBooking(
         'business-1',
         {
           ...dto,
-          isWalkIn: true,
+          isCustomTime: true,
           startAt: '2026-09-20T10:04:00',
           endAt: '2026-09-20T10:30:00',
         },
@@ -1015,6 +1021,7 @@ describe('BookingCreateFacade walk-in', () => {
 
       const booking = await tx.booking.create.mock.results[0].value;
       expect(booking.source).toBe(BookingSource.MANUAL);
+      expect(booking.isCustomTime).toBe(true);
       expect(booking.status).toBe(BookingStatus.COMPLETED);
       expect(orders.syncCompletedBooking).toHaveBeenCalledWith(
         booking,

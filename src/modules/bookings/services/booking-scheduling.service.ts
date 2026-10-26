@@ -30,7 +30,7 @@ export class BookingSchedulingService {
       requestedStaffId,
       timezone,
       manualItems,
-      walkInEndAt,
+      customEndAt,
     } = request;
     const staffNames = new Map<string, string>();
     const result: ResolvedBookingItem[] = [];
@@ -46,7 +46,7 @@ export class BookingSchedulingService {
         startAt,
         cursor,
         executionMode,
-        walkInEndAt,
+        customEndAt,
       );
       const staffId = await this.resolveItemStaff(
         locationId,
@@ -90,12 +90,12 @@ export class BookingSchedulingService {
     startAt: Date,
     cursor: Date,
     executionMode: PrismaBookingExecutionMode,
-    walkInEndAt: Date | null,
+    customEndAt: Date | null,
   ): { startAt: Date; endAt: Date } {
     const defaultMs =
       (services[index].durationMinutes + services[index].bufferMinutes) *
       60_000;
-    if (!walkInEndAt) {
+    if (!customEndAt) {
       const itemStart =
         executionMode === PrismaBookingExecutionMode.PARALLEL
           ? startAt
@@ -106,7 +106,7 @@ export class BookingSchedulingService {
       };
     }
 
-    if (walkInEndAt.getTime() <= startAt.getTime()) {
+    if (customEndAt.getTime() <= startAt.getTime()) {
       throw new AppException(
         ErrorCode.BOOKING_INVALID_INTERVAL,
         HttpStatus.BAD_REQUEST,
@@ -114,7 +114,7 @@ export class BookingSchedulingService {
     }
 
     if (executionMode === PrismaBookingExecutionMode.PARALLEL) {
-      return { startAt, endAt: walkInEndAt };
+      return { startAt, endAt: customEndAt };
     }
 
     const totalDefaultMs = services.reduce(
@@ -122,11 +122,11 @@ export class BookingSchedulingService {
         sum + (service.durationMinutes + service.bufferMinutes) * 60_000,
       0,
     );
-    const totalActualMs = walkInEndAt.getTime() - startAt.getTime();
+    const totalActualMs = customEndAt.getTime() - startAt.getTime();
     const itemStart = new Date(cursor);
     const itemEnd =
       index === services.length - 1
-        ? walkInEndAt
+        ? customEndAt
         : new Date(
             itemStart.getTime() +
               Math.round((totalActualMs * defaultMs) / totalDefaultMs),

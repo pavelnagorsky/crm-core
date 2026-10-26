@@ -991,7 +991,7 @@ describe('BookingsFacade catalog selection', () => {
   });
 });
 
-describe('BookingsFacade.update item prices', () => {
+describe('BookingsFacade.update details and item prices', () => {
   const findFirst = vi.fn();
   const update = vi.fn();
   const db = {
@@ -1087,6 +1087,54 @@ describe('BookingsFacade.update item prices', () => {
       ],
     });
   }
+
+  it.each([true, false])(
+    'saves isCustomTime=%s without changing source or status',
+    async (isCustomTime) => {
+      const current = booking({ isCustomTime: !isCustomTime });
+      update.mockResolvedValueOnce({ ...current, isCustomTime });
+
+      const result = await service.update(
+        current,
+        auditActorFromToken(token, 'biz'),
+        { isCustomTime },
+      );
+
+      expect(update.mock.calls[0][0].data.isCustomTime).toBe(isCustomTime);
+      expect(update.mock.calls[0][0].data.source).toBeUndefined();
+      expect(update.mock.calls[0][0].data.status).toBeUndefined();
+      expect(result.isCustomTime).toBe(isCustomTime);
+      expect(result.source).toBe(BookingSource.MANUAL);
+      expect(result.status).toBe(current.status);
+    },
+  );
+
+  it('preserves the custom time flag when updating other details', async () => {
+    const current = booking({ isCustomTime: true });
+    update.mockResolvedValueOnce({ ...current, notes: 'Updated' });
+
+    const result = await service.update(
+      current,
+      auditActorFromToken(token, 'biz'),
+      { notes: 'Updated' },
+    );
+
+    expect(update.mock.calls[0][0].data.isCustomTime).toBeUndefined();
+    expect(result.isCustomTime).toBe(true);
+  });
+
+  it.each([BookingSource.PUBLIC_PAGE, BookingSource.WIDGET])(
+    'rejects custom time for %s without writing',
+    async (source) => {
+      await expect(
+        service.update(booking({ source }), auditActorFromToken(token, 'biz'), {
+          isCustomTime: true,
+        }),
+      ).rejects.toMatchObject({ errorCode: 'BOOKING_CUSTOM_TIME_MANUAL_ONLY' });
+      expect(db.$transaction).not.toHaveBeenCalled();
+      expect(update).not.toHaveBeenCalled();
+    },
+  );
 
   it('writes a custom price onto each listed item and leaves the rest', async () => {
     const current = visit();
@@ -1341,8 +1389,9 @@ describe('BookingsFacade.update manual interval', () => {
     expect(db.$transaction).not.toHaveBeenCalled();
   });
 
-  it('allows saving the same past off-grid walk-in interval again', async () => {
+  it('allows saving the same past off-grid custom interval again', async () => {
     const current = twoItemVisit({
+      isCustomTime: true,
       startAt: new Date('2026-09-20T10:07:00.000Z'),
       endAt: new Date('2026-09-20T10:53:00.000Z'),
       items: [
@@ -1374,7 +1423,29 @@ describe('BookingsFacade.update manual interval', () => {
 
     expect(calendar.isSlotFree).not.toHaveBeenCalled();
     expect(bookingUpdate).toHaveBeenCalled();
+    expect(bookingUpdate.mock.calls[0][0].data.isCustomTime).toBeUndefined();
   });
+
+  it.each([true, false])(
+    'saves isCustomTime=%s together with a changed interval',
+    async (isCustomTime) => {
+      const current = twoItemVisit({ isCustomTime: !isCustomTime });
+      bookingUpdate.mockResolvedValueOnce({ ...current, isCustomTime });
+
+      const result = await service.update(
+        current,
+        auditActorFromToken(token, 'biz'),
+        {
+          isCustomTime,
+          startAt: '2026-09-24T10:15:00',
+          endAt: '2026-09-24T12:45:00',
+        },
+      );
+
+      expect(bookingUpdate.mock.calls[0][0].data.isCustomTime).toBe(isCustomTime);
+      expect(result.isCustomTime).toBe(isCustomTime);
+    },
+  );
 });
 
 describe('BookingsFacade.addProduct', () => {

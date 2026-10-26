@@ -21,6 +21,7 @@ export function booking(options: BookingFixtureOptions = {}): BookingWithItems {
     clientId: 'client',
     status: BookingStatus.CONFIRMED,
     source: BookingSource.MANUAL,
+    isCustomTime: false,
     executionMode: BookingExecutionMode.SEQUENTIAL,
     bundleId: null,
     clientFirstName: 'A',

@@ -64,6 +64,7 @@ export class BookingEventsService {
         ),
         currency,
         source: booking.source,
+        isCustomTime: booking.isCustomTime,
         executionMode: booking.executionMode,
         ...(bundleTitle ? { bundleTitle } : {}),
       },

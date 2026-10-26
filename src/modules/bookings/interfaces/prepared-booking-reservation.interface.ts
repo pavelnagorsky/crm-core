@@ -17,6 +17,7 @@ export interface PreparedBookingReservation {
   startAt: Date;
   endAt: Date;
   status: BookingStatus;
+  isCustomTime: boolean;
   notes: string | null;
   internalNotes: string | null;
   products: ManualBookingProductDto[];

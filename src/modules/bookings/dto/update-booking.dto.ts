@@ -5,6 +5,7 @@ import {
   ArrayNotEmpty,
   ArrayUnique,
   IsArray,
+  IsBoolean,
   IsEmail,
   IsOptional,
   IsString,
@@ -18,6 +19,16 @@ import { IsPhone } from '../../../shared/decorators/is-phone.decorator.js';
 import { UpdateBookingItemPriceDto } from './update-booking-item-price.dto.js';
 
 export class UpdateBookingDto {
+  @ApiProperty({
+    type: Boolean,
+    required: false,
+    description:
+      'Custom time flag for manual bookings. Omit to preserve the current value. Does not change the booking channel or status.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  isCustomTime?: boolean;
+
   @ApiProperty({
     type: String,
     format: 'uuid',

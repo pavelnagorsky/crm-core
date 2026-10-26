@@ -2,6 +2,7 @@ import { type Booking } from '@prisma/client';
 import type { FieldDescriptor } from '../interfaces/field-descriptor.interface.js';
 
 export const BOOKING_AUDIT_FIELDS: FieldDescriptor<Booking>[] = [
+  { key: 'isCustomTime' },
   { key: 'startAt', type: 'datetime' },
   { key: 'endAt', type: 'datetime' },
   { key: 'clientFirstName' },

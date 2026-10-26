@@ -362,6 +362,7 @@
   },
   "fields": {
     "BOOKING": {
+      "isCustomTime": "Произвольное время",
       "staffId": "Сотрудник",
       "serviceId": "Услуга",
       "startAt": "Начало",

@@ -36,6 +36,12 @@ export class BookingResponseDto {
   @ApiProperty({ enum: BookingSource })
   source: BookingSource;
 
+  @ApiProperty({
+    type: Boolean,
+    description: 'Whether this manual booking uses custom time.',
+  })
+  isCustomTime: boolean;
+
   @ApiProperty({ type: String })
   clientFirstName: string;
 
@@ -83,6 +89,7 @@ export class BookingResponseDto {
     dto.bundleId = booking.bundleId;
     dto.status = booking.status as BookingStatus;
     dto.source = booking.source as BookingSource;
+    dto.isCustomTime = booking.isCustomTime;
     dto.clientFirstName = booking.clientFirstName;
     dto.clientLastName = booking.clientLastName;
     dto.clientPhone = booking.clientPhone;
