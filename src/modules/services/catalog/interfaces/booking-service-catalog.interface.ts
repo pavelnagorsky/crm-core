@@ -1,12 +1,19 @@
-import { ServiceCategory } from '@prisma/client';
-import { ServiceBundleView } from './service-bundle-view.interface.js';
-import { ServiceWithImage } from './service-with-image.interface.js';
+import { Prisma } from '@prisma/client';
+import {
+  BOOKING_BUNDLE_SELECT,
+  BOOKING_SERVICE_SELECT,
+} from '../constants/booking-catalog.select.js';
+import { BookingCatalogSnapshot } from './booking-catalog-snapshot.interface.js';
 
 export interface BookingServiceCatalog {
-  categories: (ServiceCategory & {
-    services: ServiceWithImage[];
-    bundles: ServiceBundleView[];
+  categories: (BookingCatalogSnapshot['categories'][number] & {
+    services: BookingServiceCatalog['services'];
+    bundles: BookingServiceCatalog['bundles'];
   })[];
-  services: ServiceWithImage[];
-  bundles: ServiceBundleView[];
+  services: Prisma.ServiceGetPayload<{
+    select: typeof BOOKING_SERVICE_SELECT;
+  }>[];
+  bundles: Prisma.ServiceBundleGetPayload<{
+    select: typeof BOOKING_BUNDLE_SELECT;
+  }>[];
 }

@@ -264,16 +264,22 @@ describe('CalendarFacade.getManualAvailableSlots', () => {
     calendarEvent: { findMany: vi.fn() },
   };
   const staff = {
-    resolveStaffForService: vi.fn(),
-    listShiftsForStaff: vi.fn((staffIds, from, to) =>
+    listActiveWithServices: vi
+      .fn()
+      .mockResolvedValue([
+        { id: 'staff-1', staffServices: [{ serviceId: 'service-1' }] },
+      ]),
+    listShiftsForAvailability: vi.fn((_locationId, staffIds, from, to) =>
       db.staffShift.findMany({
         where: { staffId: { in: staffIds }, date: { gte: from, lte: to } },
       }),
     ),
   };
-  const location = { findById: vi.fn(() => db.location.findUnique()) };
+  const location = {
+    getBookingSettings: vi.fn(() => db.location.findUnique()),
+  };
   const services = {
-    resolveServicesForBooking: vi.fn(() => db.service.findMany()),
+    resolveServicesForAvailability: vi.fn(() => db.service.findMany()),
   };
   const compute = {
     groupShiftsByStaffDate: vi.fn().mockReturnValue(new Map()),
@@ -299,7 +305,6 @@ describe('CalendarFacade.getManualAvailableSlots', () => {
     db.service.findMany.mockResolvedValue([
       { id: 'service-1', durationMinutes: 30, bufferMinutes: 0 },
     ]);
-    staff.resolveStaffForService.mockResolvedValue([{ id: 'staff-1' }]);
     db.staffShift.findMany.mockResolvedValue([
       { staffId: 'staff-1', date: new Date('2026-09-28T00:00:00.000Z') },
     ]);

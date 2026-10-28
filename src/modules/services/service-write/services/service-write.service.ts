@@ -7,6 +7,8 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma, ServiceStatus } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
+import { AppCacheService } from '../../../../shared/cache/app-cache.service.js';
+import { CacheDependency } from '../../../../shared/cache/cache-dependency.js';
 import { ACTIVE_LOCATION_WHERE } from '../../../../shared/database/active-business.where.js';
 import { PrismaErrorCode } from '../../../../shared/database/prisma-error-codes.js';
 import { AppException } from '../../../../shared/exceptions/app.exception.js';
@@ -39,6 +41,7 @@ export class ServiceWriteService {
     private readonly db: DatabaseService,
     private readonly eventEmitter: EventEmitter2,
     private readonly locationService: LocationService,
+    private readonly cache: AppCacheService,
   ) {}
 
   async create(
@@ -61,6 +64,7 @@ export class ServiceWriteService {
       },
       include: serviceAuditInclude,
     });
+    await this.cache.invalidate(CacheDependency.serviceCatalog(locationId));
     const { currency } = await this.locationService.getLocale(locationId);
     this.logger.log(
       `service created: id=${service.id} locationId=${locationId}`,
@@ -111,6 +115,7 @@ export class ServiceWriteService {
       },
       include: serviceAuditInclude,
     });
+    await this.cache.invalidate(CacheDependency.serviceCatalog(locationId));
     const changes = diffFields(
       toServiceAuditShape(old),
       toServiceAuditShape(service),
@@ -164,6 +169,7 @@ export class ServiceWriteService {
       where: { id: serviceId },
       data: { status },
     });
+    await this.cache.invalidate(CacheDependency.serviceCatalog(locationId));
     this.logger.log(
       `service status: id=${serviceId} locationId=${locationId} status=${status}`,
     );
@@ -190,6 +196,8 @@ export class ServiceWriteService {
     const service = await this.findInLocation(locationId, serviceId);
     try {
       await this.db.service.delete({ where: { id: serviceId } });
+      await this.cache.invalidate(CacheDependency.serviceCatalog(locationId));
+      await this.cache.invalidate(CacheDependency.staffDirectory(locationId));
     } catch (e: any) {
       if (e?.code === PrismaErrorCode.FOREIGN_KEY_VIOLATION) {
         throw new AppException(ErrorCode.SERVICE_IN_USE, HttpStatus.CONFLICT);

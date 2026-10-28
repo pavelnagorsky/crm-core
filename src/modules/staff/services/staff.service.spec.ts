@@ -16,6 +16,7 @@ describe('StaffService.search', () => {
     {} as never,
     {} as never,
     {} as never,
+    { invalidate: vi.fn() } as never,
   );
 
   beforeEach(() => {

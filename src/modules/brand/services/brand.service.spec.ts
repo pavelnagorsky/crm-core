@@ -32,6 +32,7 @@ describe('BrandService first location', () => {
     epoch as never,
     bookingDeletionPolicy as never,
     access as never,
+    { invalidate: vi.fn() } as never,
   );
   const actor = { id: 'user-1', name: 'Anna', role: AuditActorRole.OWNER };
   const dto = {

@@ -11,9 +11,9 @@ import { CalendarCalculator } from '../../calculators/calendar.calculator.js';
 import { AvailableSlotsDayDto } from '../../dto/available-slots-day.dto.js';
 import { AvailableSlotsRequestDto } from '../../dto/available-slots-request.dto.js';
 import { ManualAvailableSlotsRequestDto } from '../../dto/manual-available-slots-request.dto.js';
+import { CalendarRescheduleItem } from '../../interfaces/calendar-reschedule-item.interface.js';
 import { CalendarSlotCandidate } from '../../interfaces/calendar-slot-candidate.interface.js';
 import { CalendarSlotItem } from '../../interfaces/calendar-slot-item.interface.js';
-import { CalendarRescheduleItem } from '../../interfaces/calendar-reschedule-item.interface.js';
 import { CalendarEventWithCancellations } from '../../interfaces/calendar-types.interface.js';
 import { blockingEventsWhere } from '../../rules/blocking-events-where.js';
 
@@ -110,7 +110,7 @@ export class CalendarAvailabilityService {
     toRaw: string,
   ): Promise<AvailableSlotsDayDto[]> {
     const { from, to } = this.manualSlotRange(fromRaw, toRaw);
-    const location = await this.locationService.findById(locationId);
+    const location = await this.locationService.getBookingSettings(locationId);
     const now = new Date();
     const today = TimeUtils.zonedDateStr(now, location.timezone);
     const windowEnd = TimeUtils.addDaysStr(
@@ -266,7 +266,7 @@ export class CalendarAvailabilityService {
     dto: AvailableSlotsRequestDto,
   ) {
     const [business, selection] = await Promise.all([
-      this.locationService.findById(locationId),
+      this.locationService.getBookingSettings(locationId),
       this.resolveSlotSelection(locationId, dto),
     ]);
 
@@ -291,7 +291,7 @@ export class CalendarAvailabilityService {
       );
     }
     if (dto.bundleId) {
-      const bundle = await this.serviceCatalog.resolveBundleForBooking(
+      const bundle = await this.serviceCatalog.resolveBundleForAvailability(
         locationId,
         dto.bundleId,
       );
@@ -327,7 +327,7 @@ export class CalendarAvailabilityService {
         : [];
     if (serviceIds.length === 0)
       throw new NotFoundException('Service not found');
-    const ordered = await this.serviceCatalog.resolveServicesForBooking(
+    const ordered = await this.serviceCatalog.resolveServicesForAvailability(
       locationId,
       serviceIds,
     );
@@ -354,14 +354,21 @@ export class CalendarAvailabilityService {
     serviceIds: string[],
     staffId?: string,
   ): Promise<Map<string, CalendarSlotCandidate[]>> {
-    const map = new Map<string, CalendarSlotCandidate[]>();
-    for (const serviceId of new Set(serviceIds)) {
-      map.set(
+    const directory = await this.staff.listActiveWithServices(locationId);
+    return new Map(
+      [...new Set(serviceIds)].map((serviceId) => [
         serviceId,
-        await this.staff.resolveStaffForService(locationId, serviceId, staffId),
-      );
-    }
-    return map;
+        directory
+          .filter(
+            (member) =>
+              (!staffId || member.id === staffId) &&
+              member.staffServices.some(
+                (entry) => entry.serviceId === serviceId,
+              ),
+          )
+          .map((member) => ({ id: member.id })),
+      ]),
+    );
   }
 
   private uniqueCandidates(
@@ -523,7 +530,12 @@ export class CalendarAvailabilityService {
       timezone,
     );
     return Promise.all([
-      this.staff.listShiftsForStaff(staffIds, rangeStart, rangeEnd),
+      this.staff.listShiftsForAvailability(
+        locationId,
+        staffIds,
+        rangeStart,
+        rangeEnd,
+      ),
       this.db.calendarEvent.findMany({
         where: blockingEventsWhere(
           locationId,

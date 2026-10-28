@@ -1,8 +1,15 @@
-import { Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable } from '@nestjs/common';
+import { ServiceStatus } from '@prisma/client';
+import { AppCacheService } from '../../../shared/cache/app-cache.service.js';
+import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { PaginatedResult } from '../../../shared/interfaces/paginated-result.interface.js';
+import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
+import { LocationService } from '../../location/services/location.service.js';
 import { ServiceCategoriesService } from '../categories/services/service-categories.service.js';
+import { SERVICE_CATALOG_CACHE } from './cache/service-catalog.cache.js';
 import { ServiceCatalogCountsRequestDto } from './dto/service-catalog-counts-request.dto.js';
 import { ServiceCatalogSearchRequestDto } from './dto/service-catalog-search-request.dto.js';
+import { BookingCatalogSnapshot } from './interfaces/booking-catalog-snapshot.interface.js';
 import { BookingServiceCatalog } from './interfaces/booking-service-catalog.interface.js';
 import { ServiceBundleView } from './interfaces/service-bundle-view.interface.js';
 import { ServiceCatalogCounts } from './interfaces/service-catalog-counts.interface.js';
@@ -21,16 +28,32 @@ export class ServiceCatalogFacade {
     private readonly bundles: ServiceBundleReadService,
     private readonly catalog: ServiceCatalogReadService,
     private readonly categories: ServiceCategoriesService,
+    private readonly locations: LocationService,
+    private readonly cache: AppCacheService,
   ) {}
 
   async loadForBooking(locationId: string): Promise<BookingServiceCatalog> {
-    const [categories, services, bundles] = await Promise.all([
-      this.categories.listCategories(locationId),
-      this.services.listActiveForBooking(locationId),
-      this.bundles.listActiveForBooking(locationId),
-    ]);
+    const { brandId } = await this.locations.getBookingSettings(locationId);
+    const snapshot = await this.cache.getOrLoad(
+      SERVICE_CATALOG_CACHE,
+      { brandId, locationId },
+      () => this.loadSnapshot(locationId),
+    );
+    const services = snapshot.services.filter(
+      (service) => service.status === ServiceStatus.ACTIVE,
+    );
+    const byId = new Map(
+      snapshot.services.map((service) => [service.id, service]),
+    );
+    const bundles = snapshot.bundles.map((bundle) => ({
+      ...bundle,
+      items: bundle.items.map((item) => ({
+        ...item,
+        service: byId.get(item.serviceId)!,
+      })),
+    }));
     return {
-      categories: categories.map((category) => ({
+      categories: snapshot.categories.map((category) => ({
         ...category,
         services: services.filter(
           (service) => service.categoryId === category.id,
@@ -40,6 +63,64 @@ export class ServiceCatalogFacade {
       services,
       bundles,
     };
+  }
+
+  async warmForBooking(locationId: string): Promise<void> {
+    const { brandId } = await this.locations.getBookingSettings(locationId);
+    await this.cache.warm(SERVICE_CATALOG_CACHE, { brandId, locationId }, () =>
+      this.loadSnapshot(locationId),
+    );
+  }
+
+  private async loadSnapshot(
+    locationId: string,
+  ): Promise<BookingCatalogSnapshot> {
+    const [categories, services, bundles] = await Promise.all([
+      this.categories.listForBooking(locationId),
+      this.services.listActiveForBooking(locationId),
+      this.bundles.listActiveForBooking(locationId),
+    ]);
+    const byId = new Map(services.map((service) => [service.id, service]));
+    for (const bundle of bundles)
+      for (const item of bundle.items) {
+        if (!byId.has(item.serviceId)) byId.set(item.serviceId, item.service);
+      }
+    return {
+      categories,
+      services: [...byId.values()],
+      bundles: bundles.map((bundle) => ({
+        ...bundle,
+        items: bundle.items.map(({ serviceId, sortOrder }) => ({
+          serviceId,
+          sortOrder,
+        })),
+      })),
+    };
+  }
+
+  async resolveServicesForAvailability(
+    locationId: string,
+    serviceIds: string[],
+  ) {
+    const { services } = await this.loadForBooking(locationId);
+    const byId = new Map(services.map((service) => [service.id, service]));
+    if (serviceIds.some((id) => !byId.has(id)))
+      throw new AppException(
+        ErrorCode.BOOKING_SERVICE_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
+    return serviceIds.map((id) => byId.get(id)!);
+  }
+
+  async resolveBundleForAvailability(locationId: string, bundleId: string) {
+    const { bundles } = await this.loadForBooking(locationId);
+    const bundle = bundles.find((item) => item.id === bundleId);
+    if (!bundle)
+      throw new AppException(
+        ErrorCode.BOOKING_BUNDLE_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
+    return bundle;
   }
 
   search(

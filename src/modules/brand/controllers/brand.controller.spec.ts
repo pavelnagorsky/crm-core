@@ -12,6 +12,7 @@ describe('Brand search access boundaries', () => {
     {} as never,
     {} as never,
     {} as never,
+    { invalidate: vi.fn() } as never,
   );
   const controller = new BrandController(service);
   const brands = ['brand-1', 'brand-2'].map((id) => ({

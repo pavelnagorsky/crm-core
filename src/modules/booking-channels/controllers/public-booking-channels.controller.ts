@@ -1,4 +1,11 @@
-import { Controller, Get, Param, ParseUUIDPipe, Req } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Header,
+  Param,
+  ParseUUIDPipe,
+  Req,
+} from '@nestjs/common';
 import {
   ApiForbiddenResponse,
   ApiNotFoundResponse,
@@ -32,6 +39,7 @@ export class PublicBookingChannelsController {
   @ApiOkResponse({ type: ApiResponse(PublicBookingPageResponseDto) })
   @ApiNotFoundResponse({ description: 'Published booking page not found' })
   @Get('booking-pages/:slug')
+  @Header('Cache-Control', 'no-store')
   async getPage(
     @Param('slug') slug: string,
   ): Promise<BaseResponseDto<PublicBookingPageResponseDto>> {
@@ -58,6 +66,7 @@ export class PublicBookingChannelsController {
     description: 'Request origin is not in allowedDomains',
   })
   @Get('booking-widgets/:widgetId')
+  @Header('Cache-Control', 'no-store')
   async getWidget(
     @Param('widgetId', ParseUUIDPipe) widgetId: string,
     @Req() req: Request,

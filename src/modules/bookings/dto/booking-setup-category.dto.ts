@@ -1,20 +1,7 @@
 import { ApiExtraModels, ApiProperty, getSchemaPath } from '@nestjs/swagger';
-import {
-  File,
-  Service,
-  ServiceBundle,
-  ServiceBundleItem,
-  ServiceCategory,
-} from '@prisma/client';
+import { BookingServiceCatalog } from '../../services/catalog/interfaces/booking-service-catalog.interface.js';
 import { BookingSetupBundleDto } from './booking-setup-bundle.dto.js';
 import { BookingSetupServiceDto } from './booking-setup-service.dto.js';
-
-type ServiceWithImage = Service & { imageFile: File | null };
-
-type BundleWithItems = ServiceBundle & {
-  imageFile: File | null;
-  items: (ServiceBundleItem & { service: Service })[];
-};
 
 @ApiExtraModels(BookingSetupServiceDto, BookingSetupBundleDto)
 export class BookingSetupCategoryDto {
@@ -46,10 +33,7 @@ export class BookingSetupCategoryDto {
   services: Array<BookingSetupServiceDto | BookingSetupBundleDto>;
 
   static fromEntity(
-    category: ServiceCategory & {
-      services: ServiceWithImage[];
-      bundles: BundleWithItems[];
-    },
+    category: BookingServiceCatalog['categories'][number],
   ): BookingSetupCategoryDto {
     return BookingSetupCategoryDto.build(
       category.id,
@@ -61,8 +45,8 @@ export class BookingSetupCategoryDto {
   }
 
   static uncategorized(
-    services: ServiceWithImage[],
-    bundles: BundleWithItems[],
+    services: BookingServiceCatalog['services'],
+    bundles: BookingServiceCatalog['bundles'],
   ): BookingSetupCategoryDto {
     return BookingSetupCategoryDto.build(null, null, null, services, bundles);
   }
@@ -71,8 +55,8 @@ export class BookingSetupCategoryDto {
     id: string | null,
     name: string | null,
     description: string | null,
-    services: ServiceWithImage[],
-    bundles: BundleWithItems[],
+    services: BookingServiceCatalog['services'],
+    bundles: BookingServiceCatalog['bundles'],
   ): BookingSetupCategoryDto {
     const dto = new BookingSetupCategoryDto();
     dto.id = id;
@@ -83,8 +67,8 @@ export class BookingSetupCategoryDto {
   }
 
   private static ordered(
-    services: ServiceWithImage[],
-    bundles: BundleWithItems[],
+    services: BookingServiceCatalog['services'],
+    bundles: BookingServiceCatalog['bundles'],
   ): Array<BookingSetupServiceDto | BookingSetupBundleDto> {
     return [
       ...services.map((service) => ({

@@ -39,6 +39,8 @@ describe('LocationService locale and business type', () => {
     brands as never,
     epoch as never,
     bookingDeletionPolicy as never,
+    { invalidate: vi.fn() } as never,
+    { emit: vi.fn() } as never,
   );
 
   beforeEach(() => {

@@ -7,6 +7,8 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ServiceStatus } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
+import { AppCacheService } from '../../../../shared/cache/app-cache.service.js';
+import { CacheDependency } from '../../../../shared/cache/cache-dependency.js';
 import { ACTIVE_LOCATION_WHERE } from '../../../../shared/database/active-business.where.js';
 import { PrismaErrorCode } from '../../../../shared/database/prisma-error-codes.js';
 import { AppException } from '../../../../shared/exceptions/app.exception.js';
@@ -45,6 +47,7 @@ export class ServiceBundleWriteService {
     private readonly eventEmitter: EventEmitter2,
     private readonly locationService: LocationService,
     private readonly catalog: ServiceCatalogFacade,
+    private readonly cache: AppCacheService,
   ) {}
 
   async create(
@@ -74,6 +77,7 @@ export class ServiceBundleWriteService {
       },
       include: serviceBundleInclude,
     });
+    await this.cache.invalidate(CacheDependency.serviceCatalog(locationId));
     this.logger.log(
       `service bundle created: id=${bundle.id} locationId=${locationId} items=${bundle.items.length}`,
     );
@@ -150,6 +154,7 @@ export class ServiceBundleWriteService {
       },
       include: serviceBundleInclude,
     });
+    await this.cache.invalidate(CacheDependency.serviceCatalog(locationId));
     const changes = diffFields(
       toServiceBundleAuditShape(old),
       toServiceBundleAuditShape(bundle),
@@ -193,6 +198,7 @@ export class ServiceBundleWriteService {
       where: { id: bundleId },
       data: { status },
     });
+    await this.cache.invalidate(CacheDependency.serviceCatalog(locationId));
     this.logger.log(
       `service bundle status: id=${bundleId} locationId=${locationId} status=${status}`,
     );
@@ -219,6 +225,7 @@ export class ServiceBundleWriteService {
     const bundle = await this.findInLocation(locationId, bundleId);
     try {
       await this.db.serviceBundle.delete({ where: { id: bundleId } });
+      await this.cache.invalidate(CacheDependency.serviceCatalog(locationId));
     } catch (e: any) {
       if (e?.code === PrismaErrorCode.FOREIGN_KEY_VIOLATION) {
         throw new AppException(ErrorCode.SERVICE_IN_USE, HttpStatus.CONFLICT);

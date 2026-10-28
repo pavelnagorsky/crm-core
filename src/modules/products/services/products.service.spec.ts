@@ -1,5 +1,6 @@
-import { EventEmitter2 } from '@nestjs/event-emitter';
 import { NotFoundException } from '@nestjs/common';
+import { createTestCache } from '../../../shared/cache/testing/create-test-cache.js';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ProductStatus, ProductUnit } from '@prisma/client';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
@@ -44,12 +45,14 @@ function setup() {
   };
   const locations = {
     findById: vi.fn(),
+    getBookingSettings: vi.fn(),
   };
   const events = { emit: vi.fn() };
   const service = new ProductsService(
     db as never,
     locations as unknown as LocationService,
     events as unknown as EventEmitter2,
+    createTestCache(false),
   );
   return { db, locations, events, service };
 }
@@ -57,31 +60,54 @@ function setup() {
 describe('ProductsService', () => {
   it('loads the public catalog only from active products offered by the active location', async () => {
     const { db, locations, service } = setup();
-    locations.findById.mockResolvedValue({
+    locations.getBookingSettings.mockResolvedValue({
       id: 'location-1',
       brandId: 'brand-1',
     });
-    db.productLocation.findMany.mockResolvedValue([]);
-
-    await expect(service.listForPublicCatalog('location-1')).resolves.toEqual(
-      [],
-    );
-    expect(locations.findById).toHaveBeenCalledWith('location-1');
-    expect(db.productLocation.findMany).toHaveBeenCalledWith({
-      where: {
-        locationId: 'location-1',
-        location: { deletedAt: null, brand: { deletedAt: null } },
-        status: ProductStatus.ACTIVE,
-        product: { brandId: 'brand-1', status: ProductStatus.ACTIVE },
+    db.product.findMany.mockResolvedValue([
+      { id: 'offered', name: 'Shampoo', categoryId: null },
+      { id: 'unoffered', name: 'Other', categoryId: null },
+    ]);
+    db.productCategory.findMany.mockResolvedValue([]);
+    db.productLocation.findMany.mockResolvedValue([
+      { productId: 'offered', retailPrice: '12.30' },
+      { productId: 'inactive', retailPrice: '9.00' },
+    ]);
+    expect(await service.listForPublicCatalog('location-1')).toEqual([
+      {
+        productId: 'offered',
+        retailPrice: '12.30',
+        product: {
+          id: 'offered',
+          name: 'Shampoo',
+          categoryId: null,
+          category: null,
+        },
       },
-      include: { product: { include: { category: true, imageFile: true } } },
-      orderBy: [{ product: { name: 'asc' } }, { productId: 'asc' }],
-    });
+    ]);
+    expect(db.product.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          brandId: 'brand-1',
+          brand: { deletedAt: null },
+          status: ProductStatus.ACTIVE,
+        },
+      }),
+    );
+    expect(db.productLocation.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          locationId: 'location-1',
+          location: { deletedAt: null, brand: { deletedAt: null } },
+          status: ProductStatus.ACTIVE,
+        },
+      }),
+    );
   });
 
   it('rejects an unavailable location before reading its public products', async () => {
     const { db, locations, service } = setup();
-    locations.findById.mockRejectedValue(new NotFoundException());
+    locations.getBookingSettings.mockRejectedValue(new NotFoundException());
     await expect(
       service.listForPublicCatalog('missing'),
     ).rejects.toBeInstanceOf(NotFoundException);

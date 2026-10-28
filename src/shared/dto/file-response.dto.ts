@@ -11,7 +11,9 @@ export class FileResponseDto {
   @ApiProperty({ type: String })
   url: string;
 
-  static fromEntity(file: File): FileResponseDto {
+  static fromEntity(
+    file: Pick<File, 'id' | 'fileName' | 'url'>,
+  ): FileResponseDto {
     const dto = new FileResponseDto();
     dto.id = file.id;
     dto.name = file.fileName;

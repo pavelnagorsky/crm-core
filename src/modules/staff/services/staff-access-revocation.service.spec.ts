@@ -35,6 +35,7 @@ describe('Staff access revocation transaction', () => {
     access as never,
     { findById: vi.fn().mockResolvedValue({ role: UserRole.USER }) } as never,
     epochs as never,
+    { invalidate: vi.fn() } as never,
   );
   const actor = { id: 'owner-1', name: 'Owner', role: AuditActorRole.OWNER };
   let transactionActive: boolean;

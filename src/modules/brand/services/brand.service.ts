@@ -2,11 +2,14 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Brand, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
+import { AppCacheService } from '../../../shared/cache/app-cache.service.js';
+import { CacheDependency } from '../../../shared/cache/cache-dependency.js';
 import {
   ACTIVE_BRAND_WHERE,
   ACTIVE_LOCATION_WHERE,
 } from '../../../shared/database/active-business.where.js';
 import { OrderDirection } from '../../../shared/enums/order-direction.enum.js';
+import { BookingCacheWarmupEvent } from '../../../shared/events/booking-cache-warmup.event.js';
 import { resolveLocationLocale } from '../../../shared/geo/resolve-location-locale.js';
 import { AccessService } from '../../access/services/access.service.js';
 import { AUDIT_EVENT } from '../../audit/constants/audit.constants.js';
@@ -20,6 +23,10 @@ import { diffFields } from '../../audit/utils/diff-fields.js';
 import { TokenEpochRegistryService } from '../../auth/services/token-epoch-registry.service.js';
 import { BookingDeletionPolicyService } from '../../bookings/deletion-policy/services/booking-deletion-policy.service.js';
 import { UserService } from '../../user/services/user.service.js';
+import {
+  BRAND_PROFILE_CACHE,
+  BRAND_PROFILE_SELECT,
+} from '../cache/brand-profile.cache.js';
 import { BrandSearchRequestDto } from '../dto/brand-search-request.dto.js';
 import { CreateBrandDto } from '../dto/create-brand.dto.js';
 import { UpdateBrandDto } from '../dto/update-brand.dto.js';
@@ -37,6 +44,7 @@ export class BrandService {
     private readonly tokenEpochRegistry: TokenEpochRegistryService,
     private readonly bookingDeletionPolicy: BookingDeletionPolicyService,
     private readonly access: AccessService,
+    private readonly cache: AppCacheService,
   ) {}
 
   async create(
@@ -78,6 +86,11 @@ export class BrandService {
       return brand;
     });
 
+    for (const location of brand.locations)
+      this.eventEmitter.emit(
+        BookingCacheWarmupEvent.eventName,
+        new BookingCacheWarmupEvent(location.id),
+      );
     const ownerStaff = brand.locations[0]?.staff[0];
     if (ownerStaff) {
       this.eventEmitter.emit(AUDIT_EVENT, {
@@ -106,6 +119,7 @@ export class BrandService {
       where: { id: brandId, ...ACTIVE_BRAND_WHERE },
       data: { name: dto.name, logoFileId: dto.logoFileId },
     });
+    await this.cache.invalidate(CacheDependency.brandProfile(brandId));
     const changes = diffFields(old, brand, BUSINESS_AUDIT_FIELDS);
     if (changes.length > 0) {
       this.eventEmitter.emit(AUDIT_EVENT, {
@@ -126,6 +140,27 @@ export class BrandService {
     const brand = await this.db.brand.findUnique({
       where: { id: brandId, ...ACTIVE_BRAND_WHERE },
       include: { logoFile: true },
+    });
+    if (!brand) throw new NotFoundException('Brand not found');
+    return brand;
+  }
+
+  findPublicProfile(brandId: string) {
+    return this.cache.getOrLoad(BRAND_PROFILE_CACHE, { brandId }, () =>
+      this.loadPublicProfile(brandId),
+    );
+  }
+
+  warmPublicProfile(brandId: string): Promise<void> {
+    return this.cache.warm(BRAND_PROFILE_CACHE, { brandId }, () =>
+      this.loadPublicProfile(brandId),
+    );
+  }
+
+  private async loadPublicProfile(brandId: string) {
+    const brand = await this.db.brand.findUnique({
+      where: { id: brandId, ...ACTIVE_BRAND_WHERE },
+      select: BRAND_PROFILE_SELECT,
     });
     if (!brand) throw new NotFoundException('Brand not found');
     return brand;
@@ -182,6 +217,7 @@ export class BrandService {
       if (count === 0) throw new NotFoundException('Brand not found');
       await this.bookingDeletionPolicy.assertBrandDeletionAllowed(brandId, tx);
     });
+    await this.cache.invalidate(CacheDependency.brandLifecycle(brandId));
   }
 
   async acquireActiveOperationLock(

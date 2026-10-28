@@ -7,6 +7,8 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma, Staff, StaffShift, StaffStatus } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
+import { AppCacheService } from '../../../shared/cache/app-cache.service.js';
+import { CacheDependency } from '../../../shared/cache/cache-dependency.js';
 import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
 import { stableOrderBy } from '../../../shared/database/stable-order-by.js';
@@ -15,6 +17,7 @@ import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { sanitizeRichHtml } from '../../../shared/html/sanitize-rich-html.js';
 import { PaginatedResult } from '../../../shared/interfaces/paginated-result.interface.js';
 import regularExpressions from '../../../shared/regular-expressions.js';
+import { TimeUtils } from '../../../shared/time/time.utils.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { AccessService } from '../../access/services/access.service.js';
 import { AUDIT_EVENT } from '../../audit/constants/audit.constants.js';
@@ -28,6 +31,11 @@ import { diffFields } from '../../audit/utils/diff-fields.js';
 import { TokenEpochRegistryService } from '../../auth/services/token-epoch-registry.service.js';
 import { LocationService } from '../../location/services/location.service.js';
 import { UserService } from '../../user/services/user.service.js';
+import {
+  STAFF_BOOKING_DIRECTORY_CACHE,
+  STAFF_BOOKING_SELECT,
+} from '../cache/staff-booking-directory.cache.js';
+import { STAFF_SCHEDULE_CACHE } from '../cache/staff-schedule.cache.js';
 import { ChangeStaffStatusDto } from '../dto/change-staff-status.dto.js';
 import { CreateStaffDto } from '../dto/create-staff.dto.js';
 import { GetShiftsRequestDto } from '../dto/get-shifts-request.dto.js';
@@ -37,6 +45,8 @@ import { StaffSearchRequestDto } from '../dto/staff-search-request.dto.js';
 import { StaffStatusCountResponseDto } from '../dto/staff-status-count-response.dto.js';
 import { UpdateStaffDto } from '../dto/update-staff.dto.js';
 import { StaffSearchOrderBy } from '../enums/staff-search-order-by.enum.js';
+import { BookingStaff } from '../interfaces/booking-staff.interface.js';
+import { StaffScheduleSnapshot } from '../interfaces/staff-schedule-snapshot.interface.js';
 import { StaffWithAvatar } from '../interfaces/staff-with-avatar.interface.js';
 import { StaffWithServiceCount } from '../interfaces/staff-with-service-count.interface.js';
 
@@ -145,6 +155,7 @@ export class StaffService {
     private readonly access: AccessService,
     private readonly users: UserService,
     private readonly epochs: TokenEpochRegistryService,
+    private readonly cache: AppCacheService,
   ) {}
 
   listInLocation(locationId: string): Promise<StaffWithAvatar[]> {
@@ -179,6 +190,93 @@ export class StaffService {
       select: { id: true, name: true },
     });
     return new Map(rows.map((row) => [row.id, row.name]));
+  }
+
+  async listShiftsForAvailability(
+    locationId: string,
+    staffIds: string[],
+    from: Date,
+    to: Date,
+  ): Promise<StaffScheduleSnapshot['shifts']> {
+    if (!staffIds.length) return [];
+    if (!this.cache.enabled)
+      return this.loadAvailabilityShifts(locationId, from, to, staffIds);
+    const location = await this.locationService.getBookingSettings(locationId);
+    const { coveredFrom, coveredTo } = this.scheduleWindow(location);
+    const lastDate = TimeUtils.dateOnly(TimeUtils.dateOnlyStr(to));
+    if (from < coveredFrom || lastDate > coveredTo)
+      return this.loadAvailabilityShifts(locationId, from, to, staffIds);
+    const snapshot = await this.cache.getOrLoad(
+      STAFF_SCHEDULE_CACHE,
+      { locationId, brandId: location.brandId },
+      () => this.loadScheduleWindow(locationId),
+    );
+    if (from < snapshot.coveredFrom || lastDate > snapshot.coveredTo)
+      return this.loadAvailabilityShifts(locationId, from, to, staffIds);
+    const selected = new Set(staffIds);
+    return snapshot.shifts.filter(
+      (shift) =>
+        selected.has(shift.staffId) && shift.date >= from && shift.date <= to,
+    );
+  }
+
+  async warmBookingSchedule(locationId: string): Promise<void> {
+    const { brandId } =
+      await this.locationService.getBookingSettings(locationId);
+    await this.cache.warm(STAFF_SCHEDULE_CACHE, { brandId, locationId }, () =>
+      this.loadScheduleWindow(locationId),
+    );
+  }
+
+  private scheduleWindow(location: {
+    timezone: string;
+    advanceBookingWindowDays: number;
+  }) {
+    const today = TimeUtils.zonedDateStr(new Date(), location.timezone);
+    const days = Math.max(1, location.advanceBookingWindowDays);
+    return {
+      coveredFrom: TimeUtils.dateOnly(today),
+      coveredTo: TimeUtils.dateOnly(TimeUtils.addDaysStr(today, days - 1)),
+    };
+  }
+
+  private async loadScheduleWindow(
+    locationId: string,
+  ): Promise<StaffScheduleSnapshot> {
+    const location = await this.locationService.getBookingSettings(locationId);
+    const { coveredFrom, coveredTo } = this.scheduleWindow(location);
+    const shifts = await this.loadAvailabilityShifts(
+      locationId,
+      coveredFrom,
+      coveredTo,
+    );
+    return {
+      timezone: location.timezone,
+      coveredFrom,
+      coveredTo,
+      shifts,
+    };
+  }
+
+  private loadAvailabilityShifts(
+    locationId: string,
+    from: Date,
+    to: Date,
+    staffIds?: string[],
+  ): Promise<StaffScheduleSnapshot['shifts']> {
+    return this.db.staffShift.findMany({
+      where: {
+        staff: {
+          locationId,
+          location: ACTIVE_LOCATION_WHERE,
+          status: StaffStatus.ACTIVE,
+        },
+        ...(staffIds ? { staffId: { in: staffIds } } : {}),
+        date: { gte: from, lte: to },
+      },
+      select: { staffId: true, date: true, startTime: true, endTime: true },
+      orderBy: [{ date: 'asc' }, { staffId: 'asc' }],
+    });
   }
 
   listShiftsInRange(
@@ -225,20 +323,35 @@ export class StaffService {
     });
   }
 
-  listActiveWithServices(
-    locationId: string,
-  ): Promise<(StaffWithAvatar & { staffServices: { serviceId: string }[] })[]> {
+  async listActiveWithServices(locationId: string): Promise<BookingStaff[]> {
+    const { brandId } =
+      await this.locationService.getBookingSettings(locationId);
+    return this.cache.getOrLoad(
+      STAFF_BOOKING_DIRECTORY_CACHE,
+      { brandId, locationId },
+      () => this.loadBookingDirectory(locationId),
+    );
+  }
+
+  async warmBookingDirectory(locationId: string): Promise<void> {
+    const { brandId } =
+      await this.locationService.getBookingSettings(locationId);
+    await this.cache.warm(
+      STAFF_BOOKING_DIRECTORY_CACHE,
+      { brandId, locationId },
+      () => this.loadBookingDirectory(locationId),
+    );
+  }
+
+  private loadBookingDirectory(locationId: string): Promise<BookingStaff[]> {
     return this.db.staff.findMany({
       where: {
         location: ACTIVE_LOCATION_WHERE,
         locationId,
         status: StaffStatus.ACTIVE,
       },
-      orderBy: { name: 'asc' },
-      include: {
-        avatarFile: true,
-        staffServices: { select: { serviceId: true } },
-      },
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+      select: STAFF_BOOKING_SELECT,
     });
   }
 
@@ -267,6 +380,7 @@ export class StaffService {
       },
       include: { avatarFile: true },
     });
+    await this.cache.invalidate(CacheDependency.staffDirectory(locationId));
     const event: AuditLogEvent = {
       locationId,
       entityType: AuditEntity.STAFF,
@@ -319,6 +433,7 @@ export class StaffService {
       },
       include: { avatarFile: true },
     });
+    await this.cache.invalidate(CacheDependency.staffDirectory(locationId));
     const changes = diffFields(old, staff, STAFF_AUDIT_FIELDS).filter(
       (change) => change.field !== 'status',
     );
@@ -565,6 +680,9 @@ export class StaffService {
       }
     });
 
+    await this.cache.invalidate(CacheDependency.staffDirectory(locationId));
+    await this.cache.invalidate(CacheDependency.staffSchedule(locationId));
+
     const event: AuditLogEvent = {
       locationId,
       entityType: AuditEntity.STAFF,
@@ -617,6 +735,8 @@ export class StaffService {
       }
       throw e;
     }
+    await this.cache.invalidate(CacheDependency.staffDirectory(locationId));
+    await this.cache.invalidate(CacheDependency.staffSchedule(locationId));
   }
 
   private async protectPlatformAccount(
@@ -701,6 +821,8 @@ export class StaffService {
         orderBy: { date: 'asc' },
       });
     });
+
+    await this.cache.invalidate(CacheDependency.staffSchedule(locationId));
 
     const event: AuditLogEvent = {
       locationId: staff.locationId,

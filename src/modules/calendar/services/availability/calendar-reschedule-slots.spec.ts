@@ -30,7 +30,7 @@ function setup(parallel = false) {
   }));
   const staff = {
     resolveStaffForService: vi.fn().mockResolvedValue([{ id: 'active' }]),
-    listShiftsForStaff: vi.fn().mockResolvedValue(shifts),
+    listShiftsForAvailability: vi.fn().mockResolvedValue(shifts),
   };
   const db = {
     calendarEvent: {
@@ -51,7 +51,7 @@ function setup(parallel = false) {
     slotIntervalMinutes: 30,
     minimumBookingNoticeMinutes: 60,
   };
-  const locations = { findById: vi.fn().mockResolvedValue(location) };
+  const locations = { getBookingSettings: vi.fn().mockResolvedValue(location) };
   const service = new CalendarAvailabilityService(
     db as never,
     staff as never,
@@ -138,7 +138,7 @@ describe('Available times for an existing booking', () => {
 
   it('does not offer times when any assigned staff member has no shift', async () => {
     const { service, items, staff } = setup();
-    staff.listShiftsForStaff.mockResolvedValue([]);
+    staff.listShiftsForAvailability.mockResolvedValue([]);
     await expect(
       service.getRescheduleSlots('location', items, '2026-10-29', '2026-10-29'),
     ).resolves.toEqual([]);

@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Param,
@@ -20,13 +21,13 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { Claim } from '../../access/enums/claim.enum.js';
-import { Read, Write } from '../../access/utils/permission.js';
 import { ApiResponseArray } from '../../../shared/dto/api-response-array.dto.js';
 import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../../shared/dto/id-response.dto.js';
+import { Claim } from '../../access/enums/claim.enum.js';
 import { hasGlobalPermission } from '../../access/utils/has-global-permission.js';
+import { Read, Write } from '../../access/utils/permission.js';
 import { AuditActorRole } from '../../audit/enums/audit-actor-role.enum.js';
 import { auditActorFromToken } from '../../audit/utils/audit-actor-from-token.js';
 import { Auth } from '../../auth/decorators/auth.decorator.js';
@@ -134,12 +135,13 @@ export class BrandController {
   @ApiOperation({ summary: 'Get public brand info' })
   @ApiOkResponse({ type: ApiResponse(BrandPublicResponseDto) })
   @Get(':brandId/public')
+  @Header('Cache-Control', 'no-store')
   async findPublic(
     @Param('brandId', ParseUUIDPipe) brandId: string,
   ): Promise<BaseResponseDto<BrandPublicResponseDto>> {
     return BaseResponseDto.success(
       BrandPublicResponseDto.fromEntity(
-        await this.brandService.findById(brandId),
+        await this.brandService.findPublicProfile(brandId),
       ),
     );
   }

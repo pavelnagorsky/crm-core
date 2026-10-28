@@ -4,7 +4,6 @@ import {
   ProductStatus,
   ProductUnit,
 } from '@prisma/client';
-import { PublicCatalogProduct } from '../interfaces/public-catalog-product.interface.js';
 import { PublicProductCatalogDto } from './public-product-catalog.dto.js';
 
 const date = new Date('2026-10-22T00:00:00Z');
@@ -24,7 +23,9 @@ function category(id: string, sortOrder = 0): ProductCategory {
 function product(
   id: string,
   group: ProductCategory | null,
-): PublicCatalogProduct {
+): Prisma.ProductLocationGetPayload<{
+  include: { product: { include: { category: true; imageFile: true } } };
+}> {
   return {
     id: 'location-product-' + id,
     locationId: 'location',

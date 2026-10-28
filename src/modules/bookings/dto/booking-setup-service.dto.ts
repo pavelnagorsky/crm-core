@@ -1,8 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { File, Service } from '@prisma/client';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
 import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
 import { MoneyUtils } from '../../../shared/money/money.utils.js';
+import { BookingServiceCatalog } from '../../services/catalog/interfaces/booking-service-catalog.interface.js';
 import { ServiceCatalogKind } from '../../services/enums/service-catalog-kind.enum.js';
 
 export class BookingSetupServiceDto {
@@ -31,7 +31,7 @@ export class BookingSetupServiceDto {
   durationMinutes: number;
 
   static fromEntity(
-    service: Service & { imageFile: File | null },
+    service: BookingServiceCatalog['services'][number],
   ): BookingSetupServiceDto {
     const dto = new BookingSetupServiceDto();
     dto.id = service.id;

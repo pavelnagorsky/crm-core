@@ -4,6 +4,7 @@ import {
   Delete,
   ForbiddenException,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Param,
@@ -21,11 +22,11 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { Claim } from '../../../access/enums/claim.enum.js';
-import { Read, Write } from '../../../access/utils/permission.js';
 import { ApiResponseArray } from '../../../../shared/dto/api-response-array.dto.js';
 import { ApiResponse } from '../../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../../shared/dto/base-response.dto.js';
+import { Claim } from '../../../access/enums/claim.enum.js';
+import { Read, Write } from '../../../access/utils/permission.js';
 import { auditActorFromToken } from '../../../audit/utils/audit-actor-from-token.js';
 import { Permissions } from '../../../auth/decorators/permissions.decorator.js';
 import { TokenPayload } from '../../../auth/decorators/token-payload.decorator.js';
@@ -62,6 +63,7 @@ export class CalendarController {
   @ApiOkResponse({ type: ApiResponseArray(AvailableSlotsDayDto) })
   @ApiNotFoundResponse({ description: 'Location or service not found' })
   @Get('public/available-slots')
+  @Header('Cache-Control', 'no-store')
   async getAvailableSlots(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Query() dto: AvailableSlotsRequestDto,
@@ -79,6 +81,7 @@ export class CalendarController {
   @ApiBadRequestResponse({ description: 'Date range is longer than 62 days' })
   @Permissions([Read(Claim.BOOKING), Read(Claim.BOOKING_OWN)])
   @Get('available-slots')
+  @Header('Cache-Control', 'no-store')
   async getManualAvailableSlots(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Query() dto: ManualAvailableSlotsRequestDto,

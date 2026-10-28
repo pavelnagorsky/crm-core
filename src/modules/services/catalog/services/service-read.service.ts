@@ -4,6 +4,7 @@ import { DatabaseService } from '../../../../database/database.service.js';
 import { ACTIVE_LOCATION_WHERE } from '../../../../shared/database/active-business.where.js';
 import { AppException } from '../../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
+import { BOOKING_SERVICE_SELECT } from '../constants/booking-catalog.select.js';
 import { ServiceFilter } from '../interfaces/service-filter.interface.js';
 import { ServiceForCatalog } from '../interfaces/service-for-catalog.interface.js';
 import { ServiceWithImage } from '../interfaces/service-with-image.interface.js';
@@ -36,14 +37,14 @@ export class ServiceReadService {
     return service;
   }
 
-  listActiveForBooking(locationId: string): Promise<ServiceWithImage[]> {
+  listActiveForBooking(locationId: string) {
     return this.db.service.findMany({
       where: {
         location: ACTIVE_LOCATION_WHERE,
         locationId,
         status: ServiceStatus.ACTIVE,
       },
-      include: { imageFile: true },
+      select: BOOKING_SERVICE_SELECT,
       orderBy: [{ sortOrder: 'asc' }, { title: 'asc' }],
     });
   }

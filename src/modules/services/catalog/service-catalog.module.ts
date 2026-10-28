@@ -1,4 +1,6 @@
 import { Module } from '@nestjs/common';
+import { AppCacheModule } from '../../../shared/cache/app-cache.module.js';
+import { LocationModule } from '../../location/location.module.js';
 import { ServiceCategoriesModule } from '../categories/service-categories.module.js';
 import { ServiceCatalogController } from './controllers/service-catalog.controller.js';
 import { ServiceCatalogItemFactory } from './factories/service-catalog-item.factory.js';
@@ -8,7 +10,7 @@ import { ServiceCatalogReadService } from './services/service-catalog-read.servi
 import { ServiceReadService } from './services/service-read.service.js';
 
 @Module({
-  imports: [ServiceCategoriesModule],
+  imports: [AppCacheModule, LocationModule, ServiceCategoriesModule],
   controllers: [ServiceCatalogController],
   providers: [
     ServiceCatalogFacade,

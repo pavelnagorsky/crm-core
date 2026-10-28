@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   HttpCode,
   HttpStatus,
   Param,
@@ -19,14 +20,14 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { BusinessType } from '@prisma/client';
-import { Claim } from '../../access/enums/claim.enum.js';
-import { Read, Write } from '../../access/utils/permission.js';
 import { ApiResponseArray } from '../../../shared/dto/api-response-array.dto.js';
 import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../../shared/dto/id-response.dto.js';
 import { COUNTRY_DEFAULTS } from '../../../shared/geo/country-defaults.js';
+import { Claim } from '../../access/enums/claim.enum.js';
 import { hasPermission } from '../../access/utils/assert-permission.js';
+import { Read, Write } from '../../access/utils/permission.js';
 import { Auth } from '../../auth/decorators/auth.decorator.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 import { TokenPayload } from '../../auth/decorators/token-payload.decorator.js';
@@ -35,8 +36,8 @@ import { CreateLocationDto } from '../dto/create-location.dto.js';
 import { LocationBusinessTypesResponseDto } from '../dto/location-business-types-response.dto.js';
 import { LocationCountryOptionDto } from '../dto/location-country-option.dto.js';
 import { LocationOptionsResponseDto } from '../dto/location-options-response.dto.js';
-import { LocationResponseDto } from '../dto/location-response.dto.js';
 import { LocationPublicResponseDto } from '../dto/location-public-response.dto.js';
+import { LocationResponseDto } from '../dto/location-response.dto.js';
 import { UpdateLocationDto } from '../dto/update-location.dto.js';
 import { LocationService } from '../services/location.service.js';
 
@@ -138,6 +139,7 @@ export class LocationController {
   @ApiOperation({ summary: 'Get public location info' })
   @ApiOkResponse({ type: ApiResponse(LocationPublicResponseDto) })
   @Get('locations/:locationId/public')
+  @Header('Cache-Control', 'no-store')
   async findPublic(
     @Param('locationId', ParseUUIDPipe) locationId: string,
   ): Promise<BaseResponseDto<LocationPublicResponseDto>> {

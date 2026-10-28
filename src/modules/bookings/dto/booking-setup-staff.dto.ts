@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { StaffWithAvatar } from '../../staff/interfaces/staff-with-avatar.interface.js';
 import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
 import { sanitizeRichHtml } from '../../../shared/html/sanitize-rich-html.js';
+import { BookingStaff } from '../../staff/interfaces/booking-staff.interface.js';
 
 export class BookingSetupStaffDto {
   @ApiProperty({ type: String })
@@ -26,9 +26,7 @@ export class BookingSetupStaffDto {
   })
   serviceIds: string[];
 
-  static fromEntity(
-    staff: StaffWithAvatar & { staffServices: { serviceId: string }[] },
-  ): BookingSetupStaffDto {
+  static fromEntity(staff: BookingStaff): BookingSetupStaffDto {
     const dto = new BookingSetupStaffDto();
     dto.id = staff.id;
     dto.name = staff.name;

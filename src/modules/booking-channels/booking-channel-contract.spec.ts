@@ -1,12 +1,12 @@
 import { GUARDS_METADATA } from '@nestjs/common/constants';
-import { plainToInstance } from 'class-transformer';
 import { BookingWidget } from '@prisma/client';
+import { plainToInstance } from 'class-transformer';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
-import { TokenEpochGuard } from '../auth/guards/token-epoch.guard.js';
 import { PERMISSIONS_KEY } from '../auth/guards/permission.guard.js';
-import { LocationPublicProfile } from '../location/interfaces/location-public-profile.interface.js';
-import { LocationResponseDto } from '../location/dto/location-response.dto.js';
+import { TokenEpochGuard } from '../auth/guards/token-epoch.guard.js';
 import { BookingSetupResponseDto } from '../bookings/dto/booking-setup-response.dto.js';
+import { LocationResponseDto } from '../location/dto/location-response.dto.js';
+import { LocationPublicProfile } from '../location/interfaces/location-public-profile.interface.js';
 import { BookingPalettesController } from './controllers/booking-palettes.controller.js';
 import { BookingPageResponseDto } from './dto/booking-page-response.dto.js';
 import { BookingWidgetResponseDto } from './dto/booking-widget-response.dto.js';
@@ -101,7 +101,13 @@ describe('Location contacts response contract', () => {
         setup,
       );
       for (const response of [
-        LocationResponseDto.fromEntity(profile),
+        LocationResponseDto.fromEntity({
+          ...profile,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          deletedAt: null,
+          restoredAt: null,
+        }),
         pageResponse.location,
         widgetResponse.location,
       ]) {

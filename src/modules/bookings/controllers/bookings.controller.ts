@@ -26,17 +26,17 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { CancelledBy } from '@prisma/client';
-import { Claim } from '../../access/enums/claim.enum.js';
-import { Read, Write } from '../../access/utils/permission.js';
 import { ApiResponseArray } from '../../../shared/dto/api-response-array.dto.js';
 import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../../shared/dto/id-response.dto.js';
 import { XlsxUtils } from '../../../shared/xlsx/xlsx.utils.js';
+import { Claim } from '../../access/enums/claim.enum.js';
 import {
   assertPermission,
   hasPermission,
 } from '../../access/utils/assert-permission.js';
+import { Read, Write } from '../../access/utils/permission.js';
 import { auditActorFromToken } from '../../audit/utils/audit-actor-from-token.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 import { TokenPayload } from '../../auth/decorators/token-payload.decorator.js';
@@ -83,6 +83,7 @@ export class BookingsController {
   })
   @ApiOkResponse({ type: ApiResponse(BookingSetupResponseDto) })
   @Get('public/locations/:locationId/booking-setup')
+  @Header('Cache-Control', 'no-store')
   async getBookingSetup(
     @Param('locationId', ParseUUIDPipe) locationId: string,
   ): Promise<BaseResponseDto<BookingSetupResponseDto>> {

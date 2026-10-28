@@ -8,9 +8,10 @@ import {
 import { TimeUtils } from '../../../shared/time/time.utils.js';
 import { CalendarEventItemDto } from '../dto/calendar-event-item.dto.js';
 import { ClosedTimeItemDto } from '../dto/closed-time-item.dto.js';
+import { CalendarRescheduleItem } from '../interfaces/calendar-reschedule-item.interface.js';
+import { CalendarShift } from '../interfaces/calendar-shift.interface.js';
 import { CalendarSlotCandidate } from '../interfaces/calendar-slot-candidate.interface.js';
 import { CalendarSlotItem } from '../interfaces/calendar-slot-item.interface.js';
-import { CalendarRescheduleItem } from '../interfaces/calendar-reschedule-item.interface.js';
 import {
   CalendarEventWithCancellations,
   EventTimes,
@@ -22,7 +23,7 @@ export class CalendarCalculator {
   collectRescheduleSlotsForDate(
     date: string,
     items: CalendarRescheduleItem[],
-    shifts: Map<string, Map<string, StaffShift>>,
+    shifts: Map<string, Map<string, CalendarShift>>,
     blocked: Map<string, Map<string, Interval[]>>,
     earliestStart: Date,
     slotInterval: number,
@@ -461,9 +462,9 @@ export class CalendarCalculator {
 
   /** Indexes shifts as staffId → date string → shift for O(1) lookup during slot generation. */
   groupShiftsByStaffDate(
-    shifts: StaffShift[],
-  ): Map<string, Map<string, StaffShift>> {
-    const map = new Map<string, Map<string, StaffShift>>();
+    shifts: CalendarShift[],
+  ): Map<string, Map<string, CalendarShift>> {
+    const map = new Map<string, Map<string, CalendarShift>>();
     for (const shift of shifts) {
       const dateKey = TimeUtils.dateOnlyStr(shift.date);
       if (!map.has(shift.staffId)) map.set(shift.staffId, new Map());
@@ -481,7 +482,7 @@ export class CalendarCalculator {
   collectSlotsForDate(
     date: string,
     candidateStaff: CalendarSlotCandidate[],
-    shiftsByStaffDate: Map<string, Map<string, StaffShift>>,
+    shiftsByStaffDate: Map<string, Map<string, CalendarShift>>,
     blockedByStaffDate: Map<string, Map<string, Interval[]>>,
     earliestMinute: number,
     slotDuration: number,
@@ -520,7 +521,7 @@ export class CalendarCalculator {
     items: CalendarSlotItem[],
     executionMode: string,
     candidatesByService: Map<string, CalendarSlotCandidate[]>,
-    shiftsByStaffDate: Map<string, Map<string, StaffShift>>,
+    shiftsByStaffDate: Map<string, Map<string, CalendarShift>>,
     blockedByStaffDate: Map<string, Map<string, Interval[]>>,
     earliestMinute: number,
     slotInterval: number,
@@ -530,7 +531,7 @@ export class CalendarCalculator {
     );
     const shifts = staffIds
       .map((staffId) => shiftsByStaffDate.get(staffId)?.get(date))
-      .filter((shift): shift is StaffShift => !!shift);
+      .filter((shift): shift is CalendarShift => !!shift);
     if (shifts.length === 0) return [];
 
     const minStart = Math.min(
@@ -575,7 +576,7 @@ export class CalendarCalculator {
     items: CalendarSlotItem[],
     executionMode: string,
     candidatesByService: Map<string, CalendarSlotCandidate[]>,
-    shiftsByStaffDate: Map<string, Map<string, StaffShift>>,
+    shiftsByStaffDate: Map<string, Map<string, CalendarShift>>,
     blockedByStaffDate: Map<string, Map<string, Interval[]>>,
   ): boolean {
     const windows = items.map((item, index) => {
@@ -623,7 +624,7 @@ export class CalendarCalculator {
     date: string,
     start: number,
     end: number,
-    shiftsByStaffDate: Map<string, Map<string, StaffShift>>,
+    shiftsByStaffDate: Map<string, Map<string, CalendarShift>>,
     blockedByStaffDate: Map<string, Map<string, Interval[]>>,
   ): boolean {
     const shift = shiftsByStaffDate.get(staffId)?.get(date);

@@ -9,9 +9,9 @@ import { BundleMetrics } from '../../../services/utils/bundle-metrics.js';
 import { StaffService } from '../../../staff/services/staff.service.js';
 import { BookingResolveRequestDto } from '../../dto/booking-resolve-request.dto.js';
 import { BookingResolveResponseDto } from '../../dto/booking-resolve-response.dto.js';
-import { BookingSetup } from '../../interfaces/booking-setup.interface.js';
 import { BookingExecutionMode } from '../../enums/booking-execution-mode.enum.js';
 import { StaffSelectionMode } from '../../enums/staff-selection-mode.enum.js';
+import { BookingSetup } from '../../interfaces/booking-setup.interface.js';
 
 @Injectable()
 export class BookingSetupService {
@@ -61,13 +61,17 @@ export class BookingSetupService {
       (bundle?.executionMode as BookingExecutionMode | undefined) ??
       BookingExecutionMode.SEQUENTIAL;
 
+    const directory =
+      await this.staffService.listActiveWithServices(locationId);
     let availableServiceIds = [
       ...services.map((service) => service.id),
       ...bundles.map((item) => item.id),
     ];
     if (dto.staffId) {
       const performable = new Set(
-        await this.staffService.servicesPerformableBy(locationId, dto.staffId),
+        directory
+          .find((member) => member.id === dto.staffId)
+          ?.staffServices.map((item) => item.serviceId) ?? [],
       );
       availableServiceIds = services
         .filter((service) => performable.has(service.id))
@@ -80,16 +84,9 @@ export class BookingSetupService {
     }
 
     if (!selected?.length) {
-      const availableStaff = dto.staffId
-        ? [
-            {
-              id: dto.staffId,
-              name: (await this.staffService.findById(dto.staffId)).name,
-            },
-          ]
-        : (await this.staffService.listActiveWithServices(locationId)).map(
-            (staff) => ({ id: staff.id, name: staff.name }),
-          );
+      const availableStaff = directory
+        .filter((member) => !dto.staffId || member.id === dto.staffId)
+        .map(({ id, name }) => ({ id, name }));
       return {
         availableServiceIds,
         availableStaff,
@@ -100,10 +97,14 @@ export class BookingSetupService {
       };
     }
 
-    const staffing = await this.staffService.resolveStaffingForServices(
-      locationId,
-      selected.map((service) => service.id),
-    );
+    const coverableBySingle = directory
+      .filter((member) => {
+        const performed = new Set(
+          member.staffServices.map((item) => item.serviceId),
+        );
+        return selected.every((service) => performed.has(service.id));
+      })
+      .map(({ id, name }) => ({ id, name }));
     const totalListPrice = bundle
       ? BundleMetrics.price(bundle)
       : selected.reduce(
@@ -117,8 +118,8 @@ export class BookingSetupService {
 
     return {
       availableServiceIds,
-      availableStaff: staffing.coverableBySingle,
-      staffSelection: staffing.coverableBySingle.length
+      availableStaff: coverableBySingle,
+      staffSelection: coverableBySingle.length
         ? StaffSelectionMode.SINGLE
         : StaffSelectionMode.NONE,
       executionMode,

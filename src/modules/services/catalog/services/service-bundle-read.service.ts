@@ -4,6 +4,7 @@ import { DatabaseService } from '../../../../database/database.service.js';
 import { ACTIVE_LOCATION_WHERE } from '../../../../shared/database/active-business.where.js';
 import { AppException } from '../../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
+import { BOOKING_BUNDLE_SELECT } from '../constants/booking-catalog.select.js';
 import { ServiceBundleForCatalog } from '../interfaces/service-bundle-for-catalog.interface.js';
 import { ServiceBundleView } from '../interfaces/service-bundle-view.interface.js';
 
@@ -47,14 +48,14 @@ export class ServiceBundleReadService {
     return bundle;
   }
 
-  listActiveForBooking(locationId: string): Promise<ServiceBundleView[]> {
+  listActiveForBooking(locationId: string) {
     return this.db.serviceBundle.findMany({
       where: {
         location: ACTIVE_LOCATION_WHERE,
         locationId,
         status: ServiceStatus.ACTIVE,
       },
-      include: serviceBundleInclude,
+      select: BOOKING_BUNDLE_SELECT,
       orderBy: [{ sortOrder: 'asc' }, { title: 'asc' }],
     });
   }

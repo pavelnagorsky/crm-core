@@ -1,13 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
-import {
-  File,
-  Service,
-  ServiceBundle,
-  ServiceBundleItem,
-} from '@prisma/client';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
 import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
 import { MoneyUtils } from '../../../shared/money/money.utils.js';
+import { BookingServiceCatalog } from '../../services/catalog/interfaces/booking-service-catalog.interface.js';
 import { ServiceCatalogKind } from '../../services/enums/service-catalog-kind.enum.js';
 import { BundleMetrics } from '../../services/utils/bundle-metrics.js';
 import { BookingExecutionMode } from '../enums/booking-execution-mode.enum.js';
@@ -44,10 +39,7 @@ export class BookingSetupBundleDto {
   serviceIds: string[];
 
   static fromEntity(
-    bundle: ServiceBundle & {
-      imageFile: File | null;
-      items: (ServiceBundleItem & { service: Service })[];
-    },
+    bundle: BookingServiceCatalog['bundles'][number],
   ): BookingSetupBundleDto {
     const dto = new BookingSetupBundleDto();
     dto.id = bundle.id;

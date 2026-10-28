@@ -1,6 +1,9 @@
 export default () => {
   return {
     port: parseInt(process.env.PORT ?? '', 10) || 3000,
+    cache: {
+      enabled: process.env.CACHE_ENABLED !== 'false',
+    },
     googleCloud: {
       projectId: process.env['GOOGLE_PROJECT_ID'],
       apiKey: process.env['GOOGLE_API_KEY'],

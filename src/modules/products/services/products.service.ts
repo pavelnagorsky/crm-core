@@ -8,6 +8,8 @@ import {
   ProductStatus,
 } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
+import { AppCacheService } from '../../../shared/cache/app-cache.service.js';
+import { CacheDependency } from '../../../shared/cache/cache-dependency.js';
 import {
   ACTIVE_BRAND_WHERE,
   ACTIVE_LOCATION_WHERE,
@@ -27,6 +29,13 @@ import { AuditEvent } from '../../audit/enums/audit-event.enum.js';
 import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../../audit/interfaces/audit-log-event.interface.js';
 import { LocationService } from '../../location/services/location.service.js';
+import { BRAND_PRODUCT_CATALOG_CACHE } from '../cache/brand-product-catalog.cache.js';
+import { LOCATION_PRODUCT_OFFERS_CACHE } from '../cache/location-product-offers.cache.js';
+import {
+  PUBLIC_PRODUCT_CATEGORY_SELECT,
+  PUBLIC_PRODUCT_OFFER_SELECT,
+  PUBLIC_PRODUCT_SELECT,
+} from '../constants/public-product.select.js';
 import { CreateProductCategoryDto } from '../dto/create-product-category.dto.js';
 import { CreateProductDto } from '../dto/create-product.dto.js';
 import { LocationProductSearchRequestDto } from '../dto/location-product-search-request.dto.js';
@@ -37,6 +46,7 @@ import { UpdateProductDto } from '../dto/update-product.dto.js';
 import { UpsertProductLocationDto } from '../dto/upsert-product-location.dto.js';
 import { ProductLocationSearchOrderBy } from '../enums/product-location-search-order-by.enum.js';
 import { ProductSearchOrderBy } from '../enums/product-search-order-by.enum.js';
+import { BrandProductCatalog } from '../interfaces/brand-product-catalog.interface.js';
 import { LocationProductView } from '../interfaces/location-product-view.interface.js';
 import { ProductStatusCount } from '../interfaces/product-status-count.interface.js';
 import { ProductWithDetails } from '../interfaces/product-with-details.interface.js';
@@ -70,6 +80,7 @@ export class ProductsService {
     private readonly db: DatabaseService,
     private readonly locations: LocationService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly cache: AppCacheService,
   ) {}
 
   async createCategory(
@@ -86,6 +97,7 @@ export class ProductsService {
           sortOrder: dto.sortOrder ?? 0,
         },
       });
+      await this.cache.invalidate(CacheDependency.brandProducts(brandId));
       this.emit(
         brandId,
         null,
@@ -131,6 +143,7 @@ export class ProductsService {
           sortOrder: dto.sortOrder,
         },
       });
+      await this.cache.invalidate(CacheDependency.brandProducts(brandId));
       this.emitChanges(
         brandId,
         null,
@@ -155,6 +168,7 @@ export class ProductsService {
   ): Promise<void> {
     const category = await this.findCategory(brandId, categoryId);
     await this.db.productCategory.delete({ where: { id: categoryId } });
+    await this.cache.invalidate(CacheDependency.brandProducts(brandId));
     this.emit(
       brandId,
       null,
@@ -188,6 +202,7 @@ export class ProductsService {
           status: dto.status,
         },
       });
+      await this.cache.invalidate(CacheDependency.brandProducts(brandId));
       this.emit(
         brandId,
         null,
@@ -260,6 +275,7 @@ export class ProductsService {
           },
         });
       });
+      await this.cache.invalidate(CacheDependency.brandProducts(brandId));
       this.emitChanges(
         brandId,
         null,
@@ -302,6 +318,7 @@ export class ProductsService {
       where: { id: productId },
       data: { status },
     });
+    await this.cache.invalidate(CacheDependency.brandProducts(brandId));
     this.emitChanges(
       brandId,
       null,
@@ -329,6 +346,7 @@ export class ProductsService {
       }
       throw error;
     }
+    await this.cache.invalidate(CacheDependency.brandProducts(brandId));
     this.emit(
       brandId,
       null,
@@ -382,6 +400,7 @@ export class ProductsService {
         reorderLevel: dto.reorderLevel ?? '0.000',
       },
     });
+    await this.cache.invalidate(CacheDependency.locationProducts(locationId));
     this.emit(
       product.brandId,
       locationId,
@@ -540,18 +559,82 @@ export class ProductsService {
   async listForPublicCatalog(
     locationId: string,
   ): Promise<PublicCatalogProduct[]> {
-    const location = await this.locations.findById(locationId);
+    const { brandId } = await this.locations.getBookingSettings(locationId);
+    const [catalog, offers] = await Promise.all([
+      this.cache.getOrLoad(BRAND_PRODUCT_CATALOG_CACHE, { brandId }, () =>
+        this.loadBrandCatalog(brandId),
+      ),
+      this.cache.getOrLoad(
+        LOCATION_PRODUCT_OFFERS_CACHE,
+        { brandId, locationId },
+        () => this.loadLocationOffers(locationId),
+      ),
+    ]);
+    const byProduct = new Map(offers.map((offer) => [offer.productId, offer]));
+    const categories = new Map(
+      catalog.categories.map((category) => [category.id, category]),
+    );
+    return catalog.products.flatMap((product) => {
+      const offer = byProduct.get(product.id);
+      return offer
+        ? [
+            {
+              ...offer,
+              product: {
+                ...product,
+                category: product.categoryId
+                  ? (categories.get(product.categoryId) ?? null)
+                  : null,
+              },
+            },
+          ]
+        : [];
+    });
+  }
+
+  async warmPublicCatalog(locationId: string): Promise<void> {
+    const { brandId } = await this.locations.getBookingSettings(locationId);
+    await Promise.all([
+      this.cache.warm(BRAND_PRODUCT_CATALOG_CACHE, { brandId }, () =>
+        this.loadBrandCatalog(brandId),
+      ),
+      this.cache.warm(
+        LOCATION_PRODUCT_OFFERS_CACHE,
+        { brandId, locationId },
+        () => this.loadLocationOffers(locationId),
+      ),
+    ]);
+  }
+
+  private async loadBrandCatalog(
+    brandId: string,
+  ): Promise<BrandProductCatalog> {
+    const [products, categories] = await Promise.all([
+      this.db.product.findMany({
+        where: {
+          brandId,
+          brand: ACTIVE_BRAND_WHERE,
+          status: ProductStatus.ACTIVE,
+        },
+        select: PUBLIC_PRODUCT_SELECT,
+        orderBy: [{ name: 'asc' }, { id: 'asc' }],
+      }),
+      this.db.productCategory.findMany({
+        where: { brandId, brand: ACTIVE_BRAND_WHERE },
+        select: PUBLIC_PRODUCT_CATEGORY_SELECT,
+      }),
+    ]);
+    return { products, categories };
+  }
+
+  private loadLocationOffers(locationId: string) {
     return this.db.productLocation.findMany({
       where: {
         locationId,
         location: ACTIVE_LOCATION_WHERE,
         status: ProductStatus.ACTIVE,
-        product: { brandId: location.brandId, status: ProductStatus.ACTIVE },
       },
-      include: {
-        product: { include: { category: true, imageFile: true } },
-      },
-      orderBy: [{ product: { name: 'asc' } }, { productId: 'asc' }],
+      select: PUBLIC_PRODUCT_OFFER_SELECT,
     });
   }
 

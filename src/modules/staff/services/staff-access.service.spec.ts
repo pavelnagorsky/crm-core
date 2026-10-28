@@ -14,6 +14,7 @@ describe('Own staff data access', () => {
     {} as never,
     {} as never,
     {} as never,
+    { invalidate: vi.fn() } as never,
   );
   const service = new StaffAccessService(staff);
 

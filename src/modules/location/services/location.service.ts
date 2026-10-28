@@ -1,13 +1,21 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
-import { Location, Prisma } from '@prisma/client';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { BookingVisibility, Location, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
+import { AppCacheService } from '../../../shared/cache/app-cache.service.js';
+import { CacheDependency } from '../../../shared/cache/cache-dependency.js';
 import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
+import { BookingCacheWarmupEvent } from '../../../shared/events/booking-cache-warmup.event.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { resolveLocationLocale } from '../../../shared/geo/resolve-location-locale.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { TokenEpochRegistryService } from '../../auth/services/token-epoch-registry.service.js';
 import { BookingDeletionPolicyService } from '../../bookings/deletion-policy/services/booking-deletion-policy.service.js';
 import { BrandService } from '../../brand/services/brand.service.js';
+import {
+  LOCATION_SETTINGS_CACHE,
+  LOCATION_SETTINGS_SELECT,
+} from '../cache/location-settings.cache.js';
 import { CreateLocationDto } from '../dto/create-location.dto.js';
 import { UpdateLocationDto } from '../dto/update-location.dto.js';
 import { LocationPublicProfile } from '../interfaces/location-public-profile.interface.js';
@@ -19,6 +27,8 @@ export class LocationService {
     private readonly brandService: BrandService,
     private readonly tokenEpochRegistry: TokenEpochRegistryService,
     private readonly bookingDeletionPolicy: BookingDeletionPolicyService,
+    private readonly cache: AppCacheService,
+    private readonly events: EventEmitter2,
   ) {}
 
   async create(brandId: string, dto: CreateLocationDto): Promise<Location> {
@@ -27,6 +37,10 @@ export class LocationService {
     const location = await this.db.location.create({
       data: { ...dto, ...locale, brandId },
     });
+    this.events.emit(
+      BookingCacheWarmupEvent.eventName,
+      new BookingCacheWarmupEvent(location.id),
+    );
     await this.tokenEpochRegistry.bumpMany(
       await this.brandService.findMemberUserIds(brandId),
     );
@@ -37,6 +51,19 @@ export class LocationService {
     return this.db.location.findMany({
       where: { brandId, ...ACTIVE_LOCATION_WHERE },
       orderBy: { createdAt: 'asc' },
+    });
+  }
+
+  listPublicBookingTargets(afterId?: string) {
+    return this.db.location.findMany({
+      where: {
+        ...ACTIVE_LOCATION_WHERE,
+        bookingVisibility: BookingVisibility.PUBLIC,
+        ...(afterId ? { id: { gt: afterId } } : {}),
+      },
+      select: { id: true },
+      orderBy: { id: 'asc' },
+      take: 100,
     });
   }
 
@@ -52,9 +79,27 @@ export class LocationService {
   }
 
   async findPublicProfile(locationId: string): Promise<LocationPublicProfile> {
+    const location = await this.getBookingSettings(locationId);
+    const brand = await this.brandService.findPublicProfile(location.brandId);
+    return { ...location, brand };
+  }
+
+  getBookingSettings(locationId: string) {
+    return this.cache.getOrLoad(LOCATION_SETTINGS_CACHE, { locationId }, () =>
+      this.loadBookingSettings(locationId),
+    );
+  }
+
+  warmBookingSettings(locationId: string): Promise<void> {
+    return this.cache.warm(LOCATION_SETTINGS_CACHE, { locationId }, () =>
+      this.loadBookingSettings(locationId),
+    );
+  }
+
+  private async loadBookingSettings(locationId: string) {
     const location = await this.db.location.findUnique({
       where: { id: locationId, ...ACTIVE_LOCATION_WHERE },
-      include: { brand: { include: { logoFile: true } } },
+      select: LOCATION_SETTINGS_SELECT,
     });
     if (!location) throw new NotFoundException('Location not found');
     return location;
@@ -76,10 +121,17 @@ export class LocationService {
       );
     }
     await this.findById(locationId);
-    return this.db.location.update({
+    const updated = await this.db.location.update({
       where: { id: locationId, ...ACTIVE_LOCATION_WHERE },
       data: dto,
     });
+    await this.cache.invalidate(CacheDependency.locationSettings(locationId));
+    await this.cache.invalidate(CacheDependency.staffSchedule(locationId));
+    this.events.emit(
+      BookingCacheWarmupEvent.eventName,
+      new BookingCacheWarmupEvent(locationId),
+    );
+    return updated;
   }
 
   async delete(locationId: string): Promise<void> {
@@ -94,6 +146,7 @@ export class LocationService {
         tx,
       );
     });
+    await this.cache.invalidate(CacheDependency.locationLifecycle(locationId));
   }
 
   async acquireActiveOperationLock(

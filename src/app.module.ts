@@ -7,6 +7,7 @@ import { DatabaseModule } from './database/database.module.js';
 import { AccessManagementModule } from './modules/access-management/access-management.module.js';
 import { AuditModule } from './modules/audit/audit.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
+import { BookingCacheModule } from './modules/booking-cache/booking-cache.module.js';
 import { BookingChannelsModule } from './modules/booking-channels/booking-channels.module.js';
 import { BookingsAnalyticsModule } from './modules/bookings/analytics/bookings-analytics.module.js';
 import { BookingsModule } from './modules/bookings/bookings.module.js';
@@ -51,6 +52,7 @@ import { SuppliersModule } from './modules/suppliers/suppliers.module.js';
     ClientsAnalyticsModule,
     BookingsModule,
     BookingChannelsModule,
+    BookingCacheModule,
     BookingsAnalyticsModule,
     AuditModule,
     HealthModule,

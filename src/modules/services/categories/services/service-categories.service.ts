@@ -7,6 +7,8 @@ import {
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ServiceCategory } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
+import { AppCacheService } from '../../../../shared/cache/app-cache.service.js';
+import { CacheDependency } from '../../../../shared/cache/cache-dependency.js';
 import { ACTIVE_LOCATION_WHERE } from '../../../../shared/database/active-business.where.js';
 import { PrismaErrorCode } from '../../../../shared/database/prisma-error-codes.js';
 import { AppException } from '../../../../shared/exceptions/app.exception.js';
@@ -28,6 +30,7 @@ export class ServiceCategoriesService {
   constructor(
     private readonly db: DatabaseService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly cache: AppCacheService,
   ) {}
 
   async createCategory(
@@ -44,6 +47,7 @@ export class ServiceCategoriesService {
           sortOrder: dto.sortOrder ?? 0,
         },
       });
+      await this.cache.invalidate(CacheDependency.serviceCatalog(locationId));
       this.logger.log(
         `service category created: id=${category.id} locationId=${locationId}`,
       );
@@ -94,6 +98,7 @@ export class ServiceCategoriesService {
           sortOrder: dto.sortOrder ?? existing.sortOrder,
         },
       });
+      await this.cache.invalidate(CacheDependency.serviceCatalog(locationId));
       const changes = diffFields(
         existing,
         category,
@@ -133,6 +138,14 @@ export class ServiceCategoriesService {
     });
   }
 
+  listForBooking(locationId: string) {
+    return this.db.serviceCategory.findMany({
+      where: { locationId, location: ACTIVE_LOCATION_WHERE },
+      select: { id: true, name: true, description: true, sortOrder: true },
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+    });
+  }
+
   async deleteCategory(
     locationId: string,
     categoryId: string,
@@ -143,6 +156,7 @@ export class ServiceCategoriesService {
     });
     if (!category) throw new NotFoundException('Service category not found');
     await this.db.serviceCategory.delete({ where: { id: categoryId } });
+    await this.cache.invalidate(CacheDependency.serviceCatalog(locationId));
     this.logger.log(
       `service category deleted: id=${categoryId} locationId=${locationId}`,
     );

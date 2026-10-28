@@ -2,18 +2,17 @@ import { NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test } from '@nestjs/testing';
 import { BookingSource, CancelledBy, Prisma, UserRole } from '@prisma/client';
-import { booking } from './testing/factories/booking.factory.js';
-import { authorizeTestToken } from '../auth/testing/factories/token-payload.factory.js';
 import { DatabaseService } from '../../database/database.service.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { auditActorFromToken } from '../audit/utils/audit-actor-from-token.js';
 import { TokenPayloadDto } from '../auth/dto/token-payload.dto.js';
+import { authorizeTestToken } from '../auth/testing/factories/token-payload.factory.js';
 import { CalendarFacade } from '../calendar/calendar.facade.js';
 import { LocationService } from '../location/services/location.service.js';
 import { OrdersFacade } from '../orders/orders.facade.js';
-import { ProductsService } from '../products/services/products.service.js';
 import { StaffEarningsService } from '../payroll/earnings/services/staff-earnings.service.js';
+import { ProductsService } from '../products/services/products.service.js';
 import { ServiceCatalogFacade } from '../services/catalog/service-catalog.facade.js';
 import { ServiceCatalogKind } from '../services/enums/service-catalog-kind.enum.js';
 import { StaffService } from '../staff/services/staff.service.js';
@@ -29,12 +28,13 @@ import { BookingClientTokenService } from './services/booking-client-token.servi
 import { BookingEventsService } from './services/booking-events.service.js';
 import { BookingSlotLockService } from './services/booking-slot-lock.service.js';
 import { BookingWriteLockService } from './services/booking-write-lock.service.js';
-import { BookingLifecycleService } from './services/write/booking-lifecycle.service.js';
-import { BookingMutationService } from './services/write/booking-mutation.service.js';
-import { BookingRescheduleService } from './services/write/booking-reschedule.service.js';
 import { BookingCalendarReadService } from './services/read/booking-calendar-read.service.js';
 import { BookingReadService } from './services/read/booking-read.service.js';
 import { BookingSetupService } from './services/setup/booking-setup.service.js';
+import { BookingLifecycleService } from './services/write/booking-lifecycle.service.js';
+import { BookingMutationService } from './services/write/booking-mutation.service.js';
+import { BookingRescheduleService } from './services/write/booking-reschedule.service.js';
+import { booking } from './testing/factories/booking.factory.js';
 
 const serviceCatalog = { loadForBooking: vi.fn() };
 const products = { listForPublicCatalog: vi.fn().mockResolvedValue([]) };
@@ -946,8 +946,9 @@ describe('BookingsFacade catalog selection', () => {
       { id: 'pack', items: [{ serviceId: 'cut' }] },
       { id: 'wedding', items: [{ serviceId: 'cut' }, { serviceId: 'color' }] },
     ]);
-    staff.servicesPerformableBy.mockResolvedValue(['cut']);
-    staff.findById.mockResolvedValue({ name: 'Anna' });
+    staff.listActiveWithServices.mockResolvedValue([
+      { id: 'anna', name: 'Anna', staffServices: [{ serviceId: 'cut' }] },
+    ]);
 
     const resolved = await service.resolveBookingSelection('biz', {
       staffId: 'anna',
@@ -974,11 +975,13 @@ describe('BookingsFacade catalog selection', () => {
       },
     ]);
     bundleFindMany.mockResolvedValue([]);
-    staff.servicesPerformableBy.mockResolvedValue(['cut', 'color']);
-    staff.resolveStaffingForServices.mockResolvedValue({
-      coverableBySingle: [{ id: 'anna', name: 'Anna' }],
-      requiresMultiple: false,
-    });
+    staff.listActiveWithServices.mockResolvedValue([
+      {
+        id: 'anna',
+        name: 'Anna',
+        staffServices: [{ serviceId: 'cut' }, { serviceId: 'color' }],
+      },
+    ]);
 
     const resolved = await service.resolveBookingSelection('biz', {
       staffId: 'anna',
@@ -1442,7 +1445,9 @@ describe('BookingsFacade.update manual interval', () => {
         },
       );
 
-      expect(bookingUpdate.mock.calls[0][0].data.isCustomTime).toBe(isCustomTime);
+      expect(bookingUpdate.mock.calls[0][0].data.isCustomTime).toBe(
+        isCustomTime,
+      );
       expect(result.isCustomTime).toBe(isCustomTime);
     },
   );

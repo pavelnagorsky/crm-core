@@ -11,7 +11,9 @@ export class PublicProductCategoryDto {
   @ApiProperty({ type: String, nullable: true })
   description: string | null;
 
-  static fromEntity(category: ProductCategory): PublicProductCategoryDto {
+  static fromEntity(
+    category: Pick<ProductCategory, 'id' | 'name' | 'description'>,
+  ): PublicProductCategoryDto {
     const dto = new PublicProductCategoryDto();
     dto.id = category.id;
     dto.name = category.name;
