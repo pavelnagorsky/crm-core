@@ -31,11 +31,40 @@ describe('Staff directory and private data', () => {
         email: 'private',
         taxId: 'private',
         payoutNote: 'private',
+        avatarFile: {
+          id: 'file-1',
+          fileName: 'boris.png',
+          url: 'https://cdn.example/boris.png',
+        },
+      },
+      {
+        id: 'anna',
+        name: 'Anna',
+        roleTitle: null,
+        status: 'ACTIVE',
+        avatarFile: null,
       },
     ]);
     const result = await controller.directory('location-1');
     expect(result.responseValue).toEqual([
-      { id: 'boris', name: 'Boris', roleTitle: 'Stylist', status: 'ACTIVE' },
+      {
+        id: 'boris',
+        name: 'Boris',
+        roleTitle: 'Stylist',
+        status: 'ACTIVE',
+        avatar: {
+          id: 'file-1',
+          name: 'boris.png',
+          url: 'https://cdn.example/boris.png',
+        },
+      },
+      {
+        id: 'anna',
+        name: 'Anna',
+        roleTitle: null,
+        status: 'ACTIVE',
+        avatar: null,
+      },
     ]);
   });
 

@@ -147,10 +147,11 @@ export class StaffService {
     private readonly epochs: TokenEpochRegistryService,
   ) {}
 
-  listInLocation(locationId: string): Promise<Staff[]> {
+  listInLocation(locationId: string): Promise<StaffWithAvatar[]> {
     return this.db.staff.findMany({
       where: { location: ACTIVE_LOCATION_WHERE, locationId },
       orderBy: { name: 'asc' },
+      include: { avatarFile: true },
     });
   }
 

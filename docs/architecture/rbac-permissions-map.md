@@ -387,7 +387,7 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `GET /locations/:locationId/staff/directory` | `directory` | L: `booking:read` или `booking.own:read` | Только id/name/roleTitle/status коллег; кадровые и контактные данные не возвращаются. |
+| `GET /locations/:locationId/staff/directory` | `directory` | L: `booking:read` или `booking.own:read` | Только id/name/roleTitle/status и аватар коллег; кадровые и контактные данные не возвращаются. |
 | `POST /locations/:locationId/staff` | `create` | L: `staff:write` | — |
 | `PUT /locations/:locationId/staff/:id` | `update` | L: `staff:write` | — |
 | `GET /locations/:locationId/staff/status-counts` | `getStatusCounts` | L: `staff:read` | — |
