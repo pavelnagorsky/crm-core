@@ -2,6 +2,7 @@ import { NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test } from '@nestjs/testing';
 import {
+  BookingStatus,
   BookingVisibility,
   CalendarEvent,
   CalendarEventRepeatType,
@@ -643,8 +644,10 @@ describe('CalendarFacade.getCalendar', () => {
         {
           id: 'booking-1',
           entityId: 'booking-1',
+          status: BookingStatus.CONFIRMED,
           staffId: 'staff-1',
           staffName: 'Анна',
+          clientName: 'Мария Иванова',
           serviceTitles: ['Стрижка'],
           price: '1500.50',
           startAt: new Date('2026-09-22T07:00:00.000Z'),
@@ -668,9 +671,11 @@ describe('CalendarFacade.getCalendar', () => {
       {
         id: 'booking-1',
         type: CalendarEventType.BOOKING,
+        status: BookingStatus.CONFIRMED,
         entityId: 'booking-1',
         staffId: 'staff-1',
         staffName: 'Анна',
+        clientName: 'Мария Иванова',
         title: null,
         subtitle: 'Стрижка',
         price: '1500.50',

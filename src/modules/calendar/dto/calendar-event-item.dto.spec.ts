@@ -1,4 +1,8 @@
-import { CalendarEventRepeatType, CalendarEventType } from '@prisma/client';
+import {
+  BookingStatus,
+  CalendarEventRepeatType,
+  CalendarEventType,
+} from '@prisma/client';
 import { CalendarEventItemDto } from './calendar-event-item.dto.js';
 import { CalendarBookingView } from '../interfaces/calendar-booking-view.interface.js';
 
@@ -8,8 +12,10 @@ function booking(
   return {
     id: 'booking-1',
     entityId: 'booking-1',
+    status: BookingStatus.CONFIRMED,
     staffId: 'staff-1',
     staffName: 'Анна',
+    clientName: 'Мария Иванова',
     serviceTitles: ['Стрижка'],
     price: '1500.50',
     startAt: new Date('2026-09-22T07:00:00.000Z'),
@@ -29,6 +35,8 @@ describe('CalendarEventItemDto.booking', () => {
     expect(item.subtitle).toBe('Стрижка');
     expect(item.price).toBe('90.00');
     expect(item.staffName).toBe('Анна');
+    expect(item.clientName).toBe('Мария Иванова');
+    expect(item.status).toBe(BookingStatus.CONFIRMED);
   });
 
   it('joins two services and counts three or more', () => {
@@ -103,6 +111,8 @@ describe('CalendarEventItemDto.block', () => {
 
     expect(named).toMatchObject({
       type: CalendarEventType.BLOCK,
+      status: null,
+      clientName: null,
       title: 'Обед',
       subtitle: null,
       price: null,
@@ -128,6 +138,8 @@ describe('CalendarEventItemDto.integration', () => {
 
     expect(item).toMatchObject({
       type: CalendarEventType.INTEGRATION,
+      status: null,
+      clientName: null,
       title: 'Созвон',
       subtitle: null,
       price: null,

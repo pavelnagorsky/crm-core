@@ -29,6 +29,8 @@ const calendarItemSelect = {
     select: {
       id: true,
       status: true,
+      clientFirstName: true,
+      clientLastName: true,
     },
   },
 } satisfies Prisma.BookingItemSelect;
@@ -183,6 +185,14 @@ export class BookingCalendarReadService {
     return {
       id,
       entityId: ordered[0].booking.id,
+      status: ordered[0].booking.status,
+      clientName: [
+        ordered[0].booking.clientFirstName,
+        ordered[0].booking.clientLastName,
+      ]
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .join(' '),
       staffId: ordered[0].staffId,
       staffName:
         ordered.map((row) => row.staffName.trim()).find((name) => name) ?? '',

@@ -1,5 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { CalendarEventRepeatType, CalendarEventType } from '@prisma/client';
+import {
+  BookingStatus,
+  CalendarEventRepeatType,
+  CalendarEventType,
+} from '@prisma/client';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
 import { TimeUtils } from '../../../shared/time/time.utils.js';
 import { CalendarBookingView } from '../interfaces/calendar-booking-view.interface.js';
@@ -16,6 +20,14 @@ export class CalendarEventItemDto {
   type: CalendarEventType;
 
   @ApiProperty({
+    enum: BookingStatus,
+    nullable: true,
+    description:
+      'Booking status. Included for every calendar reader regardless of role. Null for blocks and integration events.',
+  })
+  status: BookingStatus | null;
+
+  @ApiProperty({
     type: String,
     nullable: true,
     description: 'Id for GET by id. Null when that endpoint does not exist.',
@@ -27,6 +39,14 @@ export class CalendarEventItemDto {
 
   @ApiProperty({ type: String, nullable: true })
   staffName: string | null;
+
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      'Booking client first and last name. Included for every calendar reader regardless of role. Null for blocks and integration events.',
+  })
+  clientName: string | null;
 
   @ApiProperty({
     type: String,
@@ -127,9 +147,11 @@ export class CalendarEventItemDto {
     const dto = new CalendarEventItemDto();
     dto.id = booking.id;
     dto.type = CalendarEventType.BOOKING;
+    dto.status = booking.status;
     dto.entityId = booking.entityId;
     dto.staffId = booking.staffId;
     dto.staffName = booking.staffName;
+    dto.clientName = booking.clientName;
     dto.title = null;
     dto.subtitle = serviceSubtitle(booking.serviceTitles);
     dto.price = booking.price;
@@ -156,9 +178,11 @@ export class CalendarEventItemDto {
     const dto = new CalendarEventItemDto();
     dto.id = `${event.id}:${date}`;
     dto.type = type;
+    dto.status = null;
     dto.entityId = event.id;
     dto.staffId = event.staffId;
     dto.staffName = event.staffId ? staffName : null;
+    dto.clientName = null;
     dto.title = null;
     dto.subtitle = null;
     dto.price = null;

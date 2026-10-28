@@ -651,11 +651,17 @@ describe('BookingCalendarReadService.listForCalendar', () => {
           select: {
             id: true,
             status: true,
+            clientFirstName: true,
+            clientLastName: true,
           },
         },
       },
     });
     expect(feed.bookings.map((item) => item.id)).toEqual(['visible', 'noshow']);
+    expect(feed.bookings.map((item) => item.status)).toEqual([
+      BookingStatus.CONFIRMED,
+      BookingStatus.NO_SHOW,
+    ]);
     expect(feed.bookings[0].price).toBe('10.00');
     expect(feed.bookings[0].entityId).toBe('visible');
     expect(feed.linkedEventIds).toEqual(['ev-1', 'ev-2']);
@@ -683,7 +689,12 @@ describe('BookingCalendarReadService.listForCalendar', () => {
       startAt: new Date(startAt),
       endAt: new Date(endAt),
       calendarEventId: null,
-      booking: { id: 'booking-1', status: BookingStatus.CONFIRMED },
+      booking: {
+        id: 'booking-1',
+        status: BookingStatus.CONFIRMED,
+        clientFirstName: ' Мария ',
+        clientLastName: ' Иванова ',
+      },
     });
     findMany.mockResolvedValue([
       item(
@@ -730,8 +741,10 @@ describe('BookingCalendarReadService.listForCalendar', () => {
       {
         id: 'booking-1:anna',
         entityId: 'booking-1',
+        status: BookingStatus.CONFIRMED,
         staffId: 'anna',
         staffName: 'anna',
+        clientName: 'Мария Иванова',
         serviceTitles: ['Стрижка', 'Окрашивание', 'Укладка'],
         price: '150.00',
         startAt: new Date('2026-09-22T07:00:00.000Z'),
@@ -740,8 +753,10 @@ describe('BookingCalendarReadService.listForCalendar', () => {
       {
         id: 'booking-1:ira',
         entityId: 'booking-1',
+        status: BookingStatus.CONFIRMED,
         staffId: 'ira',
         staffName: 'ira',
+        clientName: 'Мария Иванова',
         serviceTitles: ['Брови'],
         price: '20.00',
         startAt: new Date('2026-09-22T07:00:00.000Z'),
