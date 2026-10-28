@@ -79,15 +79,6 @@ export class AppCacheService implements OnModuleDestroy {
     );
   }
 
-  async warm<C, V>(
-    definition: CacheDefinition<C, V>,
-    context: C,
-    loader: () => Promise<V>,
-  ): Promise<void> {
-    if (!this.enabled || this.stopped || !definition.policy.warmup) return;
-    await this.getOrLoad(definition, context, loader);
-  }
-
   invalidate(dependency: string): Promise<void> {
     if (this.enabled && !this.stopped) {
       this.invalidatedAt.set(dependency, ++this.revision);

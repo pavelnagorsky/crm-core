@@ -1,11 +1,9 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
-import { EventEmitter2 } from '@nestjs/event-emitter';
-import { BookingVisibility, Location, Prisma } from '@prisma/client';
+import { Location, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { AppCacheService } from '../../../shared/cache/app-cache.service.js';
 import { CacheDependency } from '../../../shared/cache/cache-dependency.js';
 import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
-import { BookingCacheWarmupEvent } from '../../../shared/events/booking-cache-warmup.event.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { resolveLocationLocale } from '../../../shared/geo/resolve-location-locale.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
@@ -28,7 +26,6 @@ export class LocationService {
     private readonly tokenEpochRegistry: TokenEpochRegistryService,
     private readonly bookingDeletionPolicy: BookingDeletionPolicyService,
     private readonly cache: AppCacheService,
-    private readonly events: EventEmitter2,
   ) {}
 
   async create(brandId: string, dto: CreateLocationDto): Promise<Location> {
@@ -37,10 +34,6 @@ export class LocationService {
     const location = await this.db.location.create({
       data: { ...dto, ...locale, brandId },
     });
-    this.events.emit(
-      BookingCacheWarmupEvent.eventName,
-      new BookingCacheWarmupEvent(location.id),
-    );
     await this.tokenEpochRegistry.bumpMany(
       await this.brandService.findMemberUserIds(brandId),
     );
@@ -51,19 +44,6 @@ export class LocationService {
     return this.db.location.findMany({
       where: { brandId, ...ACTIVE_LOCATION_WHERE },
       orderBy: { createdAt: 'asc' },
-    });
-  }
-
-  listPublicBookingTargets(afterId?: string) {
-    return this.db.location.findMany({
-      where: {
-        ...ACTIVE_LOCATION_WHERE,
-        bookingVisibility: BookingVisibility.PUBLIC,
-        ...(afterId ? { id: { gt: afterId } } : {}),
-      },
-      select: { id: true },
-      orderBy: { id: 'asc' },
-      take: 100,
     });
   }
 
@@ -86,12 +66,6 @@ export class LocationService {
 
   getBookingSettings(locationId: string) {
     return this.cache.getOrLoad(LOCATION_SETTINGS_CACHE, { locationId }, () =>
-      this.loadBookingSettings(locationId),
-    );
-  }
-
-  warmBookingSettings(locationId: string): Promise<void> {
-    return this.cache.warm(LOCATION_SETTINGS_CACHE, { locationId }, () =>
       this.loadBookingSettings(locationId),
     );
   }
@@ -127,10 +101,6 @@ export class LocationService {
     });
     await this.cache.invalidate(CacheDependency.locationSettings(locationId));
     await this.cache.invalidate(CacheDependency.staffSchedule(locationId));
-    this.events.emit(
-      BookingCacheWarmupEvent.eventName,
-      new BookingCacheWarmupEvent(locationId),
-    );
     return updated;
   }
 

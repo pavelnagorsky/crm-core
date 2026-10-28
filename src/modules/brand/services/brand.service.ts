@@ -9,7 +9,6 @@ import {
   ACTIVE_LOCATION_WHERE,
 } from '../../../shared/database/active-business.where.js';
 import { OrderDirection } from '../../../shared/enums/order-direction.enum.js';
-import { BookingCacheWarmupEvent } from '../../../shared/events/booking-cache-warmup.event.js';
 import { resolveLocationLocale } from '../../../shared/geo/resolve-location-locale.js';
 import { AccessService } from '../../access/services/access.service.js';
 import { AUDIT_EVENT } from '../../audit/constants/audit.constants.js';
@@ -86,11 +85,6 @@ export class BrandService {
       return brand;
     });
 
-    for (const location of brand.locations)
-      this.eventEmitter.emit(
-        BookingCacheWarmupEvent.eventName,
-        new BookingCacheWarmupEvent(location.id),
-      );
     const ownerStaff = brand.locations[0]?.staff[0];
     if (ownerStaff) {
       this.eventEmitter.emit(AUDIT_EVENT, {
@@ -147,12 +141,6 @@ export class BrandService {
 
   findPublicProfile(brandId: string) {
     return this.cache.getOrLoad(BRAND_PROFILE_CACHE, { brandId }, () =>
-      this.loadPublicProfile(brandId),
-    );
-  }
-
-  warmPublicProfile(brandId: string): Promise<void> {
-    return this.cache.warm(BRAND_PROFILE_CACHE, { brandId }, () =>
       this.loadPublicProfile(brandId),
     );
   }

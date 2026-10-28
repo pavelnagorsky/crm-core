@@ -65,13 +65,6 @@ export class ServiceCatalogFacade {
     };
   }
 
-  async warmForBooking(locationId: string): Promise<void> {
-    const { brandId } = await this.locations.getBookingSettings(locationId);
-    await this.cache.warm(SERVICE_CATALOG_CACHE, { brandId, locationId }, () =>
-      this.loadSnapshot(locationId),
-    );
-  }
-
   private async loadSnapshot(
     locationId: string,
   ): Promise<BookingCatalogSnapshot> {

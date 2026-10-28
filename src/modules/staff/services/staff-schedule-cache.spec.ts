@@ -14,6 +14,13 @@ describe('Staff schedule cache coverage', () => {
   let cache: AppCacheService;
   const findMany = vi.fn();
   let service: StaffService;
+  const readDay = (locationId: string, staffId: string, date: string) =>
+    service.listShiftsForAvailability(
+      locationId,
+      [staffId],
+      day(date),
+      day(date),
+    );
   const settings = {
     brandId: 'brand',
     timezone: 'Europe/Minsk',
@@ -43,23 +50,12 @@ describe('Staff schedule cache coverage', () => {
   });
 
   it('reuses one snapshot for different dates and employees', async () => {
-    await service.warmBookingSchedule('location');
-    expect(
-      await service.listShiftsForAvailability(
-        'location',
-        ['anna'],
-        day('2026-10-27'),
-        day('2026-10-27'),
-      ),
-    ).toEqual([shift('2026-10-27')]);
-    expect(
-      await service.listShiftsForAvailability(
-        'location',
-        ['boris'],
-        day('2026-10-28'),
-        day('2026-10-28'),
-      ),
-    ).toEqual([shift('2026-10-28', 'boris')]);
+    expect(await readDay('location', 'anna', '2026-10-27')).toEqual([
+      shift('2026-10-27'),
+    ]);
+    expect(await readDay('location', 'boris', '2026-10-28')).toEqual([
+      shift('2026-10-28', 'boris'),
+    ]);
     expect(findMany).toHaveBeenCalledTimes(1);
   });
 
@@ -75,12 +71,7 @@ describe('Staff schedule cache coverage', () => {
       {} as never,
       cache,
     );
-    await service.listShiftsForAvailability(
-      'location',
-      ['anna'],
-      day('2026-10-27'),
-      day('2026-10-27'),
-    );
+    await readDay('location', 'anna', '2026-10-27');
     expect(findMany).toHaveBeenCalledTimes(1);
     expect(findMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -94,16 +85,11 @@ describe('Staff schedule cache coverage', () => {
   });
 
   it('reads outside coverage without adding keys or returning false empty results', async () => {
-    await service.warmBookingSchedule('location');
+    await readDay('location', 'anna', '2026-10-28');
     findMany.mockResolvedValueOnce([shift('2026-12-01')]);
-    expect(
-      await service.listShiftsForAvailability(
-        'location',
-        ['anna'],
-        day('2026-12-01'),
-        day('2026-12-01'),
-      ),
-    ).toEqual([shift('2026-12-01')]);
+    expect(await readDay('location', 'anna', '2026-12-01')).toEqual([
+      shift('2026-12-01'),
+    ]);
     expect(findMany).toHaveBeenLastCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
@@ -112,11 +98,16 @@ describe('Staff schedule cache coverage', () => {
         }),
       }),
     );
+    findMany.mockResolvedValueOnce([]);
+    expect(await readDay('location', 'anna', '2026-12-01')).toEqual([]);
+    expect(await readDay('location', 'anna', '2026-10-27')).toEqual([
+      shift('2026-10-27'),
+    ]);
+    expect(findMany).toHaveBeenCalledTimes(3);
   });
 
   it('includes the final covered day when a manual range ends at the end of day', async () => {
     findMany.mockResolvedValue([shift('2026-10-29')]);
-    await service.warmBookingSchedule('location');
     expect(
       await service.listShiftsForAvailability(
         'location',
@@ -125,14 +116,17 @@ describe('Staff schedule cache coverage', () => {
         day('2026-10-29T23:59:59.999Z'),
       ),
     ).toEqual([shift('2026-10-29')]);
+    expect(await readDay('location', 'anna', '2026-10-29')).toEqual([
+      shift('2026-10-29'),
+    ]);
     expect(findMany).toHaveBeenCalledTimes(1);
   });
 
   it('moves the window at local midnight even while TTL is valid', async () => {
     vi.setSystemTime(new Date('2026-10-27T20:59:00Z'));
-    await service.warmBookingSchedule('location');
+    await readDay('location', 'anna', '2026-10-28');
     vi.setSystemTime(new Date('2026-10-27T21:01:00Z'));
-    await service.warmBookingSchedule('location');
+    await readDay('location', 'anna', '2026-10-28');
     expect(findMany).toHaveBeenCalledTimes(2);
     expect(findMany).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -146,15 +140,8 @@ describe('Staff schedule cache coverage', () => {
   it('caches all shifts in the booking window without a row limit', async () => {
     const shifts = Array.from({ length: 5001 }, () => shift('2026-10-27'));
     findMany.mockResolvedValue(shifts);
-    await service.warmBookingSchedule('location');
-    expect(
-      await service.listShiftsForAvailability(
-        'location',
-        ['anna'],
-        day('2026-10-27'),
-        day('2026-10-27'),
-      ),
-    ).toEqual(shifts);
+    expect(await readDay('location', 'anna', '2026-10-27')).toEqual(shifts);
+    expect(await readDay('location', 'anna', '2026-10-27')).toEqual(shifts);
     expect(findMany).toHaveBeenCalledTimes(1);
     expect(findMany.mock.calls[0][0]).not.toHaveProperty('take');
   });
@@ -164,15 +151,10 @@ describe('Staff schedule cache coverage', () => {
     settings.advanceBookingWindowDays = 180;
     findMany.mockResolvedValue([shift('2027-02-01')]);
     try {
-      await service.warmBookingSchedule('location');
-      expect(
-        await service.listShiftsForAvailability(
-          'location',
-          ['anna'],
-          day('2027-02-01'),
-          day('2027-02-01'),
-        ),
-      ).toEqual([shift('2027-02-01')]);
+      await readDay('location', 'anna', '2026-10-27');
+      expect(await readDay('location', 'anna', '2027-02-01')).toEqual([
+        shift('2027-02-01'),
+      ]);
       expect(findMany).toHaveBeenCalledTimes(1);
     } finally {
       settings.advanceBookingWindowDays = previousWindow;
@@ -180,26 +162,12 @@ describe('Staff schedule cache coverage', () => {
   });
 
   it('reloads a replaced schedule without invalidating another location', async () => {
-    await service.warmBookingSchedule('a');
-    await service.warmBookingSchedule('b');
+    await readDay('a', 'anna', '2026-10-27');
+    await readDay('b', 'anna', '2026-10-27');
     await cache.invalidate(CacheDependency.staffSchedule('a'));
     findMany.mockResolvedValue([]);
-    expect(
-      await service.listShiftsForAvailability(
-        'a',
-        ['anna'],
-        day('2026-10-27'),
-        day('2026-10-27'),
-      ),
-    ).toEqual([]);
-    expect(
-      await service.listShiftsForAvailability(
-        'b',
-        ['anna'],
-        day('2026-10-27'),
-        day('2026-10-27'),
-      ),
-    ).toHaveLength(1);
+    expect(await readDay('a', 'anna', '2026-10-27')).toEqual([]);
+    expect(await readDay('b', 'anna', '2026-10-27')).toHaveLength(1);
     expect(findMany).toHaveBeenCalledTimes(3);
   });
 });

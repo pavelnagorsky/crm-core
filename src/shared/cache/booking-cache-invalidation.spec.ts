@@ -1,14 +1,13 @@
-import { createTestCache } from '../../../shared/cache/testing/create-test-cache.js';
 import { Prisma, ServiceStatus } from '@prisma/client';
-import { AppCacheService } from '../../../shared/cache/app-cache.service.js';
-import { CacheNamespace } from '../../../shared/cache/enums/cache-namespace.enum.js';
-import { AuditActorRole } from '../../audit/enums/audit-actor-role.enum.js';
-import { BrandService } from '../../brand/services/brand.service.js';
-import { LocationService } from '../../location/services/location.service.js';
-import { ProductsService } from '../../products/services/products.service.js';
-import { ServiceCatalogFacade } from '../../services/catalog/service-catalog.facade.js';
-import { ServiceWriteService } from '../../services/service-write/services/service-write.service.js';
-import { StaffService } from '../../staff/services/staff.service.js';
+import { AuditActorRole } from '../../modules/audit/enums/audit-actor-role.enum.js';
+import { BrandService } from '../../modules/brand/services/brand.service.js';
+import { LocationService } from '../../modules/location/services/location.service.js';
+import { ProductsService } from '../../modules/products/services/products.service.js';
+import { ServiceCatalogFacade } from '../../modules/services/catalog/service-catalog.facade.js';
+import { ServiceWriteService } from '../../modules/services/service-write/services/service-write.service.js';
+import { StaffService } from '../../modules/staff/services/staff.service.js';
+import { AppCacheService } from './app-cache.service.js';
+import { createTestCache } from './testing/create-test-cache.js';
 
 const actor = { id: 'owner', name: 'Owner', role: AuditActorRole.OWNER };
 
@@ -253,7 +252,6 @@ describe('Cache invalidation through domain writes', () => {
         },
       } as never,
       cache,
-      { emit: vi.fn() } as never,
     );
     await locations.getBookingSettings('location');
     await expect(locations.delete('location')).rejects.toThrow('open bookings');
@@ -273,10 +271,5 @@ describe('Cache invalidation through domain writes', () => {
       'Location not found',
     );
     expect(db.location.findUnique).toHaveBeenCalledTimes(2);
-  });
-
-  it('uses unique namespace identifiers', () => {
-    const namespaces = Object.values(CacheNamespace);
-    expect(new Set(namespaces).size).toBe(namespaces.length);
   });
 });

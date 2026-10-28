@@ -14,7 +14,6 @@ const definition = defineCache<{ id: string }, { name: string }>({
   policy: {
     ttlMs: 1000,
     refreshAheadMs: 200,
-    warmup: false,
   },
 });
 
@@ -28,8 +27,10 @@ function deferred<T>() {
 
 describe('AppCacheService', () => {
   let cache: AppCacheService;
+  let manager: ReturnType<typeof createCache>;
   beforeEach(() => {
-    cache = createTestCache();
+    manager = createCache();
+    cache = new AppCacheService(manager, new ConfigService());
   });
   afterEach(async () => {
     await cache.onModuleDestroy();
@@ -209,30 +210,69 @@ describe('AppCacheService', () => {
     expect(loader).toHaveBeenCalledTimes(3);
   });
 
-  it('refreshes before TTL without dropping a valid value on refresh failure', async () => {
+  it('returns a valid value while a request refreshes it before TTL', async () => {
     vi.useFakeTimers();
-    const warm = {
-      ...definition,
-      policy: { ...definition.policy, warmup: true },
-    };
+    const pending = deferred<{ name: string }>();
+    const refreshed = deferred<void>();
+    manager.on('refresh', () => refreshed.resolve());
     const loader = vi
       .fn()
       .mockResolvedValueOnce({ name: 'old' })
-      .mockRejectedValueOnce(new Error('offline'))
-      .mockResolvedValue({ name: 'new' });
-    await cache.warm(warm, { id: 'a' }, loader);
-    await cache.warm(warm, { id: 'a' }, loader);
+      .mockReturnValueOnce(pending.promise);
+
+    await cache.getOrLoad(definition, { id: 'a' }, loader);
+    await vi.advanceTimersByTimeAsync(850);
     expect(loader).toHaveBeenCalledTimes(1);
-    vi.advanceTimersByTime(850);
-    await cache.warm(warm, { id: 'a' }, loader);
-    for (let i = 0; i < 30; i++) await Promise.resolve();
-    expect(await cache.getOrLoad(warm, { id: 'a' }, loader)).toEqual({
+    expect(await cache.getOrLoad(definition, { id: 'a' }, loader)).toEqual({
       name: 'old',
     });
-    vi.advanceTimersByTime(151);
-    expect(await cache.getOrLoad(warm, { id: 'a' }, loader)).toEqual({
+    expect(loader).toHaveBeenCalledTimes(2);
+
+    pending.resolve({ name: 'new' });
+    await refreshed.promise;
+    expect(await cache.getOrLoad(definition, { id: 'a' }, loader)).toEqual({
       name: 'new',
     });
+    expect(loader).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a valid value after refresh failure and reloads it after TTL', async () => {
+    vi.useFakeTimers();
+    const failed = deferred<unknown>();
+    manager.on('refresh', ({ error }) => failed.resolve(error));
+    const error = new Error('offline');
+    const loader = vi
+      .fn()
+      .mockResolvedValueOnce({ name: 'old' })
+      .mockRejectedValueOnce(error)
+      .mockResolvedValue({ name: 'new' });
+    await cache.getOrLoad(definition, { id: 'a' }, loader);
+    vi.advanceTimersByTime(850);
+    expect(await cache.getOrLoad(definition, { id: 'a' }, loader)).toEqual({
+      name: 'old',
+    });
+    expect(await failed.promise).toBe(error);
+    expect(
+      await manager.get(cacheKey(definition.namespace, ['a'])),
+    ).toMatchObject({
+      value: { name: 'old' },
+    });
+    expect(loader).toHaveBeenCalledTimes(2);
+    vi.advanceTimersByTime(151);
+    expect(await cache.getOrLoad(definition, { id: 'a' }, loader)).toEqual({
+      name: 'new',
+    });
+    expect(loader).toHaveBeenCalledTimes(3);
+  });
+
+  it('leaves unused entries expired until the next request', async () => {
+    vi.useFakeTimers();
+    const loader = vi.fn().mockResolvedValue({ name: 'current' });
+    await cache.getOrLoad(definition, { id: 'a' }, loader);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(loader).toHaveBeenCalledTimes(1);
+    await cache.getOrLoad(definition, { id: 'a' }, loader);
+    expect(loader).toHaveBeenCalledTimes(2);
   });
 
   it('retains Date and Decimal semantics without sharing objects', async () => {
@@ -255,44 +295,39 @@ describe('AppCacheService', () => {
     expect(b.price.plus(1).toFixed(2)).toBe('13.30');
   });
 
-  it('cron warmup after invalidation shares the next request load', async () => {
-    const warm = {
-      ...definition,
-      policy: { ...definition.policy, warmup: true },
-    };
+  it('shares concurrent request loads after invalidation', async () => {
+    vi.useFakeTimers();
     const loader = vi.fn().mockResolvedValue({ name: 'old' });
-    await cache.getOrLoad(warm, { id: 'a' }, loader);
+    await cache.getOrLoad(definition, { id: 'a' }, loader);
     const pending = deferred<{ name: string }>();
     loader.mockReturnValue(pending.promise);
     await cache.invalidate('brand:a');
-    const warming = cache.warm(warm, { id: 'a' }, loader);
-    const request = cache.getOrLoad(warm, { id: 'a' }, loader);
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    expect(loader).toHaveBeenCalledTimes(2);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(loader).toHaveBeenCalledTimes(1);
+    const first = cache.getOrLoad(definition, { id: 'a' }, loader);
+    const second = cache.getOrLoad(definition, { id: 'a' }, loader);
+    await vi.waitFor(() => expect(loader).toHaveBeenCalledTimes(2));
     pending.resolve({ name: 'new' });
-    expect(await request).toEqual({ name: 'new' });
-    await warming;
-    expect(await cache.getOrLoad(warm, { id: 'a' }, loader)).toEqual({
+    expect(await Promise.all([first, second])).toEqual([
+      { name: 'new' },
+      { name: 'new' },
+    ]);
+    expect(await cache.getOrLoad(definition, { id: 'a' }, loader)).toEqual({
       name: 'new',
     });
     expect(loader).toHaveBeenCalledTimes(2);
   });
 
-  it('bypasses caching and all warmup when disabled', async () => {
+  it('bypasses caching when disabled', async () => {
+    vi.useFakeTimers();
     await cache.onModuleDestroy();
     cache = createTestCache(false);
-    const warm = {
-      ...definition,
-      policy: { ...definition.policy, warmup: true },
-    };
     const loader = vi.fn().mockResolvedValue({ name: 'current' });
-    await cache.warm(warm, { id: 'a' }, loader);
-    expect(loader).not.toHaveBeenCalled();
-    await cache.getOrLoad(warm, { id: 'a' }, loader);
+    await cache.getOrLoad(definition, { id: 'a' }, loader);
     await cache.invalidate('brand:a');
-    await new Promise<void>((resolve) => setImmediate(resolve));
+    await vi.advanceTimersByTimeAsync(10_000);
     expect(loader).toHaveBeenCalledTimes(1);
-    await cache.getOrLoad(warm, { id: 'a' }, loader);
+    await cache.getOrLoad(definition, { id: 'a' }, loader);
     expect(loader).toHaveBeenCalledTimes(2);
   });
 
@@ -332,5 +367,10 @@ describe('AppCacheService', () => {
     expect(cacheKey(CacheNamespace.BRAND_PROFILE, ['a:b', 'c'])).not.toBe(
       cacheKey(CacheNamespace.BRAND_PROFILE, ['a', 'b:c']),
     );
+  });
+
+  it('uses unique namespace identifiers', () => {
+    const namespaces = Object.values(CacheNamespace);
+    expect(new Set(namespaces).size).toBe(namespaces.length);
   });
 });

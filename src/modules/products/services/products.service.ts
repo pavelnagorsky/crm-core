@@ -592,20 +592,6 @@ export class ProductsService {
     });
   }
 
-  async warmPublicCatalog(locationId: string): Promise<void> {
-    const { brandId } = await this.locations.getBookingSettings(locationId);
-    await Promise.all([
-      this.cache.warm(BRAND_PRODUCT_CATALOG_CACHE, { brandId }, () =>
-        this.loadBrandCatalog(brandId),
-      ),
-      this.cache.warm(
-        LOCATION_PRODUCT_OFFERS_CACHE,
-        { brandId, locationId },
-        () => this.loadLocationOffers(locationId),
-      ),
-    ]);
-  }
-
   private async loadBrandCatalog(
     brandId: string,
   ): Promise<BrandProductCatalog> {

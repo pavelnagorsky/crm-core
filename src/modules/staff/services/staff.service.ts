@@ -220,14 +220,6 @@ export class StaffService {
     );
   }
 
-  async warmBookingSchedule(locationId: string): Promise<void> {
-    const { brandId } =
-      await this.locationService.getBookingSettings(locationId);
-    await this.cache.warm(STAFF_SCHEDULE_CACHE, { brandId, locationId }, () =>
-      this.loadScheduleWindow(locationId),
-    );
-  }
-
   private scheduleWindow(location: {
     timezone: string;
     advanceBookingWindowDays: number;
@@ -327,16 +319,6 @@ export class StaffService {
     const { brandId } =
       await this.locationService.getBookingSettings(locationId);
     return this.cache.getOrLoad(
-      STAFF_BOOKING_DIRECTORY_CACHE,
-      { brandId, locationId },
-      () => this.loadBookingDirectory(locationId),
-    );
-  }
-
-  async warmBookingDirectory(locationId: string): Promise<void> {
-    const { brandId } =
-      await this.locationService.getBookingSettings(locationId);
-    await this.cache.warm(
       STAFF_BOOKING_DIRECTORY_CACHE,
       { brandId, locationId },
       () => this.loadBookingDirectory(locationId),
