@@ -3,6 +3,9 @@ import { InventoryCountsView } from '../interfaces/inventory-counts-view.interfa
 
 export class InventoryCountsResponseDto {
   @ApiProperty({ type: Number })
+  totalCount: number;
+
+  @ApiProperty({ type: Number })
   lowStockCount: number;
 
   @ApiProperty({ type: Number })

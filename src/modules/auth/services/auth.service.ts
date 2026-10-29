@@ -159,9 +159,13 @@ export class AuthService {
     return this.issueTokens(user, userAgent);
   }
 
-  async confirmEmail(userId: string): Promise<void> {
-    await this.userService.update(userId, { emailVerifiedAt: new Date() });
+  confirmEmail(userId: string, userAgent: string | null): Promise<ITokens> {
+    return this.db.$transaction(async (tx) => {
+      const user = await this.userService.confirmEmail(userId, tx);
+      return this.issueTokens(user, userAgent, tx);
+    });
   }
+
   resetPasswordRequest(dto: ResetPasswordRequestDto): Promise<void> {
     return this.passwordReset.request(dto);
   }
@@ -194,12 +198,13 @@ export class AuthService {
   private async issueTokens(
     user: User,
     userAgent: string | null,
+    tx?: Prisma.TransactionClient,
   ): Promise<ITokens> {
     const [accessToken, refreshToken] = await Promise.all([
-      this.generateAccessToken(user),
+      this.generateAccessToken(user, tx),
       this.generateRefreshToken(user),
     ]);
-    await this.saveRefreshToken(user.id, refreshToken, userAgent);
+    await this.saveRefreshToken(user.id, refreshToken, userAgent, tx);
     return { accessToken, refreshToken };
   }
 
@@ -207,10 +212,11 @@ export class AuthService {
     userId: string,
     token: string,
     userAgent: string | null,
+    tx: Prisma.TransactionClient = this.db,
   ): Promise<void> {
     const expiryDate = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
 
-    await this.db.refreshToken.create({
+    await tx.refreshToken.create({
       data: {
         userId,
         tokenHash: this.hashRefreshToken(token),
@@ -220,13 +226,13 @@ export class AuthService {
     });
 
     // keep only the newest MAX_TOKENS_PER_USER, drop expired ones
-    const all = await this.db.refreshToken.findMany({
+    const all = await tx.refreshToken.findMany({
       where: { userId },
       orderBy: { expiryDate: 'desc' },
       select: { id: true },
     });
     const toDelete = all.slice(MAX_TOKENS_PER_USER).map((t) => t.id);
-    await this.db.refreshToken.deleteMany({
+    await tx.refreshToken.deleteMany({
       where: {
         OR: [
           { id: { in: toDelete } },
@@ -268,10 +274,13 @@ export class AuthService {
     };
   }
 
-  private async generateAccessToken(user: User): Promise<string> {
+  private async generateAccessToken(
+    user: User,
+    tx?: Prisma.TransactionClient,
+  ): Promise<string> {
     const cfg = this.config.get<IJwtConfig>('jwt')!;
     return this.sign(
-      { ...(await this.resolveTokenPayload(user.id)) },
+      { ...(await this.resolveTokenPayload(user.id, tx)) },
       cfg.accessTokenSecret,
       jwtExpirationConfig.accessToken,
     );

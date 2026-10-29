@@ -1,3 +1,4 @@
+import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { JwtService } from '@nestjs/jwt';
@@ -195,5 +196,139 @@ describe('AuthService refresh token storage', () => {
 
     expect(users.findById).not.toHaveBeenCalled();
     expect(db.refreshToken.create).not.toHaveBeenCalled();
+  });
+});
+
+describe('AuthService email confirmation', () => {
+  function setup() {
+    const confirmedUser = { ...user, tokenEpoch: 0 };
+    const tx = {
+      user: {
+        updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+        findUnique: vi.fn().mockResolvedValue(confirmedUser),
+      },
+      refreshToken: {
+        create: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([]),
+        deleteMany: vi.fn(),
+      },
+    };
+    const db = {
+      $transaction: vi.fn(async (run: (value: typeof tx) => unknown) =>
+        run(tx),
+      ),
+    };
+    const users = new UserService(db as never);
+    const access = {
+      resolvePermissions: vi.fn().mockResolvedValue({
+        brandMemberships: [],
+        locationMemberships: [],
+        permissions: {},
+      }),
+    };
+    const jwt = new JwtService();
+    const config = {
+      get: vi.fn().mockReturnValue({
+        accessTokenSecret: 'access-secret',
+        refreshTokenSecret: 'refresh-secret',
+      }),
+    };
+    const service = new AuthService(
+      db as never,
+      users,
+      jwt,
+      {} as never,
+      config as never,
+      new TokenEpochRegistryService(users),
+      access as never,
+      {} as never,
+    );
+    return { service, db, tx, jwt, access };
+  }
+
+  it('confirms the user and saves a session in the same transaction', async () => {
+    const { service, db, tx, jwt, access } = setup();
+
+    const tokens = await service.confirmEmail(user.id, 'browser');
+
+    expect(db.$transaction).toHaveBeenCalledOnce();
+    expect(tx.user.updateMany).toHaveBeenCalledWith({
+      where: { id: user.id, emailVerifiedAt: null },
+      data: { emailVerifiedAt: expect.any(Date) },
+    });
+    expect(access.resolvePermissions).toHaveBeenCalledWith(
+      user.id,
+      user.role,
+      tx,
+    );
+    expect(
+      jwt.verify(tokens.accessToken, { secret: 'access-secret' }),
+    ).toMatchObject({
+      sub: user.id,
+      role: user.role,
+      tokenEpoch: 0,
+      permissions: {},
+    });
+    expect(
+      jwt.verify(tokens.refreshToken, { secret: 'refresh-secret' }),
+    ).toMatchObject({
+      sub: user.id,
+      jti: expect.any(String),
+    });
+    expect(tx.refreshToken.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        userId: user.id,
+        tokenHash: sha256(tokens.refreshToken),
+        userAgent: 'browser',
+      }),
+    });
+  });
+
+  it('rejects an already confirmed or missing user without issuing a session', async () => {
+    const { service, tx, access } = setup();
+    tx.user.updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(service.confirmEmail(user.id, null)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+
+    expect(tx.user.findUnique).not.toHaveBeenCalled();
+    expect(access.resolvePermissions).not.toHaveBeenCalled();
+    expect(tx.refreshToken.create).not.toHaveBeenCalled();
+  });
+
+  it('issues only one session when concurrent confirmations compete for the same user', async () => {
+    const { service, tx } = setup();
+    tx.user.updateMany
+      .mockResolvedValueOnce({ count: 1 })
+      .mockResolvedValue({ count: 0 });
+
+    const results = await Promise.allSettled([
+      service.confirmEmail(user.id, 'browser-1'),
+      service.confirmEmail(user.id, 'browser-2'),
+    ]);
+
+    expect(results.map((result) => result.status)).toEqual([
+      'fulfilled',
+      'rejected',
+    ]);
+    expect(results[1]).toMatchObject({
+      reason: expect.any(UnauthorizedException),
+    });
+    expect(tx.refreshToken.create).toHaveBeenCalledOnce();
+    await expect(service.confirmEmail(user.id, null)).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(tx.refreshToken.create).toHaveBeenCalledOnce();
+  });
+
+  it('rejects the transaction when session storage fails', async () => {
+    const { service, db, tx } = setup();
+    const failure = new Error('Session storage unavailable');
+    tx.refreshToken.create.mockRejectedValue(failure);
+
+    await expect(service.confirmEmail(user.id, null)).rejects.toBe(failure);
+    await expect(db.$transaction.mock.results[0].value).rejects.toBe(failure);
+    expect(tx.refreshToken.findMany).not.toHaveBeenCalled();
   });
 });

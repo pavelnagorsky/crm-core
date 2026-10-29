@@ -47,10 +47,12 @@ export class InventoryStockReadService {
     dto: InventoryCountsRequestDto,
   ): Promise<InventoryCountsView> {
     const [row] = await this.db.$queryRaw<InventoryStockCountsRow[]>`
-      SELECT COUNT(*) FILTER (WHERE "lowStock") AS "lowStockCount",
+      SELECT COUNT(*) AS "totalCount",
+        COUNT(*) FILTER (WHERE "lowStock") AS "lowStockCount",
         COUNT(*) FILTER (WHERE "outOfStock") AS "outOfStockCount"
       FROM "InventoryStockView" WHERE ${Prisma.join(this.conditions(locationId, dto), ' AND ')}`;
     return {
+      totalCount: Number(row.totalCount),
       lowStockCount: Number(row.lowStockCount),
       outOfStockCount: Number(row.outOfStockCount),
     };

@@ -46,6 +46,18 @@ export class UserService {
     return tx.user.update({ where: { id }, data });
   }
 
+  async confirmEmail(
+    id: string,
+    tx: Prisma.TransactionClient = this.db,
+  ): Promise<User> {
+    const { count } = await tx.user.updateMany({
+      where: { id, emailVerifiedAt: null },
+      data: { emailVerifiedAt: new Date() },
+    });
+    if (count !== 1) throw new UnauthorizedException();
+    return this.findById(id, tx);
+  }
+
   async getTokenEpoch(
     id: string,
     tx: Prisma.TransactionClient = this.db,

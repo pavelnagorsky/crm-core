@@ -98,21 +98,24 @@ export class AuthController {
     return BaseResponseDto.success(new AuthDto(tokens.accessToken));
   }
 
-  @ApiOperation({ summary: 'Confirm email' })
+  @ApiOperation({ summary: 'Confirm email and sign in' })
   @ApiQuery({ name: 'token', type: String })
   @ApiCreatedResponse({
-    type: BaseResponseDto,
+    type: ApiResponse(AuthDto),
     description:
-      'Email confirmed successfully. responseValue is null; no tokens are returned.',
+      'Email confirmed successfully. Returns an access token and sets the refresh token cookie. The confirmation link can only be used once.',
   })
   @ApiUnauthorizedResponse({ type: UnauthorizedResponseDto })
   @UseGuards(JwtEmailGuard)
   @Post('confirm-email')
   async confirmEmail(
     @TokenPayload() payload: TokenPayloadDto,
-  ): Promise<BaseResponseDto> {
-    await this.authService.confirmEmail(payload.sub);
-    return BaseResponseDto.success();
+    @Res({ passthrough: true }) res: Response,
+    @UserAgent() userAgent: string | null,
+  ): Promise<BaseResponseDto<AuthDto>> {
+    const tokens = await this.authService.confirmEmail(payload.sub, userAgent);
+    res.cookie(CookiesEnum.REFRESH_TOKEN, tokens.refreshToken, cookieConfig);
+    return BaseResponseDto.success(new AuthDto(tokens.accessToken));
   }
 
   @ApiOperation({ summary: 'Request password reset email' })
