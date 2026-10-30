@@ -98,6 +98,61 @@ describe('SaveBookingPageDto heading', () => {
   });
 });
 
+describe.each([
+  {
+    field: 'gtmId',
+    valid: 'GTM-ABC1234',
+    invalid: [
+      'G-ABC1234',
+      'gtm-abc1234',
+      'GTM-',
+      'GTM-A B',
+      `GTM-${'A'.repeat(29)}`,
+      '<script>alert(1)</script>',
+    ],
+  },
+  {
+    field: 'yandexMetrikaId',
+    valid: '12345678',
+    invalid: [
+      '0',
+      '01234567',
+      '-1',
+      '1.5',
+      '1e8',
+      '1234567890123456',
+      'https://mc.yandex.ru/123',
+    ],
+  },
+])('SaveBookingPageDto $field', ({ field, valid, invalid }) => {
+  it.each([
+    [valid, valid],
+    [`  ${valid}  `, valid],
+    ['', null],
+    [' \n\t ', null],
+    [null, null],
+    [undefined, undefined],
+  ])('normalizes %j to %j', async (value, expected) => {
+    const result = await pipe.transform(
+      { ...page, [field]: value },
+      { type: 'body', metatype: SaveBookingPageDto },
+    );
+    expect(result[field]).toBe(expected);
+  });
+
+  it.each([...invalid, 12345678, true, [], {}, [valid]])(
+    'rejects invalid ID %j',
+    async (value) => {
+      await expect(
+        pipe.transform(
+          { ...page, [field]: value },
+          { type: 'body', metatype: SaveBookingPageDto },
+        ),
+      ).rejects.toThrow();
+    },
+  );
+});
+
 describe('BookingFormConfigDto palette validation', () => {
   const transform = (value: unknown) =>
     pipe.transform(value, { type: 'body', metatype: BookingFormConfigDto });

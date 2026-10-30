@@ -1,0 +1,3 @@
+ALTER TABLE "BookingPage"
+ADD COLUMN "gtmId" VARCHAR(32),
+ADD COLUMN "yandexMetrikaId" VARCHAR(15);

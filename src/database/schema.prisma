@@ -1211,6 +1211,8 @@ model BookingPage {
   html            String               @default("") @db.VarChar(20000)
   metaTitle       String               @default("") @db.VarChar(70)
   metaDescription String               @default("") @db.VarChar(160)
+  gtmId           String?              @db.VarChar(32)
+  yandexMetrikaId  String?              @db.VarChar(15)
   coverFileId     String?
 
   palette           BookingPalette

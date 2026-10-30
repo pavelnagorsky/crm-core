@@ -263,6 +263,10 @@ export class BookingPagesService {
       html,
       metaTitle: dto.metaTitle,
       metaDescription: dto.metaDescription,
+      ...(dto.gtmId !== undefined ? { gtmId: dto.gtmId } : {}),
+      ...(dto.yandexMetrikaId !== undefined
+        ? { yandexMetrikaId: dto.yandexMetrikaId }
+        : {}),
       coverFileId,
       ...toBookingFormColumns(dto.form),
     };

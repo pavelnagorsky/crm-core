@@ -29,6 +29,8 @@ const regularExpressions = {
   percent: /^(100(?:\.0{1,2})?|\d{1,2}(?:\.\d{1,2})?)$/,
   // Public booking page slug: lowercase segments separated by single hyphens
   bookingPageSlug: /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
+  googleTagManagerId: /^GTM-[A-Z0-9]+$/,
+  yandexMetrikaId: /^[1-9][0-9]{0,14}$/,
   // CSS hex color, case-insensitive before normalization
   hexColor: /^#[0-9A-Fa-f]{6}$/,
   // Hostname label chain, ASCII only, no trailing dot

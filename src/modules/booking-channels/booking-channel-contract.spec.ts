@@ -244,6 +244,69 @@ describe('booking channel contract', () => {
     },
   );
 
+  it.each(['create', 'update'] as const)(
+    '%s persists analytics settings and exposes them in admin and public responses',
+    async (operation) => {
+      for (const analytics of [
+        { gtmId: 'GTM-ABC1234', yandexMetrikaId: '12345678' },
+        { gtmId: 'GTM-ABC1234', yandexMetrikaId: null },
+        { gtmId: null, yandexMetrikaId: '12345678' },
+        { gtmId: null, yandexMetrikaId: null },
+      ]) {
+        const dto = plainToInstance(SaveBookingPageDto, {
+          ...pageInput,
+          ...analytics,
+        });
+        const saved =
+          operation === 'create'
+            ? await pages.create('location', dto)
+            : await pages.update('location', 'channel', dto);
+        expect(db.bookingPage[operation]).toHaveBeenLastCalledWith(
+          expect.objectContaining({ data: expect.objectContaining(analytics) }),
+        );
+        expect(BookingPageResponseDto.fromEntity(saved)).toMatchObject(
+          analytics,
+        );
+        expect(
+          PublicBookingPageResponseDto.from(saved, location, setup).page,
+        ).toMatchObject(analytics);
+      }
+    },
+  );
+
+  it('preserves omitted analytics settings on update and clears blank IDs', async () => {
+    const existing = { gtmId: 'GTM-ABC1234', yandexMetrikaId: '12345678' };
+    db.bookingPage.update.mockImplementationOnce(async ({ data }) => ({
+      id: 'channel',
+      ...existing,
+      ...data,
+    }));
+    const saved = await pages.update(
+      'location',
+      'channel',
+      plainToInstance(SaveBookingPageDto, pageInput),
+    );
+    expect(saved).toMatchObject(existing);
+    const data = db.bookingPage.update.mock.calls[0][0].data;
+    expect(data).not.toHaveProperty('gtmId');
+    expect(data).not.toHaveProperty('yandexMetrikaId');
+
+    await pages.update(
+      'location',
+      'channel',
+      plainToInstance(SaveBookingPageDto, {
+        ...pageInput,
+        gtmId: ' ',
+        yandexMetrikaId: '',
+      }),
+    );
+    expect(db.bookingPage.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ gtmId: null, yandexMetrikaId: null }),
+      }),
+    );
+  });
+
   it('preserves cover resolution and response mapping', async () => {
     const coverFile = {
       id: 'cover',
