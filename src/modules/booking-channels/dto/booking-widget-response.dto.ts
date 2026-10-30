@@ -4,16 +4,27 @@ import { BookingChannelStatus } from '../enums/booking-channel-status.enum.js';
 import { BookingWidgetButtonPosition } from '../enums/booking-widget-button-position.enum.js';
 import { BookingWidgetPlacement } from '../enums/booking-widget-placement.enum.js';
 import { BookingWidgetTrigger } from '../enums/booking-widget-trigger.enum.js';
+import { BookingChannelStats } from '../interfaces/booking-channel-stats.interface.js';
 import {
   resolveBookingFormTheme,
   toBookingFormConfig,
 } from '../rendering/booking-form.js';
+import { BookingChannelStatsDto } from './booking-channel-stats.dto.js';
 import { BookingFormConfigDto } from './booking-form-config.dto.js';
 import { BookingFormThemeDto } from './booking-form-theme.dto.js';
 
 export class BookingWidgetResponseDto {
   @ApiProperty({ type: String })
   id: string;
+
+  @ApiProperty({ type: () => BookingChannelStatsDto })
+  stats: BookingChannelStatsDto;
+
+  @ApiProperty({ type: String, nullable: true, example: 'GTM-ABC1234' })
+  gtmId: string | null;
+
+  @ApiProperty({ type: String, nullable: true, example: '12345678' })
+  yandexMetrikaId: string | null;
 
   @ApiProperty({ type: String })
   locationId: string;
@@ -57,9 +68,15 @@ export class BookingWidgetResponseDto {
   @ApiProperty({ type: Date, nullable: true })
   publishedAt: Date | null;
 
-  static fromEntity(widget: BookingWidget): BookingWidgetResponseDto {
+  static fromEntity(
+    widget: BookingWidget,
+    stats?: BookingChannelStats,
+  ): BookingWidgetResponseDto {
     const dto = new BookingWidgetResponseDto();
     dto.id = widget.id;
+    dto.stats = new BookingChannelStatsDto(stats);
+    dto.gtmId = widget.gtmId;
+    dto.yandexMetrikaId = widget.yandexMetrikaId;
     dto.locationId = widget.locationId;
     dto.title = widget.title;
     dto.status = widget.status;

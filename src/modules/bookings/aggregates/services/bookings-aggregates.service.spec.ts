@@ -45,6 +45,29 @@ describe('BookingsAggregatesService location scope', () => {
     );
   });
 
+  it('counts channel bookings once each, across all dates, statuses and soft deletions', async () => {
+    await service.countCreatedByChannels('location-1', ['page'], ['widget']);
+    expect(db.booking.groupBy).toHaveBeenCalledWith({
+      by: ['bookingPageId', 'bookingWidgetId'],
+      where: {
+        locationId: 'location-1',
+        location: expect.any(Object),
+        OR: [
+          { bookingPageId: { in: ['page'] } },
+          { bookingWidgetId: { in: ['widget'] } },
+        ],
+      },
+      _count: { _all: true },
+    });
+  });
+
+  it('skips empty channel selections', async () => {
+    expect(await service.countCreatedByChannels('location-1', [], [])).toEqual(
+      [],
+    );
+    expect(db.booking.groupBy).not.toHaveBeenCalled();
+  });
+
   it('never widens an empty selection to all bookings', async () => {
     await service.snapshot({ ...range, locationIds: [] });
     const query = db.$queryRaw.mock.calls[0][0] as Prisma.Sql;

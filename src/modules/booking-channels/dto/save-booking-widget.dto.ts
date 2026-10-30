@@ -17,9 +17,10 @@ import { BookingWidgetPlacement } from '../enums/booking-widget-placement.enum.j
 import { BookingWidgetTrigger } from '../enums/booking-widget-trigger.enum.js';
 import { AllowedDomainsConstraint } from '../decorators/allowed-domains.constraint.js';
 import { Trim } from '../decorators/trim.decorator.js';
+import { BookingChannelAnalyticsDto } from './booking-channel-analytics.dto.js';
 import { BookingFormConfigDto } from './booking-form-config.dto.js';
 
-export class SaveBookingWidgetDto {
+export class SaveBookingWidgetDto extends BookingChannelAnalyticsDto {
   @ApiProperty({ type: String, maxLength: 80 })
   @Trim()
   @IsString()

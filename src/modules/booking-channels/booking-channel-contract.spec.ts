@@ -11,6 +11,8 @@ import { BookingSetupResponseDto } from '../bookings/dto/booking-setup-response.
 import { LocationResponseDto } from '../location/dto/location-response.dto.js';
 import { LocationPublicProfile } from '../location/interfaces/location-public-profile.interface.js';
 import { BookingPalettesController } from './controllers/booking-palettes.controller.js';
+import { BookingPagesController } from './controllers/booking-pages.controller.js';
+import { BookingWidgetsController } from './controllers/booking-widgets.controller.js';
 import { BookingPageResponseDto } from './dto/booking-page-response.dto.js';
 import { BookingWidgetResponseDto } from './dto/booking-widget-response.dto.js';
 import { PublicBookingPageResponseDto } from './dto/public-booking-page-response.dto.js';
@@ -307,6 +309,63 @@ describe('booking channel contract', () => {
     );
   });
 
+  it.each(['create', 'update'] as const)(
+    '%s persists widget analytics settings',
+    async (operation) => {
+      for (const analytics of [
+        { gtmId: 'GTM-ABC1234', yandexMetrikaId: '12345678' },
+        { gtmId: null, yandexMetrikaId: null },
+      ]) {
+        const dto = plainToInstance(SaveBookingWidgetDto, {
+          ...widgetInput,
+          ...analytics,
+        });
+        const saved =
+          operation === 'create'
+            ? await widgets.create('location', dto)
+            : await widgets.update('location', 'channel', dto);
+        expect(db.bookingWidget[operation]).toHaveBeenLastCalledWith(
+          expect.objectContaining({ data: expect.objectContaining(analytics) }),
+        );
+        expect(BookingWidgetResponseDto.fromEntity(saved)).toMatchObject(
+          analytics,
+        );
+        const response = PublicBookingWidgetResponseDto.from(
+          saved,
+          location,
+          setup,
+        );
+        expect(response.widget).toMatchObject(analytics);
+        expect(response.widget).not.toHaveProperty('stats');
+      }
+    },
+  );
+
+  it('preserves omitted widget analytics on update and clears blank IDs', async () => {
+    await widgets.update(
+      'location',
+      'channel',
+      plainToInstance(SaveBookingWidgetDto, widgetInput),
+    );
+    const data = db.bookingWidget.update.mock.calls[0][0].data;
+    expect(data).not.toHaveProperty('gtmId');
+    expect(data).not.toHaveProperty('yandexMetrikaId');
+    await widgets.update(
+      'location',
+      'channel',
+      plainToInstance(SaveBookingWidgetDto, {
+        ...widgetInput,
+        gtmId: ' ',
+        yandexMetrikaId: '',
+      }),
+    );
+    expect(db.bookingWidget.update).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ gtmId: null, yandexMetrikaId: null }),
+      }),
+    );
+  });
+
   it('preserves cover resolution and response mapping', async () => {
     const coverFile = {
       id: 'cover',
@@ -452,3 +511,86 @@ function responses(page: BookingPageWithCover, widget: BookingWidget) {
     PublicBookingWidgetResponseDto.from(widget, location, setup),
   ];
 }
+
+describe.each(['page', 'widget'] as const)(
+  '%s stats response contract',
+  (kind) => {
+    const record = {
+      ...pageInput,
+      ...widgetInput,
+      ...form,
+      palette: form.paletteId,
+      id: 'channel',
+      locationId: 'location',
+      coverFile: null,
+    };
+    const totals = { views: 25, formOpens: 8, bookings: 4 };
+
+    it('returns zero stats for a new draft without extra database reads', async () => {
+      const owner = { create: vi.fn().mockResolvedValue(record) };
+      const load = vi.fn();
+      const stats = { forPages: load, forWidgets: load };
+      const controller =
+        kind === 'page'
+          ? new BookingPagesController(owner as never, stats as never)
+          : new BookingWidgetsController(owner as never, stats as never);
+      const result = await controller.create('location', {} as never);
+      expect(result.responseValue?.stats).toEqual({
+        views: 0,
+        formOpens: 0,
+        bookings: 0,
+      });
+      expect(load).not.toHaveBeenCalled();
+    });
+
+    it('includes totals in list and ID responses without per-item queries', async () => {
+      const records = [record, { ...record, id: 'other' }];
+      const owner = {
+        list: vi.fn().mockResolvedValue(records),
+        findInLocation: vi.fn().mockResolvedValue(record),
+      };
+      const load = vi.fn().mockResolvedValue(
+        new Map([
+          ['channel', totals],
+          ['other', { views: 0, formOpens: 0, bookings: 0 }],
+        ]),
+      );
+      const stats = { forPages: load, forWidgets: load };
+      const controller =
+        kind === 'page'
+          ? new BookingPagesController(owner as never, stats as never)
+          : new BookingWidgetsController(owner as never, stats as never);
+      const list = await controller.list('location');
+      expect(list.responseValue?.[0].stats).toEqual(totals);
+      expect(list.responseValue?.[1].stats).toEqual({
+        views: 0,
+        formOpens: 0,
+        bookings: 0,
+      });
+      expect(load).toHaveBeenCalledExactlyOnceWith('location', [
+        'channel',
+        'other',
+      ]);
+      const detail = await controller.findById('location', 'channel');
+      expect(detail.responseValue?.stats).toEqual(totals);
+      expect(owner.findInLocation).toHaveBeenCalledWith('location', 'channel');
+      expect(load).toHaveBeenLastCalledWith('location', ['channel']);
+    });
+
+    it('does not read stats when the channel is inaccessible', async () => {
+      const owner = {
+        findInLocation: vi.fn().mockRejectedValue(new Error('not found')),
+      };
+      const load = vi.fn();
+      const stats = { forPages: load, forWidgets: load };
+      const controller =
+        kind === 'page'
+          ? new BookingPagesController(owner as never, stats as never)
+          : new BookingWidgetsController(owner as never, stats as never);
+      await expect(
+        controller.findById('other-location', 'channel'),
+      ).rejects.toThrow('not found');
+      expect(load).not.toHaveBeenCalled();
+    });
+  },
+);

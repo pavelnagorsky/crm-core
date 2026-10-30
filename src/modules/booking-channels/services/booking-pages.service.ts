@@ -206,6 +206,23 @@ export class BookingPagesService {
     return page;
   }
 
+  async assertPublished(pageId: string): Promise<void> {
+    const page = await this.db.bookingPage.findFirst({
+      where: {
+        id: pageId,
+        status: BookingChannelStatus.PUBLISHED,
+        location: ACTIVE_LOCATION_WHERE,
+      },
+      select: { id: true },
+    });
+    if (!page) {
+      throw new AppException(
+        ErrorCode.BOOKING_PAGE_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
+    }
+  }
+
   private async assertSlugAvailable(
     locationId: string,
     slug: string,

@@ -22,23 +22,28 @@ import {
   ApiTags,
   ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
-import { Claim } from '../../access/enums/claim.enum.js';
-import { Read, Write } from '../../access/utils/permission.js';
 import { ApiResponseArray } from '../../../shared/dto/api-response-array.dto.js';
 import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
+import { Claim } from '../../access/enums/claim.enum.js';
+import { Read, Write } from '../../access/utils/permission.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 import { BookingPageResponseDto } from '../dto/booking-page-response.dto.js';
 import { SaveBookingPageDto } from '../dto/save-booking-page.dto.js';
 import { SlugAvailabilityQueryDto } from '../dto/slug-availability-query.dto.js';
 import { SlugAvailabilityResponseDto } from '../dto/slug-availability-response.dto.js';
 import { UpdateBookingChannelStatusDto } from '../dto/update-booking-channel-status.dto.js';
+import { BookingPageWithCover } from '../interfaces/booking-page-with-cover.interface.js';
+import { BookingChannelStatsService } from '../services/booking-channel-stats.service.js';
 import { BookingPagesService } from '../services/booking-pages.service.js';
 
 @ApiTags('Booking pages')
 @Controller('locations/:locationId/booking-pages')
 export class BookingPagesController {
-  constructor(private readonly pages: BookingPagesService) {}
+  constructor(
+    private readonly pages: BookingPagesService,
+    private readonly stats: BookingChannelStatsService,
+  ) {}
 
   @ApiOperation({ summary: 'Check whether a booking page slug can be used' })
   @ApiOkResponse({ type: ApiResponse(SlugAvailabilityResponseDto) })
@@ -64,8 +69,14 @@ export class BookingPagesController {
     @Param('locationId', ParseUUIDPipe) locationId: string,
   ): Promise<BaseResponseDto<BookingPageResponseDto[]>> {
     const pages = await this.pages.list(locationId);
+    const stats = await this.stats.forPages(
+      locationId,
+      pages.map((item) => item.id),
+    );
     return BaseResponseDto.success(
-      pages.map(BookingPageResponseDto.fromEntity),
+      pages.map((item) =>
+        BookingPageResponseDto.fromEntity(item, stats.get(item.id)),
+      ),
     );
   }
 
@@ -101,7 +112,7 @@ export class BookingPagesController {
     @Param('pageId', ParseUUIDPipe) pageId: string,
   ): Promise<BaseResponseDto<BookingPageResponseDto>> {
     const page = await this.pages.findInLocation(locationId, pageId);
-    return BaseResponseDto.success(BookingPageResponseDto.fromEntity(page));
+    return this.toResponse(page);
   }
 
   @ApiOperation({
@@ -121,7 +132,7 @@ export class BookingPagesController {
     @Body() dto: SaveBookingPageDto,
   ): Promise<BaseResponseDto<BookingPageResponseDto>> {
     const page = await this.pages.update(locationId, pageId, dto);
-    return BaseResponseDto.success(BookingPageResponseDto.fromEntity(page));
+    return this.toResponse(page);
   }
 
   @ApiOperation({ summary: 'Publish or unpublish a booking page' })
@@ -139,7 +150,7 @@ export class BookingPagesController {
     @Body() dto: UpdateBookingChannelStatusDto,
   ): Promise<BaseResponseDto<BookingPageResponseDto>> {
     const page = await this.pages.changeStatus(locationId, pageId, dto.status);
-    return BaseResponseDto.success(BookingPageResponseDto.fromEntity(page));
+    return this.toResponse(page);
   }
 
   @ApiOperation({ summary: 'Delete a booking page' })
@@ -153,5 +164,14 @@ export class BookingPagesController {
     @Param('pageId', ParseUUIDPipe) pageId: string,
   ): Promise<void> {
     await this.pages.delete(locationId, pageId);
+  }
+
+  private async toResponse(
+    page: BookingPageWithCover,
+  ): Promise<BaseResponseDto<BookingPageResponseDto>> {
+    const stats = await this.stats.forPages(page.locationId, [page.id]);
+    return BaseResponseDto.success(
+      BookingPageResponseDto.fromEntity(page, stats.get(page.id)),
+    );
   }
 }

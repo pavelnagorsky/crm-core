@@ -1,10 +1,9 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
   IsDefined,
   IsNotEmpty,
   IsObject,
-  IsOptional,
   IsString,
   IsUUID,
   Matches,
@@ -14,9 +13,10 @@ import {
 } from 'class-validator';
 import regularExpressions from '../../../shared/regular-expressions.js';
 import { Trim, TrimLower, TrimToNull } from '../decorators/trim.decorator.js';
+import { BookingChannelAnalyticsDto } from './booking-channel-analytics.dto.js';
 import { BookingFormConfigDto } from './booking-form-config.dto.js';
 
-export class SaveBookingPageDto {
+export class SaveBookingPageDto extends BookingChannelAnalyticsDto {
   @ApiProperty({ type: String, maxLength: 80 })
   @Trim()
   @IsString()
@@ -69,36 +69,6 @@ export class SaveBookingPageDto {
   @IsString()
   @MaxLength(160)
   metaDescription: string;
-
-  @ApiPropertyOptional({
-    type: String,
-    nullable: true,
-    maxLength: 32,
-    example: 'GTM-ABC1234',
-    description:
-      'Google Tag Manager container ID. Omit to preserve on update; null or blank disables the integration.',
-  })
-  @TrimToNull()
-  @IsOptional()
-  @IsString()
-  @MaxLength(32)
-  @Matches(regularExpressions.googleTagManagerId)
-  gtmId?: string | null;
-
-  @ApiPropertyOptional({
-    type: String,
-    nullable: true,
-    maxLength: 15,
-    example: '12345678',
-    description:
-      'Yandex Metrica counter ID as a positive decimal string. Omit to preserve on update; null or blank disables the integration.',
-  })
-  @TrimToNull()
-  @IsOptional()
-  @IsString()
-  @MaxLength(15)
-  @Matches(regularExpressions.yandexMetrikaId)
-  yandexMetrikaId?: string | null;
 
   @ApiProperty({ type: String, format: 'uuid', nullable: true })
   @ValidateIf((_, value) => value !== null)

@@ -8,6 +8,12 @@ export class PublicBookingWidgetDetailsDto {
   @ApiProperty({ type: String })
   id: string;
 
+  @ApiProperty({ type: String, nullable: true, example: 'GTM-ABC1234' })
+  gtmId: string | null;
+
+  @ApiProperty({ type: String, nullable: true, example: '12345678' })
+  yandexMetrikaId: string | null;
+
   @ApiProperty({
     enum: BookingWidgetPlacement,
     enumName: 'BookingWidgetPlacement',
@@ -26,6 +32,8 @@ export class PublicBookingWidgetDetailsDto {
   static from(widget: BookingWidget): PublicBookingWidgetDetailsDto {
     const dto = new PublicBookingWidgetDetailsDto();
     dto.id = widget.id;
+    dto.gtmId = widget.gtmId;
+    dto.yandexMetrikaId = widget.yandexMetrikaId;
     dto.placement = widget.placement;
     dto.trigger = widget.trigger;
     dto.buttonPosition = widget.buttonPosition;

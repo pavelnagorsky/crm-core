@@ -42,6 +42,26 @@ export class BookingsAggregatesService {
     private readonly locations: LocationService,
   ) {}
 
+  async countCreatedByChannels(
+    locationId: string,
+    pageIds: string[],
+    widgetIds: string[],
+  ) {
+    if (!pageIds.length && !widgetIds.length) return [];
+    return this.db.booking.groupBy({
+      by: ['bookingPageId', 'bookingWidgetId'],
+      where: {
+        locationId,
+        location: ACTIVE_LOCATION_WHERE,
+        OR: [
+          { bookingPageId: { in: pageIds } },
+          { bookingWidgetId: { in: widgetIds } },
+        ],
+      },
+      _count: { _all: true },
+    });
+  }
+
   /**
    * Returns count and revenue grouped by BookingStatus for the given range in a single query.
    * The caller filters/sums the relevant statuses; this avoids issuing separate count/revenue

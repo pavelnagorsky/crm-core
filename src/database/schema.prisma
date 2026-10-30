@@ -1234,6 +1234,7 @@ model BookingPage {
   location  Location  @relation(fields: [locationId], references: [id], onDelete: Cascade)
   coverFile File?     @relation(fields: [coverFileId], references: [id], onDelete: Restrict)
   bookings  Booking[]
+  stats     BookingPageStats?
 
   @@index([locationId, updatedAt])
 }
@@ -1248,6 +1249,8 @@ model BookingWidget {
   trigger        BookingWidgetTrigger
   buttonPosition BookingWidgetButtonPosition
   allowedDomains String[]                    @default([])
+  gtmId          String?                     @db.VarChar(32)
+  yandexMetrikaId String?                     @db.VarChar(15)
 
   palette           BookingPalette
   customBackground  String?        @db.VarChar(7)
@@ -1268,8 +1271,26 @@ model BookingWidget {
   location Location  @relation(fields: [locationId], references: [id], onDelete: Cascade)
   bookings Booking[]
 
+  stats BookingWidgetStats?
+
   @@unique([locationId, titleKey])
   @@index([locationId, updatedAt])
+}
+
+model BookingPageStats {
+  pageId    String @id
+  views     Int    @default(0)
+  formOpens Int    @default(0)
+
+  page BookingPage @relation(fields: [pageId], references: [id], onDelete: Cascade)
+}
+
+model BookingWidgetStats {
+  widgetId  String @id
+  views     Int    @default(0)
+  formOpens Int    @default(0)
+
+  widget BookingWidget @relation(fields: [widgetId], references: [id], onDelete: Cascade)
 }
 
 model AuditLog {

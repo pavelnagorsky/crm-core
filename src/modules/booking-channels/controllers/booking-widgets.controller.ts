@@ -20,21 +20,26 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import { Claim } from '../../access/enums/claim.enum.js';
-import { Read, Write } from '../../access/utils/permission.js';
+import { BookingWidget } from '@prisma/client';
 import { ApiResponseArray } from '../../../shared/dto/api-response-array.dto.js';
 import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
+import { Claim } from '../../access/enums/claim.enum.js';
+import { Read, Write } from '../../access/utils/permission.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 import { BookingWidgetResponseDto } from '../dto/booking-widget-response.dto.js';
 import { SaveBookingWidgetDto } from '../dto/save-booking-widget.dto.js';
 import { UpdateBookingChannelStatusDto } from '../dto/update-booking-channel-status.dto.js';
+import { BookingChannelStatsService } from '../services/booking-channel-stats.service.js';
 import { BookingWidgetsService } from '../services/booking-widgets.service.js';
 
 @ApiTags('Booking widgets')
 @Controller('locations/:locationId/booking-widgets')
 export class BookingWidgetsController {
-  constructor(private readonly widgets: BookingWidgetsService) {}
+  constructor(
+    private readonly widgets: BookingWidgetsService,
+    private readonly stats: BookingChannelStatsService,
+  ) {}
 
   @ApiOperation({ summary: 'List booking widgets' })
   @ApiOkResponse({ type: ApiResponseArray(BookingWidgetResponseDto) })
@@ -44,8 +49,14 @@ export class BookingWidgetsController {
     @Param('locationId', ParseUUIDPipe) locationId: string,
   ): Promise<BaseResponseDto<BookingWidgetResponseDto[]>> {
     const widgets = await this.widgets.list(locationId);
+    const stats = await this.stats.forWidgets(
+      locationId,
+      widgets.map((item) => item.id),
+    );
     return BaseResponseDto.success(
-      widgets.map(BookingWidgetResponseDto.fromEntity),
+      widgets.map((item) =>
+        BookingWidgetResponseDto.fromEntity(item, stats.get(item.id)),
+      ),
     );
   }
 
@@ -74,7 +85,7 @@ export class BookingWidgetsController {
     @Param('widgetId', ParseUUIDPipe) widgetId: string,
   ): Promise<BaseResponseDto<BookingWidgetResponseDto>> {
     const widget = await this.widgets.findInLocation(locationId, widgetId);
-    return BaseResponseDto.success(BookingWidgetResponseDto.fromEntity(widget));
+    return this.toResponse(widget);
   }
 
   @ApiOperation({
@@ -93,7 +104,7 @@ export class BookingWidgetsController {
     @Body() dto: SaveBookingWidgetDto,
   ): Promise<BaseResponseDto<BookingWidgetResponseDto>> {
     const widget = await this.widgets.update(locationId, widgetId, dto);
-    return BaseResponseDto.success(BookingWidgetResponseDto.fromEntity(widget));
+    return this.toResponse(widget);
   }
 
   @ApiOperation({ summary: 'Publish or unpublish a booking widget' })
@@ -115,7 +126,7 @@ export class BookingWidgetsController {
       widgetId,
       dto.status,
     );
-    return BaseResponseDto.success(BookingWidgetResponseDto.fromEntity(widget));
+    return this.toResponse(widget);
   }
 
   @ApiOperation({ summary: 'Delete a booking widget' })
@@ -129,5 +140,14 @@ export class BookingWidgetsController {
     @Param('widgetId', ParseUUIDPipe) widgetId: string,
   ): Promise<void> {
     await this.widgets.delete(locationId, widgetId);
+  }
+
+  private async toResponse(
+    widget: BookingWidget,
+  ): Promise<BaseResponseDto<BookingWidgetResponseDto>> {
+    const stats = await this.stats.forWidgets(widget.locationId, [widget.id]);
+    return BaseResponseDto.success(
+      BookingWidgetResponseDto.fromEntity(widget, stats.get(widget.id)),
+    );
   }
 }

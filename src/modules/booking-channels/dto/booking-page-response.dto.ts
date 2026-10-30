@@ -1,17 +1,22 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
 import { BookingChannelStatus } from '../enums/booking-channel-status.enum.js';
+import { BookingChannelStats } from '../interfaces/booking-channel-stats.interface.js';
 import { BookingPageWithCover } from '../interfaces/booking-page-with-cover.interface.js';
 import {
   resolveBookingFormTheme,
   toBookingFormConfig,
 } from '../rendering/booking-form.js';
+import { BookingChannelStatsDto } from './booking-channel-stats.dto.js';
 import { BookingFormConfigDto } from './booking-form-config.dto.js';
 import { BookingFormThemeDto } from './booking-form-theme.dto.js';
 
 export class BookingPageResponseDto {
   @ApiProperty({ type: String })
   id: string;
+
+  @ApiProperty({ type: () => BookingChannelStatsDto })
+  stats: BookingChannelStatsDto;
 
   @ApiProperty({ type: String })
   locationId: string;
@@ -64,9 +69,13 @@ export class BookingPageResponseDto {
   @ApiProperty({ type: Date, nullable: true })
   publishedAt: Date | null;
 
-  static fromEntity(page: BookingPageWithCover): BookingPageResponseDto {
+  static fromEntity(
+    page: BookingPageWithCover,
+    stats?: BookingChannelStats,
+  ): BookingPageResponseDto {
     const dto = new BookingPageResponseDto();
     dto.id = page.id;
+    dto.stats = new BookingChannelStatsDto(stats);
     dto.locationId = page.locationId;
     dto.title = page.title;
     dto.heading = page.heading;

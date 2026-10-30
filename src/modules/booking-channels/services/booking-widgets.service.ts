@@ -190,6 +190,10 @@ export class BookingWidgetsService {
       trigger: dto.trigger,
       buttonPosition: dto.buttonPosition,
       allowedDomains,
+      ...(dto.gtmId !== undefined ? { gtmId: dto.gtmId } : {}),
+      ...(dto.yandexMetrikaId !== undefined
+        ? { yandexMetrikaId: dto.yandexMetrikaId }
+        : {}),
       ...toBookingFormColumns(dto.form),
     };
   }
