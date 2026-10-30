@@ -1,6 +1,9 @@
 import { GUARDS_METADATA } from '@nestjs/common/constants';
+import { HttpStatus } from '@nestjs/common';
 import { BookingWidget } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
+import { AppException } from '../../shared/exceptions/app.exception.js';
+import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { PERMISSIONS_KEY } from '../auth/guards/permission.guard.js';
 import { TokenEpochGuard } from '../auth/guards/token-epoch.guard.js';
@@ -127,7 +130,7 @@ function repository() {
     findFirst: vi
       .fn()
       .mockImplementation(async ({ where }) =>
-        where.titleKey ? null : { id: 'channel' },
+        where.id ? { id: 'channel' } : null,
       ),
     create: vi.fn().mockImplementation(async ({ data }) => ({
       id: 'channel',
@@ -155,6 +158,46 @@ describe('booking channel contract', () => {
   );
   const widgets = new BookingWidgetsService(db as never, {} as never);
   beforeEach(() => vi.clearAllMocks());
+
+  it.each(['DRAFT', 'PUBLISHED'])(
+    'rejects creating another page when the location has a %s page',
+    async (status) => {
+      db.bookingPage.findFirst.mockResolvedValueOnce({
+        id: 'existing',
+        status,
+      });
+      const error = await pages
+        .create('location', plainToInstance(SaveBookingPageDto, pageInput))
+        .catch((error: unknown) => error);
+
+      expect(error).toBeInstanceOf(AppException);
+      expect((error as AppException).errorCode).toBe(
+        ErrorCode.BOOKING_PAGE_ALREADY_EXISTS.code,
+      );
+      expect((error as AppException).getStatus()).toBe(HttpStatus.CONFLICT);
+      expect(db.bookingPage.create).not.toHaveBeenCalled();
+      expect(db.bookingPage.findUnique).not.toHaveBeenCalled();
+      expect(files.findById).not.toHaveBeenCalled();
+    },
+  );
+
+  it('allows creating a page when only another location has a page', async () => {
+    db.bookingPage.findFirst.mockImplementationOnce(async ({ where }) =>
+      where.locationId === 'other-location' ? { id: 'existing' } : null,
+    );
+
+    const saved = await pages.create(
+      'location',
+      plainToInstance(SaveBookingPageDto, pageInput),
+    );
+
+    expect(saved.locationId).toBe('location');
+    expect(db.bookingPage.findFirst).toHaveBeenCalledWith({
+      where: { locationId: 'location' },
+      select: { id: true },
+    });
+    expect(db.bookingPage.create).toHaveBeenCalledOnce();
+  });
 
   it.each(['create', 'update'] as const)(
     '%s persists heading and maps it unchanged in admin and public responses',

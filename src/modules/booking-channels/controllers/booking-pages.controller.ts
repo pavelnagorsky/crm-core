@@ -69,9 +69,15 @@ export class BookingPagesController {
     );
   }
 
-  @ApiOperation({ summary: 'Create a booking page. It starts as a draft.' })
+  @ApiOperation({
+    summary:
+      'Create the only booking page for a location. It starts as a draft.',
+  })
   @ApiCreatedResponse({ type: ApiResponse(BookingPageResponseDto) })
-  @ApiConflictResponse({ description: 'Slug is already used' })
+  @ApiConflictResponse({
+    description:
+      'A booking page already exists for this location or slug is already used',
+  })
   @ApiUnprocessableEntityResponse({
     description: 'Cover is not an image from this business',
   })

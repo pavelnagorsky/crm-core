@@ -230,6 +230,10 @@ export const ErrorCode = {
   },
 
   // booking channels
+  BOOKING_PAGE_ALREADY_EXISTS: {
+    code: 'BOOKING_PAGE_ALREADY_EXISTS',
+    message: 'A booking page already exists for this location',
+  },
   BOOKING_PAGE_NOT_FOUND: {
     code: 'BOOKING_PAGE_NOT_FOUND',
     message: 'Booking page not found',

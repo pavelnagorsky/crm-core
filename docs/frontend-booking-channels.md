@@ -5,6 +5,17 @@ OpenAPI: [booking-channels.openapi.json](./booking-channels.openapi.json).
 `node scripts/export-booking-channels-openapi.mjs`. В работающем API полный
 контракт доступен по `/api-json`, Swagger UI — `/api`.
 
+## Ограничение количества страниц
+
+POST `/locations/{locationId}/booking-pages` проверяет наличие страницы у филиала
+независимо от её статуса. Если страница уже есть, API возвращает `409 Conflict`
+с `responseCode: BOOKING_PAGE_ALREADY_EXISTS`. Использовать редактирование существующей
+страницы; после её удаления можно создать новую. Страницы других филиалов не влияют
+на проверку. Существующие дополнительные страницы остаются доступными.
+
+Проверка выполняется в сервисе без изменения схемы БД. Она не гарантирует запрет
+дубликатов при одновременных запросах на создание.
+
 ## Заголовки страницы
 
 POST `/locations/{locationId}/booking-pages` и PUT

@@ -93,6 +93,16 @@ export class BookingPagesService {
     locationId: string,
     dto: SaveBookingPageDto,
   ): Promise<BookingPageWithCover> {
+    const existing = await this.db.bookingPage.findFirst({
+      where: { locationId },
+      select: { id: true },
+    });
+    if (existing) {
+      throw new AppException(
+        ErrorCode.BOOKING_PAGE_ALREADY_EXISTS,
+        HttpStatus.CONFLICT,
+      );
+    }
     await this.assertSlugAvailable(locationId, dto.slug);
     const coverFileId = await this.resolveCover(locationId, dto.coverFileId);
     try {
