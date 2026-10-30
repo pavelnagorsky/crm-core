@@ -158,9 +158,15 @@ export class AuthController {
     return BaseResponseDto.success(new AuthDto(tokens.accessToken));
   }
 
-  @ApiOperation({ summary: 'OAuth — VK' })
+  @ApiOperation({
+    summary: 'VK ID sign-in',
+    description:
+      'Exchange authCode, state and deviceId from the VK ID SDK for an application session.',
+  })
   @ApiBody({ type: VkOauthRequestDto })
-  @ApiOkResponse({ type: ApiResponse(AuthDto) })
+  @ApiCreatedResponse({ type: ApiResponse(AuthDto) })
+  @ApiBadRequestResponse({ type: ValidationErrorResponseDto })
+  @ApiUnauthorizedResponse({ type: UnauthorizedResponseDto })
   @UseGuards(VkOAuthGuard)
   @Post('vk')
   async vkOAuth(
@@ -173,9 +179,15 @@ export class AuthController {
     return BaseResponseDto.success(new AuthDto(tokens.accessToken));
   }
 
-  @ApiOperation({ summary: 'OAuth — Yandex' })
+  @ApiOperation({
+    summary: 'Yandex sign-in',
+    description:
+      'Exchange the Yandex authorization code for an application session.',
+  })
   @ApiBody({ type: YandexOauthRequestDto })
-  @ApiOkResponse({ type: ApiResponse(AuthDto) })
+  @ApiCreatedResponse({ type: ApiResponse(AuthDto) })
+  @ApiBadRequestResponse({ type: ValidationErrorResponseDto })
+  @ApiUnauthorizedResponse({ type: UnauthorizedResponseDto })
   @UseGuards(YandexOAuthGuard)
   @Post('yandex')
   async yandexOAuth(

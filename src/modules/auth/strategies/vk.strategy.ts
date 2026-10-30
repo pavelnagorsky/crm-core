@@ -1,13 +1,8 @@
 import { HttpService } from '@nestjs/axios';
-import {
-  BadRequestException,
-  Injectable,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
-import { plainToInstance } from 'class-transformer';
-import { validate } from 'class-validator';
+import { isEmail } from 'class-validator';
 import { Request } from 'express';
 import { Strategy } from 'passport-custom';
 import { firstValueFrom } from 'rxjs';
@@ -18,6 +13,7 @@ import { VkOauthRequestDto } from '../dto/vk-oauth-request.dto.js';
 import { OAuthProviderEnum } from '../enums/oauth-provider.enum.js';
 import { VkTokensResponse } from '../interfaces/vk-tokens-response.interface.js';
 import { VkUserResponse } from '../interfaces/vk-user-response.interface.js';
+import { validateOAuthRequest } from '../utils/validate-oauth-request.js';
 
 @Injectable()
 export class VkOAuthStrategy extends PassportStrategy(Strategy, 'vk-oauth') {
@@ -31,18 +27,18 @@ export class VkOAuthStrategy extends PassportStrategy(Strategy, 'vk-oauth') {
   async validate(
     req: Request<Record<string, string>, unknown, unknown>,
   ): Promise<OAuthResponseDto> {
+    const dto = await validateOAuthRequest(req, VkOauthRequestDto);
+    const vk = this.config.get<IVKConfig>('vk');
+    const frontend = this.config.get<IFrontendConfig>('frontend');
+    if (!vk?.clientId || !vk.codeVerifier || !frontend?.domain) {
+      throw new UnauthorizedException('VK sign-in is not configured');
+    }
+
     try {
-      const dto = plainToInstance(VkOauthRequestDto, req.body);
-      const errors = await validate(dto);
-      if (errors.length) throw new BadRequestException();
-
-      const vk = this.config.get<IVKConfig>('vk')!;
-      const frontend = this.config.get<IFrontendConfig>('frontend')!;
-
       const { data: tokens } = await firstValueFrom(
         this.http.post<VkTokensResponse>(
           'https://id.vk.com/oauth2/auth',
-          {
+          new URLSearchParams({
             grant_type: 'authorization_code',
             code: dto.authCode,
             client_id: vk.clientId,
@@ -53,21 +49,43 @@ export class VkOAuthStrategy extends PassportStrategy(Strategy, 'vk-oauth') {
               '/auth/oauth/callback',
               frontend.domain,
             ).toString(),
-          },
+          }),
           { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
         ),
       );
-      if (tokens.error) throw new BadRequestException(tokens.error_description);
+      if (
+        tokens?.error ||
+        !tokens?.access_token ||
+        !Number.isSafeInteger(tokens.user_id) ||
+        tokens.user_id <= 0 ||
+        tokens.state !== dto.state
+      ) {
+        throw new UnauthorizedException();
+      }
 
       const { data: profile } = await firstValueFrom(
         this.http.post<VkUserResponse>(
           'https://id.vk.com/oauth2/user_info',
-          { client_id: vk.clientId, access_token: tokens.access_token },
+          new URLSearchParams({
+            client_id: vk.clientId,
+            access_token: tokens.access_token,
+          }),
           { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
         ),
       );
-      if (!profile.user?.email)
-        throw new BadRequestException('No user email from VK');
+      if (
+        profile?.error ||
+        !profile?.user?.email ||
+        !isEmail(profile.user.email)
+      ) {
+        throw new UnauthorizedException();
+      }
+      if (
+        profile.user.user_id &&
+        profile.user.user_id !== String(tokens.user_id)
+      ) {
+        throw new UnauthorizedException();
+      }
 
       return new OAuthResponseDto({
         providerId: String(tokens.user_id),

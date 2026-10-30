@@ -37,6 +37,30 @@ Frontend получает authorization code через Google SDK и отпра
 
 Успешный ответ имеет статус `201`, access token в `responseValue.accessToken` и refresh token в HttpOnly cookie. Для браузерного запроса используйте `credentials: 'include'`; origin frontend должен входить в `ALLOWED_ORIGINS`. Некорректное тело запроса возвращает `400`, отклонённый Google token/code — `401`. Создание пользователя и вход по email выполняются существующим `AuthService.handleOAuth` через `UserService`.
 
+## Вход через Yandex и VK
+
+Frontend получает код авторизации через SDK провайдера и отправляет JSON в REST API:
+
+```http
+POST /auth/yandex
+Content-Type: application/json
+
+{ "authCode": "<authorization code>" }
+```
+
+```http
+POST /auth/vk
+Content-Type: application/json
+
+{ "authCode": "<code>", "state": "<state>", "deviceId": "<device_id>" }
+```
+
+Backend обменивает код на access token провайдера, получает профиль с email и вызывает общий `AuthService.handleOAuth`. Ответ и refresh cookie такие же, как при входе через Google; неверный запрос возвращает `400`, ошибки провайдера или отсутствие email — `401`. Токены Yandex и VK не возвращаются клиенту и не сохраняются как токены сессии CRM.
+
+Для Yandex используются существующие `YANDEX_CLIENT_ID` и `YANDEX_CLIENT_SECRET`. Приложению нужен доступ к email (`login:email`). Обмен кода идёт через `https://oauth.yandex.ru/token`, профиль — через `https://login.yandex.ru/info`. [Документация Yandex ID](https://yandex.ru/dev/id/doc/ru/user-information).
+
+Для VK используются существующие `VK_CLIENT_ID`, `VK_CODE_VERIFIER` и `DOMAIN`. Frontend передаёт `code`, `state` и `device_id` из SDK callback как `authCode`, `state` и `deviceId`. SDK должен использовать тот же `codeVerifier`, что указан в `VK_CODE_VERIFIER`, и `redirectUrl`, равный `${DOMAIN}/auth/oauth/callback`; адрес должен быть зарегистрирован в VK ID. Frontend проверяет `state` своего входа перед отправкой кода, backend проверяет совпадение `state` в ответе обмена VK. Для получения email приложению нужен scope `email`. [Реализация обмена кода в VK ID SDK](https://github.com/VKCOM/vkid-web-sdk/blob/master/src/auth/auth.ts).
+
 ## Документация
 
 - [Архитектура и навигация по документам](docs/architecture/README.md).

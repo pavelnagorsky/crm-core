@@ -1,13 +1,8 @@
 import { HttpService } from '@nestjs/axios';
-import {
-  BadRequestException,
-  Injectable,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
-import { plainToInstance } from 'class-transformer';
-import { validate } from 'class-validator';
+import { isEmail } from 'class-validator';
 import { Request } from 'express';
 import { Strategy } from 'passport-custom';
 import { firstValueFrom } from 'rxjs';
@@ -17,6 +12,7 @@ import { YandexOauthRequestDto } from '../dto/yandex-oauth-request.dto.js';
 import { OAuthProviderEnum } from '../enums/oauth-provider.enum.js';
 import { YandexTokensResponse } from '../interfaces/yandex-tokens-response.interface.js';
 import { YandexUserResponse } from '../interfaces/yandex-user-response.interface.js';
+import { validateOAuthRequest } from '../utils/validate-oauth-request.js';
 
 @Injectable()
 export class YandexOAuthStrategy extends PassportStrategy(
@@ -33,12 +29,13 @@ export class YandexOAuthStrategy extends PassportStrategy(
   async validate(
     req: Request<Record<string, string>, unknown, unknown>,
   ): Promise<OAuthResponseDto> {
-    try {
-      const dto = plainToInstance(YandexOauthRequestDto, req.body);
-      const errors = await validate(dto);
-      if (errors.length) throw new BadRequestException();
+    const dto = await validateOAuthRequest(req, YandexOauthRequestDto);
+    const ya = this.config.get<IYandexCloudConfig>('yandexCloud');
+    if (!ya?.clientId || !ya.clientSecret) {
+      throw new UnauthorizedException('Yandex sign-in is not configured');
+    }
 
-      const ya = this.config.get<IYandexCloudConfig>('yandexCloud')!;
+    try {
       const authHeader = Buffer.from(
         `${ya.clientId}:${ya.clientSecret}`,
       ).toString('base64');
@@ -58,7 +55,9 @@ export class YandexOAuthStrategy extends PassportStrategy(
           },
         ),
       );
-      if (tokens.error) throw new BadRequestException(tokens.error_description);
+      if (tokens?.error || !tokens?.access_token) {
+        throw new UnauthorizedException();
+      }
 
       const { data: user } = await firstValueFrom(
         this.http.get<YandexUserResponse>('https://login.yandex.ru/info', {
@@ -66,8 +65,14 @@ export class YandexOAuthStrategy extends PassportStrategy(
         }),
       );
 
-      if (!user.default_email)
-        throw new UnauthorizedException('No user email from Yandex');
+      if (
+        typeof user?.id !== 'string' ||
+        !user.id ||
+        !user.default_email ||
+        !isEmail(user.default_email)
+      ) {
+        throw new UnauthorizedException();
+      }
       return new OAuthResponseDto({
         providerId: user.id,
         providerType: OAuthProviderEnum.Yandex,
