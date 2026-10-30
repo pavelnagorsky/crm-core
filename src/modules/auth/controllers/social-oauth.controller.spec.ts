@@ -3,7 +3,7 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportModule } from '@nestjs/passport';
 import { Test } from '@nestjs/testing';
-import axios, { InternalAxiosRequestConfig } from 'axios';
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import request from 'supertest';
 import { GlobalExceptionFilter } from '../../../shared/filters/exception.filter.js';
 import { exceptionFactory } from '../../../shared/validation/exception-factory.js';
@@ -139,10 +139,12 @@ describe('Yandex and VK sign-in (HTTP)', () => {
       const [profile] = upstream.mock.calls[1];
       expect(exchange.url).toBe(tokenUrls[provider]);
       expect(exchange.method).toBe('post');
+      expect(exchange.timeout).toBe(10_000);
       expect(exchange.headers.get('Content-Type')).toBe(
         'application/x-www-form-urlencoded',
       );
       expect(profile.url).toBe(profileUrls[provider]);
+      expect(profile.timeout).toBe(10_000);
       if (provider === 'yandex') {
         expect(Object.fromEntries(new URLSearchParams(exchange.data))).toEqual({
           grant_type: 'authorization_code',
@@ -178,6 +180,28 @@ describe('Yandex and VK sign-in (HTTP)', () => {
   );
 
   describe.each(providers)('%s errors', (provider) => {
+    it.each([
+      { name: 'number', token: 123 },
+      { name: 'boolean', token: true },
+      { name: 'array', token: ['token'] },
+      { name: 'object', token: { value: 'token' } },
+    ])(
+      'rejects a $name access token before fetching a profile',
+      async ({ token }) => {
+        const tokens = responses.get(tokenUrls[provider]) as Record<
+          string,
+          unknown
+        >;
+        responses.set(tokenUrls[provider], { ...tokens, access_token: token });
+        await request(app.getHttpServer())
+          .post(`/auth/${provider}`)
+          .send(requests[provider])
+          .expect(401);
+        expect(upstream).toHaveBeenCalledTimes(1);
+        expect(auth.handleOAuth).not.toHaveBeenCalled();
+      },
+    );
+
     it.each([
       { name: 'empty body', body: {} },
       { name: 'empty code', body: { authCode: '' } },
@@ -265,6 +289,34 @@ describe('Yandex and VK sign-in (HTTP)', () => {
       expect(auth.handleOAuth).not.toHaveBeenCalled();
       expect(response.headers['set-cookie']).toBeUndefined();
     });
+
+    it.each(['exchange', 'profile'] as const)(
+      'does not issue a session when the %s times out',
+      async (stage) => {
+        if (stage === 'profile') {
+          upstream.mockImplementationOnce(async (httpConfig) => ({
+            data: responses.get(tokenUrls[provider]),
+            status: 200,
+            statusText: 'OK',
+            headers: {},
+            config: httpConfig,
+          }));
+        }
+        upstream.mockRejectedValueOnce(
+          new AxiosError('private timeout details', AxiosError.ECONNABORTED),
+        );
+        const response = await request(app.getHttpServer())
+          .post(`/auth/${provider}`)
+          .send(requests[provider])
+          .expect(401);
+        expect(upstream).toHaveBeenCalledTimes(stage === 'profile' ? 2 : 1);
+        expect(auth.handleOAuth).not.toHaveBeenCalled();
+        expect(response.headers['set-cookie']).toBeUndefined();
+        expect(JSON.stringify(response.body)).not.toContain(
+          'private timeout details',
+        );
+      },
+    );
   });
 
   it.each(['state', 'deviceId'] as const)('requires VK %s', async (field) => {
@@ -301,6 +353,33 @@ describe('Yandex and VK sign-in (HTTP)', () => {
     await request(app.getHttpServer())
       .post('/auth/vk')
       .send(requests.vk)
+      .expect(401);
+    expect(auth.handleOAuth).not.toHaveBeenCalled();
+  });
+
+  it.each([{ id: '' }, { id: null }, { id: 0 }])(
+    'rejects an invalid VK profile user id: $id',
+    async ({ id }) => {
+      responses.set(profileUrls.vk, {
+        user: { user_id: id, email: 'anna@vk.com' },
+      });
+      await request(app.getHttpServer())
+        .post('/auth/vk')
+        .send(requests.vk)
+        .expect(401);
+      expect(auth.handleOAuth).not.toHaveBeenCalled();
+    },
+  );
+
+  it('rejects a Yandex profile error even when identity fields are present', async () => {
+    responses.set(profileUrls.yandex, {
+      id: 'yandex-user',
+      default_email: 'anna@yandex.ru',
+      error: 'access_denied',
+    });
+    await request(app.getHttpServer())
+      .post('/auth/yandex')
+      .send(requests.yandex)
       .expect(401);
     expect(auth.handleOAuth).not.toHaveBeenCalled();
   });

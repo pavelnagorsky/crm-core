@@ -8,6 +8,7 @@ import { Strategy } from 'passport-custom';
 import { firstValueFrom } from 'rxjs';
 import { IFrontendConfig } from '../../../config/interfaces/frontend-config.interface.js';
 import { IVKConfig } from '../../../config/interfaces/vk-config.interface.js';
+import { OAUTH_FORM_HTTP_OPTIONS } from '../constants/oauth-http.constants.js';
 import { OAuthResponseDto } from '../dto/oauth-response.dto.js';
 import { VkOauthRequestDto } from '../dto/vk-oauth-request.dto.js';
 import { OAuthProviderEnum } from '../enums/oauth-provider.enum.js';
@@ -50,12 +51,13 @@ export class VkOAuthStrategy extends PassportStrategy(Strategy, 'vk-oauth') {
               frontend.domain,
             ).toString(),
           }),
-          { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
+          OAUTH_FORM_HTTP_OPTIONS,
         ),
       );
       if (
         tokens?.error ||
-        !tokens?.access_token ||
+        typeof tokens?.access_token !== 'string' ||
+        !tokens.access_token ||
         !Number.isSafeInteger(tokens.user_id) ||
         tokens.user_id <= 0 ||
         tokens.state !== dto.state
@@ -70,7 +72,7 @@ export class VkOAuthStrategy extends PassportStrategy(Strategy, 'vk-oauth') {
             client_id: vk.clientId,
             access_token: tokens.access_token,
           }),
-          { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } },
+          OAUTH_FORM_HTTP_OPTIONS,
         ),
       );
       if (
@@ -81,7 +83,7 @@ export class VkOAuthStrategy extends PassportStrategy(Strategy, 'vk-oauth') {
         throw new UnauthorizedException();
       }
       if (
-        profile.user.user_id &&
+        profile.user.user_id !== undefined &&
         profile.user.user_id !== String(tokens.user_id)
       ) {
         throw new UnauthorizedException();
