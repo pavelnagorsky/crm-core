@@ -17,6 +17,26 @@ npm run start:dev
 
 Swagger UI: `/api`, OpenAPI JSON: `/api-json`. Бизнес-маршруты не имеют общего префикса `/api`.
 
+## Вход через Google
+
+Обычный OAuth и Google One Tap используют `POST /auth/google` с JSON:
+
+```json
+{ "type": "oauth", "authCode": "<authorization code>" }
+```
+
+```json
+{ "type": "one-tap", "oneTapCode": "<credential из Google callback>" }
+```
+
+`type` по умолчанию равен `oauth`, поэтому прежние запросы с одним `authCode` продолжают работать. Для One Tap нужно передавать Google ID token из `response.credential`, а не access token. Backend проверяет подпись, срок действия, issuer, audience и подтверждённый email.
+
+В Google Cloud настройте OAuth client типа Web application и разрешённые JavaScript origins frontend. В окружении backend укажите `GOOGLE_CLOUD_CLIENT_ID` и `GOOGLE_CLOUD_CLIENT_SECRET`; frontend должен использовать тот же client ID. One Tap требует только client ID на backend.
+
+Frontend получает authorization code через Google SDK и отправляет его как `authCode`. Backend обменивает код на Google ID token с `redirect_uri: 'postmessage'`. В сценарии One Tap frontend отправляет уже полученный ID token как `oneTapCode`, без обмена кода. Оба сценария завершаются проверкой ID token и выдачей сессии CRM.
+
+Успешный ответ имеет статус `201`, access token в `responseValue.accessToken` и refresh token в HttpOnly cookie. Для браузерного запроса используйте `credentials: 'include'`; origin frontend должен входить в `ALLOWED_ORIGINS`. Некорректное тело запроса возвращает `400`, отклонённый Google token/code — `401`. Создание пользователя и вход по email выполняются существующим `AuthService.handleOAuth` через `UserService`.
+
 ## Документация
 
 - [Архитектура и навигация по документам](docs/architecture/README.md).

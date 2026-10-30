@@ -1,6 +1,7 @@
 import { Body, Controller, Post, Res, UseGuards } from '@nestjs/common';
 import {
   ApiBody,
+  ApiBadRequestResponse,
   ApiCreatedResponse,
   ApiOkResponse,
   ApiOperation,
@@ -136,9 +137,15 @@ export class AuthController {
     return BaseResponseDto.success();
   }
 
-  @ApiOperation({ summary: 'OAuth — Google' })
+  @ApiOperation({
+    summary: 'Google sign-in: authorization code or One Tap',
+    description:
+      'Use type=oauth with authCode, or type=one-tap with oneTapCode (Google ID token). Returns an access token and sets the refresh token cookie.',
+  })
   @ApiBody({ type: GoogleOauthRequestDto })
-  @ApiOkResponse({ type: ApiResponse(AuthDto) })
+  @ApiCreatedResponse({ type: ApiResponse(AuthDto) })
+  @ApiBadRequestResponse({ type: ValidationErrorResponseDto })
+  @ApiUnauthorizedResponse({ type: UnauthorizedResponseDto })
   @UseGuards(GoogleOAuthGuard)
   @Post('google')
   async googleOAuth(
