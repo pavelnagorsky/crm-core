@@ -1,3 +1,5 @@
+import { BookingSelectionService } from './services/booking-selection.service.js';
+import { BookingSchedulingService } from './services/booking-scheduling.service.js';
 import { NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test } from '@nestjs/testing';
@@ -156,6 +158,8 @@ describe('BookingsFacade.completeElapsed', () => {
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
+        { provide: BookingSelectionService, useValue: {} },
+        { provide: BookingSchedulingService, useValue: {} },
         { provide: ProductsService, useValue: products },
         { provide: DatabaseService, useValue: db },
         { provide: CalendarFacade, useValue: { deleteBookingEvents: vi.fn() } },
@@ -303,6 +307,8 @@ describe('BookingsFacade.updateStatus transactionality', () => {
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
+        { provide: BookingSelectionService, useValue: {} },
+        { provide: BookingSchedulingService, useValue: {} },
         { provide: ProductsService, useValue: products },
         { provide: DatabaseService, useValue: db },
         { provide: CalendarFacade, useValue: { deleteBookingEvents: vi.fn() } },
@@ -362,6 +368,8 @@ describe('BookingsFacade.search', () => {
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
+        { provide: BookingSelectionService, useValue: {} },
+        { provide: BookingSchedulingService, useValue: {} },
         { provide: ProductsService, useValue: products },
         { provide: DatabaseService, useValue: db },
         { provide: CalendarFacade, useValue: { deleteBookingEvents: vi.fn() } },
@@ -804,6 +812,8 @@ describe('BookingsFacade catalog selection', () => {
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
+        { provide: BookingSelectionService, useValue: {} },
+        { provide: BookingSchedulingService, useValue: {} },
         { provide: ProductsService, useValue: products },
         { provide: DatabaseService, useValue: db },
         { provide: CalendarFacade, useValue: { deleteBookingEvents: vi.fn() } },
@@ -970,7 +980,7 @@ describe('BookingsFacade catalog selection', () => {
     } as BookingResolveRequestDto);
 
     expect(resolved.availableServiceIds).toEqual(['cut', 'pack']);
-    expect(resolved.totalListPrice).toBe('0.00');
+    expect(resolved.totalListPrice.toFixed(2)).toBe('0.00');
     expect(resolved.totalDuration).toBe(0);
   });
 
@@ -1003,7 +1013,7 @@ describe('BookingsFacade catalog selection', () => {
       serviceIds: ['cut', 'color'],
     } as BookingResolveRequestDto);
 
-    expect(resolved.totalListPrice).toBe('30.50');
+    expect(resolved.totalListPrice.toFixed(2)).toBe('30.50');
     expect(resolved.totalDuration).toBe(95);
     expect(resolved.availableServiceIds).toEqual(['cut', 'color']);
   });
@@ -1041,6 +1051,8 @@ describe('BookingsFacade.update details and item prices', () => {
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
+        { provide: BookingSelectionService, useValue: {} },
+        { provide: BookingSchedulingService, useValue: {} },
         { provide: ProductsService, useValue: products },
         { provide: DatabaseService, useValue: db },
         { provide: CalendarFacade, useValue: { deleteBookingEvents: vi.fn() } },
@@ -1254,6 +1266,8 @@ describe('BookingsFacade.update manual interval', () => {
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
+        { provide: BookingSelectionService, useValue: {} },
+        { provide: BookingSchedulingService, useValue: {} },
         { provide: ProductsService, useValue: products },
         { provide: DatabaseService, useValue: db },
         { provide: CalendarFacade, useValue: calendar },
@@ -1510,6 +1524,8 @@ describe('BookingsFacade.addProduct', () => {
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
+        { provide: BookingSelectionService, useValue: {} },
+        { provide: BookingSchedulingService, useValue: {} },
         { provide: ProductsService, useValue: products },
         { provide: DatabaseService, useValue: db },
         { provide: CalendarFacade, useValue: { deleteBookingEvents: vi.fn() } },
@@ -1603,6 +1619,8 @@ describe('BookingsFacade.cancel draft product cleanup', () => {
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
+        { provide: BookingSelectionService, useValue: {} },
+        { provide: BookingSchedulingService, useValue: {} },
         { provide: ProductsService, useValue: products },
         { provide: DatabaseService, useValue: db },
         { provide: CalendarFacade, useValue: { deleteBookingEvents: vi.fn() } },

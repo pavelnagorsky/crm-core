@@ -6,7 +6,7 @@ import { AddOrderItemsDto } from '../orders/dto/add-order-items.dto.js';
 import { OrderProductItemDto } from '../orders/dto/order-product-item.dto.js';
 import { OrderWithItems } from '../orders/interfaces/order-with-items.interface.js';
 import { BookingResolveRequestDto } from './dto/booking-resolve-request.dto.js';
-import { BookingResolveResponseDto } from './dto/booking-resolve-response.dto.js';
+import { BookingSelectionResolution } from './interfaces/booking-selection-resolution.interface.js';
 import { BookingSearchRequestDto } from './dto/booking-search-request.dto.js';
 import { BookingSetup } from './interfaces/booking-setup.interface.js';
 import { CancelBookingDto } from './dto/cancel-booking.dto.js';
@@ -33,7 +33,7 @@ export class BookingsFacade {
   async resolveBookingSelection(
     locationId: string,
     dto: BookingResolveRequestDto,
-  ): Promise<BookingResolveResponseDto> {
+  ): Promise<BookingSelectionResolution> {
     return this.setup.resolveBookingSelection(locationId, dto);
   }
 

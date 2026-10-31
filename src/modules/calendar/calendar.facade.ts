@@ -139,6 +139,20 @@ export class CalendarFacade {
     );
   }
 
+  getManualRescheduleSlots(
+    locationId: string,
+    items: CalendarRescheduleItem[],
+    from: string,
+    to: string,
+  ): Promise<AvailableSlotsDayDto[]> {
+    return this.availability.getManualRescheduleSlots(
+      locationId,
+      items,
+      from,
+      to,
+    );
+  }
+
   filterAvailableStaff(
     locationId: string,
     candidates: { id: string }[],

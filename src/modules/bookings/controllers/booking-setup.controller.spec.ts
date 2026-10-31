@@ -1,3 +1,5 @@
+import { BookingSelectionService } from '../services/booking-selection.service.js';
+import { BookingSchedulingService } from '../services/booking-scheduling.service.js';
 import { INestApplication, NotFoundException } from '@nestjs/common';
 import { PassportModule } from '@nestjs/passport';
 import { Test } from '@nestjs/testing';
@@ -89,6 +91,8 @@ describe('Public booking setup products (HTTP)', () => {
       providers: [
         BookingsFacade,
         BookingSetupService,
+        { provide: BookingSelectionService, useValue: {} },
+        { provide: BookingSchedulingService, useValue: {} },
         { provide: ProductsService, useValue: products },
         { provide: ServiceCatalogFacade, useValue: catalog },
         { provide: StaffService, useValue: staff },

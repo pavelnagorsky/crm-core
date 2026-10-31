@@ -37,12 +37,15 @@ channel, status or interval. Only `MANUAL` bookings can have `isCustomTime: true
 | `BookingSlotLockService` | Acquire deduplicated staff/day advisory locks in a stable order and recheck availability using the transaction. |
 | `BookingEventsService` | Build booking audit payloads and send creation/status notifications. |
 
-Changing `startAt` or `staffId` moves the existing item intervals and checks slot
-availability. Providing `endAt` explicitly selects a manual interval: sequential
+Changing `startAt`, `staffId` or item `staffAssignments` moves the existing item intervals and checks slot
+availability. Every member of the proposed team must still be active, belong to
+the location and perform their assigned service; this is rechecked inside the
+transaction for both CRM and client moves, matching calendar slot discovery.
+Providing `endAt` explicitly selects a manual interval: sequential
 items share its duration proportionally, parallel items use the entire interval,
-and availability checks are skipped. Both paths validate staff capability, lock
-staff days and reject concurrent booking edits. Future intervals also require an
-active location.
+and availability checks are skipped. Explicit staff replacements validate
+capability in both paths. Both paths lock staff days and reject concurrent
+booking edits. Future intervals also require an active location.
 
 All helpers are private providers of `BookingsModule`. Staff, calendar, client,
 location, catalog, order and payroll data is accessed through the owning services.
@@ -60,3 +63,54 @@ checks proposed item intervals against each other before reserving slots.
 
 Booking lifecycle audit is published after its transaction commits. Notification
 delivery still uses in-process events; see [known limitations](./README.md#оставшийся-технический-долг).
+
+## Parallel bundle teams
+
+A parallel bundle remains one booking with its bundle price. Each service starts
+at the same time, uses a distinct staff member and reserves its own duration plus
+buffer. The booking interval covers all item intervals. No additional table or
+migration is required.
+
+Creation, selection resolve and slot discovery accept optional `staffAssignments`
+with `{ serviceId, staffId? }`. Missing entries, omitted/null staff ids and an empty
+array request automatic assignment. JSON requests use an array; GET slot requests
+use a URL-encoded JSON string, limited to 4096 characters and ten unique services.
+UUIDs, selection membership, staff location/activity and qualification are checked.
+A global `staffId` cannot assign multiple parallel services. Combining a nonempty
+assignment array with a global staff id, or conflicting legacy manual item staff,
+is rejected. Legacy `items[].staffId` still supports repeated services separately.
+
+`shared/scheduling/assign-staff.ts` finds a complete matching with augmenting paths.
+It is a pure helper shared by booking scheduling and the private calendar
+calculator. Both first filter candidates against each item's interval. Scheduling
+ranks candidates by one combined booking-count query, then staff id; preferences
+never prevent a valid team from being found. Neither module imports the other's
+private computation providers.
+
+Resolve returns `PER_SERVICE`, `staffByService` and `canAssignStaff` for parallel
+bundles. The last field describes qualification, not time availability. Optional
+`startAt` resolves the actual team and intervals into `resolvedItems`; optional
+`endAt` previews the existing manual-interval behavior. Resolve has no reservation
+or client mutation side effects. CRM submits the displayed team explicitly.
+Availability is checked again under transaction locks, so a stale preview fails
+with 409 before any events or booking items are created.
+
+Update assignments use `{ bookingItemId, staffId }`. Unspecified items keep their
+staff, and moving the start preserves saved offsets, durations and prices. Manual
+slot discovery with `bookingId` also uses the saved items rather than the current
+catalog, excluding every previous event. It retains manual scheduling's exemption
+from public notice/advance limits. Client-token moves retain public restrictions.
+To preview replacements on a saved booking, manual slots accept
+`itemStaffAssignments` as a URL-encoded JSON array of `{ bookingItemId, staffId }`.
+These are the same explicit replacements sent as `staffAssignments` on update.
+Omitted items keep their staff; using saved item IDs also supports repeated services.
+This query requires `bookingId` and cannot be mixed with service-level assignments
+or a global staff ID. It has the same JSON length and item-count limits as creation.
+An explicit `endAt` keeps the existing manual update behavior, but overlapping
+items can never be assigned to the same staff member.
+
+CRM creation/editing and the shared public booking form display staff per service.
+Assignment values are normalized in query keys; changing the team clears selected
+time. Parallel bundle availability in the editor checks for a complete team.
+Lifecycle, calendar details and notifications already aggregate all booking items;
+payroll uses each item's actual staff and allocated price.

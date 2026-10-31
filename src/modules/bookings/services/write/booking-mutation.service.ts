@@ -49,7 +49,10 @@ export class BookingMutationService {
       );
 
     const manualIntervalChanging = dto.endAt !== undefined;
-    const slotChanging = dto.startAt !== undefined || dto.staffId !== undefined;
+    const slotChanging =
+      dto.startAt !== undefined ||
+      dto.staffId !== undefined ||
+      Boolean(dto.staffAssignments?.length);
     const pricePatches = this.pricePatches(old, dto);
     const updateArgs = {
       where: { id: bookingId },

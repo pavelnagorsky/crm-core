@@ -4,6 +4,8 @@ import { DatabaseService } from '../../../../database/database.service.js';
 import { AppException } from '../../../../shared/exceptions/app.exception.js';
 import { TimeUtils } from '../../../../shared/time/time.utils.js';
 import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
+import { hasStaffOverlap } from '../../../../shared/scheduling/has-staff-overlap.js';
+import { resolveItemStaffAssignments } from '../../../../shared/scheduling/resolve-item-staff-assignments.js';
 import { AuditActor } from '../../../audit/interfaces/audit-actor.interface.js';
 import { CalendarFacade } from '../../../calendar/calendar.facade.js';
 import { LocationService } from '../../../location/services/location.service.js';
@@ -91,25 +93,22 @@ export class BookingRescheduleService {
         HttpStatus.BAD_REQUEST,
       );
     }
-    const staff = dto.staffId
-      ? await this.staffService.findById(dto.staffId)
-      : null;
+    const assigned = await this.assignItemStaff(old, dto);
     const items = manualInterval
-      ? await this.manualIntervalItems(
-          old,
-          old.locationId,
-          startAt,
-          endAt!,
-          dto.staffId,
-          staff?.name ?? null,
-        )
-      : await this.shiftItems(old, startAt, dto.staffId, staff?.name ?? null);
+      ? this.manualIntervalItems(assigned, startAt, endAt!)
+      : this.shiftItems(assigned, startAt);
+    if (hasStaffOverlap(items)) {
+      throw new AppException(
+        ErrorCode.BOOKING_STAFF_ASSIGNMENT_OVERLAP,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
     return this.db.$transaction(async (tx) => {
       if (items.some((item) => item.endAt.getTime() > Date.now()))
         await this.write.lockActiveLocation(old.locationId, tx);
       await this.write.lockUnchangedBooking(tx, old);
       await this.slots.lockSlots(items, location.timezone, tx);
-      if (clientInitiated) {
+      if (!manualInterval) {
         for (const item of items)
           await this.assertStaffCanPerform(
             old.locationId,
@@ -177,29 +176,44 @@ export class BookingRescheduleService {
     await this.saveItemSchedule(booking.locationId, booking.items, tx);
   }
 
-  private async shiftItems(
+  private async assignItemStaff(
     old: BookingWithItems,
-    startAt: Date,
-    staffId: string | undefined,
-    staffName: string | null,
-  ): Promise<BookingWithItems['items']> {
-    const delta = startAt.getTime() - old.startAt.getTime();
-    return Promise.all(
+    dto: UpdateBookingDto,
+  ): Promise<BookingWithItems> {
+    const assignments = resolveItemStaffAssignments(
+      old.items.map((item) => item.id),
+      old.executionMode,
+      dto.staffId,
+      dto.staffAssignments,
+    );
+    const items = await Promise.all(
       old.items.map(async (item) => {
+        const staffId = assignments.get(item.id);
+        if (!staffId) return item;
         await this.assertStaffCanPerform(
           old.locationId,
           item.serviceId,
           staffId,
         );
-        return {
-          ...item,
-          staffId: staffId ?? item.staffId,
-          staffName: staffName ?? item.staffName,
-          startAt: new Date(item.startAt.getTime() + delta),
-          endAt: new Date(item.endAt.getTime() + delta),
-        };
+        const staff = await this.staffService.findById(staffId);
+        return { ...item, staffId, staffName: staff.name };
       }),
     );
+    return { ...old, items };
+  }
+
+  private shiftItems(
+    old: BookingWithItems,
+    startAt: Date,
+  ): BookingWithItems['items'] {
+    const delta = startAt.getTime() - old.startAt.getTime();
+    return old.items.map((item) => {
+      return {
+        ...item,
+        startAt: new Date(item.startAt.getTime() + delta),
+        endAt: new Date(item.endAt.getTime() + delta),
+      };
+    });
   }
 
   private async assertStaffCanPerform(
@@ -251,14 +265,11 @@ export class BookingRescheduleService {
     }
   }
 
-  private async manualIntervalItems(
+  private manualIntervalItems(
     old: BookingWithItems,
-    locationId: string,
     startAt: Date,
     endAt: Date,
-    targetStaffId: string | undefined,
-    targetStaffName: string | null,
-  ): Promise<BookingWithItems['items']> {
+  ): BookingWithItems['items'] {
     const items = [...old.items].sort((a, b) => a.sortOrder - b.sortOrder);
     const spans = items.map((item) => this.itemSpanMs(item));
     const totalSpan = spans.reduce((sum, span) => sum + span, 0);
@@ -268,13 +279,6 @@ export class BookingRescheduleService {
 
     for (let index = 0; index < items.length; index += 1) {
       const item = items[index];
-      const staffId = targetStaffId ?? item.staffId;
-      await this.assertStaffCanPerform(
-        locationId,
-        item.serviceId,
-        targetStaffId,
-      );
-
       const itemStart =
         old.executionMode === 'PARALLEL' ? new Date(startAt) : new Date(cursor);
       const itemEnd =
@@ -293,8 +297,6 @@ export class BookingRescheduleService {
 
       movedItems.push({
         ...item,
-        staffId,
-        staffName: targetStaffName ?? item.staffName,
         startAt: itemStart,
         endAt: itemEnd,
       });

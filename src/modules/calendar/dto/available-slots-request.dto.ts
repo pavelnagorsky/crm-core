@@ -1,4 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { StaffAssignments } from '../../../shared/scheduling/decorators/staff-assignments.decorator.js';
+import { StaffAssignmentDto } from '../../../shared/scheduling/dto/staff-assignment.dto.js';
 import {
   ArrayMaxSize,
   ArrayNotEmpty,
@@ -10,6 +12,9 @@ import { MULTI_SERVICE_MAX_ITEMS } from '../../services/constants/multi-service.
 import { ToArray } from '../../../shared/transforms/to-array.transform.js';
 
 export class AvailableSlotsRequestDto {
+  @StaffAssignments(true)
+  staffAssignments?: StaffAssignmentDto[];
+
   @ApiProperty({
     type: String,
     description: 'Service UUID',

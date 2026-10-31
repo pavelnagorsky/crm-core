@@ -5,6 +5,8 @@ import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { TimeUtils } from '../../../shared/time/time.utils.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
+import { assignStaff } from '../../../shared/scheduling/assign-staff.js';
+import { normalizeStaffAssignments } from '../../../shared/scheduling/normalize-staff-assignments.js';
 import { CalendarFacade } from '../../calendar/calendar.facade.js';
 import { StaffService } from '../../staff/services/staff.service.js';
 import { BookingScheduleRequest } from '../interfaces/booking-schedule-request.interface.js';
@@ -32,14 +34,15 @@ export class BookingSchedulingService {
       manualItems,
       customEndAt,
     } = request;
-    const staffNames = new Map<string, string>();
-    const result: ResolvedBookingItem[] = [];
+    const requested = normalizeStaffAssignments(
+      services.map((service) => service.id),
+      executionMode,
+      requestedStaffId,
+      request.staffAssignments,
+      manualItems,
+    );
     const cursor = new Date(startAt);
-    const usedParallelStaff = new Set<string>();
-
-    for (let index = 0; index < services.length; index += 1) {
-      const service = services[index];
-      const manual = manualItems[index];
+    const intervals = services.map((_, index) => {
       const interval = this.itemInterval(
         services,
         index,
@@ -48,40 +51,104 @@ export class BookingSchedulingService {
         executionMode,
         customEndAt,
       );
-      const staffId = await this.resolveItemStaff(
-        locationId,
-        service.id,
-        manual?.staffId ?? requestedStaffId,
-        interval.startAt,
-        interval.endAt,
-        timezone,
-        executionMode === PrismaBookingExecutionMode.PARALLEL
-          ? usedParallelStaff
-          : new Set<string>(),
+      if (executionMode === PrismaBookingExecutionMode.SEQUENTIAL)
+        cursor.setTime(interval.endAt.getTime());
+      return interval;
+    });
+    const candidates = await Promise.all(
+      services.map(async (service, index) => {
+        const requestedId =
+          manualItems[index]?.staffId ?? requested.get(service.id);
+        const qualified = await this.staffService.resolveStaffForService(
+          locationId,
+          service.id,
+          requestedId,
+        );
+        if (requestedId && qualified.length === 0) {
+          throw new AppException(
+            ErrorCode.BOOKING_STAFF_NOT_FOUND,
+            HttpStatus.NOT_FOUND,
+          );
+        }
+        const interval = intervals[index];
+        return this.calendar.filterAvailableStaff(
+          locationId,
+          qualified,
+          TimeUtils.zonedDateStr(interval.startAt, timezone),
+          interval.startAt,
+          interval.endAt,
+          timezone,
+        );
+      }),
+    );
+    const staffIds = [
+      ...new Set(candidates.flatMap((group) => group.map((staff) => staff.id))),
+    ];
+    const dayStart = TimeUtils.localToUtc(
+      `${TimeUtils.zonedDateStr(startAt, timezone)}T00:00:00`,
+      timezone,
+    );
+    const counts = staffIds.length
+      ? await this.db.bookingItem.groupBy({
+          by: ['staffId'],
+          where: {
+            location: ACTIVE_LOCATION_WHERE,
+            locationId,
+            staffId: { in: staffIds },
+            startAt: {
+              gte: dayStart,
+              lt: TimeUtils.addDaysInTz(dayStart, 1, timezone),
+            },
+          },
+          _count: { id: true },
+        })
+      : [];
+    const countByStaff = new Map(
+      counts.map((row) => [row.staffId, row._count.id]),
+    );
+    const team = assignStaff(
+      candidates.map((group, index) => ({
+        itemId: String(index),
+        staffIds: group
+          .map((staff) => staff.id)
+          .sort(
+            (a, b) =>
+              (countByStaff.get(a) ?? 0) - (countByStaff.get(b) ?? 0) ||
+              a.localeCompare(b),
+          ),
+      })),
+      executionMode === PrismaBookingExecutionMode.PARALLEL,
+    );
+    if (!team)
+      throw new AppException(
+        ErrorCode.BOOKING_NO_STAFF_AVAILABLE,
+        HttpStatus.CONFLICT,
       );
-      usedParallelStaff.add(staffId);
-      if (!staffNames.has(staffId)) {
-        const staff = await this.staffService.findById(staffId);
-        staffNames.set(staffId, staff.name);
-      }
-      result.push({
+    const staffNames = new Map(
+      await Promise.all(
+        [...new Set(team.values())].map(async (id) => {
+          const staff = await this.staffService.findById(id);
+          return [id, staff.name] as const;
+        }),
+      ),
+    );
+
+    return services.map((service, index) => {
+      const staffId = team.get(String(index))!;
+      return {
         serviceId: service.id,
         staffId,
         sortOrder: index,
-        startAt: interval.startAt,
-        endAt: interval.endAt,
+        startAt: intervals[index].startAt,
+        endAt: intervals[index].endAt,
         serviceTitle: service.title,
         serviceDuration: service.durationMinutes,
         listPrice: service.price,
         chargedPrice: service.price,
-        customPrice: manual?.customPrice ?? null,
+        customPrice: manualItems[index]?.customPrice ?? null,
         staffName: staffNames.get(staffId)!,
-      });
-      if (executionMode === PrismaBookingExecutionMode.SEQUENTIAL)
-        cursor.setTime(interval.endAt.getTime());
-    }
-
-    return result;
+      };
+    });
   }
 
   private itemInterval(
@@ -138,65 +205,5 @@ export class BookingSchedulingService {
       );
     }
     return { startAt: itemStart, endAt: itemEnd };
-  }
-
-  private async resolveItemStaff(
-    locationId: string,
-    serviceId: string,
-    requestedStaffId: string | undefined,
-    startAt: Date,
-    endAt: Date,
-    timezone: string,
-    excludedStaffIds: Set<string>,
-  ): Promise<string> {
-    const candidates = await this.staffService.resolveStaffForService(
-      locationId,
-      serviceId,
-      requestedStaffId,
-    );
-    if (requestedStaffId && candidates.length === 0) {
-      throw new AppException(
-        ErrorCode.BOOKING_STAFF_NOT_FOUND,
-        HttpStatus.NOT_FOUND,
-      );
-    }
-    const filteredCandidates = candidates.filter(
-      (candidate) => !excludedStaffIds.has(candidate.id),
-    );
-    const available = await this.calendar.filterAvailableStaff(
-      locationId,
-      filteredCandidates,
-      TimeUtils.zonedDateStr(startAt, timezone),
-      startAt,
-      endAt,
-      timezone,
-    );
-    if (available.length === 0)
-      throw new AppException(
-        ErrorCode.BOOKING_NO_STAFF_AVAILABLE,
-        HttpStatus.CONFLICT,
-      );
-    if (requestedStaffId) return available[0].id;
-
-    const dayStart = TimeUtils.localToUtc(
-      `${TimeUtils.zonedDateStr(startAt, timezone)}T00:00:00`,
-      timezone,
-    );
-    const dayEnd = TimeUtils.addDaysInTz(dayStart, 1, timezone);
-    const counts = await this.db.bookingItem.groupBy({
-      by: ['staffId'],
-      where: {
-        location: ACTIVE_LOCATION_WHERE,
-        staffId: { in: available.map((staff) => staff.id) },
-        startAt: { gte: dayStart, lt: dayEnd },
-      },
-      _count: { id: true },
-    });
-    const countByStaff = new Map(
-      counts.map((row) => [row.staffId, row._count.id]),
-    );
-    return [...available].sort(
-      (a, b) => (countByStaff.get(a.id) ?? 0) - (countByStaff.get(b.id) ?? 0),
-    )[0].id;
   }
 }

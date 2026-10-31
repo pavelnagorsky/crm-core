@@ -4,6 +4,7 @@ import { createHash } from 'crypto';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { TimeUtils } from '../../../shared/time/time.utils.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
+import { hasStaffOverlap } from '../../../shared/scheduling/has-staff-overlap.js';
 import { CalendarFacade } from '../../calendar/calendar.facade.js';
 import { StaffService } from '../../staff/services/staff.service.js';
 import { BookingSlot } from '../interfaces/booking-slot.interface.js';
@@ -36,23 +37,11 @@ export class BookingSlotLockService {
     const excludedEventIds = items.flatMap((item) =>
       item.calendarEventId ? [item.calendarEventId] : [],
     );
-    for (let index = 0; index < items.length; index += 1) {
-      const item = items[index];
-      if (
-        items
-          .slice(index + 1)
-          .some(
-            (other) =>
-              other.staffId === item.staffId &&
-              item.startAt < other.endAt &&
-              other.startAt < item.endAt,
-          )
-      ) {
-        throw new AppException(
-          ErrorCode.BOOKING_SLOT_UNAVAILABLE,
-          HttpStatus.CONFLICT,
-        );
-      }
+    if (hasStaffOverlap(items)) {
+      throw new AppException(
+        ErrorCode.BOOKING_SLOT_UNAVAILABLE,
+        HttpStatus.CONFLICT,
+      );
     }
     for (const item of items) {
       const date = TimeUtils.zonedDateStr(item.startAt, timezone);

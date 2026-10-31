@@ -105,7 +105,9 @@ export class BookingsController {
     @Body() dto: BookingResolveRequestDto,
   ): Promise<BaseResponseDto<BookingResolveResponseDto>> {
     return BaseResponseDto.success(
-      await this.bookings.resolveBookingSelection(locationId, dto),
+      BookingResolveResponseDto.fromResult(
+        await this.bookings.resolveBookingSelection(locationId, dto),
+      ),
     );
   }
 

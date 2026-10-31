@@ -175,6 +175,24 @@ export const ErrorCode = {
     code: 'BOOKING_BUNDLE_NOT_FOUND',
     message: 'Bundle not found',
   },
+  BOOKING_PARALLEL_STAFF_REQUIRED: {
+    code: 'BOOKING_PARALLEL_STAFF_REQUIRED',
+    message:
+      'Parallel services require separate staff assignments, not a shared staff member',
+  },
+  BOOKING_STAFF_ASSIGNMENT_CONFLICT: {
+    code: 'BOOKING_STAFF_ASSIGNMENT_CONFLICT',
+    message: 'Conflicting staff assignment sources',
+  },
+  BOOKING_STAFF_ASSIGNMENT_INVALID: {
+    code: 'BOOKING_STAFF_ASSIGNMENT_INVALID',
+    message:
+      'Staff assignments must reference unique services or items in the booking selection',
+  },
+  BOOKING_STAFF_ASSIGNMENT_OVERLAP: {
+    code: 'BOOKING_STAFF_ASSIGNMENT_OVERLAP',
+    message: 'A staff member cannot perform overlapping services',
+  },
   BOOKING_SELECTION_CONFLICT: {
     code: 'BOOKING_SELECTION_CONFLICT',
     message: 'Set either services or a bundle, not both',

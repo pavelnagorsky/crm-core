@@ -17,8 +17,24 @@ import { MULTI_SERVICE_MAX_ITEMS } from '../../services/constants/multi-service.
 import { IsLocalDateTime } from '../../../shared/time/decorators/is-local-date-time.validator.js';
 import { IsPhone } from '../../../shared/decorators/is-phone.decorator.js';
 import { UpdateBookingItemPriceDto } from './update-booking-item-price.dto.js';
+import { BookingItemStaffAssignmentDto } from './booking-item-staff-assignment.dto.js';
 
 export class UpdateBookingDto {
+  @ApiProperty({
+    type: () => BookingItemStaffAssignmentDto,
+    isArray: true,
+    required: false,
+    description:
+      'Explicit staff replacements by saved booking item. Omitted items retain their staff.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MULTI_SERVICE_MAX_ITEMS)
+  @ArrayUnique((item: BookingItemStaffAssignmentDto) => item?.bookingItemId)
+  @ValidateNested({ each: true })
+  @Type(() => BookingItemStaffAssignmentDto)
+  staffAssignments?: BookingItemStaffAssignmentDto[];
+
   @ApiProperty({
     type: Boolean,
     required: false,

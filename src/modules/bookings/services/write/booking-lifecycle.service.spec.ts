@@ -124,6 +124,26 @@ describe('Booking lifecycle transaction boundaries', () => {
     });
     expect(events.audit).toHaveBeenCalledOnce();
   });
+  it('cancels and deletes every event of a parallel team under the same booking transaction', async () => {
+    const { service, old, tx, calendar } = setup();
+    old.executionMode = 'PARALLEL';
+    old.items.push({
+      ...old.items[0],
+      id: 'second-item',
+      staffId: 'boris',
+      calendarEventId: 'event-2',
+    });
+    await service.cancel(old, actor, CancelledBy.STAFF, {});
+    expect(calendar.deleteBookingEvents).toHaveBeenLastCalledWith(
+      ['event', 'event-2'],
+      tx,
+    );
+    await service.delete(old, actor);
+    expect(calendar.deleteBookingEvents).toHaveBeenLastCalledWith(
+      ['event', 'event-2'],
+      tx,
+    );
+  });
   it('emits no cancellation event if the calendar write rolls back', async () => {
     const { service, old, calendar, events } = setup();
     calendar.deleteBookingEvents.mockRejectedValue(new Error('write failed'));

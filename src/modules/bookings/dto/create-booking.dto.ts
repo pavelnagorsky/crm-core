@@ -1,4 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { StaffAssignments } from '../../../shared/scheduling/decorators/staff-assignments.decorator.js';
+import { StaffAssignmentDto } from '../../../shared/scheduling/dto/staff-assignment.dto.js';
 import {
   ArrayMaxSize,
   ArrayNotEmpty,
@@ -17,6 +19,9 @@ import { IsLocalDateTime } from '../../../shared/time/decorators/is-local-date-t
 import { AtMostOneBookingChannelConstraint } from '../decorators/at-most-one-booking-channel.constraint.js';
 
 export class CreateBookingDto {
+  @StaffAssignments()
+  staffAssignments?: StaffAssignmentDto[];
+
   @ApiProperty({
     type: String,
     format: 'uuid',

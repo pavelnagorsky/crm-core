@@ -136,6 +136,34 @@ describe('Available times for an existing booking', () => {
     ).rejects.toMatchObject({ errorCode: 'BOOKING_SLOT_RANGE_TOO_LONG' });
   });
 
+  it('lets staff move a saved team outside public notice and advance limits', async () => {
+    const { service, items, location } = setup(true);
+    location.advanceBookingWindowDays = 1;
+    location.minimumBookingNoticeMinutes = 7 * 24 * 60;
+    await expect(
+      service.getRescheduleSlots('location', items, '2026-10-29', '2026-10-29'),
+    ).resolves.toEqual([]);
+    const days = await service.getManualRescheduleSlots(
+      'location',
+      items,
+      '2026-10-29',
+      '2026-10-29',
+    );
+    expect(days[0].slots).toEqual([
+      { time: '09:00' },
+      { time: '10:30' },
+      { time: '11:00' },
+    ]);
+    await expect(
+      service.getManualRescheduleSlots(
+        'location',
+        items,
+        '2026-10-26',
+        '2027-01-01',
+      ),
+    ).rejects.toMatchObject({ errorCode: 'BOOKING_SLOT_RANGE_TOO_LONG' });
+  });
+
   it('does not offer times when any assigned staff member has no shift', async () => {
     const { service, items, staff } = setup();
     staff.listShiftsForAvailability.mockResolvedValue([]);

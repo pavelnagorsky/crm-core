@@ -4,6 +4,8 @@ import { DatabaseService } from '../../../../database/database.service.js';
 import { AppException } from '../../../../shared/exceptions/app.exception.js';
 import { TimeUtils } from '../../../../shared/time/time.utils.js';
 import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
+import { normalizeStaffAssignments } from '../../../../shared/scheduling/normalize-staff-assignments.js';
+import { hasStaffOverlap } from '../../../../shared/scheduling/has-staff-overlap.js';
 import { LocationService } from '../../../location/services/location.service.js';
 import { ServiceCatalogFacade } from '../../../services/catalog/service-catalog.facade.js';
 import { StaffService } from '../../../staff/services/staff.service.js';
@@ -103,11 +105,30 @@ export class CalendarAvailabilityService {
     });
   }
 
-  async getRescheduleSlots(
+  getRescheduleSlots(
+    locationId: string,
+    items: CalendarRescheduleItem[],
+    from: string,
+    to: string,
+  ): Promise<AvailableSlotsDayDto[]> {
+    return this.collectRescheduleSlots(locationId, items, from, to, false);
+  }
+
+  getManualRescheduleSlots(
+    locationId: string,
+    items: CalendarRescheduleItem[],
+    from: string,
+    to: string,
+  ): Promise<AvailableSlotsDayDto[]> {
+    return this.collectRescheduleSlots(locationId, items, from, to, true);
+  }
+
+  private async collectRescheduleSlots(
     locationId: string,
     items: CalendarRescheduleItem[],
     fromRaw: string,
     toRaw: string,
+    manual: boolean,
   ): Promise<AvailableSlotsDayDto[]> {
     const { from, to } = this.manualSlotRange(fromRaw, toRaw);
     const location = await this.locationService.getBookingSettings(locationId);
@@ -118,8 +139,8 @@ export class CalendarAvailabilityService {
       location.advanceBookingWindowDays - 1,
     );
     const first = from < today ? today : from;
-    const last = to > windowEnd ? windowEnd : to;
-    if (!items.length || first > last) return [];
+    const last = !manual && to > windowEnd ? windowEnd : to;
+    if (!items.length || first > last || hasStaffOverlap(items)) return [];
     const assignedStaff = await Promise.all(
       items.map((item) =>
         this.staff.resolveStaffForService(
@@ -130,10 +151,12 @@ export class CalendarAvailabilityService {
       ),
     );
     if (assignedStaff.some((candidates) => candidates.length === 0)) return [];
-    const earliestStart = new Date(
-      now.getTime() +
-        Math.max(location.minimumBookingNoticeMinutes * 60_000, 1),
-    );
+    const earliestStart = manual
+      ? TimeUtils.localToUtc(`${today}T00:00:00`, location.timezone)
+      : new Date(
+          now.getTime() +
+            Math.max(location.minimumBookingNoticeMinutes * 60_000, 1),
+        );
     const spanDays = Math.ceil(
       (Math.max(...items.map((item) => item.endAt.getTime())) -
         Math.min(...items.map((item) => item.startAt.getTime()))) /
@@ -193,6 +216,7 @@ export class CalendarAvailabilityService {
     endAt: Date,
     timezone: string,
   ): Promise<{ id: string }[]> {
+    if (!candidates.length) return [];
     const staffIds = candidates.map((c) => c.id);
     const date = new Date(dateStr);
 
@@ -299,7 +323,12 @@ export class CalendarAvailabilityService {
       const candidatesByService = await this.candidatesByService(
         locationId,
         services.map((service) => service.id),
-        dto.staffId,
+        normalizeStaffAssignments(
+          services.map((service) => service.id),
+          bundle.executionMode,
+          dto.staffId,
+          dto.staffAssignments,
+        ),
       );
       const candidateStaff = this.uniqueCandidates(candidatesByService);
       return {
@@ -334,7 +363,12 @@ export class CalendarAvailabilityService {
     const candidatesByService = await this.candidatesByService(
       locationId,
       serviceIds,
-      dto.staffId,
+      normalizeStaffAssignments(
+        serviceIds,
+        'SEQUENTIAL',
+        dto.staffId,
+        dto.staffAssignments,
+      ),
     );
     const staff = this.uniqueCandidates(candidatesByService);
     return {
@@ -352,13 +386,13 @@ export class CalendarAvailabilityService {
   private async candidatesByService(
     locationId: string,
     serviceIds: string[],
-    staffId?: string,
+    requested: ReadonlyMap<string, string>,
   ): Promise<Map<string, CalendarSlotCandidate[]>> {
     const directory = await this.staff.listActiveWithServices(locationId);
     return new Map(
-      [...new Set(serviceIds)].map((serviceId) => [
-        serviceId,
-        directory
+      [...new Set(serviceIds)].map((serviceId) => {
+        const staffId = requested.get(serviceId);
+        const candidates = directory
           .filter(
             (member) =>
               (!staffId || member.id === staffId) &&
@@ -366,8 +400,15 @@ export class CalendarAvailabilityService {
                 (entry) => entry.serviceId === serviceId,
               ),
           )
-          .map((member) => ({ id: member.id })),
-      ]),
+          .map((member) => ({ id: member.id }));
+        if (staffId && candidates.length === 0) {
+          throw new AppException(
+            ErrorCode.BOOKING_STAFF_NOT_FOUND,
+            HttpStatus.NOT_FOUND,
+          );
+        }
+        return [serviceId, candidates];
+      }),
     );
   }
 

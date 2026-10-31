@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { assignStaff } from '../../../shared/scheduling/assign-staff.js';
+import { hasStaffOverlap } from '../../../shared/scheduling/has-staff-overlap.js';
 import {
   CalendarEvent,
   CalendarEventRepeatType,
@@ -29,20 +31,7 @@ export class CalendarCalculator {
     slotInterval: number,
     timezone: string,
   ): number[] {
-    if (
-      !items.length ||
-      items.some((item, index) =>
-        items
-          .slice(index + 1)
-          .some(
-            (other) =>
-              item.staffId === other.staffId &&
-              item.startAt < other.endAt &&
-              other.startAt < item.endAt,
-          ),
-      )
-    )
-      return [];
+    if (!items.length || hasStaffOverlap(items)) return [];
     const originalStart = Math.min(
       ...items.map((item) => item.startAt.getTime()),
     );
@@ -592,31 +581,26 @@ export class CalendarCalculator {
         end: slotStart + offset + item.durationMinutes,
       };
     });
-    const used = new Set<string>();
-    const assign = (index: number): boolean => {
-      if (index >= windows.length) return true;
-      const window = windows[index];
-      const candidates = candidatesByService.get(window.serviceId) ?? [];
-      for (const candidate of candidates) {
-        if (executionMode === 'PARALLEL' && used.has(candidate.id)) continue;
-        if (
-          !this.isStaffFreeOnDate(
-            candidate.id,
-            date,
-            window.start,
-            window.end,
-            shiftsByStaffDate,
-            blockedByStaffDate,
-          )
-        )
-          continue;
-        used.add(candidate.id);
-        if (assign(index + 1)) return true;
-        used.delete(candidate.id);
-      }
-      return false;
-    };
-    return assign(0);
+    return (
+      assignStaff(
+        windows.map((window, index) => ({
+          itemId: String(index),
+          staffIds: (candidatesByService.get(window.serviceId) ?? [])
+            .filter((candidate) =>
+              this.isStaffFreeOnDate(
+                candidate.id,
+                date,
+                window.start,
+                window.end,
+                shiftsByStaffDate,
+                blockedByStaffDate,
+              ),
+            )
+            .map((candidate) => candidate.id),
+        })),
+        executionMode === 'PARALLEL',
+      ) !== null
+    );
   }
 
   private isStaffFreeOnDate(

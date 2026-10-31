@@ -117,6 +117,50 @@ describe('StaffEarningsService', () => {
     ).rejects.toThrow('db down');
   });
 
+  it('uses the allocated bundle price and separate idempotency keys for each actual master', async () => {
+    compensation.resolveForDate.mockResolvedValue({ id: 'plan-1' });
+    compensation.resolveServicePercent.mockReturnValue('40');
+    db.staffEarning.upsert.mockImplementation(({ create: data }) =>
+      Promise.resolve({ id: data.idempotencyKey, ...data }),
+    );
+    const first = {
+      ...booking().items[0],
+      chargedPrice: new Prisma.Decimal(48),
+    };
+    const second = {
+      ...first,
+      id: 'booking-item-2',
+      staffId: 'boris',
+      chargedPrice: new Prisma.Decimal(72),
+    };
+    const visit = booking({
+      executionMode: 'PARALLEL',
+      bundleId: 'bundle',
+      items: [first, second],
+    });
+    const result = await service.recordForCompletedBooking(visit, db as never);
+    expect(
+      result.map((item) => [
+        item.staffId,
+        item.baseAmount?.toString(),
+        item.amount.toString(),
+      ]),
+    ).toEqual([
+      ['anna', '48', '19.2'],
+      ['boris', '72', '28.8'],
+    ]);
+    await service.recordForCompletedBooking(visit, db as never);
+    const calls = db.staffEarning.upsert.mock.calls.map(
+      ([args]) => args.where.locationId_idempotencyKey.idempotencyKey,
+    );
+    expect(calls).toEqual([
+      'booking-item:booking-item-1:SERVICE_COMMISSION',
+      'booking-item:booking-item-2:SERVICE_COMMISSION',
+      'booking-item:booking-item-1:SERVICE_COMMISSION',
+      'booking-item:booking-item-2:SERVICE_COMMISSION',
+    ]);
+  });
+
   it('reuses an existing reversal instead of inserting a second one', async () => {
     db.staffEarning.findMany.mockResolvedValue([
       {

@@ -159,6 +159,7 @@ export class BookingCreateFacade {
       startAt,
       executionMode: selection.executionMode,
       requestedStaffId: dto.staffId,
+      staffAssignments: dto.staffAssignments,
       timezone: location.timezone,
       manualItems: this.manualItems(dto),
       customEndAt,

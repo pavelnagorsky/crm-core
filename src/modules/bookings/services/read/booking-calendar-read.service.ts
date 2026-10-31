@@ -6,6 +6,7 @@ import { MoneyUtils } from '../../../../shared/money/money.utils.js';
 import { CalendarBookingFeed } from '../../../calendar/interfaces/calendar-booking-feed.interface.js';
 import { CalendarBookingView } from '../../../calendar/interfaces/calendar-booking-view.interface.js';
 import { BookingStatus } from '../../enums/booking-status.enum.js';
+import { BookingWithItems } from '../../interfaces/booking-with-items.interface.js';
 
 const CALENDAR_VISIBLE_STATUSES: ReadonlySet<string> = new Set([
   BookingStatus.PENDING,
@@ -72,11 +73,11 @@ export class BookingCalendarReadService {
     };
   }
 
-  async linkedCalendarEventIdsForBooking(
+  async resolveForReschedule(
     locationId: string,
     bookingId: string,
     participantStaffId?: string,
-  ): Promise<string[]> {
+  ): Promise<BookingWithItems> {
     const booking = await this.db.booking.findFirst({
       where: {
         location: ACTIVE_LOCATION_WHERE,
@@ -87,12 +88,10 @@ export class BookingCalendarReadService {
           ? { items: { some: { staffId: participantStaffId } } }
           : {}),
       },
-      select: { items: { select: { calendarEventId: true } } },
+      include: { items: { orderBy: { sortOrder: 'asc' } } },
     });
     if (!booking) throw new NotFoundException('Booking not found');
-    return booking.items.flatMap((item) =>
-      item.calendarEventId ? [item.calendarEventId] : [],
-    );
+    return booking;
   }
 
   private toViews(rows: CalendarItemRow[]): CalendarBookingView[] {
