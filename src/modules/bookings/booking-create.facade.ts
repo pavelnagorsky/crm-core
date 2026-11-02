@@ -21,6 +21,7 @@ import { ManualCreateBookingDto } from './dto/manual-create-booking.dto.js';
 import { BookingSource } from './enums/booking-source.enum.js';
 import { BookingStatus } from './enums/booking-status.enum.js';
 import { BookingAttribution } from './interfaces/booking-attribution.interface.js';
+import { BookingCreationOutcome } from './interfaces/booking-creation-outcome.interface.js';
 import { BookingCreationResult } from './interfaces/booking-creation-result.interface.js';
 import { BookingCreationRequest } from './interfaces/booking-creation-request.interface.js';
 import { BookingPricingResult } from './interfaces/booking-pricing-result.interface.js';
@@ -63,13 +64,13 @@ export class BookingCreateFacade {
           creationRequestHash: bookingRequestHash(locationId, dto, attribution),
         }
       : undefined;
-    const result = request
+    const result: BookingCreationOutcome = request
       ? await this.reservations.reserveOnce(locationId, request, (tx) =>
           this.create(locationId, attribution, null, dto, true, tx, request),
         )
       : {
           ...(await this.create(locationId, attribution, null, dto)),
-          created: true as const,
+          created: true,
         };
     if (!result.created) return result.booking;
     const { booking, timezone, currency, bundleTitle } = result;

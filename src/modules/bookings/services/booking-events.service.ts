@@ -91,19 +91,8 @@ export class BookingEventsService {
       NOTIFICATION_EVENT,
       new Notification(
         {
-          id: booking.id,
-          locationId: booking.locationId,
+          ...this.notificationData(booking),
           clientEmail: booking.clientEmail,
-          clientFirstName: booking.clientFirstName,
-          clientLastName: booking.clientLastName,
-          serviceTitle: booking.items
-            .map((item) => item.serviceTitle)
-            .join(', '),
-          staffName: [
-            ...new Set(booking.items.map((item) => item.staffName)),
-          ].join(', '),
-          startAt: booking.startAt,
-          endAt: booking.endAt,
           timezone,
         },
         this.bookingClientService.managementUrl(clientToken),

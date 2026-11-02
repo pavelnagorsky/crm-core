@@ -6,6 +6,17 @@ reserves the booking. Public client bans are checked before staff resolution;
 manual clients are resolved after completion permission checks. Audit and client
 notifications follow a successful reservation.
 
+Public creation accepts an optional UUID `idempotencyKey`, scoped to the location.
+`BookingReservationService.reserveOnce` acquires a transaction advisory lock before
+client, catalog or staff preparation, then checks the stored request hash. This
+lets retries return the existing booking without checking availability against
+their own reservation. Hashing covers guest intent and channel attribution before
+resolving mutable catalog prices, client profiles or automatic staff assignments.
+The key and hash are committed with the booking and calendar events; rollback
+releases the key. Replays skip creation audit and notifications. Changed intent or
+a deleted booking returns `BOOKING_IDEMPOTENCY_CONFLICT`. The response includes the
+current client-facing booking and a management link, including on replay.
+
 Booking channels (`source`) are `PUBLIC_PAGE` (online), `WIDGET` and `MANUAL`.
 Manual bookings can use custom time ("Произвольное время") by setting
 `isCustomTime: true` in `POST /locations/:locationId/bookings/manual`. This
