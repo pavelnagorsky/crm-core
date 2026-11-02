@@ -1,6 +1,11 @@
 import { ErrorCodeEntry } from '../interfaces/error-code-entry.interface.js';
 
 export const ErrorCode = {
+  BOOKING_IDEMPOTENCY_CONFLICT: {
+    code: 'BOOKING_IDEMPOTENCY_CONFLICT',
+    message:
+      'This idempotency key has already been used for a different or removed booking request',
+  },
   // system
   INTERNAL_ERROR: { code: 'INTERNAL_ERROR', message: 'Internal server error' },
   VALIDATION_ERROR: { code: 'VALIDATION_ERROR', message: 'Validation failed' },

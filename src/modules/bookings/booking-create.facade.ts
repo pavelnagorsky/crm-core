@@ -5,7 +5,7 @@ import {
   Injectable,
   Logger,
 } from '@nestjs/common';
-import { BookingVisibility } from '@prisma/client';
+import { BookingVisibility, Prisma } from '@prisma/client';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { TimeUtils } from '../../shared/time/time.utils.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
@@ -22,12 +22,14 @@ import { BookingSource } from './enums/booking-source.enum.js';
 import { BookingStatus } from './enums/booking-status.enum.js';
 import { BookingAttribution } from './interfaces/booking-attribution.interface.js';
 import { BookingCreationResult } from './interfaces/booking-creation-result.interface.js';
+import { BookingCreationRequest } from './interfaces/booking-creation-request.interface.js';
 import { BookingPricingResult } from './interfaces/booking-pricing-result.interface.js';
 import { BookingSelectionRequest } from './interfaces/booking-selection-request.interface.js';
 import { BookingWithItems } from './interfaces/booking-with-items.interface.js';
 import { PublicBookingRequestContext } from './interfaces/public-booking-request-context.interface.js';
 import { ResolvedBookingClient } from './interfaces/resolved-booking-client.interface.js';
 import { isSelfBookingBlocked } from './rules/client-ban.rules.js';
+import { bookingRequestHash } from './rules/booking-request-hash.js';
 import { BookingEventsService } from './services/booking-events.service.js';
 import { BookingReservationService } from './services/booking-reservation.service.js';
 import { BookingSchedulingService } from './services/booking-scheduling.service.js';
@@ -55,12 +57,22 @@ export class BookingCreateFacade {
   ): Promise<BookingWithItems> {
     this.assertPublicClientFields(dto);
     this.rateLimiter.assertAllowed(dto.phone, context.ip);
-    const { booking, timezone, currency, bundleTitle } = await this.create(
-      locationId,
-      attribution,
-      null,
-      dto,
-    );
+    const request: BookingCreationRequest | undefined = dto.idempotencyKey
+      ? {
+          idempotencyKey: dto.idempotencyKey.toLowerCase(),
+          creationRequestHash: bookingRequestHash(locationId, dto, attribution),
+        }
+      : undefined;
+    const result = request
+      ? await this.reservations.reserveOnce(locationId, request, (tx) =>
+          this.create(locationId, attribution, null, dto, true, tx, request),
+        )
+      : {
+          ...(await this.create(locationId, attribution, null, dto)),
+          created: true as const,
+        };
+    if (!result.created) return result.booking;
+    const { booking, timezone, currency, bundleTitle } = result;
     this.logger.log(
       `booking created (public): id=${booking.id} locationId=${locationId} source=${booking.source} items=${booking.items.length} bundleId=${booking.bundleId ?? '-'} startAt=${booking.startAt.toISOString()}`,
     );
@@ -113,6 +125,8 @@ export class BookingCreateFacade {
     actor: AuditActor | null,
     dto: CreateBookingDto | ManualCreateBookingDto,
     canComplete = true,
+    tx?: Prisma.TransactionClient,
+    request?: BookingCreationRequest,
   ): Promise<BookingCreationResult> {
     const location = await this.locationService.findById(locationId);
     if (!location)
@@ -187,23 +201,27 @@ export class BookingCreateFacade {
         dto,
       ));
 
-    const booking = await this.reservations.reserve({
-      locationId,
-      timezone: location.timezone,
-      client,
-      items,
-      attribution,
-      executionMode: selection.executionMode,
-      bundleId: selection.bundleId,
-      startAt: envelopeStart,
-      endAt: envelopeEnd,
-      status,
-      isCustomTime,
-      notes: dto.notes ?? null,
-      internalNotes: this.manualInternalNotes(dto, attribution.source),
-      products: this.manualProducts(dto, attribution.source),
-      actor,
-    });
+    const booking = await this.reservations.reserve(
+      {
+        locationId,
+        timezone: location.timezone,
+        client,
+        items,
+        attribution,
+        executionMode: selection.executionMode,
+        bundleId: selection.bundleId,
+        startAt: envelopeStart,
+        endAt: envelopeEnd,
+        status,
+        isCustomTime,
+        notes: dto.notes ?? null,
+        internalNotes: this.manualInternalNotes(dto, attribution.source),
+        products: this.manualProducts(dto, attribution.source),
+        actor,
+        request,
+      },
+      tx,
+    );
 
     return {
       booking,

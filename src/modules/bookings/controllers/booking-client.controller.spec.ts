@@ -106,6 +106,17 @@ describe('Client booking API (HTTP)', () => {
       })
       .expect(201);
     expect(body.responseValue.id).toBe(id);
+    expect(body.responseValue.booking).toEqual(expect.objectContaining({
+      id,
+      locationId,
+      status: BookingStatus.CONFIRMED,
+      totalChargedPrice: '50.00',
+      items: expect.arrayContaining([expect.objectContaining({ staffName: 'Anna' })]),
+    }));
+    expect(body.responseValue.booking.internalNotes).toBeUndefined();
+    expect(body.responseValue.booking.items[0].calendarEventId).toBeUndefined();
+    expect(body.responseValue.booking.idempotencyKey).toBeUndefined();
+    expect(body.responseValue.booking.creationRequestHash).toBeUndefined();
     expect(body.responseValue.manageUrl).toBe(
       tokens.managementUrl(body.responseValue.token),
     );
@@ -114,6 +125,26 @@ describe('Client booking API (HTTP)', () => {
       .get('/public/bookings/me')
       .auth(body.responseValue.token, { type: 'bearer' })
       .expect(200);
+  });
+
+  it('returns PENDING on creation and preserves the optional idempotency key through validation', async () => {
+    create.createPublicBooking.mockResolvedValue({ ...current(), status: BookingStatus.PENDING });
+    const key = '33333333-3333-4333-8333-333333333333';
+    const { body } = await request(app.getHttpServer())
+      .post(`/public/locations/${locationId}/bookings`)
+      .send({ serviceId: id, startAt: '2026-10-28T13:00:00', firstName: 'Anna', phone: '+375291112233', idempotencyKey: key })
+      .expect(201);
+    expect(body.responseValue.booking.status).toBe(BookingStatus.PENDING);
+    expect(body.responseValue.booking.canCancel).toBe(true);
+    expect(create.createPublicBooking).toHaveBeenCalledWith(locationId, expect.objectContaining({ idempotencyKey: key }), expect.anything(), expect.anything());
+  });
+
+  it('rejects an invalid idempotency key before creation', async () => {
+    await request(app.getHttpServer())
+      .post(`/public/locations/${locationId}/bookings`)
+      .send({ serviceId: id, startAt: '2026-10-28T13:00:00', firstName: 'Anna', phone: '+375291112233', idempotencyKey: 'not-a-uuid' })
+      .expect(400);
+    expect(create.createPublicBooking).not.toHaveBeenCalled();
   });
 
   it('returns only client-facing fields and available actions', async () => {

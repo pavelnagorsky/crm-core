@@ -1119,6 +1119,9 @@ model CalendarEventCancelledOccurrence {
 model Booking {
   id String @id @default(uuid())
 
+  idempotencyKey      String? @db.VarChar(36)
+  creationRequestHash String? @db.Char(64)
+
   locationId String
   clientId   String?
 
@@ -1161,6 +1164,7 @@ model Booking {
   bookingWidget BookingWidget? @relation(fields: [bookingWidgetId], references: [id], onDelete: SetNull)
   orders        Order[]
 
+  @@unique([locationId, idempotencyKey])
   @@index([locationId, deletedAt, startAt])
   @@index([clientId, deletedAt, startAt])
   @@index([status])

@@ -13,6 +13,7 @@ export type EmailTemplate =
   | 'reset-password'
   | 'access-invitation'
   | 'booking-confirmed'
+  | 'booking-pending'
   | 'booking-cancelled'
   | 'booking-status-changed'
   | 'booking-reminder';
@@ -25,6 +26,7 @@ const EMAIL_TEMPLATES: EmailTemplate[] = [
   'reset-password',
   'access-invitation',
   'booking-confirmed',
+  'booking-pending',
   'booking-cancelled',
   'booking-status-changed',
   'booking-reminder',

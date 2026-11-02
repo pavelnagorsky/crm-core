@@ -19,6 +19,17 @@ import { IsLocalDateTime } from '../../../shared/time/decorators/is-local-date-t
 import { AtMostOneBookingChannelConstraint } from '../decorators/at-most-one-booking-channel.constraint.js';
 
 export class CreateBookingDto {
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    required: false,
+    description:
+      'Reuse for retries of the same public booking request; generate a new key when the request changes',
+  })
+  @IsOptional()
+  @IsUUID()
+  idempotencyKey?: string;
+
   @StaffAssignments()
   staffAssignments?: StaffAssignmentDto[];
 

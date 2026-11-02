@@ -19,6 +19,7 @@ import type { Request } from 'express';
 import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
 import { PublicBookingCreatedResponseDto } from '../../bookings/dto/public-booking-created-response.dto.js';
+import { ClientBookingResponseDto } from '../../bookings/dto/client-booking-response.dto.js';
 import { BookingClientTokenService } from '../../bookings/services/booking-client-token.service.js';
 import {
   clientIp,
@@ -44,7 +45,10 @@ export class PublicBookingCreateController {
     description:
       'Location is closed for public booking, or this phone is banned from online booking',
   })
-  @ApiConflictResponse({ description: 'Slot is no longer available' })
+  @ApiConflictResponse({
+    description:
+      'Slot is no longer available, or idempotency key was reused for a different request',
+  })
   @Post('public/locations/:locationId/bookings')
   @Header('Cache-Control', 'no-store')
   async createPublic(
@@ -69,6 +73,7 @@ export class PublicBookingCreateController {
       id: booking.id,
       token,
       manageUrl: this.clientTokens.managementUrl(token),
+      booking: ClientBookingResponseDto.fromBooking(booking),
     });
   }
 }

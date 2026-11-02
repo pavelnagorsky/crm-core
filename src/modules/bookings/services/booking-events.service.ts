@@ -14,6 +14,7 @@ import { diffFields } from '../../audit/utils/diff-fields.js';
 import { LocationService } from '../../location/services/location.service.js';
 import { BookingNotificationData } from '../../notifications/interfaces/booking-notification-data.interface.js';
 import { BookingConfirmedNotification } from '../../notifications/messages/booking-confirmed.notification.js';
+import { BookingPendingNotification } from '../../notifications/messages/booking-pending.notification.js';
 import {
   BookingStatusChangedNotification,
   BookingStatusChangedStatus,
@@ -73,14 +74,22 @@ export class BookingEventsService {
   }
 
   notifyCreated(booking: BookingWithItems, timezone: string): void {
-    if (booking.status === BookingStatus.COMPLETED) return;
+    if (
+      booking.status !== BookingStatus.PENDING &&
+      booking.status !== BookingStatus.CONFIRMED
+    )
+      return;
     if (!booking.clientEmail) return;
     const clientToken = this.bookingClientService.generateClientToken(
       booking.id,
     );
+    const Notification =
+      booking.status === BookingStatus.PENDING
+        ? BookingPendingNotification
+        : BookingConfirmedNotification;
     this.eventEmitter.emit(
       NOTIFICATION_EVENT,
-      new BookingConfirmedNotification(
+      new Notification(
         {
           id: booking.id,
           locationId: booking.locationId,

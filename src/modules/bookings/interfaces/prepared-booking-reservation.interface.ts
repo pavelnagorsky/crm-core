@@ -5,6 +5,7 @@ import { BookingStatus } from '../enums/booking-status.enum.js';
 import { BookingAttribution } from './booking-attribution.interface.js';
 import { ResolvedBookingClient } from './resolved-booking-client.interface.js';
 import { ResolvedBookingItem } from './resolved-booking-item.interface.js';
+import { BookingCreationRequest } from './booking-creation-request.interface.js';
 
 export interface PreparedBookingReservation {
   locationId: string;
@@ -22,4 +23,5 @@ export interface PreparedBookingReservation {
   internalNotes: string | null;
   products: ManualBookingProductDto[];
   actor: AuditActor | null;
+  request?: BookingCreationRequest;
 }

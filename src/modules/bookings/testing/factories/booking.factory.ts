@@ -39,6 +39,8 @@ export function booking(options: BookingFixtureOptions = {}): BookingWithItems {
     deletedAt: null,
     bookingPageId: null,
     bookingWidgetId: null,
+    idempotencyKey: null,
+    creationRequestHash: null,
     ...overrides,
     items: overrides.items ?? [
       {
