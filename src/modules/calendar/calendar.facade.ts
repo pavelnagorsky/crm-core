@@ -40,16 +40,18 @@ export class CalendarFacade {
     locationId: string,
     eventId: string,
     dto: UpdateCalendarEventDto,
+    actor: AuditActor,
   ): Promise<CalendarEvent> {
-    return this.events.update(locationId, eventId, dto);
+    return this.events.update(locationId, eventId, dto, actor);
   }
 
   delete(
     locationId: string,
     eventId: string,
     dto: DeleteCalendarEventDto,
+    actor: AuditActor,
   ): Promise<void> {
-    return this.events.delete(locationId, eventId, dto);
+    return this.events.delete(locationId, eventId, dto, actor);
   }
 
   findInLocation(locationId: string, eventId: string): Promise<CalendarEvent> {
@@ -99,8 +101,9 @@ export class CalendarFacade {
     locationId: string,
     eventId: string,
     dto: MoveCalendarEventDto,
+    actor: AuditActor,
   ): Promise<CalendarEvent> {
-    return this.events.moveOccurrence(locationId, eventId, dto);
+    return this.events.moveOccurrence(locationId, eventId, dto, actor);
   }
 
   getCalendar(

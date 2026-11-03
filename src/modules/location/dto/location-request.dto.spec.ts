@@ -45,6 +45,24 @@ describe('Location request contracts', () => {
     ).rejects.toThrow();
   });
 
+  it.each([CreateLocationDto, UpdateLocationDto])(
+    'rejects the removed OTHER type in %s',
+    async (metatype) => {
+      await expect(
+        pipe.transform(
+          {
+            name: 'Location',
+            countryCode: 'BY',
+            currency: 'BYN',
+            timezone: 'Europe/Minsk',
+            businessType: 'OTHER',
+          },
+          { type: 'body', metatype },
+        ),
+      ).rejects.toThrow();
+    },
+  );
+
   it.each([undefined, null, []])(
     'requires a first location object: %j',
     async (location) => {

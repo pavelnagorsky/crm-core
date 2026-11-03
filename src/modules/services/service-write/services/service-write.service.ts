@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Prisma, ServiceStatus } from '@prisma/client';
+import { Prisma, Service, ServiceStatus } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
 import { AppCacheService } from '../../../../shared/cache/app-cache.service.js';
 import { CacheDependency } from '../../../../shared/cache/cache-dependency.js';
@@ -28,6 +28,7 @@ import { LocationService } from '../../../location/services/location.service.js'
 import { ServiceWithImage } from '../../catalog/interfaces/service-with-image.interface.js';
 import { CreateServiceDto } from '../dto/create-service.dto.js';
 import { UpdateServiceDto } from '../dto/update-service.dto.js';
+import { StarterServiceInput } from '../interfaces/starter-service-input.interface.js';
 
 const serviceAuditInclude = {
   imageFile: true,
@@ -36,6 +37,20 @@ const serviceAuditInclude = {
 
 @Injectable()
 export class ServiceWriteService {
+  createStarterServices(
+    locationId: string,
+    services: readonly StarterServiceInput[],
+    tx: Prisma.TransactionClient,
+  ): Promise<Service[]> {
+    return tx.service.createManyAndReturn({
+      data: services.map((service) => ({
+        ...service,
+        locationId,
+        status: ServiceStatus.INACTIVE,
+      })),
+    });
+  }
+
   private readonly logger = new Logger(ServiceWriteService.name);
   constructor(
     private readonly db: DatabaseService,

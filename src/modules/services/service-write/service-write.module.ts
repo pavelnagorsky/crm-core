@@ -8,5 +8,6 @@ import { ServiceWriteService } from './services/service-write.service.js';
   imports: [AppCacheModule, LocationModule],
   controllers: [ServiceWriteController],
   providers: [ServiceWriteService],
+  exports: [ServiceWriteService],
 })
 export class ServiceWriteModule {}

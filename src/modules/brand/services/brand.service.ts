@@ -21,7 +21,6 @@ import { AuditLogEvent } from '../../audit/interfaces/audit-log-event.interface.
 import { diffFields } from '../../audit/utils/diff-fields.js';
 import { TokenEpochRegistryService } from '../../auth/services/token-epoch-registry.service.js';
 import { BookingDeletionPolicyService } from '../../bookings/deletion-policy/services/booking-deletion-policy.service.js';
-import { UserService } from '../../user/services/user.service.js';
 import {
   BRAND_PROFILE_CACHE,
   BRAND_PROFILE_SELECT,
@@ -33,12 +32,12 @@ import { BrandSearchOrderBy } from '../enums/brand-search-order-by.enum.js';
 import { BrandSearchScope } from '../interfaces/brand-search-scope.interface.js';
 import { BrandWithCounts } from '../interfaces/brand-with-counts.interface.js';
 import { BrandWithLogo } from '../interfaces/brand-with-logo.interface.js';
+import { BrandWithLocations } from '../interfaces/brand-with-locations.interface.js';
 
 @Injectable()
 export class BrandService {
   constructor(
     private readonly db: DatabaseService,
-    private readonly userService: UserService,
     private readonly eventEmitter: EventEmitter2,
     private readonly tokenEpochRegistry: TokenEpochRegistryService,
     private readonly bookingDeletionPolicy: BookingDeletionPolicyService,
@@ -50,13 +49,8 @@ export class BrandService {
     userId: string,
     dto: CreateBrandDto,
     actor: AuditActor,
-  ): Promise<Brand> {
+  ): Promise<BrandWithLocations> {
     const locale = resolveLocationLocale(dto.location);
-    const user = await this.userService.findById(userId);
-    const staffName =
-      [user.firstName, user.lastName].filter(Boolean).join(' ') ||
-      user.email ||
-      'Owner';
 
     const brand = await this.db.$transaction(async (tx) => {
       const brand = await tx.brand.create({
@@ -67,39 +61,39 @@ export class BrandService {
             create: {
               ...dto.location,
               ...locale,
-              staff: {
-                create: {
-                  userId,
-                  name: staffName,
-                  phone: user.phone,
-                  email: user.email,
-                },
-              },
             },
           },
         },
-        include: { locations: { include: { staff: true } } },
+        include: { locations: true },
       });
       await this.access.assignInitialOwner(brand.id, userId, tx);
       await this.tokenEpochRegistry.bump(userId, tx);
       return brand;
     });
 
-    const ownerStaff = brand.locations[0]?.staff[0];
-    if (ownerStaff) {
+    this.eventEmitter.emit(AUDIT_EVENT, {
+      brandId: brand.id,
+      entityType: AuditEntity.BRAND,
+      entityId: brand.id,
+      eventType: AuditEvent.BRAND_CREATED,
+      actionType: AuditActionType.CREATE,
+      occurredAt: new Date(),
+      actor,
+      payload: { name: brand.name },
+    } satisfies AuditLogEvent);
+    for (const location of brand.locations) {
       this.eventEmitter.emit(AUDIT_EVENT, {
         brandId: brand.id,
-        locationId: ownerStaff.locationId,
-        entityType: AuditEntity.STAFF,
-        entityId: ownerStaff.id,
-        eventType: AuditEvent.STAFF_CREATED,
+        locationId: location.id,
+        entityType: AuditEntity.LOCATION,
+        entityId: location.id,
+        eventType: AuditEvent.LOCATION_CREATED,
         actionType: AuditActionType.CREATE,
         occurredAt: new Date(),
         actor,
-        payload: { name: ownerStaff.name },
+        payload: { name: location.name },
       } satisfies AuditLogEvent);
     }
-
     return brand;
   }
 
@@ -196,16 +190,27 @@ export class BrandService {
     });
   }
 
-  async delete(brandId: string): Promise<void> {
-    await this.db.$transaction(async (tx) => {
+  async delete(brandId: string, actor: AuditActor): Promise<void> {
+    const brand = await this.db.$transaction(async (tx) => {
       const { count } = await tx.brand.updateMany({
         where: { id: brandId, ...ACTIVE_BRAND_WHERE },
         data: { deletedAt: new Date() },
       });
       if (count === 0) throw new NotFoundException('Brand not found');
       await this.bookingDeletionPolicy.assertBrandDeletionAllowed(brandId, tx);
+      return tx.brand.findUniqueOrThrow({ where: { id: brandId } });
     });
     await this.cache.invalidate(CacheDependency.brandLifecycle(brandId));
+    this.eventEmitter.emit(AUDIT_EVENT, {
+      brandId,
+      entityType: AuditEntity.BRAND,
+      entityId: brandId,
+      eventType: AuditEvent.BRAND_DELETED,
+      actionType: AuditActionType.DELETE,
+      occurredAt: new Date(),
+      actor,
+      payload: { name: brand.name },
+    } satisfies AuditLogEvent);
   }
 
   async acquireActiveOperationLock(

@@ -1,0 +1,3 @@
+{{payload.title}}
+{{#if payload.occurrenceDate}}<p>Повторение: {{payload.occurrenceDate}}</p>{{/if}}
+<ul>{{#each payload.changes}}<li>{{t "fields" ../entityType this.field}}: <s>{{formatValue this.field this.from}}</s> → {{formatValue this.field this.to}}</li>{{/each}}</ul>

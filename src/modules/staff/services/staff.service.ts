@@ -60,6 +60,31 @@ const staffViewInclude = {
 
 @Injectable()
 export class StaffService {
+  async createInitialOwner(
+    locationId: string,
+    userId: string,
+    serviceIds: readonly string[],
+    tx: Prisma.TransactionClient,
+  ): Promise<Staff> {
+    const user = await this.users.findById(userId, tx);
+    const name =
+      [user.firstName, user.lastName].filter(Boolean).join(' ') ||
+      user.email ||
+      'Owner';
+    return tx.staff.create({
+      data: {
+        locationId,
+        userId,
+        name,
+        phone: user.phone,
+        email: user.email,
+        staffServices: {
+          create: serviceIds.map((serviceId) => ({ serviceId })),
+        },
+      },
+    });
+  }
+
   async resolveInvitationProfile(
     locationId: string,
     staffId: string,
@@ -383,7 +408,7 @@ export class StaffService {
     dto: UpdateStaffDto,
     actor: AuditActor,
   ): Promise<StaffWithAvatar> {
-    const old = await this.findInLocation(locationId, staffId);
+    const old = await this.findWithServiceCountInLocation(locationId, staffId);
     if (dto.status !== undefined && dto.status !== old.status) {
       await this.changeStatus(
         locationId,
@@ -419,6 +444,14 @@ export class StaffService {
     const changes = diffFields(old, staff, STAFF_AUDIT_FIELDS).filter(
       (change) => change.field !== 'status',
     );
+    if (dto.serviceIds !== undefined) {
+      const before = JSON.stringify(
+        old.staffServices.map((item) => item.serviceId).sort(),
+      );
+      const after = JSON.stringify([...new Set(dto.serviceIds)].sort());
+      if (before !== after)
+        changes.push({ field: 'services', from: before, to: after });
+    }
     if (changes.length > 0) {
       const event: AuditLogEvent = {
         locationId,
@@ -683,9 +716,9 @@ export class StaffService {
   async delete(
     locationId: string,
     staffId: string,
-    actor?: AuditActor,
+    actor: AuditActor,
   ): Promise<void> {
-    await this.findInLocation(locationId, staffId);
+    const staff = await this.findInLocation(locationId, staffId);
     const location = await this.locationService.findById(locationId);
     try {
       await this.db.$transaction(async (tx) => {
@@ -719,6 +752,17 @@ export class StaffService {
     }
     await this.cache.invalidate(CacheDependency.staffDirectory(locationId));
     await this.cache.invalidate(CacheDependency.staffSchedule(locationId));
+    this.eventEmitter.emit(AUDIT_EVENT, {
+      brandId: location.brandId,
+      locationId,
+      entityType: AuditEntity.STAFF,
+      entityId: staffId,
+      eventType: AuditEvent.STAFF_DELETED,
+      actionType: AuditActionType.DELETE,
+      occurredAt: new Date(),
+      actor,
+      payload: { name: staff.name },
+    } satisfies AuditLogEvent);
   }
 
   private async protectPlatformAccount(
@@ -778,12 +822,16 @@ export class StaffService {
     const from = new Date(dto.from);
     const to = new Date(dto.to);
 
-    const shifts = await this.db.$transaction(async (tx) => {
+    const result = await this.db.$transaction(async (tx) => {
+      const before = await tx.staffShift.findMany({
+        where: { staffId, date: { gte: from, lte: to } },
+        orderBy: { date: 'asc' },
+      });
       await tx.staffShift.deleteMany({
         where: { staffId, date: { gte: from, lte: to } },
       });
 
-      if (dto.shifts.length === 0) return [];
+      if (dto.shifts.length === 0) return { before, after: [] as StaffShift[] };
 
       await tx.staffShift.createMany({
         data: dto.shifts.map((s) => ({
@@ -794,7 +842,7 @@ export class StaffService {
         })),
       });
 
-      return tx.staffShift.findMany({
+      const after = await tx.staffShift.findMany({
         where: {
           staff: { location: ACTIVE_LOCATION_WHERE },
           staffId,
@@ -802,6 +850,7 @@ export class StaffService {
         },
         orderBy: { date: 'asc' },
       });
+      return { before, after };
     });
 
     await this.cache.invalidate(CacheDependency.staffSchedule(locationId));
@@ -814,10 +863,23 @@ export class StaffService {
       actionType: AuditActionType.MODIFY,
       occurredAt: new Date(),
       actor,
-      payload: { startDate: dto.from, endDate: dto.to },
+      payload: {
+        startDate: dto.from,
+        endDate: dto.to,
+        before: result.before.map((shift) => ({
+          date: TimeUtils.dateOnlyStr(shift.date),
+          startTime: shift.startTime.toISOString().slice(11, 16),
+          endTime: shift.endTime.toISOString().slice(11, 16),
+        })),
+        after: result.after.map((shift) => ({
+          date: TimeUtils.dateOnlyStr(shift.date),
+          startTime: shift.startTime.toISOString().slice(11, 16),
+          endTime: shift.endTime.toISOString().slice(11, 16),
+        })),
+      },
     };
     this.eventEmitter.emit(AUDIT_EVENT, event);
-    return shifts;
+    return result.after;
   }
 }
 

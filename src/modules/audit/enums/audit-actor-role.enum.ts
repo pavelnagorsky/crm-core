@@ -1,4 +1,5 @@
 export enum AuditActorRole {
+  UNKNOWN = 'UNKNOWN',
   CLIENT = 'CLIENT',
   STAFF = 'STAFF',
   OWNER = 'OWNER',

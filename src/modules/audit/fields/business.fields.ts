@@ -3,4 +3,5 @@ import type { FieldDescriptor } from '../interfaces/field-descriptor.interface.j
 
 export const BUSINESS_AUDIT_FIELDS: FieldDescriptor<Brand>[] = [
   { key: 'name' },
+  { key: 'logoFileId' },
 ];

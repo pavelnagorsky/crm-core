@@ -1,3 +1,6 @@
+import { auditActorFromToken } from '../../audit/utils/audit-actor-from-token.js';
+import { TokenPayload } from '../../auth/decorators/token-payload.decorator.js';
+import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
 import {
   Body,
   Controller,
@@ -97,8 +100,13 @@ export class BookingPagesController {
   async create(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Body() dto: SaveBookingPageDto,
+    @TokenPayload() token: TokenPayloadDto,
   ): Promise<BaseResponseDto<BookingPageResponseDto>> {
-    const page = await this.pages.create(locationId, dto);
+    const page = await this.pages.create(
+      locationId,
+      dto,
+      auditActorFromToken(token, locationId),
+    );
     return BaseResponseDto.success(BookingPageResponseDto.fromEntity(page));
   }
 
@@ -130,8 +138,14 @@ export class BookingPagesController {
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('pageId', ParseUUIDPipe) pageId: string,
     @Body() dto: SaveBookingPageDto,
+    @TokenPayload() token: TokenPayloadDto,
   ): Promise<BaseResponseDto<BookingPageResponseDto>> {
-    const page = await this.pages.update(locationId, pageId, dto);
+    const page = await this.pages.update(
+      locationId,
+      pageId,
+      dto,
+      auditActorFromToken(token, locationId),
+    );
     return this.toResponse(page);
   }
 
@@ -148,8 +162,14 @@ export class BookingPagesController {
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('pageId', ParseUUIDPipe) pageId: string,
     @Body() dto: UpdateBookingChannelStatusDto,
+    @TokenPayload() token: TokenPayloadDto,
   ): Promise<BaseResponseDto<BookingPageResponseDto>> {
-    const page = await this.pages.changeStatus(locationId, pageId, dto.status);
+    const page = await this.pages.changeStatus(
+      locationId,
+      pageId,
+      dto.status,
+      auditActorFromToken(token, locationId),
+    );
     return this.toResponse(page);
   }
 
@@ -162,8 +182,13 @@ export class BookingPagesController {
   async delete(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('pageId', ParseUUIDPipe) pageId: string,
+    @TokenPayload() token: TokenPayloadDto,
   ): Promise<void> {
-    await this.pages.delete(locationId, pageId);
+    await this.pages.delete(
+      locationId,
+      pageId,
+      auditActorFromToken(token, locationId),
+    );
   }
 
   private async toResponse(

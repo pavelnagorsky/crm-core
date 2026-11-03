@@ -28,9 +28,19 @@
 
 {{#if (eq eventType "STAFF_SHIFTS_UPDATED")}}
 <p>Изменён рабочий график в диапазоне {{payload.startDate}} — {{payload.endDate}}</p>
+{{#if (isArray payload.after)}}
+{{#if payload.before}}<p>Было:</p><ul>{{#each payload.before}}<li>{{this.date}}: {{this.startTime}} — {{this.endTime}}</li>{{/each}}</ul>{{/if}}
+{{#if payload.after}}<p>Стало:</p><ul>{{#each payload.after}}<li>{{this.date}}: {{this.startTime}} — {{this.endTime}}</li>{{/each}}</ul>{{else}}<p>Смены отсутствуют</p>{{/if}}
+{{/if}}
 {{/if}}
 
 {{#if (eq eventType "STAFF_BLOCK_CREATED")}}
 <p>{{formatDateTime payload.startDateTime}} — {{formatDateTime payload.endDateTime}}{{#if payload.title}} — {{payload.title}}{{/if}}{{#if payload.reason}} ({{payload.reason}}){{/if}}</p>
+{{/if}}
+
+{{#if (or (eq eventType "CALENDAR_BLOCK_CREATED") (eq eventType "CALENDAR_BLOCK_UPDATED") (eq eventType "CALENDAR_BLOCK_MOVED") (eq eventType "CALENDAR_BLOCK_DELETED"))}}
+{{payload.title}}
+{{#if payload.occurrenceDate}}<p>Повторение: {{payload.occurrenceDate}}</p>{{/if}}
+<ul>{{#each payload.changes}}<li>{{t "fields" ../entityType this.field}}: <s>{{formatValue this.field this.from}}</s> → {{formatValue this.field this.to}}</li>{{/each}}</ul>
 {{/if}}
 

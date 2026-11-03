@@ -1,3 +1,9 @@
+import { AuditActorRole } from '../audit/enums/audit-actor-role.enum.js';
+const actor = {
+  id: 'owner',
+  name: 'Owner',
+  role: AuditActorRole.OWNER,
+} as const;
 import { NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test } from '@nestjs/testing';
@@ -99,7 +105,7 @@ describe('CalendarFacade.update', () => {
     db.calendarEvent.findFirst.mockResolvedValue(seriesEvent());
     tx.calendarEvent.create.mockResolvedValue({ id: 'exception-1' });
 
-    await service.update('biz', 'event-1', singleOccurrenceUpdate());
+    await service.update('biz', 'event-1', singleOccurrenceUpdate(), actor);
 
     expect(db.calendarEvent.findFirst).toHaveBeenCalledWith({
       where: {
@@ -136,7 +142,7 @@ describe('CalendarFacade.update', () => {
     db.calendarEvent.findFirst.mockResolvedValue(null);
 
     await expect(
-      service.update('other', 'event-1', singleOccurrenceUpdate()),
+      service.update('other', 'event-1', singleOccurrenceUpdate(), actor),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 });
@@ -185,11 +191,16 @@ describe('CalendarFacade.moveOccurrence', () => {
     db.calendarEvent.findFirst.mockResolvedValue(seriesEvent());
     db.calendarEvent.update.mockResolvedValue({ id: 'event-1' });
 
-    await service.moveOccurrence('biz', 'event-1', {
-      thisOnly: false,
-      startDateTime: '2026-10-02T11:00:00',
-      endDateTime: '2026-10-02T12:00:00',
-    });
+    await service.moveOccurrence(
+      'biz',
+      'event-1',
+      {
+        thisOnly: false,
+        startDateTime: '2026-10-02T11:00:00',
+        endDateTime: '2026-10-02T12:00:00',
+      },
+      actor,
+    );
 
     expect(db.calendarEvent.update).toHaveBeenCalledWith({
       where: { id: 'event-1' },
@@ -209,12 +220,17 @@ describe('CalendarFacade.moveOccurrence', () => {
     });
     tx.calendarEvent.create.mockResolvedValue({ id: 'exception-1' });
 
-    await service.moveOccurrence('biz', 'event-1', {
-      thisOnly: true,
-      occurrenceDate: '2026-10-08',
-      startDateTime: '2026-10-08T11:00:00',
-      endDateTime: '2026-10-08T12:00:00',
-    });
+    await service.moveOccurrence(
+      'biz',
+      'event-1',
+      {
+        thisOnly: true,
+        occurrenceDate: '2026-10-08',
+        startDateTime: '2026-10-08T11:00:00',
+        endDateTime: '2026-10-08T12:00:00',
+      },
+      actor,
+    );
 
     expect(tx.calendarEventCancelledOccurrence.upsert).toHaveBeenCalledWith({
       where: {
@@ -248,11 +264,16 @@ describe('CalendarFacade.moveOccurrence', () => {
     db.calendarEvent.findFirst.mockResolvedValue(null);
 
     await expect(
-      service.moveOccurrence('other', 'event-1', {
-        thisOnly: false,
-        startDateTime: '2026-10-02T11:00:00',
-        endDateTime: '2026-10-02T12:00:00',
-      }),
+      service.moveOccurrence(
+        'other',
+        'event-1',
+        {
+          thisOnly: false,
+          startDateTime: '2026-10-02T11:00:00',
+          endDateTime: '2026-10-02T12:00:00',
+        },
+        actor,
+      ),
     ).rejects.toBeInstanceOf(NotFoundException);
   });
 });

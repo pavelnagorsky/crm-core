@@ -1,5 +1,16 @@
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AUDIT_EVENT } from '../../audit/constants/audit.constants.js';
+import { AuditActionType } from '../../audit/enums/audit-action-type.enum.js';
+import { AuditEntity } from '../../audit/enums/audit-entity.enum.js';
+import { AuditEvent } from '../../audit/enums/audit-event.enum.js';
+import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
+import { AuditLogEvent } from '../../audit/interfaces/audit-log-event.interface.js';
+import {
+  auditSnapshot,
+  auditSnapshotChanges,
+} from '../../audit/utils/audit-snapshot.js';
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { BookingPage, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
@@ -38,6 +49,7 @@ export class BookingPagesService {
     private readonly db: DatabaseService,
     private readonly filesService: FilesService,
     private readonly publishService: BookingChannelPublishService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async list(locationId: string): Promise<BookingPageWithCover[]> {
@@ -92,6 +104,7 @@ export class BookingPagesService {
   async create(
     locationId: string,
     dto: SaveBookingPageDto,
+    actor: AuditActor,
   ): Promise<BookingPageWithCover> {
     const existing = await this.db.bookingPage.findFirst({
       where: { locationId },
@@ -110,6 +123,7 @@ export class BookingPagesService {
         data: { locationId, ...this.content(dto, coverFileId) },
         include: pageInclude,
       });
+      this.record(AuditEvent.BOOKING_PAGE_CREATED, null, page, actor);
       this.logger.log(
         `booking page created: id=${page.id} locationId=${locationId} slug=${page.slug}`,
       );
@@ -127,8 +141,9 @@ export class BookingPagesService {
     locationId: string,
     pageId: string,
     dto: SaveBookingPageDto,
+    actor: AuditActor,
   ): Promise<BookingPageWithCover> {
-    await this.findInLocation(locationId, pageId);
+    const old = await this.findInLocation(locationId, pageId);
     await this.assertSlugAvailable(locationId, dto.slug, pageId);
     const coverFileId = await this.resolveCover(locationId, dto.coverFileId);
     try {
@@ -137,6 +152,7 @@ export class BookingPagesService {
         data: this.content(dto, coverFileId),
         include: pageInclude,
       });
+      this.record(AuditEvent.BOOKING_PAGE_UPDATED, old, page, actor);
       this.logger.log(
         `booking page updated: id=${pageId} locationId=${locationId}`,
       );
@@ -154,6 +170,7 @@ export class BookingPagesService {
     locationId: string,
     pageId: string,
     status: BookingChannelStatus,
+    actor: AuditActor,
   ): Promise<BookingPageWithCover> {
     const page = await this.findInLocation(locationId, pageId);
     await this.publishService.assertTransition(locationId, page.status, status);
@@ -162,15 +179,21 @@ export class BookingPagesService {
       data: { status, publishedAt: publishedAtFor(status) },
       include: pageInclude,
     });
+    this.record(AuditEvent.BOOKING_PAGE_STATUS_CHANGED, page, updated, actor);
     this.logger.log(
       `booking page status: id=${pageId} locationId=${locationId} status=${status}`,
     );
     return updated;
   }
 
-  async delete(locationId: string, pageId: string): Promise<void> {
-    await this.findInLocation(locationId, pageId);
+  async delete(
+    locationId: string,
+    pageId: string,
+    actor: AuditActor,
+  ): Promise<void> {
+    const old = await this.findInLocation(locationId, pageId);
     await this.db.bookingPage.delete({ where: { id: pageId } });
+    this.record(AuditEvent.BOOKING_PAGE_DELETED, old, null, actor);
     this.logger.log(
       `booking page deleted: id=${pageId} locationId=${locationId}`,
     );
@@ -287,5 +310,60 @@ export class BookingPagesService {
       coverFileId,
       ...toBookingFormColumns(dto.form),
     };
+  }
+  private record(
+    eventType: AuditEvent,
+    before: BookingPage | null,
+    after: BookingPage | null,
+    actor: AuditActor,
+  ): void {
+    const entity = after ?? before!;
+    const fields = [
+      'title',
+      'status',
+      'gtmId',
+      'yandexMetrikaId',
+      'palette',
+      'customBackground',
+      'customSurface',
+      'customText',
+      'customMuted',
+      'customAccent',
+      'customAccentText',
+      'headline',
+      'caption',
+      'showStaff',
+      'showBranding',
+      'heading',
+      'slug',
+      'tagline',
+      'html',
+      'metaTitle',
+      'metaDescription',
+      'coverFileId',
+    ] as const satisfies readonly (keyof BookingPage)[];
+    const changes =
+      before && after
+        ? auditSnapshotChanges(
+            auditSnapshot(before, fields),
+            auditSnapshot(after, fields),
+          )
+        : undefined;
+    if (before && after && changes?.length === 0) return;
+    this.eventEmitter.emit(AUDIT_EVENT, {
+      locationId: entity.locationId,
+      entityType: AuditEntity.BOOKING_PAGE,
+      entityId: entity.id,
+      eventType,
+      actionType:
+        before == null
+          ? AuditActionType.CREATE
+          : after == null
+            ? AuditActionType.DELETE
+            : AuditActionType.MODIFY,
+      occurredAt: new Date(),
+      actor,
+      payload: { title: entity.title, changes },
+    } satisfies AuditLogEvent);
   }
 }

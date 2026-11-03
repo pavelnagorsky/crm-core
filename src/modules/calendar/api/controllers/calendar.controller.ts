@@ -171,8 +171,14 @@ export class CalendarController {
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('eventId', ParseUUIDPipe) eventId: string,
     @Body() dto: MoveCalendarEventDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<CalendarEventResponseDto>> {
-    const event = await this.calendar.moveOccurrence(locationId, eventId, dto);
+    const event = await this.calendar.moveOccurrence(
+      locationId,
+      eventId,
+      dto,
+      auditActorFromToken(tokenPayload, locationId),
+    );
     return BaseResponseDto.success(CalendarEventResponseDto.fromEntity(event));
   }
 
@@ -188,8 +194,14 @@ export class CalendarController {
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('eventId', ParseUUIDPipe) eventId: string,
     @Body() dto: UpdateCalendarEventDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<CalendarEventResponseDto>> {
-    const event = await this.calendar.update(locationId, eventId, dto);
+    const event = await this.calendar.update(
+      locationId,
+      eventId,
+      dto,
+      auditActorFromToken(tokenPayload, locationId),
+    );
     return BaseResponseDto.success(CalendarEventResponseDto.fromEntity(event));
   }
 
@@ -206,7 +218,13 @@ export class CalendarController {
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('eventId', ParseUUIDPipe) eventId: string,
     @Query() dto: DeleteCalendarEventDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<void> {
-    await this.calendar.delete(locationId, eventId, dto);
+    await this.calendar.delete(
+      locationId,
+      eventId,
+      dto,
+      auditActorFromToken(tokenPayload, locationId),
+    );
   }
 }

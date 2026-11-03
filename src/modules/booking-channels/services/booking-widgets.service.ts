@@ -1,3 +1,14 @@
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AUDIT_EVENT } from '../../audit/constants/audit.constants.js';
+import { AuditActionType } from '../../audit/enums/audit-action-type.enum.js';
+import { AuditEntity } from '../../audit/enums/audit-entity.enum.js';
+import { AuditEvent } from '../../audit/enums/audit-event.enum.js';
+import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
+import { AuditLogEvent } from '../../audit/interfaces/audit-log-event.interface.js';
+import {
+  auditSnapshot,
+  auditSnapshotChanges,
+} from '../../audit/utils/audit-snapshot.js';
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { BookingWidget } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
@@ -24,6 +35,7 @@ export class BookingWidgetsService {
   constructor(
     private readonly db: DatabaseService,
     private readonly publishService: BookingChannelPublishService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async list(locationId: string): Promise<BookingWidget[]> {
@@ -51,6 +63,7 @@ export class BookingWidgetsService {
   async create(
     locationId: string,
     dto: SaveBookingWidgetDto,
+    actor: AuditActor,
   ): Promise<BookingWidget> {
     const allowedDomains = this.domains(dto.allowedDomains);
     await this.assertTitleAvailable(locationId, dto.title);
@@ -58,6 +71,7 @@ export class BookingWidgetsService {
       const widget = await this.db.bookingWidget.create({
         data: { locationId, ...this.content(dto, allowedDomains) },
       });
+      this.record(AuditEvent.BOOKING_WIDGET_CREATED, null, widget, actor);
       this.logger.log(
         `booking widget created: id=${widget.id} locationId=${locationId}`,
       );
@@ -75,8 +89,9 @@ export class BookingWidgetsService {
     locationId: string,
     widgetId: string,
     dto: SaveBookingWidgetDto,
+    actor: AuditActor,
   ): Promise<BookingWidget> {
-    await this.findInLocation(locationId, widgetId);
+    const old = await this.findInLocation(locationId, widgetId);
     const allowedDomains = this.domains(dto.allowedDomains);
     await this.assertTitleAvailable(locationId, dto.title, widgetId);
     try {
@@ -84,6 +99,7 @@ export class BookingWidgetsService {
         where: { id: widgetId },
         data: this.content(dto, allowedDomains),
       });
+      this.record(AuditEvent.BOOKING_WIDGET_UPDATED, old, widget, actor);
       this.logger.log(
         `booking widget updated: id=${widgetId} locationId=${locationId}`,
       );
@@ -101,6 +117,7 @@ export class BookingWidgetsService {
     locationId: string,
     widgetId: string,
     status: BookingChannelStatus,
+    actor: AuditActor,
   ): Promise<BookingWidget> {
     const widget = await this.findInLocation(locationId, widgetId);
     await this.publishService.assertTransition(
@@ -112,15 +129,26 @@ export class BookingWidgetsService {
       where: { id: widgetId },
       data: { status, publishedAt: publishedAtFor(status) },
     });
+    this.record(
+      AuditEvent.BOOKING_WIDGET_STATUS_CHANGED,
+      widget,
+      updated,
+      actor,
+    );
     this.logger.log(
       `booking widget status: id=${widgetId} locationId=${locationId} status=${status}`,
     );
     return updated;
   }
 
-  async delete(locationId: string, widgetId: string): Promise<void> {
-    await this.findInLocation(locationId, widgetId);
+  async delete(
+    locationId: string,
+    widgetId: string,
+    actor: AuditActor,
+  ): Promise<void> {
+    const old = await this.findInLocation(locationId, widgetId);
     await this.db.bookingWidget.delete({ where: { id: widgetId } });
+    this.record(AuditEvent.BOOKING_WIDGET_DELETED, old, null, actor);
     this.logger.log(
       `booking widget deleted: id=${widgetId} locationId=${locationId}`,
     );
@@ -196,5 +224,57 @@ export class BookingWidgetsService {
         : {}),
       ...toBookingFormColumns(dto.form),
     };
+  }
+  private record(
+    eventType: AuditEvent,
+    before: BookingWidget | null,
+    after: BookingWidget | null,
+    actor: AuditActor,
+  ): void {
+    const entity = after ?? before!;
+    const fields = [
+      'title',
+      'status',
+      'gtmId',
+      'yandexMetrikaId',
+      'palette',
+      'customBackground',
+      'customSurface',
+      'customText',
+      'customMuted',
+      'customAccent',
+      'customAccentText',
+      'headline',
+      'caption',
+      'showStaff',
+      'showBranding',
+      'placement',
+      'trigger',
+      'buttonPosition',
+      'allowedDomains',
+    ] as const satisfies readonly (keyof BookingWidget)[];
+    const changes =
+      before && after
+        ? auditSnapshotChanges(
+            auditSnapshot(before, fields),
+            auditSnapshot(after, fields),
+          )
+        : undefined;
+    if (before && after && changes?.length === 0) return;
+    this.eventEmitter.emit(AUDIT_EVENT, {
+      locationId: entity.locationId,
+      entityType: AuditEntity.BOOKING_WIDGET,
+      entityId: entity.id,
+      eventType,
+      actionType:
+        before == null
+          ? AuditActionType.CREATE
+          : after == null
+            ? AuditActionType.DELETE
+            : AuditActionType.MODIFY,
+      occurredAt: new Date(),
+      actor,
+      payload: { title: entity.title, changes },
+    } satisfies AuditLogEvent);
   }
 }

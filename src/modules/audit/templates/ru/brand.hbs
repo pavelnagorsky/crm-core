@@ -1,3 +1,6 @@
+{{#if (or (eq eventType "BRAND_CREATED") (eq eventType "BRAND_DELETED"))}}
+{{payload.name}}
+{{/if}}
 {{#if (eq eventType "BRAND_UPDATED")}}
 <ul>
   {{#each payload.changes}}

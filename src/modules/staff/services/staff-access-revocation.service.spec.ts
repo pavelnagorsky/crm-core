@@ -90,6 +90,16 @@ describe('Staff access revocation transaction', () => {
       );
       expect(epochs.bump).toHaveBeenCalledExactlyOnceWith('user-1', tx);
       expect(transactionCompleted).toBe(true);
+      if (operation === 'delete')
+        expect(events.emit).toHaveBeenCalledWith(
+          'audit',
+          expect.objectContaining({
+            eventType: 'STAFF_DELETED',
+            entityId: 'staff-1',
+            locationId: 'location-1',
+            actor,
+          }),
+        );
     },
   );
 
@@ -125,7 +135,12 @@ describe('Staff access revocation transaction', () => {
     async (role) => {
       const membership = { locationId: 'location-1', userId: 'user-1', role };
       let memberships = [membership];
-      const accessService = new AccessService({} as never, {} as never);
+      const accessService = new AccessService(
+        {} as never,
+        {} as never,
+        {} as never,
+        {} as never,
+      );
       vi.spyOn(accessService, 'lockBrand').mockResolvedValue(undefined);
       vi.spyOn(accessService, 'recordChange').mockResolvedValue({} as never);
       access.revokeStaffAccess.mockImplementationOnce(

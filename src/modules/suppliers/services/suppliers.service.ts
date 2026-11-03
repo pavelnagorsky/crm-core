@@ -1,3 +1,14 @@
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { AUDIT_EVENT } from '../../audit/constants/audit.constants.js';
+import { AuditActionType } from '../../audit/enums/audit-action-type.enum.js';
+import { AuditEntity } from '../../audit/enums/audit-entity.enum.js';
+import { AuditEvent } from '../../audit/enums/audit-event.enum.js';
+import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
+import { AuditLogEvent } from '../../audit/interfaces/audit-log-event.interface.js';
+import {
+  auditSnapshot,
+  auditSnapshotChanges,
+} from '../../audit/utils/audit-snapshot.js';
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma, Supplier } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
@@ -19,12 +30,19 @@ const OPTION_LIMIT = 20;
 
 @Injectable()
 export class SuppliersService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
-  async create(brandId: string, dto: CreateSupplierDto): Promise<Supplier> {
+  async create(
+    brandId: string,
+    dto: CreateSupplierDto,
+    actor: AuditActor,
+  ): Promise<Supplier> {
     const name = this.requiredText(dto.name);
     try {
-      return await this.db.supplier.create({
+      const supplier = await this.db.supplier.create({
         data: {
           brandId,
           name,
@@ -37,6 +55,8 @@ export class SuppliersService {
           notes: this.optionalText(dto.notes),
         },
       });
+      this.record(AuditEvent.SUPPLIER_CREATED, null, supplier, actor);
+      return supplier;
     } catch (error: any) {
       this.rethrowUnique(error);
       throw error;
@@ -47,12 +67,13 @@ export class SuppliersService {
     brandId: string,
     supplierId: string,
     dto: UpdateSupplierDto,
+    actor: AuditActor,
   ): Promise<Supplier> {
-    await this.findByIdInBrand(brandId, supplierId);
+    const old = await this.findByIdInBrand(brandId, supplierId);
     const name =
       dto.name !== undefined ? this.requiredText(dto.name) : undefined;
     try {
-      return await this.db.supplier.update({
+      const supplier = await this.db.supplier.update({
         where: { id: supplierId },
         data: {
           name,
@@ -76,18 +97,25 @@ export class SuppliersService {
           isActive: dto.isActive,
         },
       });
+      this.record(AuditEvent.SUPPLIER_UPDATED, old, supplier, actor);
+      return supplier;
     } catch (error: any) {
       this.rethrowUnique(error);
       throw error;
     }
   }
 
-  async deactivate(brandId: string, supplierId: string): Promise<void> {
-    await this.findByIdInBrand(brandId, supplierId);
-    await this.db.supplier.update({
+  async deactivate(
+    brandId: string,
+    supplierId: string,
+    actor: AuditActor,
+  ): Promise<void> {
+    const old = await this.findByIdInBrand(brandId, supplierId);
+    const supplier = await this.db.supplier.update({
       where: { id: supplierId },
       data: { isActive: false },
     });
+    this.record(AuditEvent.SUPPLIER_DEACTIVATED, old, supplier, actor);
   }
 
   async findByIdInBrand(
@@ -202,5 +230,39 @@ export class SuppliersService {
 
   private normalizeName(value: string): string {
     return value.trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+  }
+  private record(
+    eventType: AuditEvent,
+    before: Supplier | null,
+    after: Supplier,
+    actor: AuditActor,
+  ): void {
+    const fields = [
+      'name',
+      'legalName',
+      'taxId',
+      'phone',
+      'email',
+      'contactPerson',
+      'notes',
+      'isActive',
+    ] as const satisfies readonly (keyof Supplier)[];
+    const changes = before
+      ? auditSnapshotChanges(
+          auditSnapshot(before, fields),
+          auditSnapshot(after, fields),
+        )
+      : undefined;
+    if (before && changes?.length === 0) return;
+    this.eventEmitter.emit(AUDIT_EVENT, {
+      brandId: after.brandId,
+      entityType: AuditEntity.SUPPLIER,
+      entityId: after.id,
+      eventType,
+      actionType: before ? AuditActionType.MODIFY : AuditActionType.CREATE,
+      occurredAt: new Date(),
+      actor,
+      payload: { title: after.name, changes },
+    } satisfies AuditLogEvent);
   }
 }

@@ -1,7 +1,65 @@
 import { BusinessRole, UserRole } from '@prisma/client';
+import { Logger } from '@nestjs/common';
 import { tokenPayload } from '../../auth/testing/factories/token-payload.factory.js';
 import { BrandService } from '../services/brand.service.js';
 import { BrandController } from './brand.controller.js';
+
+describe('Brand creation background population', () => {
+  const create = vi.fn();
+  const populate = vi.fn();
+  const controller = new BrandController(
+    { create } as never,
+    { populate } as never,
+  );
+  const dto = { name: 'Brand', location: { name: 'First location' } } as never;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    create.mockResolvedValue({
+      id: 'brand-1',
+      locations: [{ id: 'location-1' }],
+    });
+  });
+
+  it('returns the created brand while initial population is still pending', async () => {
+    populate.mockReturnValue(new Promise<void>(() => {}));
+    const token = tokenPayload();
+    const response = await controller.create(token, dto);
+
+    expect(response.responseValue).toEqual({ id: 'brand-1' });
+    expect(populate).toHaveBeenCalledWith(
+      'location-1',
+      token.sub,
+      expect.objectContaining({ id: token.sub, role: 'OWNER' }),
+    );
+  });
+
+  it('logs a population failure without failing brand creation', async () => {
+    const error = new Error('Population failed');
+    populate.mockRejectedValue(error);
+    const log = vi
+      .spyOn(Logger.prototype, 'error')
+      .mockImplementation(() => {});
+    try {
+      const response = await controller.create(tokenPayload(), dto);
+      expect(response.responseValue).toEqual({ id: 'brand-1' });
+      expect(log).toHaveBeenCalledWith(
+        expect.stringContaining('location-1'),
+        error,
+      );
+    } finally {
+      log.mockRestore();
+    }
+  });
+
+  it('does not start population when brand creation fails', async () => {
+    create.mockRejectedValue(new Error('Creation failed'));
+    await expect(controller.create(tokenPayload(), dto)).rejects.toThrow(
+      'Creation failed',
+    );
+    expect(populate).not.toHaveBeenCalled();
+  });
+});
 
 describe('Brand search access boundaries', () => {
   const findMany = vi.fn();
@@ -11,10 +69,9 @@ describe('Brand search access boundaries', () => {
     {} as never,
     {} as never,
     {} as never,
-    {} as never,
     { invalidate: vi.fn() } as never,
   );
-  const controller = new BrandController(service);
+  const controller = new BrandController(service, {} as never);
   const brands = ['brand-1', 'brand-2'].map((id) => ({
     id,
     name: id,

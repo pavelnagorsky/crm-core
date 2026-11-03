@@ -76,6 +76,8 @@ describe('AuthService refresh token storage', () => {
     new AccessService(
       db as unknown as DatabaseService,
       new PermissionCalculator(),
+      {} as never,
+      {} as never,
     ),
     {} as never,
   );

@@ -1,4 +1,5 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Location, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { AppCacheService } from '../../../shared/cache/app-cache.service.js';
@@ -10,6 +11,14 @@ import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { TokenEpochRegistryService } from '../../auth/services/token-epoch-registry.service.js';
 import { BookingDeletionPolicyService } from '../../bookings/deletion-policy/services/booking-deletion-policy.service.js';
 import { BrandService } from '../../brand/services/brand.service.js';
+import { AUDIT_EVENT } from '../../audit/constants/audit.constants.js';
+import { AuditActionType } from '../../audit/enums/audit-action-type.enum.js';
+import { AuditEntity } from '../../audit/enums/audit-entity.enum.js';
+import { AuditEvent } from '../../audit/enums/audit-event.enum.js';
+import { LOCATION_AUDIT_FIELDS } from '../../audit/fields/location.fields.js';
+import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
+import { AuditLogEvent } from '../../audit/interfaces/audit-log-event.interface.js';
+import { diffFields } from '../../audit/utils/diff-fields.js';
 import {
   LOCATION_SETTINGS_CACHE,
   LOCATION_SETTINGS_SELECT,
@@ -26,14 +35,30 @@ export class LocationService {
     private readonly tokenEpochRegistry: TokenEpochRegistryService,
     private readonly bookingDeletionPolicy: BookingDeletionPolicyService,
     private readonly cache: AppCacheService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
-  async create(brandId: string, dto: CreateLocationDto): Promise<Location> {
+  async create(
+    brandId: string,
+    dto: CreateLocationDto,
+    actor: AuditActor,
+  ): Promise<Location> {
     const locale = resolveLocationLocale(dto);
     await this.brandService.findById(brandId);
     const location = await this.db.location.create({
       data: { ...dto, ...locale, brandId },
     });
+    this.eventEmitter.emit(AUDIT_EVENT, {
+      brandId,
+      locationId: location.id,
+      entityType: AuditEntity.LOCATION,
+      entityId: location.id,
+      eventType: AuditEvent.LOCATION_CREATED,
+      actionType: AuditActionType.CREATE,
+      occurredAt: new Date(),
+      actor,
+      payload: { name: location.name },
+    } satisfies AuditLogEvent);
     await this.tokenEpochRegistry.bumpMany(
       await this.brandService.findMemberUserIds(brandId),
     );
@@ -83,6 +108,7 @@ export class LocationService {
     locationId: string,
     dto: UpdateLocationDto,
     rawBody: Record<string, unknown>,
+    actor: AuditActor,
   ): Promise<Location> {
     if (
       'countryCode' in rawBody ||
@@ -94,18 +120,32 @@ export class LocationService {
         HttpStatus.BAD_REQUEST,
       );
     }
-    await this.findById(locationId);
+    const old = await this.findById(locationId);
     const updated = await this.db.location.update({
       where: { id: locationId, ...ACTIVE_LOCATION_WHERE },
       data: dto,
     });
     await this.cache.invalidate(CacheDependency.locationSettings(locationId));
     await this.cache.invalidate(CacheDependency.staffSchedule(locationId));
+    const changes = diffFields(old, updated, LOCATION_AUDIT_FIELDS);
+    if (changes.length > 0) {
+      this.eventEmitter.emit(AUDIT_EVENT, {
+        brandId: updated.brandId,
+        locationId,
+        entityType: AuditEntity.LOCATION,
+        entityId: locationId,
+        eventType: AuditEvent.LOCATION_UPDATED,
+        actionType: AuditActionType.MODIFY,
+        occurredAt: new Date(),
+        actor,
+        payload: { changes },
+      } satisfies AuditLogEvent);
+    }
     return updated;
   }
 
-  async delete(locationId: string): Promise<void> {
-    await this.db.$transaction(async (tx) => {
+  async delete(locationId: string, actor: AuditActor): Promise<void> {
+    const location = await this.db.$transaction(async (tx) => {
       const { count } = await tx.location.updateMany({
         where: { id: locationId, ...ACTIVE_LOCATION_WHERE },
         data: { deletedAt: new Date() },
@@ -115,8 +155,20 @@ export class LocationService {
         locationId,
         tx,
       );
+      return tx.location.findUniqueOrThrow({ where: { id: locationId } });
     });
     await this.cache.invalidate(CacheDependency.locationLifecycle(locationId));
+    this.eventEmitter.emit(AUDIT_EVENT, {
+      brandId: location.brandId,
+      locationId,
+      entityType: AuditEntity.LOCATION,
+      entityId: locationId,
+      eventType: AuditEvent.LOCATION_DELETED,
+      actionType: AuditActionType.DELETE,
+      occurredAt: new Date(),
+      actor,
+      payload: { name: location.name },
+    } satisfies AuditLogEvent);
   }
 
   async acquireActiveOperationLock(

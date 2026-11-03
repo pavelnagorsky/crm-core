@@ -1,0 +1,85 @@
+name: Production deploy
+
+on:
+  push:
+    branches: [master]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npx prisma validate
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  deploy:
+    needs: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Build and run on VPS
+        uses: appleboy/ssh-action@v1
+        env:
+          DEPLOY_SHA: ${{ github.sha }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/crm-core' }}
+          DOCKER_NETWORK: ${{ vars.DOCKER_NETWORK || 'bridge' }}
+          APP_PORT: ${{ vars.APP_PORT || '3000' }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          fingerprint: ${{ secrets.DEPLOY_HOST_FINGERPRINT }}
+          port: ${{ vars.DEPLOY_PORT || '22' }}
+          command_timeout: 20m
+          envs: DEPLOY_SHA,DEPLOY_PATH,DOCKER_NETWORK,APP_PORT
+          script: |
+            set -eu
+            cd "$DEPLOY_PATH"
+            test -f .env
+            git diff --quiet
+            git diff --cached --quiet
+            git fetch origin master
+            git checkout --detach "$DEPLOY_SHA"
+
+            docker build --target runtime -t "crm-core:$DEPLOY_SHA" .
+            docker build --target migrate -t "crm-core:$DEPLOY_SHA-migrate" .
+            docker run --rm --network "$DOCKER_NETWORK" --env-file .env "crm-core:$DEPLOY_SHA-migrate"
+
+            if docker container inspect crm-core > /dev/null 2>&1; then
+              docker stop --time 30 crm-core
+              docker rm crm-core
+            fi
+
+            mkdir -p secrets
+            docker run -d --name crm-core --init --restart unless-stopped \
+              --network "$DOCKER_NETWORK" --env-file .env -e PORT=3000 \
+              -p "127.0.0.1:$APP_PORT:3000" \
+              --mount "type=bind,src=$PWD/secrets,dst=/run/secrets,readonly" \
+              "crm-core:$DEPLOY_SHA"
+
+            for attempt in $(seq 1 60); do
+              status=$(docker inspect --format '{{.State.Health.Status}}' crm-core)
+              if [ "$status" = healthy ]; then exit 0; fi
+              if [ "$status" = unhealthy ]; then break; fi
+              sleep 2
+            done
+            docker logs --tail 100 crm-core
+            exit 1

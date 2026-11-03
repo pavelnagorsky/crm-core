@@ -28,6 +28,7 @@ import { COUNTRY_DEFAULTS } from '../../../shared/geo/country-defaults.js';
 import { Claim } from '../../access/enums/claim.enum.js';
 import { hasPermission } from '../../access/utils/assert-permission.js';
 import { Read, Write } from '../../access/utils/permission.js';
+import { auditActorFromToken } from '../../audit/utils/audit-actor-from-token.js';
 import { Auth } from '../../auth/decorators/auth.decorator.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 import { TokenPayload } from '../../auth/decorators/token-payload.decorator.js';
@@ -82,8 +83,13 @@ export class LocationController {
   async create(
     @Param('brandId', ParseUUIDPipe) brandId: string,
     @Body() dto: CreateLocationDto,
+    @TokenPayload() payload: TokenPayloadDto,
   ): Promise<BaseResponseDto<{ id: string }>> {
-    const location = await this.locationService.create(brandId, dto);
+    const location = await this.locationService.create(
+      brandId,
+      dto,
+      auditActorFromToken(payload, brandId),
+    );
     return BaseResponseDto.success({ id: location.id });
   }
 
@@ -127,11 +133,13 @@ export class LocationController {
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Body() dto: UpdateLocationDto,
     @Body() rawBody: Record<string, unknown>,
+    @TokenPayload() payload: TokenPayloadDto,
   ): Promise<BaseResponseDto<{ id: string }>> {
     const location = await this.locationService.update(
       locationId,
       dto,
       rawBody,
+      auditActorFromToken(payload, locationId),
     );
     return BaseResponseDto.success({ id: location.id });
   }
@@ -161,7 +169,11 @@ export class LocationController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(
     @Param('locationId', ParseUUIDPipe) locationId: string,
+    @TokenPayload() payload: TokenPayloadDto,
   ): Promise<void> {
-    await this.locationService.delete(locationId);
+    await this.locationService.delete(
+      locationId,
+      auditActorFromToken(payload, locationId),
+    );
   }
 }

@@ -1,3 +1,6 @@
+import { auditActorFromToken } from '../../audit/utils/audit-actor-from-token.js';
+import { TokenPayload } from '../../auth/decorators/token-payload.decorator.js';
+import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
 import {
   Body,
   Controller,
@@ -70,8 +73,13 @@ export class BookingWidgetsController {
   async create(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Body() dto: SaveBookingWidgetDto,
+    @TokenPayload() token: TokenPayloadDto,
   ): Promise<BaseResponseDto<BookingWidgetResponseDto>> {
-    const widget = await this.widgets.create(locationId, dto);
+    const widget = await this.widgets.create(
+      locationId,
+      dto,
+      auditActorFromToken(token, locationId),
+    );
     return BaseResponseDto.success(BookingWidgetResponseDto.fromEntity(widget));
   }
 
@@ -102,8 +110,14 @@ export class BookingWidgetsController {
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('widgetId', ParseUUIDPipe) widgetId: string,
     @Body() dto: SaveBookingWidgetDto,
+    @TokenPayload() token: TokenPayloadDto,
   ): Promise<BaseResponseDto<BookingWidgetResponseDto>> {
-    const widget = await this.widgets.update(locationId, widgetId, dto);
+    const widget = await this.widgets.update(
+      locationId,
+      widgetId,
+      dto,
+      auditActorFromToken(token, locationId),
+    );
     return this.toResponse(widget);
   }
 
@@ -120,11 +134,13 @@ export class BookingWidgetsController {
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('widgetId', ParseUUIDPipe) widgetId: string,
     @Body() dto: UpdateBookingChannelStatusDto,
+    @TokenPayload() token: TokenPayloadDto,
   ): Promise<BaseResponseDto<BookingWidgetResponseDto>> {
     const widget = await this.widgets.changeStatus(
       locationId,
       widgetId,
       dto.status,
+      auditActorFromToken(token, locationId),
     );
     return this.toResponse(widget);
   }
@@ -138,8 +154,13 @@ export class BookingWidgetsController {
   async delete(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('widgetId', ParseUUIDPipe) widgetId: string,
+    @TokenPayload() token: TokenPayloadDto,
   ): Promise<void> {
-    await this.widgets.delete(locationId, widgetId);
+    await this.widgets.delete(
+      locationId,
+      widgetId,
+      auditActorFromToken(token, locationId),
+    );
   }
 
   private async toResponse(

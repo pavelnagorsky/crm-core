@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { ServiceCategory } from '@prisma/client';
+import { Prisma, ServiceCategory } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
 import { AppCacheService } from '../../../../shared/cache/app-cache.service.js';
 import { CacheDependency } from '../../../../shared/cache/cache-dependency.js';
@@ -26,6 +26,16 @@ import { UpdateServiceCategoryDto } from '../dto/update-service-category.dto.js'
 
 @Injectable()
 export class ServiceCategoriesService {
+  createStarterCategories(
+    locationId: string,
+    names: readonly string[],
+    tx: Prisma.TransactionClient,
+  ): Promise<ServiceCategory[]> {
+    return tx.serviceCategory.createManyAndReturn({
+      data: names.map((name, sortOrder) => ({ locationId, name, sortOrder })),
+    });
+  }
+
   private readonly logger = new Logger(ServiceCategoriesService.name);
   constructor(
     private readonly db: DatabaseService,

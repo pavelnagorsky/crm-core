@@ -6,3 +6,6 @@
   {{#if payload.type}}: {{payload.type}}{{/if}}
   {{#if payload.itemCount}}, позиций: {{payload.itemCount}}{{/if}}
 </p>
+{{#if payload.transferDirection}}<p>Входящее перемещение</p>{{/if}}
+<ul>{{#each payload.changes}}<li>{{t "fields" ../entityType this.field}}: <s>{{formatValue this.field this.from}}</s> → {{formatValue this.field this.to}}</li>{{/each}}</ul>
+<ul>{{#each payload.snapshot}}<li>{{t "fields" ../entityType @key}}: {{this}}</li>{{/each}}</ul>

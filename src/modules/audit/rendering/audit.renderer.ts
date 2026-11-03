@@ -108,6 +108,7 @@ export class AuditRenderer implements OnModuleInit {
   }
 
   private registerHelpers() {
+    this.hbs.registerHelper('isArray', Array.isArray);
     this.hbs.registerHelper('eq', (a: unknown, b: unknown) => a === b);
     this.hbs.registerHelper('or', (...rawArgs: unknown[]) =>
       rawArgs.slice(0, -1).some((value) => value === true),
@@ -120,7 +121,12 @@ export class AuditRenderer implements OnModuleInit {
       const locale: I18nLocale = opts.data?.root?.locale;
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const value = keys.reduce<any>((node, key) => node?.[key], locale);
-      return typeof value === 'string' ? value : keys[keys.length - 1];
+      return typeof value === 'string'
+        ? value
+        : keys[0] === 'fields'
+          ? (locale.fields.AUDIT?.[keys[keys.length - 1]] ??
+            keys[keys.length - 1])
+          : keys[keys.length - 1];
     });
 
     this.hbs.registerHelper('formatValue', (...rawArgs: unknown[]) => {
@@ -130,7 +136,12 @@ export class AuditRenderer implements OnModuleInit {
       if (!value || value === '—') return '—';
       const locale = opts.data?.root?.locale as
         Record<string, unknown> | undefined;
-      const dictionaryName = AUDIT_FIELD_I18N[field];
+      const entityType = opts.data?.root?.entityType;
+      const dictionaryName =
+        field === 'status' &&
+        (entityType === 'BOOKING_PAGE' || entityType === 'BOOKING_WIDGET')
+          ? 'bookingChannelStatus'
+          : AUDIT_FIELD_I18N[field];
       const dictionary = dictionaryName ? locale?.[dictionaryName] : undefined;
       if (dictionaryName === 'productUnit') {
         return productUnitLabelOf(

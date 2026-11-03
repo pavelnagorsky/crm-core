@@ -14,6 +14,10 @@ import { AuditEntity } from '../../../audit/enums/audit-entity.enum.js';
 import { AuditEvent } from '../../../audit/enums/audit-event.enum.js';
 import { AuditActor } from '../../../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../../../audit/interfaces/audit-log-event.interface.js';
+import {
+  auditSnapshot,
+  auditSnapshotChanges,
+} from '../../../audit/utils/audit-snapshot.js';
 import { CreateCalendarEventDto } from '../../dto/create-calendar-event.dto.js';
 import { DeleteCalendarEventDto } from '../../dto/delete-calendar-event.dto.js';
 import { MoveCalendarEventDto } from '../../dto/move-calendar-event.dto.js';
@@ -41,23 +45,7 @@ export class CalendarEventService {
     );
 
     for (const event of events) {
-      if (!event.staffId) continue;
-      const audit: AuditLogEvent = {
-        locationId,
-        entityType: AuditEntity.STAFF,
-        entityId: event.staffId,
-        eventType: AuditEvent.STAFF_BLOCK_CREATED,
-        actionType: AuditActionType.CREATE,
-        occurredAt: new Date(),
-        actor,
-        payload: {
-          startDateTime: dto.startDateTime,
-          endDateTime: dto.endDateTime,
-          title: dto.title ?? null,
-          reason: dto.reason ?? null,
-        },
-      };
-      this.eventEmitter.emit(AUDIT_EVENT, audit);
+      this.record(AuditEvent.CALENDAR_BLOCK_CREATED, null, event, actor);
     }
 
     return events;
@@ -67,10 +55,11 @@ export class CalendarEventService {
     locationId: string,
     eventId: string,
     dto: UpdateCalendarEventDto,
+    actor: AuditActor,
   ): Promise<CalendarEvent> {
     const event = await this.findInLocation(locationId, eventId);
     if (!dto.thisOnly) {
-      return this.db.calendarEvent.update({
+      const updated = await this.db.calendarEvent.update({
         where: { id: eventId },
         data: this.buildEventData(
           event.locationId,
@@ -78,8 +67,10 @@ export class CalendarEventService {
           dto.staffId !== undefined ? dto.staffId : event.staffId,
         ),
       });
+      this.record(AuditEvent.CALENDAR_BLOCK_UPDATED, event, updated, actor);
+      return updated;
     }
-    return this.db.$transaction(async (tx) => {
+    const updated = await this.db.$transaction(async (tx) => {
       const occurrenceDate = new Date(dto.occurrenceDate!);
       await tx.calendarEventCancelledOccurrence.upsert({
         where: { eventId_occurrenceDate: { eventId, occurrenceDate } },
@@ -99,24 +90,42 @@ export class CalendarEventService {
         },
       });
     });
+    this.record(
+      AuditEvent.CALENDAR_BLOCK_UPDATED,
+      event,
+      updated,
+      actor,
+      dto.occurrenceDate,
+    );
+    return updated;
   }
 
   async delete(
     locationId: string,
     eventId: string,
     dto: DeleteCalendarEventDto,
+    actor: AuditActor,
   ): Promise<void> {
-    await this.findInLocation(locationId, eventId);
+    const event = await this.findInLocation(locationId, eventId);
     if (dto.thisOnly) {
       const occurrenceDate = new Date(dto.occurrenceDate!);
-      await this.db.calendarEventCancelledOccurrence.upsert({
-        where: { eventId_occurrenceDate: { eventId, occurrenceDate } },
-        create: { eventId, occurrenceDate },
-        update: {},
-      });
+      const cancellation =
+        await this.db.calendarEventCancelledOccurrence.createMany({
+          data: [{ eventId, occurrenceDate }],
+          skipDuplicates: true,
+        });
+      if (cancellation.count === 0) return;
+      this.record(
+        AuditEvent.CALENDAR_BLOCK_DELETED,
+        event,
+        null,
+        actor,
+        dto.occurrenceDate,
+      );
       return;
     }
     await this.db.calendarEvent.delete({ where: { id: eventId } });
+    this.record(AuditEvent.CALENDAR_BLOCK_DELETED, event, null, actor);
   }
 
   async findInLocation(
@@ -134,18 +143,21 @@ export class CalendarEventService {
     locationId: string,
     eventId: string,
     dto: MoveCalendarEventDto,
+    actor: AuditActor,
   ): Promise<CalendarEvent> {
     const event = await this.findInLocation(locationId, eventId);
     const startDateTime = new Date(dto.startDateTime);
     const endDateTime = new Date(dto.endDateTime);
     if (!dto.thisOnly) {
-      return this.db.calendarEvent.update({
+      const updated = await this.db.calendarEvent.update({
         where: { id: eventId },
         data: { startDateTime, endDateTime },
       });
+      this.record(AuditEvent.CALENDAR_BLOCK_MOVED, event, updated, actor);
+      return updated;
     }
     const occurrenceDate = new Date(dto.occurrenceDate!);
-    return this.db.$transaction(async (tx) => {
+    const updated = await this.db.$transaction(async (tx) => {
       await tx.calendarEventCancelledOccurrence.upsert({
         where: { eventId_occurrenceDate: { eventId, occurrenceDate } },
         create: { eventId, occurrenceDate },
@@ -167,6 +179,92 @@ export class CalendarEventService {
         },
       });
     });
+    this.record(
+      AuditEvent.CALENDAR_BLOCK_MOVED,
+      event,
+      updated,
+      actor,
+      dto.occurrenceDate,
+    );
+    return updated;
+  }
+
+  private record(
+    eventType: AuditEvent,
+    before: CalendarEvent | null,
+    after: CalendarEvent | null,
+    actor: AuditActor,
+    occurrenceDate?: string | null,
+  ): void {
+    const event = after ?? before!;
+    const fields = [
+      'staffId',
+      'title',
+      'reason',
+      'notes',
+      'repeatType',
+      'startDateTime',
+      'endDateTime',
+      'daysMask',
+      'repeatUntil',
+    ] as const satisfies readonly (keyof CalendarEvent)[];
+    const changes =
+      before && after
+        ? auditSnapshotChanges(
+            auditSnapshot(before, fields),
+            auditSnapshot(after, fields),
+          )
+        : undefined;
+    if (before && after && !occurrenceDate && changes?.length === 0) return;
+    const targets = new Map<
+      string,
+      Pick<AuditLogEvent, 'entityType' | 'entityId'>
+    >();
+    const currentTarget = {
+      entityType: event.staffId ? AuditEntity.STAFF : AuditEntity.CALENDAR,
+      entityId: event.staffId ?? before?.id ?? event.id,
+    };
+    targets.set(
+      `${currentTarget.entityType}:${currentTarget.entityId}`,
+      currentTarget,
+    );
+    if (before) {
+      const previousTarget = {
+        entityType: before.staffId ? AuditEntity.STAFF : AuditEntity.CALENDAR,
+        entityId: before.staffId ?? before.id,
+      };
+      targets.set(
+        `${previousTarget.entityType}:${previousTarget.entityId}`,
+        previousTarget,
+      );
+    }
+    for (const target of targets.values())
+      this.eventEmitter.emit(AUDIT_EVENT, {
+        locationId: event.locationId,
+        ...target,
+        eventType,
+        actionType:
+          before == null
+            ? AuditActionType.CREATE
+            : after == null
+              ? AuditActionType.DELETE
+              : AuditActionType.MODIFY,
+        occurredAt: new Date(),
+        actor,
+        payload: {
+          title: event.title ?? 'Блокировка',
+          changes:
+            changes ??
+            Object.entries(auditSnapshot(event, fields)).map(
+              ([field, value]) => ({
+                field,
+                from: before == null ? '—' : (value ?? '—'),
+                to: after == null ? '—' : (value ?? '—'),
+              }),
+            ),
+          occurrenceDate: occurrenceDate ?? undefined,
+        },
+      } satisfies AuditLogEvent);
   }
 
   private buildEventData(

@@ -1,3 +1,6 @@
+import { auditActorFromToken } from '../../audit/utils/audit-actor-from-token.js';
+import { TokenPayload } from '../../auth/decorators/token-payload.decorator.js';
+import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
 import {
   Body,
   Controller,
@@ -49,8 +52,13 @@ export class SuppliersController {
   async create(
     @Param('brandId', ParseUUIDPipe) brandId: string,
     @Body() dto: CreateSupplierDto,
+    @TokenPayload() token: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    const supplier = await this.suppliers.create(brandId, dto);
+    const supplier = await this.suppliers.create(
+      brandId,
+      dto,
+      auditActorFromToken(token, brandId),
+    );
     return BaseResponseDto.success({ id: supplier.id });
   }
 
@@ -112,8 +120,14 @@ export class SuppliersController {
     @Param('brandId', ParseUUIDPipe) brandId: string,
     @Param('supplierId', ParseUUIDPipe) supplierId: string,
     @Body() dto: UpdateSupplierDto,
+    @TokenPayload() token: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    const supplier = await this.suppliers.update(brandId, supplierId, dto);
+    const supplier = await this.suppliers.update(
+      brandId,
+      supplierId,
+      dto,
+      auditActorFromToken(token, brandId),
+    );
     return BaseResponseDto.success({ id: supplier.id });
   }
 
@@ -126,7 +140,12 @@ export class SuppliersController {
   async deactivate(
     @Param('brandId', ParseUUIDPipe) brandId: string,
     @Param('supplierId', ParseUUIDPipe) supplierId: string,
+    @TokenPayload() token: TokenPayloadDto,
   ): Promise<void> {
-    await this.suppliers.deactivate(brandId, supplierId);
+    await this.suppliers.deactivate(
+      brandId,
+      supplierId,
+      auditActorFromToken(token, brandId),
+    );
   }
 }

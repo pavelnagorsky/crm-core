@@ -13,9 +13,50 @@ import { AuditHistoryRequestDto } from '../dto/audit-history-request.dto.js';
 import { AuditLogItemDto } from '../dto/audit-log-item.dto.js';
 import type { AuditLogEvent } from '../interfaces/audit-log-event.interface.js';
 import { AuditRenderer } from '../rendering/audit.renderer.js';
+import { AccessChangeAuditInput } from '../interfaces/access-change-audit-input.interface.js';
+import { AuditActor } from '../interfaces/audit-actor.interface.js';
+import { auditSnapshot } from '../utils/audit-snapshot.js';
 
 @Injectable()
 export class AuditService {
+  recordAccessChange(
+    change: AccessChangeAuditInput,
+    actor: AuditActor,
+    tx: Prisma.TransactionClient,
+  ): Promise<AuditLog> {
+    const details =
+      change.payload &&
+      typeof change.payload === 'object' &&
+      !Array.isArray(change.payload)
+        ? change.payload
+        : {};
+    const snapshotSource: Prisma.JsonObject = {
+      targetId: change.targetId,
+      ...details,
+    };
+    return tx.auditLog.create({
+      data: {
+        id: change.id,
+        brandId: change.brandId,
+        locationId: change.locationId,
+        entityType: 'ACCESS',
+        entityId: change.targetId ?? change.brandId,
+        eventType: 'ACCESS_CHANGED',
+        actionType: 'ACTION',
+        occurredAt: change.createdAt,
+        actorId: actor.id ?? null,
+        actorName: actor.name,
+        actorRole: actor.role,
+        payload: {
+          title: change.action,
+          changes: Object.entries(
+            auditSnapshot(snapshotSource, Object.keys(snapshotSource)),
+          ).map(([field, value]) => ({ field, from: '—', to: value ?? '—' })),
+        },
+      },
+    });
+  }
+
   private readonly logger = new Logger(AuditService.name);
 
   constructor(

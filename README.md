@@ -1,5 +1,7 @@
 # CRM Core
 
+Docker и GitHub Actions: [настройка сборки и деплоя](docs/deployment.md).
+
 Backend CRM на NestJS, Prisma и PostgreSQL: бренды и филиалы, календарь и бронирования, клиенты, услуги, продажи, склад и зарплата.
 
 ## Запуск

@@ -7,6 +7,8 @@ import { SERVICE_BUNDLE_AUDIT_FIELDS } from './service-bundle.fields.js';
 import { SERVICE_CATEGORY_AUDIT_FIELDS } from './service-category.fields.js';
 import { BUSINESS_AUDIT_FIELDS } from './business.fields.js';
 import { PRODUCT_AUDIT_FIELDS } from './product.fields.js';
+import { LOCATION_AUDIT_FIELDS } from './location.fields.js';
+import { CALENDAR_AUDIT_FIELDS } from './calendar.fields.js';
 
 const allFields = [
   ...BOOKING_AUDIT_FIELDS,
@@ -17,6 +19,8 @@ const allFields = [
   ...SERVICE_CATEGORY_AUDIT_FIELDS,
   ...BUSINESS_AUDIT_FIELDS,
   ...PRODUCT_AUDIT_FIELDS,
+  ...LOCATION_AUDIT_FIELDS,
+  ...CALENDAR_AUDIT_FIELDS,
 ];
 
 export const AUDIT_FIELD_TYPES: Record<string, FieldType> = Object.fromEntries(

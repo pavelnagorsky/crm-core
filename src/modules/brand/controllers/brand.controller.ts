@@ -6,6 +6,7 @@ import {
   Header,
   HttpCode,
   HttpStatus,
+  Logger,
   Param,
   ParseUUIDPipe,
   Post,
@@ -29,6 +30,7 @@ import { Claim } from '../../access/enums/claim.enum.js';
 import { hasGlobalPermission } from '../../access/utils/has-global-permission.js';
 import { Read, Write } from '../../access/utils/permission.js';
 import { AuditActorRole } from '../../audit/enums/audit-actor-role.enum.js';
+import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
 import { auditActorFromToken } from '../../audit/utils/audit-actor-from-token.js';
 import { Auth } from '../../auth/decorators/auth.decorator.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
@@ -41,11 +43,17 @@ import { BrandSearchRequestDto } from '../dto/brand-search-request.dto.js';
 import { CreateBrandDto } from '../dto/create-brand.dto.js';
 import { UpdateBrandDto } from '../dto/update-brand.dto.js';
 import { BrandService } from '../services/brand.service.js';
+import { BrandInitialDataService } from '../onboarding/services/brand-initial-data.service.js';
 
 @ApiTags('Brands')
 @Controller('brands')
 export class BrandController {
-  constructor(private readonly brandService: BrandService) {}
+  private readonly logger = new Logger(BrandController.name);
+
+  constructor(
+    private readonly brandService: BrandService,
+    private readonly initialDataService: BrandInitialDataService,
+  ) {}
 
   @ApiOperation({ summary: 'Create a new brand with its first location' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
@@ -57,11 +65,21 @@ export class BrandController {
   ): Promise<BaseResponseDto<{ id: string }>> {
     const actorName =
       [payload.firstName, payload.lastName].filter(Boolean).join(' ') || 'User';
-    const brand = await this.brandService.create(payload.sub, dto, {
+    const actor: AuditActor = {
       id: payload.sub,
       name: actorName,
       role: AuditActorRole.OWNER,
-    });
+    };
+    const brand = await this.brandService.create(payload.sub, dto, actor);
+    const location = brand.locations[0];
+    void this.initialDataService
+      .populate(location.id, payload.sub, actor)
+      .catch((error: unknown) => {
+        this.logger.error(
+          `Initial data population failed: locationId=${location.id}`,
+          error,
+        );
+      });
     return BaseResponseDto.success({ id: brand.id });
   }
 
@@ -157,7 +175,11 @@ export class BrandController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async delete(
     @Param('brandId', ParseUUIDPipe) brandId: string,
+    @TokenPayload() payload: TokenPayloadDto,
   ): Promise<void> {
-    await this.brandService.delete(brandId);
+    await this.brandService.delete(
+      brandId,
+      auditActorFromToken(payload, brandId),
+    );
   }
 }

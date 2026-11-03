@@ -1,3 +1,10 @@
+import { AuditActorRole } from '../audit/enums/audit-actor-role.enum.js';
+import { tokenPayload } from '../auth/testing/factories/token-payload.factory.js';
+const actor = {
+  id: 'owner',
+  name: 'Owner',
+  role: AuditActorRole.OWNER,
+} as const;
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { HttpStatus } from '@nestjs/common';
 import { BookingWidget } from '@prisma/client';
@@ -150,6 +157,160 @@ function repository() {
   };
 }
 
+describe('Booking channel audit', () => {
+  it.each(['page', 'widget'] as const)(
+    'records %s creation and deletion with its author',
+    async (kind) => {
+      const events = { emit: vi.fn() };
+      const repo = { ...repository(), delete: vi.fn() };
+      const publish = { assertTransition: vi.fn() };
+      if (kind === 'page') {
+        const service = new BookingPagesService(
+          { bookingPage: repo } as never,
+          {} as never,
+          publish as never,
+          events as never,
+        );
+        const saved = await service.create(
+          'location',
+          plainToInstance(SaveBookingPageDto, pageInput),
+          actor,
+        );
+        repo.findFirst.mockResolvedValue(saved);
+        await service.delete('location', 'channel', actor);
+      } else {
+        const service = new BookingWidgetsService(
+          { bookingWidget: repo } as never,
+          publish as never,
+          events as never,
+        );
+        const saved = await service.create(
+          'location',
+          plainToInstance(SaveBookingWidgetDto, widgetInput),
+          actor,
+        );
+        repo.findFirst.mockResolvedValue(saved);
+        await service.delete('location', 'channel', actor);
+      }
+      const prefix = kind === 'page' ? 'BOOKING_PAGE' : 'BOOKING_WIDGET';
+      expect(events.emit).toHaveBeenCalledWith(
+        'audit',
+        expect.objectContaining({
+          entityType: prefix,
+          eventType: `${prefix}_CREATED`,
+          actor,
+          locationId: 'location',
+        }),
+      );
+      expect(events.emit).toHaveBeenCalledWith(
+        'audit',
+        expect.objectContaining({
+          eventType: `${prefix}_DELETED`,
+          actor,
+          payload: expect.objectContaining({
+            title: kind === 'page' ? pageInput.title : widgetInput.title,
+          }),
+        }),
+      );
+    },
+  );
+
+  it('records allowed domain changes with their previous value', async () => {
+    const events = { emit: vi.fn() };
+    const repo = repository();
+    const service = new BookingWidgetsService(
+      { bookingWidget: repo } as never,
+      {} as never,
+      events as never,
+    );
+    const saved = await service.create(
+      'location',
+      plainToInstance(SaveBookingWidgetDto, {
+        ...widgetInput,
+        allowedDomains: ['old.example'],
+      }),
+      actor,
+    );
+    events.emit.mockClear();
+    repo.findFirst.mockImplementation(async ({ where }) =>
+      where.id ? saved : null,
+    );
+    await service.update(
+      'location',
+      'channel',
+      plainToInstance(SaveBookingWidgetDto, {
+        ...widgetInput,
+        allowedDomains: ['new.example'],
+      }),
+      actor,
+    );
+    expect(events.emit).toHaveBeenCalledWith(
+      'audit',
+      expect.objectContaining({
+        eventType: 'BOOKING_WIDGET_UPDATED',
+        payload: expect.objectContaining({
+          changes: expect.arrayContaining([
+            {
+              field: 'allowedDomains',
+              from: '["old.example"]',
+              to: '["new.example"]',
+            },
+          ]),
+        }),
+      }),
+    );
+  });
+
+  it.each(['page', 'widget'] as const)(
+    'records %s publication only after a successful transition',
+    async (kind) => {
+      const events = { emit: vi.fn() };
+      const repo = repository();
+      const publish = { assertTransition: vi.fn() };
+      const service =
+        kind === 'page'
+          ? new BookingPagesService(
+              { bookingPage: repo } as never,
+              {} as never,
+              publish as never,
+              events as never,
+            )
+          : new BookingWidgetsService(
+              { bookingWidget: repo } as never,
+              publish as never,
+              events as never,
+            );
+      repo.findFirst.mockResolvedValue({
+        id: 'channel',
+        locationId: 'location',
+        title: 'Channel',
+        status: 'DRAFT',
+      });
+      await service.changeStatus('location', 'channel', 'PUBLISHED', actor);
+      expect(events.emit).toHaveBeenCalledWith(
+        'audit',
+        expect.objectContaining({
+          eventType:
+            kind === 'page'
+              ? 'BOOKING_PAGE_STATUS_CHANGED'
+              : 'BOOKING_WIDGET_STATUS_CHANGED',
+          payload: expect.objectContaining({
+            changes: expect.arrayContaining([
+              { field: 'status', from: 'DRAFT', to: 'PUBLISHED' },
+            ]),
+          }),
+        }),
+      );
+      events.emit.mockClear();
+      publish.assertTransition.mockRejectedValue(new Error('Not bookable'));
+      await expect(
+        service.changeStatus('location', 'channel', 'PUBLISHED', actor),
+      ).rejects.toThrow('Not bookable');
+      expect(events.emit).not.toHaveBeenCalled();
+    },
+  );
+});
+
 describe('booking channel contract', () => {
   const db = { bookingPage: repository(), bookingWidget: repository() };
   const files = { findById: vi.fn() };
@@ -157,8 +318,13 @@ describe('booking channel contract', () => {
     db as never,
     files as never,
     {} as never,
+    { emit: vi.fn() } as never,
   );
-  const widgets = new BookingWidgetsService(db as never, {} as never);
+  const widgets = new BookingWidgetsService(
+    db as never,
+    {} as never,
+    { emit: vi.fn() } as never,
+  );
   beforeEach(() => vi.clearAllMocks());
 
   it.each(['DRAFT', 'PUBLISHED'])(
@@ -169,7 +335,11 @@ describe('booking channel contract', () => {
         status,
       });
       const error = await pages
-        .create('location', plainToInstance(SaveBookingPageDto, pageInput))
+        .create(
+          'location',
+          plainToInstance(SaveBookingPageDto, pageInput),
+          actor,
+        )
         .catch((error: unknown) => error);
 
       expect(error).toBeInstanceOf(AppException);
@@ -191,6 +361,7 @@ describe('booking channel contract', () => {
     const saved = await pages.create(
       'location',
       plainToInstance(SaveBookingPageDto, pageInput),
+      actor,
     );
 
     expect(saved.locationId).toBe('location');
@@ -216,8 +387,8 @@ describe('booking channel contract', () => {
         });
         const saved =
           operation === 'create'
-            ? await pages.create('location', dto)
-            : await pages.update('location', 'channel', dto);
+            ? await pages.create('location', dto, actor)
+            : await pages.update('location', 'channel', dto, actor);
         expect(db.bookingPage[operation]).toHaveBeenLastCalledWith(
           expect.objectContaining({
             data: expect.objectContaining({ heading: dto.heading }),
@@ -261,8 +432,8 @@ describe('booking channel contract', () => {
         });
         const saved =
           operation === 'create'
-            ? await pages.create('location', dto)
-            : await pages.update('location', 'channel', dto);
+            ? await pages.create('location', dto, actor)
+            : await pages.update('location', 'channel', dto, actor);
         expect(db.bookingPage[operation]).toHaveBeenLastCalledWith(
           expect.objectContaining({ data: expect.objectContaining(analytics) }),
         );
@@ -287,6 +458,7 @@ describe('booking channel contract', () => {
       'location',
       'channel',
       plainToInstance(SaveBookingPageDto, pageInput),
+      actor,
     );
     expect(saved).toMatchObject(existing);
     const data = db.bookingPage.update.mock.calls[0][0].data;
@@ -301,6 +473,7 @@ describe('booking channel contract', () => {
         gtmId: ' ',
         yandexMetrikaId: '',
       }),
+      actor,
     );
     expect(db.bookingPage.update).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -322,8 +495,8 @@ describe('booking channel contract', () => {
         });
         const saved =
           operation === 'create'
-            ? await widgets.create('location', dto)
-            : await widgets.update('location', 'channel', dto);
+            ? await widgets.create('location', dto, actor)
+            : await widgets.update('location', 'channel', dto, actor);
         expect(db.bookingWidget[operation]).toHaveBeenLastCalledWith(
           expect.objectContaining({ data: expect.objectContaining(analytics) }),
         );
@@ -346,6 +519,7 @@ describe('booking channel contract', () => {
       'location',
       'channel',
       plainToInstance(SaveBookingWidgetDto, widgetInput),
+      actor,
     );
     const data = db.bookingWidget.update.mock.calls[0][0].data;
     expect(data).not.toHaveProperty('gtmId');
@@ -358,6 +532,7 @@ describe('booking channel contract', () => {
         gtmId: ' ',
         yandexMetrikaId: '',
       }),
+      actor,
     );
     expect(db.bookingWidget.update).toHaveBeenLastCalledWith(
       expect.objectContaining({
@@ -378,7 +553,7 @@ describe('booking channel contract', () => {
       ...pageInput,
       coverFileId: 'cover',
     });
-    const saved = await pages.create('location', dto);
+    const saved = await pages.create('location', dto, actor);
     expect(saved.coverFileId).toBe('cover');
     expect(files.findById).toHaveBeenCalledWith('cover');
     const withCover = { ...saved, coverFile } as BookingPageWithCover;
@@ -426,6 +601,7 @@ describe('booking channel contract', () => {
           ...pageInput,
           form: selectedForm,
         }),
+        actor,
       );
       const widget = await widgets.create(
         'location',
@@ -433,6 +609,7 @@ describe('booking channel contract', () => {
           ...widgetInput,
           form: selectedForm,
         }),
+        actor,
       );
       for (const record of [page, widget]) {
         expect(record.palette).toBe(preset.id);
@@ -475,6 +652,7 @@ describe('booking channel contract', () => {
           ...pageInput,
           form: selectedForm,
         }),
+        actor,
       );
       const widget = await widgets.update(
         'location',
@@ -483,6 +661,7 @@ describe('booking channel contract', () => {
           ...widgetInput,
           form: selectedForm,
         }),
+        actor,
       );
       for (const response of responses(page, widget)) {
         const config = 'form' in response ? response.form : response.config;
@@ -534,7 +713,11 @@ describe.each(['page', 'widget'] as const)(
         kind === 'page'
           ? new BookingPagesController(owner as never, stats as never)
           : new BookingWidgetsController(owner as never, stats as never);
-      const result = await controller.create('location', {} as never);
+      const result = await controller.create(
+        'location',
+        {} as never,
+        tokenPayload(),
+      );
       expect(result.responseValue?.stats).toEqual({
         views: 0,
         formOpens: 0,

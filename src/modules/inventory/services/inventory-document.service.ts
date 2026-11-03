@@ -31,6 +31,8 @@ import { InventoryDocumentWithItems } from '../interfaces/inventory-document-wit
 import { InventoryBalanceLockService } from './inventory-balance-lock.service.js';
 import { InventoryDocumentDraftService } from './inventory-document-draft.service.js';
 import { InventoryDocumentMovementService } from './inventory-document-movement.service.js';
+import { inventoryDocumentAudit } from '../utils/inventory-document-audit.js';
+import { auditSnapshotChanges } from '../../audit/utils/audit-snapshot.js';
 
 @Injectable()
 export class InventoryDocumentService {
@@ -66,6 +68,7 @@ export class InventoryDocumentService {
         createdByName: actor.name,
         items: { create: draft.items },
       },
+      include: documentInclude,
     });
     this.emit(
       location.brandId,
@@ -74,7 +77,11 @@ export class InventoryDocumentService {
       AuditEvent.INVENTORY_DOCUMENT_CREATED,
       AuditActionType.CREATE,
       actor,
-      { type: document.type, itemCount: dto.items.length },
+      {
+        type: document.type,
+        itemCount: dto.items.length,
+        snapshot: inventoryDocumentAudit(document),
+      },
     );
     return document;
   }
@@ -86,7 +93,7 @@ export class InventoryDocumentService {
   ): Promise<InventoryDocument> {
     const { locationId, id: documentId } = expected;
     const location = await this.locations.findById(locationId);
-    const document = await this.inTransaction(async (tx) => {
+    const result = await this.inTransaction(async (tx) => {
       await this.lockDocument(tx, documentId);
       const old = await this.findDocumentInTransaction(
         tx,
@@ -103,7 +110,7 @@ export class InventoryDocumentService {
         tx,
       );
       await tx.inventoryDocumentItem.deleteMany({ where: { documentId } });
-      return tx.inventoryDocument.update({
+      const document = await tx.inventoryDocument.update({
         where: { id: documentId },
         data: {
           destinationLocationId: dto.destinationLocationId ?? null,
@@ -116,8 +123,17 @@ export class InventoryDocumentService {
           note: this.text(dto.note),
           items: { create: draft.items },
         },
+        include: documentInclude,
       });
+      return {
+        document,
+        changes: auditSnapshotChanges(
+          inventoryDocumentAudit(old),
+          inventoryDocumentAudit(document),
+        ),
+      };
     });
+    const { document, changes } = result;
     this.emit(
       location.brandId,
       locationId,
@@ -125,7 +141,7 @@ export class InventoryDocumentService {
       AuditEvent.INVENTORY_DOCUMENT_UPDATED,
       AuditActionType.MODIFY,
       actor,
-      { type: document.type, itemCount: dto.items.length },
+      { type: document.type, itemCount: dto.items.length, changes },
     );
     return document;
   }
@@ -154,8 +170,34 @@ export class InventoryDocumentService {
         {
           type: transition.document.type,
           status: transition.document.status,
+          snapshot: inventoryDocumentAudit(transition.document),
+          sourceLocationId: locationId,
+          destinationLocationId: transition.document.destinationLocationId,
         },
       );
+      if (
+        transition.document.destinationLocationId &&
+        transition.document.destinationLocationId !== locationId
+      ) {
+        this.emit(
+          location.brandId,
+          transition.document.destinationLocationId,
+          transition.document.id,
+          status === InventoryDocumentTargetStatus.POSTED
+            ? AuditEvent.INVENTORY_DOCUMENT_POSTED
+            : AuditEvent.INVENTORY_DOCUMENT_VOIDED,
+          AuditActionType.ACTION,
+          actor,
+          {
+            type: transition.document.type,
+            status: transition.document.status,
+            sourceLocationId: locationId,
+            destinationLocationId: transition.document.destinationLocationId,
+            transferDirection: 'IN',
+            snapshot: inventoryDocumentAudit(transition.document),
+          },
+        );
+      }
     }
     return transition.document;
   }

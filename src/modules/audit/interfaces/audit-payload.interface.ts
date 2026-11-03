@@ -4,6 +4,12 @@ import { BookingDeletedPayload } from './booking-deleted-payload.interface.js';
 import { BookingStatusChangedPayload } from './booking-status-changed-payload.interface.js';
 import { BookingUpdatedPayload } from './booking-updated-payload.interface.js';
 import { BrandUpdatedPayload } from './brand-updated-payload.interface.js';
+import { EntityAuditPayload } from './entity-audit-payload.interface.js';
+import { BrandCreatedPayload } from './brand-created-payload.interface.js';
+import { BrandDeletedPayload } from './brand-deleted-payload.interface.js';
+import { LocationCreatedPayload } from './location-created-payload.interface.js';
+import { LocationUpdatedPayload } from './location-updated-payload.interface.js';
+import { LocationDeletedPayload } from './location-deleted-payload.interface.js';
 import { ClientCreatedPayload } from './client-created-payload.interface.js';
 import { ClientDeletedPayload } from './client-deleted-payload.interface.js';
 import { ClientUpdatedPayload } from './client-updated-payload.interface.js';
@@ -29,6 +35,7 @@ import { StaffUpdatedPayload } from './staff-updated-payload.interface.js';
 // ─── Union ───────────────────────────────────────────────────────────────────
 
 export type AuditPayload =
+  | EntityAuditPayload
   | ProductPackagingAuditPayload
   | BookingCreatedPayload
   | BookingUpdatedPayload
@@ -55,4 +62,9 @@ export type AuditPayload =
   | ServiceBundleUpdatedPayload
   | ServiceBundleDeletedPayload
   | BrandUpdatedPayload
+  | BrandCreatedPayload
+  | BrandDeletedPayload
+  | LocationCreatedPayload
+  | LocationUpdatedPayload
+  | LocationDeletedPayload
   | PayrollPeriodAuditPayload;

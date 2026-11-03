@@ -23,8 +23,17 @@ function fixture() {
     },
   };
   const bookings = { countCreatedByChannels: vi.fn().mockResolvedValue([]) };
-  const pages = new BookingPagesService(db as never, {} as never, {} as never);
-  const widgets = new BookingWidgetsService(db as never, {} as never);
+  const pages = new BookingPagesService(
+    db as never,
+    {} as never,
+    {} as never,
+    { emit: vi.fn() } as never,
+  );
+  const widgets = new BookingWidgetsService(
+    db as never,
+    {} as never,
+    { emit: vi.fn() } as never,
+  );
   return {
     db,
     bookings,

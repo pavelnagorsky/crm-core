@@ -98,7 +98,15 @@ function setup(status: InventoryDocumentStatus) {
       findMany: vi.fn().mockResolvedValue([]),
     },
     inventoryDocument: {
-      create: vi.fn(),
+      create: vi.fn().mockImplementation(async ({ data }) => ({
+        ...document(InventoryDocumentStatus.OPEN),
+        ...data,
+        items: data.items.create.map((item: object, index: number) => ({
+          ...document(InventoryDocumentStatus.OPEN).items[0],
+          ...item,
+          id: `item-${index}`,
+        })),
+      })),
       findMany: vi.fn().mockResolvedValue([]),
       count: vi.fn().mockResolvedValue(0),
     },
@@ -325,10 +333,6 @@ describe('InventoryFacade', () => {
         isActive: true,
       },
     ]);
-    db.inventoryDocument.create.mockResolvedValue({
-      id: 'receipt',
-      type: InventoryDocumentType.RECEIPT,
-    });
     await service.createDocument(
       'location-1',
       {
@@ -827,11 +831,6 @@ describe('InventoryFacade', () => {
     suppliers.resolveActiveForDocument.mockResolvedValue({
       id: 'supplier-1',
       name: 'Acme Supply',
-    });
-    db.inventoryDocument.create.mockResolvedValue({
-      id: 'document-1',
-      supplierId: 'supplier-1',
-      supplierName: 'Acme Supply',
     });
 
     await service.createDocument(

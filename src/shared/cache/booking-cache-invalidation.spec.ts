@@ -28,7 +28,10 @@ describe('Cache invalidation through domain writes', () => {
     };
     const db = {
       staff: {
-        findFirst: vi.fn().mockResolvedValue(row),
+        findFirst: vi.fn(async () => ({
+          ...row,
+          staffServices: serviceIds.map((serviceId) => ({ serviceId })),
+        })),
         findMany: vi.fn(async () => [
           {
             ...row,
@@ -58,7 +61,13 @@ describe('Cache invalidation through domain writes', () => {
       (await staff.listActiveWithServices('location'))[0].staffServices,
     ).toEqual([{ serviceId: 'old' }]);
     await staff.update('location', 'anna', { serviceIds: ['new'] }, actor);
-    expect(events.emit).not.toHaveBeenCalled();
+    expect(events.emit).toHaveBeenCalledWith(
+      'audit',
+      expect.objectContaining({
+        eventType: 'STAFF_UPDATED',
+        payload: { changes: [expect.objectContaining({ field: 'services' })] },
+      }),
+    );
     expect(
       (await staff.listActiveWithServices('location'))[0].staffServices,
     ).toEqual([{ serviceId: 'new' }]);
@@ -233,6 +242,9 @@ describe('Cache invalidation through domain writes', () => {
         updateMany: vi.fn().mockResolvedValue({ count: 1 }),
       },
       brand: {
+        findUniqueOrThrow: vi
+          .fn()
+          .mockResolvedValue({ id: 'brand', name: 'Brand' }),
         updateMany: vi.fn(async () => {
           deleted = true;
           return { count: 1 };
@@ -252,21 +264,23 @@ describe('Cache invalidation through domain writes', () => {
         },
       } as never,
       cache,
+      { emit: vi.fn() } as never,
     );
     await locations.getBookingSettings('location');
-    await expect(locations.delete('location')).rejects.toThrow('open bookings');
+    await expect(locations.delete('location', actor)).rejects.toThrow(
+      'open bookings',
+    );
     await locations.getBookingSettings('location');
     expect(db.location.findUnique).toHaveBeenCalledTimes(1);
     const brands = new BrandService(
       db as never,
-      {} as never,
-      {} as never,
+      { emit: vi.fn() } as never,
       {} as never,
       { assertBrandDeletionAllowed: vi.fn() } as never,
       {} as never,
       cache,
     );
-    await brands.delete('brand');
+    await brands.delete('brand', actor);
     await expect(locations.getBookingSettings('location')).rejects.toThrow(
       'Location not found',
     );

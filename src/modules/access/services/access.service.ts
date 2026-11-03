@@ -7,12 +7,18 @@ import {
   ACTIVE_LOCATION_WHERE,
 } from '../../../shared/database/active-business.where.js';
 import { PermissionCalculator } from '../calculators/permission.calculator.js';
+import { AuditService } from '../../audit/services/audit.service.js';
+import { UserService } from '../../user/services/user.service.js';
+import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
+import { AuditActorRole } from '../../audit/enums/audit-actor-role.enum.js';
 
 @Injectable()
 export class AccessService {
   constructor(
     private readonly db: DatabaseService,
     private readonly compute: PermissionCalculator,
+    private readonly audit: AuditService,
+    private readonly users: UserService,
   ) {}
 
   async resolvePermissions(
@@ -133,7 +139,7 @@ export class AccessService {
       where: { brandId },
       data: { revision: { increment: 1 } },
     });
-    return tx.accessAudit.create({
+    const change = await tx.accessAudit.create({
       data: {
         brandId,
         actorId,
@@ -143,6 +149,30 @@ export class AccessService {
         locationId,
       },
     });
+    let actor: AuditActor = { name: 'Система', role: AuditActorRole.SYSTEM };
+    if (actorId !== 'system') {
+      const user = await this.users.findById(actorId, tx);
+      const membership = await tx.brandMembership.findUnique({
+        where: { userId_brandId: { userId: actorId, brandId } },
+      });
+      actor = {
+        id: actorId,
+        name:
+          [user.firstName, user.lastName].filter(Boolean).join(' ') ||
+          user.email ||
+          'Пользователь',
+        role:
+          user.role === UserRole.ADMIN
+            ? AuditActorRole.SUPPORT
+            : membership?.role === BusinessRole.OWNER
+              ? AuditActorRole.OWNER
+              : membership
+                ? AuditActorRole.STAFF
+                : AuditActorRole.UNKNOWN,
+      };
+    }
+    await this.audit.recordAccessChange(change, actor, tx);
+    return change;
   }
 
   async assignInitialOwner(
