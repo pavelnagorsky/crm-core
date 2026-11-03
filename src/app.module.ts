@@ -16,6 +16,7 @@ import { ClientsAnalyticsModule } from './modules/clients/analytics/clients-anal
 import { ClientsModule } from './modules/clients/clients.module.js';
 import { DashboardModule } from './modules/dashboard/dashboard.module.js';
 import { FilesModule } from './modules/files/files.module.js';
+import { FeedbackModule } from './modules/feedback/feedback.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 import { InventoryAnalyticsModule } from './modules/inventory/analytics/inventory-analytics.module.js';
 import { InventoryModule } from './modules/inventory/inventory.module.js';
@@ -55,6 +56,7 @@ import { SuppliersModule } from './modules/suppliers/suppliers.module.js';
     AuditModule,
     HealthModule,
     FilesModule,
+    FeedbackModule,
     DashboardModule,
     PayrollModule,
     ProductsModule,

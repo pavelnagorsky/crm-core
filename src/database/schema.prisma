@@ -12,6 +12,29 @@ datasource db {
   provider = "postgresql"
 }
 
+enum FeedbackStatus {
+  NEW
+  IN_PROGRESS
+  DONE
+  SPAM
+}
+
+model Feedback {
+  id        String         @id @default(uuid())
+  name      String         @db.VarChar(100)
+  company   String?        @db.VarChar(255)
+  phone     String?        @db.VarChar(30)
+  email     String?        @db.VarChar(254)
+  message   String?        @db.VarChar(5000)
+  status    FeedbackStatus @default(NEW)
+  notes     String?        @db.VarChar(10000)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([status, createdAt, id])
+  @@index([createdAt, id])
+}
+
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
 enum UserRole {
