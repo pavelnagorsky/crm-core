@@ -599,9 +599,9 @@ describe('booking channel contract', () => {
     ).toBe(true);
     expect(catalog.presets[0]).toMatchObject({
       label: 'Чернила',
-      description: 'Тёмный зал, тёплый металл',
+      description: 'Тёплый графит и шампань',
     });
-    expect(catalog.presets).toHaveLength(22);
+    expect(catalog.presets).toHaveLength(26);
   });
 
   it('persists every catalog preset and returns identical themes in all four responses', async () => {

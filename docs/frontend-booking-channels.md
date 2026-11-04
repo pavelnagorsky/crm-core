@@ -262,12 +262,26 @@ type BookingPaletteCatalogResponse = {
 };
 ```
 
-Начальная тема — `INK`. Использовать значение `defaultPaletteId` из ответа,
+Начальная тема - `INK`. Использовать значение `defaultPaletteId` из ответа,
 не закреплять его в клиенте. `CUSTOM` отсутствует в `presets`.
 
 Порядок: `INK`, `SAND`, `SAGE`, `DUSK`, `WINE`, `PEARL`, `GRAPHITE`, `EMERALD`,
 `SKY`, `LAVENDER`, `CORAL`, `MONO`, `BLUSH`, `LAGOON`, `HONEY`, `COCOA`, `RUBY`,
-`MIST`, `OLIVE`, `INDIGO`, `APRICOT`, `PINE`.
+`MIST`, `OLIVE`, `INDIGO`, `APRICOT`, `PINE`, `LINEN`, `OBSIDIAN`, `MIDNIGHT`, `PETROL`.
+
+Коллекция от 2026-11-04: новые темы «Лён», «Обсидиан», «Полночь», «Петроль».
+Миграция `20261104140000_booking_palette_collection` добавляет только эти четыре
+значения PostgreSQL enum. Готовые цвета разрешаются одинаково для страницы и
+виджета, клиент не содержит копии палитр.
+По подтверждению пользователя миграция применена к staging 2026-11-04;
+все четыре значения подтверждены в БД, ожидающих миграций нет.
+
+CRM предлагает 20 основных тем (10 светлых и 10 тёмных). `EMERALD`, `HONEY`, `RUBY`,
+`MIST`, `OLIVE`, `APRICOT` остаются в каталоге для совместимости и видны в редакторе
+при сохранённом выборе. Существующие записи не меняют ID автоматически. Будущие
+добавления сервера отображаются без изменения клиентского списка. Контраст семи
+текстовых/акцентных пар всех 26 пресетов не ниже 4,5:1; полный отбор и предпросмотр:
+`crm-frontend/docs/BOOKING_PALETTES.md`.
 
 Русские `label` и `description`, порядок и цвета перенесены из
 `crm-frontend/src/entities/booking-form/model/palettes.ts`;

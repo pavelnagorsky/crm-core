@@ -1,0 +1,4 @@
+ALTER TYPE "BookingPalette" ADD VALUE 'LINEN';
+ALTER TYPE "BookingPalette" ADD VALUE 'OBSIDIAN';
+ALTER TYPE "BookingPalette" ADD VALUE 'MIDNIGHT';
+ALTER TYPE "BookingPalette" ADD VALUE 'PETROL';

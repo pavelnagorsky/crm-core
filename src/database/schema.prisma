@@ -140,6 +140,10 @@ enum BookingPalette {
   INDIGO
   APRICOT
   PINE
+  LINEN
+  OBSIDIAN
+  MIDNIGHT
+  PETROL
   CUSTOM
 }
 
