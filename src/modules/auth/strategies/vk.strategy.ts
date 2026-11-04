@@ -1,5 +1,5 @@
 import { HttpService } from '@nestjs/axios';
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { isEmail } from 'class-validator';
@@ -18,6 +18,7 @@ import { validateOAuthRequest } from '../utils/validate-oauth-request.js';
 
 @Injectable()
 export class VkOAuthStrategy extends PassportStrategy(Strategy, 'vk-oauth') {
+  private readonly logger = new Logger(VkOAuthStrategy.name);
   constructor(
     private readonly config: ConfigService,
     private readonly http: HttpService,
@@ -32,9 +33,11 @@ export class VkOAuthStrategy extends PassportStrategy(Strategy, 'vk-oauth') {
     const vk = this.config.get<IVKConfig>('vk');
     const frontend = this.config.get<IFrontendConfig>('frontend');
     if (!vk?.clientId || !vk.codeVerifier || !frontend?.domain) {
+      this.logger.warn('oauth failed: provider=vk reason=NOT_CONFIGURED');
       throw new UnauthorizedException('VK sign-in is not configured');
     }
 
+    let reason = 'TOKEN_EXCHANGE_FAILED';
     try {
       const { data: tokens } = await firstValueFrom(
         this.http.post<VkTokensResponse>(
@@ -65,6 +68,7 @@ export class VkOAuthStrategy extends PassportStrategy(Strategy, 'vk-oauth') {
         throw new UnauthorizedException();
       }
 
+      reason = 'PROFILE_FETCH_FAILED';
       const { data: profile } = await firstValueFrom(
         this.http.post<VkUserResponse>(
           'https://id.vk.com/oauth2/user_info',
@@ -75,13 +79,18 @@ export class VkOAuthStrategy extends PassportStrategy(Strategy, 'vk-oauth') {
           OAUTH_FORM_HTTP_OPTIONS,
         ),
       );
+      reason = 'INVALID_PROFILE';
+      if (profile?.error || !profile?.user) {
+        throw new UnauthorizedException();
+      }
+      reason = 'EMAIL_MISSING_OR_INVALID';
       if (
-        profile?.error ||
-        !profile?.user?.email ||
+        typeof profile.user.email !== 'string' ||
         !isEmail(profile.user.email)
       ) {
         throw new UnauthorizedException();
       }
+      reason = 'IDENTITY_MISMATCH';
       if (
         profile.user.user_id !== undefined &&
         profile.user.user_id !== String(tokens.user_id)
@@ -95,6 +104,7 @@ export class VkOAuthStrategy extends PassportStrategy(Strategy, 'vk-oauth') {
         email: profile.user.email,
       });
     } catch {
+      this.logger.warn(`oauth failed: provider=vk reason=${reason}`);
       throw new UnauthorizedException('VK OAuth failed');
     }
   }

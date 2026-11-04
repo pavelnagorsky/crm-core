@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { LoggerModule } from 'nestjs-pino';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
 import configuration from './config/configuration.js';
+import { loggerConfig } from './config/logger.config.js';
 import { DatabaseModule } from './database/database.module.js';
 import { AccessManagementModule } from './modules/access-management/access-management.module.js';
 import { AuditModule } from './modules/audit/audit.module.js';
@@ -39,6 +41,10 @@ import { SuppliersModule } from './modules/suppliers/suppliers.module.js';
       cache: true,
     }),
     ScheduleModule.forRoot(),
+    LoggerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: loggerConfig,
+    }),
     EventEmitterModule.forRoot({ wildcard: true }),
     DatabaseModule,
     NotificationsModule,

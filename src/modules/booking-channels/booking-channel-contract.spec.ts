@@ -1,3 +1,4 @@
+import { DEFAULT_BOOKING_WIDGET_BUTTON_APPEARANCE } from './constants/booking-widget-button.constants.js';
 import { AuditActorRole } from '../audit/enums/audit-actor-role.enum.js';
 import { tokenPayload } from '../auth/testing/factories/token-payload.factory.js';
 const actor = {
@@ -55,7 +56,8 @@ const widgetInput = {
   placement: 'DIALOG',
   trigger: 'FLOATING_BUTTON',
   buttonPosition: 'BOTTOM_RIGHT',
-  allowedDomains: [],
+  status: 'DRAFT',
+  buttonAppearance: { ...DEFAULT_BOOKING_WIDGET_BUTTON_APPEARANCE },
   form,
 };
 const location = {
@@ -139,7 +141,7 @@ function repository() {
     findFirst: vi
       .fn()
       .mockImplementation(async ({ where }) =>
-        where.id ? { id: 'channel' } : null,
+        where.id ? { id: 'channel', status: 'DRAFT' } : null,
       ),
     create: vi.fn().mockImplementation(async ({ data }) => ({
       id: 'channel',
@@ -215,7 +217,7 @@ describe('Booking channel audit', () => {
     },
   );
 
-  it('records allowed domain changes with their previous value', async () => {
+  it('records button appearance changes with their previous value', async () => {
     const events = { emit: vi.fn() };
     const repo = repository();
     const service = new BookingWidgetsService(
@@ -227,7 +229,10 @@ describe('Booking channel audit', () => {
       'location',
       plainToInstance(SaveBookingWidgetDto, {
         ...widgetInput,
-        allowedDomains: ['old.example'],
+        buttonAppearance: {
+          ...DEFAULT_BOOKING_WIDGET_BUTTON_APPEARANCE,
+          text: 'Old',
+        },
       }),
       actor,
     );
@@ -240,7 +245,10 @@ describe('Booking channel audit', () => {
       'channel',
       plainToInstance(SaveBookingWidgetDto, {
         ...widgetInput,
-        allowedDomains: ['new.example'],
+        buttonAppearance: {
+          ...DEFAULT_BOOKING_WIDGET_BUTTON_APPEARANCE,
+          text: 'New',
+        },
       }),
       actor,
     );
@@ -251,9 +259,15 @@ describe('Booking channel audit', () => {
         payload: expect.objectContaining({
           changes: expect.arrayContaining([
             {
-              field: 'allowedDomains',
-              from: '["old.example"]',
-              to: '["new.example"]',
+              field: 'buttonAppearance',
+              from: JSON.stringify({
+                ...DEFAULT_BOOKING_WIDGET_BUTTON_APPEARANCE,
+                text: 'Old',
+              }),
+              to: JSON.stringify({
+                ...DEFAULT_BOOKING_WIDGET_BUTTON_APPEARANCE,
+                text: 'New',
+              }),
             },
           ]),
         }),
@@ -727,7 +741,10 @@ describe.each(['page', 'widget'] as const)(
     });
 
     it('includes totals in list and ID responses without per-item queries', async () => {
-      const records = [record, { ...record, id: 'other' }];
+      const records = [
+        { ...record, initializationHistory: [] },
+        { ...record, id: 'other', initializationHistory: [] },
+      ];
       const owner = {
         list: vi.fn().mockResolvedValue(records),
         findInLocation: vi.fn().mockResolvedValue(record),

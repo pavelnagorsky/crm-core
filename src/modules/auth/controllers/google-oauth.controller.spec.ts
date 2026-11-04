@@ -1,4 +1,4 @@
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication, Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportModule } from '@nestjs/passport';
 import { Test } from '@nestjs/testing';
@@ -97,6 +97,22 @@ describe('Google sign-in (HTTP)', () => {
   afterEach(() => vi.restoreAllMocks());
   afterAll(async () => app?.close());
 
+  it('logs a missing Google email without the ID token', async () => {
+    const warn = vi
+      .spyOn(Logger.prototype, 'warn')
+      .mockImplementation(() => {});
+    const token = credential({ email: undefined });
+    await request(app.getHttpServer())
+      .post('/auth/google')
+      .send({ type: 'one-tap', oneTapCode: token })
+      .expect(401);
+    expect(warn).toHaveBeenCalledWith(
+      'oauth failed: provider=google reason=EMAIL_MISSING_OR_INVALID',
+    );
+    expect(warn.mock.calls.flat().join(' ')).not.toContain(token);
+    expect(auth.handleOAuth).not.toHaveBeenCalled();
+  });
+
   it.each(['oauth', 'one-tap', undefined])(
     'creates an application session through the Google guard: %s',
     async (type) => {
@@ -176,6 +192,11 @@ describe('Google sign-in (HTTP)', () => {
     },
     { name: 'unverified email', claims: { email_verified: false } },
     { name: 'missing email', claims: { email: undefined } },
+    { name: 'null email', claims: { email: null } },
+    { name: 'empty email', claims: { email: '' } },
+    { name: 'blank email', claims: { email: '   ' } },
+    { name: 'invalid email', claims: { email: 'invalid' } },
+    { name: 'non-string email', claims: { email: 123 } },
     { name: 'missing subject', claims: { sub: undefined } },
   ])(
     'rejects invalid identity claims in both flows: $name',

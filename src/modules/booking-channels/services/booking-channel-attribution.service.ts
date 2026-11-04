@@ -6,7 +6,6 @@ import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { BookingSource } from '../../bookings/enums/booking-source.enum.js';
 import { BookingAttribution } from '../../bookings/interfaces/booking-attribution.interface.js';
 import { BookingChannelStatus } from '../enums/booking-channel-status.enum.js';
-import { isDomainAllowed } from '../rules/allowed-domains.js';
 
 @Injectable()
 export class BookingChannelAttributionService {
@@ -16,7 +15,6 @@ export class BookingChannelAttributionService {
     locationId: string,
     pageId: string | undefined,
     widgetId: string | undefined,
-    origin: string | undefined,
   ): Promise<BookingAttribution> {
     if (pageId && widgetId) {
       throw new AppException(
@@ -53,19 +51,13 @@ export class BookingChannelAttributionService {
           status: BookingChannelStatus.PUBLISHED,
           location: ACTIVE_LOCATION_WHERE,
         },
-        select: { id: true, allowedDomains: true },
+        select: { id: true },
       });
       if (!widget)
         throw new AppException(
           ErrorCode.BOOKING_WIDGET_NOT_FOUND,
           HttpStatus.NOT_FOUND,
         );
-      if (!isDomainAllowed(widget.allowedDomains, origin)) {
-        throw new AppException(
-          ErrorCode.WIDGET_DOMAIN_NOT_ALLOWED,
-          HttpStatus.FORBIDDEN,
-        );
-      }
       return {
         source: BookingSource.WIDGET,
         bookingPageId: null,

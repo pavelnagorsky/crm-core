@@ -1,3 +1,4 @@
+import { DEFAULT_BOOKING_WIDGET_BUTTON_APPEARANCE } from '../constants/booking-widget-button.constants.js';
 import { ValidationPipe } from '@nestjs/common';
 import { SaveBookingWidgetDto } from './save-booking-widget.dto.js';
 import { RecordBookingChannelEventDto } from './record-booking-channel-event.dto.js';
@@ -8,7 +9,8 @@ const widget = {
   placement: 'DIALOG',
   trigger: 'FLOATING_BUTTON',
   buttonPosition: 'BOTTOM_RIGHT',
-  allowedDomains: [],
+  status: 'DRAFT',
+  buttonAppearance: { ...DEFAULT_BOOKING_WIDGET_BUTTON_APPEARANCE },
   form: {
     paletteId: 'SAGE',
     customPalette: null,

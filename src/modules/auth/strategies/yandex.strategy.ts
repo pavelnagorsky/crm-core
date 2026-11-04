@@ -1,5 +1,5 @@
 import { HttpService } from '@nestjs/axios';
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { isEmail } from 'class-validator';
@@ -23,6 +23,7 @@ export class YandexOAuthStrategy extends PassportStrategy(
   Strategy,
   'yandex-oauth',
 ) {
+  private readonly logger = new Logger(YandexOAuthStrategy.name);
   constructor(
     private readonly config: ConfigService,
     private readonly http: HttpService,
@@ -36,9 +37,11 @@ export class YandexOAuthStrategy extends PassportStrategy(
     const dto = await validateOAuthRequest(req, YandexOauthRequestDto);
     const ya = this.config.get<IYandexCloudConfig>('yandexCloud');
     if (!ya?.clientId || !ya.clientSecret) {
+      this.logger.warn('oauth failed: provider=yandex reason=NOT_CONFIGURED');
       throw new UnauthorizedException('Yandex sign-in is not configured');
     }
 
+    let reason = 'TOKEN_EXCHANGE_FAILED';
     try {
       const authHeader = Buffer.from(
         `${ya.clientId}:${ya.clientSecret}`,
@@ -68,6 +71,7 @@ export class YandexOAuthStrategy extends PassportStrategy(
         throw new UnauthorizedException();
       }
 
+      reason = 'PROFILE_FETCH_FAILED';
       const { data: user } = await firstValueFrom(
         this.http.get<YandexUserResponse>('https://login.yandex.ru/info', {
           ...OAUTH_HTTP_OPTIONS,
@@ -75,11 +79,13 @@ export class YandexOAuthStrategy extends PassportStrategy(
         }),
       );
 
+      reason = 'INVALID_PROFILE';
+      if (user?.error || typeof user?.id !== 'string' || !user.id) {
+        throw new UnauthorizedException();
+      }
+      reason = 'EMAIL_MISSING_OR_INVALID';
       if (
-        user?.error ||
-        typeof user?.id !== 'string' ||
-        !user.id ||
-        !user.default_email ||
+        typeof user.default_email !== 'string' ||
         !isEmail(user.default_email)
       ) {
         throw new UnauthorizedException();
@@ -90,6 +96,7 @@ export class YandexOAuthStrategy extends PassportStrategy(
         email: user.default_email,
       });
     } catch {
+      this.logger.warn(`oauth failed: provider=yandex reason=${reason}`);
       throw new UnauthorizedException('Yandex OAuth failed');
     }
   }

@@ -1,5 +1,5 @@
 import { HttpService } from '@nestjs/axios';
-import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { INestApplication, Logger, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportModule } from '@nestjs/passport';
 import { Test } from '@nestjs/testing';
@@ -105,6 +105,36 @@ describe('Yandex and VK sign-in (HTTP)', () => {
   });
 
   afterAll(async () => app?.close());
+
+  it.each(providers)(
+    'logs the missing email reason for %s without provider credentials',
+    async (provider) => {
+      const warn = vi
+        .spyOn(Logger.prototype, 'warn')
+        .mockImplementation(() => {});
+      try {
+        responses.set(
+          profileUrls[provider],
+          provider === 'vk'
+            ? { user: { user_id: '123' } }
+            : { id: 'yandex-user' },
+        );
+        await request(app.getHttpServer())
+          .post(`/auth/${provider}`)
+          .send(requests[provider])
+          .expect(401);
+        expect(warn).toHaveBeenCalledWith(
+          `oauth failed: provider=${provider} reason=EMAIL_MISSING_OR_INVALID`,
+        );
+        const logs = warn.mock.calls.flat().join(' ');
+        expect(logs).not.toContain('access-token');
+        expect(logs).not.toContain(requests[provider].authCode);
+        expect(auth.handleOAuth).not.toHaveBeenCalled();
+      } finally {
+        warn.mockRestore();
+      }
+    },
+  );
 
   it.each(providers)(
     'creates a CRM session through the %s guard',

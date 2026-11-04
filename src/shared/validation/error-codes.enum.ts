@@ -294,10 +294,6 @@ export const ErrorCode = {
     message:
       'Publish requires an active service assigned to an active staff member',
   },
-  WIDGET_DOMAIN_NOT_ALLOWED: {
-    code: 'WIDGET_DOMAIN_NOT_ALLOWED',
-    message: 'This widget is not allowed on the requesting domain',
-  },
   STAFF_HAS_EARNINGS: {
     code: 'STAFF_HAS_EARNINGS',
     message:

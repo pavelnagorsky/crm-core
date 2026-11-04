@@ -9,9 +9,7 @@ function fixture() {
   const db = {
     bookingPage: { findFirst: vi.fn().mockResolvedValue({ id: 'page' }) },
     bookingWidget: {
-      findFirst: vi
-        .fn()
-        .mockResolvedValue({ id: 'widget', allowedDomains: [] }),
+      findFirst: vi.fn().mockResolvedValue({ id: 'widget' }),
     },
     bookingPageStats: {
       findMany: vi.fn().mockResolvedValue([]),
@@ -55,7 +53,7 @@ describe.each(['page', 'widget'] as const)(
     ) =>
       kind === 'page'
         ? service.recordPage('id', event)
-        : service.recordWidget('id', event, 'https://example.com');
+        : service.recordWidget('id', event);
 
     it('increments each event atomically without updating channel content', async () => {
       const { service, db } = fixture();
@@ -155,26 +153,6 @@ describe.each(['page', 'widget'] as const)(
     });
   },
 );
-
-it('rejects widget events from missing or forbidden origins', async () => {
-  const { service, db } = fixture();
-  db.bookingWidget.findFirst.mockResolvedValue({
-    id: 'widget',
-    allowedDomains: ['example.com'],
-  });
-  for (const origin of [undefined, 'https://attacker.com']) {
-    await expect(
-      service.recordWidget('widget', BookingChannelEvent.VIEW, origin),
-    ).rejects.toMatchObject({ status: 403 });
-  }
-  expect(db.bookingWidgetStats.upsert).not.toHaveBeenCalled();
-  await service.recordWidget(
-    'widget',
-    BookingChannelEvent.VIEW,
-    'https://example.com',
-  );
-  expect(db.bookingWidgetStats.upsert).toHaveBeenCalledOnce();
-});
 
 it('does no queries for empty lists', async () => {
   const { service, db, bookings } = fixture();

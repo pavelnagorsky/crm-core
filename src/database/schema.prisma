@@ -1298,7 +1298,7 @@ model BookingWidget {
   placement      BookingWidgetPlacement
   trigger        BookingWidgetTrigger
   buttonPosition BookingWidgetButtonPosition
-  allowedDomains String[]                    @default([])
+  buttonAppearance Json
   gtmId          String?                     @db.VarChar(32)
   yandexMetrikaId String?                     @db.VarChar(15)
 
@@ -1322,9 +1322,21 @@ model BookingWidget {
   bookings Booking[]
 
   stats BookingWidgetStats?
+  initializationHistory BookingWidgetInitialization[]
 
   @@unique([locationId, titleKey])
   @@index([locationId, updatedAt])
+}
+
+model BookingWidgetInitialization {
+  id        Int      @id @default(autoincrement())
+  widgetId  String
+  url       String?  @db.VarChar(4096)
+  createdAt DateTime @default(now())
+
+  widget BookingWidget @relation(fields: [widgetId], references: [id], onDelete: Cascade)
+
+  @@index([widgetId, createdAt, id])
 }
 
 model BookingPageStats {

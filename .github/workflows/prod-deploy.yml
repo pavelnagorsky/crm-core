@@ -63,16 +63,22 @@ jobs:
             docker build --target migrate -t "crm-core:$DEPLOY_SHA-migrate" .
             docker run --rm --network "$DOCKER_NETWORK" --env-file .env "crm-core:$DEPLOY_SHA-migrate"
 
+            mkdir -p secrets logs
+            docker run --rm --user 0 --entrypoint sh \
+              --mount "type=bind,src=$PWD/logs,dst=/app/logs" \
+              "crm-core:$DEPLOY_SHA" -c 'chown node:node /app/logs && chmod 750 /app/logs'
+
             if docker container inspect crm-core > /dev/null 2>&1; then
               docker stop --time 30 crm-core
               docker rm crm-core
             fi
 
-            mkdir -p secrets
             docker run -d --name crm-core --init --restart unless-stopped \
-              --network "$DOCKER_NETWORK" --env-file .env -e PORT=3000 \
+              --network "$DOCKER_NETWORK" --env-file .env -e PORT=3000 -e LOG_DIRECTORY=/app/logs \
+              --log-opt max-size=20m --log-opt max-file=3 \
               -p "127.0.0.1:$APP_PORT:3000" \
               --mount "type=bind,src=$PWD/secrets,dst=/run/secrets,readonly" \
+              --mount "type=bind,src=$PWD/logs,dst=/app/logs" \
               "crm-core:$DEPLOY_SHA"
 
             for attempt in $(seq 1 60); do

@@ -1,8 +1,4 @@
-import {
-  ForbiddenException,
-  INestApplication,
-  ValidationPipe,
-} from '@nestjs/common';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import request from 'supertest';
@@ -10,6 +6,8 @@ import { BookingChannelStatsService } from '../services/booking-channel-stats.se
 import { BookingChannelEventsRateGuard } from '../guards/booking-channel-events-rate.guard.js';
 import { SaveBookingPageDto } from '../dto/save-booking-page.dto.js';
 import { SaveBookingWidgetDto } from '../dto/save-booking-widget.dto.js';
+import { BookingWidgetResponseDto } from '../dto/booking-widget-response.dto.js';
+import { PublicBookingWidgetResponseDto } from '../dto/public-booking-widget-response.dto.js';
 import { PublicBookingChannelEventsController } from './public-booking-channel-events.controller.js';
 
 describe('Public booking channel events (HTTP)', () => {
@@ -47,11 +45,7 @@ describe('Public booking channel events (HTTP)', () => {
       if (kind === 'pages')
         expect(stats.recordPage).toHaveBeenCalledExactlyOnceWith(id, 'VIEW');
       else
-        expect(stats.recordWidget).toHaveBeenCalledExactlyOnceWith(
-          id,
-          'VIEW',
-          'https://example.com',
-        );
+        expect(stats.recordWidget).toHaveBeenCalledExactlyOnceWith(id, 'VIEW');
     },
   );
 
@@ -73,18 +67,62 @@ describe('Public booking channel events (HTTP)', () => {
     },
   );
 
-  it('passes the referer origin for widgets and propagates domain rejection', async () => {
-    stats.recordWidget.mockRejectedValueOnce(new ForbiddenException());
+  it('accepts widget events from any referer origin', async () => {
     await request(app.getHttpServer())
       .post(`/public/booking-widgets/${id}/events`)
-      .set('Referer', 'https://forbidden.example/path?query=value')
+      .set('Referer', 'https://any.example/path?query=value')
       .send({ event: 'FORM_OPEN' })
-      .expect(403);
-    expect(stats.recordWidget).toHaveBeenCalledExactlyOnceWith(
-      id,
-      'FORM_OPEN',
-      'https://forbidden.example',
+      .expect(200);
+    expect(stats.recordWidget).toHaveBeenCalledExactlyOnceWith(id, 'FORM_OPEN');
+  });
+
+  it('documents full widget settings and public appearance without allowedDomains', () => {
+    const document = SwaggerModule.createDocument(
+      app,
+      new DocumentBuilder().build(),
+      {
+        extraModels: [
+          SaveBookingWidgetDto,
+          BookingWidgetResponseDto,
+          PublicBookingWidgetResponseDto,
+        ],
+      },
     );
+    const schemas = document.components!.schemas!;
+    for (const name of [
+      'SaveBookingWidgetDto',
+      'BookingWidgetResponseDto',
+      'PublicBookingWidgetDetailsDto',
+    ]) {
+      const schema = schemas[name];
+      expect(
+        JSON.stringify(
+          schema && 'properties' in schema
+            ? schema.properties?.buttonAppearance
+            : null,
+        ),
+      ).toContain('#/components/schemas/BookingWidgetButtonAppearanceDto');
+      expect(
+        schema && 'properties' in schema ? schema.properties : {},
+      ).not.toHaveProperty('allowedDomains');
+    }
+    expect(schemas.SaveBookingWidgetDto).toMatchObject({
+      required: expect.arrayContaining(['status', 'buttonAppearance']),
+    });
+    expect(schemas.BookingWidgetButtonAppearanceDto).toMatchObject({
+      properties: {
+        color: { type: 'string', nullable: true, pattern: '^#[0-9A-Fa-f]{6}$' },
+        textColor: { type: 'string', nullable: true },
+        text: { minLength: 1, maxLength: 40 },
+        offset: { minimum: 8, maximum: 64 },
+      },
+    });
+    expect(schemas.BookingWidgetButtonIcon).toMatchObject({
+      enum: expect.arrayContaining(['CALENDAR', 'CUP']),
+    });
+    expect(schemas.BookingWidgetButtonIcon).toMatchObject({
+      enum: expect.not.arrayContaining(['NONE']),
+    });
   });
 
   it('publishes inherited optional analytics fields in both OpenAPI schemas', () => {

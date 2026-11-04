@@ -1,6 +1,10 @@
 export default () => {
   return {
     port: parseInt(process.env.PORT ?? '', 10) || 3000,
+    logging: {
+      level: process.env.LOG_LEVEL ?? 'info',
+      directory: process.env.LOG_DIRECTORY ?? 'logs',
+    },
     cache: {
       enabled: process.env.CACHE_ENABLED !== 'false',
     },

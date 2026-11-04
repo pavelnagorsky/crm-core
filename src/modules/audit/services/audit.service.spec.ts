@@ -4,6 +4,11 @@ import { AuditActorRole } from '../enums/audit-actor-role.enum.js';
 import { AuditService } from './audit.service.js';
 
 describe('AuditService lifecycle persistence', () => {
+  beforeEach(() => {
+    vi.spyOn(Logger.prototype, 'log').mockImplementation(() => {});
+    vi.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
+  });
+  afterEach(() => vi.restoreAllMocks());
   it.each([
     {
       entityType: AuditEntity.BRAND,
@@ -49,6 +54,9 @@ describe('AuditService lifecycle persistence', () => {
         payload: { name: 'Studio' },
       });
       expect(findUnique).not.toHaveBeenCalled();
+      expect(Logger.prototype.log).toHaveBeenCalledWith(
+        expect.stringContaining(`event=${eventType}`),
+      );
       expect(create).toHaveBeenCalledWith({
         data: {
           brandId: 'brand-1',
@@ -66,4 +74,69 @@ describe('AuditService lifecycle persistence', () => {
       });
     },
   );
+
+  it.each(['persistence', 'scope resolution', 'missing scope'])(
+    'keeps a brief domain log and reports %s failures with entity context',
+    async (failure) => {
+      const error = new Error('database unavailable');
+      const create = vi.fn().mockRejectedValue(error);
+      const findUnique = vi.fn().mockRejectedValue(error);
+      const service = new AuditService(
+        { auditLog: { create }, location: { findUnique } } as never,
+        {} as never,
+      );
+
+      await expect(
+        service.handleAuditEvent({
+          brandId: failure === 'persistence' ? 'brand-1' : undefined,
+          locationId: failure === 'scope resolution' ? 'location-1' : undefined,
+          entityType: AuditEntity.BRAND,
+          entityId: 'brand-1',
+          eventType: AuditEvent.BRAND_CREATED,
+          actionType: AuditActionType.CREATE,
+          occurredAt: new Date(),
+          actor: {
+            id: 'user-1',
+            name: 'private actor name',
+            role: AuditActorRole.OWNER,
+          },
+          payload: { name: 'private business name' },
+        }),
+      ).resolves.toBeUndefined();
+
+      const logs = vi.mocked(Logger.prototype.log).mock.calls.flat().join(' ');
+      expect(logs).toContain('event=BRAND_CREATED');
+      expect(logs).toContain('entityId=brand-1');
+      expect(logs).toContain('actorId=user-1');
+      expect(logs).not.toContain('private');
+      expect(Logger.prototype.error).toHaveBeenCalledWith(
+        expect.stringContaining('entityId=brand-1'),
+        ...(failure === 'missing scope' ? [] : [error.stack]),
+      );
+    },
+  );
+
+  it('logs access changes as staged inside the caller transaction', async () => {
+    const create = vi.fn().mockResolvedValue({ id: 'audit-1' });
+    const service = new AuditService({} as never, {} as never);
+    await service.recordAccessChange(
+      {
+        id: 'audit-1',
+        brandId: 'brand-1',
+        locationId: null,
+        actorId: 'user-1',
+        action: 'GRANT',
+        targetId: 'user-2',
+        payload: { email: 'private@example.com' },
+        createdAt: new Date(),
+      },
+      { id: 'user-1', name: 'private name', role: AuditActorRole.OWNER },
+      { auditLog: { create } } as never,
+    );
+
+    expect(Logger.prototype.log).toHaveBeenCalledWith(
+      'audit staged: event=ACCESS_CHANGED action=GRANT entityId=user-2 brandId=brand-1 locationId=- actorId=user-1 auditId=audit-1',
+    );
+  });
 });
+import { Logger } from '@nestjs/common';

@@ -7,20 +7,16 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
-  Req,
   UseGuards,
 } from '@nestjs/common';
 import {
-  ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
   ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
-import type { Request } from 'express';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
-import { requestOrigin } from '../../../shared/http/request-context.js';
 import { RecordBookingChannelEventDto } from '../dto/record-booking-channel-event.dto.js';
 import { BookingChannelEventsRateGuard } from '../guards/booking-channel-events-rate.guard.js';
 import { BookingChannelStatsService } from '../services/booking-channel-stats.service.js';
@@ -56,13 +52,11 @@ export class PublicBookingChannelEventsController {
   })
   @ApiOkResponse({ type: BaseResponseDto })
   @ApiNotFoundResponse({ description: 'Published booking widget not found' })
-  @ApiForbiddenResponse({ description: 'Origin is not in allowedDomains' })
   async recordWidget(
     @Param('widgetId', ParseUUIDPipe) widgetId: string,
     @Body() dto: RecordBookingChannelEventDto,
-    @Req() req: Request,
   ): Promise<BaseResponseDto<null>> {
-    await this.stats.recordWidget(widgetId, dto.event, requestOrigin(req));
+    await this.stats.recordWidget(widgetId, dto.event);
     return BaseResponseDto.success(null);
   }
 }

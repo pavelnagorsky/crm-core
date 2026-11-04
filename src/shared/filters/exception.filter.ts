@@ -26,7 +26,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const http = host.switchToHttp();
     const req = http.getRequest<Request>();
     const res = http.getResponse<Response>();
-    const ctx = `${req.method} ${req.url}`;
+    const ctx = `${req.method} ${req.url.split('?')[0]}`;
 
     if (exception instanceof AppException) {
       this.logger.warn(
@@ -56,6 +56,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
             : exception.message;
       if (status >= 500) {
         this.logger.error(`[${ctx}] HttpException ${status}: ${message}`);
+      } else {
+        this.logger.warn(`[${ctx}] HttpException ${code} (${status})`);
       }
       res.status(status).json(BaseResponseDto.failure(code, String(message)));
       return;

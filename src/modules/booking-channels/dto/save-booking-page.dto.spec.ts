@@ -1,3 +1,4 @@
+import { DEFAULT_BOOKING_WIDGET_BUTTON_APPEARANCE } from '../constants/booking-widget-button.constants.js';
 import { ValidationPipe } from '@nestjs/common';
 import { SaveBookingPageDto } from './save-booking-page.dto.js';
 import { BookingFormConfigDto } from './booking-form-config.dto.js';
@@ -42,7 +43,8 @@ describe.each([
       placement: 'DIALOG',
       trigger: 'FLOATING_BUTTON',
       buttonPosition: 'BOTTOM_RIGHT',
-      allowedDomains: [],
+      status: 'DRAFT',
+      buttonAppearance: { ...DEFAULT_BOOKING_WIDGET_BUTTON_APPEARANCE },
       form,
     },
   },

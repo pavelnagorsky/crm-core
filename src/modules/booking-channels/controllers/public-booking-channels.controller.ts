@@ -1,22 +1,14 @@
+import { Controller, Get, Header, Param, ParseUUIDPipe } from '@nestjs/common';
 import {
-  Controller,
-  Get,
-  Header,
-  Param,
-  ParseUUIDPipe,
-  Req,
-} from '@nestjs/common';
-import {
-  ApiForbiddenResponse,
   ApiNotFoundResponse,
+  ApiBadRequestResponse,
+  ApiHeader,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
-import type { Request } from 'express';
 import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
-import { requestOrigin } from '../../../shared/http/request-context.js';
 import { BookingsFacade } from '../../bookings/bookings.facade.js';
 import { BookingSetupResponseDto } from '../../bookings/dto/booking-setup-response.dto.js';
 import { LocationService } from '../../location/services/location.service.js';
@@ -24,6 +16,8 @@ import { PublicBookingPageResponseDto } from '../dto/public-booking-page-respons
 import { PublicBookingWidgetResponseDto } from '../dto/public-booking-widget-response.dto.js';
 import { BookingPagesService } from '../services/booking-pages.service.js';
 import { BookingWidgetsService } from '../services/booking-widgets.service.js';
+import { WidgetPageUrlPipe } from '../pipes/widget-page-url.pipe.js';
+import { WidgetPageUrlHeader } from '../decorators/widget-page-url-header.decorator.js';
 
 @ApiTags('Public booking')
 @Controller('public')
@@ -61,24 +55,26 @@ export class PublicBookingChannelsController {
     summary: 'Get a published booking widget for the embed runtime',
   })
   @ApiOkResponse({ type: ApiResponse(PublicBookingWidgetResponseDto) })
-  @ApiNotFoundResponse({ description: 'Published booking widget not found' })
-  @ApiForbiddenResponse({
-    description: 'Request origin is not in allowedDomains',
+  @ApiHeader({
+    name: 'X-Widget-Page-Url',
+    required: false,
+    description:
+      'Full HTTP(S) URL of the embedding page, up to 4096 characters',
   })
+  @ApiBadRequestResponse({ description: 'Invalid embedding page URL' })
+  @ApiNotFoundResponse({ description: 'Published booking widget not found' })
   @Get('booking-widgets/:widgetId')
   @Header('Cache-Control', 'no-store')
   async getWidget(
     @Param('widgetId', ParseUUIDPipe) widgetId: string,
-    @Req() req: Request,
+    @WidgetPageUrlHeader(WidgetPageUrlPipe) pageUrl: string | null = null,
   ): Promise<BaseResponseDto<PublicBookingWidgetResponseDto>> {
-    const widget = await this.widgets.getPublished(
-      widgetId,
-      requestOrigin(req),
-    );
+    const widget = await this.widgets.getPublished(widgetId);
     const [location, setup] = await Promise.all([
       this.locationService.findPublicProfile(widget.locationId),
       this.bookings.getBookingSetup(widget.locationId),
     ]);
+    await this.widgets.recordInitialization(widgetId, pageUrl);
     return BaseResponseDto.success(
       PublicBookingWidgetResponseDto.from(
         widget,

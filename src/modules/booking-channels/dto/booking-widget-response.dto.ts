@@ -1,3 +1,4 @@
+import { normalizeBookingWidgetTrigger } from '../rules/booking-widget-trigger.js';
 import { ApiProperty } from '@nestjs/swagger';
 import { BookingWidget } from '@prisma/client';
 import { BookingChannelStatus } from '../enums/booking-channel-status.enum.js';
@@ -12,6 +13,7 @@ import {
 import { BookingChannelStatsDto } from './booking-channel-stats.dto.js';
 import { BookingFormConfigDto } from './booking-form-config.dto.js';
 import { BookingFormThemeDto } from './booking-form-theme.dto.js';
+import { BookingWidgetButtonAppearanceDto } from './booking-widget-button-appearance.dto.js';
 
 export class BookingWidgetResponseDto {
   @ApiProperty({ type: String })
@@ -56,8 +58,8 @@ export class BookingWidgetResponseDto {
   })
   buttonPosition: BookingWidgetButtonPosition;
 
-  @ApiProperty({ type: [String] })
-  allowedDomains: string[];
+  @ApiProperty({ type: () => BookingWidgetButtonAppearanceDto })
+  buttonAppearance: BookingWidgetButtonAppearanceDto;
 
   @ApiProperty({ type: Date })
   createdAt: Date;
@@ -83,9 +85,14 @@ export class BookingWidgetResponseDto {
     dto.form = toBookingFormConfig(widget);
     dto.theme = resolveBookingFormTheme(widget);
     dto.placement = widget.placement;
-    dto.trigger = widget.trigger;
+    dto.trigger = normalizeBookingWidgetTrigger(
+      widget.placement,
+      widget.trigger,
+    );
     dto.buttonPosition = widget.buttonPosition;
-    dto.allowedDomains = widget.allowedDomains;
+    dto.buttonAppearance = BookingWidgetButtonAppearanceDto.fromStored(
+      widget.buttonAppearance,
+    );
     dto.createdAt = widget.createdAt;
     dto.updatedAt = widget.updatedAt;
     dto.publishedAt = widget.publishedAt;

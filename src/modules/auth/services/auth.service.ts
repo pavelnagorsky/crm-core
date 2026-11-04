@@ -1,9 +1,15 @@
-import { HttpStatus, Injectable, Logger } from '@nestjs/common';
+import {
+  HttpStatus,
+  Injectable,
+  Logger,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { JwtService, JwtSignOptions } from '@nestjs/jwt';
 import { Prisma, User } from '@prisma/client';
 import { compare, hash } from 'bcrypt';
+import { isEmail } from 'class-validator';
 import { createHash, randomUUID } from 'crypto';
 import { IFrontendConfig } from '../../../config/interfaces/frontend-config.interface.js';
 import { IJwtConfig } from '../../../config/interfaces/jwt-config.interface.js';
@@ -152,18 +158,28 @@ export class AuthService {
       },
     });
     if (count !== 1) {
+      this.logger.warn(
+        `refresh failed: userId=${userId} reason=TOKEN_INVALID_OR_CONSUMED`,
+      );
       throw new AppException(ErrorCode.UNAUTHORIZED, HttpStatus.UNAUTHORIZED);
     }
 
     const user = await this.userService.findById(userId);
-    return this.issueTokens(user, userAgent);
+    const tokens = await this.issueTokens(user, userAgent);
+    this.logger.log(`refresh success: userId=${userId}`);
+    return tokens;
   }
 
-  confirmEmail(userId: string, userAgent: string | null): Promise<ITokens> {
-    return this.db.$transaction(async (tx) => {
+  async confirmEmail(
+    userId: string,
+    userAgent: string | null,
+  ): Promise<ITokens> {
+    const tokens = await this.db.$transaction(async (tx) => {
       const user = await this.userService.confirmEmail(userId, tx);
       return this.issueTokens(user, userAgent, tx);
     });
+    this.logger.log(`confirm email success: userId=${userId}`);
+    return tokens;
   }
 
   resetPasswordRequest(dto: ResetPasswordRequestDto): Promise<void> {
@@ -178,6 +194,13 @@ export class AuthService {
     dto: OAuthResponseDto,
     userAgent: string | null,
   ): Promise<ITokens> {
+    if (typeof dto.email !== 'string' || !isEmail(dto.email)) {
+      this.logger.warn(
+        `oauth failed: provider=${dto.providerType} reason=EMAIL_MISSING_OR_INVALID`,
+      );
+      throw new UnauthorizedException('OAuth provider email required');
+    }
+
     let user = await this.userService.findByEmail(dto.email);
     if (!user) {
       user = await this.userService.create({

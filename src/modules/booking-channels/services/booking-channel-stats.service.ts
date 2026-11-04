@@ -99,9 +99,8 @@ export class BookingChannelStatsService {
   async recordWidget(
     widgetId: string,
     event: BookingChannelEvent,
-    origin?: string,
   ): Promise<void> {
-    await this.widgets.getPublished(widgetId, origin);
+    await this.widgets.getPublished(widgetId);
     const field = event === BookingChannelEvent.VIEW ? 'views' : 'formOpens';
     try {
       await this.db.bookingWidgetStats.upsert({

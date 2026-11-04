@@ -1,3 +1,4 @@
+import { normalizeBookingWidgetTrigger } from '../rules/booking-widget-trigger.js';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { AUDIT_EVENT } from '../../audit/constants/audit.constants.js';
 import { AuditActionType } from '../../audit/enums/audit-action-type.enum.js';
@@ -11,16 +12,13 @@ import {
 } from '../../audit/utils/audit-snapshot.js';
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { BookingWidget } from '@prisma/client';
+import { BookingWidgetWithInitializationHistory } from '../interfaces/booking-widget-with-initialization-history.interface.js';
 import { DatabaseService } from '../../../database/database.service.js';
 import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { BookingChannelStatus } from '../enums/booking-channel-status.enum.js';
 import { SaveBookingWidgetDto } from '../dto/save-booking-widget.dto.js';
-import {
-  isDomainAllowed,
-  normalizeAllowedDomains,
-} from '../rules/allowed-domains.js';
 import { toBookingFormColumns } from '../rendering/booking-form.js';
 import {
   BookingChannelPublishService,
@@ -38,10 +36,17 @@ export class BookingWidgetsService {
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
-  async list(locationId: string): Promise<BookingWidget[]> {
+  async list(
+    locationId: string,
+  ): Promise<BookingWidgetWithInitializationHistory[]> {
     return this.db.bookingWidget.findMany({
       where: { location: ACTIVE_LOCATION_WHERE, locationId },
       orderBy: { updatedAt: 'desc' },
+      include: {
+        initializationHistory: {
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        },
+      },
     });
   }
 
@@ -65,11 +70,21 @@ export class BookingWidgetsService {
     dto: SaveBookingWidgetDto,
     actor: AuditActor,
   ): Promise<BookingWidget> {
-    const allowedDomains = this.domains(dto.allowedDomains);
+    if (dto.status === BookingChannelStatus.PUBLISHED) {
+      await this.publishService.assertTransition(
+        locationId,
+        BookingChannelStatus.DRAFT,
+        dto.status,
+      );
+    }
     await this.assertTitleAvailable(locationId, dto.title);
     try {
       const widget = await this.db.bookingWidget.create({
-        data: { locationId, ...this.content(dto, allowedDomains) },
+        data: {
+          locationId,
+          ...this.content(dto),
+          publishedAt: publishedAtFor(dto.status),
+        },
       });
       this.record(AuditEvent.BOOKING_WIDGET_CREATED, null, widget, actor);
       this.logger.log(
@@ -92,12 +107,23 @@ export class BookingWidgetsService {
     actor: AuditActor,
   ): Promise<BookingWidget> {
     const old = await this.findInLocation(locationId, widgetId);
-    const allowedDomains = this.domains(dto.allowedDomains);
+    if (old.status !== dto.status) {
+      await this.publishService.assertTransition(
+        locationId,
+        old.status,
+        dto.status,
+      );
+    }
     await this.assertTitleAvailable(locationId, dto.title, widgetId);
     try {
       const widget = await this.db.bookingWidget.update({
         where: { id: widgetId },
-        data: this.content(dto, allowedDomains),
+        data: {
+          ...this.content(dto),
+          ...(old.status !== dto.status
+            ? { publishedAt: publishedAtFor(dto.status) }
+            : {}),
+        },
       });
       this.record(AuditEvent.BOOKING_WIDGET_UPDATED, old, widget, actor);
       this.logger.log(
@@ -154,10 +180,7 @@ export class BookingWidgetsService {
     );
   }
 
-  async getPublished(
-    widgetId: string,
-    origin?: string,
-  ): Promise<BookingWidget> {
+  async getPublished(widgetId: string): Promise<BookingWidget> {
     const widget = await this.db.bookingWidget.findFirst({
       where: {
         id: widgetId,
@@ -170,13 +193,32 @@ export class BookingWidgetsService {
         ErrorCode.BOOKING_WIDGET_NOT_FOUND,
         HttpStatus.NOT_FOUND,
       );
-    if (!isDomainAllowed(widget.allowedDomains, origin)) {
-      throw new AppException(
-        ErrorCode.WIDGET_DOMAIN_NOT_ALLOWED,
-        HttpStatus.FORBIDDEN,
-      );
-    }
     return widget;
+  }
+
+  async recordInitialization(
+    widgetId: string,
+    url: string | null,
+  ): Promise<void> {
+    await this.db.$transaction(async (tx) => {
+      // Serialize writes per widget so concurrent initializations retain exactly ten entries.
+      const widgets = await tx.$queryRaw<{ id: string }[]>`
+        SELECT "id" FROM "BookingWidget" WHERE "id" = ${widgetId} FOR UPDATE
+      `;
+      if (widgets.length === 0) return;
+      await tx.bookingWidgetInitialization.create({
+        data: { widgetId, url, createdAt: new Date() },
+      });
+      const retained = await tx.bookingWidgetInitialization.findMany({
+        where: { widgetId },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        take: 10,
+        select: { id: true },
+      });
+      await tx.bookingWidgetInitialization.deleteMany({
+        where: { widgetId, id: { notIn: retained.map((item) => item.id) } },
+      });
+    });
   }
 
   private async assertTitleAvailable(
@@ -200,24 +242,15 @@ export class BookingWidgetsService {
       );
   }
 
-  private domains(values: string[]): string[] {
-    const normalized = normalizeAllowedDomains(values);
-    if (!normalized)
-      throw new AppException(
-        ErrorCode.VALIDATION_ERROR,
-        HttpStatus.BAD_REQUEST,
-      );
-    return normalized;
-  }
-
-  private content(dto: SaveBookingWidgetDto, allowedDomains: string[]) {
+  private content(dto: SaveBookingWidgetDto) {
     return {
-      title: dto.title,
+      title: dto.title.trim(),
       titleKey: dto.title.trim().toLowerCase(),
       placement: dto.placement,
-      trigger: dto.trigger,
+      status: dto.status,
+      trigger: normalizeBookingWidgetTrigger(dto.placement, dto.trigger),
       buttonPosition: dto.buttonPosition,
-      allowedDomains,
+      buttonAppearance: { ...dto.buttonAppearance },
       ...(dto.gtmId !== undefined ? { gtmId: dto.gtmId } : {}),
       ...(dto.yandexMetrikaId !== undefined
         ? { yandexMetrikaId: dto.yandexMetrikaId }
@@ -225,6 +258,7 @@ export class BookingWidgetsService {
       ...toBookingFormColumns(dto.form),
     };
   }
+
   private record(
     eventType: AuditEvent,
     before: BookingWidget | null,
@@ -251,7 +285,7 @@ export class BookingWidgetsService {
       'placement',
       'trigger',
       'buttonPosition',
-      'allowedDomains',
+      'buttonAppearance',
     ] as const satisfies readonly (keyof BookingWidget)[];
     const changes =
       before && after

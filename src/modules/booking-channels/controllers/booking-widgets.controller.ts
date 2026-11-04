@@ -31,6 +31,7 @@ import { Claim } from '../../access/enums/claim.enum.js';
 import { Read, Write } from '../../access/utils/permission.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 import { BookingWidgetResponseDto } from '../dto/booking-widget-response.dto.js';
+import { BookingWidgetListItemResponseDto } from '../dto/booking-widget-list-item-response.dto.js';
 import { SaveBookingWidgetDto } from '../dto/save-booking-widget.dto.js';
 import { UpdateBookingChannelStatusDto } from '../dto/update-booking-channel-status.dto.js';
 import { BookingChannelStatsService } from '../services/booking-channel-stats.service.js';
@@ -45,12 +46,12 @@ export class BookingWidgetsController {
   ) {}
 
   @ApiOperation({ summary: 'List booking widgets' })
-  @ApiOkResponse({ type: ApiResponseArray(BookingWidgetResponseDto) })
+  @ApiOkResponse({ type: ApiResponseArray(BookingWidgetListItemResponseDto) })
   @Permissions(Read(Claim.BOOKING_CHANNEL))
   @Get()
   async list(
     @Param('locationId', ParseUUIDPipe) locationId: string,
-  ): Promise<BaseResponseDto<BookingWidgetResponseDto[]>> {
+  ): Promise<BaseResponseDto<BookingWidgetListItemResponseDto[]>> {
     const widgets = await this.widgets.list(locationId);
     const stats = await this.stats.forWidgets(
       locationId,
@@ -58,12 +59,17 @@ export class BookingWidgetsController {
     );
     return BaseResponseDto.success(
       widgets.map((item) =>
-        BookingWidgetResponseDto.fromEntity(item, stats.get(item.id)),
+        BookingWidgetListItemResponseDto.fromListEntity(
+          item,
+          stats.get(item.id),
+        ),
       ),
     );
   }
 
-  @ApiOperation({ summary: 'Create a booking widget. It starts as a draft.' })
+  @ApiOperation({
+    summary: 'Create a booking widget with its settings and status.',
+  })
   @ApiCreatedResponse({ type: ApiResponse(BookingWidgetResponseDto) })
   @ApiConflictResponse({
     description: 'Widget title already exists in this business',
@@ -97,7 +103,7 @@ export class BookingWidgetsController {
   }
 
   @ApiOperation({
-    summary: 'Replace booking widget content. Status is unchanged.',
+    summary: 'Save booking widget settings and status atomically.',
   })
   @ApiOkResponse({ type: ApiResponse(BookingWidgetResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking widget not found' })

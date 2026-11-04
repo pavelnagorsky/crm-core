@@ -60,7 +60,6 @@ export class PublicBookingCreateController {
       locationId,
       dto.bookingPageId,
       dto.bookingWidgetId,
-      requestOrigin(req),
     );
     const booking = await this.bookingCreateService.createPublicBooking(
       locationId,

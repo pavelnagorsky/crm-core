@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { compare, hash } from 'bcrypt';
 import { randomInt } from 'crypto';
@@ -21,6 +21,7 @@ import { TokenEpochRegistryService } from './token-epoch-registry.service.js';
 
 @Injectable()
 export class PasswordResetService {
+  private readonly logger = new Logger(PasswordResetService.name);
   constructor(
     private readonly db: DatabaseService,
     private readonly users: UserService,
@@ -30,7 +31,10 @@ export class PasswordResetService {
 
   async request(dto: ResetPasswordRequestDto): Promise<void> {
     const user = await this.users.findByEmail(dto.email);
-    if (!user) return;
+    if (!user) {
+      this.logger.log('password reset request skipped: reason=USER_NOT_FOUND');
+      return;
+    }
     const cutoff = new Date(
       Date.now() - RESET_CODE_RESEND_COOLDOWN_SECONDS * 1000,
     );
@@ -72,6 +76,7 @@ export class PasswordResetService {
       NOTIFICATION_EVENT,
       new ResetPasswordNotification(user.email!, code),
     );
+    this.logger.log(`password reset notification queued: userId=${user.id}`);
   }
 
   async reset(dto: ResetPasswordDto): Promise<void> {
@@ -113,9 +118,11 @@ export class PasswordResetService {
       await tx.refreshToken.deleteMany({ where: { userId: user.id } });
       await this.epochs.bump(user.id, tx);
     });
+    this.logger.log(`password reset success: userId=${user.id}`);
   }
 
   private invalidCode(): never {
+    this.logger.warn('password reset failed: reason=INVALID_RESET_CODE');
     throw new AppException(
       ErrorCode.INVALID_RESET_CODE,
       HttpStatus.BAD_REQUEST,
@@ -123,6 +130,7 @@ export class PasswordResetService {
   }
 
   private resendTooSoon(): never {
+    this.logger.warn('password reset request rejected: reason=RESEND_TOO_SOON');
     throw new AppException(
       ErrorCode.RESET_CODE_RESEND_TOO_SOON,
       HttpStatus.TOO_MANY_REQUESTS,

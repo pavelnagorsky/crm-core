@@ -27,7 +27,7 @@ export class BookingFormConfigDto {
   @Type(() => BookingPaletteTokensDto)
   customPalette: BookingPaletteTokensDto | null;
 
-  @ApiProperty({ type: String, maxLength: 80 })
+  @ApiProperty({ type: String, minLength: 1, maxLength: 80 })
   @Trim()
   @IsString()
   @IsNotEmpty()
@@ -44,7 +44,11 @@ export class BookingFormConfigDto {
   @IsBoolean()
   showStaff: boolean;
 
-  @ApiProperty({ type: Boolean })
+  @ApiProperty({
+    type: Boolean,
+    description:
+      'Changing widget branding requires booking-channel write permission, verified by the server.',
+  })
   @IsBoolean()
   showBranding: boolean;
 }

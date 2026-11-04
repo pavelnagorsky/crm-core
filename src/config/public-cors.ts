@@ -5,8 +5,15 @@ const publicCors: CorsOptions = {
   origin: true,
   credentials: true,
   methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'X-Widget-Page-Url',
+    'X-Request-Id',
+  ],
   optionsSuccessStatus: 200,
+  exposedHeaders: ['X-Request-Id'],
 };
 
 export function isPublicApiPath(path: string): boolean {

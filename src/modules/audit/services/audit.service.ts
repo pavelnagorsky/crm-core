@@ -19,7 +19,7 @@ import { auditSnapshot } from '../utils/audit-snapshot.js';
 
 @Injectable()
 export class AuditService {
-  recordAccessChange(
+  async recordAccessChange(
     change: AccessChangeAuditInput,
     actor: AuditActor,
     tx: Prisma.TransactionClient,
@@ -34,7 +34,7 @@ export class AuditService {
       targetId: change.targetId,
       ...details,
     };
-    return tx.auditLog.create({
+    const log = await tx.auditLog.create({
       data: {
         id: change.id,
         brandId: change.brandId,
@@ -55,6 +55,10 @@ export class AuditService {
         },
       },
     });
+    this.logger.log(
+      `audit staged: event=ACCESS_CHANGED action=${change.action} entityId=${change.targetId ?? change.brandId} brandId=${change.brandId} locationId=${change.locationId ?? '-'} actorId=${actor.id ?? 'system'} auditId=${change.id}`,
+    );
+    return log;
   }
 
   private readonly logger = new Logger(AuditService.name);
@@ -66,13 +70,17 @@ export class AuditService {
 
   @OnEvent(AUDIT_EVENT, { async: true, suppressErrors: true })
   async handleAuditEvent(event: AuditLogEvent): Promise<void> {
-    const brandId = event.brandId ?? (await this.resolveBrandId(event));
-    if (!brandId) {
-      this.logger.error('Failed to persist audit log: missing brandId');
-      return;
-    }
+    const context = `event=${event.eventType} entity=${event.entityType} entityId=${event.entityId} brandId=${event.brandId ?? '-'} locationId=${event.locationId ?? '-'} actorId=${event.actor.id ?? '-'} actorRole=${event.actor.role}`;
+    this.logger.log(`domain event: ${context}`);
 
     try {
+      const brandId = event.brandId ?? (await this.resolveBrandId(event));
+      if (!brandId) {
+        this.logger.error(
+          `Failed to persist audit log: missing brandId ${context}`,
+        );
+        return;
+      }
       await this.db.auditLog.create({
         data: {
           brandId,
@@ -90,7 +98,7 @@ export class AuditService {
       });
     } catch (err) {
       this.logger.error(
-        'Failed to persist audit log',
+        `Failed to persist audit log: ${context}`,
         err instanceof Error ? err.stack : String(err),
       );
     }

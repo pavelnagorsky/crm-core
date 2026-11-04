@@ -1,6 +1,7 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
+import { isEmail } from 'class-validator';
 import { Request } from 'express';
 import { OAuth2Client } from 'google-auth-library';
 import { Strategy } from 'passport-custom';
@@ -16,6 +17,7 @@ export class GoogleOAuthStrategy extends PassportStrategy(
   Strategy,
   'google-oauth',
 ) {
+  private readonly logger = new Logger(GoogleOAuthStrategy.name);
   private readonly client: OAuth2Client;
 
   constructor(private readonly config: ConfigService) {
@@ -34,9 +36,11 @@ export class GoogleOAuthStrategy extends PassportStrategy(
       !cfg?.clientId ||
       (dto.type === GoogleOauthTypeEnum.OAUTH && !cfg.clientSecret)
     ) {
+      this.logger.warn('oauth failed: provider=google reason=NOT_CONFIGURED');
       throw new UnauthorizedException('Google sign-in is not configured');
     }
 
+    let reason = 'TOKEN_EXCHANGE_FAILED';
     try {
       let idToken: string;
       if (dto.type === GoogleOauthTypeEnum.ONE_TAP) {
@@ -49,12 +53,18 @@ export class GoogleOAuthStrategy extends PassportStrategy(
         if (!tokens.id_token) throw new UnauthorizedException();
         idToken = tokens.id_token;
       }
+      reason = 'IDENTITY_VERIFICATION_FAILED';
       const ticket = await this.client.verifyIdToken({
         idToken,
         audience: cfg.clientId,
       });
       const payload = ticket.getPayload();
-      if (!payload?.sub || !payload.email || payload.email_verified !== true)
+      if (!payload?.sub) throw new UnauthorizedException();
+      reason = 'EMAIL_MISSING_OR_INVALID';
+      if (typeof payload.email !== 'string' || !isEmail(payload.email))
+        throw new UnauthorizedException('Verified Google email required');
+      reason = 'EMAIL_NOT_VERIFIED';
+      if (payload.email_verified !== true)
         throw new UnauthorizedException('Verified Google email required');
 
       return new OAuthResponseDto({
@@ -63,6 +73,7 @@ export class GoogleOAuthStrategy extends PassportStrategy(
         email: payload.email,
       });
     } catch {
+      this.logger.warn(`oauth failed: provider=google reason=${reason}`);
       throw new UnauthorizedException('Google OAuth failed');
     }
   }

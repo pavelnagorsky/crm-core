@@ -8,6 +8,8 @@ import { DatabaseService } from '../../../database/database.service.js';
 import { PermissionCalculator } from '../../access/calculators/permission.calculator.js';
 import { AccessService } from '../../access/services/access.service.js';
 import { UserService } from '../../user/services/user.service.js';
+import { OAuthResponseDto } from '../dto/oauth-response.dto.js';
+import { OAuthProviderEnum } from '../enums/oauth-provider.enum.js';
 import { AuthService } from './auth.service.js';
 import { TokenEpochRegistryService } from './token-epoch-registry.service.js';
 
@@ -44,6 +46,7 @@ describe('AuthService refresh token storage', () => {
     },
   };
   const users = {
+    create: vi.fn(),
     findByEmail: vi.fn().mockResolvedValue(user),
     findById: vi.fn().mockResolvedValue(user),
   };
@@ -90,6 +93,31 @@ describe('AuthService refresh token storage', () => {
     db.locationMembership.findMany.mockResolvedValue([]);
     db.location.findMany.mockResolvedValue([]);
   });
+
+  describe.each(Object.values(OAuthProviderEnum))(
+    '%s OAuth email',
+    (providerType) => {
+      it.each([undefined, null, '', '   ', 'invalid', 123, true, [], {}])(
+        'rejects an absent or invalid email: %j',
+        async (email) => {
+          const dto = new OAuthResponseDto({
+            providerId: 'provider-user',
+            providerType,
+          });
+          Object.assign(dto, { email });
+
+          await expect(service.handleOAuth(dto, 'browser')).rejects.toThrow(
+            UnauthorizedException,
+          );
+
+          expect(users.findByEmail).not.toHaveBeenCalled();
+          expect(users.create).not.toHaveBeenCalled();
+          expect(jwt.signAsync).not.toHaveBeenCalled();
+          expect(db.refreshToken.create).not.toHaveBeenCalled();
+        },
+      );
+    },
+  );
 
   it('stores only a SHA-256 hash and gives every refresh JWT a jti', async () => {
     const tokens = await service.handleOAuth(

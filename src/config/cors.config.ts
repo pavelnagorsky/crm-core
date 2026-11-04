@@ -6,9 +6,11 @@ export const corsConfig: CorsOptions = {
     'Content-Type',
     'Authorization',
     'X-Requested-With',
+    'X-Request-Id',
     'If-Match',
   ],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   optionsSuccessStatus: 200,
   credentials: true,
+  exposedHeaders: ['X-Request-Id'],
 };

@@ -1,4 +1,5 @@
 const regularExpressions = {
+  requestId: /^[\w.-]{1,64}$/,
   slugPattern: /^[a-z0-9-]*$/,
   password: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]{8,}$/,
   passwordResetCode: /^\d{6}$/,
@@ -29,7 +30,7 @@ const regularExpressions = {
   percent: /^(100(?:\.0{1,2})?|\d{1,2}(?:\.\d{1,2})?)$/,
   // Public booking page slug: lowercase segments separated by single hyphens
   bookingPageSlug: /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
-  googleTagManagerId: /^GTM-[A-Z0-9]+$/,
+  googleTagManagerId: /^GTM-[A-Z0-9]{1,28}$/,
   yandexMetrikaId: /^[1-9][0-9]{0,14}$/,
   // CSS hex color, case-insensitive before normalization
   hexColor: /^#[0-9A-Fa-f]{6}$/,

@@ -9,6 +9,7 @@ export class BookingChannelAnalyticsDto {
     nullable: true,
     maxLength: 32,
     example: 'GTM-ABC1234',
+    pattern: regularExpressions.googleTagManagerId.source,
     description:
       'Google Tag Manager container ID. Omit to preserve on update; null or blank disables the integration.',
   })
@@ -24,6 +25,7 @@ export class BookingChannelAnalyticsDto {
     nullable: true,
     maxLength: 15,
     example: '12345678',
+    pattern: regularExpressions.yandexMetrikaId.source,
     description:
       'Yandex Metrica counter ID as a positive decimal string. Omit to preserve on update; null or blank disables the integration.',
   })
