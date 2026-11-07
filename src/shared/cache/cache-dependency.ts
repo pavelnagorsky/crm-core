@@ -11,4 +11,5 @@ export const CacheDependency = {
   staffSchedule: (id: string) => dependency('staff.schedule', id),
   brandProducts: (id: string) => dependency('products.brand', id),
   locationProducts: (id: string) => dependency('products.location', id),
+  publicBookingPages: () => dependency('booking-pages.public', 'all'),
 };

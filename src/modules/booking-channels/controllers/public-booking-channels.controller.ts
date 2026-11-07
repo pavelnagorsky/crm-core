@@ -1,4 +1,11 @@
-import { Controller, Get, Header, Param, ParseUUIDPipe } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Header,
+  Param,
+  ParseUUIDPipe,
+  Query,
+} from '@nestjs/common';
 import {
   ApiNotFoundResponse,
   ApiBadRequestResponse,
@@ -12,6 +19,10 @@ import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
 import { BookingsFacade } from '../../bookings/bookings.facade.js';
 import { BookingSetupResponseDto } from '../../bookings/dto/booking-setup-response.dto.js';
 import { LocationService } from '../../location/services/location.service.js';
+import { PUBLIC_BOOKING_PAGE_LIST_TTL_SECONDS } from '../constants/public-booking-page-list.constants.js';
+import { PublicBookingPageListItemDto } from '../dto/public-booking-page-list-item.dto.js';
+import { PublicBookingPageListRequestDto } from '../dto/public-booking-page-list-request.dto.js';
+import { PublicBookingPageListResponseDto } from '../dto/public-booking-page-list-response.dto.js';
 import { PublicBookingPageResponseDto } from '../dto/public-booking-page-response.dto.js';
 import { PublicBookingWidgetResponseDto } from '../dto/public-booking-widget-response.dto.js';
 import { BookingPagesService } from '../services/booking-pages.service.js';
@@ -28,6 +39,32 @@ export class PublicBookingChannelsController {
     private readonly locationService: LocationService,
     private readonly bookings: BookingsFacade,
   ) {}
+
+  @ApiOperation({
+    summary: 'List published, indexable booking pages for the sitemap',
+  })
+  @ApiOkResponse({ type: ApiResponse(PublicBookingPageListResponseDto) })
+  @Get('booking-pages')
+  @Header(
+    'Cache-Control',
+    `public, max-age=${PUBLIC_BOOKING_PAGE_LIST_TTL_SECONDS}, s-maxage=${PUBLIC_BOOKING_PAGE_LIST_TTL_SECONDS}, stale-while-revalidate=60`,
+  )
+  async listPages(
+    @Query() dto: PublicBookingPageListRequestDto,
+  ): Promise<BaseResponseDto<PublicBookingPageListResponseDto>> {
+    const { items, totalItems } = await this.pages.listPublished(
+      dto.page,
+      dto.pageSize,
+    );
+    return BaseResponseDto.success(
+      new PublicBookingPageListResponseDto(
+        items.map(PublicBookingPageListItemDto.fromEntry),
+        dto.page,
+        dto.pageSize,
+        totalItems,
+      ),
+    );
+  }
 
   @ApiOperation({ summary: 'Get a published booking page by slug' })
   @ApiOkResponse({ type: ApiResponse(PublicBookingPageResponseDto) })

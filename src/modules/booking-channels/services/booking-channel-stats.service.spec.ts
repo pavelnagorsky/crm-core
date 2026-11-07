@@ -26,6 +26,7 @@ function fixture() {
     {} as never,
     {} as never,
     { emit: vi.fn() } as never,
+    { invalidate: vi.fn() } as never,
   );
   const widgets = new BookingWidgetsService(
     db as never,

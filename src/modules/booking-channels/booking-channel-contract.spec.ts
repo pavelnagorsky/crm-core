@@ -172,6 +172,7 @@ describe('Booking channel audit', () => {
           {} as never,
           publish as never,
           events as never,
+          { invalidate: vi.fn() } as never,
         );
         const saved = await service.create(
           'location',
@@ -288,6 +289,7 @@ describe('Booking channel audit', () => {
               {} as never,
               publish as never,
               events as never,
+              { invalidate: vi.fn() } as never,
             )
           : new BookingWidgetsService(
               { bookingWidget: repo } as never,
@@ -333,6 +335,7 @@ describe('booking channel contract', () => {
     files as never,
     {} as never,
     { emit: vi.fn() } as never,
+    { invalidate: vi.fn() } as never,
   );
   const widgets = new BookingWidgetsService(
     db as never,

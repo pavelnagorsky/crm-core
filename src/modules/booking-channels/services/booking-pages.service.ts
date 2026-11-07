@@ -10,16 +10,20 @@ import {
   auditSnapshotChanges,
 } from '../../audit/utils/audit-snapshot.js';
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
-import { BookingPage, Prisma } from '@prisma/client';
+import { BookingPage, BookingVisibility, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
+import { AppCacheService } from '../../../shared/cache/app-cache.service.js';
+import { CacheDependency } from '../../../shared/cache/cache-dependency.js';
 import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { FilesService } from '../../files/services/files.service.js';
+import { PUBLIC_BOOKING_PAGE_LIST_CACHE } from '../cache/public-booking-page-list.cache.js';
 import { SaveBookingPageDto } from '../dto/save-booking-page.dto.js';
 import { BookingChannelStatus } from '../enums/booking-channel-status.enum.js';
 import { SlugAvailabilityReason } from '../enums/slug-availability-reason.enum.js';
 import { BookingPageWithCover } from '../interfaces/booking-page-with-cover.interface.js';
+import { PublicBookingPageListResult } from '../interfaces/public-booking-page-list-result.interface.js';
 import { SlugAvailability } from '../interfaces/slug-availability.interface.js';
 import { toBookingFormColumns } from '../rendering/booking-form.js';
 import { sanitizeBookingHtml } from '../rendering/booking-html.js';
@@ -50,6 +54,7 @@ export class BookingPagesService {
     private readonly filesService: FilesService,
     private readonly publishService: BookingChannelPublishService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly cache: AppCacheService,
   ) {}
 
   async list(locationId: string): Promise<BookingPageWithCover[]> {
@@ -123,6 +128,7 @@ export class BookingPagesService {
         data: { locationId, ...this.content(dto, coverFileId) },
         include: pageInclude,
       });
+      await this.invalidatePublicList();
       this.record(AuditEvent.BOOKING_PAGE_CREATED, null, page, actor);
       this.logger.log(
         `booking page created: id=${page.id} locationId=${locationId} slug=${page.slug}`,
@@ -152,6 +158,7 @@ export class BookingPagesService {
         data: this.content(dto, coverFileId),
         include: pageInclude,
       });
+      await this.invalidatePublicList();
       this.record(AuditEvent.BOOKING_PAGE_UPDATED, old, page, actor);
       this.logger.log(
         `booking page updated: id=${pageId} locationId=${locationId}`,
@@ -179,6 +186,7 @@ export class BookingPagesService {
       data: { status, publishedAt: publishedAtFor(status) },
       include: pageInclude,
     });
+    await this.invalidatePublicList();
     this.record(AuditEvent.BOOKING_PAGE_STATUS_CHANGED, page, updated, actor);
     this.logger.log(
       `booking page status: id=${pageId} locationId=${locationId} status=${status}`,
@@ -193,6 +201,7 @@ export class BookingPagesService {
   ): Promise<void> {
     const old = await this.findInLocation(locationId, pageId);
     await this.db.bookingPage.delete({ where: { id: pageId } });
+    await this.invalidatePublicList();
     this.record(AuditEvent.BOOKING_PAGE_DELETED, old, null, actor);
     this.logger.log(
       `booking page deleted: id=${pageId} locationId=${locationId}`,
@@ -229,6 +238,34 @@ export class BookingPagesService {
     return page;
   }
 
+  async listPublished(
+    page: number,
+    pageSize: number,
+  ): Promise<PublicBookingPageListResult> {
+    const all = await this.cache.getOrLoad(
+      PUBLIC_BOOKING_PAGE_LIST_CACHE,
+      {},
+      () =>
+        this.db.bookingPage.findMany({
+          where: {
+            status: BookingChannelStatus.PUBLISHED,
+            // PRIVATE locations do not accept public bookings, so their pages are not indexable.
+            location: {
+              ...ACTIVE_LOCATION_WHERE,
+              bookingVisibility: BookingVisibility.PUBLIC,
+            },
+          },
+          select: { slug: true, updatedAt: true },
+          orderBy: { slug: 'asc' },
+        }),
+    );
+    const offset = (page - 1) * pageSize;
+    return {
+      items: all.slice(offset, offset + pageSize),
+      totalItems: all.length,
+    };
+  }
+
   async assertPublished(pageId: string): Promise<void> {
     const page = await this.db.bookingPage.findFirst({
       where: {
@@ -244,6 +281,10 @@ export class BookingPagesService {
         HttpStatus.NOT_FOUND,
       );
     }
+  }
+
+  private invalidatePublicList(): Promise<void> {
+    return this.cache.invalidate(CacheDependency.publicBookingPages());
   }
 
   private async assertSlugAvailable(
