@@ -10,6 +10,8 @@ import { BookingChannelAttributionService } from '../../booking-channels/service
 import { BookingCreateFacade } from '../booking-create.facade.js';
 import { BookingsFacade } from '../bookings.facade.js';
 import { BookingStatus } from '../enums/booking-status.enum.js';
+import { LocationService } from '../../location/services/location.service.js';
+import { ReviewsFacade } from '../../reviews/reviews.facade.js';
 import { BookingsExportService } from '../export/services/bookings-export.service.js';
 import { BookingAccessService } from '../services/booking-access.service.js';
 import { BookingClientTokenService } from '../services/booking-client-token.service.js';
@@ -37,6 +39,8 @@ describe('Client booking API (HTTP)', () => {
     availableSlots: vi.fn(),
     rescheduleByClient: vi.fn(),
     cancelByClient: vi.fn(),
+    getReviewContext: vi.fn(),
+    submitReview: vi.fn(),
   };
   const create = { createPublicBooking: vi.fn() };
   const current = () =>
@@ -63,6 +67,8 @@ describe('Client booking API (HTTP)', () => {
         { provide: BookingClientTokenService, useValue: tokens },
         { provide: BookingClientService, useValue: client },
         { provide: BookingsExportService, useValue: {} },
+        { provide: LocationService, useValue: {} },
+        { provide: ReviewsFacade, useValue: {} },
         { provide: BookingAccessService, useValue: {} },
         { provide: TokenEpochRegistryService, useValue: {} },
         {
@@ -91,6 +97,11 @@ describe('Client booking API (HTTP)', () => {
     client.cancelByClient.mockResolvedValue(current());
     client.rescheduleByClient.mockResolvedValue(current());
     client.availableSlots.mockResolvedValue([]);
+    client.getReviewContext.mockResolvedValue({
+      canReview: false,
+      review: null,
+      reviewLinks: null,
+    });
     create.createPublicBooking.mockResolvedValue(current());
   });
   afterEach(() => vi.useRealTimers());
@@ -106,13 +117,17 @@ describe('Client booking API (HTTP)', () => {
       })
       .expect(201);
     expect(body.responseValue.id).toBe(id);
-    expect(body.responseValue.booking).toEqual(expect.objectContaining({
-      id,
-      locationId,
-      status: BookingStatus.CONFIRMED,
-      totalChargedPrice: '50.00',
-      items: expect.arrayContaining([expect.objectContaining({ staffName: 'Anna' })]),
-    }));
+    expect(body.responseValue.booking).toEqual(
+      expect.objectContaining({
+        id,
+        locationId,
+        status: BookingStatus.CONFIRMED,
+        totalChargedPrice: '50.00',
+        items: expect.arrayContaining([
+          expect.objectContaining({ staffName: 'Anna' }),
+        ]),
+      }),
+    );
     expect(body.responseValue.booking.internalNotes).toBeUndefined();
     expect(body.responseValue.booking.items[0].calendarEventId).toBeUndefined();
     expect(body.responseValue.booking.idempotencyKey).toBeUndefined();
@@ -128,21 +143,41 @@ describe('Client booking API (HTTP)', () => {
   });
 
   it('returns PENDING on creation and preserves the optional idempotency key through validation', async () => {
-    create.createPublicBooking.mockResolvedValue({ ...current(), status: BookingStatus.PENDING });
+    create.createPublicBooking.mockResolvedValue({
+      ...current(),
+      status: BookingStatus.PENDING,
+    });
     const key = '33333333-3333-4333-8333-333333333333';
     const { body } = await request(app.getHttpServer())
       .post(`/public/locations/${locationId}/bookings`)
-      .send({ serviceId: id, startAt: '2026-10-28T13:00:00', firstName: 'Anna', phone: '+375291112233', idempotencyKey: key })
+      .send({
+        serviceId: id,
+        startAt: '2026-10-28T13:00:00',
+        firstName: 'Anna',
+        phone: '+375291112233',
+        idempotencyKey: key,
+      })
       .expect(201);
     expect(body.responseValue.booking.status).toBe(BookingStatus.PENDING);
     expect(body.responseValue.booking.canCancel).toBe(true);
-    expect(create.createPublicBooking).toHaveBeenCalledWith(locationId, expect.objectContaining({ idempotencyKey: key }), expect.anything(), expect.anything());
+    expect(create.createPublicBooking).toHaveBeenCalledWith(
+      locationId,
+      expect.objectContaining({ idempotencyKey: key }),
+      expect.anything(),
+      expect.anything(),
+    );
   });
 
   it('rejects an invalid idempotency key before creation', async () => {
     await request(app.getHttpServer())
       .post(`/public/locations/${locationId}/bookings`)
-      .send({ serviceId: id, startAt: '2026-10-28T13:00:00', firstName: 'Anna', phone: '+375291112233', idempotencyKey: 'not-a-uuid' })
+      .send({
+        serviceId: id,
+        startAt: '2026-10-28T13:00:00',
+        firstName: 'Anna',
+        phone: '+375291112233',
+        idempotencyKey: 'not-a-uuid',
+      })
       .expect(400);
     expect(create.createPublicBooking).not.toHaveBeenCalled();
   });
@@ -163,6 +198,106 @@ describe('Client booking API (HTTP)', () => {
     expect(body.responseValue.items[0]).not.toHaveProperty('calendarEventId');
     expect(headers['cache-control']).toBe('no-store');
     expect(bookings.findById).toHaveBeenCalledExactlyOnceWith(id);
+  });
+
+  it('exposes review state, the 14-day window of completed visits and map links', async () => {
+    const completed = {
+      ...current(),
+      status: BookingStatus.COMPLETED,
+      endAt: new Date('2026-10-20T11:00:00Z'),
+    };
+    bookings.findById.mockResolvedValue(completed);
+    client.getReviewContext.mockResolvedValue({
+      canReview: true,
+      review: {
+        rating: 5,
+        text: 'Супер',
+        reviewedAt: new Date('2026-10-25T10:00:00Z'),
+        status: 'PUBLISHED',
+        replyText: null,
+        repliedAt: null,
+        staff: [],
+      },
+      reviewLinks: { google: 'https://g.page/r/x', yandex: null },
+    });
+    const { body } = await request(app.getHttpServer())
+      .get('/public/bookings/me')
+      .auth(tokens.generateClientToken(id), { type: 'bearer' })
+      .expect(200);
+    expect(body.responseValue).toMatchObject({
+      canReview: true,
+      canReviewUntil: '2026-11-03T11:00:00.000Z',
+      accessExpiresAt: '2026-11-03T11:00:00.000Z',
+      review: { rating: 5, text: 'Супер', reply: null },
+      reviewLinks: { google: 'https://g.page/r/x', yandex: null },
+    });
+    expect(body.responseValue.review).not.toHaveProperty('staff');
+  });
+
+  it('reports no review state before the visit is completed', async () => {
+    const { body } = await request(app.getHttpServer())
+      .get('/public/bookings/me')
+      .auth(tokens.generateClientToken(id), { type: 'bearer' })
+      .expect(200);
+    expect(body.responseValue).toMatchObject({
+      canReview: false,
+      canReviewUntil: null,
+      review: null,
+      reviewLinks: null,
+    });
+  });
+
+  it('saves a review for the token booking only and sanitizes the text', async () => {
+    client.submitReview.mockResolvedValue({
+      rating: 4,
+      text: 'Отлично',
+      reviewedAt: new Date('2026-10-25T10:00:00Z'),
+      status: 'PUBLISHED',
+      replyText: 'Спасибо!',
+      repliedAt: new Date('2026-10-26T08:00:00Z'),
+      staff: [],
+    });
+    const { body, headers } = await request(app.getHttpServer())
+      .put('/public/bookings/me/review')
+      .auth(tokens.generateClientToken(id), { type: 'bearer' })
+      .send({
+        rating: 4,
+        text: ' <b>Отлично</b><script>x</script> ',
+        bookingId: 'other',
+        status: 'HIDDEN',
+      })
+      .expect(200);
+    expect(client.submitReview).toHaveBeenCalledWith(
+      expect.objectContaining({ id }),
+      { rating: 4, text: 'Отлично' },
+    );
+    expect(body.responseValue).toEqual({
+      rating: 4,
+      text: 'Отлично',
+      reviewedAt: '2026-10-25T10:00:00.000Z',
+      reply: { text: 'Спасибо!', repliedAt: '2026-10-26T08:00:00.000Z' },
+    });
+    expect(headers['cache-control']).toBe('no-store');
+  });
+
+  it.each([
+    {},
+    { rating: 5 },
+    { text: 'ok' },
+    { rating: 0, text: 'ok' },
+    { rating: 6, text: 'ok' },
+    { rating: 4.5, text: 'ok' },
+    { rating: 'five', text: 'ok' },
+    { rating: 5, text: '   ' },
+    { rating: 5, text: '<img src=x>' },
+    { rating: 5, text: 'a'.repeat(2001) },
+  ])('rejects invalid review input %j', async (payload) => {
+    await request(app.getHttpServer())
+      .put('/public/bookings/me/review')
+      .auth(tokens.generateClientToken(id), { type: 'bearer' })
+      .send(payload)
+      .expect(400);
+    expect(client.submitReview).not.toHaveBeenCalled();
   });
 
   it('cancels only the authorized booking with a client-supplied reason', async () => {
@@ -198,12 +333,15 @@ describe('Client booking API (HTTP)', () => {
         '/public/bookings/me/available-slots?from=2026-10-28&to=2026-10-29',
         '/public/bookings/me/cancel',
         '/public/bookings/me/reschedule',
+        '/public/bookings/me/review',
       ]) {
         const mutation =
           path.endsWith('/cancel') || path.endsWith('/reschedule');
-        let req = mutation
-          ? request(app.getHttpServer()).post(path)
-          : request(app.getHttpServer()).get(path);
+        let req = path.endsWith('/review')
+          ? request(app.getHttpServer()).put(path)
+          : mutation
+            ? request(app.getHttpServer()).post(path)
+            : request(app.getHttpServer()).get(path);
         if (kind !== 'missing') req = req.auth(token, { type: 'bearer' });
         await req.expect(401);
       }

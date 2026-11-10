@@ -79,6 +79,28 @@
 | `GET /public/booking-pages/:slug` | `getPage` | P: `public` | — |
 | `GET /public/booking-widgets/:widgetId` | `getWidget` | P: `public` | — |
 
+## reviews
+
+[Исходник](../../src/modules/reviews/controllers/reviews.controller.ts)
+
+| API | Метод | Проверка | Уточнение |
+| --- | --- | --- | --- |
+| `GET /locations/:locationId/reviews` | `search` | L: `review:read` | — |
+| `GET /locations/:locationId/reviews/summary` | `getSummary` | L: `review:read` | — |
+| `GET /locations/:locationId/reviews/:reviewId` | `findById` | L: `review:read` | — |
+| `PATCH /locations/:locationId/reviews/:reviewId/visibility` | `setVisibility` | L: `review:write` | Скрытие требует причину. |
+| `PUT /locations/:locationId/reviews/:reviewId/reply` | `saveReply` | L: `review:write` | — |
+| `DELETE /locations/:locationId/reviews/:reviewId/reply` | `deleteReply` | L: `review:write` | — |
+| `DELETE /locations/:locationId/reviews/:reviewId` | `delete` | L: `review:write` | Физическое удаление, снимок остаётся в аудите. |
+
+## public-reviews
+
+[Исходник](../../src/modules/reviews/controllers/public-reviews.controller.ts)
+
+| API | Метод | Проверка | Уточнение |
+| --- | --- | --- | --- |
+| `GET /public/locations/:locationId/reviews` | `list` | P: `public` | Только опубликованные отзывы; 404, если отзывы выключены у филиала. |
+
 ## public-booking-create
 
 [Исходник](../../src/modules/booking-channels/controllers/public-booking-create.controller.ts)

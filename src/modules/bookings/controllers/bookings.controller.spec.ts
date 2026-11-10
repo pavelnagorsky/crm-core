@@ -15,6 +15,8 @@ describe('Manual booking API permissions', () => {
     {} as never,
     {} as never,
     {} as never,
+    {} as never,
+    {} as never,
   );
   beforeEach(() => vi.clearAllMocks());
 

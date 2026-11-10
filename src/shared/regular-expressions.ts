@@ -41,6 +41,12 @@ const regularExpressions = {
   ipv4: /^(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(?:\.(?:25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}$/,
   // RF INN (10/12) or RB UNP (9)
   taxId: /^\d{9,12}$/,
+  // Google review destinations as host + path: g.page/r/<id>/review, search.google.com/local/writereview, google.com/maps/place/…
+  googleReviewTarget:
+    /^(?:g\.page\/r\/[\w-]+\/review\/?|search\.google\.com\/local\/writereview\/?|(?:www\.)?google\.com\/maps\/place\/.+)$/,
+  // Yandex Maps organization or profile pages as host + path: yandex.<tld>/maps/org/…, yandex.<tld>/profile/<id>
+  yandexReviewTarget:
+    /^(?:www\.)?yandex\.(?:ru|by|kz|uz|com)\/(?:maps\/org\/.+|profile\/\d+\/?)$/,
 };
 
 export default regularExpressions;

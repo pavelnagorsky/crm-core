@@ -141,7 +141,9 @@ export class AuditRenderer implements OnModuleInit {
         field === 'status' &&
         (entityType === 'BOOKING_PAGE' || entityType === 'BOOKING_WIDGET')
           ? 'bookingChannelStatus'
-          : AUDIT_FIELD_I18N[field];
+          : field === 'status' && entityType === 'REVIEW'
+            ? 'reviewStatus'
+            : AUDIT_FIELD_I18N[field];
       const dictionary = dictionaryName ? locale?.[dictionaryName] : undefined;
       if (dictionaryName === 'productUnit') {
         return productUnitLabelOf(

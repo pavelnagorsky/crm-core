@@ -47,6 +47,7 @@ import { StaffResponseDto } from '../dto/staff-response.dto.js';
 import { StaffSearchRequestDto } from '../dto/staff-search-request.dto.js';
 import { StaffSearchResponseDto } from '../dto/staff-search-response.dto.js';
 import { StaffStatusCountResponseDto } from '../dto/staff-status-count-response.dto.js';
+import { ReviewsFacade } from '../../reviews/reviews.facade.js';
 import { StaffDirectoryItemDto } from '../dto/staff-directory-item.dto.js';
 import { UpdateStaffDto } from '../dto/update-staff.dto.js';
 import { StaffExportService } from '../export/services/staff-export.service.js';
@@ -60,6 +61,7 @@ export class StaffController {
     private readonly staffService: StaffService,
     private readonly staffExportService: StaffExportService,
     private readonly access: StaffAccessService,
+    private readonly reviews: ReviewsFacade,
   ) {}
 
   @ApiOperation({
@@ -72,7 +74,18 @@ export class StaffController {
     @Param('locationId', ParseUUIDPipe) locationId: string,
   ): Promise<BaseResponseDto<StaffDirectoryItemDto[]>> {
     const staff = await this.staffService.listInLocation(locationId);
-    return BaseResponseDto.success(staff.map(StaffDirectoryItemDto.fromEntity));
+    const summaries = await this.reviews.getStaffSummaries(
+      locationId,
+      staff.map((member) => member.id),
+    );
+    return BaseResponseDto.success(
+      staff.map((member) =>
+        StaffDirectoryItemDto.fromEntity(
+          member,
+          summaries.get(member.id) ?? null,
+        ),
+      ),
+    );
   }
 
   @ApiOperation({ summary: 'Create a staff member' })
@@ -162,7 +175,10 @@ export class StaffController {
       locationId,
       id,
     );
-    return BaseResponseDto.success(StaffResponseDto.fromEntity(staff));
+    const summaries = await this.reviews.getStaffSummaries(locationId, [id]);
+    return BaseResponseDto.success(
+      StaffResponseDto.fromEntity(staff, summaries.get(id) ?? null),
+    );
   }
 
   @ApiOperation({ summary: 'Search staff members' })
@@ -177,9 +193,15 @@ export class StaffController {
       locationId,
       dto,
     );
+    const summaries = await this.reviews.getStaffSummaries(
+      locationId,
+      items.map((member) => member.id),
+    );
     return BaseResponseDto.success(
       new StaffSearchResponseDto(
-        items.map(StaffResponseDto.fromEntity),
+        items.map((member) =>
+          StaffResponseDto.fromEntity(member, summaries.get(member.id) ?? null),
+        ),
         dto.page,
         dto.pageSize,
         totalItems,

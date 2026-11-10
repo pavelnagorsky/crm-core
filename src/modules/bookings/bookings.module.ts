@@ -7,6 +7,7 @@ import { LocationModule } from '../location/location.module.js';
 import { OrdersModule } from '../orders/orders.module.js';
 import { PayrollModule } from '../payroll/payroll.module.js';
 import { ProductsModule } from '../products/products.module.js';
+import { ReviewsModule } from '../reviews/reviews.module.js';
 import { ServiceCatalogModule } from '../services/catalog/service-catalog.module.js';
 import { StaffModule } from '../staff/staff.module.js';
 import { BookingCreateFacade } from './booking-create.facade.js';
@@ -44,6 +45,7 @@ import { JwtBookingClientStrategy } from './strategies/jwt-booking-client.strate
     ServiceCatalogModule,
     ProductsModule,
     OrdersModule,
+    ReviewsModule,
     I18nModule,
   ],
   controllers: [BookingsController, BookingClientController],

@@ -62,6 +62,8 @@ import { UpdateBookingDto } from '../dto/update-booking.dto.js';
 import { BookingStatus } from '../enums/booking-status.enum.js';
 import { BookingExportRequestDto } from '../export/dto/booking-export-request.dto.js';
 import { BookingsExportService } from '../export/services/bookings-export.service.js';
+import { LocationService } from '../../location/services/location.service.js';
+import { ReviewsFacade } from '../../reviews/reviews.facade.js';
 import { BookingAccessService } from '../services/booking-access.service.js';
 import { BookingClientTokenService } from '../services/booking-client-token.service.js';
 
@@ -74,6 +76,8 @@ export class BookingsController {
     private readonly bookingClientService: BookingClientTokenService,
     private readonly bookingsExportService: BookingsExportService,
     private readonly access: BookingAccessService,
+    private readonly locations: LocationService,
+    private readonly reviews: ReviewsFacade,
   ) {}
 
   // ─── Public ──────────────────────────────────────────────────────────────────
@@ -87,10 +91,18 @@ export class BookingsController {
   async getBookingSetup(
     @Param('locationId', ParseUUIDPipe) locationId: string,
   ): Promise<BaseResponseDto<BookingSetupResponseDto>> {
+    const [setup, settings] = await Promise.all([
+      this.bookings.getBookingSetup(locationId),
+      this.locations.getBookingSettings(locationId),
+    ]);
+    const staffSummaries = settings.reviewsEnabled
+      ? await this.reviews.getStaffSummaries(
+          locationId,
+          setup.staff.map((staff) => staff.id),
+        )
+      : undefined;
     return BaseResponseDto.success(
-      BookingSetupResponseDto.fromEntity(
-        await this.bookings.getBookingSetup(locationId),
-      ),
+      BookingSetupResponseDto.fromEntity(setup, staffSummaries),
     );
   }
 

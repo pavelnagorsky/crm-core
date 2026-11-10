@@ -6,6 +6,7 @@ import {
   HttpCode,
   HttpStatus,
   Post,
+  Put,
   Query,
   UseGuards,
 } from '@nestjs/common';
@@ -23,6 +24,8 @@ import { ApiResponseArray } from '../../../shared/dto/api-response-array.dto.js'
 import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../../shared/dto/id-response.dto.js';
+import { ClientReviewDto } from '../../reviews/dto/client-review.dto.js';
+import { SubmitReviewDto } from '../../reviews/dto/submit-review.dto.js';
 import { AvailableSlotsDayDto } from '../../calendar/dto/available-slots-day.dto.js';
 import { ClientBooking } from '../decorators/client-booking.decorator.js';
 import { CancelBookingDto } from '../dto/cancel-booking.dto.js';
@@ -49,7 +52,33 @@ export class BookingClientController {
     @ClientBooking() booking: BookingWithItems,
   ): Promise<BaseResponseDto<ClientBookingResponseDto>> {
     return BaseResponseDto.success(
-      ClientBookingResponseDto.fromBooking(booking),
+      ClientBookingResponseDto.fromBooking(
+        booking,
+        await this.bookings.getReviewContext(booking),
+      ),
+    );
+  }
+
+  @ApiOperation({
+    summary:
+      'Create or edit the review of this visit; one review per booking, no deletion',
+  })
+  @ApiForbiddenResponse({
+    description:
+      'REVIEW_NOT_ALLOWED: the visit is not completed or reviews are disabled',
+  })
+  @ApiBadRequestResponse({ description: 'Invalid rating or text' })
+  @ApiOkResponse({ type: ApiResponse(ClientReviewDto) })
+  @Put('review')
+  @Header('Cache-Control', 'no-store')
+  async submitReview(
+    @ClientBooking() booking: BookingWithItems,
+    @Body() dto: SubmitReviewDto,
+  ): Promise<BaseResponseDto<ClientReviewDto>> {
+    return BaseResponseDto.success(
+      ClientReviewDto.fromEntity(
+        await this.bookings.submitReview(booking, dto),
+      ),
     );
   }
 

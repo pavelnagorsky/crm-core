@@ -4,6 +4,7 @@ import { I18nModule } from '../../shared/i18n/i18n.module.js';
 import { AccessModule } from '../access/access.module.js';
 import { LocationModule } from '../location/location.module.js';
 import { ServiceCatalogModule } from '../services/catalog/service-catalog.module.js';
+import { ReviewsModule } from '../reviews/reviews.module.js';
 import { UserModule } from '../user/user.module.js';
 import { StaffAnalyticsController } from './analytics/controllers/staff-analytics.controller.js';
 import { StaffAnalyticsService } from './analytics/services/staff-analytics.service.js';
@@ -20,6 +21,7 @@ import { StaffService } from './services/staff.service.js';
     I18nModule,
     AccessModule,
     UserModule,
+    ReviewsModule,
   ],
   controllers: [StaffAnalyticsController, StaffController],
   providers: [

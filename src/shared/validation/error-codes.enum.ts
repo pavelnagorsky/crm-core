@@ -637,4 +637,20 @@ export const ErrorCode = {
     code: 'SUPPORT_REQUEST_UPDATE_EMPTY',
     message: 'Status or notes is required',
   },
+  REVIEW_NOT_ALLOWED: {
+    code: 'REVIEW_NOT_ALLOWED',
+    message: 'A review cannot be left for this booking',
+  },
+  REVIEW_NOT_FOUND: {
+    code: 'REVIEW_NOT_FOUND',
+    message: 'Review not found',
+  },
+  REVIEW_REPLY_NOT_FOUND: {
+    code: 'REVIEW_REPLY_NOT_FOUND',
+    message: 'Review has no reply',
+  },
+  REVIEW_HIDE_REASON_REQUIRED: {
+    code: 'REVIEW_HIDE_REASON_REQUIRED',
+    message: 'A reason is required to hide a review',
+  },
 } as const satisfies Record<string, ErrorCodeEntry>;

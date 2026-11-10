@@ -220,6 +220,7 @@ enum AuditEntity {
   PRODUCT
   INVENTORY
   ORDER
+  REVIEW
 }
 
 enum AuditEvent {
@@ -296,6 +297,12 @@ enum AuditEvent {
   ORDER_ITEM_REVERSED
   ORDER_VOIDED
   ORDER_DELETED
+  REVIEW_CREATED
+  REVIEW_UPDATED
+  REVIEW_VISIBILITY_CHANGED
+  REVIEW_REPLIED
+  REVIEW_REPLY_DELETED
+  REVIEW_DELETED
 }
 
 enum AuditActorRole {
@@ -526,6 +533,9 @@ model Location {
   minimumBookingNoticeMinutes   Int                          @default(0)
   bookingVisibility             BookingVisibility            @default(PUBLIC)
   isBookingConfirmationRequired Boolean                      @default(false)
+  reviewsEnabled                Boolean                      @default(true)
+  googleReviewUrl               String?                      @db.VarChar(2048)
+  yandexReviewUrl               String?                      @db.VarChar(2048)
   createdAt                     DateTime                     @default(now())
   updatedAt                     DateTime                     @updatedAt
   deletedAt                     DateTime?
@@ -553,6 +563,7 @@ model Location {
   orders                     Order[]
   orderOperations            OrderOperation[]
   orderReturns               OrderReturn[]
+  reviews                    Review[]
 
   @@index([brandId, deletedAt])
 }
@@ -998,6 +1009,7 @@ model Client {
   user     User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
   bookings Booking[]
   orders   Order[]
+  reviews  Review[]
 
   @@unique([brandId, phone])
   @@index([brandId])
@@ -1116,6 +1128,7 @@ model Staff {
   earnings          StaffEarning[]
   payrollResults    PayrollResult[]
   soldOrderItems    OrderItem[]
+  reviewStaff       ReviewStaff[]
 
   @@unique([locationId, userId])
   @@index([locationId])
@@ -1242,7 +1255,8 @@ model Booking {
   cancelledBy        CancelledBy?
   cancelledAt        DateTime?
 
-  reminderSentAt DateTime?
+  reminderSentAt      DateTime?
+  reviewRequestSentAt DateTime?
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -1256,6 +1270,7 @@ model Booking {
   bookingPage   BookingPage?   @relation(fields: [bookingPageId], references: [id], onDelete: SetNull)
   bookingWidget BookingWidget? @relation(fields: [bookingWidgetId], references: [id], onDelete: SetNull)
   orders        Order[]
+  review        Review?
 
   @@unique([locationId, idempotencyKey])
   @@index([locationId, deletedAt, startAt])
@@ -1295,6 +1310,55 @@ model BookingItem {
   @@index([locationId])
   @@index([staffId, startAt])
   @@index([serviceId])
+}
+
+enum ReviewStatus {
+  PUBLISHED
+  HIDDEN
+}
+
+model Review {
+  id         String  @id @default(uuid())
+  locationId String
+  bookingId  String? @unique
+  clientId   String?
+
+  rating          Int      @db.SmallInt
+  text            String   @db.VarChar(2000)
+  authorFirstName String?  @db.VarChar(100)
+  authorLastName  String?  @db.VarChar(100)
+  reviewedAt      DateTime
+
+  status       ReviewStatus @default(PUBLISHED)
+  hiddenAt     DateTime?
+  hiddenReason String?      @db.VarChar(500)
+
+  replyText     String?   @db.VarChar(2000)
+  repliedAt     DateTime?
+  repliedByName String?   @db.VarChar(250)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  location Location      @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  booking  Booking?      @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  client   Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  staff    ReviewStaff[]
+
+  @@index([locationId, status, reviewedAt, id])
+  @@index([clientId])
+}
+
+model ReviewStaff {
+  reviewId  String
+  staffId   String
+  staffName String @db.VarChar(250)
+
+  review Review @relation(fields: [reviewId], references: [id], onDelete: Cascade)
+  staff  Staff  @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@id([reviewId, staffId])
+  @@index([staffId])
 }
 
 model BookingPage {

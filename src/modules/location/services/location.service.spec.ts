@@ -66,6 +66,8 @@ describe('LocationService locale and business type', () => {
       whatsapp: '+375292332000',
       website: 'https://example.com',
       mapWidgetUrl: 'https://yandex.ru/map-widget/v1/',
+      googleReviewUrl: 'https://g.page/r/CexampleId/review',
+      yandexReviewUrl: 'https://yandex.ru/maps/org/studio/1234567890/',
     };
     db.location.update.mockImplementationOnce(async ({ data }) => ({
       ...stored,
@@ -95,6 +97,9 @@ describe('LocationService locale and business type', () => {
       'whatsapp',
       'website',
       'mapWidgetUrl',
+      'googleReviewUrl',
+      'yandexReviewUrl',
+      'reviewsEnabled',
     ]) {
       expect(data[field]).toBeUndefined();
     }
@@ -110,6 +115,8 @@ describe('LocationService locale and business type', () => {
         'whatsapp',
         'website',
         'mapWidgetUrl',
+        'googleReviewUrl',
+        'yandexReviewUrl',
       ];
       const raw = Object.fromEntries(fields.map((field) => [field, value]));
       const dto = await new ValidationPipe({

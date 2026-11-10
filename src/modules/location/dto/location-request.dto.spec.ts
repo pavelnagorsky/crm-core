@@ -91,6 +91,8 @@ describe('Location request contracts', () => {
         'whatsapp',
         'website',
         'mapWidgetUrl',
+        'googleReviewUrl',
+        'yandexReviewUrl',
       ];
       const transform = (contacts: Record<string, unknown>) =>
         pipe.transform({ ...base, ...contacts }, { type: 'body', metatype });
@@ -216,6 +218,98 @@ describe('Location request contracts', () => {
       ])('rejects invalid map input: %s', async (mapWidgetUrl) => {
         await expect(transform({ mapWidgetUrl })).rejects.toThrow();
       });
+
+      describe.each([
+        {
+          field: 'googleReviewUrl',
+          valid: [
+            'https://g.page/r/CexampleId_-1/review',
+            'https://g.page/r/CexampleId/review/',
+            'https://search.google.com/local/writereview?placeid=ChIJexample',
+            'https://www.google.com/maps/place/Studio/@53.9,27.5,17z/data=!4m7',
+            'https://google.com/maps/place/Studio',
+            'HTTPS://G.PAGE/r/CexampleId/review',
+          ],
+          invalid: [
+            'http://g.page/r/CexampleId/review',
+            'https://g.page/CexampleId/review',
+            'https://g.page/r/CexampleId',
+            'https://evilgoogle.com/maps/place/Studio',
+            'https://google.com.evil.ru/maps/place/Studio',
+            'https://evil.ru/?u=https://g.page/r/CexampleId/review',
+            'https://user@g.page/r/CexampleId/review',
+            'https://g.page:8443/r/CexampleId/review',
+            'https://maps.app.goo.gl/abc123',
+            'https://goo.gl/maps/abc123',
+            'https://www.google.com/search?q=studio',
+            'https://www.google.com/maps/',
+            'https://yandex.ru/maps/org/studio/1234567890/',
+            'g.page/r/CexampleId/review',
+            'javascript:alert(1)',
+          ],
+        },
+        {
+          field: 'yandexReviewUrl',
+          valid: [
+            'https://yandex.ru/maps/org/studio/1234567890/reviews/',
+            'https://yandex.ru/maps/org/studio/1234567890',
+            'https://www.yandex.ru/maps/org/studio/1234567890/',
+            'https://yandex.by/maps/org/studio/1234567890/',
+            'https://yandex.kz/maps/org/studio/1234567890/',
+            'https://yandex.uz/maps/org/studio/1234567890/',
+            'https://yandex.com/maps/org/studio/1234567890/',
+            'https://yandex.ru/profile/1234567890',
+            'https://yandex.ru/profile/1234567890/',
+          ],
+          invalid: [
+            'http://yandex.ru/maps/org/studio/1234567890/',
+            'https://evilyandex.ru/maps/org/studio/1234567890/',
+            'https://yandex.ru.evil.com/maps/org/studio/1234567890/',
+            'https://evil.com/?u=https://yandex.ru/maps/org/studio/1/',
+            'https://user@yandex.ru/maps/org/studio/1234567890/',
+            'https://yandex.ru:8443/maps/org/studio/1234567890/',
+            'https://yandex.ru/maps/',
+            'https://yandex.ru/maps/-/CCUexample',
+            'https://yandex.ru/profile/abc',
+            'https://yandex.ru/search/?text=studio',
+            'https://yandex.fr/maps/org/studio/1234567890/',
+            'https://g.page/r/CexampleId/review',
+            'yandex.ru/maps/org/studio/1234567890/',
+          ],
+        },
+      ])('$field', ({ field, valid, invalid }) => {
+        it.each(valid)('accepts and trims %s', async (value) => {
+          await expect(
+            transform({ [field]: `  ${value}  ` }),
+          ).resolves.toMatchObject({ [field]: value });
+        });
+
+        it.each(invalid)('rejects %s', async (value) => {
+          await expect(transform({ [field]: value })).rejects.toThrow();
+        });
+
+        it('accepts a link up to 2048 characters', async () => {
+          const prefix = valid[0].includes('?') ? valid[0] : `${valid[0]}?q=`;
+          const value = prefix + 'a'.repeat(2048 - prefix.length);
+          await expect(transform({ [field]: value })).resolves.toMatchObject({
+            [field]: value,
+          });
+          await expect(transform({ [field]: value + 'a' })).rejects.toThrow();
+        });
+      });
+
+      it.each([true, false])('accepts reviewsEnabled %j', async (value) => {
+        await expect(
+          transform({ reviewsEnabled: value }),
+        ).resolves.toMatchObject({ reviewsEnabled: value });
+      });
+
+      it.each(['true', 1])(
+        'rejects non-boolean reviewsEnabled %j',
+        async (value) => {
+          await expect(transform({ reviewsEnabled: value })).rejects.toThrow();
+        },
+      );
     },
   );
 });

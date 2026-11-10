@@ -10,6 +10,7 @@ import { PublicBookingChannelsController } from '../../booking-channels/controll
 import { BookingPagesService } from '../../booking-channels/services/booking-pages.service.js';
 import { BookingWidgetsService } from '../../booking-channels/services/booking-widgets.service.js';
 import { LocationService } from '../../location/services/location.service.js';
+import { ReviewsFacade } from '../../reviews/reviews.facade.js';
 import { ProductsService } from '../../products/services/products.service.js';
 import { ServiceCatalogFacade } from '../../services/catalog/service-catalog.facade.js';
 import { StaffService } from '../../staff/services/staff.service.js';
@@ -38,6 +39,8 @@ describe('Public booking setup products (HTTP)', () => {
       .fn()
       .mockResolvedValue({ categories: [], services: [], bundles: [] }),
   };
+  const reviews = { getStaffSummaries: vi.fn() };
+  const settings = vi.fn();
   const staff = { listActiveWithServices: vi.fn().mockResolvedValue([]) };
   const channel = {
     id: widgetId,
@@ -109,15 +112,21 @@ describe('Public booking setup products (HTTP)', () => {
         },
         {
           provide: BookingWidgetsService,
-          useValue: { getPublished: vi.fn().mockResolvedValue(channel) },
+          useValue: {
+            getPublished: vi.fn().mockResolvedValue(channel),
+            recordInitialization: vi.fn(),
+          },
         },
+        { provide: ReviewsFacade, useValue: reviews },
         {
           provide: LocationService,
           useValue: {
             findPublicProfile: vi.fn().mockResolvedValue({
               id: locationId,
+              reviewsEnabled: false,
               brand: { name: 'Brand', logoFile: null },
             }),
+            getBookingSettings: settings,
           },
         },
       ],
@@ -129,6 +138,7 @@ describe('Public booking setup products (HTTP)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     products.listForPublicCatalog.mockResolvedValue([product]);
+    settings.mockResolvedValue({ id: locationId, reviewsEnabled: false });
   });
 
   afterAll(async () => app?.close());
@@ -166,4 +176,31 @@ describe('Public booking setup products (HTTP)', () => {
       await request(app.getHttpServer()).get(path).expect(404);
     },
   );
+
+  it('adds staff review summaries to the public setup when reviews are enabled', async () => {
+    settings.mockResolvedValue({ id: locationId, reviewsEnabled: true });
+    staff.listActiveWithServices.mockResolvedValueOnce([
+      {
+        id: 'staff-1',
+        name: 'Мария',
+        roleTitle: null,
+        description: null,
+        avatarFile: null,
+        staffServices: [],
+      },
+    ]);
+    reviews.getStaffSummaries.mockResolvedValueOnce(
+      new Map([['staff-1', { count: 4, average: 4.5 }]]),
+    );
+    const { body } = await request(app.getHttpServer())
+      .get(paths[0])
+      .expect(200);
+    expect(body.responseValue.staff[0].reviewSummary).toEqual({
+      count: 4,
+      average: 4.5,
+    });
+    expect(reviews.getStaffSummaries).toHaveBeenCalledWith(locationId, [
+      'staff-1',
+    ]);
+  });
 });

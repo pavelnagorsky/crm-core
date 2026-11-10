@@ -25,6 +25,9 @@ export const LOCATION_SETTINGS_SELECT = {
   minimumBookingNoticeMinutes: true,
   bookingVisibility: true,
   isBookingConfirmationRequired: true,
+  reviewsEnabled: true,
+  googleReviewUrl: true,
+  yandexReviewUrl: true,
 } satisfies Prisma.LocationSelect;
 
 export const LOCATION_SETTINGS_CACHE = defineCache<

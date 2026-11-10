@@ -70,6 +70,13 @@
       "heading": "Напоминание о записи",
       "body": "Напоминаем, что через час у вас запланирована запись.",
       "hint": "Ждём вас!"
+    },
+    "review-request": {
+      "subject": "Оцените ваш визит",
+      "heading": "Как всё прошло?",
+      "body": "Спасибо, что выбрали нас! Расскажите, как прошёл ваш визит — это займёт меньше минуты.",
+      "action": "Оставить отзыв",
+      "hint": "Ссылка действует ограниченное время. Ваш отзыв поможет другим клиентам и нам стать лучше."
     }
   },
   "auditEvent": {
@@ -146,7 +153,13 @@
     "ORDER_ITEM_CONFIRMED": "Позиция заказа подтверждена",
     "ORDER_ITEM_REVERSED": "Позиция заказа сторнирована",
     "ORDER_VOIDED": "Заказ отменён",
-    "ORDER_DELETED": "Заказ удалён"
+    "ORDER_DELETED": "Заказ удалён",
+    "REVIEW_CREATED": "Отзыв оставлен",
+    "REVIEW_UPDATED": "Отзыв изменён клиентом",
+    "REVIEW_VISIBILITY_CHANGED": "Видимость отзыва изменена",
+    "REVIEW_REPLIED": "Ответ на отзыв сохранён",
+    "REVIEW_REPLY_DELETED": "Ответ на отзыв удалён",
+    "REVIEW_DELETED": "Отзыв удалён"
   },
   "actorRole": {
     "UNKNOWN": "роль не сохранена",
@@ -423,6 +436,10 @@
     "OWNER_REPLACED": "Владелец заменён",
     "STAFF_ACCESS_REVOKED": "Доступ сотрудника отозван"
   },
+  "reviewStatus": {
+    "PUBLISHED": "Опубликован",
+    "HIDDEN": "Скрыт"
+  },
   "bookingChannelStatus": {
     "DRAFT": "Черновик",
     "PUBLISHED": "Опубликовано"
@@ -496,6 +513,13 @@
       "name": "Название",
       "logoFileId": "Логотип"
     },
+    "REVIEW": {
+      "rating": "Оценка",
+      "text": "Текст",
+      "status": "Статус",
+      "hiddenReason": "Причина скрытия",
+      "replyText": "Ответ"
+    },
     "LOCATION": {
       "name": "Название",
       "businessType": "Тип бизнеса",
@@ -507,6 +531,9 @@
       "whatsapp": "WhatsApp",
       "website": "Сайт",
       "mapWidgetUrl": "Виджет карты",
+      "googleReviewUrl": "Ссылка на отзыв в Google",
+      "yandexReviewUrl": "Ссылка на отзыв в Яндекс Картах",
+      "reviewsEnabled": "Отзывы включены",
       "advanceBookingWindowDays": "Окно бронирования (дней)",
       "slotIntervalMinutes": "Интервал слотов (мин)",
       "minimumBookingNoticeMinutes": "Мин. время до записи (мин)",

@@ -4,6 +4,7 @@ import { BookingsAggregatesModule } from '../bookings/aggregates/bookings-aggreg
 import { BookingsModule } from '../bookings/bookings.module.js';
 import { FilesModule } from '../files/files.module.js';
 import { LocationModule } from '../location/location.module.js';
+import { ReviewsModule } from '../reviews/reviews.module.js';
 import { ServiceCatalogModule } from '../services/catalog/service-catalog.module.js';
 import { BookingPagesController } from './controllers/booking-pages.controller.js';
 import { BookingPalettesController } from './controllers/booking-palettes.controller.js';
@@ -26,6 +27,7 @@ import { BookingWidgetsService } from './services/booking-widgets.service.js';
     FilesModule,
     BookingsModule,
     BookingsAggregatesModule,
+    ReviewsModule,
   ],
   controllers: [
     PublicBookingChannelEventsController,

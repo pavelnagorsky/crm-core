@@ -3,6 +3,11 @@ import { Booking } from '@prisma/client';
 import { AuditActorRole } from '../../audit/enums/audit-actor-role.enum.js';
 import { CalendarFacade } from '../../calendar/calendar.facade.js';
 import { AvailableSlotsDayDto } from '../../calendar/dto/available-slots-day.dto.js';
+import { LocationService } from '../../location/services/location.service.js';
+import { ReviewWithStaff } from '../../reviews/interfaces/review-with-staff.interface.js';
+import { ReviewsFacade } from '../../reviews/reviews.facade.js';
+import { SubmitReviewDto } from '../../reviews/dto/submit-review.dto.js';
+import { ClientBookingReviewContext } from '../interfaces/client-booking-review-context.interface.js';
 import { CancelBookingDto } from '../dto/cancel-booking.dto.js';
 import { ClientBookingSlotsRequestDto } from '../dto/client-booking-slots-request.dto.js';
 import { RescheduleClientBookingDto } from '../dto/reschedule-client-booking.dto.js';
@@ -21,7 +26,46 @@ export class BookingClientService {
     private readonly lifecycle: BookingLifecycleService,
     private readonly calendar: CalendarFacade,
     private readonly events: BookingEventsService,
+    private readonly reviews: ReviewsFacade,
+    private readonly locations: LocationService,
   ) {}
+
+  async getReviewContext(
+    booking: BookingWithItems,
+  ): Promise<ClientBookingReviewContext> {
+    const settings = await this.locations.getBookingSettings(
+      booking.locationId,
+    );
+    const state = await this.reviews.getBookingReviewState(
+      booking,
+      settings.reviewsEnabled,
+    );
+    const links = {
+      google: settings.googleReviewUrl,
+      yandex: settings.yandexReviewUrl,
+    };
+    return {
+      ...state,
+      // Map links are the thank-you step: shown only after the client reviewed the visit here.
+      reviewLinks:
+        state.review && (links.google || links.yandex) ? links : null,
+    };
+  }
+
+  async submitReview(
+    booking: BookingWithItems,
+    dto: SubmitReviewDto,
+  ): Promise<ReviewWithStaff> {
+    const settings = await this.locations.getBookingSettings(
+      booking.locationId,
+    );
+    const { review } = await this.reviews.submitForBooking(
+      booking,
+      dto,
+      settings.reviewsEnabled,
+    );
+    return review;
+  }
 
   async availableSlots(
     booking: BookingWithItems,

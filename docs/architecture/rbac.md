@@ -77,6 +77,8 @@ OWNER не настраивается. В колонке «Настройка» 
 | `payroll.export:read` | L | Скачивание зарплатных XLSX | Да | Да | Нет | MANAGER |
 | `booking-channel:read` | L | Чтение страниц и виджетов записи | Да | Да | Нет | MANAGER |
 | `booking-channel:write` | L | Создание, изменение, публикация и удаление страниц/виджетов | Да | Да | Нет | MANAGER |
+| `review:read` | L | Просмотр отзывов клиентов филиала и их рейтингов | Да | Да | Нет | MANAGER |
+| `review:write` | L | Ответы на отзывы, скрытие и удаление отзывов | Да | Да | Нет | MANAGER |
 | `analytics.location:read` | L | Dashboard, аналитика записей, услуг, товаров, склада и сотрудников | Да | Да | Нет | MANAGER |
 | `analytics.brand:read` | B | Общая аналитика бренда, включая клиентскую | Да | Да | Нет | MANAGER |
 | `audit.location:read` | L | Журнал изменений филиала | Да | Да | Нет | MANAGER |

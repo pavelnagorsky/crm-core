@@ -4,6 +4,8 @@ import {
   OptionalLocationPhone,
   OptionalMapWidgetUrl,
 } from '../decorators/contact-field.decorator.js';
+import { OptionalGoogleReviewUrl } from '../decorators/optional-google-review-url.decorator.js';
+import { OptionalYandexReviewUrl } from '../decorators/optional-yandex-review-url.decorator.js';
 import { BookingVisibility, BusinessType } from '@prisma/client';
 import {
   IsBoolean,
@@ -56,6 +58,17 @@ export class UpdateLocationDto {
 
   @OptionalMapWidgetUrl()
   mapWidgetUrl?: string | null;
+
+  @OptionalGoogleReviewUrl()
+  googleReviewUrl?: string | null;
+
+  @OptionalYandexReviewUrl()
+  yandexReviewUrl?: string | null;
+
+  @ApiProperty({ type: Boolean, required: false })
+  @IsOptional()
+  @IsBoolean()
+  reviewsEnabled?: boolean;
 
   @ApiProperty({ type: Number, required: false })
   @IsOptional()

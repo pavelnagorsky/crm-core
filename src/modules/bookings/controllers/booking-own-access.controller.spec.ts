@@ -32,6 +32,8 @@ describe('Staff booking API', () => {
     {} as never,
     {} as never,
     access,
+    {} as never,
+    {} as never,
   );
   const guard = new PermissionGuard(new Reflector());
 

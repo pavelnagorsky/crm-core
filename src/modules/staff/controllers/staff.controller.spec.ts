@@ -12,15 +12,23 @@ describe('Staff directory and private data', () => {
     findWithServiceCountInLocation: vi.fn(),
     getShifts: vi.fn(),
   };
+  const reviews = { getStaffSummaries: vi.fn() };
   const controller = new StaffController(
     staff as never,
     {} as never,
     new StaffAccessService(staff as never),
+    reviews as never,
   );
 
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => {
+    vi.clearAllMocks();
+    reviews.getStaffSummaries.mockResolvedValue(new Map());
+  });
 
   it('returns colleague names without contact, tax or payout details', async () => {
+    reviews.getStaffSummaries.mockResolvedValue(
+      new Map([['boris', { count: 4, average: 4.5 }]]),
+    );
     staff.listInLocation.mockResolvedValue([
       {
         id: 'boris',
@@ -36,6 +44,7 @@ describe('Staff directory and private data', () => {
           fileName: 'boris.png',
           url: 'https://cdn.example/boris.png',
         },
+        reviewSummary: { count: 4, average: 4.5 },
       },
       {
         id: 'anna',
@@ -57,6 +66,7 @@ describe('Staff directory and private data', () => {
           name: 'boris.png',
           url: 'https://cdn.example/boris.png',
         },
+        reviewSummary: { count: 4, average: 4.5 },
       },
       {
         id: 'anna',
@@ -64,7 +74,12 @@ describe('Staff directory and private data', () => {
         roleTitle: null,
         status: 'ACTIVE',
         avatar: null,
+        reviewSummary: null,
       },
+    ]);
+    expect(reviews.getStaffSummaries).toHaveBeenCalledWith('location-1', [
+      'boris',
+      'anna',
     ]);
   });
 

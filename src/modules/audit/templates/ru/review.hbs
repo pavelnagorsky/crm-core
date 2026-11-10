@@ -1,0 +1,2 @@
+{{payload.title}}
+<ul>{{#each payload.changes}}<li>{{t "fields" ../entityType this.field}}: <s>{{formatValue this.field this.from}}</s> → {{formatValue this.field this.to}}</li>{{/each}}</ul>

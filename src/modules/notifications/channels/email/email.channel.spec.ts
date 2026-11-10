@@ -7,6 +7,7 @@ import { BookingConfirmedNotification } from '../../messages/booking-confirmed.n
 import { BookingReminderNotification } from '../../messages/booking-reminder.notification.js';
 import { BookingStatusChangedNotification } from '../../messages/booking-status-changed.notification.js';
 import { ConfirmEmailNotification } from '../../messages/confirm-email.notification.js';
+import { ReviewRequestNotification } from '../../messages/review-request.notification.js';
 import { ResetPasswordNotification } from '../../messages/reset-password.notification.js';
 import { EmailChannel } from './email.channel.js';
 import { EmailRenderer } from './email.renderer.js';
@@ -154,5 +155,17 @@ describe('Email branding', () => {
     expect(() => renderer.render('booking-reminder', {})).toThrow(
       'Brand name required',
     );
+  });
+
+  it('renders the review request with the management link and visit details', async () => {
+    await channel.send(
+      new ReviewRequestNotification(booking, 'https://example.com/manage'),
+    );
+    const mail = sendMail.mock.calls[0][0];
+    expect(mail.subject).toBe('Studio Brand — Оцените ваш визит');
+    expect(mail.html).toContain('href="https://example.com/manage"');
+    expect(mail.html).toContain('Оставить отзыв');
+    expect(mail.html).toContain('Haircut');
+    expect(mail.html).toContain('Olga');
   });
 });

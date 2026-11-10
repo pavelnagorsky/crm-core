@@ -17,6 +17,8 @@ import { CalendarViewFacade } from '../../calendar/api/calendar-view.facade.js';
 import { CalendarFacade } from '../../calendar/calendar.facade.js';
 import { BookingCreateFacade } from '../booking-create.facade.js';
 import { BookingsFacade } from '../bookings.facade.js';
+import { LocationService } from '../../location/services/location.service.js';
+import { ReviewsFacade } from '../../reviews/reviews.facade.js';
 import { BookingsExportService } from '../export/services/bookings-export.service.js';
 import { BookingAccessService } from '../services/booking-access.service.js';
 import { BookingClientTokenService } from '../services/booking-client-token.service.js';
@@ -65,6 +67,8 @@ describe('Staff assignment HTTP contract', () => {
           BookingCreateFacade,
           BookingClientTokenService,
           BookingsExportService,
+          LocationService,
+          ReviewsFacade,
           TokenEpochRegistryService,
         ].map((provide) => ({ provide, useValue: {} })),
       ],

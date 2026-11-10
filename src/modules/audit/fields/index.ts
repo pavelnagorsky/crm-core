@@ -9,6 +9,7 @@ import { BUSINESS_AUDIT_FIELDS } from './business.fields.js';
 import { PRODUCT_AUDIT_FIELDS } from './product.fields.js';
 import { LOCATION_AUDIT_FIELDS } from './location.fields.js';
 import { CALENDAR_AUDIT_FIELDS } from './calendar.fields.js';
+import { REVIEW_AUDIT_FIELDS } from './review.fields.js';
 
 const allFields = [
   ...BOOKING_AUDIT_FIELDS,
@@ -21,6 +22,7 @@ const allFields = [
   ...PRODUCT_AUDIT_FIELDS,
   ...LOCATION_AUDIT_FIELDS,
   ...CALENDAR_AUDIT_FIELDS,
+  ...REVIEW_AUDIT_FIELDS,
 ];
 
 export const AUDIT_FIELD_TYPES: Record<string, FieldType> = Object.fromEntries(

@@ -4,6 +4,8 @@ import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
 import { StaffStatus } from '../enums/staff-status.enum.js';
 import { StaffEmploymentType } from '../enums/staff-employment-type.enum.js';
 import { StaffPayoutMethod } from '../enums/staff-payout-method.enum.js';
+import { ReviewStaffSummary } from '../../reviews/interfaces/review-staff-summary.interface.js';
+import { ReviewStaffSummaryDto } from '../../reviews/dto/review-staff-summary.dto.js';
 
 export class StaffResponseDto {
   @ApiProperty({ type: String })
@@ -69,13 +71,23 @@ export class StaffResponseDto {
   @ApiProperty({ type: String, nullable: true })
   payoutNote: string | null;
 
+  @ApiProperty({
+    type: () => ReviewStaffSummaryDto,
+    nullable: true,
+    description: 'Published reviews of this member; null while there are none',
+  })
+  reviewSummary: ReviewStaffSummaryDto | null;
+
   @ApiProperty({ type: Date })
   createdAt: Date;
 
   @ApiProperty({ type: Date })
   updatedAt: Date;
 
-  static fromEntity(staff: StaffWithServiceCount): StaffResponseDto {
+  static fromEntity(
+    staff: StaffWithServiceCount,
+    reviewSummary: ReviewStaffSummary | null = null,
+  ): StaffResponseDto {
     const dto = new StaffResponseDto();
     dto.id = staff.id;
     dto.locationId = staff.locationId;
@@ -98,6 +110,9 @@ export class StaffResponseDto {
     dto.employeeNumber = staff.employeeNumber;
     dto.payoutMethod = staff.payoutMethod;
     dto.payoutNote = staff.payoutNote;
+    dto.reviewSummary = reviewSummary
+      ? ReviewStaffSummaryDto.fromSummary(reviewSummary)
+      : null;
     dto.createdAt = staff.createdAt;
     dto.updatedAt = staff.updatedAt;
     return dto;

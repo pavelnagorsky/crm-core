@@ -1,6 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
 import { sanitizeRichHtml } from '../../../shared/html/sanitize-rich-html.js';
+import { ReviewStaffSummaryDto } from '../../reviews/dto/review-staff-summary.dto.js';
+import { ReviewStaffSummary } from '../../reviews/interfaces/review-staff-summary.interface.js';
 import { BookingStaff } from '../../staff/interfaces/booking-staff.interface.js';
 
 export class BookingSetupStaffDto {
@@ -26,7 +28,18 @@ export class BookingSetupStaffDto {
   })
   serviceIds: string[];
 
-  static fromEntity(staff: BookingStaff): BookingSetupStaffDto {
+  @ApiProperty({
+    type: () => ReviewStaffSummaryDto,
+    nullable: true,
+    description:
+      'Null when the staff member has no published reviews or reviews are disabled',
+  })
+  reviewSummary: ReviewStaffSummaryDto | null;
+
+  static fromEntity(
+    staff: BookingStaff,
+    reviewSummary: ReviewStaffSummary | null = null,
+  ): BookingSetupStaffDto {
     const dto = new BookingSetupStaffDto();
     dto.id = staff.id;
     dto.name = staff.name;
@@ -38,6 +51,9 @@ export class BookingSetupStaffDto {
       ? FileResponseDto.fromEntity(staff.avatarFile)
       : null;
     dto.serviceIds = staff.staffServices.map((ss) => ss.serviceId);
+    dto.reviewSummary = reviewSummary
+      ? ReviewStaffSummaryDto.fromSummary(reviewSummary)
+      : null;
     return dto;
   }
 }

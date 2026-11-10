@@ -1,6 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
 import { StaffStatus } from '../enums/staff-status.enum.js';
+import { ReviewStaffSummaryDto } from '../../reviews/dto/review-staff-summary.dto.js';
+import { ReviewStaffSummary } from '../../reviews/interfaces/review-staff-summary.interface.js';
 import { StaffWithAvatar } from '../interfaces/staff-with-avatar.interface.js';
 
 export class StaffDirectoryItemDto {
@@ -11,8 +13,13 @@ export class StaffDirectoryItemDto {
   status: StaffStatus;
   @ApiProperty({ type: () => FileResponseDto, nullable: true })
   avatar: FileResponseDto | null;
+  @ApiProperty({ type: () => ReviewStaffSummaryDto, nullable: true })
+  reviewSummary: ReviewStaffSummaryDto | null;
 
-  static fromEntity(staff: StaffWithAvatar): StaffDirectoryItemDto {
+  static fromEntity(
+    staff: StaffWithAvatar,
+    reviewSummary: ReviewStaffSummary | null = null,
+  ): StaffDirectoryItemDto {
     return Object.assign(new StaffDirectoryItemDto(), {
       id: staff.id,
       name: staff.name,
@@ -20,6 +27,9 @@ export class StaffDirectoryItemDto {
       status: staff.status,
       avatar: staff.avatarFile
         ? FileResponseDto.fromEntity(staff.avatarFile)
+        : null,
+      reviewSummary: reviewSummary
+        ? ReviewStaffSummaryDto.fromSummary(reviewSummary)
         : null,
     });
   }

@@ -54,7 +54,7 @@ describe('StaffService.search', () => {
       _count: { select: { staffServices: true } },
       staffServices: { select: { serviceId: true } },
     });
-    const responses = items.map(StaffResponseDto.fromEntity);
+    const responses = items.map((item) => StaffResponseDto.fromEntity(item));
     expect(responses.map((item) => item.hasNoServices)).toEqual([false, true]);
     expect(responses.map((item) => item.serviceIds)).toEqual([
       ['service-1'],

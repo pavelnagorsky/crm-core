@@ -7,4 +7,6 @@ export enum CacheNamespace {
   BRAND_PRODUCT_CATALOG = 'products.brand-catalog',
   LOCATION_PRODUCT_OFFERS = 'products.location-offers',
   PUBLIC_BOOKING_PAGE_LIST = 'booking-pages.public-list',
+  REVIEW_LOCATION_OVERVIEW = 'reviews.location-overview',
+  REVIEW_STAFF_SUMMARIES = 'reviews.staff-summaries',
 }

@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { LocationPublicProfile } from '../../location/interfaces/location-public-profile.interface.js';
 import { LocationPublicResponseDto } from '../../location/dto/location-public-response.dto.js';
 import { BookingSetupResponseDto } from '../../bookings/dto/booking-setup-response.dto.js';
+import { LocationReviewsOverviewDto } from '../../reviews/dto/location-reviews-overview.dto.js';
 import { BookingPageWithCover } from '../interfaces/booking-page-with-cover.interface.js';
 import {
   resolveBookingFormTheme,
@@ -24,6 +25,14 @@ export class PublicBookingPageResponseDto {
   @ApiProperty({ type: () => BookingSetupResponseDto })
   setup: BookingSetupResponseDto;
 
+  @ApiProperty({
+    type: () => LocationReviewsOverviewDto,
+    nullable: true,
+    description:
+      'Null when reviews are disabled or the location has no published reviews',
+  })
+  reviews: LocationReviewsOverviewDto | null;
+
   @ApiProperty({ type: () => PublicBookingPageDetailsDto })
   page: PublicBookingPageDetailsDto;
 
@@ -31,12 +40,14 @@ export class PublicBookingPageResponseDto {
     page: BookingPageWithCover,
     location: LocationPublicProfile,
     setup: BookingSetupResponseDto,
+    reviews: LocationReviewsOverviewDto | null = null,
   ): PublicBookingPageResponseDto {
     const dto = new PublicBookingPageResponseDto();
     dto.config = toBookingFormConfig(page);
     dto.theme = resolveBookingFormTheme(page);
     dto.location = LocationPublicResponseDto.fromEntity(location);
     dto.setup = setup;
+    dto.reviews = reviews;
     dto.page = PublicBookingPageDetailsDto.from(page);
     return dto;
   }

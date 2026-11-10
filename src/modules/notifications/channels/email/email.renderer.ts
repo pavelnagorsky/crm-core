@@ -16,7 +16,8 @@ export type EmailTemplate =
   | 'booking-pending'
   | 'booking-cancelled'
   | 'booking-status-changed'
-  | 'booking-reminder';
+  | 'booking-reminder'
+  | 'review-request';
 
 type CompiledTemplate = Handlebars.TemplateDelegate;
 
@@ -30,6 +31,7 @@ const EMAIL_TEMPLATES: EmailTemplate[] = [
   'booking-cancelled',
   'booking-status-changed',
   'booking-reminder',
+  'review-request',
 ];
 
 @Injectable()

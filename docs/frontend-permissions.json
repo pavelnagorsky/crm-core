@@ -847,6 +847,39 @@
         }
       }
     },
+    "review": {
+      "scope": "L",
+      "group": "Отзывы",
+      "actions": {
+        "read": {
+          "label": "Просмотр отзывов клиентов",
+          "defaultRoles": [
+            "OWNER",
+            "MANAGER"
+          ],
+          "configurableRoles": [
+            "MANAGER"
+          ],
+          "dependencies": []
+        },
+        "write": {
+          "label": "Ответы на отзывы, скрытие и удаление отзывов",
+          "defaultRoles": [
+            "OWNER",
+            "MANAGER"
+          ],
+          "configurableRoles": [
+            "MANAGER"
+          ],
+          "dependencies": [
+            {
+              "claim": "review",
+              "access": "read"
+            }
+          ]
+        }
+      }
+    },
     "analytics.location": {
       "scope": "L",
       "group": "Аналитика и история",

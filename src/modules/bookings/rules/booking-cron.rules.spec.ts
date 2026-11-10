@@ -3,6 +3,7 @@ import {
   isAutoCompletable,
   reminderWindow,
   REMINDER_LEAD_MS,
+  reviewRequestWindow,
 } from './booking-cron.rules.js';
 
 describe('booking-cron.rules', () => {
@@ -27,5 +28,11 @@ describe('booking-cron.rules', () => {
     expect(isAutoCompletable(BookingStatus.COMPLETED, ended, now)).toBe(false);
     expect(isAutoCompletable(BookingStatus.NO_SHOW, ended, now)).toBe(false);
     expect(isAutoCompletable(BookingStatus.CANCELLED, ended, now)).toBe(false);
+  });
+
+  it('asks for reviews of visits that ended between 2 hours and 7 days ago', () => {
+    const { from, to } = reviewRequestWindow(now);
+    expect(to.toISOString()).toBe('2026-09-24T10:00:00.000Z');
+    expect(from.toISOString()).toBe('2026-09-17T12:00:00.000Z');
   });
 });

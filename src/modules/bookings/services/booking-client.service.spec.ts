@@ -61,6 +61,8 @@ function setup() {
     {} as never,
     calendar as never,
     events as never,
+    {} as never,
+    {} as never,
   );
   return { service, old, calendar, slots, write, tx, events, staff, location };
 }
@@ -235,5 +237,81 @@ describe('Client booking changes', () => {
       service.rescheduleByClient(scheduled, { startAt: '2027-03-28T02:30:00' }),
     ).rejects.toMatchObject({ errorCode: 'BOOKING_SLOT_UNAVAILABLE' });
     expect(tx.booking.update).not.toHaveBeenCalled();
+  });
+});
+
+describe('Client booking reviews', () => {
+  const completed = booking({ status: BookingStatus.COMPLETED });
+  const review = { id: 'review', rating: 5 };
+
+  function reviewSetup(settings: Record<string, unknown> = {}) {
+    const locations = {
+      getBookingSettings: vi.fn().mockResolvedValue({
+        reviewsEnabled: true,
+        googleReviewUrl: 'https://g.page/r/abc',
+        yandexReviewUrl: null,
+        ...settings,
+      }),
+    };
+    const reviews = {
+      getBookingReviewState: vi
+        .fn()
+        .mockResolvedValue({ canReview: true, review: null }),
+      submitForBooking: vi.fn().mockResolvedValue({ review, created: true }),
+    };
+    const service = new BookingClientService(
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      reviews as never,
+      locations as never,
+    );
+    return { service, reviews, locations };
+  }
+
+  it('hides map links until a review exists', async () => {
+    const { service, reviews } = reviewSetup();
+    expect((await service.getReviewContext(completed)).reviewLinks).toBeNull();
+    reviews.getBookingReviewState.mockResolvedValue({
+      canReview: true,
+      review,
+    });
+    expect(await service.getReviewContext(completed)).toEqual({
+      canReview: true,
+      review,
+      reviewLinks: { google: 'https://g.page/r/abc', yandex: null },
+    });
+  });
+
+  it('omits map links when the location has none', async () => {
+    const { service, reviews } = reviewSetup({ googleReviewUrl: null });
+    reviews.getBookingReviewState.mockResolvedValue({
+      canReview: true,
+      review,
+    });
+    expect((await service.getReviewContext(completed)).reviewLinks).toBeNull();
+  });
+
+  it('passes the location reviews switch to the reviews domain', async () => {
+    const { service, reviews } = reviewSetup({ reviewsEnabled: false });
+    await service.getReviewContext(completed);
+    expect(reviews.getBookingReviewState).toHaveBeenCalledWith(
+      completed,
+      false,
+    );
+    await service.submitReview(completed, { rating: 5, text: 'ok' });
+    expect(reviews.submitForBooking).toHaveBeenCalledWith(
+      completed,
+      { rating: 5, text: 'ok' },
+      false,
+    );
+  });
+
+  it('returns the saved review', async () => {
+    const { service } = reviewSetup();
+    expect(
+      await service.submitReview(completed, { rating: 5, text: 'ok' }),
+    ).toBe(review);
   });
 });

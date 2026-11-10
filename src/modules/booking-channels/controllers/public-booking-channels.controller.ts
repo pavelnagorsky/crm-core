@@ -18,7 +18,10 @@ import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
 import { BookingsFacade } from '../../bookings/bookings.facade.js';
 import { BookingSetupResponseDto } from '../../bookings/dto/booking-setup-response.dto.js';
+import { LocationPublicProfile } from '../../location/interfaces/location-public-profile.interface.js';
 import { LocationService } from '../../location/services/location.service.js';
+import { LocationReviewsOverviewDto } from '../../reviews/dto/location-reviews-overview.dto.js';
+import { ReviewsFacade } from '../../reviews/reviews.facade.js';
 import { PUBLIC_BOOKING_PAGE_LIST_TTL_SECONDS } from '../constants/public-booking-page-list.constants.js';
 import { PublicBookingPageListItemDto } from '../dto/public-booking-page-list-item.dto.js';
 import { PublicBookingPageListRequestDto } from '../dto/public-booking-page-list-request.dto.js';
@@ -38,6 +41,7 @@ export class PublicBookingChannelsController {
     private readonly widgets: BookingWidgetsService,
     private readonly locationService: LocationService,
     private readonly bookings: BookingsFacade,
+    private readonly reviews: ReviewsFacade,
   ) {}
 
   @ApiOperation({
@@ -75,16 +79,12 @@ export class PublicBookingChannelsController {
     @Param('slug') slug: string,
   ): Promise<BaseResponseDto<PublicBookingPageResponseDto>> {
     const page = await this.pages.getPublishedBySlug(slug);
-    const [location, setup] = await Promise.all([
-      this.locationService.findPublicProfile(page.locationId),
-      this.bookings.getBookingSetup(page.locationId),
-    ]);
+    const location = await this.locationService.findPublicProfile(
+      page.locationId,
+    );
+    const { setup, reviews } = await this.loadSetup(location);
     return BaseResponseDto.success(
-      PublicBookingPageResponseDto.from(
-        page,
-        location,
-        BookingSetupResponseDto.fromEntity(setup),
-      ),
+      PublicBookingPageResponseDto.from(page, location, setup, reviews),
     );
   }
 
@@ -107,17 +107,38 @@ export class PublicBookingChannelsController {
     @WidgetPageUrlHeader(WidgetPageUrlPipe) pageUrl: string | null = null,
   ): Promise<BaseResponseDto<PublicBookingWidgetResponseDto>> {
     const widget = await this.widgets.getPublished(widgetId);
-    const [location, setup] = await Promise.all([
-      this.locationService.findPublicProfile(widget.locationId),
-      this.bookings.getBookingSetup(widget.locationId),
-    ]);
+    const location = await this.locationService.findPublicProfile(
+      widget.locationId,
+    );
+    const { setup, reviews } = await this.loadSetup(location);
     await this.widgets.recordInitialization(widgetId, pageUrl);
     return BaseResponseDto.success(
-      PublicBookingWidgetResponseDto.from(
-        widget,
-        location,
-        BookingSetupResponseDto.fromEntity(setup),
-      ),
+      PublicBookingWidgetResponseDto.from(widget, location, setup, reviews),
     );
+  }
+
+  /** Setup plus review data; both stay empty when the location turned reviews off. */
+  private async loadSetup(location: LocationPublicProfile): Promise<{
+    setup: BookingSetupResponseDto;
+    reviews: LocationReviewsOverviewDto | null;
+  }> {
+    const [setup, overview] = await Promise.all([
+      this.bookings.getBookingSetup(location.id),
+      location.reviewsEnabled
+        ? this.reviews.getLocationOverview(location.id)
+        : null,
+    ]);
+    const staffSummaries = location.reviewsEnabled
+      ? await this.reviews.getStaffSummaries(
+          location.id,
+          setup.staff.map((staff) => staff.id),
+        )
+      : undefined;
+    return {
+      setup: BookingSetupResponseDto.fromEntity(setup, staffSummaries),
+      reviews: overview
+        ? LocationReviewsOverviewDto.fromOverview(overview)
+        : null,
+    };
   }
 }

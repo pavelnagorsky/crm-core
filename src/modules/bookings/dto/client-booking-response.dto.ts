@@ -1,13 +1,22 @@
 import { ApiProperty, PickType } from '@nestjs/swagger';
 import { Prisma } from '@prisma/client';
 import { MoneyUtils } from '../../../shared/money/money.utils.js';
+import { ClientReviewDto } from '../../reviews/dto/client-review.dto.js';
 import { BookingWithItems } from '../interfaces/booking-with-items.interface.js';
 import {
   canClientManageBooking,
   clientAccessExpiresAt,
 } from '../rules/booking-client.rules.js';
+import { ClientBookingReviewContext } from '../interfaces/client-booking-review-context.interface.js';
 import { BookingResponseDto } from './booking-response.dto.js';
 import { ClientBookingItemResponseDto } from './client-booking-item-response.dto.js';
+import { ClientReviewLinksDto } from './client-review-links.dto.js';
+
+const NO_REVIEW_CONTEXT: ClientBookingReviewContext = {
+  canReview: false,
+  review: null,
+  reviewLinks: null,
+};
 
 export class ClientBookingResponseDto extends PickType(BookingResponseDto, [
   'id',
@@ -39,7 +48,36 @@ export class ClientBookingResponseDto extends PickType(BookingResponseDto, [
   @ApiProperty({ type: String, nullable: true })
   cancellationReason: string | null;
 
-  static fromBooking(booking: BookingWithItems): ClientBookingResponseDto {
+  @ApiProperty({
+    type: Boolean,
+    description:
+      'Completed visit, reviews enabled for the location; the review can be created or edited',
+  })
+  canReview: boolean;
+
+  @ApiProperty({
+    type: Date,
+    nullable: true,
+    description:
+      'Last moment the review can be changed; null when canReview is false',
+  })
+  canReviewUntil: Date | null;
+
+  @ApiProperty({ type: () => ClientReviewDto, nullable: true })
+  review: ClientReviewDto | null;
+
+  @ApiProperty({
+    type: () => ClientReviewLinksDto,
+    nullable: true,
+    description:
+      'Public map review pages of the location; present only once a review exists',
+  })
+  reviewLinks: ClientReviewLinksDto | null;
+
+  static fromBooking(
+    booking: BookingWithItems,
+    reviewContext: ClientBookingReviewContext = NO_REVIEW_CONTEXT,
+  ): ClientBookingResponseDto {
     const canManage = canClientManageBooking(booking);
     return Object.assign(new ClientBookingResponseDto(), {
       id: booking.id,
@@ -67,6 +105,14 @@ export class ClientBookingResponseDto extends PickType(BookingResponseDto, [
       canReschedule: canManage,
       accessExpiresAt: clientAccessExpiresAt(booking),
       cancellationReason: booking.cancellationReason,
+      canReview: reviewContext.canReview,
+      canReviewUntil: reviewContext.canReview
+        ? clientAccessExpiresAt(booking)
+        : null,
+      review: reviewContext.review
+        ? ClientReviewDto.fromEntity(reviewContext.review)
+        : null,
+      reviewLinks: reviewContext.reviewLinks,
     });
   }
 }

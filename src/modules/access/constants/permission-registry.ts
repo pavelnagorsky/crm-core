@@ -314,6 +314,16 @@ export const PERMISSION_REGISTRY: Readonly<
       ),
     },
   },
+  [Claim.REVIEW]: {
+    scope: PermissionScope.LOCATION,
+    actions: {
+      [PermissionAccess.READ]: action([BusinessRole.MANAGER]),
+      [PermissionAccess.WRITE]: action(
+        [BusinessRole.MANAGER],
+        [Read(Claim.REVIEW)],
+      ),
+    },
+  },
   [Claim.ANALYTICS_LOCATION]: {
     scope: PermissionScope.LOCATION,
     actions: {

@@ -47,6 +47,15 @@ export class LocationResponseDto {
   @ApiProperty({ type: String, nullable: true })
   mapWidgetUrl: string | null;
 
+  @ApiProperty({ type: String, nullable: true })
+  googleReviewUrl: string | null;
+
+  @ApiProperty({ type: String, nullable: true })
+  yandexReviewUrl: string | null;
+
+  @ApiProperty({ type: Boolean })
+  reviewsEnabled: boolean;
+
   @ApiProperty({ type: Number })
   advanceBookingWindowDays: number;
 
@@ -85,6 +94,9 @@ export class LocationResponseDto {
     dto.whatsapp = location.whatsapp;
     dto.website = location.website;
     dto.mapWidgetUrl = location.mapWidgetUrl;
+    dto.googleReviewUrl = location.googleReviewUrl;
+    dto.yandexReviewUrl = location.yandexReviewUrl;
+    dto.reviewsEnabled = location.reviewsEnabled;
     dto.advanceBookingWindowDays = location.advanceBookingWindowDays;
     dto.slotIntervalMinutes = location.slotIntervalMinutes;
     dto.minimumBookingNoticeMinutes = location.minimumBookingNoticeMinutes;

@@ -3,6 +3,7 @@ import { BookingWidget } from '@prisma/client';
 import { LocationPublicProfile } from '../../location/interfaces/location-public-profile.interface.js';
 import { LocationPublicResponseDto } from '../../location/dto/location-public-response.dto.js';
 import { BookingSetupResponseDto } from '../../bookings/dto/booking-setup-response.dto.js';
+import { LocationReviewsOverviewDto } from '../../reviews/dto/location-reviews-overview.dto.js';
 import {
   resolveBookingFormTheme,
   toBookingFormConfig,
@@ -24,6 +25,14 @@ export class PublicBookingWidgetResponseDto {
   @ApiProperty({ type: () => BookingSetupResponseDto })
   setup: BookingSetupResponseDto;
 
+  @ApiProperty({
+    type: () => LocationReviewsOverviewDto,
+    nullable: true,
+    description:
+      'Null when reviews are disabled or the location has no published reviews',
+  })
+  reviews: LocationReviewsOverviewDto | null;
+
   @ApiProperty({ type: () => PublicBookingWidgetDetailsDto })
   widget: PublicBookingWidgetDetailsDto;
 
@@ -31,12 +40,14 @@ export class PublicBookingWidgetResponseDto {
     widget: BookingWidget,
     location: LocationPublicProfile,
     setup: BookingSetupResponseDto,
+    reviews: LocationReviewsOverviewDto | null = null,
   ): PublicBookingWidgetResponseDto {
     const dto = new PublicBookingWidgetResponseDto();
     dto.config = toBookingFormConfig(widget);
     dto.theme = resolveBookingFormTheme(widget);
     dto.location = LocationPublicResponseDto.fromEntity(location);
     dto.setup = setup;
+    dto.reviews = reviews;
     dto.widget = PublicBookingWidgetDetailsDto.from(widget);
     return dto;
   }

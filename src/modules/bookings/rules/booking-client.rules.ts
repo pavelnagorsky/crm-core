@@ -6,8 +6,19 @@ import { BookingStatus } from '../enums/booking-status.enum.js';
 import { TimeUtils } from '../../../shared/time/time.utils.js';
 import { ClientBookingWindow } from '../interfaces/client-booking-window.interface.js';
 
-export function clientAccessExpiresAt(booking: Pick<Booking, 'endAt'>): Date {
-  return new Date(booking.endAt.getTime() + 3 * 24 * 60 * 60 * 1000);
+const DAY_MS = 24 * 60 * 60 * 1000;
+const CLIENT_ACCESS_DAYS = 3;
+/** Completed visits stay reachable longer so the client can leave and edit a review. */
+const CLIENT_COMPLETED_ACCESS_DAYS = 14;
+
+export function clientAccessExpiresAt(
+  booking: Pick<Booking, 'endAt' | 'status'>,
+): Date {
+  const days =
+    booking.status === BookingStatus.COMPLETED
+      ? CLIENT_COMPLETED_ACCESS_DAYS
+      : CLIENT_ACCESS_DAYS;
+  return new Date(booking.endAt.getTime() + days * DAY_MS);
 }
 
 export function resolveClientRescheduleStart(
