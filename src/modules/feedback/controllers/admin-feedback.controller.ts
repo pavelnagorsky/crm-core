@@ -27,7 +27,7 @@ import { FeedbackResponseDto } from '../dto/feedback-response.dto.js';
 import { FeedbackSearchRequestDto } from '../dto/feedback-search-request.dto.js';
 import { FeedbackSearchResponseDto } from '../dto/feedback-search-response.dto.js';
 import { UpdateFeedbackDto } from '../dto/update-feedback.dto.js';
-import { PlatformAdminGuard } from '../guards/platform-admin.guard.js';
+import { PlatformAdminGuard } from '../../auth/guards/platform-admin.guard.js';
 import { FeedbackService } from '../services/feedback.service.js';
 
 @ApiTags('Feedback administration')

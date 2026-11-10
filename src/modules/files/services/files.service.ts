@@ -120,6 +120,32 @@ export class FilesService implements OnModuleInit {
     return file;
   }
 
+  /** Resolves files owned by the user, preserving the requested order; any foreign or missing ID fails. */
+  async findManyInUser(userId: string, fileIds: string[]): Promise<File[]> {
+    if (!fileIds.length) return [];
+    const files = await this.db.file.findMany({
+      where: { id: { in: fileIds } },
+    });
+    const byId = new Map(files.map((file) => [file.id, file]));
+    return fileIds.map((id) => {
+      const file = byId.get(id);
+      if (!file || !this.isInUser(file, userId)) {
+        throw new AppException(ErrorCode.FILE_NOT_FOUND, HttpStatus.NOT_FOUND);
+      }
+      return file;
+    });
+  }
+
+  /** Returns existing files in the requested order, skipping deleted ones. */
+  async findManyByIds(fileIds: string[]): Promise<File[]> {
+    if (!fileIds.length) return [];
+    const files = await this.db.file.findMany({
+      where: { id: { in: fileIds } },
+    });
+    const byId = new Map(files.map((file) => [file.id, file]));
+    return fileIds.flatMap((id) => byId.get(id) ?? []);
+  }
+
   async findById(fileId: string): Promise<File> {
     const file = await this.db.file.findUnique({ where: { id: fileId } });
     if (!file) {

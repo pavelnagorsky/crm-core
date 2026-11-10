@@ -6,7 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { UserRole } from '@prisma/client';
-import { AuthenticatedRequest } from '../../auth/interfaces/authenticated-request.interface.js';
+import { AuthenticatedRequest } from '../interfaces/authenticated-request.interface.js';
 
 @Injectable()
 export class PlatformAdminGuard implements CanActivate {

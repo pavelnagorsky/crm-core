@@ -621,4 +621,20 @@ export const ErrorCode = {
     code: 'BOOKING_CHANNEL_EVENTS_RATE_LIMITED',
     message: 'Too many booking channel events; try again later',
   },
+  SUPPORT_REQUEST_NOT_FOUND: {
+    code: 'SUPPORT_REQUEST_NOT_FOUND',
+    message: 'Support request not found',
+  },
+  SUPPORT_EMAIL_REQUIRED: {
+    code: 'SUPPORT_EMAIL_REQUIRED',
+    message: 'Email is required when the account has no email',
+  },
+  SUPPORT_ATTACHMENTS_REQUIRE_AUTH: {
+    code: 'SUPPORT_ATTACHMENTS_REQUIRE_AUTH',
+    message: 'Sign in to attach files to a support request',
+  },
+  SUPPORT_REQUEST_UPDATE_EMPTY: {
+    code: 'SUPPORT_REQUEST_UPDATE_EMPTY',
+    message: 'Status or notes is required',
+  },
 } as const satisfies Record<string, ErrorCodeEntry>;

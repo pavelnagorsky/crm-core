@@ -35,6 +35,47 @@ model Feedback {
   @@index([createdAt, id])
 }
 
+enum SupportRequestStatus {
+  NEW
+  IN_PROGRESS
+  WAITING_FOR_USER
+  RESOLVED
+  SPAM
+}
+
+// email is the reply address snapshot: the one submitted, or the account email
+// when an authenticated user left it empty. CHECK constraints live in the migration.
+model SupportRequest {
+  id         String               @id @default(uuid())
+  userId     String?
+  email      String               @db.VarChar(254)
+  message    String               @db.VarChar(5000)
+  status     SupportRequestStatus @default(NEW)
+  notes      String?              @db.VarChar(10000)
+  resolvedAt DateTime?
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @updatedAt
+
+  user        User?                      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  attachments SupportRequestAttachment[]
+
+  @@index([status, createdAt, id])
+  @@index([createdAt, id])
+  @@index([userId])
+}
+
+model SupportRequestAttachment {
+  supportRequestId String
+  fileId           String
+  position         Int    @db.SmallInt
+
+  supportRequest SupportRequest @relation(fields: [supportRequestId], references: [id], onDelete: Cascade)
+  file           File           @relation(fields: [fileId], references: [id], onDelete: Cascade)
+
+  @@id([supportRequestId, fileId])
+  @@index([fileId])
+}
+
 // ─── Enums ───────────────────────────────────────────────────────────────────
 
 enum UserRole {
@@ -416,6 +457,7 @@ model User {
   clients                  Client[]
   staffProfiles            Staff[]
   files                    File[]
+  supportRequests          SupportRequest[]
 }
 
 model RefreshToken {
@@ -1089,13 +1131,14 @@ model File {
   fileSizeBytes Int
   createdAt     DateTime @default(now())
 
-  user                User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
   staffAvatars        Staff[]
   brandLogos          Brand[]
   serviceImages       Service[]
   serviceBundleImages ServiceBundle[]
   productImages       Product[]
   bookingPageCovers   BookingPage[]
+  supportAttachments  SupportRequestAttachment[]
 
   @@index([userId])
 }
@@ -1266,27 +1309,27 @@ model BookingPage {
   metaTitle       String               @default("") @db.VarChar(70)
   metaDescription String               @default("") @db.VarChar(160)
   gtmId           String?              @db.VarChar(32)
-  yandexMetrikaId  String?              @db.VarChar(15)
+  yandexMetrikaId String?              @db.VarChar(15)
   coverFileId     String?
 
-  palette           BookingPalette
-  customBackground  String?        @db.VarChar(7)
-  customSurface     String?        @db.VarChar(7)
-  customText        String?        @db.VarChar(7)
-  customMuted       String?        @db.VarChar(7)
-  customAccent      String?        @db.VarChar(7)
-  customAccentText  String?        @db.VarChar(7)
-  headline          String         @db.VarChar(80)
-  caption           String         @default("") @db.VarChar(120)
-  showStaff         Boolean
-  showBranding      Boolean
+  palette          BookingPalette
+  customBackground String?        @db.VarChar(7)
+  customSurface    String?        @db.VarChar(7)
+  customText       String?        @db.VarChar(7)
+  customMuted      String?        @db.VarChar(7)
+  customAccent     String?        @db.VarChar(7)
+  customAccentText String?        @db.VarChar(7)
+  headline         String         @db.VarChar(80)
+  caption          String         @default("") @db.VarChar(120)
+  showStaff        Boolean
+  showBranding     Boolean
 
   publishedAt DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  location  Location  @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  coverFile File?     @relation(fields: [coverFileId], references: [id], onDelete: Restrict)
+  location  Location          @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  coverFile File?             @relation(fields: [coverFileId], references: [id], onDelete: Restrict)
   bookings  Booking[]
   stats     BookingPageStats?
 
@@ -1294,29 +1337,29 @@ model BookingPage {
 }
 
 model BookingWidget {
-  id             String                      @id @default(uuid())
-  locationId     String
-  title          String                      @db.VarChar(80)
-  titleKey       String                      @db.VarChar(80)
-  status         BookingChannelStatus        @default(DRAFT)
-  placement      BookingWidgetPlacement
-  trigger        BookingWidgetTrigger
-  buttonPosition BookingWidgetButtonPosition
+  id               String                      @id @default(uuid())
+  locationId       String
+  title            String                      @db.VarChar(80)
+  titleKey         String                      @db.VarChar(80)
+  status           BookingChannelStatus        @default(DRAFT)
+  placement        BookingWidgetPlacement
+  trigger          BookingWidgetTrigger
+  buttonPosition   BookingWidgetButtonPosition
   buttonAppearance Json
-  gtmId          String?                     @db.VarChar(32)
-  yandexMetrikaId String?                     @db.VarChar(15)
+  gtmId            String?                     @db.VarChar(32)
+  yandexMetrikaId  String?                     @db.VarChar(15)
 
-  palette           BookingPalette
-  customBackground  String?        @db.VarChar(7)
-  customSurface     String?        @db.VarChar(7)
-  customText        String?        @db.VarChar(7)
-  customMuted       String?        @db.VarChar(7)
-  customAccent      String?        @db.VarChar(7)
-  customAccentText  String?        @db.VarChar(7)
-  headline          String         @db.VarChar(80)
-  caption           String         @default("") @db.VarChar(120)
-  showStaff         Boolean
-  showBranding      Boolean
+  palette          BookingPalette
+  customBackground String?        @db.VarChar(7)
+  customSurface    String?        @db.VarChar(7)
+  customText       String?        @db.VarChar(7)
+  customMuted      String?        @db.VarChar(7)
+  customAccent     String?        @db.VarChar(7)
+  customAccentText String?        @db.VarChar(7)
+  headline         String         @db.VarChar(80)
+  caption          String         @default("") @db.VarChar(120)
+  showStaff        Boolean
+  showBranding     Boolean
 
   publishedAt DateTime?
   createdAt   DateTime  @default(now())
@@ -1325,7 +1368,7 @@ model BookingWidget {
   location Location  @relation(fields: [locationId], references: [id], onDelete: Cascade)
   bookings Booking[]
 
-  stats BookingWidgetStats?
+  stats                 BookingWidgetStats?
   initializationHistory BookingWidgetInitialization[]
 
   @@unique([locationId, titleKey])
@@ -1542,13 +1585,13 @@ model AccessState {
 }
 
 model BrandPermissionOverride {
-  id         String       @id @default(uuid())
-  brandId    String
-  role       BusinessRole
-  claim      String       @db.VarChar(100)
-  access     String       @db.VarChar(10)
-  allowed    Boolean
-  brand      Brand        @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  id      String       @id @default(uuid())
+  brandId String
+  role    BusinessRole
+  claim   String       @db.VarChar(100)
+  access  String       @db.VarChar(10)
+  allowed Boolean
+  brand   Brand        @relation(fields: [brandId], references: [id], onDelete: Cascade)
 
   @@unique([brandId, role, claim, access])
 }
