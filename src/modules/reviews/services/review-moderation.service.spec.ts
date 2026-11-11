@@ -47,6 +47,7 @@ function setup(existing: typeof stored | null = stored) {
   const aggregates = {
     invalidateLocation: vi.fn(),
     getLocationSummary: vi.fn(),
+    getStaffSummary: vi.fn(),
   };
   const events = { emit: vi.fn() };
   const service = new ReviewModerationService(
@@ -138,6 +139,52 @@ describe('ReviewModerationService.getSummary', () => {
         replyText: null,
       },
     });
+  });
+});
+
+describe('ReviewModerationService.getSummary for one staff member', () => {
+  it('uses the staff summary and scopes the counters to their reviews', async () => {
+    const { db, aggregates, service } = setup();
+    const summary = { count: 1, average: null, distribution: {} };
+    aggregates.getStaffSummary.mockResolvedValue(summary);
+    db.review.count.mockResolvedValueOnce(0).mockResolvedValueOnce(1);
+
+    await expect(service.getSummary('loc', 's1')).resolves.toEqual({
+      summary,
+      hiddenCount: 0,
+      unansweredCount: 1,
+    });
+    expect(aggregates.getStaffSummary).toHaveBeenCalledWith('loc', 's1');
+    expect(aggregates.getLocationSummary).not.toHaveBeenCalled();
+    expect(db.review.count).toHaveBeenNthCalledWith(1, {
+      where: {
+        locationId: 'loc',
+        staff: { some: { staffId: 's1' } },
+        status: ReviewStatus.HIDDEN,
+      },
+    });
+  });
+});
+
+describe('ReviewModerationService.search filters', () => {
+  it.each([
+    [true, { not: null }],
+    [false, null],
+  ])('replied=%s filters by reply presence', async (replied, replyText) => {
+    const { db, service } = setup();
+    await service.search('loc', searchDto({ replied, clientId: 'c1' }));
+    expect(db.review.findMany.mock.calls[0][0].where).toMatchObject({
+      clientId: 'c1',
+      replyText,
+    });
+  });
+
+  it('does not filter by reply when replied is absent', async () => {
+    const { db, service } = setup();
+    await service.search('loc', searchDto());
+    expect(db.review.findMany.mock.calls[0][0].where).not.toHaveProperty(
+      'replyText',
+    );
   });
 });
 

@@ -46,6 +46,13 @@ export class ReviewResponseDto {
   @ApiProperty({ type: String, nullable: true })
   hiddenReason: string | null;
 
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'Where an imported review came from; staff-only',
+  })
+  source: string | null;
+
   @ApiProperty({ type: () => ReviewAdminReplyDto, nullable: true })
   reply: ReviewAdminReplyDto | null;
 
@@ -72,6 +79,7 @@ export class ReviewResponseDto {
       status: review.status,
       hiddenAt: review.hiddenAt,
       hiddenReason: review.hiddenReason,
+      source: review.source,
       reply: ReviewAdminReplyDto.fromReview(review),
       staff: [...review.staff]
         .sort((a, b) => a.staffName.localeCompare(b.staffName))

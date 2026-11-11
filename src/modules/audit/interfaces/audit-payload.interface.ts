@@ -15,6 +15,7 @@ import { ClientDeletedPayload } from './client-deleted-payload.interface.js';
 import { ClientUpdatedPayload } from './client-updated-payload.interface.js';
 import { PayrollPeriodAuditPayload } from './payroll-period-audit-payload.interface.js';
 import { ProductPackagingAuditPayload } from './product-packaging-audit-payload.interface.js';
+import { ReviewImportCompletedPayload } from './review-import-completed-payload.interface.js';
 import { ServiceBundleCreatedPayload } from './service-bundle-created-payload.interface.js';
 import { ServiceBundleDeletedPayload } from './service-bundle-deleted-payload.interface.js';
 import { ServiceBundleUpdatedPayload } from './service-bundle-updated-payload.interface.js';
@@ -67,4 +68,5 @@ export type AuditPayload =
   | LocationCreatedPayload
   | LocationUpdatedPayload
   | LocationDeletedPayload
-  | PayrollPeriodAuditPayload;
+  | PayrollPeriodAuditPayload
+  | ReviewImportCompletedPayload;

@@ -7,6 +7,7 @@ import { AuditEntity } from '../../audit/enums/audit-entity.enum.js';
 import { AuditEvent } from '../../audit/enums/audit-event.enum.js';
 import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../../audit/interfaces/audit-log-event.interface.js';
+import { ReviewImportCompletion } from '../interfaces/review-import-completion.interface.js';
 import { reviewAuditChanges } from '../rules/review-audit.rules.js';
 
 interface ReviewAuditInput {
@@ -41,6 +42,23 @@ export class ReviewAuditService {
         title: author || '—',
         changes: reviewAuditChanges(before, after),
       },
+    } satisfies AuditLogEvent);
+  }
+
+  emitImport(
+    locationId: string,
+    { batchId, ...counts }: ReviewImportCompletion,
+    actor: AuditActor,
+  ) {
+    this.eventEmitter.emit(AUDIT_EVENT, {
+      locationId,
+      entityType: AuditEntity.REVIEW,
+      entityId: batchId,
+      eventType: AuditEvent.REVIEW_IMPORT_COMPLETED,
+      actionType: AuditActionType.CREATE,
+      occurredAt: new Date(),
+      actor,
+      payload: counts,
     } satisfies AuditLogEvent);
   }
 }

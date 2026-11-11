@@ -10,6 +10,7 @@ import { ReviewWithStaff } from '../interfaces/review-with-staff.interface.js';
 import { ReviewableBooking } from '../interfaces/reviewable-booking.interface.js';
 import { SubmitReviewInput } from '../interfaces/submit-review-input.interface.js';
 import { SubmitReviewResult } from '../interfaces/submit-review-result.interface.js';
+import { reviewOrderBy } from '../rules/review-order.rules.js';
 import { assertBookingReviewable } from '../rules/review-eligibility.rules.js';
 import {
   authorSnapshot,
@@ -44,7 +45,7 @@ export class ReviewsService {
     return new Set(reviews.flatMap((review) => review.bookingId ?? []));
   }
 
-  /** Published reviews only, newest first. */
+  /** Published reviews only, newest first unless another order is asked. */
   async listPublished(
     locationId: string,
     filter: ReviewListFilter,
@@ -58,7 +59,7 @@ export class ReviewsService {
     const [items, totalItems] = await Promise.all([
       this.db.review.findMany({
         where,
-        orderBy: [{ reviewedAt: 'desc' }, { id: 'desc' }],
+        orderBy: reviewOrderBy(filter.orderBy, filter.orderDirection),
         skip: (filter.page - 1) * filter.pageSize,
         take: filter.pageSize,
         include: { staff: true },

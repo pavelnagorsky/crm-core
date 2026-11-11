@@ -45,7 +45,9 @@ import { StaffSearchRequestDto } from '../dto/staff-search-request.dto.js';
 import { StaffStatusCountResponseDto } from '../dto/staff-status-count-response.dto.js';
 import { UpdateStaffDto } from '../dto/update-staff.dto.js';
 import { StaffSearchOrderBy } from '../enums/staff-search-order-by.enum.js';
+import { normalizeStaffName } from '../rules/staff-name.rules.js';
 import { BookingStaff } from '../interfaces/booking-staff.interface.js';
+import { StaffNameMatch } from '../interfaces/staff-name-match.interface.js';
 import { StaffScheduleSnapshot } from '../interfaces/staff-schedule-snapshot.interface.js';
 import { StaffWithAvatar } from '../interfaces/staff-with-avatar.interface.js';
 import { StaffWithServiceCount } from '../interfaces/staff-with-service-count.interface.js';
@@ -215,6 +217,34 @@ export class StaffService {
       select: { id: true, name: true },
     });
     return new Map(rows.map((row) => [row.id, row.name]));
+  }
+
+  /**
+   * Active staff of the location whose name matches each given name, ignoring case, `ё` and
+   * extra spaces. Keys are the names as given; several matches mean the name is ambiguous.
+   */
+  async matchActiveByNames(
+    locationId: string,
+    names: readonly string[],
+  ): Promise<Map<string, StaffNameMatch[]>> {
+    if (names.length === 0) return new Map();
+    const staff = await this.db.staff.findMany({
+      where: {
+        location: ACTIVE_LOCATION_WHERE,
+        locationId,
+        status: StaffStatus.ACTIVE,
+      },
+      select: { id: true, name: true },
+      orderBy: { id: 'asc' },
+    });
+    const byName = new Map<string, StaffNameMatch[]>();
+    for (const member of staff) {
+      const key = normalizeStaffName(member.name);
+      byName.set(key, [...(byName.get(key) ?? []), member]);
+    }
+    return new Map(
+      names.map((name) => [name, byName.get(normalizeStaffName(name)) ?? []]),
+    );
   }
 
   async listShiftsForAvailability(

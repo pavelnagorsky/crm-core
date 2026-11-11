@@ -52,8 +52,32 @@ describe('ReviewAggregatesService', () => {
   it('returns summaries only for requested staff that have reviews', async () => {
     const { db, service } = setup();
     const summaries = await service.getStaffSummaries('loc', ['a', 'c']);
-    expect([...summaries]).toEqual([['a', { count: 3, average: 5 }]]);
+    expect([...summaries]).toEqual([
+      [
+        'a',
+        {
+          count: 3,
+          average: 5,
+          distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 3 },
+        },
+      ],
+    ]);
     await service.getStaffSummaries('loc', ['b']);
+    expect(db.$queryRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it('gives one staff summary with distribution, empty for staff without reviews', async () => {
+    const { db, service } = setup();
+    await expect(service.getStaffSummary('loc', 'a')).resolves.toEqual({
+      count: 3,
+      average: 5,
+      distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 3 },
+    });
+    await expect(service.getStaffSummary('loc', 'c')).resolves.toEqual({
+      count: 0,
+      average: null,
+      distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+    });
     expect(db.$queryRaw).toHaveBeenCalledTimes(1);
   });
 

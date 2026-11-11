@@ -11,7 +11,7 @@ describe('Public reviews API (HTTP)', () => {
   const locationId = '22222222-2222-4222-8222-222222222222';
   const staffId = '33333333-3333-4333-8333-333333333333';
   const reviews = { listPublished: vi.fn() };
-  const aggregates = { getLocationSummary: vi.fn() };
+  const aggregates = { getLocationSummary: vi.fn(), getStaffSummary: vi.fn() };
   const locations = { getBookingSettings: vi.fn() };
   const review = {
     id: 'r1',
@@ -28,6 +28,9 @@ describe('Public reviews API (HTTP)', () => {
     repliedByName: 'Manager',
     bookingId: 'private-booking',
     clientId: 'private-client',
+    source: 'private-source',
+    importKey: 'private-key',
+    importBatchId: 'private-batch',
     staff: [
       { reviewId: 'r1', staffId, staffName: 'Мария' },
       { reviewId: 'r1', staffId: 's2', staffName: 'Алла' },
@@ -59,6 +62,11 @@ describe('Public reviews API (HTTP)', () => {
       average: null,
       distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 1 },
     });
+    aggregates.getStaffSummary.mockResolvedValue({
+      count: 0,
+      average: null,
+      distribution: { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 },
+    });
   });
 
   it('lists published reviews without private data', async () => {
@@ -85,7 +93,7 @@ describe('Public reviews API (HTTP)', () => {
       },
     ]);
     expect(JSON.stringify(body)).not.toMatch(
-      /private|Козлова|hiddenReason|repliedByName/,
+      /private|Козлова|hiddenReason|repliedByName|source|import/,
     );
   });
 
@@ -99,6 +107,8 @@ describe('Public reviews API (HTTP)', () => {
       pageSize: 5,
       staffId,
       rating: 4,
+      orderBy: undefined,
+      orderDirection: 'desc',
     });
     await request(app.getHttpServer())
       .get(`/public/locations/${locationId}/reviews`)
@@ -108,7 +118,41 @@ describe('Public reviews API (HTTP)', () => {
       pageSize: 10,
       staffId: undefined,
       rating: undefined,
+      orderBy: undefined,
+      orderDirection: 'desc',
     });
+  });
+
+  it('summarizes the staff member when the list is filtered by staff', async () => {
+    aggregates.getStaffSummary.mockResolvedValue({
+      count: 4,
+      average: 4.5,
+      distribution: { 1: 0, 2: 0, 3: 0, 4: 2, 5: 2 },
+    });
+    const { body } = await request(app.getHttpServer())
+      .get(`/public/locations/${locationId}/reviews`)
+      .query({ staffId })
+      .expect(200);
+    expect(aggregates.getStaffSummary).toHaveBeenCalledWith(
+      locationId,
+      staffId,
+    );
+    expect(aggregates.getLocationSummary).not.toHaveBeenCalled();
+    expect(body.responseValue.summary).toMatchObject({
+      count: 4,
+      average: 4.5,
+    });
+  });
+
+  it('passes the requested order', async () => {
+    await request(app.getHttpServer())
+      .get(`/public/locations/${locationId}/reviews`)
+      .query({ orderBy: 'rating', orderDirection: 'asc' })
+      .expect(200);
+    expect(reviews.listPublished).toHaveBeenCalledWith(
+      locationId,
+      expect.objectContaining({ orderBy: 'rating', orderDirection: 'asc' }),
+    );
   });
 
   it('ignores isExport so the list can never be dumped at once', async () => {
@@ -129,6 +173,8 @@ describe('Public reviews API (HTTP)', () => {
     { rating: 6 },
     { rating: 'x' },
     { staffId: 'not-a-uuid' },
+    { orderBy: 'text' },
+    { orderDirection: 'UP' },
   ])('rejects invalid query %j', async (query) => {
     await request(app.getHttpServer())
       .get(`/public/locations/${locationId}/reviews`)

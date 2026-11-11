@@ -880,6 +880,28 @@
         }
       }
     },
+    "review.import": {
+      "scope": "L",
+      "group": "Отзывы",
+      "actions": {
+        "write": {
+          "label": "Импорт отзывов из XLSX",
+          "defaultRoles": [
+            "OWNER",
+            "MANAGER"
+          ],
+          "configurableRoles": [
+            "MANAGER"
+          ],
+          "dependencies": [
+            {
+              "claim": "review",
+              "access": "read"
+            }
+          ]
+        }
+      }
+    },
     "analytics.location": {
       "scope": "L",
       "group": "Аналитика и история",

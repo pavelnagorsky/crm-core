@@ -1,11 +1,14 @@
 import { format } from 'date-fns';
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import { PassThrough } from 'stream';
 import { XlsxBook } from './interfaces/xlsx-book.interface.js';
+import { XlsxCellValue } from './interfaces/xlsx-cell-value.interface.js';
 import { XlsxCells } from './interfaces/xlsx-cells.interface.js';
 import { XlsxColumn } from './interfaces/xlsx-column.interface.js';
 import { XlsxFile } from './interfaces/xlsx-file.interface.js';
 import { XlsxGrid } from './interfaces/xlsx-grid.interface.js';
+import { XlsxRow } from './interfaces/xlsx-row.interface.js';
 import { XlsxSheet } from './interfaces/xlsx-sheet.interface.js';
 
 const OCTET_STREAM = 'application/octet-stream';
@@ -15,6 +18,14 @@ const DEFAULT_COLUMN_WIDTH = 20;
 const MIN_COLUMN_WIDTH = 10;
 const MAX_COLUMN_WIDTH = 255;
 const COLUMN_PADDING = 2;
+const WORKBOOK_PATH = 'xl/workbook.xml';
+const WORKBOOK_RELS_PATH = 'xl/_rels/workbook.xml.rels';
+const SHARED_STRINGS_PATH = 'xl/sharedStrings.xml';
+const STYLES_PATH = 'xl/styles.xml';
+const WORKSHEET_PATH = /^xl\/worksheets\/sheet(\d+)\.xml$/;
+const EMPTY_SHARED_STRINGS =
+  '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>' +
+  '<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="0" uniqueCount="0"/>';
 
 type XlsxStoredColumn = { header: string; key: string; width?: number };
 type XlsxStoredRow = unknown[] | Record<string, unknown>;
@@ -125,6 +136,76 @@ export class XlsxUtils {
     };
   }
 
+  /**
+   * Streams the first worksheet one row at a time; empty rows are skipped.
+   * Throws while iterating when the buffer is not a readable workbook.
+   */
+  static async *rows(buffer: Buffer): AsyncGenerator<XlsxRow> {
+    const reader = new ExcelJS.stream.xlsx.WorkbookReader(
+      await XlsxUtils.streamableParts(buffer),
+      {
+        sharedStrings: 'cache',
+        // Cached styles carry number formats, so date cells arrive as Date values.
+        styles: 'cache',
+        hyperlinks: 'ignore',
+        worksheets: 'emit',
+        entries: 'ignore',
+      },
+    );
+    for await (const worksheet of reader) {
+      for await (const excelRow of worksheet as AsyncIterable<ExcelJS.Row>) {
+        yield {
+          number: excelRow.number,
+          each(visit) {
+            excelRow.eachCell({ includeEmpty: false }, (cell, column) => {
+              visit(XlsxUtils.cellText(cell.value), column);
+            });
+          },
+          text(column: number) {
+            return XlsxUtils.cellText(excelRow.getCell(column).value);
+          },
+          value(column: number) {
+            return XlsxUtils.cellValue(excelRow.getCell(column).value);
+          },
+        };
+      }
+      return;
+    }
+  }
+
+  /**
+   * The parts the stream reader needs, re-packed so the first worksheet comes last and shared
+   * strings always exist. Excel and ExcelJS store worksheets before shared strings; the reader
+   * then spills the sheet to a temp file, and under load the zip iteration ends early and
+   * silently drops the remaining parts.
+   */
+  private static async streamableParts(buffer: Buffer): Promise<PassThrough> {
+    const source = await JSZip.loadAsync(buffer);
+    const sheetPath = Object.keys(source.files)
+      .map((path) => ({ path, match: WORKSHEET_PATH.exec(path) }))
+      .filter(({ match }) => match)
+      .sort((a, b) => Number(a.match?.[1]) - Number(b.match?.[1]))[0]?.path;
+    const rels = source.file(WORKBOOK_RELS_PATH);
+    const workbook = source.file(WORKBOOK_PATH);
+    if (!sheetPath || !rels || !workbook)
+      throw new Error('Workbook has no worksheet');
+
+    const parts = new JSZip();
+    parts.file(WORKBOOK_RELS_PATH, rels.nodeStream());
+    parts.file(WORKBOOK_PATH, workbook.nodeStream());
+    parts.file(
+      SHARED_STRINGS_PATH,
+      source.file(SHARED_STRINGS_PATH)?.nodeStream() ?? EMPTY_SHARED_STRINGS,
+    );
+    const styles = source.file(STYLES_PATH);
+    if (styles) parts.file(STYLES_PATH, styles.nodeStream());
+    parts.file(sheetPath, source.files[sheetPath].nodeStream());
+    // JSZip streams come from `readable-stream`, which ExcelJS does not accept as a Stream.
+    return parts
+      .generateNodeStream({ compression: 'STORE', streamFiles: true })
+      .pipe(new PassThrough());
+  }
+
   private static sheetName(name: string, fallback: string): string {
     const cleaned = name.replace(INVALID_SHEET_CHARS, ' ').trim() || fallback;
     return cleaned.slice(0, SHEET_NAME_LIMIT);
@@ -149,6 +230,23 @@ export class XlsxUtils {
         return XlsxUtils.cellText(value.text as ExcelJS.CellValue);
     }
     return String(value).trim();
+  }
+
+  private static cellValue(value: ExcelJS.CellValue): XlsxCellValue {
+    if (value == null) return null;
+    if (
+      value instanceof Date ||
+      typeof value === 'number' ||
+      typeof value === 'boolean'
+    )
+      return value;
+    if (typeof value === 'string') return value.trim();
+    if (typeof value === 'object') {
+      if ('error' in value) return null;
+      if ('result' in value)
+        return XlsxUtils.cellValue(value.result as ExcelJS.CellValue);
+    }
+    return XlsxUtils.cellText(value);
   }
 
   private static contentWidth(value: unknown): number {

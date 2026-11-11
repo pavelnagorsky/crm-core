@@ -653,4 +653,32 @@ export const ErrorCode = {
     code: 'REVIEW_HIDE_REASON_REQUIRED',
     message: 'A reason is required to hide a review',
   },
+  REVIEW_IMPORT_FILE_MISSING: {
+    code: 'REVIEW_IMPORT_FILE_MISSING',
+    message: 'Import file is missing',
+  },
+  REVIEW_IMPORT_FILE_TOO_LARGE: {
+    code: 'REVIEW_IMPORT_FILE_TOO_LARGE',
+    message: 'Import file exceeds the maximum allowed size',
+  },
+  REVIEW_IMPORT_FILE_UNSUPPORTED: {
+    code: 'REVIEW_IMPORT_FILE_UNSUPPORTED',
+    message: 'Import file must be an .xlsx spreadsheet',
+  },
+  REVIEW_IMPORT_FILE_CORRUPT: {
+    code: 'REVIEW_IMPORT_FILE_CORRUPT',
+    message: 'Import file could not be read',
+  },
+  REVIEW_IMPORT_MISSING_COLUMNS: {
+    code: 'REVIEW_IMPORT_MISSING_COLUMNS',
+    message: 'Import file is missing required columns',
+  },
+  REVIEW_IMPORT_FILE_EMPTY: {
+    code: 'REVIEW_IMPORT_FILE_EMPTY',
+    message: 'Import file has no review rows',
+  },
+  REVIEW_IMPORT_TOO_MANY_ROWS: {
+    code: 'REVIEW_IMPORT_TOO_MANY_ROWS',
+    message: 'Import file exceeds the row limit',
+  },
 } as const satisfies Record<string, ErrorCodeEntry>;

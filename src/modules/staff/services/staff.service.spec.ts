@@ -93,3 +93,49 @@ describe('StaffService.search', () => {
     });
   });
 });
+
+describe('StaffService.matchActiveByNames', () => {
+  const findMany = vi.fn();
+  const service = new StaffService(
+    { staff: { findMany } } as never,
+    { emit: vi.fn() } as unknown as EventEmitter2,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    { invalidate: vi.fn() } as never,
+  );
+
+  beforeEach(() => {
+    findMany.mockReset();
+    findMany.mockResolvedValue([
+      { id: 's1', name: 'Алёна Петрова' },
+      { id: 's2', name: 'Ольга' },
+      { id: 's3', name: 'ОЛЬГА' },
+    ]);
+  });
+
+  it('matches active staff of the location ignoring case, ё and spacing', async () => {
+    const result = await service.matchActiveByNames('loc', [
+      '  алена   петрова ',
+      'Ольга',
+      'Незнакомка',
+    ]);
+
+    expect(findMany.mock.calls[0][0]).toMatchObject({
+      where: { locationId: 'loc', status: 'ACTIVE' },
+    });
+    expect(result.get('  алена   петрова ')).toEqual([
+      { id: 's1', name: 'Алёна Петрова' },
+    ]);
+    expect(result.get('Ольга')?.map((staff) => staff.id)).toEqual(['s2', 's3']);
+    expect(result.get('Незнакомка')).toEqual([]);
+  });
+
+  it('does not query without names', async () => {
+    await expect(service.matchActiveByNames('loc', [])).resolves.toEqual(
+      new Map(),
+    );
+    expect(findMany).not.toHaveBeenCalled();
+  });
+});

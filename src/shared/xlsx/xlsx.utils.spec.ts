@@ -1,4 +1,5 @@
 import ExcelJS from 'exceljs';
+import JSZip from 'jszip';
 import { PassThrough } from 'stream';
 import { XlsxBook } from './interfaces/xlsx-book.interface.js';
 import { XlsxFile } from './interfaces/xlsx-file.interface.js';
@@ -139,6 +140,71 @@ describe('XlsxUtils', () => {
     ).resolves.toBeNull();
     const empty = Buffer.from(await new ExcelJS.Workbook().xlsx.writeBuffer());
     await expect(XlsxUtils.read(empty)).resolves.toBeNull();
+  });
+
+  it('streams rows of the first sheet with typed values', async () => {
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet('Reviews');
+    sheet.getCell('A1').value = 'Дата';
+    sheet.getCell('B1').value = 'Оценка';
+    sheet.getCell('A2').value = new Date(Date.UTC(2024, 2, 31, 23, 30));
+    sheet.getCell('A2').numFmt = 'dd.mm.yyyy hh:mm';
+    sheet.getCell('B2').value = 5;
+    sheet.getCell('A4').value = { richText: [{ text: ' 01.02.2024 ' }] };
+    sheet.getCell('B4').value = { formula: '2+2', result: 4 };
+    workbook.addWorksheet('Other').getCell('A1').value = 'ignored';
+    const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+
+    const rows = [];
+    for await (const row of XlsxUtils.rows(buffer)) {
+      rows.push({
+        number: row.number,
+        first: row.value(1),
+        second: row.value(2),
+        text: row.text(2),
+      });
+    }
+
+    expect(rows).toHaveLength(3);
+    expect(rows[0]).toEqual({
+      number: 1,
+      first: 'Дата',
+      second: 'Оценка',
+      text: 'Оценка',
+    });
+    expect(rows[1].number).toBe(2);
+    expect((rows[1].first as Date).toISOString()).toBe(
+      '2024-03-31T23:30:00.000Z',
+    );
+    expect(rows[1].second).toBe(5);
+    expect(rows[2]).toEqual({
+      number: 4,
+      first: '01.02.2024',
+      second: 4,
+      text: '4',
+    });
+  });
+
+  it('streams a workbook that has no shared strings part', async () => {
+    const workbook = new ExcelJS.Workbook();
+    workbook.addWorksheet('Numbers').addRow([1, 2]);
+    const zip = await JSZip.loadAsync(await workbook.xlsx.writeBuffer());
+    zip.remove('xl/sharedStrings.xml');
+    const buffer = await zip.generateAsync({ type: 'nodebuffer' });
+
+    const values = [];
+    for await (const row of XlsxUtils.rows(buffer))
+      values.push([row.value(1), row.value(2)]);
+
+    expect(values).toEqual([[1, 2]]);
+  });
+
+  it('throws while streaming a corrupt buffer', async () => {
+    const read = async () => {
+      for await (const row of XlsxUtils.rows(Buffer.from('not-a-workbook')))
+        void row;
+    };
+    await expect(read()).rejects.toThrow();
   });
 
   it('accepts an xlsx upload and rejects other files', () => {

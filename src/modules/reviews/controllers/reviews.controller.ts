@@ -31,6 +31,7 @@ import { ReviewAdminSummaryDto } from '../dto/review-admin-summary.dto.js';
 import { ReviewResponseDto } from '../dto/review-response.dto.js';
 import { ReviewSearchRequestDto } from '../dto/review-search-request.dto.js';
 import { ReviewSearchResponseDto } from '../dto/review-search-response.dto.js';
+import { ReviewSummaryRequestDto } from '../dto/review-summary-request.dto.js';
 import { SaveReviewReplyDto } from '../dto/save-review-reply.dto.js';
 import { UpdateReviewVisibilityDto } from '../dto/update-review-visibility.dto.js';
 import { ReviewModerationService } from '../services/review-moderation.service.js';
@@ -61,17 +62,19 @@ export class ReviewsController {
   }
 
   @ApiOperation({
-    summary: 'Rating summary of a location with moderation counters',
+    summary:
+      'Rating summary with moderation counters, for the location or one staff member',
   })
   @ApiOkResponse({ type: ApiResponse(ReviewAdminSummaryDto) })
   @Permissions(Read(Claim.REVIEW))
   @Get('summary')
   async getSummary(
     @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Query() dto: ReviewSummaryRequestDto,
   ): Promise<BaseResponseDto<ReviewAdminSummaryDto>> {
     return BaseResponseDto.success(
       ReviewAdminSummaryDto.fromEntity(
-        await this.reviews.getSummary(locationId),
+        await this.reviews.getSummary(locationId, dto.staffId),
       ),
     );
   }

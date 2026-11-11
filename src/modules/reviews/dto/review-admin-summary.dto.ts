@@ -5,7 +5,8 @@ import { ReviewSummaryDto } from './review-summary.dto.js';
 export class ReviewAdminSummaryDto {
   @ApiProperty({
     type: () => ReviewSummaryDto,
-    description: 'Published reviews only, the same figures clients see',
+    description:
+      'Published reviews only, the same figures clients see; with distribution also for one staff member',
   })
   summary: ReviewSummaryDto;
 

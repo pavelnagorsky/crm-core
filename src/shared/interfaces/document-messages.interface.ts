@@ -61,6 +61,36 @@ export interface DocumentMessages {
     genderMale: string;
     genderFemale: string;
   };
+  reviewsImport: {
+    sheet: string;
+    hintsSheet: string;
+    rating: string;
+    date: string;
+    text: string;
+    author: string;
+    staff: string;
+    source: string;
+    reply: string;
+    id: string;
+    hintColumn: string;
+    hintRequired: string;
+    hintRule: string;
+    yes: string;
+    no: string;
+    ratingHint: string;
+    dateHint: string;
+    textHint: string;
+    authorHint: string;
+    staffHint: string;
+    sourceHint: string;
+    replyHint: string;
+    idHint: string;
+    exampleText: string;
+    exampleAuthor: string;
+    exampleStaff: string;
+    exampleSource: string;
+    exampleReply: string;
+  };
   bookings: {
     sheet: string;
     startAt: string;

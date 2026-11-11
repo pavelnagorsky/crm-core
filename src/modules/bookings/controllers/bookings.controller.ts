@@ -49,6 +49,7 @@ import { BookingPricingRequestDto } from '../dto/booking-pricing-request.dto.js'
 import { BookingPricingResponseDto } from '../dto/booking-pricing-response.dto.js';
 import { BookingResolveRequestDto } from '../dto/booking-resolve-request.dto.js';
 import { BookingResolveResponseDto } from '../dto/booking-resolve-response.dto.js';
+import { BookingDetailsResponseDto } from '../dto/booking-details-response.dto.js';
 import { BookingResponseDto } from '../dto/booking-response.dto.js';
 import { BookingSearchRequestDto } from '../dto/booking-search-request.dto.js';
 import { BookingSearchResponseDto } from '../dto/booking-search-response.dto.js';
@@ -210,8 +211,10 @@ export class BookingsController {
     return new StreamableFile(stream, { type: XlsxUtils.mimeType });
   }
 
-  @ApiOperation({ summary: 'Get booking by ID' })
-  @ApiOkResponse({ type: ApiResponse(BookingResponseDto) })
+  @ApiOperation({
+    summary: 'Get booking by ID, with the client review for review:read',
+  })
+  @ApiOkResponse({ type: ApiResponse(BookingDetailsResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking not found' })
   @Permissions([Read(Claim.BOOKING), Read(Claim.BOOKING_OWN)])
   @Get('locations/:locationId/bookings/:id')
@@ -219,10 +222,15 @@ export class BookingsController {
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('id', ParseUUIDPipe) id: string,
     @TokenPayload() token: TokenPayloadDto,
-  ): Promise<BaseResponseDto<BookingResponseDto>> {
+  ): Promise<BaseResponseDto<BookingDetailsResponseDto>> {
     const booking = await this.bookings.findByIdInLocation(locationId, id);
     await this.access.assertRead(token, booking);
-    return BaseResponseDto.success(BookingResponseDto.fromEntity(booking));
+    const review = this.access.canReadReview(token, locationId)
+      ? await this.reviews.findForBooking(booking.id)
+      : null;
+    return BaseResponseDto.success(
+      BookingDetailsResponseDto.fromBooking(booking, review),
+    );
   }
 
   @ApiOperation({ summary: 'Search bookings' })

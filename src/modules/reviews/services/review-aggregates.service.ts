@@ -10,10 +10,7 @@ import { ReviewLocationOverview } from '../interfaces/review-location-overview.i
 import { ReviewRatingGroup } from '../interfaces/review-rating-group.interface.js';
 import { ReviewStaffSummary } from '../interfaces/review-staff-summary.interface.js';
 import { ReviewSummary } from '../interfaces/review-summary.interface.js';
-import {
-  buildReviewStaffSummary,
-  buildReviewSummary,
-} from '../rules/review-summary.rules.js';
+import { buildReviewSummary } from '../rules/review-summary.rules.js';
 
 /** Published-only rating aggregates; hidden reviews never count. */
 @Injectable()
@@ -46,17 +43,22 @@ export class ReviewAggregatesService {
     return (await this.getLocationOverview(locationId)).summary;
   }
 
+  /** Summary with distribution of one master; zero counts while they have no published reviews. */
+  async getStaffSummary(
+    locationId: string,
+    staffId: string,
+  ): Promise<ReviewSummary> {
+    const all = await this.loadCachedStaffSummaries(locationId);
+    return all[staffId] ?? buildReviewSummary([]);
+  }
+
   /** Staff without published reviews are absent from the result. */
   async getStaffSummaries(
     locationId: string,
     staffIds: readonly string[],
   ): Promise<Map<string, ReviewStaffSummary>> {
     if (staffIds.length === 0) return new Map();
-    const all = await this.cache.getOrLoad(
-      REVIEW_STAFF_SUMMARIES_CACHE,
-      { locationId },
-      () => this.loadStaffSummaries(locationId),
-    );
+    const all = await this.loadCachedStaffSummaries(locationId);
     return new Map(
       staffIds.flatMap((id) => (all[id] ? [[id, all[id]] as const] : [])),
     );
@@ -82,9 +84,19 @@ export class ReviewAggregatesService {
     );
   }
 
+  private loadCachedStaffSummaries(
+    locationId: string,
+  ): Promise<Record<string, ReviewSummary>> {
+    return this.cache.getOrLoad(
+      REVIEW_STAFF_SUMMARIES_CACHE,
+      { locationId },
+      () => this.loadStaffSummaries(locationId),
+    );
+  }
+
   private async loadStaffSummaries(
     locationId: string,
-  ): Promise<Record<string, ReviewStaffSummary>> {
+  ): Promise<Record<string, ReviewSummary>> {
     const rows = await this.db.$queryRaw<
       { staffId: string; rating: number; count: number }[]
     >`
@@ -103,7 +115,7 @@ export class ReviewAggregatesService {
     return Object.fromEntries(
       [...byStaff].map(([staffId, groups]) => [
         staffId,
-        buildReviewStaffSummary(groups),
+        buildReviewSummary(groups),
       ]),
     );
   }

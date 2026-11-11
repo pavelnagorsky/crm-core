@@ -48,6 +48,9 @@ describe('Reviews admin API (HTTP)', () => {
     replyText: null,
     repliedAt: null,
     repliedByName: null,
+    source: 'YCLIENTS',
+    importKey: 'id:42',
+    importBatchId: 'batch-1',
     createdAt: new Date('2026-10-01T10:00:00Z'),
     updatedAt: new Date('2026-10-01T10:00:00Z'),
     staff: [{ reviewId, staffId: 's1', staffName: 'Мария' }],
@@ -115,9 +118,12 @@ describe('Reviews admin API (HTTP)', () => {
       authorFirstName: 'Анна',
       authorLastName: 'Козлова',
       clientId: 'c1',
+      source: 'YCLIENTS',
       reply: null,
       staff: [{ id: 's1', name: 'Мария' }],
     });
+    expect(body.responseValue.items[0]).not.toHaveProperty('importKey');
+    expect(body.responseValue.items[0]).not.toHaveProperty('importBatchId');
   });
 
   it.each([
@@ -127,6 +133,8 @@ describe('Reviews admin API (HTTP)', () => {
     ['staffId', 'not-a-uuid'],
     ['from', 'yesterday'],
     ['orderBy', 'text'],
+    ['clientId', 'not-a-uuid'],
+    ['replied', 'maybe'],
   ])('rejects invalid search filter %s=%s', async (key, value) => {
     await request(app.getHttpServer())
       .get(base)
@@ -144,6 +152,35 @@ describe('Reviews admin API (HTTP)', () => {
       unansweredCount: 1,
     });
     expect(moderation.findById).not.toHaveBeenCalled();
+  });
+
+  it('passes staffId to the summary and validates it', async () => {
+    await request(app.getHttpServer())
+      .get(`${base}/summary`)
+      .query({ staffId: '33333333-3333-4333-8333-333333333333' })
+      .expect(200);
+    expect(moderation.getSummary).toHaveBeenLastCalledWith(
+      locationId,
+      '33333333-3333-4333-8333-333333333333',
+    );
+    await request(app.getHttpServer())
+      .get(`${base}/summary`)
+      .query({ staffId: 'nope' })
+      .expect(400);
+  });
+
+  it('parses the replied and clientId filters', async () => {
+    await request(app.getHttpServer())
+      .get(base)
+      .query({
+        replied: 'false',
+        clientId: '33333333-3333-4333-8333-333333333333',
+      })
+      .expect(200);
+    expect(moderation.search.mock.calls[0][1]).toMatchObject({
+      replied: false,
+      clientId: '33333333-3333-4333-8333-333333333333',
+    });
   });
 
   it('gets a review and rejects a malformed id', async () => {

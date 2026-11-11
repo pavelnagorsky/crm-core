@@ -34,7 +34,7 @@ export class PublicReviewsController {
   ) {}
 
   @ApiOperation({
-    summary: 'List published reviews of a location, newest first',
+    summary: 'List published reviews of a location, newest first by default',
   })
   @ApiOkResponse({ type: ApiResponse(PublicReviewListResponseDto) })
   @ApiNotFoundResponse({
@@ -58,8 +58,12 @@ export class PublicReviewsController {
         pageSize: dto.pageSize,
         staffId: dto.staffId,
         rating: dto.rating,
+        orderBy: dto.orderBy,
+        orderDirection: dto.orderDirection,
       }),
-      this.aggregates.getLocationSummary(locationId),
+      dto.staffId
+        ? this.aggregates.getStaffSummary(locationId, dto.staffId)
+        : this.aggregates.getLocationSummary(locationId),
     ]);
     return BaseResponseDto.success(
       new PublicReviewListResponseDto(

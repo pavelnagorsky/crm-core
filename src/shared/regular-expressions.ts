@@ -47,6 +47,19 @@ const regularExpressions = {
   // Yandex Maps organization or profile pages as host + path: yandex.<tld>/maps/org/…, yandex.<tld>/profile/<id>
   yandexReviewTarget:
     /^(?:www\.)?yandex\.(?:ru|by|kz|uz|com)\/(?:maps\/org\/.+|profile\/\d+\/?)$/,
+  // Imported review rating: whole number, optional zero fraction and unit — 5, 5.0, 5,0, 5 звёзд, 4 stars
+  reviewRatingText: /^(\d+)(?:[.,]0+)?\s*(?:зв[её]зд[аы]?|stars?|★+)?$/i,
+  // Day-first date with optional time — 05.03.2025, 5.3.2025 14:30, 05.03.2025 14:30:15
+  dottedDateTime:
+    /^(\d{1,2})\.(\d{1,2})\.(\d{4})(?:[ T]+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/,
+  // ISO date with optional time and no offset — 2025-03-05, 2025-03-05 14:30, 2025-03-05T14:30:15.000
+  isoLocalDateTime:
+    /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?)?$/,
+  // ISO date-time pinned to an offset — 2025-03-05T14:30:00Z, 2025-03-05T14:30+03:00
+  isoZonedDateTime:
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:?\d{2})$/i,
+  // Several staff names in one cell — "Анна, Мария", "Анна; Мария", "Анна / Мария" or one per line
+  staffNameSeparators: /\s*[,;/\r\n]+\s*/,
 };
 
 export default regularExpressions;

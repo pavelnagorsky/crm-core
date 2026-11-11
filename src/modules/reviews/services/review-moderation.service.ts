@@ -2,8 +2,6 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { Prisma, ReviewStatus } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
-import { stableOrderBy } from '../../../shared/database/stable-order-by.js';
-import { OrderDirection } from '../../../shared/enums/order-direction.enum.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { AuditActionType } from '../../audit/enums/audit-action-type.enum.js';
@@ -11,10 +9,10 @@ import { AuditEvent } from '../../audit/enums/audit-event.enum.js';
 import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
 import { ReviewSearchRequestDto } from '../dto/review-search-request.dto.js';
 import { UpdateReviewVisibilityDto } from '../dto/update-review-visibility.dto.js';
-import { ReviewSearchOrderBy } from '../enums/review-search-order-by.enum.js';
 import { ReviewAdminSummary } from '../interfaces/review-admin-summary.interface.js';
 import { ReviewPage } from '../interfaces/review-page.interface.js';
 import { ReviewWithStaff } from '../interfaces/review-with-staff.interface.js';
+import { reviewOrderBy } from '../rules/review-order.rules.js';
 import { ReviewAggregatesService } from './review-aggregates.service.js';
 import { ReviewAuditService } from './review-audit.service.js';
 
@@ -32,14 +30,7 @@ export class ReviewModerationService {
     dto: ReviewSearchRequestDto,
   ): Promise<ReviewPage> {
     const where = this.searchWhere(locationId, dto);
-    const direction = dto.orderDirection ?? OrderDirection.DESC;
-    const orderBy =
-      dto.orderBy === ReviewSearchOrderBy.RATING
-        ? stableOrderBy(
-            [{ rating: direction }, { reviewedAt: OrderDirection.DESC }],
-            direction,
-          )
-        : stableOrderBy({ reviewedAt: direction }, direction);
+    const orderBy = reviewOrderBy(dto.orderBy, dto.orderDirection);
     const [items, totalItems] = await this.db.$transaction([
       this.db.review.findMany({
         where,
@@ -55,18 +46,24 @@ export class ReviewModerationService {
     return { items, totalItems };
   }
 
-  async getSummary(locationId: string): Promise<ReviewAdminSummary> {
+  /** Location-wide, or of one staff member when `staffId` is given. */
+  async getSummary(
+    locationId: string,
+    staffId?: string,
+  ): Promise<ReviewAdminSummary> {
+    const scope: Prisma.ReviewWhereInput = {
+      locationId,
+      ...(staffId && { staff: { some: { staffId } } }),
+    };
     const [summary, hiddenCount, unansweredCount] = await Promise.all([
-      this.aggregates.getLocationSummary(locationId),
+      staffId
+        ? this.aggregates.getStaffSummary(locationId, staffId)
+        : this.aggregates.getLocationSummary(locationId),
       this.db.review.count({
-        where: { locationId, status: ReviewStatus.HIDDEN },
+        where: { ...scope, status: ReviewStatus.HIDDEN },
       }),
       this.db.review.count({
-        where: {
-          locationId,
-          status: ReviewStatus.PUBLISHED,
-          replyText: null,
-        },
+        where: { ...scope, status: ReviewStatus.PUBLISHED, replyText: null },
       }),
     ]);
     return { summary, hiddenCount, unansweredCount };
@@ -201,6 +198,9 @@ export class ReviewModerationService {
     if (dto.status) where.status = dto.status;
     if (dto.rating !== undefined) where.rating = dto.rating;
     if (dto.staffId) where.staff = { some: { staffId: dto.staffId } };
+    if (dto.clientId) where.clientId = dto.clientId;
+    if (dto.replied !== undefined)
+      where.replyText = dto.replied ? { not: null } : null;
     if (dto.from || dto.to)
       where.reviewedAt = {
         ...(dto.from && { gte: new Date(dto.from) }),

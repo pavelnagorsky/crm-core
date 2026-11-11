@@ -1,7 +1,7 @@
 import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Claim } from '../../access/enums/claim.enum.js';
-import { Read, addGrant } from '../../access/utils/permission.js';
+import { Read, addGrant, removeGrant } from '../../access/utils/permission.js';
 import { PermissionGuard } from '../../auth/guards/permission.guard.js';
 import { tokenPayload } from '../../auth/testing/factories/token-payload.factory.js';
 import { StaffAccessService } from '../../staff/services/staff-access.service.js';
@@ -26,6 +26,7 @@ describe('Staff booking API', () => {
   const access = new BookingAccessService(
     new StaffAccessService(staff as never),
   );
+  const reviews = { findForBooking: vi.fn() };
   const controller = new BookingsController(
     bookings as never,
     {} as never,
@@ -33,13 +34,37 @@ describe('Staff booking API', () => {
     {} as never,
     access,
     {} as never,
-    {} as never,
+    reviews as never,
   );
+  const review = {
+    id: 'review-1',
+    locationId: 'location-1',
+    bookingId: current.id,
+    clientId: null,
+    authorFirstName: 'Анна',
+    authorLastName: 'Козлова',
+    rating: 2,
+    text: 'Долго ждали',
+    reviewedAt: new Date('2026-10-01T10:00:00Z'),
+    status: 'HIDDEN',
+    hiddenAt: new Date('2026-10-02T10:00:00Z'),
+    hiddenReason: 'спам',
+    replyText: null,
+    repliedAt: null,
+    repliedByName: null,
+    source: null,
+    importKey: null,
+    importBatchId: null,
+    createdAt: new Date('2026-10-01T10:00:00Z'),
+    updatedAt: new Date('2026-10-02T10:00:00Z'),
+    staff: [{ reviewId: 'review-1', staffId: 'anna', staffName: 'Анна' }],
+  };
   const guard = new PermissionGuard(new Reflector());
 
   beforeEach(() => {
     vi.clearAllMocks();
     bookings.findByIdInLocation.mockResolvedValue(current);
+    reviews.findForBooking.mockResolvedValue(review);
     bookings.updateStatus.mockResolvedValue(current);
     bookings.cancel.mockResolvedValue(current);
     bookings.search.mockResolvedValue({ items: [], totalItems: 0 });
@@ -116,6 +141,51 @@ describe('Staff booking API', () => {
       });
     },
   );
+
+  it('shows the review of the visit, hidden ones included, to review readers', async () => {
+    const details = await controller.findById(
+      'location-1',
+      current.id,
+      tokenPayload('MANAGER'),
+    );
+    expect(reviews.findForBooking).toHaveBeenCalledWith(current.id);
+    expect(details.responseValue?.review).toMatchObject({
+      id: 'review-1',
+      rating: 2,
+      status: 'HIDDEN',
+      hiddenReason: 'спам',
+      staff: [{ id: 'anna', name: 'Анна' }],
+    });
+  });
+
+  it('keeps the review away from participants without review:read', async () => {
+    const details = await controller.findById(
+      'location-1',
+      current.id,
+      tokenPayload('STAFF'),
+    );
+    expect(details.responseValue?.review).toBeNull();
+
+    const manager = tokenPayload('MANAGER');
+    removeGrant(manager.permissions!['L:location-1'], Read(Claim.REVIEW));
+    const withoutGrant = await controller.findById(
+      'location-1',
+      current.id,
+      manager,
+    );
+    expect(withoutGrant.responseValue?.review).toBeNull();
+    expect(reviews.findForBooking).not.toHaveBeenCalled();
+  });
+
+  it('returns null when the visit has no review', async () => {
+    reviews.findForBooking.mockResolvedValue(null);
+    const details = await controller.findById(
+      'location-1',
+      current.id,
+      tokenPayload('MANAGER'),
+    );
+    expect(details.responseValue?.review).toBeNull();
+  });
 
   it('allows cancellation before completion', async () => {
     await controller.cancel(

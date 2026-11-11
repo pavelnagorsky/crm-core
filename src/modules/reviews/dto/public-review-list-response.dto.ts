@@ -9,7 +9,8 @@ export class PublicReviewListResponseDto extends PaginationResponseDto {
 
   @ApiProperty({
     type: () => ReviewSummaryDto,
-    description: 'Location-wide summary, independent of the list filters',
+    description:
+      'Summary of the staff member when `staffId` is given, otherwise of the location; `rating` does not affect it',
   })
   summary: ReviewSummaryDto;
 

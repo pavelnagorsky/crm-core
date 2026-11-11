@@ -6,6 +6,7 @@ import { ReviewsController } from './controllers/reviews.controller.js';
 import { ReviewsFacade } from './reviews.facade.js';
 import { ReviewAggregatesService } from './services/review-aggregates.service.js';
 import { ReviewAuditService } from './services/review-audit.service.js';
+import { ReviewImportStoreService } from './services/review-import-store.service.js';
 import { ReviewModerationService } from './services/review-moderation.service.js';
 import { ReviewsService } from './services/reviews.service.js';
 
@@ -17,6 +18,7 @@ import { ReviewsService } from './services/reviews.service.js';
     ReviewModerationService,
     ReviewAggregatesService,
     ReviewAuditService,
+    ReviewImportStoreService,
     ReviewsFacade,
   ],
   exports: [ReviewsFacade],

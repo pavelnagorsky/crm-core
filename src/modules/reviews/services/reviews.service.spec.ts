@@ -1,3 +1,5 @@
+import { OrderDirection } from '../../../shared/enums/order-direction.enum.js';
+import { ReviewSearchOrderBy } from '../enums/review-search-order-by.enum.js';
 import { HttpStatus } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { BookingStatus, Prisma } from '@prisma/client';
@@ -198,6 +200,18 @@ describe('ReviewsService.listPublished', () => {
       include: { staff: true },
     });
     expect(db.review.count).toHaveBeenCalledWith({ where });
+
+    await service.listPublished('loc', {
+      page: 1,
+      pageSize: 5,
+      orderBy: ReviewSearchOrderBy.RATING,
+      orderDirection: OrderDirection.ASC,
+    });
+    expect(db.review.findMany.mock.calls[1][0].orderBy).toEqual([
+      { rating: 'asc' },
+      { reviewedAt: 'desc' },
+      { id: 'asc' },
+    ]);
   });
 
   it('omits absent filters', async () => {

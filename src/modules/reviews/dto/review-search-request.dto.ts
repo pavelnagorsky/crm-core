@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsInt,
@@ -13,6 +14,7 @@ import {
 } from 'class-validator';
 import { ReviewStatus } from '@prisma/client';
 import { PaginationRequestDto } from '../../../shared/dto/pagination-request.dto.js';
+import { ParseBoolean } from '../../../shared/transforms/parse-boolean.transform.js';
 import {
   REVIEW_RATING_MAX,
   REVIEW_RATING_MIN,
@@ -34,6 +36,27 @@ export class ReviewSearchRequestDto extends PaginationRequestDto<ReviewSearchOrd
   @IsOptional()
   @IsUUID()
   staffId?: string;
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    required: false,
+    description: 'Reviews left by this client, for the client card',
+  })
+  @IsOptional()
+  @IsUUID()
+  clientId?: string;
+
+  @ApiProperty({
+    type: Boolean,
+    required: false,
+    description:
+      'true: only reviews with a reply; false: only reviews still waiting for one',
+  })
+  @IsOptional()
+  @IsBoolean()
+  @ParseBoolean()
+  replied?: boolean;
 
   @ApiProperty({ enum: ReviewStatus, required: false })
   @IsOptional()

@@ -303,6 +303,7 @@ enum AuditEvent {
   REVIEW_REPLIED
   REVIEW_REPLY_DELETED
   REVIEW_DELETED
+  REVIEW_IMPORT_COMPLETED
 }
 
 enum AuditActorRole {
@@ -1337,6 +1338,10 @@ model Review {
   repliedAt     DateTime?
   repliedByName String?   @db.VarChar(250)
 
+  source        String? @db.VarChar(100)
+  importKey     String? @db.VarChar(140)
+  importBatchId String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -1345,6 +1350,7 @@ model Review {
   client   Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
   staff    ReviewStaff[]
 
+  @@unique([locationId, importKey])
   @@index([locationId, status, reviewedAt, id])
   @@index([clientId])
 }

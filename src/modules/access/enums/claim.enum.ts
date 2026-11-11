@@ -36,6 +36,7 @@ export enum Claim {
   PAYROLL_EXPORT = 'payroll.export',
   BOOKING_CHANNEL = 'booking-channel',
   REVIEW = 'review',
+  REVIEW_IMPORT = 'review.import',
   ANALYTICS_LOCATION = 'analytics.location',
   ANALYTICS_BRAND = 'analytics.brand',
   AUDIT_LOCATION = 'audit.location',

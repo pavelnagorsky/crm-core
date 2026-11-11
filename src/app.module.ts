@@ -29,6 +29,7 @@ import { OrdersModule } from './modules/orders/orders.module.js';
 import { PayrollModule } from './modules/payroll/payroll.module.js';
 import { ProductsAnalyticsModule } from './modules/products/analytics/products-analytics.module.js';
 import { ProductsModule } from './modules/products/products.module.js';
+import { ReviewImportModule } from './modules/reviews/import/review-import.module.js';
 import { ServicesModule } from './modules/services/services.module.js';
 import { StaffModule } from './modules/staff/staff.module.js';
 import { SuppliersModule } from './modules/suppliers/suppliers.module.js';
@@ -65,6 +66,7 @@ import { SuppliersModule } from './modules/suppliers/suppliers.module.js';
     FilesModule,
     FeedbackModule,
     SupportModule,
+    ReviewImportModule,
     DashboardModule,
     PayrollModule,
     ProductsModule,

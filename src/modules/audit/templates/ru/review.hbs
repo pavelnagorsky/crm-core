@@ -1,2 +1,6 @@
+{{#if (eq eventType "REVIEW_IMPORT_COMPLETED")}}
+<p>{{payload.fileName}}: загружено {{payload.importedCount}} из {{payload.totalRows}}, дубликатов {{payload.duplicateCount}}, с ошибками {{payload.errorCount}}</p>
+{{else}}
 {{payload.title}}
 <ul>{{#each payload.changes}}<li>{{t "fields" ../entityType this.field}}: <s>{{formatValue this.field this.from}}</s> → {{formatValue this.field this.to}}</li>{{/each}}</ul>
+{{/if}}

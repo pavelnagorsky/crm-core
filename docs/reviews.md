@@ -61,21 +61,61 @@
 
 | API | Назначение |
 | --- | --- |
-| `GET /locations/:locationId/reviews` | Список: `page`, `pageSize`, `search`, `staffId`, `status`, `rating`, `from`, `to`, `isExport` |
-| `GET /locations/:locationId/reviews/summary` | Сводка с распределением, опционально по `staffId` |
+| `GET /locations/:locationId/reviews` | Список: `page`, `pageSize`, `search`, `staffId`, `clientId` (карточка клиента), `status`, `rating`, `replied` (`false` — ждут ответа), `from`, `to`, `isExport` |
+| `GET /locations/:locationId/reviews/summary` | Сводка с распределением, `hiddenCount`, `unansweredCount`. С `staffId` — по одному сотруднику (карточка сотрудника) |
 | `GET /locations/:locationId/reviews/:reviewId` | Один отзыв |
 | `PATCH /locations/:locationId/reviews/:reviewId/visibility` | `{ status, reason? }`, причина обязательна при скрытии |
 | `PUT /locations/:locationId/reviews/:reviewId/reply` | `{ text }`, создать или изменить ответ |
 | `DELETE /locations/:locationId/reviews/:reviewId/reply` | 204 |
 | `DELETE /locations/:locationId/reviews/:reviewId` | 204, жёсткое удаление вместе с `ReviewStaff` |
 
-Рейтинг сотрудника: поле `reviewSummary` (`{ count, average }` или `null`) в `StaffResponseDto` и `StaffDirectoryItemDto`. Отзывы сотрудника — список с `staffId`.
+Рейтинг сотрудника: поле `reviewSummary` (`{ count, average }` или `null`) в `StaffResponseDto` и `StaffDirectoryItemDto`. Отзывы сотрудника — список с `staffId`, сводка с распределением — `summary?staffId=`.
+
+Карточка записи: `GET /locations/:locationId/bookings/:id` возвращает `BookingDetailsResponseDto` с полем `review` — тот же `ReviewResponseDto`, что в списке отзывов, включая скрытые. Поле заполняется только при праве `review:read`; у сотрудника с `booking.own:read` без этого права оно всегда `null`. В списке записей отзыва нет.
+
+## Импорт из xlsx
+
+Модуль `ReviewImportModule` (`src/modules/reviews/import/`) — перенос отзывов из другой CRM. Право `review.import:write` (уровень локации), выдаётся владельцу и менеджеру.
+
+| API | Назначение |
+| --- | --- |
+| `GET /locations/:locationId/reviews/import/template` | Шаблон xlsx: заголовки, строка-пример и лист «Подсказки» |
+| `POST /locations/:locationId/reviews/import` | multipart `file`. Ответ: `totalRows`, `importedCount`, `duplicateCount`, `errorCount`, `unmatchedStaffCount`, `unmatchedStaffNames` (до 100 уникальных имён), `errorsByCode`, `errors: [{ row, code }]` (первые 100) |
+
+Один шаг, без предпросмотра и отката: валидные строки записываются сразу, невалидные пропускаются и перечисляются с номерами строк, как их показывает Excel. Пользователь исправляет строки и загружает файл снова — уже принятые строки становятся дубликатами.
+
+**Файл.** Только `.xlsx`, до 25 МБ и 50 000 непустых строк, читается первый лист. Заголовок — первая непустая строка. Ошибки файла (`400`, `413`, `422`): `REVIEW_IMPORT_FILE_MISSING`, `_FILE_TOO_LARGE`, `_FILE_UNSUPPORTED`, `_FILE_CORRUPT`, `_MISSING_COLUMNS` (в `responseValue` — недостающие колонки), `_FILE_EMPTY`, `_TOO_MANY_ROWS`.
+
+**Колонки** (регистр, `ё` и лишние пробелы в заголовке не важны):
+
+| Колонка | Обязательна | Правило | Код ошибки строки |
+| --- | --- | --- | --- |
+| Оценка (`оценка`, `рейтинг`, `звезды`, `rating`, `stars`) | да | Целое 1–5: `5`, `5.0`, `5 звёзд` | `RATING_INVALID` |
+| Дата (`дата`, `дата отзыва`, `date`) | да | `dd.MM.yyyy[ HH:mm[:ss]]`, `yyyy-MM-dd[ HH:mm[:ss]]`, ISO, дата-ячейка Excel. Не раньше 2000 года и не в будущем | `DATE_INVALID` |
+| Текст (`текст`, `отзыв`, `комментарий`, `text`, `review`) | да | Простой текст до 2000 символов, разметка удаляется | `TEXT_REQUIRED`, `TEXT_TOO_LONG` |
+| Автор (`автор`, `клиент`, `author`) или `Имя` + `Фамилия` | нет | До 100 символов на часть. Одна колонка делится по первому пробелу. Пусто — `null` | `AUTHOR_TOO_LONG` |
+| Сотрудник (`сотрудник`, `мастер`, `staff`) | нет | Несколько имён через `,` `;` `/` или перенос строки | — |
+| Источник (`источник`, `source`) | нет | До 100 символов, любое значение. Виден только в панели (`source` в `ReviewResponseDto`) | `SOURCE_TOO_LONG` |
+| Ответ (`ответ`, `reply`) | нет | До 2000 символов. `repliedAt` = дата отзыва, `repliedByName = null` | `REPLY_TOO_LONG` |
+| ID (`id`, `id отзыва`) | нет | До 128 символов | `ID_TOO_LONG` |
+
+В строке сообщается первая найденная ошибка в порядке колонок таблицы.
+
+**Даты.** Дата без пояса — «стенное» время филиала (`Location.timezone`), переводится в UTC через `TimeUtils.localToUtc` с учётом перехода на летнее время. Дата-ячейка Excel читается UTC-геттерами, поэтому результат не зависит от пояса сервера. Дата без времени ставится на 12:00 по филиалу. Дата со смещением (`…Z`, `…+03:00`) берётся как есть.
+
+**Сотрудники.** Каждое имя сопоставляется с активными сотрудниками локации без учёта регистра, `ё` и пробелов (`StaffService.matchActiveByNames`). Отзыв привязывается ко всем найденным; имя без совпадений или с несколькими совпадениями пропускается, учитывается в `unmatchedStaffCount` и попадает в `unmatchedStaffNames`. Если не найден никто, отзыв остаётся на уровне локации.
+
+**Дедупликация.** `importKey` уникален в локации: `id:<ID>` из файла, иначе `sha256:` от автора, даты, оценки и текста (без учёта регистра и пробелов). Запись — `createManyAndReturn` со `skipDuplicates`, поэтому повторная загрузка и разбиение файла с пересечением безопасны. Два разных отзыва с одинаковыми автором, датой, оценкой и текстом сливаются в один. Удалённый вручную импортированный отзыв вернётся при повторной загрузке того же файла.
+
+**Запись.** Файл читается потоково в два прохода (`XlsxUtils.rows`): первый проверяет заголовок и считает строки, второй разбирает строки и пишет пачками по 500, каждая пачка — своя транзакция под `acquireActiveOperationLock` локации. После импорта один раз сбрасывается кэш сводок и пишется одна запись аудита `REVIEW_IMPORT_COMPLETED` (если что-то загружено): имя файла и счётчики, `entityId` — id партии. `importBatchId` хранится только для разбора через SQL, наружу не отдаётся.
+
+Импортированные отзывы входят в рейтинг как обычные, клиентам источник не показывается.
 
 ## Публичный API
 
 | API | Назначение |
 | --- | --- |
-| `GET /public/locations/:locationId/reviews` | Опубликованные отзывы: `page`, `pageSize` (по умолчанию 10, максимум 50), `staffId`, `rating` |
+| `GET /public/locations/:locationId/reviews` | Опубликованные отзывы: `page`, `pageSize` (по умолчанию 10, максимум 50), `staffId`, `rating`, `orderBy` (`reviewedAt` по умолчанию или `rating`), `orderDirection`. `isExport` не поддерживается: список всегда постраничный. `summary` — по сотруднику, если задан `staffId`, иначе по локации; фильтр `rating` на неё не влияет |
 | `GET /public/booking-pages/:slug`, `GET /public/booking-widgets/:widgetId` | Поле `reviews: { summary, latest }` (последние 3) |
 | booking setup | `reviewSummary` у каждого сотрудника |
 
@@ -83,7 +123,7 @@
 
 ## Аудит
 
-Сущность `REVIEW`. Отслеживаемые поля: `rating`, `text`, `status`, `hiddenReason`, `replyText`. События: создание (актор — клиент), изменение, смена видимости, ответ, удаление ответа, удаление отзыва (со снимком). Изменения `googleReviewUrl`, `yandexReviewUrl`, `reviewsEnabled` попадают в аудит локации.
+Сущность `REVIEW`. Отслеживаемые поля: `rating`, `text`, `status`, `hiddenReason`, `replyText`. События: создание (актор — клиент), изменение, смена видимости, ответ, удаление ответа, удаление отзыва (со снимком), импорт (`REVIEW_IMPORT_COMPLETED`, одна запись на файл). Изменения `googleReviewUrl`, `yandexReviewUrl`, `reviewsEnabled` попадают в аудит локации.
 
 ## Границы модулей
 
@@ -92,5 +132,4 @@
 
 ## Дальше
 
-- Фаза 2 (`feature/reviews-import`): импорт отзывов из xlsx, раздел 6.2 плана.
 - Фаза 3: экспорт, дашборд, уведомление владельцу о плохой оценке.

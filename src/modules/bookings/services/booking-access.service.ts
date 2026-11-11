@@ -61,6 +61,11 @@ export class BookingAccessService {
     }
   }
 
+  /** Reviews are a separate permission: staff reading their own bookings do not see them. */
+  canReadReview(token: TokenPayloadDto, locationId: string): boolean {
+    return hasPermission(token, Read(Claim.REVIEW), locationId);
+  }
+
   private assertParticipant(
     booking: BookingWithItems,
     staffId: string | undefined,

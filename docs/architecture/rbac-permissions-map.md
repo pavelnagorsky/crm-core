@@ -93,6 +93,15 @@
 | `DELETE /locations/:locationId/reviews/:reviewId/reply` | `deleteReply` | L: `review:write` | — |
 | `DELETE /locations/:locationId/reviews/:reviewId` | `delete` | L: `review:write` | Физическое удаление, снимок остаётся в аудите. |
 
+## review-import
+
+[Исходник](../../src/modules/reviews/import/controllers/review-import.controller.ts)
+
+| API | Метод | Проверка | Уточнение |
+| --- | --- | --- | --- |
+| `GET /locations/:locationId/reviews/import/template` | `getTemplate` | L: `review.import:write` | Шаблон xlsx с примером и листом подсказок. |
+| `POST /locations/:locationId/reviews/import` | `import` | L: `review.import:write` | Валидные строки записываются сразу, ошибки — по номерам строк. |
+
 ## public-reviews
 
 [Исходник](../../src/modules/reviews/controllers/public-reviews.controller.ts)
@@ -135,7 +144,7 @@
 | `POST /locations/:locationId/bookings/manual` | `createManual` | L: `booking:write` | Произвольная цена: также sale.price.override:write. Товары: order:write. Клиент находится или создаётся автоматически независимо от client:write. Произвольное время (`isCustomTime: true`, канал `MANUAL`) с немедленным COMPLETED: order:write. |
 | `GET /locations/:locationId/bookings/status-counts` | `getStatusCounts` | L: `booking:read` или `booking.own:read` | При own-чтении обязательно участие в записи; списки и счётчики ограничены до пагинации. |
 | `GET /locations/:locationId/bookings/export` | `export` | L: `booking.export:read` | — |
-| `GET /locations/:locationId/bookings/:id` | `findById` | L: `booking:read` или `booking.own:read` | При own-чтении обязательно участие в записи; списки и счётчики ограничены до пагинации. |
+| `GET /locations/:locationId/bookings/:id` | `findById` | L: `booking:read` или `booking.own:read` | При own-чтении обязательно участие в записи; списки и счётчики ограничены до пагинации. Поле `review` заполняется только при `review:read`. |
 | `GET /locations/:locationId/bookings` | `search` | L: `booking:read` или `booking.own:read` | При own-чтении обязательно участие в записи; списки и счётчики ограничены до пагинации. |
 | `PUT /locations/:locationId/bookings/:id` | `update` | L: `booking:write` или `booking.own:write` | При own-праве достаточно участия в одной услуге; действие над всей записью. Изменение цены требует sale.price.override:write; завершённую запись STAFF не редактирует. |
 | `PATCH /locations/:locationId/bookings/:id/status` | `updateStatus` | L: `booking:write` или `booking.own:write` | При own-праве достаточно участия в одной услуге. Завершение проводит услуги/начисления без order:write; отмена или откат завершённого требуют order.return:write. |
