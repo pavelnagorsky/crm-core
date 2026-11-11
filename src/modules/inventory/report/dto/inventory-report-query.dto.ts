@@ -1,13 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { Matches } from 'class-validator';
-import regularExpressions from '../../../../shared/regular-expressions.js';
+import { IsCalendarDate } from '../../../../shared/time/decorators/is-calendar-date.validator.js';
 
 export class InventoryReportQueryDto {
   @ApiProperty({ type: String, format: 'date', example: '2026-10-01' })
-  @Matches(regularExpressions.calendarDate)
+  @IsCalendarDate()
   from: string;
 
   @ApiProperty({ type: String, format: 'date', example: '2026-10-31' })
-  @Matches(regularExpressions.calendarDate)
+  @IsCalendarDate()
   to: string;
 }

@@ -1,7 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsDateString, Matches } from 'class-validator';
-import regularExpressions from '../../../shared/regular-expressions.js';
 import { IsDateRangeValid } from '../../staff/decorators/is-date-range-valid.decorator.js';
+import { IsCalendarDate } from '../../../shared/time/decorators/is-calendar-date.validator.js';
 
 @IsDateRangeValid()
 export class ClientBookingSlotsRequestDto {
@@ -10,8 +9,7 @@ export class ClientBookingSlotsRequestDto {
     format: 'date',
     description: 'First date, inclusive. Maximum range is 62 days.',
   })
-  @IsDateString({ strict: true })
-  @Matches(regularExpressions.calendarDate)
+  @IsCalendarDate()
   from: string;
 
   @ApiProperty({
@@ -19,7 +17,6 @@ export class ClientBookingSlotsRequestDto {
     format: 'date',
     description: 'Last date, inclusive.',
   })
-  @IsDateString({ strict: true })
-  @Matches(regularExpressions.calendarDate)
+  @IsCalendarDate()
   to: string;
 }

@@ -1,6 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsEnum, IsOptional, IsUUID, Matches } from 'class-validator';
-import regularExpressions from '../../../shared/regular-expressions.js';
+import { IsEnum, IsOptional, IsUUID } from 'class-validator';
+import { IsCalendarDate } from '../../../shared/time/decorators/is-calendar-date.validator.js';
 import { InventoryDocumentType } from '../enums/inventory-document-type.enum.js';
 
 export class InventoryDocumentStatusCountsRequestDto {
@@ -11,12 +11,12 @@ export class InventoryDocumentStatusCountsRequestDto {
 
   @ApiProperty({ type: String, format: 'date', required: false })
   @IsOptional()
-  @Matches(regularExpressions.calendarDate)
+  @IsCalendarDate()
   from?: string;
 
   @ApiProperty({ type: String, format: 'date', required: false })
   @IsOptional()
-  @Matches(regularExpressions.calendarDate)
+  @IsCalendarDate()
   to?: string;
 
   @ApiProperty({ type: String, format: 'uuid', required: false })

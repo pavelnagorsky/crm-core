@@ -1,17 +1,17 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsArray, IsEnum, IsOptional, IsUUID, Matches } from 'class-validator';
+import { IsArray, IsEnum, IsOptional, IsUUID } from 'class-validator';
+import { IsCalendarDate } from '../../../../shared/time/decorators/is-calendar-date.validator.js';
 import { PaginationRequestDto } from '../../../../shared/dto/pagination-request.dto.js';
-import regularExpressions from '../../../../shared/regular-expressions.js';
 import { ToArray } from '../../../../shared/transforms/to-array.transform.js';
 import { InventoryTurnoverOrderBy } from '../enums/inventory-turnover-order-by.enum.js';
 
 export class InventoryTurnoverRequestDto extends PaginationRequestDto<InventoryTurnoverOrderBy> {
   @ApiProperty({ type: String, format: 'date', example: '2026-10-01' })
-  @Matches(regularExpressions.calendarDate)
+  @IsCalendarDate()
   from: string;
 
   @ApiProperty({ type: String, format: 'date', example: '2026-10-31' })
-  @Matches(regularExpressions.calendarDate)
+  @IsCalendarDate()
   to: string;
 
   @ApiProperty({
