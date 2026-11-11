@@ -110,21 +110,12 @@ export class DashboardRangeService {
           ErrorCode.DASHBOARD_CUSTOM_RANGE_REQUIRED,
           HttpStatus.BAD_REQUEST,
         );
-      // Both dates are treated as inclusive calendar days in the business timezone.
+      // Both dates are inclusive "YYYY-MM-DD" calendar days in the business timezone.
       // "from" is the start of that day, "to" is the start of the day AFTER the end day
       // so the half-open [from, to) window covers the end day in full.
-      const fromParts = TimeUtils.toZonedParts(new Date(dto.from), timezone);
-      const toParts = TimeUtils.toZonedParts(new Date(dto.to), timezone);
-      const from = TimeUtils.zonedDayStart(
-        fromParts.year,
-        fromParts.month,
-        fromParts.day,
-        timezone,
-      );
-      const to = TimeUtils.zonedDayStart(
-        toParts.year,
-        toParts.month,
-        toParts.day + 1,
+      const from = TimeUtils.zonedDateStart(dto.from, timezone);
+      const to = TimeUtils.zonedDateStart(
+        TimeUtils.addDaysStr(dto.to, 1),
         timezone,
       );
       if (from >= to)

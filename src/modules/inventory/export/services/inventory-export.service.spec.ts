@@ -55,6 +55,7 @@ describe('InventoryExportService', () => {
       id: 'location-1',
       name: 'Main warehouse',
       currency: 'BYN',
+      timezone: 'Europe/Minsk',
     }),
   };
   const locale = new LocaleService();
@@ -69,6 +70,10 @@ describe('InventoryExportService', () => {
     inventory.searchInventory.mockReset();
     inventory.searchMovements.mockReset();
     locations.findById.mockClear();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('exports every balance matching the inventory filters as xlsx', async () => {
@@ -141,7 +146,7 @@ describe('InventoryExportService', () => {
     expect(grid.row(2).text(8)).toBe('BYN');
     expect(grid.row(2).text(10)).toBe('Нет');
     expect(grid.row(2).text(11)).toBe('Нет');
-    expect(grid.row(2).text(12)).toBe('2026-10-01');
+    expect(grid.row(2).text(12)).toBe('01.10.2026 13:00');
     expect(grid.row(3).text(2)).toBe('');
     expect(grid.row(3).text(3)).toBe('');
     expect(grid.row(3).text(8)).toBe('BYN');
@@ -179,7 +184,7 @@ describe('InventoryExportService', () => {
           averageUnitCostAfter: new Prisma.Decimal(3),
           unitCost: new Prisma.Decimal(3),
           totalCost: new Prisma.Decimal(15),
-          occurredAt: new Date('2026-10-02T09:30:00.000Z'),
+          occurredAt: new Date('2026-11-11T21:30:00.000Z'),
           idempotencyKey: 'document-1:post:document-item-1',
           reversedMovementId: null,
           createdAt: new Date('2026-10-02T09:31:00.000Z'),
@@ -228,7 +233,7 @@ describe('InventoryExportService', () => {
     expect(grid.row(1).text(9)).toBe('Остаток до');
     expect(grid.row(1).text(10)).toBe('Остаток после');
     expect(grid.row(1).text(13)).toBe('ID');
-    expect(grid.row(2).text(1)).toBe('2026-10-02T09:30:00.000Z');
+    expect(grid.row(2).text(1)).toBe('12.11.2026 00:30');
     expect(grid.row(2).text(3)).toBe('Shampoo');
     expect(grid.row(2).text(4)).toBe('SKU-1');
     expect(grid.row(2).text(5)).toBe('5.000');
@@ -240,10 +245,12 @@ describe('InventoryExportService', () => {
     expect(grid.row(2).text(11)).toBe('document-1');
     expect(grid.row(2).text(12)).toBe('');
     expect(grid.row(2).text(13)).toBe('movement-1');
-    expect(grid.row(2).text(14)).toBe('2026-10-02T09:31:00.000Z');
+    expect(grid.row(2).text(14)).toBe('02.10.2026 12:31');
   });
 
   it('exports an inventory statement for manual stock count', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-11-11T21:30:00.000Z'));
     inventory.searchInventory.mockResolvedValue({
       items: [
         balance({ name: 'Shampoo', quantityOnHand: new Prisma.Decimal(5) }),
@@ -273,9 +280,7 @@ describe('InventoryExportService', () => {
       pageSize: 1,
       isExport: true,
     });
-    expect(file.filename).toMatch(
-      /^inventory-statement-\d{4}-\d{2}-\d{2}\.xlsx$/,
-    );
+    expect(file.filename).toBe('inventory-statement-2026-11-12.xlsx');
 
     const buffer = await collect(file.stream);
     const grid = await XlsxUtils.read(buffer);
@@ -283,6 +288,7 @@ describe('InventoryExportService', () => {
     if (!grid) return;
     expect(grid.row(1).text(1)).toBe('Инвентаризационная ведомость');
     expect(grid.row(2).text(2)).toBe('Main warehouse');
+    expect(grid.row(3).text(2)).toBe('2026-11-12');
     expect(grid.row(5).text(4)).toBe('БЕИ');
     expect(grid.row(5).text(5)).toBe('Учетный остаток');
     expect(grid.row(5).text(6)).toBe('Факт');

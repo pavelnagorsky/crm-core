@@ -5,6 +5,7 @@ import {
   LocaleService,
 } from '../../../../shared/i18n/locale.service.js';
 import { DocumentMessages } from '../../../../shared/interfaces/document-messages.interface.js';
+import { TimeUtils } from '../../../../shared/time/time.utils.js';
 import { XlsxColumn } from '../../../../shared/xlsx/interfaces/xlsx-column.interface.js';
 import { XlsxFile } from '../../../../shared/xlsx/interfaces/xlsx-file.interface.js';
 import { XlsxUtils } from '../../../../shared/xlsx/xlsx.utils.js';
@@ -66,7 +67,7 @@ export class ClientsExportService {
       phone: client.phone,
       email: client.email ?? '',
       birthDate: client.birthDate
-        ? client.birthDate.toISOString().slice(0, 10)
+        ? TimeUtils.dateOnlyStr(client.birthDate)
         : '',
       gender: this.genderLabel(client.gender, text),
       notes: client.notes ?? '',

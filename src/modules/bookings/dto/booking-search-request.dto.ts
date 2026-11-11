@@ -9,6 +9,7 @@ import {
   IsUUID,
   MaxLength,
 } from 'class-validator';
+import { IsCalendarDate } from '../../../shared/time/decorators/is-calendar-date.validator.js';
 import { PaginationRequestDto } from '../../../shared/dto/pagination-request.dto.js';
 import { catalogItemIdsDescription } from '../utils/catalog-item-filter.js';
 import { BookingSearchOrderBy } from '../enums/booking-search-order-by.enum.js';
@@ -88,6 +89,50 @@ export class BookingSearchRequestDto extends PaginationRequestDto<BookingSearchO
   @IsOptional()
   @IsDateString()
   createdTo?: string;
+
+  @ApiProperty({
+    type: String,
+    format: 'date',
+    required: false,
+    description:
+      'First start day (YYYY-MM-DD) in the location timezone, inclusive',
+  })
+  @IsOptional()
+  @IsCalendarDate()
+  startDateFrom?: string;
+
+  @ApiProperty({
+    type: String,
+    format: 'date',
+    required: false,
+    description:
+      'Last start day (YYYY-MM-DD) in the location timezone, inclusive',
+  })
+  @IsOptional()
+  @IsCalendarDate()
+  startDateTo?: string;
+
+  @ApiProperty({
+    type: String,
+    format: 'date',
+    required: false,
+    description:
+      'First creation day (YYYY-MM-DD) in the location timezone, inclusive',
+  })
+  @IsOptional()
+  @IsCalendarDate()
+  createdDateFrom?: string;
+
+  @ApiProperty({
+    type: String,
+    format: 'date',
+    required: false,
+    description:
+      'Last creation day (YYYY-MM-DD) in the location timezone, inclusive',
+  })
+  @IsOptional()
+  @IsCalendarDate()
+  createdDateTo?: string;
 
   @ApiProperty({ enum: BookingSearchOrderBy, required: false })
   @IsOptional()

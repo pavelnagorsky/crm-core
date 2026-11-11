@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { InventoryMovement } from '@prisma/client';
+import { InventoryMovement, Location } from '@prisma/client';
 import ExcelJS from 'exceljs';
 import { PassThrough } from 'stream';
 import { labelOf } from '../../../../shared/i18n/label-of.js';
@@ -11,6 +11,7 @@ import { productUnitLabelOf } from '../../../../shared/i18n/product-unit-label.j
 import { I18nLocale } from '../../../../shared/interfaces/i18n-locale.interface.js';
 import { MoneyUtils } from '../../../../shared/money/money.utils.js';
 import { QuantityUtils } from '../../../../shared/quantity/quantity.utils.js';
+import { TimeUtils } from '../../../../shared/time/time.utils.js';
 import { XlsxColumn } from '../../../../shared/xlsx/interfaces/xlsx-column.interface.js';
 import { XlsxFile } from '../../../../shared/xlsx/interfaces/xlsx-file.interface.js';
 import { XlsxUtils } from '../../../../shared/xlsx/xlsx.utils.js';
@@ -32,7 +33,7 @@ type InventoryBalanceRow = {
   reorderLevel: string;
   lowStock: string;
   outOfStock: string;
-  updatedAt: Date | string;
+  updatedAt: string;
 };
 
 type InventoryMovementRow = {
@@ -89,10 +90,11 @@ export class InventoryExportService {
       }),
     ]);
     return XlsxUtils.table(
-      items.map((item) => this.toRow(item, messages, location.currency)),
+      items.map((item) => this.toRow(item, messages, location)),
       columns,
       'inventory-balances',
       inventory.balancesSheet,
+      location.timezone,
     );
   }
 
@@ -129,12 +131,11 @@ export class InventoryExportService {
       }),
     ]);
     return XlsxUtils.table(
-      items.map((item) =>
-        this.toMovementRow(item, messages, location.currency),
-      ),
+      items.map((item) => this.toMovementRow(item, messages, location)),
       columns,
       'inventory-movements',
       inventory.movementsSheet,
+      location.timezone,
     );
   }
 
@@ -145,7 +146,6 @@ export class InventoryExportService {
     const messages = this.locale.get(lang);
     const inventory = messages.documents.inventory;
     const common = messages.documents.common;
-    const day = new Date().toISOString().slice(0, 10);
     const [location, { items }] = await Promise.all([
       this.locations.findById(locationId),
       this.inventory.searchInventory(locationId, {
@@ -155,6 +155,7 @@ export class InventoryExportService {
       }),
     ]);
 
+    const day = TimeUtils.zonedDateStr(new Date(), location.timezone);
     const workbook = new ExcelJS.Workbook();
     const sheet = workbook.addWorksheet(inventory.inventoryStatementSheet);
     sheet.columns = [
@@ -239,7 +240,7 @@ export class InventoryExportService {
   private toRow(
     item: InventoryBalanceView,
     messages: I18nLocale,
-    currency: string,
+    { currency, timezone }: Pick<Location, 'currency' | 'timezone'>,
   ): InventoryBalanceRow {
     const inventory = messages.documents.inventory;
     return {
@@ -258,17 +259,19 @@ export class InventoryExportService {
       reorderLevel: QuantityUtils.format(item.reorderLevel),
       lowStock: item.lowStock ? inventory.yes : inventory.no,
       outOfStock: item.outOfStock ? inventory.yes : inventory.no,
-      updatedAt: item.updatedAt ?? '',
+      updatedAt: item.updatedAt
+        ? TimeUtils.zonedDateTimeStr(item.updatedAt, timezone)
+        : '',
     };
   }
 
   private toMovementRow(
     item: InventoryMovement,
     messages: I18nLocale,
-    currency: string,
+    { currency, timezone }: Pick<Location, 'currency' | 'timezone'>,
   ): InventoryMovementRow {
     return {
-      occurredAt: item.occurredAt.toISOString(),
+      occurredAt: TimeUtils.zonedDateTimeStr(item.occurredAt, timezone),
       type: labelOf(messages.inventoryMovementType, item.type),
       productName: item.productName,
       productSku: item.productSku ?? '',
@@ -281,7 +284,7 @@ export class InventoryExportService {
       documentId: item.documentId ?? '',
       orderId: item.orderId ?? '',
       id: item.id,
-      createdAt: item.createdAt.toISOString(),
+      createdAt: TimeUtils.zonedDateTimeStr(item.createdAt, timezone),
     };
   }
 

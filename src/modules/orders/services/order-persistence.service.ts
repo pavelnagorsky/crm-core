@@ -10,6 +10,7 @@ import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.
 import { stableOrderBy } from '../../../shared/database/stable-order-by.js';
 import { OrderDirection } from '../../../shared/enums/order-direction.enum.js';
 import { PaginatedResult } from '../../../shared/interfaces/paginated-result.interface.js';
+import { TimeUtils } from '../../../shared/time/time.utils.js';
 import regularExpressions from '../../../shared/regular-expressions.js';
 import { OrderPricingCalculator } from '../calculators/order-pricing.calculator.js';
 import { orderInclude } from '../constants/order-include.constant.js';
@@ -32,11 +33,16 @@ export class OrderPersistenceService {
     return this.findExisting({ id: orderId, locationId });
   }
 
+  /**
+   * `timezone` is the location timezone. It is required only when the calendar-day filters
+   * (`dateFrom`, `dateTo`) are set.
+   */
   async search(
     locationId: string,
     dto: OrderSearchRequestDto,
+    timezone?: string,
   ): Promise<PaginatedResult<OrderWithItems>> {
-    const where = this.orderWhere(locationId, dto);
+    const where = this.orderWhere(locationId, dto, timezone);
     const direction = dto.orderDirection ?? OrderDirection.DESC;
     const args: Prisma.OrderFindManyArgs = {
       where,
@@ -60,10 +66,11 @@ export class OrderPersistenceService {
   async getStatusCounts(
     locationId: string,
     dto: OrderStatusCountsRequestDto,
+    timezone?: string,
   ): Promise<OrderStatusCount[]> {
     const rows = await this.db.order.groupBy({
       by: ['status'],
-      where: this.orderWhere(locationId, dto),
+      where: this.orderWhere(locationId, dto, timezone),
       _count: { _all: true },
     });
     const byStatus = new Map(rows.map((row) => [row.status, row._count._all]));
@@ -199,7 +206,10 @@ export class OrderPersistenceService {
       bookingId?: string;
       from?: string;
       to?: string;
+      dateFrom?: string;
+      dateTo?: string;
     },
+    timezone?: string,
   ): Prisma.OrderWhereInput {
     const where: Prisma.OrderWhereInput = {
       location: ACTIVE_LOCATION_WHERE,
@@ -216,6 +226,21 @@ export class OrderPersistenceService {
             }
           : undefined,
     };
+    if (filter.dateFrom || filter.dateTo) {
+      if (!timezone)
+        throw new Error(
+          'Location timezone is required for calendar-day filters',
+        );
+      where.AND = [
+        {
+          occurredAt: TimeUtils.zonedDaysRange(
+            filter.dateFrom,
+            filter.dateTo,
+            timezone,
+          ),
+        },
+      ];
+    }
     const search = filter.search?.trim();
     if (search) {
       const terms = search.split(regularExpressions.whitespace).filter(Boolean);

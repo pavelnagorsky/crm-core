@@ -131,18 +131,26 @@ export class OrdersFacade {
     return this.drafts.priceProductItems(locationId, items);
   }
 
-  search(
+  async search(
     locationId: string,
     dto: OrderSearchRequestDto,
   ): Promise<PaginatedResult<OrderWithItems>> {
-    return this.persistence.search(locationId, dto);
+    return this.persistence.search(
+      locationId,
+      dto,
+      await this.dayFilterTimezone(locationId, dto),
+    );
   }
 
-  getStatusCounts(
+  async getStatusCounts(
     locationId: string,
     dto: OrderStatusCountsRequestDto,
   ): Promise<OrderStatusCount[]> {
-    return this.persistence.getStatusCounts(locationId, dto);
+    return this.persistence.getStatusCounts(
+      locationId,
+      dto,
+      await this.dayFilterTimezone(locationId, dto),
+    );
   }
 
   addDraftItems(
@@ -325,5 +333,13 @@ export class OrdersFacade {
       },
     );
     return order;
+  }
+
+  private async dayFilterTimezone(
+    locationId: string,
+    dto: { dateFrom?: string; dateTo?: string },
+  ): Promise<string | undefined> {
+    if (!dto.dateFrom && !dto.dateTo) return undefined;
+    return (await this.locations.getLocale(locationId)).timezone;
   }
 }

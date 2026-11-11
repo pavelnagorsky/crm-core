@@ -5,6 +5,7 @@ import { BookingFixtureOptions } from '../../testing/interfaces/booking-fixture-
 import { OrderDirection } from '../../../../shared/enums/order-direction.enum.js';
 import { LocaleService } from '../../../../shared/i18n/locale.service.js';
 import { XlsxUtils } from '../../../../shared/xlsx/xlsx.utils.js';
+import { LocationService } from '../../../location/services/location.service.js';
 import { BookingsFacade } from '../../bookings.facade.js';
 import { BookingSearchOrderBy } from '../../enums/booking-search-order-by.enum.js';
 import { BookingStatus as BookingStatusFilter } from '../../enums/booking-status.enum.js';
@@ -77,16 +78,25 @@ describe('BookingsExportService', () => {
   const bookings = {
     search: vi.fn<BookingsFacade['search']>(),
   };
+  const locations = {
+    getLocale: vi.fn<LocationService['getLocale']>(),
+  };
   const locale = {
     get: vi.fn<LocaleService['get']>(),
   };
   const service = new BookingsExportService(
     bookings as unknown as BookingsFacade,
+    locations as unknown as LocationService,
     locale as unknown as LocaleService,
   );
 
   beforeEach(() => {
     bookings.search.mockReset();
+    locations.getLocale.mockReset();
+    locations.getLocale.mockResolvedValue({
+      timezone: 'Europe/Minsk',
+      currency: 'BYN',
+    });
     locale.get.mockReset();
     locale.get.mockReturnValue({
       documents: { bookings: labels },
@@ -98,7 +108,10 @@ describe('BookingsExportService', () => {
   it('exports every booking matching the table filters and order as xlsx', async () => {
     bookings.search.mockResolvedValue({
       items: [
-        booking(),
+        booking({
+          startAt: new Date('2026-11-11T21:30:00Z'),
+          endAt: new Date('2026-11-11T22:30:00Z'),
+        }),
         booking({
           id: 'booking-2',
           status: BookingStatus.CANCELLED,
@@ -152,7 +165,11 @@ describe('BookingsExportService', () => {
     expect(grid.row(1).text(1)).toBe('Начало');
     expect(grid.row(1).text(11)).toBe('Цена');
     expect(grid.row(1).text(16)).toBe('Создана');
-    expect(grid.row(2).text(1)).toBe('2026-09-24T10:00:00.000Z');
+    expect(locations.getLocale).toHaveBeenCalledWith('business-1');
+    expect(grid.row(2).text(1)).toBe('12.11.2026 00:30');
+    expect(grid.row(2).text(2)).toBe('12.11.2026 01:30');
+    expect(grid.row(2).text(16)).toBe('20.09.2026 11:00');
+    expect(grid.row(3).text(1)).toBe('24.09.2026 13:00');
     expect(grid.row(2).text(3)).toBe('Подтверждено');
     expect(grid.row(2).text(4)).toBe('Вручную');
     expect(grid.row(2).text(5)).toBe('Анна');

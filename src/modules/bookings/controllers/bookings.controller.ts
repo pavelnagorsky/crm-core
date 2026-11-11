@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Header,
   HttpCode,
@@ -18,6 +19,7 @@ import {
 import {
   ApiConflictResponse,
   ApiCreatedResponse,
+  ApiForbiddenResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
@@ -148,6 +150,11 @@ export class BookingsController {
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Location, service, or staff not found' })
   @ApiConflictResponse({ description: 'Slot is no longer available' })
+  @ApiForbiddenResponse({
+    description:
+      'BOOKING_COMPLETED_CREATE_FORBIDDEN: the visit has already ended, so it would be created as completed, and the caller lacks order write permission',
+    type: ForbiddenException,
+  })
   @Permissions(Write(Claim.BOOKING))
   @Post('locations/:locationId/bookings/manual')
   async createManual(

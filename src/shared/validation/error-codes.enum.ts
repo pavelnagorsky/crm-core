@@ -231,6 +231,10 @@ export const ErrorCode = {
     code: 'BOOKING_CUSTOM_TIME_MANUAL_ONLY',
     message: 'Only manual bookings can use custom time',
   },
+  BOOKING_COMPLETED_CREATE_FORBIDDEN: {
+    code: 'BOOKING_COMPLETED_CREATE_FORBIDDEN',
+    message: 'Creating a completed booking is not allowed',
+  },
   BOOKING_TIME_INVALID: {
     code: 'BOOKING_TIME_INVALID',
     message: 'Booking end time must be after start time',

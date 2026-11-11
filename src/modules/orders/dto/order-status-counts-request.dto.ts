@@ -6,6 +6,7 @@ import {
   IsUUID,
   MaxLength,
 } from 'class-validator';
+import { IsCalendarDate } from '../../../shared/time/decorators/is-calendar-date.validator.js';
 
 export class OrderStatusCountsRequestDto {
   @ApiProperty({ type: String, required: false })
@@ -38,4 +39,26 @@ export class OrderStatusCountsRequestDto {
   @IsOptional()
   @IsDateString()
   to?: string;
+
+  @ApiProperty({
+    type: String,
+    format: 'date',
+    required: false,
+    description:
+      'First order day (YYYY-MM-DD) in the location timezone, inclusive. Filters by occurredAt',
+  })
+  @IsOptional()
+  @IsCalendarDate()
+  dateFrom?: string;
+
+  @ApiProperty({
+    type: String,
+    format: 'date',
+    required: false,
+    description:
+      'Last order day (YYYY-MM-DD) in the location timezone, inclusive. Filters by occurredAt',
+  })
+  @IsOptional()
+  @IsCalendarDate()
+  dateTo?: string;
 }

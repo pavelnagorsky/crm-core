@@ -1043,6 +1043,40 @@ describe('BookingCreateFacade custom time', () => {
       vi.useRealTimers();
     }
   });
+
+  it('rejects an elapsed booking with a coded error when the caller cannot complete it', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-20T07:30:00.000Z'));
+    try {
+      const { service, tx } = customTimeSetup();
+
+      const error = await service
+        .createManualBooking(
+          'business-1',
+          {
+            ...dto,
+            isCustomTime: true,
+            startAt: '2026-09-20T10:04:00',
+            endAt: '2026-09-20T10:30:00',
+          },
+          { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER },
+          false,
+        )
+        .then(
+          () => null,
+          (caught: unknown) => caught,
+        );
+
+      expect(error).toBeInstanceOf(AppException);
+      expect((error as AppException).errorCode).toBe(
+        'BOOKING_COMPLETED_CREATE_FORBIDDEN',
+      );
+      expect((error as AppException).getStatus()).toBe(403);
+      expect(tx.booking.create).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 function createBookingService(

@@ -8,6 +8,13 @@ export class WidgetMetaDto {
   @ApiProperty({ type: () => WidgetPeriodDto, required: false })
   previousPeriod?: WidgetPeriodDto;
 
+  @ApiProperty({
+    type: String,
+    description:
+      'IANA timezone the period and buckets were computed in, e.g. Europe/Minsk',
+  })
+  timezone: string;
+
   @ApiProperty({ type: String, required: false })
   currency?: string;
 }

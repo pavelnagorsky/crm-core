@@ -393,6 +393,7 @@ export class BookingsAnalyticsService {
       previousPeriod: ctx.range.compareWithPrevious
         ? this.buckets.previousPeriodDto(ctx.range)
         : undefined,
+      timezone: ctx.range.timezone,
       currency: withCurrency ? ctx.range.currency : undefined,
     };
   }

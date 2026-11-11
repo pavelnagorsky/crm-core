@@ -162,6 +162,9 @@ function setup() {
       brandId: 'brand-1',
       currency: 'BYN',
     }),
+    getLocale: vi
+      .fn()
+      .mockResolvedValue({ timezone: 'America/New_York', currency: 'USD' }),
   };
   const events = { emit: vi.fn() };
   const compute = new OrderPricingCalculator();
@@ -402,6 +405,38 @@ function attachStatefulBookingOrder(tx: ReturnType<typeof setup>['tx']) {
 }
 
 describe('OrdersFacade', () => {
+  it('counts orders by inclusive calendar days in the location timezone', async () => {
+    const { service, db, locations } = setup();
+    db.order.groupBy.mockResolvedValue([]);
+
+    await service.getStatusCounts('location-1', {
+      dateFrom: '2026-11-01',
+      dateTo: '2026-11-30',
+    });
+
+    expect(locations.getLocale).toHaveBeenCalledWith('location-1');
+    expect(db.order.groupBy.mock.calls[0][0].where.AND).toEqual([
+      {
+        occurredAt: {
+          gte: new Date('2026-11-01T04:00:00.000Z'),
+          lt: new Date('2026-12-01T05:00:00.000Z'),
+        },
+      },
+    ]);
+  });
+
+  it('does not resolve the timezone without calendar-day filters', async () => {
+    const { service, db, locations } = setup();
+    db.order.groupBy.mockResolvedValue([]);
+
+    await service.getStatusCounts('location-1', {
+      from: '2026-11-01T00:00:00.000Z',
+    });
+
+    expect(locations.getLocale).not.toHaveBeenCalled();
+    expect(db.order.groupBy.mock.calls[0][0].where.AND).toBeUndefined();
+  });
+
   it('keeps owner custom price separate from discounts', async () => {
     const { service, db, products, inventory, earnings } = setup();
     products.resolveForSale.mockResolvedValue([product()]);

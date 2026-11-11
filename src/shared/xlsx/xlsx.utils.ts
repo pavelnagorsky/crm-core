@@ -2,6 +2,7 @@ import { format } from 'date-fns';
 import ExcelJS from 'exceljs';
 import JSZip from 'jszip';
 import { PassThrough } from 'stream';
+import { TimeUtils } from '../time/time.utils.js';
 import { XlsxBook } from './interfaces/xlsx-book.interface.js';
 import { XlsxCellValue } from './interfaces/xlsx-cell-value.interface.js';
 import { XlsxCells } from './interfaces/xlsx-cells.interface.js';
@@ -46,14 +47,18 @@ export class XlsxUtils {
     return name.endsWith('.xlsx') && mimeOk;
   }
 
-  /** One sheet of columns and rows. Filename is `${basename}-YYYY-MM-DD.xlsx`. */
+  /**
+   * One sheet of columns and rows. Filename is `${basename}-YYYY-MM-DD.xlsx`, where the
+   * day is today in `timezone`.
+   */
   static table<T extends Record<string, unknown>>(
     rows: readonly T[],
     columns: readonly XlsxColumn<T>[],
     basename: string,
     name = basename,
+    timezone = 'UTC',
   ): XlsxFile {
-    const day = new Date().toISOString().slice(0, 10);
+    const day = TimeUtils.zonedDateStr(new Date(), timezone);
     return XlsxUtils.write(`${basename}-${day}.xlsx`, (book) => {
       const sheet = book.addSheet(name);
       sheet.setColumns(

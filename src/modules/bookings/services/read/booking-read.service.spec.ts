@@ -70,4 +70,35 @@ describe('Participant-scoped booking queries', () => {
     expect(db.booking.findMany.mock.calls[0][0].where.AND).toBeUndefined();
     expect(db.booking.findMany.mock.calls[0][0].where.items).toBeUndefined();
   });
+
+  it('filters by inclusive calendar days in the location timezone', async () => {
+    await service.search(
+      'location-1',
+      {
+        page: 1,
+        pageSize: 10,
+        staffIds: ['boris'],
+        startDateFrom: '2026-11-11',
+        startDateTo: '2026-11-12',
+        createdDateTo: '2026-11-10',
+      } as BookingSearchRequestDto,
+      undefined,
+      'Europe/Minsk',
+    );
+    expect(db.booking.findMany.mock.calls[0][0].where.AND).toEqual([
+      { items: { some: { staffId: { in: ['boris'] } } } },
+      {
+        startAt: {
+          gte: new Date('2026-11-10T21:00:00.000Z'),
+          lt: new Date('2026-11-12T21:00:00.000Z'),
+        },
+      },
+      {
+        createdAt: {
+          gte: undefined,
+          lt: new Date('2026-11-10T21:00:00.000Z'),
+        },
+      },
+    ]);
+  });
 });

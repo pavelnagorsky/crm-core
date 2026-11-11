@@ -7,6 +7,7 @@ import {
   IsUUID,
   MaxLength,
 } from 'class-validator';
+import { IsCalendarDate } from '../../../shared/time/decorators/is-calendar-date.validator.js';
 import { PaginationRequestDto } from '../../../shared/dto/pagination-request.dto.js';
 import { OrderSearchOrderBy } from '../enums/order-search-order-by.enum.js';
 import { OrderStatus } from '../enums/order-status.enum.js';
@@ -47,6 +48,28 @@ export class OrderSearchRequestDto extends PaginationRequestDto<OrderSearchOrder
   @IsOptional()
   @IsDateString()
   to?: string;
+
+  @ApiProperty({
+    type: String,
+    format: 'date',
+    required: false,
+    description:
+      'First order day (YYYY-MM-DD) in the location timezone, inclusive. Filters by occurredAt',
+  })
+  @IsOptional()
+  @IsCalendarDate()
+  dateFrom?: string;
+
+  @ApiProperty({
+    type: String,
+    format: 'date',
+    required: false,
+    description:
+      'Last order day (YYYY-MM-DD) in the location timezone, inclusive. Filters by occurredAt',
+  })
+  @IsOptional()
+  @IsCalendarDate()
+  dateTo?: string;
 
   @ApiProperty({ enum: OrderSearchOrderBy, required: false })
   @IsOptional()

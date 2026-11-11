@@ -188,6 +188,7 @@ export class DashboardWidgetFactory {
       breakdown: { dimension: 'saleType', items, total },
       meta: {
         period: this.buckets.periodDto(ctx.range),
+        timezone: ctx.range.timezone,
         currency: ctx.range.currency,
       },
     };
@@ -474,6 +475,7 @@ export class DashboardWidgetFactory {
       previousPeriod: ctx.range.compareWithPrevious
         ? this.buckets.previousPeriodDto(ctx.range)
         : undefined,
+      timezone: ctx.range.timezone,
       currency: withCurrency ? ctx.range.currency : undefined,
     };
   }

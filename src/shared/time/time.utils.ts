@@ -123,6 +123,30 @@ export class TimeUtils {
     return TimeUtils.localToUtc(local, timezone);
   }
 
+  /** Returns the UTC instant of 00:00 on a "YYYY-MM-DD" calendar day in the target timezone. */
+  static zonedDateStart(dateStr: string, timezone: string): Date {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    return TimeUtils.zonedDayStart(year, month, day, timezone);
+  }
+
+  /**
+   * Half-open UTC bounds for inclusive "YYYY-MM-DD" calendar days in the target timezone:
+   * `gte` is the start of `from`, `lt` is the start of the day after `to`.
+   * A missing side stays open.
+   */
+  static zonedDaysRange(
+    from: string | undefined,
+    to: string | undefined,
+    timezone: string,
+  ): { gte?: Date; lt?: Date } {
+    return {
+      gte: from ? TimeUtils.zonedDateStart(from, timezone) : undefined,
+      lt: to
+        ? TimeUtils.zonedDateStart(TimeUtils.addDaysStr(to, 1), timezone)
+        : undefined,
+    };
+  }
+
   /** Shifts a UTC Date by N calendar days in the target timezone, snapping to midnight. */
   static addDaysInTz(date: Date, days: number, timezone: string): Date {
     const p = TimeUtils.toZonedParts(date, timezone);
@@ -169,6 +193,12 @@ export class TimeUtils {
   static zonedDateStr(date: Date, timezone: string): string {
     const p = TimeUtils.toZonedParts(date, timezone);
     return `${pad(p.year, 4)}-${pad(p.month, 2)}-${pad(p.day, 2)}`;
+  }
+
+  /** Formats a UTC Date as "dd.MM.yyyy HH:mm" wall-clock time in the target timezone. */
+  static zonedDateTimeStr(date: Date, timezone: string): string {
+    const p = TimeUtils.toZonedParts(date, timezone);
+    return `${pad(p.day, 2)}.${pad(p.month, 2)}.${pad(p.year, 4)} ${pad(p.hour, 2)}:${pad(p.minute, 2)}`;
   }
 
   /**

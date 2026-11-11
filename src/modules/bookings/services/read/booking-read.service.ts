@@ -12,6 +12,7 @@ import { BookingWithItems } from '../../interfaces/booking-with-items.interface.
 import { bookingWithItemsInclude } from '../../constants/booking-with-items.include.js';
 import { catalogItemMatch } from '../../utils/catalog-item-filter.js';
 import regularExpressions from '../../../../shared/regular-expressions.js';
+import { TimeUtils } from '../../../../shared/time/time.utils.js';
 
 @Injectable()
 export class BookingReadService {
@@ -47,12 +48,22 @@ export class BookingReadService {
     return booking;
   }
 
+  /**
+   * `timezone` is the location timezone. It is required only when the calendar-day filters
+   * (`startDateFrom`, `startDateTo`, `createdDateFrom`, `createdDateTo`) are set.
+   */
   async search(
     locationId: string,
     dto: BookingSearchRequestDto,
     participantStaffId?: string,
+    timezone?: string,
   ): Promise<PaginatedResult<BookingWithItems>> {
-    const where = this.buildSearchWhere(locationId, dto, participantStaffId);
+    const where = this.buildSearchWhere(
+      locationId,
+      dto,
+      participantStaffId,
+      timezone,
+    );
     const direction = dto.orderDirection ?? OrderDirection.DESC;
     const orderBy = dto.orderBy ?? BookingSearchOrderBy.START_AT;
 
@@ -109,12 +120,14 @@ export class BookingReadService {
     locationId: string,
     dto: Partial<BookingSearchRequestDto>,
     participantStaffId?: string,
+    timezone?: string,
   ): Prisma.BookingWhereInput {
     const where: Prisma.BookingWhereInput = {
       location: ACTIVE_LOCATION_WHERE,
       locationId,
       deletedAt: null,
     };
+    const and: Prisma.BookingWhereInput[] = [];
 
     if (dto.status) where.status = dto.status;
     if (dto.clientId) where.clientId = dto.clientId;
@@ -122,7 +135,7 @@ export class BookingReadService {
       dto.staffIds,
       dto.catalogItemIds,
     );
-    if (catalogFilter) where.AND = [catalogFilter];
+    if (catalogFilter) and.push(catalogFilter);
     if (participantStaffId)
       where.items = { some: { staffId: participantStaffId } };
     if (dto.startFrom || dto.startTo) {
@@ -147,6 +160,25 @@ export class BookingReadService {
         );
       }
     }
+    if (dto.startDateFrom || dto.startDateTo) {
+      and.push({
+        startAt: TimeUtils.zonedDaysRange(
+          dto.startDateFrom,
+          dto.startDateTo,
+          this.requireTimezone(timezone),
+        ),
+      });
+    }
+    if (dto.createdDateFrom || dto.createdDateTo) {
+      and.push({
+        createdAt: TimeUtils.zonedDaysRange(
+          dto.createdDateFrom,
+          dto.createdDateTo,
+          this.requireTimezone(timezone),
+        ),
+      });
+    }
+    if (and.length) where.AND = and;
     const search = dto.search?.trim();
     if (search) {
       const terms = search.split(regularExpressions.whitespace).filter(Boolean);
@@ -193,6 +225,12 @@ export class BookingReadService {
     }
 
     return where;
+  }
+
+  private requireTimezone(timezone: string | undefined): string {
+    if (!timezone)
+      throw new Error('Location timezone is required for calendar-day filters');
+    return timezone;
   }
 
   private searchOrderBy(

@@ -5,9 +5,9 @@ import { DashboardPeriod } from '../enums/dashboard-period.enum.js';
 import { SeriesGranularity } from '../enums/series-granularity.enum.js';
 import { DashboardRangeService } from './dashboard-range.service.js';
 
-function service(): DashboardRangeService {
+function service(timezone = 'UTC'): DashboardRangeService {
   const businessService = {
-    getLocale: vi.fn().mockResolvedValue({ timezone: 'UTC', currency: 'USD' }),
+    getLocale: vi.fn().mockResolvedValue({ timezone, currency: 'USD' }),
   } as unknown as LocationService;
   return new DashboardRangeService(businessService);
 }
@@ -52,8 +52,8 @@ describe('DashboardRangeService granularity', () => {
       'biz',
       range({
         period: DashboardPeriod.CUSTOM,
-        from: '2025-01-01T00:00:00.000Z',
-        to: '2025-12-31T00:00:00.000Z',
+        from: '2025-01-01',
+        to: '2025-12-31',
       }),
     );
 
@@ -65,8 +65,8 @@ describe('DashboardRangeService granularity', () => {
       'biz',
       range({
         period: DashboardPeriod.CUSTOM,
-        from: '2026-01-01T00:00:00.000Z',
-        to: '2026-03-01T00:00:00.000Z',
+        from: '2026-01-01',
+        to: '2026-03-01',
       }),
     );
 
@@ -107,8 +107,8 @@ describe('DashboardRangeService granularity', () => {
       'biz',
       range({
         period: DashboardPeriod.CUSTOM,
-        from: '2026-01-01T00:00:00.000Z',
-        to: '2026-04-05T00:00:00.000Z',
+        from: '2026-01-01',
+        to: '2026-04-05',
       }),
     );
 
@@ -300,5 +300,50 @@ describe('DashboardRangeService brand scope', () => {
       }),
     );
     expect(resolved.timezone).toBe('UTC');
+  });
+});
+
+describe('DashboardRangeService custom period', () => {
+  it('reads inclusive calendar days in the location timezone', async () => {
+    const resolved = await service('America/New_York').resolve(
+      'biz',
+      range({
+        period: DashboardPeriod.CUSTOM,
+        from: '2026-11-01',
+        to: '2026-11-30',
+      }),
+    );
+
+    // 2026-11-01 00:00 is still EDT (-04:00); 2026-12-01 00:00 is EST (-05:00).
+    expect(resolved.from.toISOString()).toBe('2026-11-01T04:00:00.000Z');
+    expect(resolved.to.toISOString()).toBe('2026-12-01T05:00:00.000Z');
+    expect(resolved.timezone).toBe('America/New_York');
+  });
+
+  it('keeps a single day on that day west of UTC', async () => {
+    const resolved = await service('America/New_York').resolve(
+      'biz',
+      range({
+        period: DashboardPeriod.CUSTOM,
+        from: '2026-11-11',
+        to: '2026-11-11',
+      }),
+    );
+
+    expect(resolved.from.toISOString()).toBe('2026-11-11T05:00:00.000Z');
+    expect(resolved.to.toISOString()).toBe('2026-11-12T05:00:00.000Z');
+  });
+
+  it('rejects a range that ends before it starts', async () => {
+    await expect(
+      service().resolve(
+        'biz',
+        range({
+          period: DashboardPeriod.CUSTOM,
+          from: '2026-11-02',
+          to: '2026-11-01',
+        }),
+      ),
+    ).rejects.toMatchObject({ errorCode: 'DASHBOARD_CUSTOM_RANGE_INVALID' });
   });
 });

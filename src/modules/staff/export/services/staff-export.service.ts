@@ -5,9 +5,11 @@ import {
   LocaleService,
 } from '../../../../shared/i18n/locale.service.js';
 import { I18nLocale } from '../../../../shared/interfaces/i18n-locale.interface.js';
+import { TimeUtils } from '../../../../shared/time/time.utils.js';
 import { XlsxColumn } from '../../../../shared/xlsx/interfaces/xlsx-column.interface.js';
 import { XlsxFile } from '../../../../shared/xlsx/interfaces/xlsx-file.interface.js';
 import { XlsxUtils } from '../../../../shared/xlsx/xlsx.utils.js';
+import { LocationService } from '../../../location/services/location.service.js';
 import { StaffExportRequestDto } from '../dto/staff-export-request.dto.js';
 import { StaffWithAvatar } from '../../interfaces/staff-with-avatar.interface.js';
 import { StaffService } from '../../services/staff.service.js';
@@ -23,13 +25,14 @@ type StaffRow = {
   taxId: string;
   employeeNumber: string;
   payoutMethod: string;
-  createdAt: Date;
+  createdAt: string;
 };
 
 @Injectable()
 export class StaffExportService {
   constructor(
     private readonly staffService: StaffService,
+    private readonly locations: LocationService,
     private readonly locale: LocaleService,
   ) {}
 
@@ -53,15 +56,19 @@ export class StaffExportService {
       { header: text.common.payoutMethod, key: 'payoutMethod' },
       { header: text.common.createdAt, key: 'createdAt' },
     ];
-    const { items } = await this.staffService.search(locationId, {
-      ...dto,
-      isExport: true,
-    });
-    const rows = items.map((staff) => this.toRow(staff, messages));
-    return XlsxUtils.table(rows, columns, 'staff', text.staff.sheet);
+    const [{ timezone }, { items }] = await Promise.all([
+      this.locations.getLocale(locationId),
+      this.staffService.search(locationId, { ...dto, isExport: true }),
+    ]);
+    const rows = items.map((staff) => this.toRow(staff, messages, timezone));
+    return XlsxUtils.table(rows, columns, 'staff', text.staff.sheet, timezone);
   }
 
-  private toRow(staff: StaffWithAvatar, messages: I18nLocale): StaffRow {
+  private toRow(
+    staff: StaffWithAvatar,
+    messages: I18nLocale,
+    timezone: string,
+  ): StaffRow {
     return {
       id: staff.id,
       name: staff.name,
@@ -73,7 +80,7 @@ export class StaffExportService {
       taxId: staff.taxId ?? '',
       employeeNumber: staff.employeeNumber ?? '',
       payoutMethod: labelOf(messages.payoutMethod, staff.payoutMethod),
-      createdAt: staff.createdAt,
+      createdAt: TimeUtils.zonedDateTimeStr(staff.createdAt, timezone),
     };
   }
 }

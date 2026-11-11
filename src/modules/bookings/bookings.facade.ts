@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { Booking, CancelledBy } from '@prisma/client';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
 import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
+import { LocationService } from '../location/services/location.service.js';
 import { AddOrderItemsDto } from '../orders/dto/add-order-items.dto.js';
 import { OrderProductItemDto } from '../orders/dto/order-product-item.dto.js';
 import { OrderWithItems } from '../orders/interfaces/order-with-items.interface.js';
@@ -24,6 +25,7 @@ export class BookingsFacade {
     private readonly read: BookingReadService,
     private readonly setup: BookingSetupService,
     private readonly mutation: BookingMutationService,
+    private readonly locations: LocationService,
   ) {}
 
   async getBookingSetup(locationId: string): Promise<BookingSetup> {
@@ -105,7 +107,12 @@ export class BookingsFacade {
     dto: BookingSearchRequestDto,
     participantStaffId?: string,
   ): Promise<PaginatedResult<BookingWithItems>> {
-    return this.read.search(locationId, dto, participantStaffId);
+    return this.read.search(
+      locationId,
+      dto,
+      participantStaffId,
+      await this.dayFilterTimezone(locationId, dto),
+    );
   }
 
   async cancel(
@@ -126,5 +133,19 @@ export class BookingsFacade {
     participantStaffId?: string,
   ): Promise<{ status: BookingStatus; count: number }[]> {
     return this.read.getStatusCounts(locationId, participantStaffId);
+  }
+
+  private async dayFilterTimezone(
+    locationId: string,
+    dto: BookingSearchRequestDto,
+  ): Promise<string | undefined> {
+    if (
+      !dto.startDateFrom &&
+      !dto.startDateTo &&
+      !dto.createdDateFrom &&
+      !dto.createdDateTo
+    )
+      return undefined;
+    return (await this.locations.getLocale(locationId)).timezone;
   }
 }

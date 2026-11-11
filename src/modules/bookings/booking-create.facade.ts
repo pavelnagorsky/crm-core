@@ -1,6 +1,5 @@
 import {
   BadRequestException,
-  ForbiddenException,
   HttpStatus,
   Injectable,
   Logger,
@@ -191,8 +190,9 @@ export class BookingCreateFacade {
       location.isBookingConfirmationRequired,
     );
     if (status === BookingStatus.COMPLETED && !canComplete)
-      throw new ForbiddenException(
-        'Creating a completed booking is not allowed',
+      throw new AppException(
+        ErrorCode.BOOKING_COMPLETED_CREATE_FORBIDDEN,
+        HttpStatus.FORBIDDEN,
       );
     const client =
       publicClient ??
