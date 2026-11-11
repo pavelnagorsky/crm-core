@@ -70,7 +70,7 @@ export class ClientBookingResponseDto extends PickType(BookingResponseDto, [
     type: () => ClientReviewLinksDto,
     nullable: true,
     description:
-      'Public map review pages of the location; present only once a review exists',
+      'Map review pages of the location, to show on the thank-you step after the review. Present while the review can be left or exists; null when the location has no links',
   })
   reviewLinks: ClientReviewLinksDto | null;
 

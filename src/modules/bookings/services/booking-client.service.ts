@@ -46,9 +46,11 @@ export class BookingClientService {
     };
     return {
       ...state,
-      // Map links are the thank-you step: shown only after the client reviewed the visit here.
+      // Sent with the form so the thank-you step needs no extra request; the UI shows them after the review.
       reviewLinks:
-        state.review && (links.google || links.yandex) ? links : null,
+        (state.canReview || state.review) && (links.google || links.yandex)
+          ? links
+          : null,
     };
   }
 

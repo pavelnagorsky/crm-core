@@ -270,9 +270,20 @@ describe('Client booking reviews', () => {
     return { service, reviews, locations };
   }
 
-  it('hides map links until a review exists', async () => {
+  it('sends map links with the form and keeps them once reviewed', async () => {
     const { service, reviews } = reviewSetup();
-    expect((await service.getReviewContext(completed)).reviewLinks).toBeNull();
+    expect((await service.getReviewContext(completed)).reviewLinks).toEqual({
+      google: 'https://g.page/r/abc',
+      yandex: null,
+    });
+    reviews.getBookingReviewState.mockResolvedValue({
+      canReview: false,
+      review,
+    });
+    expect((await service.getReviewContext(completed)).reviewLinks).toEqual({
+      google: 'https://g.page/r/abc',
+      yandex: null,
+    });
     reviews.getBookingReviewState.mockResolvedValue({
       canReview: true,
       review,
@@ -282,6 +293,15 @@ describe('Client booking reviews', () => {
       review,
       reviewLinks: { google: 'https://g.page/r/abc', yandex: null },
     });
+  });
+
+  it('omits map links when no review can be left', async () => {
+    const { service, reviews } = reviewSetup();
+    reviews.getBookingReviewState.mockResolvedValue({
+      canReview: false,
+      review: null,
+    });
+    expect((await service.getReviewContext(completed)).reviewLinks).toBeNull();
   });
 
   it('omits map links when the location has none', async () => {
