@@ -73,6 +73,8 @@
 
 Карточка записи: `GET /locations/:locationId/bookings/:id` возвращает `BookingDetailsResponseDto` с полем `review` — тот же `ReviewResponseDto`, что в списке отзывов, включая скрытые. Поле заполняется только при праве `review:read`; у сотрудника с `booking.own:read` без этого права оно всегда `null`. В списке записей отзыва нет.
 
+Визит отзыва: `visit: { startAt, services: { id, name }[] } | null` в `ReviewResponseDto` — для списка, карточки отзыва и ответов на скрытие и ответ. Данные читает `BookingVisitsService` (`src/modules/bookings/visits/`, отдельный модуль домена записей: `BookingsModule` сам зависит от `ReviewsModule`), одним запросом на страницу. Услуги — снимок `BookingItem.serviceTitle` в порядке `sortOrder`, комплекс раскрыт по услугам. `null` у импортированных отзывов и удалённых записей; в карточке записи тоже `null`. В публичные DTO не попадает.
+
 ## Импорт из xlsx
 
 Модуль `ReviewImportModule` (`src/modules/reviews/import/`) — перенос отзывов из другой CRM. Право `review.import:write` (уровень локации), выдаётся владельцу и менеджеру.

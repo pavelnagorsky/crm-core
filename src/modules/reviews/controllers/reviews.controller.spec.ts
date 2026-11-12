@@ -199,6 +199,35 @@ describe('Reviews admin API (HTTP)', () => {
     await request(app.getHttpServer()).get(`${base}/nope`).expect(400);
   });
 
+  it('returns the reviewed visit in UTC, or null without one', async () => {
+    moderation.findById.mockResolvedValueOnce({
+      ...review,
+      visit: {
+        startAt: new Date('2026-03-05T11:00:00Z'),
+        services: [
+          { id: 's-cut', name: 'Стрижка и укладка' },
+          { id: 's-color', name: 'Окрашивание' },
+        ],
+      },
+    });
+    const { body } = await request(app.getHttpServer())
+      .get(`${base}/${reviewId}`)
+      .expect(200);
+    expect(body.responseValue.visit).toEqual({
+      startAt: '2026-03-05T11:00:00.000Z',
+      services: [
+        { id: 's-cut', name: 'Стрижка и укладка' },
+        { id: 's-color', name: 'Окрашивание' },
+      ],
+    });
+
+    moderation.findById.mockResolvedValueOnce({ ...review, visit: null });
+    const { body: imported } = await request(app.getHttpServer())
+      .get(`${base}/${reviewId}`)
+      .expect(200);
+    expect(imported.responseValue.visit).toBeNull();
+  });
+
   it('hides a review passing the actor from the token', async () => {
     await request(app.getHttpServer())
       .patch(`${base}/${reviewId}/visibility`)

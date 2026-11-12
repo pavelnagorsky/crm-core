@@ -8,6 +8,7 @@ import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { AUDIT_EVENT } from '../../audit/constants/audit.constants.js';
 import { AuditActorRole } from '../../audit/enums/audit-actor-role.enum.js';
 import { AuditEvent } from '../../audit/enums/audit-event.enum.js';
+import { BookingVisitsService } from '../../bookings/visits/services/booking-visits.service.js';
 import { ReviewSearchRequestDto } from '../dto/review-search-request.dto.js';
 import { ReviewSearchOrderBy } from '../enums/review-search-order-by.enum.js';
 import { ReviewAggregatesService } from './review-aggregates.service.js';
@@ -19,7 +20,7 @@ const actor = { id: 'u1', name: 'Мария Иванова', role: AuditActorRol
 const stored = {
   id: 'review',
   locationId: 'loc',
-  bookingId: 'booking',
+  bookingId: 'booking' as string | null,
   authorFirstName: 'Анна',
   authorLastName: 'Козлова',
   rating: 4,
@@ -31,6 +32,14 @@ const stored = {
   repliedAt: null as Date | null,
   repliedByName: null as string | null,
   staff: [],
+};
+
+const visit = {
+  startAt: new Date('2026-03-05T11:00:00Z'),
+  services: [
+    { id: 's-cut', name: 'Стрижка и укладка' },
+    { id: 's-color', name: 'Окрашивание' },
+  ],
 };
 
 function setup(existing: typeof stored | null = stored) {
@@ -50,13 +59,17 @@ function setup(existing: typeof stored | null = stored) {
     getStaffSummary: vi.fn(),
     getClientSummary: vi.fn(),
   };
+  const visits = {
+    findByBookingIds: vi.fn().mockResolvedValue(new Map([['booking', visit]])),
+  };
   const events = { emit: vi.fn() };
   const service = new ReviewModerationService(
     db as unknown as DatabaseService,
     aggregates as unknown as ReviewAggregatesService,
     new ReviewAuditService(events as unknown as EventEmitter2),
+    visits as unknown as BookingVisitsService,
   );
-  return { db, aggregates, events, service };
+  return { db, aggregates, visits, events, service };
 }
 
 function searchDto(patch: Partial<ReviewSearchRequestDto> = {}) {
@@ -85,7 +98,7 @@ describe('ReviewModerationService.search', () => {
         search: ' Анна ',
       }),
     );
-    expect(result).toEqual({ items: [stored], totalItems: 1 });
+    expect(result).toEqual({ items: [{ ...stored, visit }], totalItems: 1 });
     const args = db.review.findMany.mock.calls[0][0];
     expect(args.where).toMatchObject({
       locationId: 'loc',
@@ -116,6 +129,52 @@ describe('ReviewModerationService.search', () => {
     expect(args.take).toBeUndefined();
     expect(args.orderBy[0]).toEqual({ rating: 'desc' });
     expect(args.orderBy).toContainEqual({ reviewedAt: 'desc' });
+  });
+});
+
+describe('ReviewModerationService visits', () => {
+  it('loads the visits of a page in one call; imported and deleted bookings get null', async () => {
+    const { db, visits, service } = setup();
+    db.$transaction.mockResolvedValue([
+      [
+        stored,
+        { ...stored, id: 'imported', bookingId: null },
+        { ...stored, id: 'deleted', bookingId: 'gone' },
+      ],
+      3,
+    ]);
+    const { items } = await service.search('loc', searchDto());
+    expect(visits.findByBookingIds).toHaveBeenCalledTimes(1);
+    expect(visits.findByBookingIds).toHaveBeenCalledWith('loc', [
+      'booking',
+      'gone',
+    ]);
+    expect(items.map((item) => item.visit)).toEqual([visit, null, null]);
+  });
+
+  it('attaches the visit to a single review and to update results', async () => {
+    const { service } = setup();
+    expect((await service.findById('loc', 'review')).visit).toEqual(visit);
+    expect(
+      (await service.saveReply('loc', 'review', 'Спасибо!', actor)).visit,
+    ).toEqual(visit);
+    expect(
+      (
+        await service.setVisibility(
+          'loc',
+          'review',
+          { status: ReviewStatus.PUBLISHED },
+          actor,
+        )
+      ).visit,
+    ).toEqual(visit);
+  });
+
+  it('keeps the visit out of the audit snapshots', async () => {
+    const { events, service } = setup();
+    await service.saveReply('loc', 'review', 'Спасибо!', actor);
+    const payload = events.emit.mock.calls[0][1];
+    expect(JSON.stringify(payload)).not.toContain('Окрашивание');
   });
 });
 

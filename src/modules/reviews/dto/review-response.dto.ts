@@ -5,8 +5,10 @@ import {
   REVIEW_RATING_MIN,
 } from '../constants/reviews.constants.js';
 import { ReviewWithStaff } from '../interfaces/review-with-staff.interface.js';
+import { ReviewWithVisit } from '../interfaces/review-with-visit.interface.js';
 import { PublicReviewStaffDto } from './public-review-staff.dto.js';
 import { ReviewAdminReplyDto } from './review-admin-reply.dto.js';
+import { ReviewVisitDto } from './review-visit.dto.js';
 
 /** Full review for the staff panel: unmasked author snapshot and moderation state. */
 export class ReviewResponseDto {
@@ -59,13 +61,24 @@ export class ReviewResponseDto {
   @ApiProperty({ type: () => PublicReviewStaffDto, isArray: true })
   staff: PublicReviewStaffDto[];
 
+  @ApiProperty({
+    type: () => ReviewVisitDto,
+    nullable: true,
+    description:
+      'The reviewed visit. Null for imported reviews, deleted bookings and inside the booking card',
+  })
+  visit: ReviewVisitDto | null;
+
   @ApiProperty()
   createdAt: Date;
 
   @ApiProperty()
   updatedAt: Date;
 
-  static fromEntity(review: ReviewWithStaff): ReviewResponseDto {
+  static fromEntity(
+    review: ReviewWithStaff | ReviewWithVisit,
+  ): ReviewResponseDto {
+    const visit = 'visit' in review ? review.visit : null;
     return Object.assign(new ReviewResponseDto(), {
       id: review.id,
       locationId: review.locationId,
@@ -84,6 +97,7 @@ export class ReviewResponseDto {
       staff: [...review.staff]
         .sort((a, b) => a.staffName.localeCompare(b.staffName))
         .map(PublicReviewStaffDto.fromEntity),
+      visit: visit ? ReviewVisitDto.fromEntity(visit) : null,
       createdAt: review.createdAt,
       updatedAt: review.updatedAt,
     });

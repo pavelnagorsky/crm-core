@@ -145,7 +145,9 @@ reviews: { summary: ReviewSummaryDto; latest: PublicReviewDto[] /* послед�
 | `from`, `to` | Период по дате отзыва (ISO date-time) |
 | `orderBy`, `orderDirection` | `reviewedAt` (по умолчанию) или `rating` |
 
-**Отзыв для панели** `ReviewResponseDto`: полное имя автора (`authorFirstName`, `authorLastName`), `rating`, `text`, `reviewedAt`, `status`, `hiddenAt`, `hiddenReason`, `reply: { text, repliedAt, repliedByName } | null`, `staff`, `bookingId` (`null` у импортированных), `clientId`, `source` и даты. `source` — откуда импортирован отзыв, например «YCLIENTS»; у отзывов, оставленных клиентами у нас, он `null`. Его видят только менеджеры.
+**Отзыв для панели** `ReviewResponseDto`: полное имя автора (`authorFirstName`, `authorLastName`), `rating`, `text`, `reviewedAt`, `status`, `hiddenAt`, `hiddenReason`, `reply: { text, repliedAt, repliedByName } | null`, `staff`, `bookingId` (`null` у импортированных), `clientId`, `source`, `visit` и даты. `source` — откуда импортирован отзыв, например «YCLIENTS»; у отзывов, оставленных клиентами у нас, он `null`. Его видят только менеджеры.
+
+`visit: { startAt, services: { id, name }[] } | null` — визит, о котором отзыв: строка «Визит 5 марта, 14:00 · Стрижка и укладка, Окрашивание». `startAt` — начало визита в UTC, во время филиала его переводит фронт. `services` — услуги в порядке записи; у комплекса перечислены его услуги, а не название комплекса. Названия — на момент визита, как `staff[].name`: переименование или удаление услуги их не меняет. `visit` равно `null` у импортированных отзывов (`bookingId: null`) и если запись удалена. Есть в списке, в `GET .../reviews/:reviewId` и в ответах `PATCH .../visibility` и `PUT .../reply`. В карточке записи (`review` в `BookingDetailsResponseDto`) `visit` всегда `null` — запись и так открыта. В публичных отзывах поля нет.
 
 **Действия:**
 

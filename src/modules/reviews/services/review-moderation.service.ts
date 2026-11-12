@@ -7,6 +7,7 @@ import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { AuditActionType } from '../../audit/enums/audit-action-type.enum.js';
 import { AuditEvent } from '../../audit/enums/audit-event.enum.js';
 import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
+import { BookingVisitsService } from '../../bookings/visits/services/booking-visits.service.js';
 import { ReviewSearchRequestDto } from '../dto/review-search-request.dto.js';
 import { ReviewSummaryRequestDto } from '../dto/review-summary-request.dto.js';
 import { UpdateReviewVisibilityDto } from '../dto/update-review-visibility.dto.js';
@@ -14,6 +15,7 @@ import { ReviewAdminSummary } from '../interfaces/review-admin-summary.interface
 import { ReviewPage } from '../interfaces/review-page.interface.js';
 import { ReviewSummary } from '../interfaces/review-summary.interface.js';
 import { ReviewWithStaff } from '../interfaces/review-with-staff.interface.js';
+import { ReviewWithVisit } from '../interfaces/review-with-visit.interface.js';
 import { reviewOrderBy } from '../rules/review-order.rules.js';
 import { ReviewAggregatesService } from './review-aggregates.service.js';
 import { ReviewAuditService } from './review-audit.service.js';
@@ -25,12 +27,13 @@ export class ReviewModerationService {
     private readonly db: DatabaseService,
     private readonly aggregates: ReviewAggregatesService,
     private readonly audit: ReviewAuditService,
+    private readonly visits: BookingVisitsService,
   ) {}
 
   async search(
     locationId: string,
     dto: ReviewSearchRequestDto,
-  ): Promise<ReviewPage> {
+  ): Promise<ReviewPage<ReviewWithVisit>> {
     const where = this.searchWhere(locationId, dto);
     const orderBy = reviewOrderBy(dto.orderBy, dto.orderDirection);
     const [items, totalItems] = await this.db.$transaction([
@@ -45,7 +48,7 @@ export class ReviewModerationService {
       }),
       this.db.review.count({ where }),
     ]);
-    return { items, totalItems };
+    return { items: await this.withVisits(locationId, items), totalItems };
   }
 
   /** Location-wide, narrowed to one staff member and/or one client when given. */
@@ -70,13 +73,8 @@ export class ReviewModerationService {
     return { summary, hiddenCount, unansweredCount };
   }
 
-  async findById(locationId: string, id: string): Promise<ReviewWithStaff> {
-    const review = await this.db.review.findFirst({
-      where: { id, locationId },
-      include: { staff: true },
-    });
-    if (!review) throw this.notFound();
-    return review;
+  async findById(locationId: string, id: string): Promise<ReviewWithVisit> {
+    return this.withVisit(await this.findOwned(locationId, id));
   }
 
   async setVisibility(
@@ -84,21 +82,23 @@ export class ReviewModerationService {
     id: string,
     dto: UpdateReviewVisibilityDto,
     actor: AuditActor,
-  ): Promise<ReviewWithStaff> {
-    const before = await this.findById(locationId, id);
+  ): Promise<ReviewWithVisit> {
+    const before = await this.findOwned(locationId, id);
     const hiding = dto.status === ReviewStatus.HIDDEN;
     const reason = hiding ? dto.reason?.trim() || null : null;
     if (before.status === dto.status && before.hiddenReason === reason)
-      return before;
-    return this.apply(
-      before,
-      {
-        status: dto.status,
-        hiddenAt: hiding ? (before.hiddenAt ?? new Date()) : null,
-        hiddenReason: reason,
-      },
-      AuditEvent.REVIEW_VISIBILITY_CHANGED,
-      actor,
+      return this.withVisit(before);
+    return this.withVisit(
+      await this.apply(
+        before,
+        {
+          status: dto.status,
+          hiddenAt: hiding ? (before.hiddenAt ?? new Date()) : null,
+          hiddenReason: reason,
+        },
+        AuditEvent.REVIEW_VISIBILITY_CHANGED,
+        actor,
+      ),
     );
   }
 
@@ -107,14 +107,16 @@ export class ReviewModerationService {
     id: string,
     text: string,
     actor: AuditActor,
-  ): Promise<ReviewWithStaff> {
-    const before = await this.findById(locationId, id);
-    if (before.replyText === text) return before;
-    return this.apply(
-      before,
-      { replyText: text, repliedAt: new Date(), repliedByName: actor.name },
-      AuditEvent.REVIEW_REPLIED,
-      actor,
+  ): Promise<ReviewWithVisit> {
+    const before = await this.findOwned(locationId, id);
+    if (before.replyText === text) return this.withVisit(before);
+    return this.withVisit(
+      await this.apply(
+        before,
+        { replyText: text, repliedAt: new Date(), repliedByName: actor.name },
+        AuditEvent.REVIEW_REPLIED,
+        actor,
+      ),
     );
   }
 
@@ -123,7 +125,7 @@ export class ReviewModerationService {
     id: string,
     actor: AuditActor,
   ): Promise<void> {
-    const before = await this.findById(locationId, id);
+    const before = await this.findOwned(locationId, id);
     if (before.replyText == null)
       throw new AppException(
         ErrorCode.REVIEW_REPLY_NOT_FOUND,
@@ -143,7 +145,7 @@ export class ReviewModerationService {
     id: string,
     actor: AuditActor,
   ): Promise<void> {
-    const before = await this.findById(locationId, id);
+    const before = await this.findOwned(locationId, id);
     try {
       await this.db.review.delete({ where: { id } });
     } catch (error) {
@@ -184,6 +186,38 @@ export class ReviewModerationService {
       after: review,
     });
     return review;
+  }
+
+  private async findOwned(
+    locationId: string,
+    id: string,
+  ): Promise<ReviewWithStaff> {
+    const review = await this.db.review.findFirst({
+      where: { id, locationId },
+      include: { staff: true },
+    });
+    if (!review) throw this.notFound();
+    return review;
+  }
+
+  private async withVisit(review: ReviewWithStaff): Promise<ReviewWithVisit> {
+    const [withVisit] = await this.withVisits(review.locationId, [review]);
+    return withVisit;
+  }
+
+  /** One query for the whole page; imported reviews have no booking to look up. */
+  private async withVisits(
+    locationId: string,
+    reviews: readonly ReviewWithStaff[],
+  ): Promise<ReviewWithVisit[]> {
+    const visits = await this.visits.findByBookingIds(
+      locationId,
+      reviews.flatMap((review) => review.bookingId ?? []),
+    );
+    return reviews.map((review) => ({
+      ...review,
+      visit: (review.bookingId && visits.get(review.bookingId)) || null,
+    }));
   }
 
   private loadSummary(
