@@ -1,6 +1,6 @@
 import ExcelJS from 'exceljs';
+import { buildReviewsImportTemplate } from '../../../../../scripts/reviews-import-template.js';
 import { PassThrough } from 'stream';
-import { LocaleService } from '../../../../shared/i18n/locale.service.js';
 import { XlsxUtils } from '../../../../shared/xlsx/xlsx.utils.js';
 import {
   REVIEW_IMPORT_MAX_BYTES,
@@ -12,7 +12,6 @@ import { ReviewSheetColumn } from '../enums/review-sheet-column.enum.js';
 import { ReviewImportUpload } from '../interfaces/review-import-upload.interface.js';
 import { ReviewSheetRow } from '../interfaces/review-sheet-row.interface.js';
 import { ReviewSheetScan } from '../interfaces/review-sheet-scan.interface.js';
-import { ReviewImportTemplateService } from './review-import-template.service.js';
 import { ReviewSheetService } from './review-sheet.service.js';
 
 const HEADERS = [
@@ -279,9 +278,7 @@ describe('ReviewSheetService', () => {
   });
 
   it('accepts the downloadable template without errors', async () => {
-    const locale = new LocaleService();
-    locale.onModuleInit();
-    const file = new ReviewImportTemplateService(locale).build();
+    const file = buildReviewsImportTemplate();
     const { scan, rows } = await readAll(await collect(file.stream));
 
     expect(scan).toMatchObject({ ok: true, totalRows: 1 });

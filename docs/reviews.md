@@ -79,8 +79,9 @@
 
 | API | Назначение |
 | --- | --- |
-| `GET /locations/:locationId/reviews/import/template` | Шаблон xlsx: заголовки, строка-пример и лист «Подсказки» |
 | `POST /locations/:locationId/reviews/import` | multipart `file`. Ответ: `totalRows`, `importedCount`, `duplicateCount`, `errorCount`, `unmatchedStaffCount`, `unmatchedStaffNames` (до 100 уникальных имён), `errorsByCode`, `errors: [{ row, code }]` (первые 100) |
+
+**Шаблон** — статический файл в GCS, его отдаёт не API: https://storage.googleapis.com/crm-clients-bucket/internal/reviews-import-template.xlsx. В нём заголовки, строка-пример и лист «Подсказки». Источник файла — `scripts/reviews-import-template.ts`; тест `review-sheet.service.spec.ts` проверяет, что шаблон проходит парсер импорта. После изменения колонок, заголовков или правил импорта шаблон нужно пересобрать и перезалить: `npm run template:reviews-import` (нужны `GOOGLE_APPLICATION_CREDENTIALS` и `GOOGLE_BUCKET_NAME` из `.env`).
 
 Один шаг, без предпросмотра и отката: валидные строки записываются сразу, невалидные пропускаются и перечисляются с номерами строк, как их показывает Excel. Пользователь исправляет строки и загружает файл снова — уже принятые строки становятся дубликатами.
 

@@ -99,7 +99,6 @@
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `GET /locations/:locationId/reviews/import/template` | `getTemplate` | L: `review.import:write` | Шаблон xlsx с примером и листом подсказок. |
 | `POST /locations/:locationId/reviews/import` | `import` | L: `review.import:write` | Валидные строки записываются сразу, ошибки — по номерам строк. |
 
 ## public-reviews

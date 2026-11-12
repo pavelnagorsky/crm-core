@@ -270,7 +270,7 @@ ReviewSummaryDto { count: number; average: number | null; distribution: Record<1
 
 **API:**
 
-- `GET /locations/:locationId/reviews/import/template` — шаблон xlsx с заголовками, примером и листом подсказок.
+- Шаблон xlsx с заголовками, примером и листом подсказок — статический файл в GCS: https://storage.googleapis.com/crm-clients-bucket/internal/reviews-import-template.xlsx (собирается `npm run template:reviews-import`).
 - `POST /locations/:locationId/reviews/import` — multipart `file`. Ответ: `totalRows`, `importedCount`, `duplicateCount`, `errorCount`, `unmatchedStaffCount`, `errorsByCode`, `errors: [{ row, code }]` (первые 100). Тот же принцип, что у импорта клиентов: валидные строки записываются сразу, невалидные пропускаются и перечисляются в ответе. Расширение относительно клиентов — номера строк и коды, чтобы пользователь мог исправить файл.
 - Поток для пользователя: загрузить файл, по ответу исправить строки с ошибками, загрузить исправленный файл (или только строки с ошибками) повторно. Серверу не нужны ни промежуточные таблицы, ни задания.
 - Право `review:import` (запись, уровень локации). Новые `ErrorCode` для файла — по образцу `CLIENT_IMPORT_*`: `REVIEW_IMPORT_FILE_MISSING`, `_FILE_TOO_LARGE`, `_FILE_UNSUPPORTED`, `_FILE_CORRUPT`, `_MISSING_COLUMNS`, `_FILE_EMPTY`, `_TOO_MANY_ROWS`.

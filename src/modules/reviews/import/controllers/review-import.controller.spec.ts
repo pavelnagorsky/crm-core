@@ -4,9 +4,7 @@ import { Test } from '@nestjs/testing';
 import { UserRole } from '@prisma/client';
 import ExcelJS from 'exceljs';
 import request from 'supertest';
-import { LocaleService } from '../../../../shared/i18n/locale.service.js';
 import { GlobalExceptionFilter } from '../../../../shared/filters/exception.filter.js';
-import { XlsxUtils } from '../../../../shared/xlsx/xlsx.utils.js';
 import { Claim } from '../../../access/enums/claim.enum.js';
 import { Write } from '../../../access/utils/permission.js';
 import { JwtAuthGuard } from '../../../auth/guards/jwt-auth.guard.js';
@@ -20,7 +18,6 @@ import { StaffService } from '../../../staff/services/staff.service.js';
 import { ReviewsFacade } from '../../reviews.facade.js';
 import { REVIEW_IMPORT_MAX_BYTES } from '../constants/review-import.constants.js';
 import { ReviewImportFileInterceptor } from '../interceptors/review-import-file.interceptor.js';
-import { ReviewImportTemplateService } from '../services/review-import-template.service.js';
 import { ReviewImportService } from '../services/review-import.service.js';
 import { ReviewSheetService } from '../services/review-sheet.service.js';
 import { ReviewImportController } from './review-import.controller.js';
@@ -45,16 +42,12 @@ describe('Review import API (HTTP)', () => {
   const locations = { getLocale: vi.fn() };
 
   beforeAll(async () => {
-    const locale = new LocaleService();
-    locale.onModuleInit();
     const module = await Test.createTestingModule({
       controllers: [ReviewImportController],
       providers: [
         ReviewImportService,
         ReviewSheetService,
-        ReviewImportTemplateService,
         ReviewImportFileInterceptor,
-        { provide: LocaleService, useValue: locale },
         { provide: ReviewsFacade, useValue: reviews },
         { provide: StaffService, useValue: staff },
         { provide: LocationService, useValue: locations },
@@ -168,41 +161,15 @@ describe('Review import API (HTTP)', () => {
     expect(body.responseCode).toBe('REVIEW_IMPORT_MISSING_COLUMNS');
     expect(body.responseValue).toEqual(['rating', 'date']);
   });
-
-  it('downloads the template as an xlsx attachment', async () => {
-    const response = await request(app.getHttpServer())
-      .get(`${base}/template`)
-      .buffer(true)
-      .parse((res, callback) => {
-        const chunks: Buffer[] = [];
-        res.on('data', (chunk: Buffer) => chunks.push(chunk));
-        res.on('end', () => callback(null, Buffer.concat(chunks)));
-      })
-      .expect(200);
-
-    expect(response.headers['content-type']).toContain(XlsxUtils.mimeType);
-    expect(response.headers['content-disposition']).toBe(
-      'attachment; filename="reviews-import-template.xlsx"',
-    );
-    const book = new ExcelJS.Workbook();
-    await book.xlsx.load(response.body as ArrayBuffer);
-    expect(book.worksheets.map((sheet) => sheet.name)).toEqual([
-      'Отзывы',
-      'Подсказки',
-    ]);
-  });
 });
 
 describe('Review import API permissions', () => {
   const reflector = new Reflector();
   const proto = ReviewImportController.prototype;
 
-  it.each(['getTemplate', 'import'] as const)(
-    '%s needs review.import:write',
-    (handler) => {
-      expect(reflector.get(PERMISSIONS_KEY, proto[handler])).toEqual([
-        Write(Claim.REVIEW_IMPORT),
-      ]);
-    },
-  );
+  it('import needs review.import:write', () => {
+    expect(reflector.get(PERMISSIONS_KEY, proto.import)).toEqual([
+      Write(Claim.REVIEW_IMPORT),
+    ]);
+  });
 });
