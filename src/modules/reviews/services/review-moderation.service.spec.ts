@@ -204,22 +204,21 @@ describe('ReviewModerationService.findById', () => {
 
 describe('ReviewModerationService.setVisibility', () => {
   it.each([undefined, '', '   '])(
-    'requires a reason to hide (%j)',
+    'hides without a reason (%j)',
     async (reason) => {
       const { db, service } = setup();
-      const error = await service
-        .setVisibility(
-          'loc',
-          'review',
-          { status: ReviewStatus.HIDDEN, reason },
-          actor,
-        )
-        .catch((e: unknown) => e);
-      expect((error as AppException).getStatus()).toBe(HttpStatus.BAD_REQUEST);
-      expect(codeOf(error).code).toBe(
-        ErrorCode.REVIEW_HIDE_REASON_REQUIRED.code,
+      await service.setVisibility(
+        'loc',
+        'review',
+        { status: ReviewStatus.HIDDEN, reason },
+        actor,
       );
-      expect(db.review.update).not.toHaveBeenCalled();
+      const data = db.review.update.mock.calls[0][0].data;
+      expect(data).toMatchObject({
+        status: ReviewStatus.HIDDEN,
+        hiddenReason: null,
+      });
+      expect(data.hiddenAt).toBeInstanceOf(Date);
     },
   );
 

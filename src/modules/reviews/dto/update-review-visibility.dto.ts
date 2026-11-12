@@ -15,7 +15,7 @@ export class UpdateReviewVisibilityDto {
     required: false,
     maxLength: REVIEW_HIDE_REASON_MAX_LENGTH,
     description:
-      'Internal note, never shown to the client. Required when hiding; ignored when publishing',
+      'Internal note, never shown to the client. Optional when hiding; ignored when publishing',
   })
   @IsOptional()
   @Transform(({ value }) => sanitizeReviewText(value))

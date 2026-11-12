@@ -187,7 +187,7 @@ ReviewSummaryDto { count: number; average: number | null; distribution: Record<1
 | `GET /locations/:locationId/reviews` | Список. Фильтры: `staffId`, `status`, `rating`, `search`, `from`, `to`, `isExport` |
 | `GET /locations/:locationId/reviews/summary` | Сводка с распределением, опционально по `staffId` |
 | `GET /locations/:locationId/reviews/:id` | Один отзыв с полным именем и записью |
-| `PATCH /locations/:locationId/reviews/:id/visibility` | `{ status, reason? }`, причина обязательна при скрытии |
+| `PATCH /locations/:locationId/reviews/:id/visibility` | `{ status, reason? }`, причина скрытия необязательна |
 | `DELETE /locations/:locationId/reviews/:id` | 204. Жёсткое удаление вместе с `ReviewStaff`, сброс кэша сводок, аудит со снимком |
 | `PUT /locations/:locationId/reviews/:id/reply` | `{ text }` |
 | `DELETE /locations/:locationId/reviews/:id/reply` | 204 |

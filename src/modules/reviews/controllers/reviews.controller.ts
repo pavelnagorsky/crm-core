@@ -12,7 +12,6 @@ import {
   Query,
 } from '@nestjs/common';
 import {
-  ApiBadRequestResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
@@ -97,10 +96,9 @@ export class ReviewsController {
 
   @ApiOperation({
     summary:
-      'Hide a review from the public or publish it again; hiding needs a reason',
+      'Hide a review from the public (optionally with a reason) or publish it again',
   })
   @ApiOkResponse({ type: ApiResponse(ReviewResponseDto) })
-  @ApiBadRequestResponse({ description: 'REVIEW_HIDE_REASON_REQUIRED' })
   @ApiNotFoundResponse({ description: 'REVIEW_NOT_FOUND' })
   @Permissions(Write(Claim.REVIEW))
   @Patch(':reviewId/visibility')

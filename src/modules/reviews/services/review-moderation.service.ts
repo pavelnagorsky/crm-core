@@ -87,11 +87,6 @@ export class ReviewModerationService {
     const before = await this.findById(locationId, id);
     const hiding = dto.status === ReviewStatus.HIDDEN;
     const reason = hiding ? dto.reason?.trim() || null : null;
-    if (hiding && !reason)
-      throw new AppException(
-        ErrorCode.REVIEW_HIDE_REASON_REQUIRED,
-        HttpStatus.BAD_REQUEST,
-      );
     if (before.status === dto.status && before.hiddenReason === reason)
       return before;
     return this.apply(

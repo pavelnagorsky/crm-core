@@ -653,10 +653,6 @@ export const ErrorCode = {
     code: 'REVIEW_REPLY_NOT_FOUND',
     message: 'Review has no reply',
   },
-  REVIEW_HIDE_REASON_REQUIRED: {
-    code: 'REVIEW_HIDE_REASON_REQUIRED',
-    message: 'A reason is required to hide a review',
-  },
   REVIEW_IMPORT_FILE_MISSING: {
     code: 'REVIEW_IMPORT_FILE_MISSING',
     message: 'Import file is missing',
