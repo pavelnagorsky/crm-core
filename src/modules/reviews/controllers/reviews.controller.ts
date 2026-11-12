@@ -62,7 +62,7 @@ export class ReviewsController {
 
   @ApiOperation({
     summary:
-      'Rating summary with moderation counters, for the location or one staff member',
+      'Rating summary with moderation counters, for the location, one staff member and/or one client',
   })
   @ApiOkResponse({ type: ApiResponse(ReviewAdminSummaryDto) })
   @Permissions(Read(Claim.REVIEW))
@@ -73,7 +73,7 @@ export class ReviewsController {
   ): Promise<BaseResponseDto<ReviewAdminSummaryDto>> {
     return BaseResponseDto.success(
       ReviewAdminSummaryDto.fromEntity(
-        await this.reviews.getSummary(locationId, dto.staffId),
+        await this.reviews.getSummary(locationId, dto),
       ),
     );
   }

@@ -128,8 +128,8 @@ reviews: { summary: ReviewSummaryDto; latest: PublicReviewDto[] /* послед�
 
 Права: чтение — `review:read`, действия — `review:write`. Все пути относятся к филиалу: `/locations/:locationId/reviews…`.
 
-**Сводка:** `GET /locations/:locationId/reviews/summary[?staffId=]`
-→ `{ summary: ReviewSummaryDto, hiddenCount, unansweredCount }`. Сводка считается только по опубликованным отзывам — те же цифры, что видят клиенты. `hiddenCount` — сколько отзывов скрыто, `unansweredCount` — сколько опубликованных ждут ответа. Последнее хорошо смотрится счётчиком или бейджем «Ждут ответа».
+**Сводка:** `GET /locations/:locationId/reviews/summary[?staffId=&clientId=]`
+→ `{ summary: ReviewSummaryDto, hiddenCount, unansweredCount }`. Сводка считается только по опубликованным отзывам — те же цифры, что видят клиенты. `hiddenCount` — сколько отзывов скрыто, `unansweredCount` — сколько опубликованных ждут ответа. Последнее хорошо смотрится счётчиком или бейджем «Ждут ответа». С `staffId` всё считается по сотруднику, с `clientId` — по отзывам клиента (вкладка «Отзывы» в карточке клиента); параметры можно комбинировать.
 
 **Список:** `GET /locations/:locationId/reviews`
 

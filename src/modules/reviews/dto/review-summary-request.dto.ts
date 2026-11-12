@@ -11,4 +11,14 @@ export class ReviewSummaryRequestDto {
   @IsOptional()
   @IsUUID()
   staffId?: string;
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    required: false,
+    description: 'Summary of reviews left by this client, for the client card',
+  })
+  @IsOptional()
+  @IsUUID()
+  clientId?: string;
 }

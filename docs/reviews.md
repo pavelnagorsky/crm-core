@@ -62,7 +62,7 @@
 | API | Назначение |
 | --- | --- |
 | `GET /locations/:locationId/reviews` | Список: `page`, `pageSize`, `search`, `staffId`, `clientId` (карточка клиента), `status`, `rating`, `replied` (`false` — ждут ответа), `from`, `to`, `isExport` |
-| `GET /locations/:locationId/reviews/summary` | Сводка с распределением, `hiddenCount`, `unansweredCount`. С `staffId` — по одному сотруднику (карточка сотрудника) |
+| `GET /locations/:locationId/reviews/summary` | Сводка с распределением, `hiddenCount`, `unansweredCount`. С `staffId` — по одному сотруднику (карточка сотрудника), с `clientId` — по одному клиенту (карточка клиента); можно комбинировать |
 | `GET /locations/:locationId/reviews/:reviewId` | Один отзыв |
 | `PATCH /locations/:locationId/reviews/:reviewId/visibility` | `{ status, reason? }`, причина скрытия необязательна |
 | `PUT /locations/:locationId/reviews/:reviewId/reply` | `{ text }`, создать или изменить ответ |

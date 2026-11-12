@@ -8,9 +8,11 @@ import { AuditActionType } from '../../audit/enums/audit-action-type.enum.js';
 import { AuditEvent } from '../../audit/enums/audit-event.enum.js';
 import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
 import { ReviewSearchRequestDto } from '../dto/review-search-request.dto.js';
+import { ReviewSummaryRequestDto } from '../dto/review-summary-request.dto.js';
 import { UpdateReviewVisibilityDto } from '../dto/update-review-visibility.dto.js';
 import { ReviewAdminSummary } from '../interfaces/review-admin-summary.interface.js';
 import { ReviewPage } from '../interfaces/review-page.interface.js';
+import { ReviewSummary } from '../interfaces/review-summary.interface.js';
 import { ReviewWithStaff } from '../interfaces/review-with-staff.interface.js';
 import { reviewOrderBy } from '../rules/review-order.rules.js';
 import { ReviewAggregatesService } from './review-aggregates.service.js';
@@ -46,19 +48,18 @@ export class ReviewModerationService {
     return { items, totalItems };
   }
 
-  /** Location-wide, or of one staff member when `staffId` is given. */
+  /** Location-wide, narrowed to one staff member and/or one client when given. */
   async getSummary(
     locationId: string,
-    staffId?: string,
+    { staffId, clientId }: ReviewSummaryRequestDto,
   ): Promise<ReviewAdminSummary> {
     const scope: Prisma.ReviewWhereInput = {
       locationId,
       ...(staffId && { staff: { some: { staffId } } }),
+      ...(clientId && { clientId }),
     };
     const [summary, hiddenCount, unansweredCount] = await Promise.all([
-      staffId
-        ? this.aggregates.getStaffSummary(locationId, staffId)
-        : this.aggregates.getLocationSummary(locationId),
+      this.loadSummary(locationId, staffId, clientId),
       this.db.review.count({
         where: { ...scope, status: ReviewStatus.HIDDEN },
       }),
@@ -183,6 +184,17 @@ export class ReviewModerationService {
       after: review,
     });
     return review;
+  }
+
+  private loadSummary(
+    locationId: string,
+    staffId?: string,
+    clientId?: string,
+  ): Promise<ReviewSummary> {
+    if (clientId)
+      return this.aggregates.getClientSummary(locationId, clientId, staffId);
+    if (staffId) return this.aggregates.getStaffSummary(locationId, staffId);
+    return this.aggregates.getLocationSummary(locationId);
   }
 
   private searchWhere(

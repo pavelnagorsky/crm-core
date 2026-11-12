@@ -154,18 +154,28 @@ describe('Reviews admin API (HTTP)', () => {
     expect(moderation.findById).not.toHaveBeenCalled();
   });
 
-  it('passes staffId to the summary and validates it', async () => {
+  it('passes staffId and clientId to the summary and validates them', async () => {
     await request(app.getHttpServer())
       .get(`${base}/summary`)
-      .query({ staffId: '33333333-3333-4333-8333-333333333333' })
+      .query({
+        staffId: '33333333-3333-4333-8333-333333333333',
+        clientId: '44444444-4444-4444-8444-444444444444',
+      })
       .expect(200);
     expect(moderation.getSummary).toHaveBeenLastCalledWith(
       locationId,
-      '33333333-3333-4333-8333-333333333333',
+      expect.objectContaining({
+        staffId: '33333333-3333-4333-8333-333333333333',
+        clientId: '44444444-4444-4444-8444-444444444444',
+      }),
     );
     await request(app.getHttpServer())
       .get(`${base}/summary`)
       .query({ staffId: 'nope' })
+      .expect(400);
+    await request(app.getHttpServer())
+      .get(`${base}/summary`)
+      .query({ clientId: 'nope' })
       .expect(400);
   });
 

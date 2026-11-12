@@ -48,6 +48,7 @@ function setup(existing: typeof stored | null = stored) {
     invalidateLocation: vi.fn(),
     getLocationSummary: vi.fn(),
     getStaffSummary: vi.fn(),
+    getClientSummary: vi.fn(),
   };
   const events = { emit: vi.fn() };
   const service = new ReviewModerationService(
@@ -124,7 +125,7 @@ describe('ReviewModerationService.getSummary', () => {
     const summary = { count: 3, average: 4.5, distribution: {} };
     aggregates.getLocationSummary.mockResolvedValue(summary);
     db.review.count.mockResolvedValueOnce(2).mockResolvedValueOnce(5);
-    await expect(service.getSummary('loc')).resolves.toEqual({
+    await expect(service.getSummary('loc', {})).resolves.toEqual({
       summary,
       hiddenCount: 2,
       unansweredCount: 5,
@@ -149,17 +150,42 @@ describe('ReviewModerationService.getSummary for one staff member', () => {
     aggregates.getStaffSummary.mockResolvedValue(summary);
     db.review.count.mockResolvedValueOnce(0).mockResolvedValueOnce(1);
 
-    await expect(service.getSummary('loc', 's1')).resolves.toEqual({
-      summary,
-      hiddenCount: 0,
-      unansweredCount: 1,
-    });
+    await expect(service.getSummary('loc', { staffId: 's1' })).resolves.toEqual(
+      {
+        summary,
+        hiddenCount: 0,
+        unansweredCount: 1,
+      },
+    );
     expect(aggregates.getStaffSummary).toHaveBeenCalledWith('loc', 's1');
     expect(aggregates.getLocationSummary).not.toHaveBeenCalled();
     expect(db.review.count).toHaveBeenNthCalledWith(1, {
       where: {
         locationId: 'loc',
         staff: { some: { staffId: 's1' } },
+        status: ReviewStatus.HIDDEN,
+      },
+    });
+  });
+});
+
+describe('ReviewModerationService.getSummary for one client', () => {
+  it('uses the client summary and scopes the counters to their reviews', async () => {
+    const { db, aggregates, service } = setup();
+    const summary = { count: 2, average: null, distribution: {} };
+    aggregates.getClientSummary.mockResolvedValue(summary);
+    db.review.count.mockResolvedValueOnce(1).mockResolvedValueOnce(0);
+
+    await expect(
+      service.getSummary('loc', { clientId: 'c1', staffId: 's1' }),
+    ).resolves.toEqual({ summary, hiddenCount: 1, unansweredCount: 0 });
+    expect(aggregates.getClientSummary).toHaveBeenCalledWith('loc', 'c1', 's1');
+    expect(aggregates.getStaffSummary).not.toHaveBeenCalled();
+    expect(db.review.count).toHaveBeenNthCalledWith(1, {
+      where: {
+        locationId: 'loc',
+        staff: { some: { staffId: 's1' } },
+        clientId: 'c1',
         status: ReviewStatus.HIDDEN,
       },
     });

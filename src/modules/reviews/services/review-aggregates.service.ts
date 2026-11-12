@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { ReviewStatus } from '@prisma/client';
+import { Prisma, ReviewStatus } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { AppCacheService } from '../../../shared/cache/app-cache.service.js';
 import { CacheDependency } from '../../../shared/cache/cache-dependency.js';
@@ -52,6 +52,19 @@ export class ReviewAggregatesService {
     return all[staffId] ?? buildReviewSummary([]);
   }
 
+  /** Uncached: only the client card asks for it. Narrowed to one master when `staffId` is given. */
+  getClientSummary(
+    locationId: string,
+    clientId: string,
+    staffId?: string,
+  ): Promise<ReviewSummary> {
+    return this.loadSummary({
+      locationId,
+      clientId,
+      ...(staffId && { staff: { some: { staffId } } }),
+    });
+  }
+
   /** Staff without published reviews are absent from the result. */
   async getStaffSummaries(
     locationId: string,
@@ -68,12 +81,16 @@ export class ReviewAggregatesService {
     return this.cache.invalidate(CacheDependency.locationReviews(locationId));
   }
 
-  private async loadLocationSummary(
-    locationId: string,
+  private loadLocationSummary(locationId: string): Promise<ReviewSummary> {
+    return this.loadSummary({ locationId });
+  }
+
+  private async loadSummary(
+    scope: Prisma.ReviewWhereInput,
   ): Promise<ReviewSummary> {
     const groups = await this.db.review.groupBy({
       by: ['rating'],
-      where: { locationId, status: ReviewStatus.PUBLISHED },
+      where: { ...scope, status: ReviewStatus.PUBLISHED },
       _count: { _all: true },
     });
     return buildReviewSummary(
