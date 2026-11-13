@@ -75,6 +75,21 @@ checks proposed item intervals against each other before reserving slots.
 Booking lifecycle audit is published after its transaction commits. Notification
 delivery still uses in-process events; see [known limitations](./README.md#оставшийся-технический-долг).
 
+Emails about staff changes wait out an undo window. Creating a booking from the
+journal and moving it store a pending email on the booking (`clientNoticeAt`,
+`clientNoticeType`, `clientNoticeFromStartAt`); the per-minute cron sends it once
+the window passes and rechecks the booking first. The rules live in
+`rules/booking-client-notice.rules.ts`. `BookingWriteLockService.lockUnchangedBooking`
+returns the locked pending email, because the cron clears it without bumping
+`updatedAt` and the copy loaded before the lock may be stale. Reminders follow
+`reminderDueAt` (`rules/booking-reminder.rules.ts`), recomputed whenever a booking
+becomes confirmed or moves. Client actions also reach staff:
+`BookingStaffNotificationService` emails the location's managers and the booking's
+staff accounts, with recipients resolved by `AccessService`.
+
+Only confirmed bookings complete automatically. An unconfirmed request is never
+completed, reminded or paid for by the cron; staff close it by hand.
+
 ## Parallel bundle teams
 
 A parallel bundle remains one booking with its bundle price. Each service starts
