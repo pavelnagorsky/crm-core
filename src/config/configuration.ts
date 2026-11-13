@@ -12,6 +12,7 @@ export default () => {
       projectId: process.env['GOOGLE_PROJECT_ID'],
       apiKey: process.env['GOOGLE_API_KEY'],
       bucketName: process.env['GOOGLE_BUCKET_NAME'],
+      privateBucketName: process.env['GOOGLE_PRIVATE_BUCKET_NAME'],
       clientId: process.env['GOOGLE_CLOUD_CLIENT_ID'],
       clientSecret: process.env['GOOGLE_CLOUD_CLIENT_SECRET'],
     },

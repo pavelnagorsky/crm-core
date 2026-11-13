@@ -1,5 +1,5 @@
-import { SupportRequest, SupportRequestAttachment } from '@prisma/client';
+import { SupportAttachment, SupportRequest } from '@prisma/client';
 
 export interface SupportRequestWithAttachments extends SupportRequest {
-  attachments: Pick<SupportRequestAttachment, 'fileId'>[];
+  attachments: Pick<SupportAttachment, 'id'>[];
 }

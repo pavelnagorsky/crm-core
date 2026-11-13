@@ -102,7 +102,7 @@ export class AdminSupportController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({
     summary:
-      'Permanently delete a support request; attached files stay in the author storage',
+      'Permanently delete a support request together with its attachments',
   })
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Support request not found' })

@@ -56,24 +56,33 @@ model SupportRequest {
   createdAt  DateTime             @default(now())
   updatedAt  DateTime             @updatedAt
 
-  user        User?                      @relation(fields: [userId], references: [id], onDelete: SetNull)
-  attachments SupportRequestAttachment[]
+  user        User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
+  attachments SupportAttachment[]
 
   @@index([status, createdAt, id])
   @@index([createdAt, id])
   @@index([userId])
 }
 
-model SupportRequestAttachment {
-  supportRequestId String
-  fileId           String
-  position         Int    @db.SmallInt
+/// Private support attachment stored in the private bucket. Uploaded first
+/// (supportRequestId null), then linked when the request is sent; unlinked ones are purged.
+model SupportAttachment {
+  id               String   @id @default(uuid())
+  userId           String?
+  supportRequestId String?
+  position         Int?     @db.SmallInt
+  storageKey       String   @db.VarChar(500)
+  fileName         String   @db.VarChar(255)
+  mimeType         String   @db.VarChar(100)
+  fileSizeBytes    Int
+  createdAt        DateTime @default(now())
 
-  supportRequest SupportRequest @relation(fields: [supportRequestId], references: [id], onDelete: Cascade)
-  file           File           @relation(fields: [fileId], references: [id], onDelete: Cascade)
+  user           User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
+  supportRequest SupportRequest? @relation(fields: [supportRequestId], references: [id], onDelete: Cascade)
 
-  @@id([supportRequestId, fileId])
-  @@index([fileId])
+  @@index([supportRequestId, position])
+  @@index([userId])
+  @@index([createdAt])
 }
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
@@ -466,6 +475,7 @@ model User {
   staffProfiles            Staff[]
   files                    File[]
   supportRequests          SupportRequest[]
+  supportAttachments       SupportAttachment[]
 }
 
 model RefreshToken {
@@ -1146,14 +1156,13 @@ model File {
   fileSizeBytes Int
   createdAt     DateTime @default(now())
 
-  user                User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   staffAvatars        Staff[]
   brandLogos          Brand[]
   serviceImages       Service[]
   serviceBundleImages ServiceBundle[]
   productImages       Product[]
   bookingPageCovers   BookingPage[]
-  supportAttachments  SupportRequestAttachment[]
 
   @@index([userId])
 }

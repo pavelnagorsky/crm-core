@@ -219,9 +219,7 @@
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
 | `POST /brands/:brandId/files` | `uploadForBrand` | G: `file.brand:write` | — |
-| `POST /users/me/files` | `uploadForUser` | U: `own-files` | Только собственные файлы. |
 | `DELETE /brands/:brandId/files/:fileId` | `deleteFromBrand` | G: `file.brand:write` | Удаление связанного файла не должно обходить запрет изменения сущности. |
-| `DELETE /users/me/files/:fileId` | `deleteFromUser` | U: `own-files` | Только собственные файлы. |
 
 ## health
 
@@ -429,6 +427,22 @@
 | `DELETE /locations/:locationId/staff/:id` | `delete` | L: `staff:write` | — |
 | `GET /locations/:locationId/staff/:id/shifts` | `getShifts` | L: `staff:read` или `staff.own:read` | Own: только собственный активный профиль или его смены. |
 | `PUT /locations/:locationId/staff/:id/shifts` | `replaceShifts` | L: `staff:write` | — |
+
+## support
+
+[Исходники](../../src/modules/support/controllers/)
+
+Вложения обращений лежат в приватном бакете и выдаются только подписанными ссылками со сроком 1 час.
+
+| API | Метод | Проверка | Уточнение |
+| --- | --- | --- | --- |
+| `POST /public/support-requests` | `create` | P: гость или вход | Вложения (`fileIds`) только после входа, свои и ещё не отправленные. |
+| `POST /support-requests/attachments` | `upload` | U: вход | Приватный файл; неотправленные удаляются через 24 часа. |
+| `DELETE /support-requests/attachments/:id` | `delete` | U: вход | Только своё и ещё не отправленное вложение. |
+| `GET /admin/support-requests` | `search` | P: администратор платформы | — |
+| `GET /admin/support-requests/:id` | `findById` | P: администратор платформы | Вложения с подписанными ссылками (`url`, `urlExpiresAt`). |
+| `PATCH /admin/support-requests/:id` | `update` | P: администратор платформы | — |
+| `DELETE /admin/support-requests/:id` | `delete` | P: администратор платформы | Удаляет и вложения. |
 
 ## suppliers
 

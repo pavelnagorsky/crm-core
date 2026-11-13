@@ -46,7 +46,7 @@ export class CreateSupportRequestDto {
     isArray: true,
     maxItems: 10,
     description:
-      'Files uploaded via POST /users/me/files; signed-in users only, files must belong to the caller',
+      'Attachments uploaded via POST /support-requests/attachments, in display order. Signed-in users only; each must belong to the caller and not be sent yet',
   })
   @IsOptional()
   @IsArray()

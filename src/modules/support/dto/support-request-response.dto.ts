@@ -32,7 +32,12 @@ export class SupportRequestResponseDto {
   @ApiProperty({ type: Date, nullable: true })
   resolvedAt: Date | null;
 
-  @ApiProperty({ type: String, format: 'uuid', isArray: true })
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    isArray: true,
+    description: 'Attachment ids in the order sent',
+  })
   fileIds: string[];
 
   @ApiProperty()
@@ -52,7 +57,7 @@ export class SupportRequestResponseDto {
       status: entity.status,
       notes: entity.notes,
       resolvedAt: entity.resolvedAt,
-      fileIds: entity.attachments.map((attachment) => attachment.fileId),
+      fileIds: entity.attachments.map((attachment) => attachment.id),
       createdAt: entity.createdAt,
       updatedAt: entity.updatedAt,
     });

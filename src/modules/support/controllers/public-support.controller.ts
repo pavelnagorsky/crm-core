@@ -33,7 +33,8 @@ export class PublicSupportController {
       'Invalid form, missing reply email (SUPPORT_EMAIL_REQUIRED) or guest attachments (SUPPORT_ATTACHMENTS_REQUIRE_AUTH)',
   })
   @ApiNotFoundResponse({
-    description: 'An attached file does not exist or belongs to someone else',
+    description:
+      'FILE_NOT_FOUND: an attachment does not exist, belongs to someone else or is already sent',
   })
   async create(
     @Body() dto: CreateSupportRequestDto,

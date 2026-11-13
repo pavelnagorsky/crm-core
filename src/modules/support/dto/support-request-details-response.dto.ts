@@ -7,7 +7,7 @@ export class SupportRequestDetailsResponseDto extends SupportRequestResponseDto 
   @ApiProperty({
     type: () => SupportAttachmentDto,
     isArray: true,
-    description: 'Attachments that still exist; deleted files are omitted',
+    description: 'Private attachments in the order sent, with signed links',
   })
   files: SupportAttachmentDto[];
 
@@ -18,7 +18,7 @@ export class SupportRequestDetailsResponseDto extends SupportRequestResponseDto 
     return Object.assign(
       new SupportRequestDetailsResponseDto(),
       SupportRequestResponseDto.fromEntity(request),
-      { files: files.map(SupportAttachmentDto.fromEntity) },
+      { files: files.map(SupportAttachmentDto.fromSigned) },
     );
   }
 }
