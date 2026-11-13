@@ -18,6 +18,7 @@ export class BookingStatusChangedNotification
     private readonly booking: BookingNotificationData,
     private readonly status: BookingStatusChangedStatus,
     private readonly cancellationReason: string | undefined,
+    private readonly previousStartAt?: Date,
   ) {
     super();
   }
@@ -35,6 +36,7 @@ export class BookingStatusChangedNotification
         timezone: this.booking.timezone,
         status: this.status,
         cancellationReason: this.cancellationReason ?? null,
+        previousStartAt: this.previousStartAt ?? null,
       },
     };
   }

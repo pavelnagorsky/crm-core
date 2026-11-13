@@ -3,6 +3,7 @@ import {
   BookingVisibility,
   CalendarEventRepeatType,
   CalendarEventType,
+  ClientNoticeType,
   OrderItemType,
   Prisma,
 } from '@prisma/client';
@@ -11,6 +12,7 @@ import { AuditActorRole } from '../audit/enums/audit-actor-role.enum.js';
 import { NOTIFICATION_EVENT } from '../notifications/services/notifications.service.js';
 import { OrderPricingCalculator } from '../orders/calculators/order-pricing.calculator.js';
 import { BookingCreateFacade } from './booking-create.facade.js';
+import { CLIENT_NOTICE_DELAY_MS } from './rules/booking-client-notice.rules.js';
 import { CreateBookingDto } from './dto/create-booking.dto.js';
 import { BookingSource } from './enums/booking-source.enum.js';
 import { BookingStatus } from './enums/booking-status.enum.js';
@@ -677,6 +679,9 @@ function customTimeSetup(
             clientPhone: string | null;
             clientEmail: string | null;
             internalNotes?: string | null;
+            notifyClient?: boolean;
+            clientNoticeAt?: Date | null;
+            clientNoticeType?: ClientNoticeType | null;
             items: {
               create: {
                 startAt: Date;
@@ -763,7 +768,7 @@ function customTimeSetup(
     earnings as never,
     ...catalogDeps(db),
   );
-  return { service, tx, calendar, clients, orders, earnings, emitter };
+  return { service, tx, db, calendar, clients, orders, earnings, emitter };
 }
 
 describe('BookingCreateFacade custom time', () => {
@@ -807,13 +812,18 @@ describe('BookingCreateFacade custom time', () => {
   });
 
   it.each([
-    [undefined, 1],
-    [true, 1],
-    [false, 0],
+    [undefined, true, true],
+    [undefined, false, false],
+    [true, false, true],
+    [false, true, false],
   ])(
-    'emails the client about a manual booking when notifyClient is %s',
-    async (notifyClient, emails) => {
-      const { service, clients, emitter } = customTimeSetup();
+    'queues the client email for a manual booking when notifyClient is %s and the location setting is %s',
+    async (notifyClient, setting, queued) => {
+      const { service, tx, db, clients, emitter } = customTimeSetup();
+      db.location.findUnique.mockResolvedValue({
+        ...(await db.location.findUnique()),
+        notifyClientOnStaffChanges: setting,
+      });
       clients.resolveForBooking.mockResolvedValue({
         id: 'client-1',
         firstName: 'Anna',
@@ -823,20 +833,29 @@ describe('BookingCreateFacade custom time', () => {
         bannedAt: null,
       });
 
+      const before = Date.now();
       await service.createManualBooking(
         'business-1',
-        {
-          ...dto,
-          startAt: '2099-09-20T10:00:00',
-          notifyClient,
-        },
+        { ...dto, startAt: '2099-09-20T10:00:00', notifyClient },
         { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER },
       );
 
-      const notifications = emitter.emit.mock.calls.filter(
-        ([event]) => event === NOTIFICATION_EVENT,
-      );
-      expect(notifications).toHaveLength(emails);
+      const data = tx.booking.create.mock.calls[0][0].data;
+      expect(data.notifyClient).toBe(queued);
+      if (queued) {
+        expect(data.clientNoticeType).toBe(ClientNoticeType.CREATED);
+        expect(data.clientNoticeAt?.getTime()).toBeGreaterThanOrEqual(
+          before + CLIENT_NOTICE_DELAY_MS,
+        );
+      } else {
+        expect(data.clientNoticeAt).toBeNull();
+        expect(data.clientNoticeType).toBeNull();
+      }
+      expect(
+        emitter.emit.mock.calls.filter(
+          ([event]) => event === NOTIFICATION_EVENT,
+        ),
+      ).toHaveLength(0);
     },
   );
 

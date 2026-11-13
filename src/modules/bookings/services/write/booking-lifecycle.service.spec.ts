@@ -1,8 +1,9 @@
-import { CancelledBy } from '@prisma/client';
+import { CancelledBy, ClientNoticeType } from '@prisma/client';
 import { booking } from '../../testing/factories/booking.factory.js';
 import { AuditActorRole } from '../../../audit/enums/audit-actor-role.enum.js';
 import { BookingStatus } from '../../enums/booking-status.enum.js';
 import { BookingLifecycleService } from './booking-lifecycle.service.js';
+import { NO_CLIENT_NOTICE } from '../../rules/booking-client-notice.rules.js';
 
 const actor = { name: 'Owner', role: AuditActorRole.OWNER };
 function setup() {
@@ -35,7 +36,10 @@ function setup() {
     removeDraftProductsForBooking: vi.fn().mockResolvedValue([]),
     syncCompletedBooking: vi.fn(),
   };
-  const write = { lockUnchangedBooking: vi.fn(), lockActiveLocation: vi.fn() };
+  const write = {
+    lockUnchangedBooking: vi.fn().mockResolvedValue(NO_CLIENT_NOTICE),
+    lockActiveLocation: vi.fn(),
+  };
   const events = {
     audit: vi.fn(() => {
       expect(committed).toBe(true);
@@ -104,8 +108,9 @@ describe('Booking lifecycle transaction boundaries', () => {
     vi.setSystemTime(new Date('2026-09-23T10:00:00Z'));
     try {
       const { service, old, write, tx } = setup();
-      write.lockUnchangedBooking.mockImplementation(() => {
+      write.lockUnchangedBooking.mockImplementation(async () => {
         vi.setSystemTime(old.startAt);
+        return NO_CLIENT_NOTICE;
       });
       await expect(service.cancelByClient(old, {})).rejects.toMatchObject({
         errorCode: 'BOOKING_CLIENT_ACTION_UNAVAILABLE',
@@ -124,6 +129,30 @@ describe('Booking lifecycle transaction boundaries', () => {
     });
     expect(events.audit).toHaveBeenCalledOnce();
   });
+  it('tells the client about a staff cancellation and clears the pending email', async () => {
+    const { service, old, tx, events } = setup();
+    await service.cancel(old, actor, CancelledBy.STAFF, {});
+    expect(tx.booking.update.mock.calls[0][0].data).toMatchObject(
+      NO_CLIENT_NOTICE,
+    );
+    expect(events.notifyStatus).toHaveBeenCalledWith(
+      old,
+      'CANCELLED',
+      undefined,
+    );
+  });
+
+  it('stays silent about a cancellation while the creation email is still queued', async () => {
+    const { service, old, write, events } = setup();
+    write.lockUnchangedBooking.mockResolvedValue({
+      clientNoticeAt: new Date(),
+      clientNoticeType: ClientNoticeType.CREATED,
+      clientNoticeFromStartAt: null,
+    });
+    await service.cancel(old, actor, CancelledBy.STAFF, {});
+    expect(events.notifyStatus).not.toHaveBeenCalled();
+  });
+
   it('cancels and deletes every event of a parallel team under the same booking transaction', async () => {
     const { service, old, tx, calendar } = setup();
     old.executionMode = 'PARALLEL';

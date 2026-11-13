@@ -57,6 +57,7 @@ import { BookingSearchRequestDto } from '../dto/booking-search-request.dto.js';
 import { BookingSearchResponseDto } from '../dto/booking-search-response.dto.js';
 import { BookingSetupResponseDto } from '../dto/booking-setup-response.dto.js';
 import { BookingStatusCountResponseDto } from '../dto/booking-status-count-response.dto.js';
+import { BookingWriteResponseDto } from '../dto/booking-write-response.dto.js';
 import { CancelBookingDto } from '../dto/cancel-booking.dto.js';
 import { ClientLinkResponseDto } from '../dto/client-link-response.dto.js';
 import { ManualCreateBookingDto } from '../dto/manual-create-booking.dto.js';
@@ -147,7 +148,7 @@ export class BookingsController {
   // ─── Owner / Staff ────────────────────────────────────────────────────────────
 
   @ApiOperation({ summary: 'Create a booking manually' })
-  @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
+  @ApiCreatedResponse({ type: ApiResponse(BookingWriteResponseDto) })
   @ApiNotFoundResponse({ description: 'Location, service, or staff not found' })
   @ApiConflictResponse({ description: 'Slot is no longer available' })
   @ApiForbiddenResponse({
@@ -161,7 +162,7 @@ export class BookingsController {
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Body() dto: ManualCreateBookingDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
-  ): Promise<BaseResponseDto<IdResponseDto>> {
+  ): Promise<BaseResponseDto<BookingWriteResponseDto>> {
     if (
       dto.items?.some((item) => item.customPrice != null) ||
       dto.products?.some((item) => item.customUnitPrice != null)
@@ -179,7 +180,9 @@ export class BookingsController {
       auditActorFromToken(tokenPayload, locationId),
       hasPermission(tokenPayload, Write(Claim.ORDER), locationId),
     );
-    return BaseResponseDto.success({ id: booking.id });
+    return BaseResponseDto.success(
+      BookingWriteResponseDto.fromBooking(booking),
+    );
   }
 
   @ApiOperation({ summary: 'Get booking count per status' })
@@ -266,7 +269,7 @@ export class BookingsController {
   }
 
   @ApiOperation({ summary: 'Update an accessible booking' })
-  @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
+  @ApiOkResponse({ type: ApiResponse(BookingWriteResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking not found' })
   @ApiConflictResponse({ description: 'Slot is no longer available' })
   @Permissions([Write(Claim.BOOKING), Write(Claim.BOOKING_OWN)])
@@ -276,7 +279,7 @@ export class BookingsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateBookingDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
-  ): Promise<BaseResponseDto<IdResponseDto>> {
+  ): Promise<BaseResponseDto<BookingWriteResponseDto>> {
     const current = await this.bookings.findByIdInLocation(locationId, id);
     await this.access.assertEdit(tokenPayload, current);
     if (
@@ -299,7 +302,9 @@ export class BookingsController {
       auditActorFromToken(tokenPayload, locationId),
       dto,
     );
-    return BaseResponseDto.success({ id: booking.id });
+    return BaseResponseDto.success(
+      BookingWriteResponseDto.fromBooking(booking),
+    );
   }
 
   @ApiOperation({ summary: 'Update booking status' })

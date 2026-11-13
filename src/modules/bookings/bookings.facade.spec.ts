@@ -37,6 +37,7 @@ import { BookingLifecycleService } from './services/write/booking-lifecycle.serv
 import { BookingMutationService } from './services/write/booking-mutation.service.js';
 import { BookingRescheduleService } from './services/write/booking-reschedule.service.js';
 import { booking } from './testing/factories/booking.factory.js';
+import { NO_CLIENT_NOTICE } from './rules/booking-client-notice.rules.js';
 
 const serviceCatalog = { loadForBooking: vi.fn() };
 const products = { listForPublicCatalog: vi.fn().mockResolvedValue([]) };
@@ -1666,7 +1667,7 @@ beforeEach(() => {
   vi.spyOn(
     BookingWriteLockService.prototype,
     'lockUnchangedBooking',
-  ).mockResolvedValue(undefined);
+  ).mockResolvedValue(NO_CLIENT_NOTICE);
 });
 
 function createMutationService(

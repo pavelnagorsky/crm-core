@@ -1,17 +1,19 @@
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test } from '@nestjs/testing';
-import { BookingStatus } from '@prisma/client';
+import { BookingStatus, ClientNoticeType } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { LocationService } from '../../location/services/location.service.js';
 import { ReviewRequestNotification } from '../../notifications/messages/review-request.notification.js';
 import { ReviewsFacade } from '../../reviews/reviews.facade.js';
 import { BookingsFacade } from '../bookings.facade.js';
+import { booking } from '../testing/factories/booking.factory.js';
 import {
   REVIEW_REQUEST_DELAY_MS,
   REVIEW_REQUEST_MAX_AGE_MS,
 } from '../rules/booking-cron.rules.js';
 import { BookingClientTokenService } from './booking-client-token.service.js';
 import { BookingCronService } from './booking-cron.service.js';
+import { BookingEventsService } from './booking-events.service.js';
 
 describe('BookingCronService.sendReminders', () => {
   const db = {
@@ -56,6 +58,7 @@ describe('BookingCronService.sendReminders', () => {
         { provide: LocationService, useValue: business },
         { provide: ReviewsFacade, useValue: reviews },
         { provide: BookingClientTokenService, useValue: clientTokens },
+        { provide: BookingEventsService, useValue: {} },
       ],
     }).compile();
     service = module.get(BookingCronService);
@@ -87,6 +90,7 @@ describe('BookingCronService.sendReminders', () => {
     const to = where.startAt.lte as Date;
     expect(to.getTime() - from.getTime()).toBe(24 * 60 * 60 * 1000);
     expect(where.reminderSentAt).toBeNull();
+    expect(where.clientNoticeAt).toBeNull();
     expect(where.status).toBe(BookingStatus.CONFIRMED);
     expect(emitter.emit).toHaveBeenCalledTimes(1);
     expect(where.location).toEqual({
@@ -98,6 +102,7 @@ describe('BookingCronService.sendReminders', () => {
         id: 'b1',
         deletedAt: null,
         reminderSentAt: null,
+        clientNoticeAt: null,
         updatedAt: undefined,
         status: BookingStatus.CONFIRMED,
         location: { deletedAt: null, brand: { deletedAt: null } },
@@ -182,6 +187,7 @@ describe('BookingCronService.sendReviewRequests', () => {
         { provide: LocationService, useValue: locations },
         { provide: ReviewsFacade, useValue: reviews },
         { provide: BookingClientTokenService, useValue: clientTokens },
+        { provide: BookingEventsService, useValue: {} },
       ],
     }).compile();
     service = module.get(BookingCronService);
@@ -264,5 +270,139 @@ describe('BookingCronService.sendReviewRequests', () => {
     await service.sendReviewRequests();
     expect(db.booking.updateMany).not.toHaveBeenCalled();
     expect(emitter.emit).not.toHaveBeenCalled();
+  });
+});
+
+describe('BookingCronService.sendClientNotices', () => {
+  const now = new Date('2026-09-20T10:00:00.000Z');
+  const db = { booking: { findMany: vi.fn(), updateMany: vi.fn() } };
+  const database = {
+    ...db,
+    $transaction: vi.fn(async (callback) => callback(db)),
+  };
+  const locations = {
+    acquireActiveOperationLock: vi.fn(),
+    getBookingSettings: vi.fn(),
+  };
+  const events = { notifyCreated: vi.fn(), notifyStatus: vi.fn() };
+  const pending = (overrides: Parameters<typeof booking>[0] = {}) =>
+    booking({
+      locationId: 'biz',
+      clientEmail: 'a@example.com',
+      startAt: new Date('2026-09-21T10:00:00.000Z'),
+      updatedAt: new Date('2026-09-20T09:57:00.000Z'),
+      clientNoticeAt: new Date('2026-09-20T09:59:00.000Z'),
+      clientNoticeType: ClientNoticeType.CREATED,
+      ...overrides,
+    });
+
+  let service: BookingCronService;
+
+  beforeEach(async () => {
+    vi.clearAllMocks();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(now);
+    locations.acquireActiveOperationLock.mockResolvedValue(true);
+    locations.getBookingSettings.mockResolvedValue({
+      timezone: 'Europe/Minsk',
+      notifyClientOnStaffChanges: true,
+    });
+    db.booking.updateMany.mockResolvedValue({ count: 1 });
+    const module = await Test.createTestingModule({
+      providers: [
+        BookingCronService,
+        { provide: DatabaseService, useValue: database },
+        { provide: BookingsFacade, useValue: {} },
+        { provide: EventEmitter2, useValue: { emit: vi.fn() } },
+        { provide: LocationService, useValue: locations },
+        { provide: ReviewsFacade, useValue: {} },
+        { provide: BookingClientTokenService, useValue: {} },
+        { provide: BookingEventsService, useValue: events },
+      ],
+    }).compile();
+    service = module.get(BookingCronService);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it('sends a due creation email once and clears it without bumping the version', async () => {
+    const due = pending();
+    db.booking.findMany.mockResolvedValue([due]);
+
+    await service.sendClientNotices();
+
+    expect(db.booking.findMany.mock.calls[0][0].where.clientNoticeAt).toEqual({
+      lte: now,
+    });
+    expect(db.booking.updateMany).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        id: due.id,
+        clientNoticeAt: due.clientNoticeAt,
+      }),
+      data: {
+        clientNoticeAt: null,
+        clientNoticeType: null,
+        clientNoticeFromStartAt: null,
+        updatedAt: due.updatedAt,
+      },
+    });
+    expect(events.notifyCreated).toHaveBeenCalledWith(due, 'Europe/Minsk');
+    expect(events.notifyStatus).not.toHaveBeenCalled();
+  });
+
+  it('sends a due move email with the start before the series', async () => {
+    const from = new Date('2026-09-21T08:00:00.000Z');
+    const due = pending({
+      clientNoticeType: ClientNoticeType.RESCHEDULED,
+      clientNoticeFromStartAt: from,
+    });
+    db.booking.findMany.mockResolvedValue([due]);
+
+    await service.sendClientNotices();
+
+    expect(events.notifyStatus).toHaveBeenCalledWith(
+      due,
+      'RESCHEDULED',
+      undefined,
+      from,
+    );
+  });
+
+  it('skips the email when another worker already claimed it', async () => {
+    db.booking.findMany.mockResolvedValue([pending()]);
+    db.booking.updateMany.mockResolvedValue({ count: 0 });
+
+    await service.sendClientNotices();
+
+    expect(events.notifyCreated).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['the email was removed', { clientEmail: null }],
+    ['the booking was cancelled', { status: BookingStatus.CANCELLED }],
+    ['the visit has started', { startAt: new Date('2026-09-20T09:30:00Z') }],
+  ])('clears but does not send when %s', async (_case, overrides) => {
+    db.booking.findMany.mockResolvedValue([pending(overrides)]);
+
+    await service.sendClientNotices();
+
+    expect(db.booking.updateMany).toHaveBeenCalledOnce();
+    expect(events.notifyCreated).not.toHaveBeenCalled();
+  });
+
+  it('drops a move email once the location turned the setting off', async () => {
+    db.booking.findMany.mockResolvedValue([
+      pending({
+        clientNoticeType: ClientNoticeType.RESCHEDULED,
+        clientNoticeFromStartAt: new Date('2026-09-21T08:00:00.000Z'),
+      }),
+    ]);
+    locations.getBookingSettings.mockResolvedValue({
+      timezone: 'UTC',
+      notifyClientOnStaffChanges: false,
+    });
+
+    await service.sendClientNotices();
+
+    expect(events.notifyStatus).not.toHaveBeenCalled();
   });
 });

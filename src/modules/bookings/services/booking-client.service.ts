@@ -105,7 +105,12 @@ export class BookingClientService {
     if (updated.startAt.getTime() === booking.startAt.getTime()) return updated;
     await this.events.updated(booking, updated, actor);
     try {
-      await this.events.notifyStatus(updated, 'RESCHEDULED');
+      await this.events.notifyStatus(
+        updated,
+        'RESCHEDULED',
+        undefined,
+        booking.startAt,
+      );
     } catch (error) {
       this.logger.error(
         `Failed to notify client about rescheduled booking ${booking.id}`,

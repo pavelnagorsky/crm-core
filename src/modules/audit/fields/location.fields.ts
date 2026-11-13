@@ -20,4 +20,5 @@ export const LOCATION_AUDIT_FIELDS: FieldDescriptor<Location>[] = [
   { key: 'minimumBookingNoticeMinutes' },
   { key: 'bookingVisibility', i18n: 'bookingVisibility' },
   { key: 'isBookingConfirmationRequired', i18n: 'booleanValue' },
+  { key: 'notifyClientOnStaffChanges', i18n: 'booleanValue' },
 ];

@@ -6,6 +6,7 @@ import { BookingExecutionMode } from '../enums/booking-execution-mode.enum.js';
 import { BookingSource } from '../enums/booking-source.enum.js';
 import { BookingStatus } from '../enums/booking-status.enum.js';
 import { BookingWithItems } from '../interfaces/booking-with-items.interface.js';
+import { BookingClientNoticeDto } from './booking-client-notice.dto.js';
 import { BookingItemResponseDto } from './booking-item-response.dto.js';
 
 export class BookingResponseDto {
@@ -72,6 +73,20 @@ export class BookingResponseDto {
   @ApiProperty({ type: String, nullable: true })
   internalNotes: string | null;
 
+  @ApiProperty({
+    type: Boolean,
+    description:
+      'Staff email the client about this booking: the confirmation and later moves. Set at creation',
+  })
+  notifyClient: boolean;
+
+  @ApiProperty({
+    type: () => BookingClientNoticeDto,
+    nullable: true,
+    description: 'An email to the client still waiting to go out',
+  })
+  clientNotice: BookingClientNoticeDto | null;
+
   @ApiProperty({ type: Date })
   createdAt: Date;
 
@@ -90,6 +105,8 @@ export class BookingResponseDto {
     dto.status = booking.status as BookingStatus;
     dto.source = booking.source as BookingSource;
     dto.isCustomTime = booking.isCustomTime;
+    dto.notifyClient = booking.notifyClient;
+    dto.clientNotice = BookingClientNoticeDto.fromBooking(booking);
     dto.clientFirstName = booking.clientFirstName;
     dto.clientLastName = booking.clientLastName;
     dto.clientPhone = booking.clientPhone;

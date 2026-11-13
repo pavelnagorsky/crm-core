@@ -22,6 +22,10 @@ import {
   assertClientRescheduleTime,
   resolveClientRescheduleStart,
 } from '../../rules/booking-client.rules.js';
+import {
+  clientRescheduleClientNotice,
+  staffRescheduleClientNotice,
+} from '../../rules/booking-client-notice.rules.js';
 import { BookingWriteLockService } from '../booking-write-lock.service.js';
 
 @Injectable()
@@ -100,7 +104,7 @@ export class BookingRescheduleService {
     return this.db.$transaction(async (tx) => {
       if (items.some((item) => item.endAt.getTime() > Date.now()))
         await this.write.lockActiveLocation(old.locationId, tx);
-      await this.write.lockUnchangedBooking(tx, old);
+      const notice = await this.write.lockUnchangedBooking(tx, old);
       await this.slots.lockSlots(items, location.timezone, tx);
       if (!manualInterval) {
         for (const item of items)
@@ -138,6 +142,17 @@ export class BookingRescheduleService {
           ...(nextStartAt.getTime() !== old.startAt.getTime() && {
             reminderSentAt: null,
           }),
+          ...(clientInitiated
+            ? clientRescheduleClientNotice({ ...old, ...notice })
+            : staffRescheduleClientNotice(
+                { ...old, ...notice },
+                {
+                  startAt: nextStartAt,
+                  clientEmail: this.nextClientEmail(old, data),
+                },
+                location.notifyClientOnStaffChanges,
+                new Date(),
+              )),
         },
         include: bookingWithItemsInclude,
       });
@@ -173,6 +188,15 @@ export class BookingRescheduleService {
       tx,
     );
     await this.saveItemSchedule(booking.locationId, booking.items, tx);
+  }
+
+  private nextClientEmail(
+    old: BookingWithItems,
+    data: Prisma.BookingUpdateInput,
+  ): string | null {
+    return typeof data.clientEmail === 'string' || data.clientEmail === null
+      ? data.clientEmail
+      : old.clientEmail;
   }
 
   private async assignItemStaff(

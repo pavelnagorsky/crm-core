@@ -169,6 +169,7 @@ export class BookingEventsService {
     booking: BookingWithItems,
     status: BookingStatusChangedStatus,
     reason?: string,
+    previousStartAt?: Date,
   ): Promise<void> {
     if (!booking.clientEmail) return;
     const { timezone } = await this.locationService.getLocale(
@@ -184,6 +185,7 @@ export class BookingEventsService {
         },
         status,
         reason,
+        previousStartAt,
       ),
     );
   }

@@ -116,4 +116,15 @@ export class CreateLocationDto {
   @IsOptional()
   @IsBoolean()
   isBookingConfirmationRequired?: boolean;
+
+  @ApiProperty({
+    type: Boolean,
+    default: true,
+    required: false,
+    description:
+      'Email the client about bookings staff create or move. Staff can still opt out per booking at creation.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  notifyClientOnStaffChanges?: boolean;
 }

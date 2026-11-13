@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
-import { Booking, CancelledBy } from '@prisma/client';
+import { Booking, CancelledBy, ClientNoticeType } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
 import {
   ACTIVE_LOCATION_WHERE,
@@ -20,6 +20,7 @@ import { CancelBookingDto } from '../../dto/cancel-booking.dto.js';
 import { UpdateBookingStatusDto } from '../../dto/update-booking-status.dto.js';
 import { BookingStatus } from '../../enums/booking-status.enum.js';
 import { BookingWithItems } from '../../interfaces/booking-with-items.interface.js';
+import { NO_CLIENT_NOTICE } from '../../rules/booking-client-notice.rules.js';
 import {
   ACTIVE_BOOKING_STATUSES,
   AUTO_COMPLETABLE_STATUSES,
@@ -67,6 +68,8 @@ export class BookingLifecycleService {
         where: { id: bookingId },
         data: {
           status: dto.status,
+          ...(!ACTIVE_BOOKING_STATUSES.includes(dto.status) &&
+            NO_CLIENT_NOTICE),
           ...(old.status === BookingStatus.CANCELLED
             ? { cancelledAt: null, cancelledBy: null, cancellationReason: null }
             : {}),
@@ -224,7 +227,7 @@ export class BookingLifecycleService {
       await this.write.lockUnchangedBooking(tx, booking);
       await tx.booking.update({
         where: { id: booking.id },
-        data: { deletedAt: new Date() },
+        data: { deletedAt: new Date(), ...NO_CLIENT_NOTICE },
       });
       await this.calendar.deleteBookingEvents(
         booking.items.flatMap((item) =>
@@ -277,8 +280,11 @@ export class BookingLifecycleService {
     }
     const storedReason = this.optionalReason(reason);
     let removedDraftProductItems: Record<string, unknown>[] = [];
+    let creationEmailPending = false;
     const updated = await this.db.$transaction(async (tx) => {
-      await this.write.lockUnchangedBooking(tx, booking);
+      const notice = await this.write.lockUnchangedBooking(tx, booking);
+      creationEmailPending =
+        notice.clientNoticeType === ClientNoticeType.CREATED;
       if (cancelledBy === CancelledBy.CLIENT)
         assertClientCanManageBooking(booking);
       const result = await tx.booking.update({
@@ -288,6 +294,7 @@ export class BookingLifecycleService {
           cancelledBy,
           cancelledAt: new Date(),
           cancellationReason: storedReason,
+          ...NO_CLIENT_NOTICE,
           items: { updateMany: { where: {}, data: { calendarEventId: null } } },
         },
         include: bookingWithItemsInclude,
@@ -327,7 +334,8 @@ export class BookingLifecycleService {
     this.logger.log(
       `booking cancelled: id=${booking.id} locationId=${booking.locationId} cancelledBy=${cancelledBy}`,
     );
-    if (cancelledBy === CancelledBy.STAFF)
+    // A booking whose creation email is still queued is unknown to the client: no news is right.
+    if (cancelledBy === CancelledBy.STAFF && !creationEmailPending)
       await this.events.notifyStatus(
         booking,
         'CANCELLED',

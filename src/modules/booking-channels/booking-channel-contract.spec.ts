@@ -122,6 +122,7 @@ describe('Location contacts response contract', () => {
           deletedAt: null,
           restoredAt: null,
           reviewsEnabled: true,
+          notifyClientOnStaffChanges: true,
           googleReviewUrl: null,
           yandexReviewUrl: null,
         }),

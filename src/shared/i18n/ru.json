@@ -556,7 +556,8 @@
       "slotIntervalMinutes": "Интервал слотов (мин)",
       "minimumBookingNoticeMinutes": "Мин. время до записи (мин)",
       "bookingVisibility": "Видимость записи",
-      "isBookingConfirmationRequired": "Требуется подтверждение"
+      "isBookingConfirmationRequired": "Требуется подтверждение",
+      "notifyClientOnStaffChanges": "Сообщать клиенту о записях, созданных или перенесённых администратором"
     },
     "BOOKING": {
       "isCustomTime": "Произвольное время",

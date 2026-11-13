@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { BookingStatus, Prisma } from '@prisma/client';
+import { BookingStatus, ClientNoticeType, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 import { LocationService } from '../../location/services/location.service.js';
@@ -13,10 +13,15 @@ import { ReviewsFacade } from '../../reviews/reviews.facade.js';
 import { BookingsFacade } from '../bookings.facade.js';
 import { BookingWithItems } from '../interfaces/booking-with-items.interface.js';
 import {
+  isClientNoticeSendable,
+  NO_CLIENT_NOTICE,
+} from '../rules/booking-client-notice.rules.js';
+import {
   reminderWindow,
   reviewRequestWindow,
 } from '../rules/booking-cron.rules.js';
 import { BookingClientTokenService } from './booking-client-token.service.js';
+import { BookingEventsService } from './booking-events.service.js';
 
 @Injectable()
 export class BookingCronService {
@@ -29,6 +34,7 @@ export class BookingCronService {
     private readonly locationService: LocationService,
     private readonly reviews: ReviewsFacade,
     private readonly clientTokens: BookingClientTokenService,
+    private readonly events: BookingEventsService,
   ) {}
 
   @Cron(CronExpression.EVERY_HOUR)
@@ -42,6 +48,8 @@ export class BookingCronService {
         status: BookingStatus.CONFIRMED,
         clientEmail: { not: null },
         reminderSentAt: null,
+        // The pending creation or move email goes first.
+        clientNoticeAt: null,
         deletedAt: null,
         location: ACTIVE_LOCATION_WHERE,
       },
@@ -64,6 +72,7 @@ export class BookingCronService {
             id: booking.id,
             deletedAt: null,
             reminderSentAt: null,
+            clientNoticeAt: null,
             updatedAt: booking.updatedAt,
             status: BookingStatus.CONFIRMED,
             location: ACTIVE_LOCATION_WHERE,
@@ -142,6 +151,70 @@ export class BookingCronService {
                 this.clientTokens.generateClientToken(booking.id),
               ),
             ),
+          );
+      }),
+    );
+  }
+
+  /** Sends the emails queued by staff creating or moving a booking once the undo window passes. */
+  @Cron(CronExpression.EVERY_MINUTE)
+  async sendClientNotices(): Promise<void> {
+    const now = new Date();
+    const bookings = await this.db.booking.findMany({
+      where: {
+        clientNoticeAt: { lte: now },
+        deletedAt: null,
+        location: ACTIVE_LOCATION_WHERE,
+      },
+      include: { items: { orderBy: { sortOrder: 'asc' } } },
+    });
+    if (!bookings.length) return;
+
+    const settings = new Map(
+      await Promise.all(
+        [...new Set(bookings.map((booking) => booking.locationId))].map(
+          async (locationId) =>
+            [
+              locationId,
+              await this.locationService
+                .getBookingSettings(locationId)
+                .catch(() => null),
+            ] as const,
+        ),
+      ),
+    );
+
+    await Promise.all(
+      bookings.map(async (booking) => {
+        const location = settings.get(booking.locationId);
+        if (!location) return;
+        const claimed = await this.claim(booking.locationId, {
+          where: {
+            id: booking.id,
+            deletedAt: null,
+            clientNoticeAt: booking.clientNoticeAt,
+            location: ACTIVE_LOCATION_WHERE,
+          },
+          // Bookkeeping, not an edit: keeps the version staff hold in an open form valid.
+          data: { ...NO_CLIENT_NOTICE, updatedAt: booking.updatedAt },
+        });
+        if (
+          !claimed ||
+          !isClientNoticeSendable(
+            booking,
+            location.notifyClientOnStaffChanges,
+            now,
+          )
+        )
+          return;
+        if (booking.clientNoticeType === ClientNoticeType.CREATED)
+          this.events.notifyCreated(booking, location.timezone);
+        else
+          await this.events.notifyStatus(
+            booking,
+            'RESCHEDULED',
+            undefined,
+            booking.clientNoticeFromStartAt ?? undefined,
           );
       }),
     );

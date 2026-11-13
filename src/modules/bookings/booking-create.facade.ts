@@ -30,6 +30,10 @@ import { PublicBookingRequestContext } from './interfaces/public-booking-request
 import { ResolvedBookingClient } from './interfaces/resolved-booking-client.interface.js';
 import { isSelfBookingBlocked } from './rules/client-ban.rules.js';
 import { bookingRequestHash } from './rules/booking-request-hash.js';
+import {
+  createdClientNotice,
+  NO_CLIENT_NOTICE,
+} from './rules/booking-client-notice.rules.js';
 import { BookingEventsService } from './services/booking-events.service.js';
 import { BookingReservationService } from './services/booking-reservation.service.js';
 import { BookingSchedulingService } from './services/booking-scheduling.service.js';
@@ -93,7 +97,7 @@ export class BookingCreateFacade {
     actor: AuditActor,
     canComplete = true,
   ): Promise<BookingWithItems> {
-    const { booking, timezone, currency, bundleTitle } = await this.create(
+    const { booking, currency, bundleTitle } = await this.create(
       locationId,
       {
         source: BookingSource.MANUAL,
@@ -108,8 +112,6 @@ export class BookingCreateFacade {
       `booking created (manual): id=${booking.id} locationId=${locationId} source=${booking.source} items=${booking.items.length} bundleId=${booking.bundleId ?? '-'} actor=${actor.name}`,
     );
     this.events.created(booking, actor, currency, bundleTitle);
-    if (dto.notifyClient !== false)
-      this.events.notifyCreated(booking, timezone);
     return booking;
   }
 
@@ -204,6 +206,23 @@ export class BookingCreateFacade {
         attribution.source,
         dto,
       ));
+    const internal = this.isInternalSource(attribution.source);
+    const notifyClient = internal
+      ? (('notifyClient' in dto ? dto.notifyClient : undefined) ??
+        location.notifyClientOnStaffChanges)
+      : true;
+    // Online bookings email the client at once; staff ones wait, so a mistake can be undone first.
+    const clientNotice = internal
+      ? createdClientNotice(
+          {
+            status,
+            startAt: envelopeStart,
+            clientEmail: client.email,
+            notifyClient,
+          },
+          new Date(),
+        )
+      : NO_CLIENT_NOTICE;
 
     const booking = await this.reservations.reserve(
       {
@@ -218,6 +237,8 @@ export class BookingCreateFacade {
         endAt: envelopeEnd,
         status,
         isCustomTime,
+        notifyClient,
+        clientNotice,
         notes: dto.notes ?? null,
         internalNotes: this.manualInternalNotes(dto, attribution.source),
         products: this.manualProducts(dto, attribution.source),

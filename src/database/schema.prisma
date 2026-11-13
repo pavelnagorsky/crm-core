@@ -535,6 +535,7 @@ model Location {
   bookingVisibility             BookingVisibility            @default(PUBLIC)
   isBookingConfirmationRequired Boolean                      @default(false)
   reviewsEnabled                Boolean                      @default(true)
+  notifyClientOnStaffChanges    Boolean                      @default(true)
   googleReviewUrl               String?                      @db.VarChar(2048)
   yandexReviewUrl               String?                      @db.VarChar(2048)
   createdAt                     DateTime                     @default(now())
@@ -1259,6 +1260,14 @@ model Booking {
   reminderSentAt      DateTime?
   reviewRequestSentAt DateTime?
 
+  // Staff may email the client about this booking (creation and reschedule). Set once at creation.
+  notifyClient            Boolean           @default(true)
+  // A pending email to the client, sent by the cron once this moment passes.
+  clientNoticeAt          DateTime?
+  clientNoticeType        ClientNoticeType?
+  // Start before the first reschedule of the pending series, for the "was" line.
+  clientNoticeFromStartAt DateTime?
+
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
@@ -1280,6 +1289,12 @@ model Booking {
   @@index([bundleId])
   @@index([bookingPageId])
   @@index([bookingWidgetId])
+  @@index([clientNoticeAt])
+}
+
+enum ClientNoticeType {
+  CREATED
+  RESCHEDULED
 }
 
 model BookingItem {

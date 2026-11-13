@@ -71,6 +71,9 @@ export class LocationResponseDto {
   @ApiProperty({ type: Boolean })
   isBookingConfirmationRequired: boolean;
 
+  @ApiProperty({ type: Boolean })
+  notifyClientOnStaffChanges: boolean;
+
   @ApiProperty({ type: Date })
   createdAt: Date;
 
@@ -102,6 +105,7 @@ export class LocationResponseDto {
     dto.minimumBookingNoticeMinutes = location.minimumBookingNoticeMinutes;
     dto.bookingVisibility = location.bookingVisibility;
     dto.isBookingConfirmationRequired = location.isBookingConfirmationRequired;
+    dto.notifyClientOnStaffChanges = location.notifyClientOnStaffChanges;
     dto.createdAt = location.createdAt;
     dto.updatedAt = location.updatedAt;
     return dto;

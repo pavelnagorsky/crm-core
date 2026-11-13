@@ -100,9 +100,8 @@ export class ManualCreateBookingDto extends CreateBookingDto {
   @ApiProperty({
     type: Boolean,
     required: false,
-    default: true,
     description:
-      'Email the client the booking confirmation with the management link. Reminders and status emails are not affected.',
+      'Email the client about this booking: the confirmation now and later reschedules by staff. Defaults to the location notifyClientOnStaffChanges setting. Stored on the booking. Reminders, cancellations and status emails are not affected.',
   })
   @IsOptional()
   @IsBoolean()

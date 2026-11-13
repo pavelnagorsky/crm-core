@@ -132,6 +132,8 @@ export class BookingReservationService {
         status,
         source: attribution.source,
         isCustomTime: input.isCustomTime,
+        notifyClient: input.notifyClient,
+        ...input.clientNotice,
         bookingPageId: attribution.bookingPageId,
         bookingWidgetId: attribution.bookingWidgetId,
         clientFirstName: client.firstName,

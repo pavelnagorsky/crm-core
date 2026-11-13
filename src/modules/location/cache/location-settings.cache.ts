@@ -25,6 +25,7 @@ export const LOCATION_SETTINGS_SELECT = {
   minimumBookingNoticeMinutes: true,
   bookingVisibility: true,
   isBookingConfirmationRequired: true,
+  notifyClientOnStaffChanges: true,
   reviewsEnabled: true,
   googleReviewUrl: true,
   yandexReviewUrl: true,

@@ -6,6 +6,7 @@ import { BookingAttribution } from './booking-attribution.interface.js';
 import { ResolvedBookingClient } from './resolved-booking-client.interface.js';
 import { ResolvedBookingItem } from './resolved-booking-item.interface.js';
 import { BookingCreationRequest } from './booking-creation-request.interface.js';
+import { ClientNoticeState } from './client-notice-state.interface.js';
 
 export interface PreparedBookingReservation {
   locationId: string;
@@ -19,6 +20,8 @@ export interface PreparedBookingReservation {
   endAt: Date;
   status: BookingStatus;
   isCustomTime: boolean;
+  notifyClient: boolean;
+  clientNotice: ClientNoticeState;
   notes: string | null;
   internalNotes: string | null;
   products: ManualBookingProductDto[];

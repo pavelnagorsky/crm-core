@@ -111,6 +111,9 @@ describe('Client booking changes', () => {
       startAt: new Date('2026-10-29T11:00:00Z'),
       endAt: new Date('2026-10-29T12:00:00Z'),
       reminderSentAt: null,
+      clientNoticeAt: null,
+      clientNoticeType: null,
+      clientNoticeFromStartAt: null,
     });
     expect(events.updated).toHaveBeenCalledWith(
       expect.anything(),
@@ -120,6 +123,8 @@ describe('Client booking changes', () => {
     expect(events.notifyStatus).toHaveBeenCalledWith(
       expect.anything(),
       'RESCHEDULED',
+      undefined,
+      old.startAt,
     );
   });
 
