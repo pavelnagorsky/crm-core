@@ -56,33 +56,24 @@ model SupportRequest {
   createdAt  DateTime             @default(now())
   updatedAt  DateTime             @updatedAt
 
-  user        User?               @relation(fields: [userId], references: [id], onDelete: SetNull)
-  attachments SupportAttachment[]
+  user        User?                      @relation(fields: [userId], references: [id], onDelete: SetNull)
+  attachments SupportRequestAttachment[]
 
   @@index([status, createdAt, id])
   @@index([createdAt, id])
   @@index([userId])
 }
 
-/// Private support attachment stored in the private bucket. Uploaded first
-/// (supportRequestId null), then linked when the request is sent; unlinked ones are purged.
-model SupportAttachment {
-  id               String   @id @default(uuid())
-  userId           String?
-  supportRequestId String?
-  position         Int?     @db.SmallInt
-  storageKey       String   @db.VarChar(500)
-  fileName         String   @db.VarChar(255)
-  mimeType         String   @db.VarChar(100)
-  fileSizeBytes    Int
-  createdAt        DateTime @default(now())
+model SupportRequestAttachment {
+  supportRequestId String
+  privateFileId    String
+  position         Int    @db.SmallInt
 
-  user           User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
-  supportRequest SupportRequest? @relation(fields: [supportRequestId], references: [id], onDelete: Cascade)
+  supportRequest SupportRequest @relation(fields: [supportRequestId], references: [id], onDelete: Cascade)
+  privateFile    PrivateFile    @relation(fields: [privateFileId], references: [id], onDelete: Cascade)
 
-  @@index([supportRequestId, position])
-  @@index([userId])
-  @@index([createdAt])
+  @@id([supportRequestId, privateFileId])
+  @@unique([privateFileId])
 }
 
 // ─── Enums ───────────────────────────────────────────────────────────────────
@@ -475,7 +466,7 @@ model User {
   staffProfiles            Staff[]
   files                    File[]
   supportRequests          SupportRequest[]
-  supportAttachments       SupportAttachment[]
+  privateFiles             PrivateFile[]
 }
 
 model RefreshToken {
@@ -1165,6 +1156,26 @@ model File {
   bookingPageCovers   BookingPage[]
 
   @@index([userId])
+}
+
+/// File in the private bucket; read only through short-lived signed links.
+/// Uploaded unattached (attachedAt null); a domain module attaches it when it
+/// starts referencing it. Unattached files are purged after a day.
+model PrivateFile {
+  id            String    @id @default(uuid())
+  userId        String?
+  storageKey    String    @db.VarChar(500)
+  fileName      String    @db.VarChar(255)
+  mimeType      String    @db.VarChar(100)
+  fileSizeBytes Int
+  attachedAt    DateTime?
+  createdAt     DateTime  @default(now())
+
+  user                     User?                     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  supportRequestAttachment SupportRequestAttachment?
+
+  @@index([userId])
+  @@index([attachedAt, createdAt])
 }
 
 model StaffService {

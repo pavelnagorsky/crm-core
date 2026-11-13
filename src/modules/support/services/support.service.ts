@@ -1,9 +1,5 @@
-import { HttpStatus, Injectable, Logger } from '@nestjs/common';
-import {
-  Prisma,
-  SupportAttachment,
-  SupportRequestStatus,
-} from '@prisma/client';
+import { HttpStatus, Injectable } from '@nestjs/common';
+import { Prisma, SupportRequestStatus } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
 import { stableOrderBy } from '../../../shared/database/stable-order-by.js';
@@ -11,12 +7,8 @@ import { OrderDirection } from '../../../shared/enums/order-direction.enum.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { PaginatedResult } from '../../../shared/interfaces/paginated-result.interface.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
-import { FilesService } from '../../files/services/files.service.js';
+import { PrivateFilesService } from '../../files/services/private-files.service.js';
 import { UserService } from '../../user/services/user.service.js';
-import {
-  SUPPORT_ATTACHMENT_ORPHAN_TTL_MS,
-  SUPPORT_ATTACHMENT_PURGE_BATCH,
-} from '../constants/support.constants.js';
 import { CreateSupportRequestDto } from '../dto/create-support-request.dto.js';
 import { SupportRequestSearchRequestDto } from '../dto/support-request-search-request.dto.js';
 import { UpdateSupportRequestDto } from '../dto/update-support-request.dto.js';
@@ -26,18 +18,16 @@ import { SupportRequestWithAttachments } from '../interfaces/support-request-wit
 
 const ATTACHMENTS_INCLUDE = {
   attachments: {
-    select: { id: true },
+    select: { privateFileId: true },
     orderBy: { position: 'asc' },
   },
 } satisfies Prisma.SupportRequestInclude;
 
 @Injectable()
 export class SupportService {
-  private readonly logger = new Logger(SupportService.name);
-
   constructor(
     private readonly db: DatabaseService,
-    private readonly filesService: FilesService,
+    private readonly privateFiles: PrivateFilesService,
     private readonly userService: UserService,
   ) {}
 
@@ -58,53 +48,21 @@ export class SupportService {
       const request = await tx.supportRequest.create({
         data: { userId, email, message: dto.message.trim() },
       });
-      for (const [position, id] of attachmentIds.entries()) {
-        const { count } = await tx.supportAttachment.updateMany({
-          where: { id, userId, supportRequestId: null },
-          data: { supportRequestId: request.id, position },
+      if (userId && attachmentIds.length) {
+        await this.privateFiles.attach(attachmentIds, userId, tx);
+        await tx.supportRequestAttachment.createMany({
+          data: attachmentIds.map((privateFileId, position) => ({
+            supportRequestId: request.id,
+            privateFileId,
+            position,
+          })),
         });
-        if (count === 0) {
-          throw new AppException(
-            ErrorCode.FILE_NOT_FOUND,
-            HttpStatus.NOT_FOUND,
-          );
-        }
       }
-      return { ...request, attachments: attachmentIds.map((id) => ({ id })) };
+      return {
+        ...request,
+        attachments: attachmentIds.map((privateFileId) => ({ privateFileId })),
+      };
     });
-  }
-
-  /** Stored privately until sent with a request; unsent ones are purged after a day. */
-  async uploadAttachment(
-    file: Express.Multer.File,
-    userId: string,
-  ): Promise<SupportAttachment> {
-    const stored = await this.filesService.uploadPrivate(file, userId);
-    try {
-      return await this.db.supportAttachment.create({
-        data: { userId, ...stored },
-      });
-    } catch (error) {
-      await this.deleteObjectQuietly(stored.storageKey);
-      throw error;
-    }
-  }
-
-  /** Only the uploader can remove an attachment, and only before it is sent. */
-  async deleteAttachment(id: string, userId: string): Promise<void> {
-    const attachment = await this.db.supportAttachment.findFirst({
-      where: { id, userId },
-    });
-    if (!attachment) {
-      throw new AppException(ErrorCode.FILE_NOT_FOUND, HttpStatus.NOT_FOUND);
-    }
-    const { count } = await this.db.supportAttachment.deleteMany({
-      where: { id, supportRequestId: null },
-    });
-    if (count === 0) {
-      throw new AppException(ErrorCode.FILE_IN_USE, HttpStatus.CONFLICT);
-    }
-    await this.deleteObjectQuietly(attachment.storageKey);
   }
 
   async search(
@@ -145,18 +103,8 @@ export class SupportService {
   /** Attachments come with signed links that expire; reload the request to refresh them. */
   async findDetails(id: string): Promise<SupportRequestDetails> {
     const request = await this.findById(id);
-    const attachments = await this.db.supportAttachment.findMany({
-      where: { supportRequestId: id },
-      orderBy: { position: 'asc' },
-    });
-    const files = await Promise.all(
-      attachments.map(async (attachment) => ({
-        attachment,
-        ...(await this.filesService.signPrivateUrl(
-          attachment.storageKey,
-          attachment.fileName,
-        )),
-      })),
+    const files = await this.privateFiles.signMany(
+      request.attachments.map((attachment) => attachment.privateFileId),
     );
     return { request, files };
   }
@@ -193,55 +141,18 @@ export class SupportService {
 
   /** Attachments go with the request, from the database and from storage. */
   async delete(id: string): Promise<void> {
-    const attachments = await this.db.supportAttachment.findMany({
+    const attachments = await this.db.supportRequestAttachment.findMany({
       where: { supportRequestId: id },
-      select: { storageKey: true },
+      select: { privateFileId: true },
     });
     try {
       await this.db.supportRequest.delete({ where: { id } });
     } catch (error) {
       this.rethrowNotFound(error);
     }
-    await Promise.all(
-      attachments.map((attachment) =>
-        this.deleteObjectQuietly(attachment.storageKey),
-      ),
+    await this.privateFiles.deleteMany(
+      attachments.map((attachment) => attachment.privateFileId),
     );
-  }
-
-  /** Removes attachments uploaded but never sent; returns how many were purged. */
-  async purgeOrphanAttachments(): Promise<number> {
-    const orphans = await this.db.supportAttachment.findMany({
-      where: {
-        supportRequestId: null,
-        createdAt: {
-          lt: new Date(Date.now() - SUPPORT_ATTACHMENT_ORPHAN_TTL_MS),
-        },
-      },
-      select: { id: true, storageKey: true },
-      orderBy: { createdAt: 'asc' },
-      take: SUPPORT_ATTACHMENT_PURGE_BATCH,
-    });
-    let purged = 0;
-    for (const orphan of orphans) {
-      // Skips an attachment that got sent since it was selected.
-      const { count } = await this.db.supportAttachment.deleteMany({
-        where: { id: orphan.id, supportRequestId: null },
-      });
-      if (count === 0) continue;
-      await this.deleteObjectQuietly(orphan.storageKey);
-      purged += 1;
-    }
-    return purged;
-  }
-
-  /** The row is gone already; a leftover private object is harmless, so storage errors are only logged. */
-  private async deleteObjectQuietly(storageKey: string): Promise<void> {
-    try {
-      await this.filesService.deletePrivate(storageKey);
-    } catch {
-      this.logger.warn(`Private object left in storage: ${storageKey}`);
-    }
   }
 
   private async findById(id: string): Promise<SupportRequestWithAttachments> {

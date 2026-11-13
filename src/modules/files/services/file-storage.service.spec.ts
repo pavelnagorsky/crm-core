@@ -1,8 +1,9 @@
 import { HttpStatus } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { DatabaseService } from '../../../database/database.service.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
-import { FilesService } from './files.service.js';
+import { FileBucket } from '../enums/file-bucket.enum.js';
+import { FileStorageScope } from '../enums/file-storage-scope.enum.js';
+import { FileStorageService } from './file-storage.service.js';
 
 const gcs = vi.hoisted(() => {
   const file = {
@@ -21,7 +22,6 @@ vi.mock('@google-cloud/storage', () => ({
 }));
 
 function setup() {
-  const db = { file: { create: vi.fn(async ({ data }) => data) } };
   const config = {
     get: () => ({
       bucketName: 'public-bucket',
@@ -29,12 +29,9 @@ function setup() {
       projectId: 'project',
     }),
   };
-  const service = new FilesService(
-    db as unknown as DatabaseService,
-    config as unknown as ConfigService,
-  );
+  const service = new FileStorageService(config as unknown as ConfigService);
   service.onModuleInit();
-  return { db, service };
+  return service;
 }
 
 const upload = (originalname: string, size = 100) =>
@@ -45,12 +42,17 @@ const upload = (originalname: string, size = 100) =>
     buffer: Buffer.from('x'),
   }) as Express.Multer.File;
 
-describe('FilesService', () => {
+describe('FileStorageService', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it('marks public uploads as immutable for long-term caching', async () => {
-    const { service } = setup();
-    const saved = await service.uploadForBrand(upload('logo.png'), 'u1', 'b1');
+    const service = setup();
+    const stored = await service.save(
+      FileBucket.PUBLIC,
+      upload('logo.png'),
+      FileStorageScope.BRAND,
+      'b1',
+    );
     expect(gcs.bucket).toHaveBeenCalledWith('public-bucket');
     expect(gcs.file.save).toHaveBeenCalledWith(expect.any(Buffer), {
       metadata: {
@@ -59,19 +61,23 @@ describe('FilesService', () => {
       },
       resumable: false,
     });
-    expect(saved.url).toMatch(
+    expect(service.publicUrl(stored.storageKey)).toMatch(
       /^https:\/\/storage\.googleapis\.com\/public-bucket\/brands\/b1\/files\/.+\.png$/,
     );
   });
 
-  it('writes private uploads to the private bucket without a database record', async () => {
-    const { db, service } = setup();
-    const stored = await service.uploadPrivate(upload('Скрин.PNG'), 'u1');
+  it('writes private uploads to the private bucket without public caching', async () => {
+    const service = setup();
+    const stored = await service.save(
+      FileBucket.PRIVATE,
+      upload('Скрин.PNG'),
+      FileStorageScope.USER,
+      'u1',
+    );
     expect(gcs.bucket).toHaveBeenCalledWith('private-bucket');
     expect(gcs.file.save.mock.calls[0][1].metadata).toEqual({
       contentType: 'image/png',
     });
-    expect(db.file.create).not.toHaveBeenCalled();
     expect(stored).toMatchObject({
       fileName: 'Скрин.PNG',
       mimeType: 'image/png',
@@ -87,19 +93,18 @@ describe('FilesService', () => {
       HttpStatus.PAYLOAD_TOO_LARGE,
     ],
     ['blocked', upload('run.exe'), HttpStatus.UNPROCESSABLE_ENTITY],
-  ])(
-    'applies the same limits to private uploads: %s',
-    async (_, file, status) => {
-      const { service } = setup();
-      const error = await service.uploadPrivate(file, 'u1').catch((e) => e);
-      expect(error).toBeInstanceOf(AppException);
-      expect((error as AppException).getStatus()).toBe(status);
-      expect(gcs.file.save).not.toHaveBeenCalled();
-    },
-  );
+  ])('rejects uploads before writing: %s', async (_, file, status) => {
+    const service = setup();
+    const error = await service
+      .save(FileBucket.PRIVATE, file, FileStorageScope.USER, 'u1')
+      .catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(AppException);
+    expect((error as AppException).getStatus()).toBe(status);
+    expect(gcs.file.save).not.toHaveBeenCalled();
+  });
 
   it('signs a short-lived read link that keeps the original file name', async () => {
-    const { service } = setup();
+    const service = setup();
     const before = Date.now();
     const signed = await service.signPrivateUrl(
       'users/u1/files/a.png',
@@ -119,11 +124,14 @@ describe('FilesService', () => {
     expect(signed.url).toBe('https://signed.example/x');
   });
 
-  it('maps a storage failure on private delete to FILE_DELETE_FAILED', async () => {
-    const { service } = setup();
+  it('maps a storage failure on delete to FILE_DELETE_FAILED', async () => {
+    const service = setup();
     gcs.file.delete.mockRejectedValueOnce(new Error('gcs down'));
-    const error = await service.deletePrivate('key').catch((e) => e);
+    const error = await service
+      .delete(FileBucket.PRIVATE, 'key')
+      .catch((e: unknown) => e);
     expect((error as AppException).errorCode).toBe('FILE_DELETE_FAILED');
+    expect(gcs.bucket).toHaveBeenCalledWith('private-bucket');
     expect(gcs.file.delete).toHaveBeenCalledWith({ ignoreNotFound: true });
   });
 });

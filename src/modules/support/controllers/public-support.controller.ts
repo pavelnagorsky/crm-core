@@ -34,7 +34,7 @@ export class PublicSupportController {
   })
   @ApiNotFoundResponse({
     description:
-      'FILE_NOT_FOUND: an attachment does not exist, belongs to someone else or is already sent',
+      'FILE_NOT_FOUND: an attachment does not exist, belongs to someone else or is already used',
   })
   async create(
     @Body() dto: CreateSupportRequestDto,

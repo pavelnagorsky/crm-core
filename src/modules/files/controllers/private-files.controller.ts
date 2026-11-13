@@ -28,20 +28,20 @@ import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
 import { Auth } from '../../auth/decorators/auth.decorator.js';
 import { TokenPayload } from '../../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
-import { SupportAttachmentUploadResponseDto } from '../dto/support-attachment-upload-response.dto.js';
-import { SupportService } from '../services/support.service.js';
+import { PrivateFileResponseDto } from '../dto/private-file-response.dto.js';
+import { PrivateFilesService } from '../services/private-files.service.js';
 
-@ApiTags('Support')
-@Controller('support-requests/attachments')
+@ApiTags('Files')
+@Controller('private-files')
 @Auth()
-export class SupportAttachmentsController {
-  constructor(private readonly supportService: SupportService) {}
+export class PrivateFilesController {
+  constructor(private readonly privateFiles: PrivateFilesService) {}
 
   @Post()
   @UseInterceptors(FileInterceptor('file', { storage: memoryStorage() }))
   @ApiOperation({
     summary:
-      'Upload a private attachment for a support request; send its id in fileIds. Unsent attachments are deleted after 24 hours',
+      'Upload a private file. Pass its id where a private file is expected (e.g. fileIds of a support request); files not used within 24 hours are deleted',
   })
   @ApiConsumes('multipart/form-data')
   @ApiBody({
@@ -53,32 +53,30 @@ export class SupportAttachmentsController {
       },
     },
   })
-  @ApiOkResponse({ type: ApiResponse(SupportAttachmentUploadResponseDto) })
+  @ApiOkResponse({ type: ApiResponse(PrivateFileResponseDto) })
   @ApiPayloadTooLargeResponse({ description: 'File exceeds 15 MB limit' })
   @ApiUnprocessableEntityResponse({ description: 'File extension is blocked' })
   async upload(
     @UploadedFile() file: Express.Multer.File,
     @TokenPayload() payload: TokenPayloadDto,
-  ): Promise<BaseResponseDto<SupportAttachmentUploadResponseDto>> {
+  ): Promise<BaseResponseDto<PrivateFileResponseDto>> {
     return BaseResponseDto.success(
-      SupportAttachmentUploadResponseDto.fromEntity(
-        await this.supportService.uploadAttachment(file, payload.sub),
+      PrivateFileResponseDto.fromSigned(
+        await this.privateFiles.upload(file, payload.sub),
       ),
     );
   }
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Remove an own attachment that is not sent yet' })
+  @ApiOperation({ summary: 'Delete an own private file that is not used yet' })
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'FILE_NOT_FOUND' })
-  @ApiConflictResponse({
-    description: 'FILE_IN_USE: already sent with a request',
-  })
+  @ApiConflictResponse({ description: 'FILE_IN_USE: already used' })
   async delete(
     @Param('id', ParseUUIDPipe) id: string,
     @TokenPayload() payload: TokenPayloadDto,
   ): Promise<void> {
-    await this.supportService.deleteAttachment(id, payload.sub);
+    await this.privateFiles.deleteOwn(id, payload.sub);
   }
 }

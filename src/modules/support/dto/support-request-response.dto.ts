@@ -57,7 +57,7 @@ export class SupportRequestResponseDto {
       status: entity.status,
       notes: entity.notes,
       resolvedAt: entity.resolvedAt,
-      fileIds: entity.attachments.map((attachment) => attachment.id),
+      fileIds: entity.attachments.map((attachment) => attachment.privateFileId),
       createdAt: entity.createdAt,
       updatedAt: entity.updatedAt,
     });

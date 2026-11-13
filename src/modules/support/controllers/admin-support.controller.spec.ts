@@ -5,7 +5,6 @@ import { PlatformAdminGuard } from '../../auth/guards/platform-admin.guard.js';
 import { TokenEpochGuard } from '../../auth/guards/token-epoch.guard.js';
 import { AdminSupportController } from './admin-support.controller.js';
 import { PublicSupportController } from './public-support.controller.js';
-import { SupportAttachmentsController } from './support-attachments.controller.js';
 
 describe('Support controllers access', () => {
   it('authenticates and validates token epoch before checking the platform role', () => {
@@ -21,11 +20,5 @@ describe('Support controllers access', () => {
         PublicSupportController.prototype.create,
       ),
     ).toEqual([OptionalJwtAuthGuard]);
-  });
-
-  it('requires a signed-in user to upload or remove attachments', () => {
-    expect(
-      Reflect.getMetadata(GUARDS_METADATA, SupportAttachmentsController),
-    ).toEqual([JwtAuthGuard, TokenEpochGuard]);
   });
 });

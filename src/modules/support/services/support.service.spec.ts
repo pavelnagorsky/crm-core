@@ -4,7 +4,7 @@ import { DatabaseService } from '../../../database/database.service.js';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
-import { FilesService } from '../../files/services/files.service.js';
+import { PrivateFilesService } from '../../files/services/private-files.service.js';
 import { UserService } from '../../user/services/user.service.js';
 import { SupportRequestSearchRequestDto } from '../dto/support-request-search-request.dto.js';
 import { SupportService } from './support.service.js';
@@ -22,40 +22,29 @@ function setup() {
       update: vi.fn(),
       delete: vi.fn(),
     },
-    supportAttachment: {
-      create: vi.fn(async ({ data }) => ({ id: FILE_A, ...data })),
-      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
-      findFirst: vi.fn(),
+    supportRequestAttachment: {
+      createMany: vi.fn().mockResolvedValue({ count: 0 }),
       findMany: vi.fn().mockResolvedValue([]),
-      deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
     },
     $transaction: vi.fn(),
   };
   db.$transaction.mockImplementation((arg: unknown) =>
     typeof arg === 'function' ? arg(db) : Promise.all(arg as unknown[]),
   );
-  const filesService = {
-    uploadPrivate: vi.fn().mockResolvedValue({
-      storageKey: 'users/user-id/files/a.png',
-      fileName: 'screen.png',
-      mimeType: 'image/png',
-      fileSizeBytes: 10,
-    }),
-    signPrivateUrl: vi.fn(async (key: string) => ({
-      url: `https://signed/${key}`,
-      expiresAt: new Date('2026-11-13T13:00:00Z'),
-    })),
-    deletePrivate: vi.fn().mockResolvedValue(undefined),
+  const privateFiles = {
+    attach: vi.fn().mockResolvedValue(undefined),
+    signMany: vi.fn().mockResolvedValue([]),
+    deleteMany: vi.fn().mockResolvedValue(undefined),
   };
   const userService = {
     findById: vi.fn().mockResolvedValue({ email: 'Account@Example.com' }),
   };
   const service = new SupportService(
     db as unknown as DatabaseService,
-    filesService as unknown as FilesService,
+    privateFiles as unknown as PrivateFilesService,
     userService as unknown as UserService,
   );
-  return { db, filesService, userService, service };
+  return { db, privateFiles, userService, service };
 }
 
 async function expectAppError(
@@ -91,7 +80,7 @@ describe('SupportService.create', () => {
   );
 
   it('rejects guest attachments before touching files or the database', async () => {
-    const { db, service } = setup();
+    const { db, privateFiles, service } = setup();
     await expectAppError(
       service.create(
         { message: 'Help', email: 'a@example.com', fileIds: [FILE_A] },
@@ -100,7 +89,7 @@ describe('SupportService.create', () => {
       'SUPPORT_ATTACHMENTS_REQUIRE_AUTH',
       HttpStatus.BAD_REQUEST,
     );
-    expect(db.supportAttachment.updateMany).not.toHaveBeenCalled();
+    expect(privateFiles.attach).not.toHaveBeenCalled();
     expect(db.supportRequest.create).not.toHaveBeenCalled();
   });
 
@@ -154,133 +143,48 @@ describe('SupportService.create', () => {
     );
   });
 
-  it('links own unsent attachments in the given order inside the transaction', async () => {
-    const { db, service } = setup();
+  it('attaches own files and links them in the given order inside the transaction', async () => {
+    const { db, privateFiles, service } = setup();
     const request = await service.create(
       { message: 'Help', fileIds: [FILE_B, FILE_A] },
       'user-id',
     );
     expect(db.$transaction).toHaveBeenCalledWith(expect.any(Function));
-    expect(db.supportAttachment.updateMany.mock.calls).toEqual([
-      [
-        {
-          where: { id: FILE_B, userId: 'user-id', supportRequestId: null },
-          data: { supportRequestId: 'request-id', position: 0 },
-        },
+    expect(privateFiles.attach).toHaveBeenCalledWith(
+      [FILE_B, FILE_A],
+      'user-id',
+      db,
+    );
+    expect(db.supportRequestAttachment.createMany).toHaveBeenCalledWith({
+      data: [
+        { supportRequestId: 'request-id', privateFileId: FILE_B, position: 0 },
+        { supportRequestId: 'request-id', privateFileId: FILE_A, position: 1 },
       ],
-      [
-        {
-          where: { id: FILE_A, userId: 'user-id', supportRequestId: null },
-          data: { supportRequestId: 'request-id', position: 1 },
-        },
-      ],
+    });
+    expect(request.attachments).toEqual([
+      { privateFileId: FILE_B },
+      { privateFileId: FILE_A },
     ]);
-    expect(request.attachments).toEqual([{ id: FILE_B }, { id: FILE_A }]);
   });
 
-  it('fails with FILE_NOT_FOUND when an attachment is foreign, missing or already sent', async () => {
-    const { db, service } = setup();
-    db.supportAttachment.updateMany
-      .mockResolvedValueOnce({ count: 1 })
-      .mockResolvedValueOnce({ count: 0 });
+  it('does not link anything when attaching fails', async () => {
+    const { db, privateFiles, service } = setup();
+    privateFiles.attach.mockRejectedValue(
+      new AppException(ErrorCode.FILE_NOT_FOUND, HttpStatus.NOT_FOUND),
+    );
     await expectAppError(
-      service.create({ message: 'Help', fileIds: [FILE_A, FILE_B] }, 'user-id'),
+      service.create({ message: 'Help', fileIds: [FILE_A] }, 'user-id'),
       'FILE_NOT_FOUND',
       HttpStatus.NOT_FOUND,
     );
-  });
-});
-
-describe('SupportService attachments', () => {
-  it('stores the upload privately and records it unlinked', async () => {
-    const { db, filesService, service } = setup();
-    const file = { originalname: 'screen.png' } as Express.Multer.File;
-    await service.uploadAttachment(file, 'user-id');
-    expect(filesService.uploadPrivate).toHaveBeenCalledWith(file, 'user-id');
-    expect(db.supportAttachment.create).toHaveBeenCalledWith({
-      data: {
-        userId: 'user-id',
-        storageKey: 'users/user-id/files/a.png',
-        fileName: 'screen.png',
-        mimeType: 'image/png',
-        fileSizeBytes: 10,
-      },
-    });
+    expect(db.supportRequestAttachment.createMany).not.toHaveBeenCalled();
   });
 
-  it('removes the stored object when the record cannot be saved', async () => {
-    const { db, filesService, service } = setup();
-    db.supportAttachment.create.mockRejectedValue(new Error('db down'));
-    await expect(
-      service.uploadAttachment({} as Express.Multer.File, 'user-id'),
-    ).rejects.toThrow('db down');
-    expect(filesService.deletePrivate).toHaveBeenCalledWith(
-      'users/user-id/files/a.png',
-    );
-  });
-
-  it('deletes an own unsent attachment from the database and storage', async () => {
-    const { db, filesService, service } = setup();
-    db.supportAttachment.findFirst.mockResolvedValue({
-      id: FILE_A,
-      storageKey: 'key-a',
-    });
-    await service.deleteAttachment(FILE_A, 'user-id');
-    expect(db.supportAttachment.findFirst).toHaveBeenCalledWith({
-      where: { id: FILE_A, userId: 'user-id' },
-    });
-    expect(db.supportAttachment.deleteMany).toHaveBeenCalledWith({
-      where: { id: FILE_A, supportRequestId: null },
-    });
-    expect(filesService.deletePrivate).toHaveBeenCalledWith('key-a');
-  });
-
-  it('refuses to delete a foreign or sent attachment', async () => {
-    const { db, filesService, service } = setup();
-    db.supportAttachment.findFirst.mockResolvedValueOnce(null);
-    await expectAppError(
-      service.deleteAttachment(FILE_A, 'user-id'),
-      'FILE_NOT_FOUND',
-      HttpStatus.NOT_FOUND,
-    );
-    db.supportAttachment.findFirst.mockResolvedValueOnce({
-      id: FILE_A,
-      storageKey: 'key-a',
-    });
-    db.supportAttachment.deleteMany.mockResolvedValueOnce({ count: 0 });
-    await expectAppError(
-      service.deleteAttachment(FILE_A, 'user-id'),
-      'FILE_IN_USE',
-      HttpStatus.CONFLICT,
-    );
-    expect(filesService.deletePrivate).not.toHaveBeenCalled();
-  });
-
-  it('purges old unsent attachments and skips ones sent meanwhile', async () => {
-    const { db, filesService, service } = setup();
-    db.supportAttachment.findMany.mockResolvedValue([
-      { id: FILE_A, storageKey: 'key-a' },
-      { id: FILE_B, storageKey: 'key-b' },
-    ]);
-    db.supportAttachment.deleteMany
-      .mockResolvedValueOnce({ count: 1 })
-      .mockResolvedValueOnce({ count: 0 });
-    await expect(service.purgeOrphanAttachments()).resolves.toBe(1);
-    const where = db.supportAttachment.findMany.mock.calls[0][0].where;
-    expect(where.supportRequestId).toBeNull();
-    expect(Date.now() - where.createdAt.lt.getTime()).toBeGreaterThanOrEqual(
-      24 * 60 * 60 * 1000 - 1000,
-    );
-    expect(filesService.deletePrivate.mock.calls).toEqual([['key-a']]);
-  });
-
-  it('keeps purging when storage refuses to delete an object', async () => {
-    const { db, filesService, service } = setup();
-    db.supportAttachment.findMany.mockResolvedValue([
-      { id: FILE_A, storageKey: 'key-a' },
-    ]);
-    filesService.deletePrivate.mockRejectedValue(new Error('gcs down'));
-    await expect(service.purgeOrphanAttachments()).resolves.toBe(1);
+  it('skips attaching when there are no files', async () => {
+    const { db, privateFiles, service } = setup();
+    await service.create({ message: 'Help' }, 'user-id');
+    expect(privateFiles.attach).not.toHaveBeenCalled();
+    expect(db.supportRequestAttachment.createMany).not.toHaveBeenCalled();
   });
 });
 
@@ -368,49 +272,44 @@ describe('SupportService admin operations', () => {
   });
 
   it('returns attachments in sent order with signed links', async () => {
-    const { db, filesService, service } = setup();
+    const { db, privateFiles, service } = setup();
     db.supportRequest.findUnique.mockResolvedValue({
       id: 'id',
-      attachments: [{ id: FILE_B }],
+      attachments: [{ privateFileId: FILE_B }, { privateFileId: FILE_A }],
     });
-    const attachment = { id: FILE_B, storageKey: 'key-b', fileName: 'b.png' };
-    db.supportAttachment.findMany.mockResolvedValue([attachment]);
+    const signed = [{ file: { id: FILE_B }, url: 'u', expiresAt: new Date() }];
+    privateFiles.signMany.mockResolvedValue(signed);
     const { files } = await service.findDetails('id');
-    expect(db.supportAttachment.findMany).toHaveBeenCalledWith({
-      where: { supportRequestId: 'id' },
-      orderBy: { position: 'asc' },
-    });
-    expect(filesService.signPrivateUrl).toHaveBeenCalledWith('key-b', 'b.png');
-    expect(files).toEqual([
-      {
-        attachment,
-        url: 'https://signed/key-b',
-        expiresAt: new Date('2026-11-13T13:00:00Z'),
+    expect(db.supportRequest.findUnique.mock.calls[0][0].include).toEqual({
+      attachments: {
+        select: { privateFileId: true },
+        orderBy: { position: 'asc' },
       },
-    ]);
+    });
+    expect(privateFiles.signMany).toHaveBeenCalledWith([FILE_B, FILE_A]);
+    expect(files).toBe(signed);
   });
 
-  it('deletes the attachment objects together with the request', async () => {
-    const { db, filesService, service } = setup();
-    db.supportAttachment.findMany.mockResolvedValue([
-      { storageKey: 'key-a' },
-      { storageKey: 'key-b' },
+  it('deletes the attached files together with the request', async () => {
+    const { db, privateFiles, service } = setup();
+    db.supportRequestAttachment.findMany.mockResolvedValue([
+      { privateFileId: FILE_A },
+      { privateFileId: FILE_B },
     ]);
     db.supportRequest.delete.mockResolvedValue({});
     await service.delete('id');
-    expect(filesService.deletePrivate.mock.calls).toEqual([
-      ['key-a'],
-      ['key-b'],
-    ]);
+    expect(privateFiles.deleteMany).toHaveBeenCalledWith([FILE_A, FILE_B]);
   });
 
-  it('keeps attachment objects when the request does not exist', async () => {
-    const { db, filesService, service } = setup();
-    db.supportAttachment.findMany.mockResolvedValue([{ storageKey: 'key-a' }]);
+  it('keeps the files when the request does not exist', async () => {
+    const { db, privateFiles, service } = setup();
+    db.supportRequestAttachment.findMany.mockResolvedValue([
+      { privateFileId: FILE_A },
+    ]);
     db.supportRequest.delete.mockRejectedValue(
       knownError(PrismaErrorCode.RECORD_NOT_FOUND),
     );
     await expect(service.delete('id')).rejects.toBeInstanceOf(AppException);
-    expect(filesService.deletePrivate).not.toHaveBeenCalled();
+    expect(privateFiles.deleteMany).not.toHaveBeenCalled();
   });
 });

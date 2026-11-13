@@ -214,12 +214,16 @@
 
 ## files
 
-[Исходник](../../src/modules/files/controllers/files.controller.ts)
+[Исходники](../../src/modules/files/controllers/)
+
+Приватные файлы лежат в приватном бакете и выдаются только подписанными ссылками со сроком 1 час. Загруженный файл никому не виден, кроме загрузившего; когда модуль начинает его использовать (например, вложение обращения в поддержку), доступ к нему определяет этот модуль. Неиспользованные файлы удаляются через 24 часа.
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
 | `POST /brands/:brandId/files` | `uploadForBrand` | G: `file.brand:write` | — |
 | `DELETE /brands/:brandId/files/:fileId` | `deleteFromBrand` | G: `file.brand:write` | Удаление связанного файла не должно обходить запрет изменения сущности. |
+| `POST /private-files` | `upload` | U: вход | В ответе подписанная ссылка (`url`, `urlExpiresAt`). |
+| `DELETE /private-files/:id` | `delete` | U: вход | Только свой и ещё не использованный файл. |
 
 ## health
 
@@ -432,13 +436,11 @@
 
 [Исходники](../../src/modules/support/controllers/)
 
-Вложения обращений лежат в приватном бакете и выдаются только подписанными ссылками со сроком 1 час.
+Вложения обращений — приватные файлы (см. [files](#files)).
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `POST /public/support-requests` | `create` | P: гость или вход | Вложения (`fileIds`) только после входа, свои и ещё не отправленные. |
-| `POST /support-requests/attachments` | `upload` | U: вход | Приватный файл; неотправленные удаляются через 24 часа. |
-| `DELETE /support-requests/attachments/:id` | `delete` | U: вход | Только своё и ещё не отправленное вложение. |
+| `POST /public/support-requests` | `create` | P: гость или вход | Вложения (`fileIds` из `POST /private-files`) только после входа, свои и ещё не использованные. |
 | `GET /admin/support-requests` | `search` | P: администратор платформы | — |
 | `GET /admin/support-requests/:id` | `findById` | P: администратор платформы | Вложения с подписанными ссылками (`url`, `urlExpiresAt`). |
 | `PATCH /admin/support-requests/:id` | `update` | P: администратор платформы | — |

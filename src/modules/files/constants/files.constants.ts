@@ -5,3 +5,8 @@ export const PUBLIC_FILE_CACHE_CONTROL = 'public, max-age=31536000, immutable';
 
 /** Lifetime of a signed link to a private file. */
 export const PRIVATE_FILE_URL_TTL_MS = 60 * 60 * 1000;
+
+/** Private files not attached to anything within this time are purged. */
+export const PRIVATE_FILE_UNATTACHED_TTL_MS = 24 * 60 * 60 * 1000;
+
+export const PRIVATE_FILE_PURGE_BATCH = 200;
