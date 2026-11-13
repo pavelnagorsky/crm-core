@@ -8,7 +8,6 @@ import { StaffModule } from '../staff/staff.module.js';
 import { UserModule } from '../user/user.module.js';
 import { AccessManagementFacade } from './access-management.facade.js';
 import { AccessManagementController } from './controllers/access-management.controller.js';
-import { InvitationRateLimiter } from './services/invitation-rate-limiter.js';
 
 @Module({
   imports: [
@@ -20,7 +19,7 @@ import { InvitationRateLimiter } from './services/invitation-rate-limiter.js';
     UserModule,
     NotificationsModule,
   ],
-  providers: [AccessManagementFacade, InvitationRateLimiter],
+  providers: [AccessManagementFacade],
   controllers: [AccessManagementController],
 })
 export class AccessManagementModule {}

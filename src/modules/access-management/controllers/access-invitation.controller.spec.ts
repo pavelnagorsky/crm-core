@@ -17,7 +17,6 @@ describe('Invitation link and email responses', () => {
     {} as never,
     {} as never,
     {} as never,
-    {} as never,
   );
   const result = {
     token: 'original-token',

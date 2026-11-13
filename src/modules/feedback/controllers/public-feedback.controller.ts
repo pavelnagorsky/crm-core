@@ -10,12 +10,14 @@ import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
 import { IdResponseDto } from '../../../shared/dto/id-response.dto.js';
 import { CreateFeedbackDto } from '../dto/create-feedback.dto.js';
 import { FeedbackService } from '../services/feedback.service.js';
+import { StrictRateLimit } from '../../../shared/decorators/strict-rate-limit.decorator.js';
 
 @ApiTags('Feedback')
 @Controller('public/feedback')
 export class PublicFeedbackController {
   constructor(private readonly feedbackService: FeedbackService) {}
 
+  @StrictRateLimit()
   @Post()
   @Header('Cache-Control', 'no-store')
   @ApiOperation({

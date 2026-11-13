@@ -3,7 +3,6 @@ import { Test } from '@nestjs/testing';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import request from 'supertest';
 import { BookingChannelStatsService } from '../services/booking-channel-stats.service.js';
-import { BookingChannelEventsRateGuard } from '../guards/booking-channel-events-rate.guard.js';
 import { SaveBookingPageDto } from '../dto/save-booking-page.dto.js';
 import { SaveBookingWidgetDto } from '../dto/save-booking-widget.dto.js';
 import { BookingWidgetResponseDto } from '../dto/booking-widget-response.dto.js';
@@ -18,10 +17,7 @@ describe('Public booking channel events (HTTP)', () => {
   beforeAll(async () => {
     const module = await Test.createTestingModule({
       controllers: [PublicBookingChannelEventsController],
-      providers: [
-        BookingChannelEventsRateGuard,
-        { provide: BookingChannelStatsService, useValue: stats },
-      ],
+      providers: [{ provide: BookingChannelStatsService, useValue: stats }],
     }).compile();
     app = module.createNestApplication();
     app.useGlobalPipes(

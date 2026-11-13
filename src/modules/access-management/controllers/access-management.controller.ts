@@ -14,7 +14,6 @@ import {
   Patch,
   Post,
   Query,
-  Req,
 } from '@nestjs/common';
 import {
   ApiCreatedResponse,
@@ -23,7 +22,6 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { BusinessRole } from '@prisma/client';
-import type { Request } from 'express';
 import { Claim } from '../../access/enums/claim.enum.js';
 import { Write } from '../../access/utils/permission.js';
 import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
@@ -53,7 +51,7 @@ import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
 import { StaffService } from '../../staff/services/staff.service.js';
 import { UserService } from '../../user/services/user.service.js';
 import { AccessManagementFacade } from '../access-management.facade.js';
-import { InvitationRateLimiter } from '../services/invitation-rate-limiter.js';
+import { StrictRateLimit } from '../../../shared/decorators/strict-rate-limit.decorator.js';
 
 @ApiTags('Access')
 @Controller()
@@ -62,7 +60,6 @@ export class AccessManagementController {
     private readonly management: AccessManagementFacade,
     private readonly administration: AccessAdministrationService,
     private readonly staff: StaffService,
-    private readonly rateLimiter: InvitationRateLimiter,
     private readonly users: UserService,
   ) {}
 
@@ -316,14 +313,13 @@ export class AccessManagementController {
     await this.management.revoke(token, brandId, id);
   }
 
+  @StrictRateLimit()
   @Post('access/invitations/preview')
   @HttpCode(HttpStatus.OK)
   @ApiOkResponse({ type: ApiResponse(InvitationPreviewDto) })
   async preview(
     @Body() dto: InvitationTokenDto,
-    @Req() request: Request,
   ): Promise<BaseResponseDto<InvitationPreviewDto>> {
-    this.rateLimiter.assertAllowed(request.ip ?? 'unknown');
     return BaseResponseDto.success(
       Object.assign(
         new InvitationPreviewDto(),
@@ -333,15 +329,14 @@ export class AccessManagementController {
   }
 
   @Auth()
+  @StrictRateLimit()
   @Post('access/invitations/accept')
   @HttpCode(HttpStatus.OK)
   @ApiOkResponse({ type: ApiResponse(AccessInvitationResponseDto) })
   async accept(
     @TokenPayload() token: TokenPayloadDto,
     @Body() dto: InvitationTokenDto,
-    @Req() request: Request,
   ): Promise<BaseResponseDto<AccessInvitationResponseDto>> {
-    this.rateLimiter.assertAllowed(request.ip ?? 'unknown');
     return BaseResponseDto.success(
       AccessInvitationResponseDto.fromEntity(
         await this.management.accept(token, dto.token),

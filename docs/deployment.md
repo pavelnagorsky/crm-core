@@ -24,7 +24,8 @@ GitHub Actions запускает проверки и тесты, затем п�
    `/opt/crm-core/secrets/google-credentials.json` и задать в `.env`:
    `GOOGLE_APPLICATION_CREDENTIALS=/run/secrets/google-credentials.json`.
    Файл должен читаться пользователем контейнера с UID 1000.
-4. Настроить HTTPS reverse proxy на `127.0.0.1:3000`.
+4. Настроить HTTPS reverse proxy на `127.0.0.1:3000` с лимитами из
+   [rate-limiting.md](rate-limiting.md#nginx).
 
 ## GitHub Secrets
 

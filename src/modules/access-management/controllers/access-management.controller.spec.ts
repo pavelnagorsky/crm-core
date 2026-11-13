@@ -13,7 +13,6 @@ describe('Access membership participant details', () => {
     management as never,
     administration as never,
     {} as never,
-    {} as never,
     new UserService(db as never),
   );
   const owner = {

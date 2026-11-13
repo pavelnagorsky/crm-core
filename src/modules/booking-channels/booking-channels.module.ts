@@ -12,7 +12,6 @@ import { BookingWidgetsController } from './controllers/booking-widgets.controll
 import { PublicBookingChannelEventsController } from './controllers/public-booking-channel-events.controller.js';
 import { PublicBookingChannelsController } from './controllers/public-booking-channels.controller.js';
 import { PublicBookingCreateController } from './controllers/public-booking-create.controller.js';
-import { BookingChannelEventsRateGuard } from './guards/booking-channel-events-rate.guard.js';
 import { BookingChannelAttributionService } from './services/booking-channel-attribution.service.js';
 import { BookingChannelPublishService } from './services/booking-channel-publish.service.js';
 import { BookingChannelStatsService } from './services/booking-channel-stats.service.js';
@@ -39,7 +38,6 @@ import { BookingWidgetsService } from './services/booking-widgets.service.js';
   ],
   providers: [
     BookingChannelStatsService,
-    BookingChannelEventsRateGuard,
     BookingPagesService,
     BookingWidgetsService,
     BookingChannelPublishService,

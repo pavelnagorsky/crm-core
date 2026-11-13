@@ -14,12 +14,14 @@ import { OptionalTokenPayload } from '../../auth/decorators/optional-token-paylo
 import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
 import { CreateSupportRequestDto } from '../dto/create-support-request.dto.js';
 import { SupportService } from '../services/support.service.js';
+import { StrictRateLimit } from '../../../shared/decorators/strict-rate-limit.decorator.js';
 
 @ApiTags('Support')
 @Controller('public/support-requests')
 export class PublicSupportController {
   constructor(private readonly supportService: SupportService) {}
 
+  @StrictRateLimit()
   @Post()
   @OptionalAuth()
   @Header('Cache-Control', 'no-store')

@@ -11,6 +11,7 @@ import {
 } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { cookieConfig } from '../../../config/cookie.config.js';
+import { StrictRateLimit } from '../../../shared/decorators/strict-rate-limit.decorator.js';
 import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
 import { UnauthorizedResponseDto } from '../../../shared/dto/unauthorized-response.dto.js';
@@ -47,6 +48,7 @@ export class AuthController {
     type: ValidationErrorResponseDto,
     description: 'Validation error',
   })
+  @StrictRateLimit()
   @Post('register')
   async register(@Body() dto: RegisterDto): Promise<BaseResponseDto> {
     await this.authService.register(dto);
@@ -55,6 +57,7 @@ export class AuthController {
 
   @ApiOperation({ summary: 'Login' })
   @ApiOkResponse({ type: ApiResponse(AuthDto) })
+  @StrictRateLimit()
   @Post('login')
   async login(
     @Body() dto: LoginDto,
@@ -108,6 +111,7 @@ export class AuthController {
   })
   @ApiUnauthorizedResponse({ type: UnauthorizedResponseDto })
   @UseGuards(JwtEmailGuard)
+  @StrictRateLimit()
   @Post('confirm-email')
   async confirmEmail(
     @TokenPayload() payload: TokenPayloadDto,
@@ -121,6 +125,7 @@ export class AuthController {
 
   @ApiOperation({ summary: 'Request password reset email' })
   @ApiOkResponse({ type: ApiResponse(AuthDto) })
+  @StrictRateLimit()
   @Post('reset-password-request')
   async resetPasswordRequest(
     @Body() dto: ResetPasswordRequestDto,
@@ -131,6 +136,7 @@ export class AuthController {
 
   @ApiOperation({ summary: 'Reset password' })
   @ApiOkResponse({ type: ApiResponse(AuthDto) })
+  @StrictRateLimit()
   @Post('reset-password')
   async resetPassword(@Body() dto: ResetPasswordDto): Promise<BaseResponseDto> {
     await this.authService.resetPassword(dto);
@@ -147,6 +153,7 @@ export class AuthController {
   @ApiBadRequestResponse({ type: ValidationErrorResponseDto })
   @ApiUnauthorizedResponse({ type: UnauthorizedResponseDto })
   @UseGuards(GoogleOAuthGuard)
+  @StrictRateLimit()
   @Post('google')
   async googleOAuth(
     @OAuthData() oauthData: OAuthResponseDto,
@@ -168,6 +175,7 @@ export class AuthController {
   @ApiBadRequestResponse({ type: ValidationErrorResponseDto })
   @ApiUnauthorizedResponse({ type: UnauthorizedResponseDto })
   @UseGuards(VkOAuthGuard)
+  @StrictRateLimit()
   @Post('vk')
   async vkOAuth(
     @OAuthData() oauthData: OAuthResponseDto,
@@ -189,6 +197,7 @@ export class AuthController {
   @ApiBadRequestResponse({ type: ValidationErrorResponseDto })
   @ApiUnauthorizedResponse({ type: UnauthorizedResponseDto })
   @UseGuards(YandexOAuthGuard)
+  @StrictRateLimit()
   @Post('yandex')
   async yandexOAuth(
     @OAuthData() oauthData: OAuthResponseDto,

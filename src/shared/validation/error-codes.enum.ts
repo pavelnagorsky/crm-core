@@ -621,9 +621,9 @@ export const ErrorCode = {
     code: 'ACCESS_GRANT_INVALID',
     message: 'Invalid role, scope, or staff binding',
   },
-  BOOKING_CHANNEL_EVENTS_RATE_LIMITED: {
-    code: 'BOOKING_CHANNEL_EVENTS_RATE_LIMITED',
-    message: 'Too many booking channel events; try again later',
+  TOO_MANY_REQUESTS: {
+    code: 'TOO_MANY_REQUESTS',
+    message: 'Too many requests. Try again later',
   },
   SUPPORT_REQUEST_NOT_FOUND: {
     code: 'SUPPORT_REQUEST_NOT_FOUND',

@@ -7,7 +7,6 @@ import {
   Param,
   ParseUUIDPipe,
   Post,
-  UseGuards,
 } from '@nestjs/common';
 import {
   ApiNotFoundResponse,
@@ -16,14 +15,14 @@ import {
   ApiTags,
   ApiTooManyRequestsResponse,
 } from '@nestjs/swagger';
+import { PublicRateLimit } from '../../../shared/decorators/public-rate-limit.decorator.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
 import { RecordBookingChannelEventDto } from '../dto/record-booking-channel-event.dto.js';
-import { BookingChannelEventsRateGuard } from '../guards/booking-channel-events-rate.guard.js';
 import { BookingChannelStatsService } from '../services/booking-channel-stats.service.js';
 
 @ApiTags('Public booking')
 @Controller('public')
-@UseGuards(BookingChannelEventsRateGuard)
+@PublicRateLimit()
 @ApiTooManyRequestsResponse({ description: 'Too many events from this IP' })
 export class PublicBookingChannelEventsController {
   constructor(private readonly stats: BookingChannelStatsService) {}

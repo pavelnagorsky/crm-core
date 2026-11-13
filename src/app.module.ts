@@ -1,10 +1,13 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { APP_GUARD } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
+import { ThrottlerModule } from '@nestjs/throttler';
 import configuration from './config/configuration.js';
 import { loggerConfig } from './config/logger.config.js';
+import { throttlerConfig } from './config/throttler.config.js';
 import { DatabaseModule } from './database/database.module.js';
 import { AccessManagementModule } from './modules/access-management/access-management.module.js';
 import { AuditModule } from './modules/audit/audit.module.js';
@@ -33,6 +36,7 @@ import { ReviewImportModule } from './modules/reviews/import/review-import.modul
 import { ServicesModule } from './modules/services/services.module.js';
 import { StaffModule } from './modules/staff/staff.module.js';
 import { SuppliersModule } from './modules/suppliers/suppliers.module.js';
+import { AppThrottlerGuard } from './shared/guards/app-throttler.guard.js';
 
 @Module({
   imports: [
@@ -43,6 +47,7 @@ import { SuppliersModule } from './modules/suppliers/suppliers.module.js';
       cache: true,
     }),
     ScheduleModule.forRoot(),
+    ThrottlerModule.forRoot(throttlerConfig),
     LoggerModule.forRootAsync({
       inject: [ConfigService],
       useFactory: loggerConfig,
@@ -76,5 +81,6 @@ import { SuppliersModule } from './modules/suppliers/suppliers.module.js';
     InventoryAnalyticsModule,
     OrdersModule,
   ],
+  providers: [{ provide: APP_GUARD, useClass: AppThrottlerGuard }],
 })
 export class AppModule {}
