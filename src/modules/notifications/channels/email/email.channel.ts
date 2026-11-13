@@ -50,6 +50,10 @@ export class EmailChannel extends AbstractChannel {
         ...data,
         brandName: location.brand.name,
         brandLogoUrl: location.brand.logoFile?.url ?? null,
+        locationAddress:
+          [location.city, location.addressLine].filter(Boolean).join(', ') ||
+          null,
+        locationPhone: location.phone,
       };
     }
     const { subject, html, senderName, attachments } = this.renderer.render(

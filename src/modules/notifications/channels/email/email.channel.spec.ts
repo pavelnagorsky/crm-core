@@ -2,7 +2,6 @@ import { ConfigService } from '@nestjs/config';
 import { LocationService } from '../../../location/services/location.service.js';
 import { BookingNotificationData } from '../../interfaces/booking-notification-data.interface.js';
 import { AccessInvitationNotification } from '../../messages/access-invitation.notification.js';
-import { BookingCancelledNotification } from '../../messages/booking-cancelled.notification.js';
 import { BookingConfirmedNotification } from '../../messages/booking-confirmed.notification.js';
 import { BookingReminderNotification } from '../../messages/booking-reminder.notification.js';
 import { BookingStatusChangedNotification } from '../../messages/booking-status-changed.notification.js';
@@ -88,8 +87,7 @@ describe('Email branding', () => {
 
   it.each([
     new BookingConfirmedNotification(booking, 'https://example.com/manage'),
-    new BookingCancelledNotification(booking, 'Cancelled'),
-    new BookingReminderNotification(booking),
+    new BookingReminderNotification(booking, 'https://example.com/manage'),
     new BookingStatusChangedNotification(booking, 'RESCHEDULED', undefined),
   ])('uses the location brand for client email %s', async (notification) => {
     await channel.send(notification);
@@ -111,7 +109,7 @@ describe('Email branding', () => {
     locations.findPublicProfile.mockResolvedValue({
       brand: { name: 'Studio Brand', logoFile: null },
     });
-    await channel.send(new BookingReminderNotification(booking));
+    await channel.send(new BookingReminderNotification(booking, 'https://example.com/manage'));
 
     const mail = sendMail.mock.calls[0][0];
     expect(mail.html).toContain('>Studio Brand</td>');

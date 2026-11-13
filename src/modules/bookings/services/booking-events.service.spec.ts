@@ -26,7 +26,7 @@ describe('Booking creation notifications', () => {
   beforeEach(() => vi.clearAllMocks());
 
   it.each([
-    [BookingStatus.PENDING, 'booking-pending', 'Заявка на запись принята'],
+    [BookingStatus.PENDING, 'booking-pending', 'Заявка принята'],
     [BookingStatus.CONFIRMED, 'booking-confirmed', 'Запись подтверждена'],
   ])(
     'sends the correct email for %s with a management link',
@@ -50,7 +50,7 @@ describe('Booking creation notifications', () => {
         `href="${Handlebars.escapeExpression(tokens.managementUrl())}"`,
       );
       if (status === BookingStatus.PENDING) {
-        expect(email.html).toContain('Дождитесь подтверждения от салона');
+        expect(email.html).toContain('свяжется с вами, чтобы подтвердить');
         expect(email.html).not.toContain('Ваша запись подтверждена');
       }
     },

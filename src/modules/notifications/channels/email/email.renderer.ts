@@ -14,7 +14,6 @@ export type EmailTemplate =
   | 'access-invitation'
   | 'booking-confirmed'
   | 'booking-pending'
-  | 'booking-cancelled'
   | 'booking-status-changed'
   | 'booking-reminder'
   | 'review-request'
@@ -29,7 +28,6 @@ const EMAIL_TEMPLATES: EmailTemplate[] = [
   'access-invitation',
   'booking-confirmed',
   'booking-pending',
-  'booking-cancelled',
   'booking-status-changed',
   'booking-reminder',
   'review-request',
@@ -78,6 +76,13 @@ export class EmailRenderer implements OnModuleInit {
       join(templatesDir, '..', 'assets', 'klendo-logo.png'),
     );
 
+    this.hbs.registerPartial(
+      'bookingDetails',
+      readFileSync(
+        join(templatesDir, this.lang, 'partials', 'booking-details.hbs'),
+        'utf-8',
+      ),
+    );
     for (const name of EMAIL_TEMPLATES) {
       const source = readFileSync(
         join(templatesDir, this.lang, `${name}.hbs`),

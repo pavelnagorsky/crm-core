@@ -198,6 +198,12 @@ export class BookingEventsService {
         status,
         reason,
         previousStartAt,
+        // A cancelled booking has nothing left to manage.
+        status === 'CANCELLED'
+          ? undefined
+          : this.bookingClientService.managementUrl(
+              this.bookingClientService.generateClientToken(booking.id),
+            ),
       ),
     );
   }

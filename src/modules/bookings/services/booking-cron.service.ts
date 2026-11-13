@@ -82,6 +82,9 @@ export class BookingCronService {
             NOTIFICATION_EVENT,
             new BookingReminderNotification(
               this.notificationData(booking, locale.timezone),
+              this.clientTokens.managementUrl(
+                this.clientTokens.generateClientToken(booking.id),
+              ),
             ),
           );
       }),
