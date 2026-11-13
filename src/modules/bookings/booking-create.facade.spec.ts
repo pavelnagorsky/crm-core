@@ -1167,7 +1167,9 @@ function createBookingService(
     location,
     new BookingSelectionService(location, services, orders),
     new BookingSchedulingService(db, staff, calendar),
-    new BookingEventsService(emitter, clientTokens, location),
+    new BookingEventsService(emitter, clientTokens, location, {
+      notify: vi.fn(),
+    } as never),
     new BookingReservationService(
       db,
       location,

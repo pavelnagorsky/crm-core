@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { AuditActorRole } from '../../audit/enums/audit-actor-role.enum.js';
+import { StaffBookingEvent } from '../../notifications/enums/staff-booking-event.enum.js';
 import { BookingStatus } from '../enums/booking-status.enum.js';
 import { booking } from '../testing/factories/booking.factory.js';
 import { BookingClientService } from './booking-client.service.js';
@@ -42,7 +43,11 @@ function setup() {
   const db = {
     $transaction: vi.fn(async (run: (value: typeof tx) => unknown) => run(tx)),
   };
-  const events = { updated: vi.fn(), notifyStatus: vi.fn() };
+  const events = {
+    updated: vi.fn(),
+    notifyStatus: vi.fn(),
+    notifyStaff: vi.fn(),
+  };
   const staff = {
     resolveStaffForService: vi.fn().mockResolvedValue([{ id: 'anna' }]),
   };
@@ -125,6 +130,11 @@ describe('Client booking changes', () => {
       expect.anything(),
       'RESCHEDULED',
       undefined,
+      old.startAt,
+    );
+    expect(events.notifyStaff).toHaveBeenCalledWith(
+      expect.objectContaining({ startAt: new Date('2026-10-29T11:00:00Z') }),
+      StaffBookingEvent.RESCHEDULED,
       old.startAt,
     );
   });
@@ -229,6 +239,7 @@ describe('Client booking changes', () => {
     expect(tx.booking.update).not.toHaveBeenCalled();
     expect(events.updated).not.toHaveBeenCalled();
     expect(events.notifyStatus).not.toHaveBeenCalled();
+    expect(events.notifyStaff).not.toHaveBeenCalled();
   });
 
   it('rejects nonexistent local times instead of moving the visit to another hour', async () => {

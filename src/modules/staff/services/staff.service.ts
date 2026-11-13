@@ -498,6 +498,19 @@ export class StaffService {
     return staff;
   }
 
+  /** Accounts linked to these staff members of the location; staff without an account are skipped. */
+  async findLinkedUserIds(
+    locationId: string,
+    staffIds: string[],
+  ): Promise<string[]> {
+    if (!staffIds.length) return [];
+    const rows = await this.db.staff.findMany({
+      where: { locationId, id: { in: staffIds }, userId: { not: null } },
+      select: { userId: true },
+    });
+    return [...new Set(rows.flatMap((row) => row.userId ?? []))];
+  }
+
   async findById(staffId: string): Promise<StaffWithAvatar> {
     const staff = await this.db.staff.findUnique({
       where: { location: ACTIVE_LOCATION_WHERE, id: staffId },

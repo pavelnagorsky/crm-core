@@ -7,6 +7,7 @@ import { LocationService } from '../../location/services/location.service.js';
 import { ReviewWithStaff } from '../../reviews/interfaces/review-with-staff.interface.js';
 import { ReviewsFacade } from '../../reviews/reviews.facade.js';
 import { SubmitReviewDto } from '../../reviews/dto/submit-review.dto.js';
+import { StaffBookingEvent } from '../../notifications/enums/staff-booking-event.enum.js';
 import { ClientBookingReviewContext } from '../interfaces/client-booking-review-context.interface.js';
 import { CancelBookingDto } from '../dto/cancel-booking.dto.js';
 import { ClientBookingSlotsRequestDto } from '../dto/client-booking-slots-request.dto.js';
@@ -117,6 +118,11 @@ export class BookingClientService {
         error instanceof Error ? error.stack : String(error),
       );
     }
+    await this.events.notifyStaff(
+      updated,
+      StaffBookingEvent.RESCHEDULED,
+      booking.startAt,
+    );
     return updated;
   }
 }

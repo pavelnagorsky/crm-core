@@ -28,6 +28,7 @@ import { BookingStatus } from './enums/booking-status.enum.js';
 import { BookingWithItems } from './interfaces/booking-with-items.interface.js';
 import { BookingClientTokenService } from './services/booking-client-token.service.js';
 import { BookingEventsService } from './services/booking-events.service.js';
+import { BookingStaffNotificationService } from './services/booking-staff-notification.service.js';
 import { BookingSlotLockService } from './services/booking-slot-lock.service.js';
 import { BookingWriteLockService } from './services/booking-write-lock.service.js';
 import { BookingCalendarReadService } from './services/read/booking-calendar-read.service.js';
@@ -156,6 +157,10 @@ describe('BookingsFacade.completeElapsed', () => {
         BookingLifecycleService,
         BookingWriteLockService,
         BookingEventsService,
+        {
+          provide: BookingStaffNotificationService,
+          useValue: { notify: vi.fn() },
+        },
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
@@ -305,6 +310,10 @@ describe('BookingsFacade.updateStatus transactionality', () => {
         BookingLifecycleService,
         BookingWriteLockService,
         BookingEventsService,
+        {
+          provide: BookingStaffNotificationService,
+          useValue: { notify: vi.fn() },
+        },
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
@@ -366,6 +375,10 @@ describe('BookingsFacade.search', () => {
         BookingLifecycleService,
         BookingWriteLockService,
         BookingEventsService,
+        {
+          provide: BookingStaffNotificationService,
+          useValue: { notify: vi.fn() },
+        },
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
@@ -810,6 +823,10 @@ describe('BookingsFacade catalog selection', () => {
         BookingLifecycleService,
         BookingWriteLockService,
         BookingEventsService,
+        {
+          provide: BookingStaffNotificationService,
+          useValue: { notify: vi.fn() },
+        },
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
@@ -1049,6 +1066,10 @@ describe('BookingsFacade.update details and item prices', () => {
         BookingLifecycleService,
         BookingWriteLockService,
         BookingEventsService,
+        {
+          provide: BookingStaffNotificationService,
+          useValue: { notify: vi.fn() },
+        },
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
@@ -1264,6 +1285,10 @@ describe('BookingsFacade.update manual interval', () => {
         BookingLifecycleService,
         BookingWriteLockService,
         BookingEventsService,
+        {
+          provide: BookingStaffNotificationService,
+          useValue: { notify: vi.fn() },
+        },
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
@@ -1522,6 +1547,10 @@ describe('BookingsFacade.addProduct', () => {
         BookingLifecycleService,
         BookingWriteLockService,
         BookingEventsService,
+        {
+          provide: BookingStaffNotificationService,
+          useValue: { notify: vi.fn() },
+        },
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
@@ -1617,6 +1646,10 @@ describe('BookingsFacade.cancel draft product cleanup', () => {
         BookingLifecycleService,
         BookingWriteLockService,
         BookingEventsService,
+        {
+          provide: BookingStaffNotificationService,
+          useValue: { notify: vi.fn() },
+        },
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
@@ -1681,7 +1714,9 @@ function createMutationService(
   read: ConstructorParameters<typeof BookingMutationService>[3],
 ): BookingMutationService {
   const write = new BookingWriteLockService(location);
-  const events = new BookingEventsService(emitter, {} as never, location);
+  const events = new BookingEventsService(emitter, {} as never, location, {
+    notify: vi.fn(),
+  } as never);
   const slots = new BookingSlotLockService(staff, calendar);
   const reschedule = new BookingRescheduleService(
     db,

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { PassportModule } from '@nestjs/passport';
 import { I18nModule } from '../../shared/i18n/i18n.module.js';
+import { AccessModule } from '../access/access.module.js';
 import { CalendarModule } from '../calendar/calendar.module.js';
 import { ClientsModule } from '../clients/clients.module.js';
 import { LocationModule } from '../location/location.module.js';
@@ -32,11 +33,13 @@ import { PublicBookingRateLimiter } from './services/public-booking-rate-limiter
 import { BookingCalendarReadService } from './services/read/booking-calendar-read.service.js';
 import { BookingReadService } from './services/read/booking-read.service.js';
 import { BookingSetupService } from './services/setup/booking-setup.service.js';
+import { BookingStaffNotificationService } from './services/booking-staff-notification.service.js';
 import { JwtBookingClientStrategy } from './strategies/jwt-booking-client.strategy.js';
 
 @Module({
   imports: [
     PassportModule,
+    AccessModule,
     LocationModule,
     CalendarModule,
     ClientsModule,
@@ -57,6 +60,7 @@ import { JwtBookingClientStrategy } from './strategies/jwt-booking-client.strate
     BookingSchedulingService,
     BookingSlotLockService,
     BookingEventsService,
+    BookingStaffNotificationService,
     BookingWriteLockService,
     BookingLifecycleService,
     BookingRescheduleService,

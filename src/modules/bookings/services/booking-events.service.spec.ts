@@ -17,6 +17,7 @@ describe('Booking creation notifications', () => {
     emitter as never,
     tokens as never,
     {} as never,
+    {} as never,
   );
   const renderer = new EmailRenderer(
     new ConfigService({ app: { locale: 'ru' } }),

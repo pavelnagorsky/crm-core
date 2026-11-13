@@ -17,7 +17,8 @@ export type EmailTemplate =
   | 'booking-cancelled'
   | 'booking-status-changed'
   | 'booking-reminder'
-  | 'review-request';
+  | 'review-request'
+  | 'staff-booking-event';
 
 type CompiledTemplate = Handlebars.TemplateDelegate;
 
@@ -32,6 +33,7 @@ const EMAIL_TEMPLATES: EmailTemplate[] = [
   'booking-status-changed',
   'booking-reminder',
   'review-request',
+  'staff-booking-event',
 ];
 
 @Injectable()
@@ -106,12 +108,11 @@ export class EmailRenderer implements OnModuleInit {
           data.brandLogoUrl.startsWith('https://')
         ? data.brandLogoUrl
         : undefined;
-    const title =
-      (this.locale.email[template]?.subject as string | undefined) ?? template;
-    const subject = `${senderName} — ${title}`;
-    const heading =
-      (this.locale.email[template]?.heading as string | undefined) ?? title;
     const ctx = { ...data, locale: this.locale, lang: this.lang };
+    const texts = this.texts(template, data.variant);
+    const title = texts.subject ? this.text(texts.subject, ctx) : template;
+    const subject = `${senderName} — ${title}`;
+    const heading = texts.heading ? this.text(texts.heading, ctx) : title;
 
     const content = contentTemplate(ctx);
     const html = this.layoutTemplate({
@@ -146,6 +147,29 @@ export class EmailRenderer implements OnModuleInit {
     };
   }
 
+  /** Subject and heading of the template, or of its `variant` section when the data names one. */
+  private texts(
+    template: EmailTemplate,
+    variant: unknown,
+  ): { subject?: string; heading?: string } {
+    const section = this.locale.email[template] as
+      Record<string, unknown> | undefined;
+    const own =
+      typeof variant === 'string'
+        ? (section?.[variant] as Record<string, unknown> | undefined)
+        : undefined;
+    const pick = (key: 'subject' | 'heading') => {
+      const value = own?.[key] ?? section?.[key];
+      return typeof value === 'string' ? value : undefined;
+    };
+    return { subject: pick('subject'), heading: pick('heading') };
+  }
+
+  /** Subjects and headings may name booking data, e.g. the visit time. Plain text, escaped by the layout. */
+  private text(source: string, ctx: Record<string, unknown>): string {
+    return this.hbs.compile(source, { noEscape: true })(ctx);
+  }
+
   private registerHelpers() {
     this.hbs.registerHelper('t', (...rawArgs: unknown[]) => {
       const opts = rawArgs[rawArgs.length - 1] as Handlebars.HelperOptions;
@@ -165,12 +189,46 @@ export class EmailRenderer implements OnModuleInit {
       return this.formatDate(value, timezone, true);
     });
 
+    // "суббота, 14 ноября в 15:00"; `short` gives "сб, …". The year only when it is not this year.
+    this.hbs.registerHelper('formatVisit', (...rawArgs: unknown[]) => {
+      const opts = rawArgs[rawArgs.length - 1] as Handlebars.HelperOptions;
+      const value = rawArgs[0] as string | Date;
+      const short = rawArgs.length > 2 && rawArgs[1] === 'short';
+      const timezone: string = opts.data?.root?.timezone ?? 'UTC';
+      return this.formatVisit(value, timezone, short);
+    });
+
     this.hbs.registerHelper('formatTime', (...rawArgs: unknown[]) => {
       const opts = rawArgs[rawArgs.length - 1] as Handlebars.HelperOptions;
       const value = rawArgs[0] as string | Date;
       const timezone: string = opts.data?.root?.timezone ?? 'UTC';
       return this.formatDate(value, timezone, false, true);
     });
+  }
+
+  private formatVisit(
+    value: string | Date,
+    timezone: string,
+    short: boolean,
+  ): string {
+    const d = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value);
+    const intlLocale = LANG_TO_INTL_LOCALE[this.lang] ?? 'ru-RU';
+    const year = (date: Date) =>
+      new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        year: 'numeric',
+      }).format(date);
+    return new Intl.DateTimeFormat(intlLocale, {
+      timeZone: timezone,
+      weekday: short ? 'short' : 'long',
+      day: 'numeric',
+      month: 'long',
+      ...(year(d) !== year(new Date()) && { year: 'numeric' }),
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
+    }).format(d);
   }
 
   private formatDate(

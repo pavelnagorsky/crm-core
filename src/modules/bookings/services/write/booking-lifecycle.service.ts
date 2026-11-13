@@ -15,6 +15,7 @@ import { CalendarFacade } from '../../../calendar/calendar.facade.js';
 import { LocationService } from '../../../location/services/location.service.js';
 import { OrdersFacade } from '../../../orders/orders.facade.js';
 import { StaffEarningsService } from '../../../payroll/earnings/services/staff-earnings.service.js';
+import { StaffBookingEvent } from '../../../notifications/enums/staff-booking-event.enum.js';
 import { bookingWithItemsInclude } from '../../constants/booking-with-items.include.js';
 import { CancelBookingDto } from '../../dto/cancel-booking.dto.js';
 import { UpdateBookingStatusDto } from '../../dto/update-booking-status.dto.js';
@@ -353,6 +354,8 @@ export class BookingLifecycleService {
         'CANCELLED',
         storedReason ?? undefined,
       );
+    if (cancelledBy === CancelledBy.CLIENT)
+      await this.events.notifyStaff(updated, StaffBookingEvent.CANCELLED);
     return updated;
   }
 }

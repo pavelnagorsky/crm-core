@@ -11,6 +11,9 @@ import { AuditService } from '../../audit/services/audit.service.js';
 import { UserService } from '../../user/services/user.service.js';
 import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
 import { AuditActorRole } from '../../audit/enums/audit-actor-role.enum.js';
+import { Claim } from '../enums/claim.enum.js';
+import { PermissionScope } from '../enums/permission-scope.enum.js';
+import { hasGrant, Read } from '../utils/permission.js';
 
 @Injectable()
 export class AccessService {
@@ -236,6 +239,55 @@ export class AccessService {
       }),
     ]);
     return [...new Set([...brands, ...locations].map((row) => row.userId))];
+  }
+
+  /**
+   * Who hears about client actions on a booking: the location's managers, assigned to it or to
+   * the whole brand, and the booking's staff accounts. Each must still see bookings there.
+   * Owners are left out on purpose: they watch the panel, not one email per location.
+   */
+  async bookingNotificationRecipients(
+    locationId: string,
+    staffUserIds: string[],
+  ) {
+    const location = await this.db.location.findFirst({
+      where: { id: locationId, ...ACTIVE_LOCATION_WHERE },
+      select: { brandId: true },
+    });
+    if (!location) return [];
+    const [local, brand] = await Promise.all([
+      this.db.locationMembership.findMany({
+        where: { locationId, role: BusinessRole.MANAGER },
+        select: { userId: true },
+      }),
+      this.db.brandMembership.findMany({
+        where: { brandId: location.brandId, role: BusinessRole.MANAGER },
+        select: { userId: true },
+      }),
+    ]);
+    const candidates = [
+      ...new Set([
+        ...[...local, ...brand].map((row) => row.userId),
+        ...staffUserIds,
+      ]),
+    ];
+    const allowed = await Promise.all(
+      candidates.map(async (userId) => {
+        const { permissions } = await this.resolvePermissions(
+          userId,
+          UserRole.USER,
+        );
+        const grants = permissions[`${PermissionScope.LOCATION}:${locationId}`];
+        return grants &&
+          (hasGrant(grants, Read(Claim.BOOKING)) ||
+            hasGrant(grants, Read(Claim.BOOKING_OWN)))
+          ? userId
+          : null;
+      }),
+    );
+    return this.users.findAccessParticipants(
+      allowed.filter((userId): userId is string => userId !== null),
+    );
   }
 
   async memberUserIds(brandId: string) {

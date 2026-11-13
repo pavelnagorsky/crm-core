@@ -78,6 +78,7 @@ describe('Booking management links', () => {
       emitter as never,
       tokens,
       {} as never,
+      {} as never,
     );
     events.notifyCreated(
       booking({ id, clientEmail: 'client@example.test' }),

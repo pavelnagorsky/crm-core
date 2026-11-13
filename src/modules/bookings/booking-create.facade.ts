@@ -12,6 +12,7 @@ import { AuditActorRole } from '../audit/enums/audit-actor-role.enum.js';
 import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
 import { ClientsService } from '../clients/services/clients.service.js';
 import { LocationService } from '../location/services/location.service.js';
+import { StaffBookingEvent } from '../notifications/enums/staff-booking-event.enum.js';
 import { BookingPricingRequestDto } from './dto/booking-pricing-request.dto.js';
 import { CreateBookingDto } from './dto/create-booking.dto.js';
 import { ManualBookingItemDto } from './dto/manual-booking-item.dto.js';
@@ -88,6 +89,12 @@ export class BookingCreateFacade {
     };
     this.events.created(booking, actor, currency, bundleTitle);
     this.events.notifyCreated(booking, timezone);
+    await this.events.notifyStaff(
+      booking,
+      booking.status === BookingStatus.PENDING
+        ? StaffBookingEvent.REQUESTED
+        : StaffBookingEvent.CREATED,
+    );
     return booking;
   }
 

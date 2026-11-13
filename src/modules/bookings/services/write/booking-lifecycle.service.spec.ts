@@ -4,6 +4,7 @@ import { AuditActorRole } from '../../../audit/enums/audit-actor-role.enum.js';
 import { BookingStatus } from '../../enums/booking-status.enum.js';
 import { BookingLifecycleService } from './booking-lifecycle.service.js';
 import { NO_CLIENT_NOTICE } from '../../rules/booking-client-notice.rules.js';
+import { StaffBookingEvent } from '../../../notifications/enums/staff-booking-event.enum.js';
 
 const actor = { name: 'Owner', role: AuditActorRole.OWNER };
 function setup() {
@@ -45,6 +46,7 @@ function setup() {
       expect(committed).toBe(true);
     }),
     notifyStatus: vi.fn(),
+    notifyStaff: vi.fn(),
   };
   const reschedule = { restoreBookingEvents: vi.fn() };
   const service = new BookingLifecycleService(
@@ -129,6 +131,22 @@ describe('Booking lifecycle transaction boundaries', () => {
     });
     expect(events.audit).toHaveBeenCalledOnce();
   });
+  it('tells staff when the client cancels, and not the client', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-23T10:00:00Z'));
+    try {
+      const { service, old, events } = setup();
+      await service.cancelByClient(old, {});
+      expect(events.notifyStaff).toHaveBeenCalledWith(
+        expect.objectContaining({ status: BookingStatus.CANCELLED }),
+        StaffBookingEvent.CANCELLED,
+      );
+      expect(events.notifyStatus).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('tells the client about a staff cancellation and clears the pending email', async () => {
     const { service, old, tx, events } = setup();
     await service.cancel(old, actor, CancelledBy.STAFF, {});

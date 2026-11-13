@@ -20,10 +20,12 @@ import {
   BookingStatusChangedStatus,
 } from '../../notifications/messages/booking-status-changed.notification.js';
 import { NOTIFICATION_EVENT } from '../../notifications/services/notifications.service.js';
+import { StaffBookingEvent } from '../../notifications/enums/staff-booking-event.enum.js';
 import { BookingStatus } from '../enums/booking-status.enum.js';
 import { BookingAuditInput } from '../interfaces/booking-audit-input.interface.js';
 import { BookingWithItems } from '../interfaces/booking-with-items.interface.js';
 import { BookingClientTokenService } from './booking-client-token.service.js';
+import { BookingStaffNotificationService } from './booking-staff-notification.service.js';
 
 @Injectable()
 export class BookingEventsService {
@@ -33,6 +35,7 @@ export class BookingEventsService {
     private readonly eventEmitter: EventEmitter2,
     private readonly bookingClientService: BookingClientTokenService,
     private readonly locationService: LocationService,
+    private readonly staffNotifications: BookingStaffNotificationService,
   ) {}
 
   created(
@@ -98,6 +101,15 @@ export class BookingEventsService {
         this.bookingClientService.managementUrl(clientToken),
       ),
     );
+  }
+
+  /** Tells the location's managers and the booking's staff what the client did. Never throws. */
+  notifyStaff(
+    booking: BookingWithItems,
+    event: StaffBookingEvent,
+    previousStartAt: Date | null = null,
+  ): Promise<void> {
+    return this.staffNotifications.notify(booking, event, previousStartAt);
   }
 
   audit(params: BookingAuditInput): void {
