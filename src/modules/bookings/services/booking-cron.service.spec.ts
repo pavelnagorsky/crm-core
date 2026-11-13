@@ -64,7 +64,7 @@ describe('BookingCronService.sendReminders', () => {
     service = module.get(BookingCronService);
   });
 
-  it('reminds bookings that start within the next 24 hours and skips the rest', async () => {
+  it('reminds confirmed bookings whose reminder is due and the visit is still ahead', async () => {
     const due = {
       id: 'b1',
       locationId: 'biz',
@@ -86,9 +86,8 @@ describe('BookingCronService.sendReminders', () => {
     await service.sendReminders();
 
     const where = db.booking.findMany.mock.calls[0][0].where;
-    const from = where.startAt.gt as Date;
-    const to = where.startAt.lte as Date;
-    expect(to.getTime() - from.getTime()).toBe(24 * 60 * 60 * 1000);
+    const now = where.reminderDueAt.lte as Date;
+    expect(where.startAt).toEqual({ gt: now });
     expect(where.reminderSentAt).toBeNull();
     expect(where.clientNoticeAt).toBeNull();
     expect(where.status).toBe(BookingStatus.CONFIRMED);
@@ -107,7 +106,7 @@ describe('BookingCronService.sendReminders', () => {
         status: BookingStatus.CONFIRMED,
         location: { deletedAt: null, brand: { deletedAt: null } },
       },
-      data: { reminderSentAt: expect.any(Date) },
+      data: { reminderSentAt: expect.any(Date), updatedAt: undefined },
     });
   });
 

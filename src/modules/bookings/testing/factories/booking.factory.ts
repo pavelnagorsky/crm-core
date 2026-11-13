@@ -33,6 +33,7 @@ export function booking(options: BookingFixtureOptions = {}): BookingWithItems {
     cancellationReason: null,
     cancelledBy: null,
     cancelledAt: null,
+    reminderDueAt: null,
     reminderSentAt: null,
     reviewRequestSentAt: null,
     notifyClient: true,

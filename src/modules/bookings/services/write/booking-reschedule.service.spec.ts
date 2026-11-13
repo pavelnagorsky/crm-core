@@ -109,6 +109,9 @@ describe('Parallel booking rescheduling', () => {
     expect(db.booking.update.mock.calls[0][0].data).toMatchObject({
       reminderSentAt: null,
     });
+    expect(db.booking.update.mock.calls[0][0].data).toHaveProperty(
+      'reminderDueAt',
+    );
   });
 
   it('keeps the sent reminder when only the staff change', async () => {

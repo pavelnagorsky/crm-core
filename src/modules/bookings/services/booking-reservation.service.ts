@@ -15,6 +15,7 @@ import { BookingCreationRequest } from '../interfaces/booking-creation-request.i
 import { BookingCreationResult } from '../interfaces/booking-creation-result.interface.js';
 import { BookingWithItems } from '../interfaces/booking-with-items.interface.js';
 import { PreparedBookingReservation } from '../interfaces/prepared-booking-reservation.interface.js';
+import { reminderDueAt } from '../rules/booking-reminder.rules.js';
 import { BookingSlotLockService } from './booking-slot-lock.service.js';
 
 @Injectable()
@@ -134,6 +135,7 @@ export class BookingReservationService {
         isCustomTime: input.isCustomTime,
         notifyClient: input.notifyClient,
         ...input.clientNotice,
+        reminderDueAt: reminderDueAt({ status, startAt }, new Date()),
         bookingPageId: attribution.bookingPageId,
         bookingWidgetId: attribution.bookingWidgetId,
         clientFirstName: client.firstName,

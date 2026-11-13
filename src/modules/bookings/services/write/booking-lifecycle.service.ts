@@ -21,6 +21,7 @@ import { UpdateBookingStatusDto } from '../../dto/update-booking-status.dto.js';
 import { BookingStatus } from '../../enums/booking-status.enum.js';
 import { BookingWithItems } from '../../interfaces/booking-with-items.interface.js';
 import { NO_CLIENT_NOTICE } from '../../rules/booking-client-notice.rules.js';
+import { reminderDueAt } from '../../rules/booking-reminder.rules.js';
 import {
   ACTIVE_BOOKING_STATUSES,
   AUTO_COMPLETABLE_STATUSES,
@@ -70,6 +71,12 @@ export class BookingLifecycleService {
           status: dto.status,
           ...(!ACTIVE_BOOKING_STATUSES.includes(dto.status) &&
             NO_CLIENT_NOTICE),
+          ...(dto.status !== old.status && {
+            reminderDueAt: reminderDueAt(
+              { status: dto.status, startAt: old.startAt },
+              new Date(),
+            ),
+          }),
           ...(old.status === BookingStatus.CANCELLED
             ? { cancelledAt: null, cancelledBy: null, cancellationReason: null }
             : {}),
@@ -227,7 +234,11 @@ export class BookingLifecycleService {
       await this.write.lockUnchangedBooking(tx, booking);
       await tx.booking.update({
         where: { id: booking.id },
-        data: { deletedAt: new Date(), ...NO_CLIENT_NOTICE },
+        data: {
+          deletedAt: new Date(),
+          reminderDueAt: null,
+          ...NO_CLIENT_NOTICE,
+        },
       });
       await this.calendar.deleteBookingEvents(
         booking.items.flatMap((item) =>
@@ -294,6 +305,7 @@ export class BookingLifecycleService {
           cancelledBy,
           cancelledAt: new Date(),
           cancellationReason: storedReason,
+          reminderDueAt: null,
           ...NO_CLIENT_NOTICE,
           items: { updateMany: { where: {}, data: { calendarEventId: null } } },
         },

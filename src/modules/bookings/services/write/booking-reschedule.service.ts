@@ -26,6 +26,7 @@ import {
   clientRescheduleClientNotice,
   staffRescheduleClientNotice,
 } from '../../rules/booking-client-notice.rules.js';
+import { reminderDueAt } from '../../rules/booking-reminder.rules.js';
 import { BookingWriteLockService } from '../booking-write-lock.service.js';
 
 @Injectable()
@@ -141,6 +142,10 @@ export class BookingRescheduleService {
           // The reminder named the old time; the new time needs its own.
           ...(nextStartAt.getTime() !== old.startAt.getTime() && {
             reminderSentAt: null,
+            reminderDueAt: reminderDueAt(
+              { status: old.status, startAt: nextStartAt },
+              new Date(),
+            ),
           }),
           ...(clientInitiated
             ? clientRescheduleClientNotice({ ...old, ...notice })

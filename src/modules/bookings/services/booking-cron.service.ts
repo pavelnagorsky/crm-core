@@ -16,10 +16,7 @@ import {
   isClientNoticeSendable,
   NO_CLIENT_NOTICE,
 } from '../rules/booking-client-notice.rules.js';
-import {
-  reminderWindow,
-  reviewRequestWindow,
-} from '../rules/booking-cron.rules.js';
+import { reviewRequestWindow } from '../rules/booking-cron.rules.js';
 import { BookingClientTokenService } from './booking-client-token.service.js';
 import { BookingEventsService } from './booking-events.service.js';
 
@@ -37,14 +34,14 @@ export class BookingCronService {
     private readonly events: BookingEventsService,
   ) {}
 
-  @Cron(CronExpression.EVERY_HOUR)
+  @Cron('0 */15 * * * *')
   async sendReminders(): Promise<void> {
     const now = new Date();
-    const { from, to } = reminderWindow(now);
 
     const bookings = await this.db.booking.findMany({
       where: {
-        startAt: { gt: from, lte: to },
+        reminderDueAt: { lte: now },
+        startAt: { gt: now },
         status: BookingStatus.CONFIRMED,
         clientEmail: { not: null },
         reminderSentAt: null,
@@ -77,7 +74,8 @@ export class BookingCronService {
             status: BookingStatus.CONFIRMED,
             location: ACTIVE_LOCATION_WHERE,
           },
-          data: { reminderSentAt: now },
+          // Bookkeeping, not an edit: keeps the version staff hold in an open form valid.
+          data: { reminderSentAt: now, updatedAt: booking.updatedAt },
         });
         if (claimed)
           this.eventEmitter.emit(

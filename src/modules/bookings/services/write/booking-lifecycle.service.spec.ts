@@ -193,6 +193,32 @@ describe('Booking lifecycle transaction boundaries', () => {
       cancellationReason: null,
     });
   });
+  it('schedules the reminder from the moment a request is confirmed', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-09-20T08:00:00Z'));
+    try {
+      const { service, tx } = setup();
+      const request = booking({
+        status: BookingStatus.PENDING,
+        startAt: new Date('2026-09-20T18:00:00Z'),
+      });
+      await service.updateStatus(request, actor, {
+        status: BookingStatus.CONFIRMED,
+      });
+      expect(tx.booking.update.mock.calls[0][0].data.reminderDueAt).toEqual(
+        new Date('2026-09-20T16:00:00Z'),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('drops the reminder when a booking is cancelled', async () => {
+    const { service, old, tx } = setup();
+    await service.cancel(old, actor, CancelledBy.STAFF, {});
+    expect(tx.booking.update.mock.calls[0][0].data.reminderDueAt).toBeNull();
+  });
+
   it('does not complete a booking changed since the cron selected it', async () => {
     const { service, old, tx, orders, earnings } = setup();
     const now = new Date('2026-10-17');

@@ -1,7 +1,5 @@
 import { BookingStatus } from '../enums/booking-status.enum.js';
 
-export const REMINDER_LEAD_MS = 24 * 60 * 60 * 1000;
-
 /** The visit should be over, and the client home, before asking for a review. */
 export const REVIEW_REQUEST_DELAY_MS = 2 * 60 * 60 * 1000;
 /** Older visits are no longer asked: the client has most likely forgotten them. */
@@ -20,13 +18,6 @@ export const ACTIVE_BOOKING_STATUSES: readonly BookingStatus[] = [
 export const AUTO_COMPLETABLE_STATUSES: readonly BookingStatus[] = [
   BookingStatus.CONFIRMED,
 ];
-
-export function reminderWindow(now: Date): { from: Date; to: Date } {
-  return {
-    from: now,
-    to: new Date(now.getTime() + REMINDER_LEAD_MS),
-  };
-}
 
 export function isAutoCompletable(
   status: BookingStatus,

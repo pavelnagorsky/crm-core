@@ -111,6 +111,7 @@ describe('Client booking changes', () => {
       startAt: new Date('2026-10-29T11:00:00Z'),
       endAt: new Date('2026-10-29T12:00:00Z'),
       reminderSentAt: null,
+      reminderDueAt: new Date('2026-10-28T11:00:00Z'),
       clientNoticeAt: null,
       clientNoticeType: null,
       clientNoticeFromStartAt: null,

@@ -1257,6 +1257,8 @@ model Booking {
   cancelledBy        CancelledBy?
   cancelledAt        DateTime?
 
+  // When to remind: a day before, or two hours before when confirmed within a day. Null: no reminder.
+  reminderDueAt       DateTime?
   reminderSentAt      DateTime?
   reviewRequestSentAt DateTime?
 
@@ -1290,6 +1292,7 @@ model Booking {
   @@index([bookingPageId])
   @@index([bookingWidgetId])
   @@index([clientNoticeAt])
+  @@index([reminderDueAt])
 }
 
 enum ClientNoticeType {
