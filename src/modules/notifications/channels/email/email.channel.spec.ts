@@ -88,7 +88,7 @@ describe('Email branding', () => {
   it.each([
     new BookingConfirmedNotification(booking, 'https://example.com/manage'),
     new BookingReminderNotification(booking, 'https://example.com/manage'),
-    new BookingStatusChangedNotification(booking, 'RESCHEDULED', undefined),
+    new BookingStatusChangedNotification(booking, 'RESCHEDULED'),
   ])('uses the location brand for client email %s', async (notification) => {
     await channel.send(notification);
 
@@ -109,7 +109,9 @@ describe('Email branding', () => {
     locations.findPublicProfile.mockResolvedValue({
       brand: { name: 'Studio Brand', logoFile: null },
     });
-    await channel.send(new BookingReminderNotification(booking, 'https://example.com/manage'));
+    await channel.send(
+      new BookingReminderNotification(booking, 'https://example.com/manage'),
+    );
 
     const mail = sendMail.mock.calls[0][0];
     expect(mail.html).toContain('>Studio Brand</td>');

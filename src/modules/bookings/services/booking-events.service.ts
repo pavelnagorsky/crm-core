@@ -13,6 +13,7 @@ import { AuditLogEvent } from '../../audit/interfaces/audit-log-event.interface.
 import { diffFields } from '../../audit/utils/diff-fields.js';
 import { LocationService } from '../../location/services/location.service.js';
 import { BookingNotificationData } from '../../notifications/interfaces/booking-notification-data.interface.js';
+import { BookingStatusChangeDetails } from '../../notifications/interfaces/booking-status-change-details.interface.js';
 import { BookingConfirmedNotification } from '../../notifications/messages/booking-confirmed.notification.js';
 import { BookingPendingNotification } from '../../notifications/messages/booking-pending.notification.js';
 import {
@@ -103,13 +104,16 @@ export class BookingEventsService {
     );
   }
 
-  /** Tells the location's managers and the booking's staff what the client did. Never throws. */
+  /**
+   * Tells the location's managers and the booking's staff what the client did. Runs in the
+   * background: resolving recipients must not hold up the client, and it never throws.
+   */
   notifyStaff(
     booking: BookingWithItems,
     event: StaffBookingEvent,
     previousStartAt: Date | null = null,
-  ): Promise<void> {
-    return this.staffNotifications.notify(booking, event, previousStartAt);
+  ): void {
+    void this.staffNotifications.notify(booking, event, previousStartAt);
   }
 
   audit(params: BookingAuditInput): void {
@@ -180,8 +184,7 @@ export class BookingEventsService {
   async notifyStatus(
     booking: BookingWithItems,
     status: BookingStatusChangedStatus,
-    reason?: string,
-    previousStartAt?: Date,
+    details: Omit<BookingStatusChangeDetails, 'manageLink'> = {},
   ): Promise<void> {
     if (!booking.clientEmail) return;
     const { timezone } = await this.locationService.getLocale(
@@ -196,14 +199,16 @@ export class BookingEventsService {
           timezone,
         },
         status,
-        reason,
-        previousStartAt,
-        // A cancelled booking has nothing left to manage.
-        status === 'CANCELLED'
-          ? undefined
-          : this.bookingClientService.managementUrl(
-              this.bookingClientService.generateClientToken(booking.id),
-            ),
+        {
+          ...details,
+          // A cancelled booking has nothing left to manage.
+          manageLink:
+            status === 'CANCELLED'
+              ? null
+              : this.bookingClientService.managementUrl(
+                  this.bookingClientService.generateClientToken(booking.id),
+                ),
+        },
       ),
     );
   }

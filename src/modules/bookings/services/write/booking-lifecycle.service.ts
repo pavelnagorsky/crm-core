@@ -349,13 +349,11 @@ export class BookingLifecycleService {
     );
     // A booking whose creation email is still queued is unknown to the client: no news is right.
     if (cancelledBy === CancelledBy.STAFF && !creationEmailPending)
-      await this.events.notifyStatus(
-        booking,
-        'CANCELLED',
-        storedReason ?? undefined,
-      );
+      await this.events.notifyStatus(booking, 'CANCELLED', {
+        cancellationReason: storedReason,
+      });
     if (cancelledBy === CancelledBy.CLIENT)
-      await this.events.notifyStaff(updated, StaffBookingEvent.CANCELLED);
+      this.events.notifyStaff(updated, StaffBookingEvent.CANCELLED);
     return updated;
   }
 }

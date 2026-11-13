@@ -129,8 +129,7 @@ describe('Client booking changes', () => {
     expect(events.notifyStatus).toHaveBeenCalledWith(
       expect.anything(),
       'RESCHEDULED',
-      undefined,
-      old.startAt,
+      { previousStartAt: old.startAt },
     );
     expect(events.notifyStaff).toHaveBeenCalledWith(
       expect.objectContaining({ startAt: new Date('2026-10-29T11:00:00Z') }),

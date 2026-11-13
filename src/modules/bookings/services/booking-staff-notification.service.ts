@@ -39,7 +39,9 @@ export class BookingStaffNotificationService {
           booking.locationId,
           staffUserIds,
         )
-      ).filter((user) => user.email);
+      ).filter(
+        (user): user is typeof user & { email: string } => user.email !== null,
+      );
       if (!recipients.length) return;
       const { timezone } = await this.locations.getLocale(booking.locationId);
       const bookingUrl = this.bookingUrl(booking);
@@ -48,7 +50,7 @@ export class BookingStaffNotificationService {
           NOTIFICATION_EVENT,
           new StaffBookingNotification({
             event,
-            recipientEmail: recipient.email!,
+            recipientEmail: recipient.email,
             recipientFirstName: recipient.firstName,
             locationId: booking.locationId,
             clientName: [booking.clientFirstName, booking.clientLastName]

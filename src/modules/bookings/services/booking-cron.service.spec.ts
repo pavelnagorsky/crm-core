@@ -336,6 +336,7 @@ describe('BookingCronService.sendClientNotices', () => {
       where: expect.objectContaining({
         id: due.id,
         clientNoticeAt: due.clientNoticeAt,
+        updatedAt: due.updatedAt,
       }),
       data: {
         clientNoticeAt: null,
@@ -358,12 +359,9 @@ describe('BookingCronService.sendClientNotices', () => {
 
     await service.sendClientNotices();
 
-    expect(events.notifyStatus).toHaveBeenCalledWith(
-      due,
-      'RESCHEDULED',
-      undefined,
-      from,
-    );
+    expect(events.notifyStatus).toHaveBeenCalledWith(due, 'RESCHEDULED', {
+      previousStartAt: from,
+    });
   });
 
   it('skips the email when another worker already claimed it', async () => {

@@ -153,11 +153,9 @@ describe('Booking lifecycle transaction boundaries', () => {
     expect(tx.booking.update.mock.calls[0][0].data).toMatchObject(
       NO_CLIENT_NOTICE,
     );
-    expect(events.notifyStatus).toHaveBeenCalledWith(
-      old,
-      'CANCELLED',
-      undefined,
-    );
+    expect(events.notifyStatus).toHaveBeenCalledWith(old, 'CANCELLED', {
+      cancellationReason: null,
+    });
   });
 
   it('stays silent about a cancellation while the creation email is still queued', async () => {

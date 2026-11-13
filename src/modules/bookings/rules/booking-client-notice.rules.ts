@@ -2,6 +2,7 @@ import { Booking, ClientNoticeType } from '@prisma/client';
 import { BookingStatus } from '../enums/booking-status.enum.js';
 import { ClientNoticeBooking } from '../interfaces/client-notice-booking.interface.js';
 import { ClientNoticeState } from '../interfaces/client-notice-state.interface.js';
+import { ACTIVE_BOOKING_STATUSES } from './booking-cron.rules.js';
 
 /** Lets staff undo a mistaken change, or finish a series of moves, before the client hears of it. */
 export const CLIENT_NOTICE_DELAY_MS = 2 * 60 * 1000;
@@ -19,8 +20,7 @@ function canReachClient(
 ): boolean {
   return (
     Boolean(booking.clientEmail) &&
-    (booking.status === BookingStatus.PENDING ||
-      booking.status === BookingStatus.CONFIRMED) &&
+    ACTIVE_BOOKING_STATUSES.includes(booking.status as BookingStatus) &&
     booking.startAt.getTime() > now.getTime()
   );
 }

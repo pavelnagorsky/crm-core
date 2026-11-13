@@ -89,7 +89,7 @@ export class BookingCreateFacade {
     };
     this.events.created(booking, actor, currency, bundleTitle);
     this.events.notifyCreated(booking, timezone);
-    await this.events.notifyStaff(
+    this.events.notifyStaff(
       booking,
       booking.status === BookingStatus.PENDING
         ? StaffBookingEvent.REQUESTED

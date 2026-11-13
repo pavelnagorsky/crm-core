@@ -1,5 +1,6 @@
 import { DeliveryStrategy } from '../enums/delivery-strategy.enum.js';
 import { BookingNotificationData } from '../interfaces/booking-notification-data.interface.js';
+import { BookingStatusChangeDetails } from '../interfaces/booking-status-change-details.interface.js';
 import { ChannelPayload } from '../interfaces/channel-payload.interface.js';
 import { HasEmailChannel } from '../interfaces/has-email-channel.interface.js';
 import { AbstractNotification } from './abstract.notification.js';
@@ -17,9 +18,7 @@ export class BookingStatusChangedNotification
   constructor(
     private readonly booking: BookingNotificationData,
     private readonly status: BookingStatusChangedStatus,
-    private readonly cancellationReason: string | undefined,
-    private readonly previousStartAt?: Date,
-    private readonly manageLink?: string,
+    private readonly details: BookingStatusChangeDetails = {},
   ) {
     super();
   }
@@ -37,9 +36,9 @@ export class BookingStatusChangedNotification
         timezone: this.booking.timezone,
         status: this.status,
         variant: this.status,
-        cancellationReason: this.cancellationReason ?? null,
-        previousStartAt: this.previousStartAt ?? null,
-        manageLink: this.manageLink ?? null,
+        cancellationReason: this.details.cancellationReason ?? null,
+        previousStartAt: this.details.previousStartAt ?? null,
+        manageLink: this.details.manageLink ?? null,
       },
     };
   }

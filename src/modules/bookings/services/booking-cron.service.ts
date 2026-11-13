@@ -171,6 +171,8 @@ export class BookingCronService {
     });
     if (!bookings.length) return;
 
+    this.logger.log(`Sending ${bookings.length} queued client email(s)`);
+
     const settings = new Map(
       await Promise.all(
         [...new Set(bookings.map((booking) => booking.locationId))].map(
@@ -190,10 +192,12 @@ export class BookingCronService {
         const location = settings.get(booking.locationId);
         if (!location) return;
         const claimed = await this.claim(booking.locationId, {
+          // Restoring the version below would undo an edit made since the select; retry next minute.
           where: {
             id: booking.id,
             deletedAt: null,
             clientNoticeAt: booking.clientNoticeAt,
+            updatedAt: booking.updatedAt,
             location: ACTIVE_LOCATION_WHERE,
           },
           // Bookkeeping, not an edit: keeps the version staff hold in an open form valid.
@@ -211,12 +215,9 @@ export class BookingCronService {
         if (booking.clientNoticeType === ClientNoticeType.CREATED)
           this.events.notifyCreated(booking, location.timezone);
         else
-          await this.events.notifyStatus(
-            booking,
-            'RESCHEDULED',
-            undefined,
-            booking.clientNoticeFromStartAt ?? undefined,
-          );
+          await this.events.notifyStatus(booking, 'RESCHEDULED', {
+            previousStartAt: booking.clientNoticeFromStartAt,
+          });
       }),
     );
   }
