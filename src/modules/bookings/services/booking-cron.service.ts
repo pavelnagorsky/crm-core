@@ -13,7 +13,6 @@ import { ReviewsFacade } from '../../reviews/reviews.facade.js';
 import { BookingsFacade } from '../bookings.facade.js';
 import { BookingWithItems } from '../interfaces/booking-with-items.interface.js';
 import {
-  AUTO_COMPLETABLE_STATUSES,
   reminderWindow,
   reviewRequestWindow,
 } from '../rules/booking-cron.rules.js';
@@ -40,7 +39,7 @@ export class BookingCronService {
     const bookings = await this.db.booking.findMany({
       where: {
         startAt: { gt: from, lte: to },
-        status: { in: [...AUTO_COMPLETABLE_STATUSES] },
+        status: BookingStatus.CONFIRMED,
         clientEmail: { not: null },
         reminderSentAt: null,
         deletedAt: null,
@@ -66,7 +65,7 @@ export class BookingCronService {
             deletedAt: null,
             reminderSentAt: null,
             updatedAt: booking.updatedAt,
-            status: { in: [...AUTO_COMPLETABLE_STATUSES] },
+            status: BookingStatus.CONFIRMED,
             location: ACTIVE_LOCATION_WHERE,
           },
           data: { reminderSentAt: now },

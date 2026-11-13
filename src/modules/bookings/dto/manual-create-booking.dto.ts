@@ -96,4 +96,15 @@ export class ManualCreateBookingDto extends CreateBookingDto {
   @IsOptional()
   @IsLocalDateTime()
   endAt?: string;
+
+  @ApiProperty({
+    type: Boolean,
+    required: false,
+    default: true,
+    description:
+      'Email the client the booking confirmation with the management link. Reminders and status emails are not affected.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  notifyClient?: boolean;
 }

@@ -87,10 +87,7 @@ describe('BookingCronService.sendReminders', () => {
     const to = where.startAt.lte as Date;
     expect(to.getTime() - from.getTime()).toBe(24 * 60 * 60 * 1000);
     expect(where.reminderSentAt).toBeNull();
-    expect(where.status.in).toEqual([
-      BookingStatus.PENDING,
-      BookingStatus.CONFIRMED,
-    ]);
+    expect(where.status).toBe(BookingStatus.CONFIRMED);
     expect(emitter.emit).toHaveBeenCalledTimes(1);
     expect(where.location).toEqual({
       deletedAt: null,
@@ -102,7 +99,7 @@ describe('BookingCronService.sendReminders', () => {
         deletedAt: null,
         reminderSentAt: null,
         updatedAt: undefined,
-        status: { in: [BookingStatus.PENDING, BookingStatus.CONFIRMED] },
+        status: BookingStatus.CONFIRMED,
         location: { deletedAt: null, brand: { deletedAt: null } },
       },
       data: { reminderSentAt: expect.any(Date) },

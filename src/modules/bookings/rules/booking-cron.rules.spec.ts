@@ -16,12 +16,12 @@ describe('booking-cron.rules', () => {
     expect(to.toISOString()).toBe('2026-09-25T12:00:00.000Z');
   });
 
-  it('auto-completes only open bookings whose slot has ended', () => {
+  it('auto-completes only confirmed bookings whose slot has ended', () => {
     const ended = new Date('2026-09-24T11:00:00.000Z');
     const upcoming = new Date('2026-09-24T13:00:00.000Z');
 
     expect(isAutoCompletable(BookingStatus.CONFIRMED, ended, now)).toBe(true);
-    expect(isAutoCompletable(BookingStatus.PENDING, ended, now)).toBe(true);
+    expect(isAutoCompletable(BookingStatus.PENDING, ended, now)).toBe(false);
     expect(isAutoCompletable(BookingStatus.CONFIRMED, upcoming, now)).toBe(
       false,
     );

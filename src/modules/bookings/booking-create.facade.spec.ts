@@ -8,6 +8,7 @@ import {
 } from '@prisma/client';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { AuditActorRole } from '../audit/enums/audit-actor-role.enum.js';
+import { NOTIFICATION_EVENT } from '../notifications/services/notifications.service.js';
 import { OrderPricingCalculator } from '../orders/calculators/order-pricing.calculator.js';
 import { BookingCreateFacade } from './booking-create.facade.js';
 import { CreateBookingDto } from './dto/create-booking.dto.js';
@@ -748,12 +749,13 @@ function customTimeSetup(
     recordForCompletedBooking: vi.fn().mockResolvedValue([]),
     syncForCompletedBooking: vi.fn().mockResolvedValue([]),
   };
+  const emitter = { emit: vi.fn() };
   const service = createBookingService(
     db as never,
     calendar as never,
     clients as never,
     staff as never,
-    { emit: vi.fn() } as never,
+    emitter as never,
     { generateClientToken: vi.fn(), managementUrl: vi.fn() } as never,
     ...channelDeps(),
     orders as never,
@@ -761,7 +763,7 @@ function customTimeSetup(
     earnings as never,
     ...catalogDeps(db),
   );
-  return { service, tx, calendar, clients, orders, earnings };
+  return { service, tx, calendar, clients, orders, earnings, emitter };
 }
 
 describe('BookingCreateFacade custom time', () => {
@@ -784,11 +786,57 @@ describe('BookingCreateFacade custom time', () => {
 
       expect(booking.source).toBe(BookingSource.MANUAL);
       expect(booking.isCustomTime).toBe(false);
-      expect(booking.status).toBe(BookingStatus.PENDING);
+      expect(booking.status).toBe(BookingStatus.CONFIRMED);
       expect(booking.endAt.toISOString()).toBe('2020-09-20T08:04:00.000Z');
       expect(tx.booking.create).toHaveBeenCalledOnce();
       expect(orders.syncCompletedBooking).not.toHaveBeenCalled();
       expect(earnings.recordForCompletedBooking).not.toHaveBeenCalled();
+    },
+  );
+
+  it('confirms a manual booking even when the location requires confirmation', async () => {
+    const { service } = customTimeSetup();
+
+    const booking = await service.createManualBooking(
+      'business-1',
+      { ...dto, startAt: '2099-09-20T10:00:00' },
+      { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER },
+    );
+
+    expect(booking.status).toBe(BookingStatus.CONFIRMED);
+  });
+
+  it.each([
+    [undefined, 1],
+    [true, 1],
+    [false, 0],
+  ])(
+    'emails the client about a manual booking when notifyClient is %s',
+    async (notifyClient, emails) => {
+      const { service, clients, emitter } = customTimeSetup();
+      clients.resolveForBooking.mockResolvedValue({
+        id: 'client-1',
+        firstName: 'Anna',
+        lastName: 'Ivanova',
+        phone: '+375291112233',
+        email: 'anna@example.test',
+        bannedAt: null,
+      });
+
+      await service.createManualBooking(
+        'business-1',
+        {
+          ...dto,
+          startAt: '2099-09-20T10:00:00',
+          notifyClient,
+        },
+        { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER },
+      );
+
+      const notifications = emitter.emit.mock.calls.filter(
+        ([event]) => event === NOTIFICATION_EVENT,
+      );
+      expect(notifications).toHaveLength(emails);
     },
   );
 

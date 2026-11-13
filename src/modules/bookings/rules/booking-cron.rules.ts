@@ -7,8 +7,17 @@ export const REVIEW_REQUEST_DELAY_MS = 2 * 60 * 60 * 1000;
 /** Older visits are no longer asked: the client has most likely forgotten them. */
 export const REVIEW_REQUEST_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
-export const AUTO_COMPLETABLE_STATUSES: readonly BookingStatus[] = [
+/** Bookings that still hold their slot. */
+export const ACTIVE_BOOKING_STATUSES: readonly BookingStatus[] = [
   BookingStatus.PENDING,
+  BookingStatus.CONFIRMED,
+];
+
+/**
+ * An unconfirmed request is not a visit: it is never completed, reminded or paid for
+ * automatically, staff confirm or close it by hand.
+ */
+export const AUTO_COMPLETABLE_STATUSES: readonly BookingStatus[] = [
   BookingStatus.CONFIRMED,
 ];
 

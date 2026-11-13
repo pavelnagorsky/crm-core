@@ -108,7 +108,8 @@ export class BookingCreateFacade {
       `booking created (manual): id=${booking.id} locationId=${locationId} source=${booking.source} items=${booking.items.length} bundleId=${booking.bundleId ?? '-'} actor=${actor.name}`,
     );
     this.events.created(booking, actor, currency, bundleTitle);
-    this.events.notifyCreated(booking, timezone);
+    if (dto.notifyClient !== false)
+      this.events.notifyCreated(booking, timezone);
     return booking;
   }
 
@@ -184,10 +185,12 @@ export class BookingCreateFacade {
     const envelopeEnd = new Date(
       Math.max(...items.map((item) => item.endAt.getTime())),
     );
+    // Confirmation is for online requests; staff booking from the journal has already agreed.
     const status = this.initialStatus(
       isCustomTime,
       envelopeEnd,
-      location.isBookingConfirmationRequired,
+      location.isBookingConfirmationRequired &&
+        !this.isInternalSource(attribution.source),
     );
     if (status === BookingStatus.COMPLETED && !canComplete)
       throw new AppException(

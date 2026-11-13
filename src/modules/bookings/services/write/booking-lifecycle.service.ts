@@ -20,7 +20,10 @@ import { CancelBookingDto } from '../../dto/cancel-booking.dto.js';
 import { UpdateBookingStatusDto } from '../../dto/update-booking-status.dto.js';
 import { BookingStatus } from '../../enums/booking-status.enum.js';
 import { BookingWithItems } from '../../interfaces/booking-with-items.interface.js';
-import { AUTO_COMPLETABLE_STATUSES } from '../../rules/booking-cron.rules.js';
+import {
+  ACTIVE_BOOKING_STATUSES,
+  AUTO_COMPLETABLE_STATUSES,
+} from '../../rules/booking-cron.rules.js';
 import { assertClientCanManageBooking } from '../../rules/booking-client.rules.js';
 import { BookingEventsService } from '../booking-events.service.js';
 import { BookingWriteLockService } from '../booking-write-lock.service.js';
@@ -54,7 +57,7 @@ export class BookingLifecycleService {
       : null;
     const updated = await this.db.$transaction(async (tx) => {
       await this.write.lockUnchangedBooking(tx, old);
-      if (AUTO_COMPLETABLE_STATUSES.includes(dto.status)) {
+      if (ACTIVE_BOOKING_STATUSES.includes(dto.status)) {
         await this.write.lockActiveLocation(locationId, tx);
         if (old.status === BookingStatus.CANCELLED) {
           await this.reschedule.restoreBookingEvents(old, tx);
