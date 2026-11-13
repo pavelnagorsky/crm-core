@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AppCacheModule } from '../../shared/cache/app-cache.module.js';
+import { I18nModule } from '../../shared/i18n/i18n.module.js';
 import { BookingVisitsModule } from '../bookings/visits/booking-visits.module.js';
 import { LocationModule } from '../location/location.module.js';
 import { PublicReviewsController } from './controllers/public-reviews.controller.js';
@@ -13,7 +14,7 @@ import { ReviewModerationService } from './services/review-moderation.service.js
 import { ReviewsService } from './services/reviews.service.js';
 
 @Module({
-  imports: [AppCacheModule, LocationModule, BookingVisitsModule],
+  imports: [AppCacheModule, I18nModule, LocationModule, BookingVisitsModule],
   controllers: [PublicReviewsController, ReviewsController],
   providers: [
     ReviewsService,
