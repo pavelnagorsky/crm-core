@@ -40,7 +40,9 @@ function setup() {
   const db = {
     $executeRaw: vi.fn(),
     bookingItem: { update: vi.fn() },
-    booking: { update: vi.fn(async () => old) },
+    booking: {
+      update: vi.fn(async (_args: { data: Record<string, unknown> }) => old),
+    },
     $transaction: vi.fn(async (callback) => callback(db)),
   };
   const location = { findById: vi.fn(async () => ({ timezone: 'UTC' })) };
@@ -93,6 +95,32 @@ describe('Parallel booking rescheduling', () => {
       expect.any(Date),
       ['event-a', 'event-b'],
       db,
+    );
+  });
+
+  it('resets the sent reminder when staff move the start time', async () => {
+    const { old, service, db } = setup();
+    await service.reschedule(
+      old,
+      { startAt: '2026-11-10T12:00:00' },
+      {},
+      actor,
+    );
+    expect(db.booking.update.mock.calls[0][0].data).toMatchObject({
+      reminderSentAt: null,
+    });
+  });
+
+  it('keeps the sent reminder when only the staff change', async () => {
+    const { old, service, db } = setup();
+    await service.reschedule(
+      old,
+      { staffAssignments: [{ bookingItemId: 'second', staffId: 'carol' }] },
+      {},
+      actor,
+    );
+    expect(db.booking.update.mock.calls[0][0].data).not.toHaveProperty(
+      'reminderSentAt',
     );
   });
 

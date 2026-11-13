@@ -52,13 +52,7 @@ export class BookingRescheduleService {
     actor: AuditActor,
   ): Promise<BookingWithItems> {
     assertClientCanManageBooking(old);
-    return this.moveBooking(
-      old,
-      { startAt },
-      { reminderSentAt: null },
-      actor,
-      true,
-    );
+    return this.moveBooking(old, { startAt }, {}, actor, true);
   }
 
   private async moveBooking(
@@ -129,16 +123,21 @@ export class BookingRescheduleService {
         assertClientRescheduleTime(startAt, location);
       }
       await this.saveItemSchedule(old.locationId, items, tx);
+      const nextStartAt = new Date(
+        Math.min(...items.map((item) => item.startAt.getTime())),
+      );
       const updated = await tx.booking.update({
         where: { id: old.id },
         data: {
           ...data,
-          startAt: new Date(
-            Math.min(...items.map((item) => item.startAt.getTime())),
-          ),
+          startAt: nextStartAt,
           endAt: new Date(
             Math.max(...items.map((item) => item.endAt.getTime())),
           ),
+          // The reminder named the old time; the new time needs its own.
+          ...(nextStartAt.getTime() !== old.startAt.getTime() && {
+            reminderSentAt: null,
+          }),
         },
         include: bookingWithItemsInclude,
       });
