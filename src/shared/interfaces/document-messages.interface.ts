@@ -80,6 +80,23 @@ export interface DocumentMessages {
     cancellationReason: string;
     createdAt: string;
   };
+  reviews: {
+    sheet: string;
+    reviewedAt: string;
+    rating: string;
+    text: string;
+    authorFirstName: string;
+    authorLastName: string;
+    staffNames: string;
+    visitStartAt: string;
+    visitServices: string;
+    status: string;
+    hiddenReason: string;
+    replyText: string;
+    repliedAt: string;
+    repliedByName: string;
+    source: string;
+  };
   inventory: {
     vedomostSheet: string;
     movementsSheet: string;

@@ -10,16 +10,20 @@ import {
   Patch,
   Put,
   Query,
+  Res,
+  StreamableFile,
 } from '@nestjs/common';
 import {
   ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiProduces,
   ApiTags,
 } from '@nestjs/swagger';
 import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
+import { XlsxUtils } from '../../../shared/xlsx/xlsx.utils.js';
 import { Claim } from '../../access/enums/claim.enum.js';
 import { Read, Write } from '../../access/utils/permission.js';
 import { auditActorFromToken } from '../../audit/utils/audit-actor-from-token.js';
@@ -33,12 +37,17 @@ import { ReviewSearchResponseDto } from '../dto/review-search-response.dto.js';
 import { ReviewSummaryRequestDto } from '../dto/review-summary-request.dto.js';
 import { SaveReviewReplyDto } from '../dto/save-review-reply.dto.js';
 import { UpdateReviewVisibilityDto } from '../dto/update-review-visibility.dto.js';
+import { ReviewExportRequestDto } from '../export/dto/review-export-request.dto.js';
+import { ReviewsExportService } from '../export/services/reviews-export.service.js';
 import { ReviewModerationService } from '../services/review-moderation.service.js';
 
 @ApiTags('Reviews')
 @Controller('locations/:locationId/reviews')
 export class ReviewsController {
-  constructor(private readonly reviews: ReviewModerationService) {}
+  constructor(
+    private readonly reviews: ReviewModerationService,
+    private readonly reviewsExport: ReviewsExportService,
+  ) {}
 
   @ApiOperation({ summary: 'Search reviews of a location' })
   @ApiOkResponse({ type: ApiResponse(ReviewSearchResponseDto) })
@@ -76,6 +85,27 @@ export class ReviewsController {
         await this.reviews.getSummary(locationId, dto),
       ),
     );
+  }
+
+  @ApiOperation({
+    summary: 'Export reviews matching the table filters and order as XLSX',
+  })
+  @ApiProduces(XlsxUtils.mimeType)
+  @ApiOkResponse({ description: 'File stream' })
+  @Permissions(Read(Claim.REVIEW_EXPORT))
+  @Get('export')
+  async export(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Query() dto: ReviewExportRequestDto,
+    @Res({ passthrough: true })
+    res: { setHeader: (name: string, value: string) => void },
+  ): Promise<StreamableFile> {
+    const { stream, filename } = await this.reviewsExport.stream(
+      locationId,
+      dto,
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return new StreamableFile(stream, { type: XlsxUtils.mimeType });
   }
 
   @ApiOperation({ summary: 'Get a review' })

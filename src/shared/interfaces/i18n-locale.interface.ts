@@ -14,6 +14,7 @@ export interface I18nLocale {
   salaryMode: Record<string, string>;
   payrollPeriodStatus: Record<string, string>;
   inventoryMovementType: Record<string, string>;
+  reviewStatus: Record<string, string>;
   productUnit: Record<string, ProductUnitLabel>;
   documents: DocumentMessages;
   fields: Record<string, Record<string, string>>;

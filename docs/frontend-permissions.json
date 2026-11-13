@@ -902,6 +902,28 @@
         }
       }
     },
+    "review.export": {
+      "scope": "L",
+      "group": "Отзывы",
+      "actions": {
+        "read": {
+          "label": "Экспорт отзывов в XLSX",
+          "defaultRoles": [
+            "OWNER",
+            "MANAGER"
+          ],
+          "configurableRoles": [
+            "MANAGER"
+          ],
+          "dependencies": [
+            {
+              "claim": "review",
+              "access": "read"
+            }
+          ]
+        }
+      }
+    },
     "analytics.location": {
       "scope": "L",
       "group": "Аналитика и история",

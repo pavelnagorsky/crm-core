@@ -2,7 +2,7 @@
 
 В обозначениях ниже `claim:read` / `claim:write` двоеточие отделяет действие от ключа. В API это отдельные поля `claim` и `access`; в JWT — карта `claim → read | write | readWrite`. Точки группируют имена, но не выдают дочерние права.
 
-Модель backend на 2026-10-19. Реестр содержит 41 claim и 53 пары claim/access. [Карта API](./rbac-permissions-map.md), [контракты управления доступом](./rbac-contracts.md). Defaults ролей — [ROLE_BAGS](../../src/modules/access/constants/role-bags.ts). Источники правил — [реестр](../../src/modules/access/constants/permission-registry.ts) и [вычислитель claims](../../src/modules/access/calculators/permission.calculator.ts).
+Модель backend на 2026-10-19. Реестр содержит 44 claim и 57 пар claim/access. [Карта API](./rbac-permissions-map.md), [контракты управления доступом](./rbac-contracts.md). Defaults ролей — [ROLE_BAGS](../../src/modules/access/constants/role-bags.ts). Источники правил — [реестр](../../src/modules/access/constants/permission-registry.ts) и [вычислитель claims](../../src/modules/access/calculators/permission.calculator.ts).
 
 ## 1. Роли и области
 
@@ -80,6 +80,7 @@ OWNER не настраивается. В колонке «Настройка» 
 | `review:read` | L | Просмотр отзывов клиентов филиала и их рейтингов | Да | Да | Нет | MANAGER |
 | `review:write` | L | Ответы на отзывы, скрытие и удаление отзывов | Да | Да | Нет | MANAGER |
 | `review.import:write` | L | Импорт отзывов из XLSX | Да | Да | Нет | MANAGER |
+| `review.export:read` | L | Экспорт отзывов в XLSX | Да | Да | Нет | MANAGER |
 | `analytics.location:read` | L | Dashboard, аналитика записей, услуг, товаров, склада и сотрудников | Да | Да | Нет | MANAGER |
 | `analytics.brand:read` | B | Общая аналитика бренда, включая клиентскую | Да | Да | Нет | MANAGER |
 | `audit.location:read` | L | Журнал изменений филиала | Да | Да | Нет | MANAGER |

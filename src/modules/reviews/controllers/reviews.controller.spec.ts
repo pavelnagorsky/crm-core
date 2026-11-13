@@ -6,6 +6,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import { Test } from '@nestjs/testing';
 import { ReviewStatus, UserRole } from '@prisma/client';
+import { PassThrough } from 'stream';
 import request from 'supertest';
 import { Claim } from '../../access/enums/claim.enum.js';
 import { Read, Write } from '../../access/utils/permission.js';
@@ -15,6 +16,7 @@ import {
   PERMISSIONS_KEY,
 } from '../../auth/guards/permission.guard.js';
 import { TokenEpochGuard } from '../../auth/guards/token-epoch.guard.js';
+import { ReviewsExportService } from '../export/services/reviews-export.service.js';
 import { ReviewModerationService } from '../services/review-moderation.service.js';
 import { ReviewsController } from './reviews.controller.js';
 
@@ -32,6 +34,7 @@ describe('Reviews admin API (HTTP)', () => {
     deleteReply: vi.fn(),
     delete: vi.fn(),
   };
+  const reviewsExport = { stream: vi.fn() };
   const review = {
     id: reviewId,
     locationId,
@@ -59,7 +62,10 @@ describe('Reviews admin API (HTTP)', () => {
   beforeAll(async () => {
     const module = await Test.createTestingModule({
       controllers: [ReviewsController],
-      providers: [{ provide: ReviewModerationService, useValue: moderation }],
+      providers: [
+        { provide: ReviewModerationService, useValue: moderation },
+        { provide: ReviewsExportService, useValue: reviewsExport },
+      ],
     })
       .overrideGuard(JwtAuthGuard)
       .useValue({
@@ -193,6 +199,30 @@ describe('Reviews admin API (HTTP)', () => {
     });
   });
 
+  it('exports with parsed filters before the :reviewId route', async () => {
+    reviewsExport.stream.mockImplementation(async () => {
+      const stream = new PassThrough();
+      stream.end('xlsx');
+      return { stream, filename: 'reviews-2026-11-13.xlsx' };
+    });
+    const response = await request(app.getHttpServer())
+      .get(`${base}/export`)
+      .query({ rating: '2', replied: 'false', orderBy: 'rating' })
+      .expect(200);
+    expect(response.headers['content-disposition']).toBe(
+      'attachment; filename="reviews-2026-11-13.xlsx"',
+    );
+    expect(reviewsExport.stream).toHaveBeenCalledWith(
+      locationId,
+      expect.objectContaining({ rating: 2, replied: false, orderBy: 'rating' }),
+    );
+    expect(moderation.findById).not.toHaveBeenCalled();
+    await request(app.getHttpServer())
+      .get(`${base}/export`)
+      .query({ rating: '9' })
+      .expect(400);
+  });
+
   it('gets a review and rejects a malformed id', async () => {
     await request(app.getHttpServer()).get(`${base}/${reviewId}`).expect(200);
     expect(moderation.findById).toHaveBeenCalledWith(locationId, reviewId);
@@ -297,6 +327,10 @@ describe('Reviews admin API permissions', () => {
       expect(required(handler)).toEqual([Read(Claim.REVIEW)]);
     },
   );
+
+  it('export needs review.export:read', () => {
+    expect(required('export')).toEqual([Read(Claim.REVIEW_EXPORT)]);
+  });
 
   it.each(['setVisibility', 'saveReply', 'deleteReply', 'delete'] as const)(
     '%s needs review:write',

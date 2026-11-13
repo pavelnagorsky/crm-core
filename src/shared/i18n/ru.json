@@ -353,6 +353,23 @@
       "cancellationReason": "Причина отмены",
       "createdAt": "Создана"
     },
+    "reviews": {
+      "sheet": "Отзывы",
+      "reviewedAt": "Дата отзыва",
+      "rating": "Оценка",
+      "text": "Текст отзыва",
+      "authorFirstName": "Имя автора",
+      "authorLastName": "Фамилия автора",
+      "staffNames": "Сотрудники",
+      "visitStartAt": "Визит",
+      "visitServices": "Услуги визита",
+      "status": "Статус",
+      "hiddenReason": "Причина скрытия",
+      "replyText": "Ответ",
+      "repliedAt": "Дата ответа",
+      "repliedByName": "Автор ответа",
+      "source": "Источник"
+    },
     "inventory": {
       "vedomostSheet": "Ведомость",
       "movementsSheet": "Движения",

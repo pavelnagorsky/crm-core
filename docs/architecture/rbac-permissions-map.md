@@ -87,6 +87,7 @@
 | --- | --- | --- | --- |
 | `GET /locations/:locationId/reviews` | `search` | L: `review:read` | — |
 | `GET /locations/:locationId/reviews/summary` | `getSummary` | L: `review:read` | — |
+| `GET /locations/:locationId/reviews/export` | `export` | L: `review.export:read` | Те же фильтры, что у списка, без пагинации. |
 | `GET /locations/:locationId/reviews/:reviewId` | `findById` | L: `review:read` | — |
 | `PATCH /locations/:locationId/reviews/:reviewId/visibility` | `setVisibility` | L: `review:write` | Скрытие требует причину. |
 | `PUT /locations/:locationId/reviews/:reviewId/reply` | `saveReply` | L: `review:write` | — |

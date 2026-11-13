@@ -333,6 +333,15 @@ export const PERMISSION_REGISTRY: Readonly<
       ),
     },
   },
+  [Claim.REVIEW_EXPORT]: {
+    scope: PermissionScope.LOCATION,
+    actions: {
+      [PermissionAccess.READ]: action(
+        [BusinessRole.MANAGER],
+        [Read(Claim.REVIEW)],
+      ),
+    },
+  },
   [Claim.ANALYTICS_LOCATION]: {
     scope: PermissionScope.LOCATION,
     actions: {

@@ -4,6 +4,7 @@ import { BookingVisitsModule } from '../bookings/visits/booking-visits.module.js
 import { LocationModule } from '../location/location.module.js';
 import { PublicReviewsController } from './controllers/public-reviews.controller.js';
 import { ReviewsController } from './controllers/reviews.controller.js';
+import { ReviewsExportService } from './export/services/reviews-export.service.js';
 import { ReviewsFacade } from './reviews.facade.js';
 import { ReviewAggregatesService } from './services/review-aggregates.service.js';
 import { ReviewAuditService } from './services/review-audit.service.js';
@@ -20,6 +21,7 @@ import { ReviewsService } from './services/reviews.service.js';
     ReviewAggregatesService,
     ReviewAuditService,
     ReviewImportStoreService,
+    ReviewsExportService,
     ReviewsFacade,
   ],
   exports: [ReviewsFacade],
