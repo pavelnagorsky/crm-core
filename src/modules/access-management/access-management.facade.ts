@@ -240,6 +240,7 @@ export class AccessManagementFacade {
         this.link(result.token),
         brand.name,
         brand.logoFile?.url ?? null,
+        result.invitation.expiresAt,
       ),
     );
   }

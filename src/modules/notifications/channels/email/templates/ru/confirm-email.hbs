@@ -1,4 +1,4 @@
-<p>{{t "email" "confirm-email" "body"}}</p>
-<a class="btn" href="{{confirmLink}}">{{t "email" "confirm-email" "action"}}</a>
-<p class="hint">{{t "email" "confirm-email" "hint"}}</p>
-<p class="link-fallback">{{t "email" "common" "linkFallback"}}<br /><a href="{{confirmLink}}">{{confirmLink}}</a></p>
+<p style="margin: 0 0 28px; font-size: 16px; line-height: 26px; color: #637381;">{{t "email" "confirm-email" "body"}}</p>
+{{> button href=confirmLink label=(t "email" "confirm-email" "action")}}
+<p style="margin: 0; font-size: 14px; line-height: 22px; color: #637381;">{{t "email" "confirm-email" "hint"}}</p>
+{{> linkFallback href=confirmLink}}

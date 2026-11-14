@@ -1,4 +1,5 @@
-<p>Здравствуйте, <strong>{{clientFirstName}}</strong>! {{t "email" "booking-confirmed" "body"}}</p>
+{{> greeting name=clientFirstName body=(tv "body")}}
 {{> bookingDetails}}
-<a class="btn" href="{{manageLink}}">{{t "email" "common" "manageAction"}}</a>
-<p class="hint">{{t "email" "booking-confirmed" "hint"}}</p>
+{{> button href=manageLink label=(t "email" "common" "manageAction")}}
+<p style="margin: 0; font-size: 14px; line-height: 22px; color: #637381;">{{tv "hint"}}</p>
+{{> linkFallback href=manageLink}}

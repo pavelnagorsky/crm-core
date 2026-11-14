@@ -5,8 +5,10 @@ import Handlebars from 'handlebars';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
 import { IAppConfig } from '../../../../config/interfaces/app-config.interface.js';
+import { IFrontendConfig } from '../../../../config/interfaces/frontend-config.interface.js';
 import { I18nLocale } from '../../../../shared/interfaces/i18n-locale.interface.js';
 import { RenderedEmail } from '../../interfaces/rendered-email.interface.js';
+import { EMAIL_CHIP_COLORS, EMAIL_CHIP_TONES } from './email-chips.js';
 
 export type EmailTemplate =
   | 'confirm-email'
@@ -22,6 +24,26 @@ export type EmailTemplate =
 type CompiledTemplate = Handlebars.TemplateDelegate;
 
 const LANG_TO_INTL_LOCALE: Record<string, string> = { ru: 'ru-RU' };
+const PLATFORM_BUTTON_COLOR = '#00A76F';
+const BRAND_BUTTON_COLOR = '#1C252E';
+/** Sent to the brand's own team: the salon's contacts mean nothing to them. */
+const TEAM_TEMPLATES: ReadonlySet<EmailTemplate> = new Set([
+  'access-invitation',
+  'staff-booking-event',
+]);
+/** Klendo site pages linked from the footer of emails the platform sends itself. */
+const PLATFORM_FOOTER_PATHS = {
+  faqs: '/faqs',
+  contacts: '/contacts',
+  privacyPolicy: '/privacy-policy',
+  termsOfService: '/terms-of-service',
+} as const;
+const PARTIALS: Record<string, string> = {
+  bookingDetails: 'booking-details',
+  button: 'button',
+  greeting: 'greeting',
+  linkFallback: 'link-fallback',
+};
 const EMAIL_TEMPLATES: EmailTemplate[] = [
   'confirm-email',
   'reset-password',
@@ -39,6 +61,11 @@ export class EmailRenderer implements OnModuleInit {
   private readonly hbs: typeof Handlebars;
   private readonly contentTemplates = new Map<string, CompiledTemplate>();
   private readonly lang: string;
+  private readonly siteUrl: string;
+  private readonly platformFooterLinks: Record<
+    keyof typeof PLATFORM_FOOTER_PATHS,
+    string
+  >;
   private locale!: I18nLocale;
   private layoutTemplate!: CompiledTemplate;
   private platformLogo!: Buffer;
@@ -46,6 +73,14 @@ export class EmailRenderer implements OnModuleInit {
   constructor(private readonly config: ConfigService) {
     this.hbs = Handlebars.create();
     this.lang = this.config.get<IAppConfig>('app')!.locale;
+    const domain = this.config.get<IFrontendConfig>('frontend')!.domain;
+    this.siteUrl = new URL('/', domain).toString();
+    this.platformFooterLinks = Object.fromEntries(
+      Object.entries(PLATFORM_FOOTER_PATHS).map(([key, path]) => [
+        key,
+        new URL(path, domain).toString(),
+      ]),
+    ) as Record<keyof typeof PLATFORM_FOOTER_PATHS, string>;
     this.registerHelpers();
   }
 
@@ -76,13 +111,14 @@ export class EmailRenderer implements OnModuleInit {
       join(templatesDir, '..', 'assets', 'klendo-logo.png'),
     );
 
-    this.hbs.registerPartial(
-      'bookingDetails',
-      readFileSync(
-        join(templatesDir, this.lang, 'partials', 'booking-details.hbs'),
-        'utf-8',
-      ),
-    );
+    for (const [name, file] of Object.entries(PARTIALS))
+      this.hbs.registerPartial(
+        name,
+        readFileSync(
+          join(templatesDir, this.lang, 'partials', `${file}.hbs`),
+          'utf-8',
+        ),
+      );
     for (const name of EMAIL_TEMPLATES) {
       const source = readFileSync(
         join(templatesDir, this.lang, `${name}.hbs`),
@@ -113,20 +149,48 @@ export class EmailRenderer implements OnModuleInit {
           data.brandLogoUrl.startsWith('https://')
         ? data.brandLogoUrl
         : undefined;
-    const ctx = { ...data, locale: this.locale, lang: this.lang };
+    const ctx = {
+      ...data,
+      locale: this.locale,
+      lang: this.lang,
+      template,
+      buttonColor: isPlatform ? PLATFORM_BUTTON_COLOR : BRAND_BUTTON_COLOR,
+    };
     const texts = this.texts(template, data.variant);
     const title = texts.subject ? this.text(texts.subject, ctx) : template;
     const subject = `${senderName} — ${title}`;
     const heading = texts.heading ? this.text(texts.heading, ctx) : title;
+    const tone =
+      EMAIL_CHIP_TONES[`${template}.${String(data.variant)}`] ??
+      EMAIL_CHIP_TONES[template];
+    const chip =
+      texts.chip && tone
+        ? { label: texts.chip, ...EMAIL_CHIP_COLORS[tone] }
+        : null;
+    const contact =
+      isPlatform || TEAM_TEMPLATES.has(template)
+        ? []
+        : [data.locationAddress, data.locationPhone].filter(
+            (part): part is string => typeof part === 'string' && part !== '',
+          );
 
     const content = contentTemplate(ctx);
     const html = this.layoutTemplate({
       subject,
       heading,
+      chip,
       senderName,
+      senderInitial: Array.from(senderName)[0].toUpperCase(),
       logoUrl,
       isPlatform,
-      brandingClass: isPlatform ? 'platform' : 'business',
+      // Staff notifications come from Klendo itself, not from the salon's booking page.
+      platformTagline: isPlatform || template === 'staff-booking-event',
+      footerContact: contact.length
+        ? [senderName, ...contact].join(' · ')
+        : null,
+      footerNote: texts.footerNote ?? null,
+      siteUrl: this.siteUrl,
+      footerLinks: isPlatform ? this.platformFooterLinks : null,
       content,
       lang: this.lang,
       locale: this.locale,
@@ -152,22 +216,32 @@ export class EmailRenderer implements OnModuleInit {
     };
   }
 
-  /** Subject and heading of the template, or of its `variant` section when the data names one. */
+  /** Layout texts of the template, or of its `variant` section when the data names one. */
   private texts(
     template: EmailTemplate,
     variant: unknown,
-  ): { subject?: string; heading?: string } {
+  ): {
+    subject?: string;
+    heading?: string;
+    chip?: string;
+    footerNote?: string;
+  } {
     const section = this.locale.email[template] as
       Record<string, unknown> | undefined;
     const own =
       typeof variant === 'string'
         ? (section?.[variant] as Record<string, unknown> | undefined)
         : undefined;
-    const pick = (key: 'subject' | 'heading') => {
+    const pick = (key: string) => {
       const value = own?.[key] ?? section?.[key];
       return typeof value === 'string' ? value : undefined;
     };
-    return { subject: pick('subject'), heading: pick('heading') };
+    return {
+      subject: pick('subject'),
+      heading: pick('heading'),
+      chip: pick('chip'),
+      footerNote: pick('footerNote'),
+    };
   }
 
   /** Subjects and headings may name booking data, e.g. the visit time. Plain text, escaped by the layout. */
@@ -185,6 +259,44 @@ export class EmailRenderer implements OnModuleInit {
       return typeof value === 'string'
         ? new Handlebars.SafeString(value)
         : keys[keys.length - 1];
+    });
+
+    // Text of the current template's variant section, else of the template itself; empty when neither has it.
+    this.hbs.registerHelper(
+      'tv',
+      (key: string, opts: Handlebars.HelperOptions) => {
+        const root = opts.data?.root ?? {};
+        const section = (root.locale as I18nLocale | undefined)?.email[
+          root.template
+        ] as Record<string, unknown> | undefined;
+        const own =
+          typeof root.variant === 'string'
+            ? (section?.[root.variant] as Record<string, unknown> | undefined)
+            : undefined;
+        const value = own?.[key] ?? section?.[key];
+        return typeof value === 'string' ? value : '';
+      },
+    );
+
+    this.hbs.registerHelper('eq', (a: unknown, b: unknown) => a === b);
+
+    this.hbs.registerHelper('capitalize', (value: unknown) => {
+      const text = String(value ?? '');
+      return text.charAt(0).toUpperCase() + text.slice(1);
+    });
+
+    // "суббота, 14 ноября"; the year only when it is not this year.
+    this.hbs.registerHelper('formatVisitDay', (...rawArgs: unknown[]) => {
+      const opts = rawArgs[rawArgs.length - 1] as Handlebars.HelperOptions;
+      const timezone: string = opts.data?.root?.timezone ?? 'UTC';
+      return this.formatDay(rawArgs[0] as string | Date, timezone, true);
+    });
+
+    // "21 ноября"
+    this.hbs.registerHelper('formatDayMonth', (...rawArgs: unknown[]) => {
+      const opts = rawArgs[rawArgs.length - 1] as Handlebars.HelperOptions;
+      const timezone: string = opts.data?.root?.timezone ?? 'UTC';
+      return this.formatDay(rawArgs[0] as string | Date, timezone, false);
     });
 
     this.hbs.registerHelper('formatDateTime', (...rawArgs: unknown[]) => {
@@ -209,6 +321,28 @@ export class EmailRenderer implements OnModuleInit {
       const timezone: string = opts.data?.root?.timezone ?? 'UTC';
       return this.formatDate(value, timezone, false, true);
     });
+  }
+
+  private formatDay(
+    value: string | Date,
+    timezone: string,
+    weekday: boolean,
+  ): string {
+    const d = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value);
+    const intlLocale = LANG_TO_INTL_LOCALE[this.lang] ?? 'ru-RU';
+    const year = (date: Date) =>
+      new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        year: 'numeric',
+      }).format(date);
+    return new Intl.DateTimeFormat(intlLocale, {
+      timeZone: timezone,
+      ...(weekday && { weekday: 'long' }),
+      day: 'numeric',
+      month: 'long',
+      ...(year(d) !== year(new Date()) && { year: 'numeric' }),
+    }).format(d);
   }
 
   private formatVisit(

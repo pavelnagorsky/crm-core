@@ -1,0 +1,3 @@
+# Email templates: Prettier's Handlebars parser rejects partials ({{> …}}) and rewrites
+# the rest — drops <!DOCTYPE html>, reflows inline tables and whitespace that email clients render.
+*.hbs

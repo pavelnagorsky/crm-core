@@ -19,6 +19,7 @@ vi.mock('nodemailer', () => ({
 describe('Email branding', () => {
   const config = new ConfigService({
     app: { locale: 'ru' },
+    frontend: { domain: 'https://klendo.by' },
     emailConfig: { email: 'mail@klendo.example', emailPw: 'test' },
   });
   const locations = { findPublicProfile: vi.fn() };
@@ -71,7 +72,19 @@ describe('Email branding', () => {
       });
       expect(mail.subject).toMatch(/^Klendo — /);
       expect(mail.html).toContain('src="cid:klendo-logo"');
-      expect(mail.html).not.toContain('Powered by Klendo');
+      expect(mail.html).not.toContain(
+        'Онлайн-запись работает на <a href="https://klendo.by/"',
+      );
+      expect(mail.html).toContain(
+        '<a href="https://klendo.by/" target="_blank"',
+      );
+      for (const path of [
+        'faqs',
+        'contacts',
+        'privacy-policy',
+        'terms-of-service',
+      ])
+        expect(mail.html).toContain(`href="https://klendo.by/${path}"`);
       expect(mail.attachments).toEqual([
         expect.objectContaining({
           cid: 'klendo-logo',
@@ -100,7 +113,10 @@ describe('Email branding', () => {
     });
     expect(mail.subject).toMatch(/^Studio Brand — /);
     expect(mail.html).toContain('src="https://cdn.example.com/brand.png"');
-    expect(mail.html).toContain('Powered by Klendo');
+    expect(mail.html).toContain(
+      'Онлайн-запись работает на <a href="https://klendo.by/"',
+    );
+    expect(mail.html).not.toContain('href="https://klendo.by/privacy-policy"');
     expect(mail.html).not.toContain('cid:klendo-logo');
     expect(mail.attachments).toBeUndefined();
   });
@@ -116,7 +132,9 @@ describe('Email branding', () => {
     const mail = sendMail.mock.calls[0][0];
     expect(mail.html).toContain('>Studio Brand</td>');
     expect(mail.html).not.toContain('<img');
-    expect(mail.html).toContain('Powered by Klendo');
+    expect(mail.html).toContain(
+      'Онлайн-запись работает на <a href="https://klendo.by/"',
+    );
   });
 
   it('uses business branding for employee invitations', async () => {
@@ -136,7 +154,9 @@ describe('Email branding', () => {
     expect(mail.html).toContain(
       'src="https://cdn.example.com/inviting-brand.png"',
     );
-    expect(mail.html).toContain('Powered by Klendo');
+    expect(mail.html).toContain(
+      'Онлайн-запись работает на <a href="https://klendo.by/"',
+    );
     expect(mail.html).not.toContain('cid:klendo-logo');
     expect(locations.findPublicProfile).not.toHaveBeenCalled();
   });

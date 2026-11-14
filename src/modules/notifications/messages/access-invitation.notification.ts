@@ -15,6 +15,7 @@ export class AccessInvitationNotification
     private readonly invitationLink: string,
     private readonly brandName: string,
     private readonly brandLogoUrl: string | null = null,
+    private readonly expiresAt: Date | null = null,
   ) {
     super();
   }
@@ -26,6 +27,7 @@ export class AccessInvitationNotification
         brandName: this.brandName,
         brandLogoUrl: this.brandLogoUrl,
         invitationLink: this.invitationLink,
+        expiresAt: this.expiresAt,
       },
     };
   }

@@ -1,6 +1,9 @@
-<p>Здравствуйте, <strong>{{clientFirstName}}</strong>! {{t "email" "booking-status-changed" status "body"}}</p>
+{{> greeting name=clientFirstName body=(tv "body")}}
 {{> bookingDetails}}
 {{#if manageLink}}
-<a class="btn" href="{{manageLink}}">{{t "email" "common" "manageAction"}}</a>
+{{> button href=manageLink label=(t "email" "common" "manageAction")}}
+{{else if locationPhone}}
+{{> button tel=locationPhone label=(t "email" "common" "callAction")}}
 {{/if}}
-<p class="hint">{{t "email" "booking-status-changed" status "hint"}}</p>
+<p style="margin: 0; font-size: 14px; line-height: 22px; color: #637381;">{{tv "hint"}}</p>
+{{#if manageLink}}{{> linkFallback href=manageLink}}{{/if}}

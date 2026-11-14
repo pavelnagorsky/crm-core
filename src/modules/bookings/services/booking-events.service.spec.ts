@@ -20,7 +20,10 @@ describe('Booking creation notifications', () => {
     {} as never,
   );
   const renderer = new EmailRenderer(
-    new ConfigService({ app: { locale: 'ru' } }),
+    new ConfigService({
+      app: { locale: 'ru' },
+      frontend: { domain: 'https://klendo.by' },
+    }),
   );
   beforeAll(() => renderer.onModuleInit());
   beforeEach(() => vi.clearAllMocks());

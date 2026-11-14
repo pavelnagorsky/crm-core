@@ -1,39 +1,54 @@
-<div class="details">
-  <div class="details-title">{{t "email" "common" "details"}}</div>
-  <div class="details-row">
-    <span class="details-label">{{t "email" "common" "service"}}</span>
-    <span class="details-value">{{serviceTitle}}</span>
-  </div>
-  <div class="details-row">
-    <span class="details-label">{{t "email" "common" "specialist"}}</span>
-    <span class="details-value">{{staffName}}</span>
-  </div>
-  {{#if previousStartAt}}
-  <div class="details-row">
-    <span class="details-label">{{t "email" "common" "previousTime"}}</span>
-    <span class="details-value"><s>{{formatVisit previousStartAt}}</s></span>
-  </div>
-  {{/if}}
-  <div class="details-row">
-    <span class="details-label">{{t "email" "common" "dateTime"}}</span>
-    <span class="details-value">{{formatVisit startAt}} — {{formatTime endAt}}</span>
-  </div>
-  {{#if locationAddress}}
-  <div class="details-row">
-    <span class="details-label">{{t "email" "common" "address"}}</span>
-    <span class="details-value">{{locationAddress}}</span>
-  </div>
-  {{/if}}
-  {{#if locationPhone}}
-  <div class="details-row">
-    <span class="details-label">{{t "email" "common" "phone"}}</span>
-    <span class="details-value"><a href="tel:{{locationPhone}}">{{locationPhone}}</a></span>
-  </div>
-  {{/if}}
-  {{#if cancellationReason}}
-  <div class="details-row">
-    <span class="details-label">{{t "email" "common" "reason"}}</span>
-    <span class="details-value">{{cancellationReason}}</span>
-  </div>
-  {{/if}}
-</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 0 0 28px;">
+  <tr>
+    <td class="panel" bgcolor="#F4F6F8" style="background: #F4F6F8; border-radius: 12px; padding: 20px 24px;">
+      {{#if clientName}}
+      <div style="font-size: 13px; line-height: 20px; color: #637381;">{{t "email" "staff-booking-event" "client"}}</div>
+      <div style="font-size: 22px; line-height: 30px; font-weight: 700; color: #1C252E;">{{clientName}}</div>
+      {{#if clientPhone}}
+      <div style="font-size: 15px; line-height: 24px; font-weight: 600;"><a href="tel:{{clientPhone}}" style="color: #007867; text-decoration: underline;">{{clientPhone}}</a></div>
+      {{/if}}
+      <div style="height: 1px; line-height: 1px; font-size: 0; background: #DFE3E8; margin: 16px 0;">&nbsp;</div>
+      {{/if}}
+      {{#if previousStartAt}}
+      <div style="margin: 0 0 4px; font-size: 13px; line-height: 20px; color: #919EAB;">{{t "email" "common" "previousTime"}}: <s>{{formatVisit previousStartAt}}</s></div>
+      {{/if}}
+      <div style="font-size: 14px; line-height: 22px; font-weight: 600; color: #637381;">{{#if (tv "day")}}{{tv "day"}}, {{formatVisitDay startAt}}{{else}}{{capitalize (formatVisitDay startAt)}}{{/if}}</div>
+      {{#if (eq variant "CANCELLED")}}
+      <div style="font-size: 28px; line-height: 36px; font-weight: 700; color: #919EAB; text-decoration: line-through;">{{formatTime startAt}} — {{formatTime endAt}}</div>
+      {{else}}
+      <div style="font-size: 28px; line-height: 36px; font-weight: 700; color: #1C252E;">{{formatTime startAt}} — {{formatTime endAt}}</div>
+      {{/if}}
+      <div style="height: 1px; line-height: 1px; font-size: 0; background: #DFE3E8; margin: 16px 0 12px;">&nbsp;</div>
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        <tr>
+          <td class="label" width="112" valign="top" style="width: 112px; padding: 4px 16px 4px 0; font-size: 14px; line-height: 22px; color: #637381;">{{t "email" "common" "service"}}</td>
+          <td valign="top" style="padding: 4px 0; font-size: 14px; line-height: 22px; font-weight: 600; color: #1C252E;">{{serviceTitle}}</td>
+        </tr>
+        <tr>
+          <td class="label" width="112" valign="top" style="width: 112px; padding: 4px 16px 4px 0; font-size: 14px; line-height: 22px; color: #637381;">{{t "email" "common" "specialist"}}</td>
+          <td valign="top" style="padding: 4px 0; font-size: 14px; line-height: 22px; font-weight: 600; color: #1C252E;">{{staffName}}</td>
+        </tr>
+        {{#unless clientName}}
+        {{#if locationAddress}}
+        <tr>
+          <td class="label" width="112" valign="top" style="width: 112px; padding: 4px 16px 4px 0; font-size: 14px; line-height: 22px; color: #637381;">{{t "email" "common" "address"}}</td>
+          <td valign="top" style="padding: 4px 0; font-size: 14px; line-height: 22px; font-weight: 600; color: #1C252E;">{{locationAddress}}</td>
+        </tr>
+        {{/if}}
+        {{#if locationPhone}}
+        <tr>
+          <td class="label" width="112" valign="top" style="width: 112px; padding: 4px 16px 4px 0; font-size: 14px; line-height: 22px; color: #637381;">{{t "email" "common" "phone"}}</td>
+          <td valign="top" style="padding: 4px 0; font-size: 14px; line-height: 22px; font-weight: 600;"><a href="tel:{{locationPhone}}" style="color: #007867; text-decoration: none;">{{locationPhone}}</a></td>
+        </tr>
+        {{/if}}
+        {{/unless}}
+        {{#if cancellationReason}}
+        <tr>
+          <td class="label" width="112" valign="top" style="width: 112px; padding: 4px 16px 4px 0; font-size: 14px; line-height: 22px; color: #637381;">{{t "email" "common" "reason"}}</td>
+          <td valign="top" style="padding: 4px 0; font-size: 14px; line-height: 22px; font-weight: 600; color: #1C252E;">{{cancellationReason}}</td>
+        </tr>
+        {{/if}}
+      </table>
+    </td>
+  </tr>
+</table>

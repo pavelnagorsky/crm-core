@@ -1,4 +1,4 @@
-<p>{{{t "email" "access-invitation" "body"}}} <strong>{{brandName}}</strong>.</p>
-<a class="btn" href="{{invitationLink}}">{{t "email" "access-invitation" "action"}}</a>
-<p class="hint">{{t "email" "access-invitation" "hint"}}</p>
-<p class="link-fallback">{{t "email" "common" "linkFallback"}}<br /><a href="{{invitationLink}}">{{invitationLink}}</a></p>
+<p style="margin: 0 0 28px; font-size: 16px; line-height: 26px; color: #637381;">{{t "email" "access-invitation" "body"}} <strong style="font-weight: 600; color: #1C252E;">{{brandName}}</strong> {{t "email" "access-invitation" "bodyAfter"}}</p>
+{{> button href=invitationLink label=(t "email" "access-invitation" "action")}}
+<p style="margin: 0; font-size: 14px; line-height: 22px; color: #637381;">{{#if expiresAt}}{{t "email" "access-invitation" "expires"}} {{formatDayMonth expiresAt}}. {{/if}}{{t "email" "access-invitation" "hint"}}</p>
+{{> linkFallback href=invitationLink}}

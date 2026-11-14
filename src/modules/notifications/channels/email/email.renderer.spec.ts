@@ -4,7 +4,10 @@ import { EmailRenderer } from './email.renderer.js';
 
 describe('EmailRenderer', () => {
   const renderer = new EmailRenderer(
-    new ConfigService({ app: { locale: 'ru' } }),
+    new ConfigService({
+      app: { locale: 'ru' },
+      frontend: { domain: 'https://klendo.by' },
+    }),
   );
   const visit = {
     brandName: 'Салон',
@@ -36,10 +39,11 @@ describe('EmailRenderer', () => {
     expect(email.subject).toBe(
       'Салон — Новая заявка на сб, 14 ноября в 15:00 — подтвердите',
     );
-    expect(email.html).toContain('<h1>Новая заявка на запись</h1>');
+    expect(email.html).toContain('>Новая заявка на запись</h1>');
     expect(email.html).toContain('+375291112233');
     expect(email.html).toContain(`href="${visit.bookingUrl}"`);
-    expect(email.html).toContain('суббота, 14 ноября в 15:00');
+    expect(email.html).toContain('Суббота, 14 ноября');
+    expect(email.html).toContain('15:00 — 16:00');
   });
 
   it('shows the old time of a move and the year of a visit next year', () => {
@@ -110,7 +114,7 @@ describe('EmailRenderer', () => {
       expect(email.subject).toBe(
         'Салон — Запись перенесена на сб, 14 ноября в 15:00',
       );
-      expect(email.html).toContain('<h1>Запись перенесена</h1>');
+      expect(email.html).toContain('>Запись перенесена</h1>');
       expect(email.html).toContain('<s>пятница, 13 ноября в 12:00</s>');
       expect(email.html).toContain(
         `href="${Handlebars.escapeExpression(client.manageLink)}"`,
@@ -131,7 +135,8 @@ describe('EmailRenderer', () => {
       );
       expect(email.html).toContain('Мастер заболел');
       expect(email.html).toContain('+375291234567');
-      expect(email.html).not.toContain('class="btn"');
+      expect(email.html).not.toContain('Перенести или отменить');
+      expect(email.html).toContain('>Позвонить в салон</a>');
     });
 
     it('leaves out the address and phone rows when the location has none', () => {
@@ -144,7 +149,7 @@ describe('EmailRenderer', () => {
         'Салон — Запись подтверждена — сб, 14 ноября в 15:00',
       );
       expect(email.html).not.toContain('Адрес');
-      expect(email.html).not.toContain('Телефон салона');
+      expect(email.html).not.toContain('>Телефон</td>');
     });
   });
 });
