@@ -44,6 +44,10 @@ export const ErrorCode = {
     code: 'RESET_CODE_RESEND_TOO_SOON',
     message: 'Please wait before requesting a new code',
   },
+  EMAIL_CONFIRMATION_RESEND_TOO_SOON: {
+    code: 'EMAIL_CONFIRMATION_RESEND_TOO_SOON',
+    message: 'Please wait before requesting a new confirmation email',
+  },
 
   // user
   USER_NOT_FOUND: { code: 'USER_NOT_FOUND', message: 'User not found' },

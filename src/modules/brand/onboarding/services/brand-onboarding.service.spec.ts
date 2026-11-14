@@ -1,18 +1,19 @@
 import { BusinessType, Prisma, ServiceStatus } from '@prisma/client';
+import { COUNTRY_DEFAULTS } from '../../../../shared/geo/country-defaults.js';
 import { AuditActorRole } from '../../../audit/enums/audit-actor-role.enum.js';
 import { ServiceCategoriesService } from '../../../services/categories/services/service-categories.service.js';
 import { ServiceWriteService } from '../../../services/service-write/services/service-write.service.js';
 import { StaffService } from '../../../staff/services/staff.service.js';
-import { BrandInitialDataService } from './brand-initial-data.service.js';
+import { BrandOnboardingService } from './brand-onboarding.service.js';
 
-describe('BrandInitialDataService', () => {
+describe('BrandOnboardingService', () => {
   const tx = {
     serviceCategory: { createManyAndReturn: vi.fn() },
     service: { createManyAndReturn: vi.fn() },
     staff: { create: vi.fn() },
   };
   const db = { $transaction: vi.fn() };
-  const locations = { acquireActiveOperationLock: vi.fn(), findById: vi.fn() };
+  const brands = { create: vi.fn(), recordCreated: vi.fn() };
   const users = { findById: vi.fn() };
   const cache = { invalidate: vi.fn() };
   const events = { emit: vi.fn() };
@@ -36,13 +37,12 @@ describe('BrandInitialDataService', () => {
     {} as never,
     cache as never,
   );
-  const initialData = new BrandInitialDataService(
+  const onboarding = new BrandOnboardingService(
     db as never,
-    locations as never,
+    brands as never,
     categories,
     services,
     staff,
-    cache as never,
     events as never,
   );
   const actor = { id: 'user-1', name: 'Anna', role: AuditActorRole.OWNER };
@@ -52,17 +52,23 @@ describe('BrandInitialDataService', () => {
     businessType: BusinessType.BARBERSHOP,
     currency: 'BYN',
   };
+  const dto = { name: 'Brand', location: {} } as never;
+  const withLocation = (overrides: object) =>
+    brands.create.mockResolvedValue({
+      id: 'brand-1',
+      locations: [{ ...location, ...overrides }],
+    });
+  const createBrand = () => onboarding.createBrand(actor.id, dto, actor);
 
   beforeEach(() => {
     vi.resetAllMocks();
     db.$transaction.mockImplementation(async (callback) => {
       const result = await callback(tx);
-      expect(cache.invalidate).not.toHaveBeenCalled();
       expect(events.emit).not.toHaveBeenCalled();
+      expect(brands.recordCreated).not.toHaveBeenCalled();
       return result;
     });
-    locations.acquireActiveOperationLock.mockResolvedValue(true);
-    locations.findById.mockResolvedValue(location);
+    withLocation({});
     users.findById.mockResolvedValue({
       firstName: 'Anna',
       lastName: 'Ivanova',
@@ -88,10 +94,13 @@ describe('BrandInitialDataService', () => {
     );
   });
 
-  it('creates inactive priced services, categories and a linked owner in the same transaction', async () => {
-    await initialData.populate(location.id, actor.id, actor);
+  it('creates the brand, inactive priced services, categories and a linked owner in one transaction', async () => {
+    const brand = await createBrand();
 
+    expect(brand.id).toBe('brand-1');
     expect(db.$transaction).toHaveBeenCalledOnce();
+    expect(brands.create).toHaveBeenCalledWith(actor.id, dto, tx);
+    expect(brands.recordCreated).toHaveBeenCalledWith(brand, actor);
     const data = tx.service.createManyAndReturn.mock.calls[0][0].data;
     expect(data).toEqual([
       expect.objectContaining({
@@ -131,27 +140,21 @@ describe('BrandInitialDataService', () => {
         },
       }),
     });
-    expect(cache.invalidate).toHaveBeenCalledWith(
-      'services.catalog:location-1',
-    );
-    expect(cache.invalidate).toHaveBeenCalledWith('staff.directory:location-1');
-    expect(cache.invalidate).toHaveBeenCalledWith('staff.schedule:location-1');
     expect(events.emit).toHaveBeenCalledTimes(6);
   });
 
   it.each(
     Object.values(BusinessType).flatMap((businessType) =>
-      ['RUB', 'BYN', 'KZT'].map((currency) => ({ businessType, currency })),
+      Object.values(COUNTRY_DEFAULTS).map(({ currency }) => ({
+        businessType,
+        currency,
+      })),
     ),
   )(
     'has valid starter services for $businessType in $currency',
     async ({ businessType, currency }) => {
-      locations.findById.mockResolvedValue({
-        ...location,
-        businessType,
-        currency,
-      });
-      await initialData.populate(location.id, actor.id, actor);
+      withLocation({ businessType, currency });
+      await createBrand();
       const data = tx.service.createManyAndReturn.mock.calls[0][0].data;
       expect(data.length).toBeGreaterThanOrEqual(2);
       for (const service of data) {
@@ -166,8 +169,8 @@ describe('BrandInitialDataService', () => {
   it.each([null, undefined])(
     'creates only the owner when the business type is %s',
     async (businessType) => {
-      locations.findById.mockResolvedValue({ ...location, businessType });
-      await initialData.populate(location.id, actor.id, actor);
+      withLocation({ businessType });
+      await createBrand();
       expect(tx.serviceCategory.createManyAndReturn).not.toHaveBeenCalled();
       expect(tx.service.createManyAndReturn).not.toHaveBeenCalled();
       expect(tx.staff.create).toHaveBeenCalledWith({
@@ -181,29 +184,10 @@ describe('BrandInitialDataService', () => {
     },
   );
 
-  it('does not populate a deleted location or brand', async () => {
-    locations.acquireActiveOperationLock.mockResolvedValue(false);
-    await initialData.populate(location.id, actor.id, actor);
-    expect(tx.staff.create).not.toHaveBeenCalled();
-    expect(tx.serviceCategory.createManyAndReturn).not.toHaveBeenCalled();
-    expect(cache.invalidate).not.toHaveBeenCalled();
-  });
-
-  it('propagates a transaction failure without publishing audit events or invalidating caches', async () => {
+  it('rolls back the brand on a starter data failure without publishing audit events', async () => {
     tx.staff.create.mockRejectedValue(new Error('Staff insert failed'));
-    await expect(
-      initialData.populate(location.id, actor.id, actor),
-    ).rejects.toThrow('Staff insert failed');
-    expect(cache.invalidate).not.toHaveBeenCalled();
+    await expect(createBrand()).rejects.toThrow('Staff insert failed');
+    expect(brands.recordCreated).not.toHaveBeenCalled();
     expect(events.emit).not.toHaveBeenCalled();
-  });
-
-  it('rejects an unsupported currency before inserting starter data', async () => {
-    locations.findById.mockResolvedValue({ ...location, currency: 'USD' });
-    await expect(
-      initialData.populate(location.id, actor.id, actor),
-    ).rejects.toThrow('Unsupported starter catalog currency');
-    expect(tx.serviceCategory.createManyAndReturn).not.toHaveBeenCalled();
-    expect(tx.staff.create).not.toHaveBeenCalled();
   });
 });

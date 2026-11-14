@@ -88,7 +88,9 @@ describe('BrandService first location', () => {
   });
 
   it('creates the first location with normalized locale, business type and owner access', async () => {
-    await service.create('user-1', dto, actor);
+    const brand = await service.create('user-1', dto, db as never);
+    expect(events.emit).not.toHaveBeenCalled();
+    service.recordCreated(brand, actor);
 
     expect(db.brand.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -152,7 +154,7 @@ describe('BrandService first location', () => {
             ...dto,
             location: { ...dto.location, ...overrides },
           },
-          actor,
+          db as never,
         ),
       ).rejects.toBeInstanceOf(BadRequestException);
 
@@ -161,16 +163,6 @@ describe('BrandService first location', () => {
       expect(events.emit).not.toHaveBeenCalled();
     },
   );
-
-  it('does not log creation when the transaction rolls back', async () => {
-    access.assignInitialOwner.mockRejectedValueOnce(
-      new Error('Membership failed'),
-    );
-    await expect(service.create('user-1', dto, actor)).rejects.toThrow(
-      'Membership failed',
-    );
-    expect(events.emit).not.toHaveBeenCalled();
-  });
 
   it('does not log deletion when open bookings block it', async () => {
     db.brand.updateMany.mockResolvedValue({ count: 1 });

@@ -25,5 +25,8 @@ export const RESET_CODE_TTL_MINUTES = 15;
 /** Minimum interval between two password-reset code requests for one user. */
 export const RESET_CODE_RESEND_COOLDOWN_SECONDS = 60;
 
+/** Minimum interval between two confirmation emails for one user. */
+export const EMAIL_CONFIRMATION_RESEND_COOLDOWN_SECONDS = 60;
+
 /** Failed guesses allowed for one password-reset code generation. */
 export const RESET_CODE_MAX_ATTEMPTS = 5;

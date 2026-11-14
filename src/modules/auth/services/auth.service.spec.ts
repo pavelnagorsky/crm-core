@@ -362,3 +362,72 @@ describe('AuthService email confirmation', () => {
     expect(tx.refreshToken.findMany).not.toHaveBeenCalled();
   });
 });
+
+describe('AuthService confirmation email resend', () => {
+  const users = {
+    findByEmail: vi.fn(),
+    claimEmailConfirmationSend: vi.fn(),
+  };
+  const events = { emit: vi.fn() };
+  const config = {
+    get: vi.fn((key: string) =>
+      key === 'jwt'
+        ? { emailTokenSecret: 'email-secret' }
+        : { domain: 'https://app.example.com' },
+    ),
+  };
+  const service = new AuthService(
+    {} as never,
+    users as unknown as UserService,
+    { signAsync: vi.fn().mockResolvedValue('email-token') } as never,
+    events as unknown as EventEmitter2,
+    config as unknown as ConfigService,
+    {} as never,
+    {} as never,
+    {} as never,
+  );
+  const dto = { email: 'anna@example.com' };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    users.findByEmail.mockResolvedValue({ ...user, emailVerifiedAt: null });
+    users.claimEmailConfirmationSend.mockResolvedValue(true);
+  });
+
+  it('sends a new confirmation link to an unconfirmed user', async () => {
+    await service.resendConfirmationEmail(dto);
+
+    expect(users.claimEmailConfirmationSend).toHaveBeenCalledWith(
+      user.id,
+      expect.any(Date),
+    );
+    const cutoff = users.claimEmailConfirmationSend.mock.calls[0][1] as Date;
+    expect(Date.now() - cutoff.getTime()).toBeGreaterThanOrEqual(60_000);
+    expect(events.emit).toHaveBeenCalledOnce();
+    expect(events.emit.mock.calls[0][1].toEmail()).toEqual({
+      to: user.email,
+      data: {
+        confirmLink:
+          'https://app.example.com/auth/confirm-email?token=email-token',
+      },
+    });
+  });
+
+  it.each([
+    ['unknown', null],
+    ['already confirmed', user],
+  ])('succeeds without sending for an %s email', async (_, found) => {
+    users.findByEmail.mockResolvedValue(found);
+    await service.resendConfirmationEmail(dto);
+    expect(users.claimEmailConfirmationSend).not.toHaveBeenCalled();
+    expect(events.emit).not.toHaveBeenCalled();
+  });
+
+  it('rejects a resend inside the cooldown without sending', async () => {
+    users.claimEmailConfirmationSend.mockResolvedValue(false);
+    await expect(service.resendConfirmationEmail(dto)).rejects.toMatchObject({
+      status: 429,
+    });
+    expect(events.emit).not.toHaveBeenCalled();
+  });
+});

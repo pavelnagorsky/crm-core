@@ -7,6 +7,7 @@ import {
   ApiOperation,
   ApiQuery,
   ApiTags,
+  ApiTooManyRequestsResponse,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger';
 import type { Response } from 'express';
@@ -24,6 +25,7 @@ import { GoogleOauthRequestDto } from '../dto/google-oauth-request.dto.js';
 import { LoginDto } from '../dto/login.dto.js';
 import { OAuthResponseDto } from '../dto/oauth-response.dto.js';
 import { RegisterDto } from '../dto/register.dto.js';
+import { ResendConfirmationEmailDto } from '../dto/resend-confirmation-email.dto.js';
 import { ResetPasswordRequestDto } from '../dto/reset-password-request.dto.js';
 import { ResetPasswordDto } from '../dto/reset-password.dto.js';
 import { TokenPayloadDto } from '../dto/token-payload.dto.js';
@@ -121,6 +123,26 @@ export class AuthController {
     const tokens = await this.authService.confirmEmail(payload.sub, userAgent);
     res.cookie(CookiesEnum.REFRESH_TOKEN, tokens.refreshToken, cookieConfig);
     return BaseResponseDto.success(new AuthDto(tokens.accessToken));
+  }
+
+  @ApiOperation({
+    summary: 'Resend the email confirmation link',
+    description:
+      'Sends a new confirmation link to an unconfirmed account registered with email and password. Succeeds without sending anything when the email is unknown or already confirmed. Earlier links stay valid until they expire.',
+  })
+  @ApiCreatedResponse({ type: BaseResponseDto })
+  @ApiBadRequestResponse({ type: ValidationErrorResponseDto })
+  @ApiTooManyRequestsResponse({
+    description:
+      'EMAIL_CONFIRMATION_RESEND_TOO_SOON: a confirmation email was sent to this account less than 60 seconds ago',
+  })
+  @StrictRateLimit()
+  @Post('resend-confirmation-email')
+  async resendConfirmationEmail(
+    @Body() dto: ResendConfirmationEmailDto,
+  ): Promise<BaseResponseDto> {
+    await this.authService.resendConfirmationEmail(dto);
+    return BaseResponseDto.success();
   }
 
   @ApiOperation({ summary: 'Request password reset email' })

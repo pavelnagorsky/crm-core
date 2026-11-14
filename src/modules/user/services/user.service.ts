@@ -58,6 +58,22 @@ export class UserService {
     return this.findById(id, tx);
   }
 
+  /** Records a confirmation email send for an unconfirmed user unless one was sent after `cutoff`. */
+  async claimEmailConfirmationSend(id: string, cutoff: Date): Promise<boolean> {
+    const { count } = await this.db.user.updateMany({
+      where: {
+        id,
+        emailVerifiedAt: null,
+        OR: [
+          { emailConfirmationSentAt: null },
+          { emailConfirmationSentAt: { lte: cutoff } },
+        ],
+      },
+      data: { emailConfirmationSentAt: new Date() },
+    });
+    return count === 1;
+  }
+
   async getTokenEpoch(
     id: string,
     tx: Prisma.TransactionClient = this.db,

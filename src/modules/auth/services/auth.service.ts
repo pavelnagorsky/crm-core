@@ -14,6 +14,7 @@ import { createHash, randomUUID } from 'crypto';
 import { IFrontendConfig } from '../../../config/interfaces/frontend-config.interface.js';
 import { IJwtConfig } from '../../../config/interfaces/jwt-config.interface.js';
 import {
+  EMAIL_CONFIRMATION_RESEND_COOLDOWN_SECONDS,
   jwtExpirationConfig,
   REFRESH_TOKEN_TTL_MS,
 } from '../../../config/token-expiration.config.js';
@@ -28,6 +29,7 @@ import { PASSWORD_HASH_ROUNDS } from '../constants/auth.constants.js';
 import { LoginDto } from '../dto/login.dto.js';
 import { OAuthResponseDto } from '../dto/oauth-response.dto.js';
 import { RegisterDto } from '../dto/register.dto.js';
+import { ResendConfirmationEmailDto } from '../dto/resend-confirmation-email.dto.js';
 import { ResetPasswordRequestDto } from '../dto/reset-password-request.dto.js';
 import { ResetPasswordDto } from '../dto/reset-password.dto.js';
 import { TokenPayloadDto } from '../dto/token-payload.dto.js';
@@ -78,18 +80,37 @@ export class AuthService {
       firstName: dto.firstName,
       lastName: dto.lastName,
       phone: dto.phone ?? null,
+      emailConfirmationSentAt: new Date(),
     });
 
-    const token = await this.generateEmailToken(user);
-    const cfg = this.config.get<IFrontendConfig>('frontend')!;
-    this.eventEmitter.emit(
-      NOTIFICATION_EVENT,
-      new ConfirmEmailNotification(
-        user.email!,
-        `${cfg.domain}/auth/confirm-email?token=${token}`,
-      ),
-    );
+    await this.sendConfirmationEmail(user);
     this.logger.log(`register: user=${user.id} email=${user.email}`);
+  }
+
+  async resendConfirmationEmail(
+    dto: ResendConfirmationEmailDto,
+  ): Promise<void> {
+    const user = await this.userService.findByEmail(dto.email);
+    if (!user || user.emailVerifiedAt) {
+      this.logger.log(
+        `confirmation resend skipped: reason=${user ? 'ALREADY_CONFIRMED' : 'USER_NOT_FOUND'}`,
+      );
+      return;
+    }
+    const cutoff = new Date(
+      Date.now() - EMAIL_CONFIRMATION_RESEND_COOLDOWN_SECONDS * 1000,
+    );
+    if (!(await this.userService.claimEmailConfirmationSend(user.id, cutoff))) {
+      this.logger.warn(
+        `confirmation resend rejected: userId=${user.id} reason=RESEND_TOO_SOON`,
+      );
+      throw new AppException(
+        ErrorCode.EMAIL_CONFIRMATION_RESEND_TOO_SOON,
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+    await this.sendConfirmationEmail(user);
+    this.logger.log(`confirmation resend queued: userId=${user.id}`);
   }
 
   async login(dto: LoginDto, userAgent: string | null): Promise<ITokens> {
@@ -320,6 +341,18 @@ export class AuthService {
 
   private hashRefreshToken(token: string): string {
     return createHash('sha256').update(token).digest('hex');
+  }
+
+  private async sendConfirmationEmail(user: User): Promise<void> {
+    const token = await this.generateEmailToken(user);
+    const cfg = this.config.get<IFrontendConfig>('frontend')!;
+    this.eventEmitter.emit(
+      NOTIFICATION_EVENT,
+      new ConfirmEmailNotification(
+        user.email!,
+        `${cfg.domain}/auth/confirm-email?token=${token}`,
+      ),
+    );
   }
 
   private generateEmailToken(user: User): Promise<string> {

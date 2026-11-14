@@ -6,7 +6,6 @@ import {
   Header,
   HttpCode,
   HttpStatus,
-  Logger,
   Param,
   ParseUUIDPipe,
   Post,
@@ -43,19 +42,26 @@ import { BrandSearchRequestDto } from '../dto/brand-search-request.dto.js';
 import { CreateBrandDto } from '../dto/create-brand.dto.js';
 import { UpdateBrandDto } from '../dto/update-brand.dto.js';
 import { BrandService } from '../services/brand.service.js';
-import { BrandInitialDataService } from '../onboarding/services/brand-initial-data.service.js';
+import { BrandOnboardingService } from '../onboarding/services/brand-onboarding.service.js';
 
 @ApiTags('Brands')
 @Controller('brands')
 export class BrandController {
-  private readonly logger = new Logger(BrandController.name);
-
   constructor(
     private readonly brandService: BrandService,
-    private readonly initialDataService: BrandInitialDataService,
+    private readonly onboarding: BrandOnboardingService,
   ) {}
 
-  @ApiOperation({ summary: 'Create a new brand with its first location' })
+  @ApiOperation({
+    summary: 'Create a new brand with its first location',
+    description:
+      'Creates the brand, its first location and the starter data in one transaction, so everything exists when the response arrives. ' +
+      'Starter data: the caller becomes the brand OWNER and gets an active staff card in the first location, linked to their account ' +
+      '(name from firstName/lastName, otherwise email; phone and email from the profile). ' +
+      'When location.businessType is set and the currency is RUB, BYN or KZT, starter service categories and INACTIVE services ' +
+      'are created for that business type and assigned to the owner card; otherwise only the owner card is created. ' +
+      'Locations added later via POST /brands/{brandId}/locations get no starter data.',
+  })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
   @Auth()
   @Post()
@@ -70,16 +76,7 @@ export class BrandController {
       name: actorName,
       role: AuditActorRole.OWNER,
     };
-    const brand = await this.brandService.create(payload.sub, dto, actor);
-    const location = brand.locations[0];
-    void this.initialDataService
-      .populate(location.id, payload.sub, actor)
-      .catch((error: unknown) => {
-        this.logger.error(
-          `Initial data population failed: locationId=${location.id}`,
-          error,
-        );
-      });
+    const brand = await this.onboarding.createBrand(payload.sub, dto, actor);
     return BaseResponseDto.success({ id: brand.id });
   }
 

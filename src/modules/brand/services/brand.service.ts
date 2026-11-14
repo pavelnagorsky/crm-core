@@ -45,32 +45,31 @@ export class BrandService {
     private readonly cache: AppCacheService,
   ) {}
 
+  /** Creates the brand with its first location inside the caller's transaction; call `recordCreated` after commit. */
   async create(
     userId: string,
     dto: CreateBrandDto,
-    actor: AuditActor,
+    tx: Prisma.TransactionClient,
   ): Promise<BrandWithLocations> {
-    const locale = resolveLocationLocale(dto.location);
-
-    const brand = await this.db.$transaction(async (tx) => {
-      const brand = await tx.brand.create({
-        data: {
-          name: dto.name,
-          logoFileId: dto.logoFileId ?? null,
-          locations: {
-            create: {
-              ...dto.location,
-              ...locale,
-            },
+    const brand = await tx.brand.create({
+      data: {
+        name: dto.name,
+        logoFileId: dto.logoFileId ?? null,
+        locations: {
+          create: {
+            ...dto.location,
+            ...resolveLocationLocale(dto.location),
           },
         },
-        include: { locations: true },
-      });
-      await this.access.assignInitialOwner(brand.id, userId, tx);
-      await this.tokenEpochRegistry.bump(userId, tx);
-      return brand;
+      },
+      include: { locations: true },
     });
+    await this.access.assignInitialOwner(brand.id, userId, tx);
+    await this.tokenEpochRegistry.bump(userId, tx);
+    return brand;
+  }
 
+  recordCreated(brand: BrandWithLocations, actor: AuditActor): void {
     this.eventEmitter.emit(AUDIT_EVENT, {
       brandId: brand.id,
       entityType: AuditEntity.BRAND,
@@ -94,7 +93,6 @@ export class BrandService {
         payload: { name: location.name },
       } satisfies AuditLogEvent);
     }
-    return brand;
   }
 
   async update(

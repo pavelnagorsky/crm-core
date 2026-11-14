@@ -40,3 +40,6 @@ export const COUNTRY_DEFAULTS = {
 } as const satisfies Record<string, CountryDefault>;
 
 export type CountryCode = keyof typeof COUNTRY_DEFAULTS;
+
+export type CountryCurrency =
+  (typeof COUNTRY_DEFAULTS)[CountryCode]['currency'];

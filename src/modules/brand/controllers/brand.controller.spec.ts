@@ -1,63 +1,38 @@
 import { BusinessRole, UserRole } from '@prisma/client';
-import { Logger } from '@nestjs/common';
 import { tokenPayload } from '../../auth/testing/factories/token-payload.factory.js';
 import { BrandService } from '../services/brand.service.js';
 import { BrandController } from './brand.controller.js';
 
-describe('Brand creation background population', () => {
-  const create = vi.fn();
-  const populate = vi.fn();
-  const controller = new BrandController(
-    { create } as never,
-    { populate } as never,
-  );
+describe('Brand creation', () => {
+  const createBrand = vi.fn();
+  const controller = new BrandController({} as never, { createBrand } as never);
   const dto = { name: 'Brand', location: { name: 'First location' } } as never;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    create.mockResolvedValue({
+    createBrand.mockResolvedValue({
       id: 'brand-1',
       locations: [{ id: 'location-1' }],
     });
   });
 
-  it('returns the created brand while initial population is still pending', async () => {
-    populate.mockReturnValue(new Promise<void>(() => {}));
+  it('returns the brand after onboarding created it with its starter data', async () => {
     const token = tokenPayload();
     const response = await controller.create(token, dto);
 
     expect(response.responseValue).toEqual({ id: 'brand-1' });
-    expect(populate).toHaveBeenCalledWith(
-      'location-1',
+    expect(createBrand).toHaveBeenCalledWith(
       token.sub,
+      dto,
       expect.objectContaining({ id: token.sub, role: 'OWNER' }),
     );
   });
 
-  it('logs a population failure without failing brand creation', async () => {
-    const error = new Error('Population failed');
-    populate.mockRejectedValue(error);
-    const log = vi
-      .spyOn(Logger.prototype, 'error')
-      .mockImplementation(() => {});
-    try {
-      const response = await controller.create(tokenPayload(), dto);
-      expect(response.responseValue).toEqual({ id: 'brand-1' });
-      expect(log).toHaveBeenCalledWith(
-        expect.stringContaining('location-1'),
-        error,
-      );
-    } finally {
-      log.mockRestore();
-    }
-  });
-
-  it('does not start population when brand creation fails', async () => {
-    create.mockRejectedValue(new Error('Creation failed'));
+  it('fails brand creation when onboarding fails', async () => {
+    createBrand.mockRejectedValue(new Error('Starter data failed'));
     await expect(controller.create(tokenPayload(), dto)).rejects.toThrow(
-      'Creation failed',
+      'Starter data failed',
     );
-    expect(populate).not.toHaveBeenCalled();
   });
 });
 
