@@ -221,14 +221,6 @@ export class BrandService {
     } satisfies AuditLogEvent);
   }
 
-  /** Billing launch: every brand, deleted ones too, oldest first. */
-  findAllForBillingLaunch(): Promise<Pick<Brand, 'id' | 'createdAt'>[]> {
-    return this.db.brand.findMany({
-      select: { id: true, createdAt: true },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
-    });
-  }
-
   /** Names by id, deleted brands included (billing history, admin lists). */
   async findNames(brandIds: string[]): Promise<Map<string, string>> {
     if (!brandIds.length) return new Map();

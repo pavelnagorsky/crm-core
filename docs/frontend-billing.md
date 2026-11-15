@@ -20,7 +20,7 @@
 | Письма владельцу и админу (напоминания, заявка, оплата) | Ссылки ведут в `/app/brands/:brandId/billing` и `/admin/billing/payments?search=KL-…` |
 | Новый claim `billing` (только OWNER), `PERMISSIONS_VERSION = 3` | Видимость раздела «Подписка» |
 
-**Запуск платных тарифов.** Пока админ не запустил биллинг скриптом (`npm run billing:launch -- --trial-ends=YYYY-MM-DD`), подписок нет: все бренды в состоянии `FREE`, баннеров, лимитов и блокировок нет. `subscription-states` возвращает пустой массив. Фронтенд должен корректно работать в этом режиме: это состояние «по умолчанию» и на проде до дня запуска.
+**Запуск платных тарифов.** Биллинг запущен на stage 2026-11-15 (`launchedAt` проставлен): у всех существующих брендов триал до 2026-12-15, новые бренды получают подписку при создании. Режим «без запуска» (`launchedAt = null`) остаётся в коде: подписок нет, все бренды в состоянии `FREE`, баннеров, лимитов и блокировок нет, `subscription-states` возвращает пустой массив. Фронтенд должен корректно работать и в нём (например, на чистой локальной базе).
 
 Блокировка и лимиты дополнительно включаются флагом `enforcementEnabled` в настройках. Пока он выключен, `isBlocked` всегда `false`, а лимиты не проверяются, но состояние, даты и баннеры уже работают.
 
@@ -361,7 +361,7 @@ responseValue: {
 
 Поля: `defaultCountryCode`, `trialDays`, `graceDays`, `reminderDaysBefore` (например `[7, 3, 1]`), `paymentProvider`, `paymentRequestTtlDays`, `pendingRequestGraceDays`, `offlinePaymentInstructions` (текст в `nextAction.instructions`), `adminNotifyEmail` (кому письма о новых заявках), `enforcementEnabled`, а также только для чтения `launchedAt` и `updatedAt`.
 
-`providers`: `[{ code, ownerInitiated, adminConfirmable, webhooks, statusPolling, recurring }]` — варианты для выбора `paymentProvider`. `PUT` принимает все поля настроек целиком (не частично), кроме `launchedAt`, `updatedAt` и `providers`: запуск делается только скриптом. По умолчанию: `trialDays` 30, `graceDays` 3, `reminderDaysBefore` `[7, 3, 1]`, `paymentRequestTtlDays` 14, `pendingRequestGraceDays` 3, `enforcementEnabled` `false`.
+`providers`: `[{ code, ownerInitiated, adminConfirmable, webhooks, statusPolling, recurring }]` — варианты для выбора `paymentProvider`. `PUT` принимает все поля настроек целиком (не частично), кроме `launchedAt`, `updatedAt` и `providers`: `launchedAt` только для чтения. По умолчанию: `trialDays` 30, `graceDays` 3, `reminderDaysBefore` `[7, 3, 1]`, `paymentRequestTtlDays` 14, `pendingRequestGraceDays` 3, `enforcementEnabled` `false`.
 
 ### 10.3 «Подписки»
 

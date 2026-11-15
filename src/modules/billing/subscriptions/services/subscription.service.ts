@@ -96,24 +96,6 @@ export class SubscriptionService {
     return row?.brandId ?? null;
   }
 
-  /** Brands that already have a subscription, from the given ones. */
-  async findExistingBrandIds(brandIds: string[]): Promise<Set<string>> {
-    const rows = await this.db.subscription.findMany({
-      where: { brandId: { in: brandIds } },
-      select: { brandId: true },
-    });
-    return new Set(rows.map((r) => r.brandId));
-  }
-
-  /** Users whose trial is already spent, from the given ones. */
-  async findTrialUserIds(userIds: string[]): Promise<Set<string>> {
-    const rows = await this.db.subscription.findMany({
-      where: { trialUserId: { in: userIds } },
-      select: { trialUserId: true },
-    });
-    return new Set(rows.map((r) => r.trialUserId as string));
-  }
-
   findManyByPlan(planId: string): Promise<SubscriptionWithPlan[]> {
     return this.db.subscription.findMany({
       where: { planId },

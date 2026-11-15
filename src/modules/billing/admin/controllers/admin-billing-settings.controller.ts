@@ -43,8 +43,7 @@ export class AdminBillingSettingsController {
 
   @Put()
   @ApiOperation({
-    summary:
-      'Update billing settings; launchedAt is set only by the launch script',
+    summary: 'Update billing settings; launchedAt is read-only',
   })
   @ApiOkResponse({ type: ApiResponse(BillingSettingsResponseDto) })
   @ApiBadRequestResponse({ description: 'BILLING_PROVIDER_NOT_AVAILABLE' })

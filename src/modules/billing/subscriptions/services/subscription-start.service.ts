@@ -1,5 +1,5 @@
 import { BadRequestException, HttpStatus, Injectable } from '@nestjs/common';
-import { Prisma, Subscription, SubscriptionEventType } from '@prisma/client';
+import { Prisma, SubscriptionEventType } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { DatabaseService } from '../../../../database/database.service.js';
 import { AppException } from '../../../../shared/exceptions/app.exception.js';
@@ -8,7 +8,6 @@ import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
 import { BillingPeriodCalculator } from '../../compute/billing-period.calculator.js';
 import { BillingActors } from '../../constants/billing-actors.js';
 import { BillingActor } from '../../interfaces/billing-actor.interface.js';
-import { SubscriptionBackfillRow } from '../../interfaces/subscription-backfill-row.interface.js';
 import { SubscriptionOrigin } from '../../interfaces/subscription-origin.interface.js';
 import { SubscriptionWithPlan } from '../../interfaces/subscription-with-plan.interface.js';
 import { BillingSettingsService } from '../../settings/services/billing-settings.service.js';
@@ -17,7 +16,7 @@ import { SubscriptionService } from './subscription.service.js';
 
 type Tx = Prisma.TransactionClient;
 
-/** Creates subscriptions: a new brand, a pilot brand and the launch backfill (plan section 4.1). */
+/** Creates subscriptions: a new brand and a pilot brand (plan section 4.1). */
 @Injectable()
 export class SubscriptionStartService {
   constructor(
@@ -128,77 +127,5 @@ export class SubscriptionStartService {
     });
     await this.subscriptions.invalidate(brandId);
     return this.subscriptions.findByBrandOrThrow(brandId);
-  }
-
-  /**
-   * Launch backfill: INSERT ... ON CONFLICT DO NOTHING. A row whose trialUserId got
-   * taken meanwhile is inserted again without it. Returns the number of new rows.
-   */
-  async backfill(
-    rows: SubscriptionBackfillRow[],
-    trialEndsOn: string,
-    actor: BillingActor,
-    now = new Date(),
-  ): Promise<number> {
-    const created = await this.insertBackfill(
-      rows.map((r) => this.backfillData(r, trialEndsOn, now, true)),
-      actor,
-    );
-    const createdIds = new Set(created.map((s) => s.brandId));
-    const skipped = rows.filter((r) => !createdIds.has(r.brandId));
-    if (!skipped.length) return created.length;
-
-    const existing = await this.subscriptions.findExistingBrandIds(
-      skipped.map((r) => r.brandId),
-    );
-    const retried = await this.insertBackfill(
-      skipped
-        .filter((r) => !existing.has(r.brandId))
-        .map((r) => this.backfillData(r, trialEndsOn, now, false)),
-      actor,
-    );
-    return created.length + retried.length;
-  }
-
-  private backfillData(
-    row: SubscriptionBackfillRow,
-    trialEndsOn: string,
-    now: Date,
-    withTrialUser: boolean,
-  ): Prisma.SubscriptionCreateManyInput {
-    const trialEndsAt = TimeUtils.zonedDateStart(trialEndsOn, row.timezone);
-    return {
-      id: randomUUID(),
-      brandId: row.brandId,
-      countryCode: row.countryCode,
-      timezone: row.timezone,
-      trialStartedAt: now,
-      trialEndsAt,
-      accessEndsAt: trialEndsAt,
-      trialUserId: withTrialUser ? row.trialUserId : null,
-    };
-  }
-
-  private insertBackfill(
-    data: Prisma.SubscriptionCreateManyInput[],
-    actor: BillingActor,
-  ): Promise<Subscription[]> {
-    if (!data.length) return Promise.resolve([]);
-    return this.db.$transaction(async (tx) => {
-      const created = await tx.subscription.createManyAndReturn({
-        data,
-        skipDuplicates: true,
-      });
-      await this.events.recordMany(
-        created.map((s) => ({
-          subscription: s,
-          payload: { trialEndsAt: s.trialEndsAt, source: 'launch' },
-        })),
-        SubscriptionEventType.TRIAL_STARTED,
-        actor,
-        tx,
-      );
-      return created;
-    });
   }
 }

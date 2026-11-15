@@ -53,17 +53,4 @@ export class BillingSettingsService {
     await this.cache.invalidate(CacheDependency.billingSettings());
     return settings;
   }
-
-  /** Sets launchedAt once; a repeated launch keeps the first date. */
-  async markLaunched(
-    now: Date,
-    actorId: string | null,
-  ): Promise<BillingSettings> {
-    await this.db.billingSettings.updateMany({
-      where: { id: SETTINGS_ID, launchedAt: null },
-      data: { launchedAt: now, updatedById: actorId },
-    });
-    await this.cache.invalidate(CacheDependency.billingSettings());
-    return this.read();
-  }
 }

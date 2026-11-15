@@ -4,9 +4,9 @@
 
 **Отступления от плана при реализации:**
 
-- **Скрипт запуска** — `src/cli/billing-launch.ts` в сборке, а не `scripts/billing-launch.ts`: ему нужен DI Nest. Запуск: `npm run build && npm run billing:launch -- --trial-ends=YYYY-MM-DD`. Повторный проход через 60 секунд встроен в скрипт. Модуль контекста — `BillingLaunchModule`; он импортирует `AuthModule`, потому что `BrandService` зависит от `TokenEpochRegistryService`.
+- **Запуск выполнен 2026-11-15 на stage** одноразовым скриптом `src/cli/billing-launch.ts` (`--trial-ends=2026-12-15`): все 7 существующих брендов получили триал до 2026-12-15, `launchedAt` проставлен. Скрипт, `BillingLaunchModule` и код бэкфилла после этого удалены; новые бренды получают подписку через `BrandService.create`.
 - **Лимиты в `TRIAL` не действуют** даже при оплаченном вперёд тарифе: лимиты тарифа начинаются с оплаченного периода (`SubscriptionAccessService.limits`). При оплате в триале `payment-quote` всё равно проверяет, что тариф вмещает использование.
-- **Модули (10.1)** разделены так, чтобы ядро не зависело от доменов CRM и не было циклов: `BillingCoreModule` (тарифы, настройки, подписка, платежи, состояние, `BillingFacade`), `BillingUsageModule` (подсчёт через `StaffService` и `LocationService`), `BillingMailModule` (письма и ссылки), `BillingJobsModule` (кроны напоминаний и истечения заявок), `BillingOwnerModule` (публичные цены и раздел «Подписка» владельца), `BillingAdminModule` (админка платформы), `BillingLaunchModule` (только скрипт запуска).
+- **Модули (10.1)** разделены так, чтобы ядро не зависело от доменов CRM и не было циклов: `BillingCoreModule` (тарифы, настройки, подписка, платежи, состояние, `BillingFacade`), `BillingUsageModule` (подсчёт через `StaffService` и `LocationService`), `BillingMailModule` (письма и ссылки), `BillingJobsModule` (кроны напоминаний и истечения заявок), `BillingOwnerModule` (публичные цены и раздел «Подписка» владельца), `BillingAdminModule` (админка платформы).
 - **Смена тарифа** оркестрируется в HTTP-модулях (`BrandPlanChangeService`, `AdminSubscriptionBillingService`): проверка лимитов через `BillingUsageService`, затем `SubscriptionPlanService` внутри `SubscriptionService.withLock`. Ядро не знает о сотрудниках и филиалах.
 - **`payment-quote` и `applyPayment` считают период одной функцией** `PaymentProjectionCalculator.project` (пересчёт остатка + период 4.3), поэтому сумма и даты в предпросмотре совпадают с применённой оплатой. `nextAction` строит `PaymentNextActionService` через `PaymentProviderRegistry.nextAction` по провайдеру платежа.
 - Владелец и админ получают разные DTO одного платежа: у владельца нет `adminNote`, `providerData`, `actorId`.
@@ -1025,7 +1025,6 @@ src/modules/billing/
   jobs/billing-jobs.module.ts        // SubscriptionNoticesCron, SubscriptionPaymentsCron
   owner/billing-owner.module.ts      // публичные цены, раздел «Подписка» владельца
   admin/billing-admin.module.ts      // тарифы, настройки, подписки и платежи в админке
-  launch/billing-launch.module.ts    // только npm run billing:launch
   dto/ enums/ interfaces/      // по одному классу, enum или интерфейсу на файл
   testing/                     // фикстуры и заглушки для спеков
 ```
@@ -1226,7 +1225,7 @@ interface PaymentProvider {
 **День D:**
 1. Письмо всем владельцам (разовая рассылка вне модуля): «Klendo становится платным. Месяц бесплатно, до {D + 29} включительно. Цены — на странице «Тарифы»».
 2. Обновить соглашение (12.5).
-3. `npm run billing:launch -- --trial-ends=YYYY-MM-DD` (D + 30, `src/cli/billing-launch.ts`), идемпотентный:
+3. Скрипт запуска с `--trial-ends=YYYY-MM-DD` (D + 30), идемпотентный (выполнен 2026-11-15 на stage с `--trial-ends=2026-12-15` и удалён; код остался в коммите 35c60b9):
    1. `launchedAt = now`. Дальше `BrandService.create` создаёт подписки сам.
    2. Бэкфилл каждому бренду без подписки, включая удалённые: `trialStartedAt = now`, `trialEndsAt` — дата на границе суток; `countryCode` и `timezone` — самого старого активного филиала, иначе любого, иначе `BY`, `Europe/Minsk`.
    3. Триал получают все. `trialUserId` — только у самого старого бренда владельца, если свободен.
@@ -1243,7 +1242,7 @@ interface PaymentProvider {
 | 1. Тарифы и цены | `feature/billing-plans` | `BillingPlan`, `BillingPlanPrice`, `BillingSettings`, сид BY, кэш, публичный API цен, админские тарифы и настройки | Маркетинг на API (12.1), админка тарифов и настроек | сейчас |
 | 2. Подписка и триал (скрыта до запуска) | `feature/billing-subscriptions` | `Subscription`, `SubscriptionEvent`, `SubscriptionNotice`, состояние, `startSubscription`, пилот, `Claim.BILLING`, `trial-eligibility`, `subscription-states`, `GET …/subscription`, лимиты, онлайн-запись (6.2), крон и 4 письма, админский список, продление триала (одному и массово) | Раздел «Подписка» без оплаты, баннеры, ошибки лимитов, страница блокировки, публичная запись, админский список | сейчас: без `launchedAt` ни на кого не влияет |
 | 3. Офлайн-оплата | `feature/billing-offline-payments` | `SubscriptionPayment`, платёжный слой (10.2), запрос на продление, продление льготного периода, `confirm` и `applyPayment` (4.3), смена тарифа, зачёт и продление админом, 3 письма об оплате | «Продлить», `PaymentNextActionView`, открытая заявка, смена тарифа, история, очередь в админке | до D + 23 |
-| 4. Запуск | — | `src/cli/billing-launch.ts` | Юридические тексты (12.5) | день D (13) |
+| 4. Запуск | — | скрипт запуска (выполнен 2026-11-15, удалён) | Юридические тексты (12.5) | день D (13) |
 | 5. Онлайн-оплата | `feature/billing-online-payments` | bePaid, вебхук, сверка (11.2) | `REDIRECT`, экран возврата | после юрлица и договора с bePaid |
 | 6. Автопродление | `feature/billing-auto-renew` | 11.3 | Галочка, переключатель, карта | после фазы 5, по спросу |
 

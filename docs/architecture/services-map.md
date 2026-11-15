@@ -92,7 +92,6 @@
 | AdminSubscriptionsQueryService / AdminSubscriptionLifecycleService / AdminSubscriptionBillingService / AdminSubscriptionPaymentsService / AdminBillingPlansService | Админка платформы: поиск и карточка подписки, жизненный цикл, тариф и оплаты, платежи, тарифы (BillingAdminModule). |
 | PaymentMailService / SubscriptionNoticeMailService / BillingLinkService | Письма биллинга о платежах и окончании доступа, ссылки на экран оплаты (BillingMailModule). |
 | SubscriptionNoticesCron / SubscriptionPaymentsCron | Напоминания об окончании доступа и истечение заявок (BillingJobsModule). |
-| BillingLaunchService | Запуск платных тарифов и бэкфилл подписок; только из `npm run billing:launch`. |
 | MoneyUtils / UnitCostUtils / QuantityUtils / TimeUtils / XlsxUtils | Статические утилиты, не DI-сервисы. |
 
 Иерархия модулей и восстановление SQL view: [services-catalog.md](./services-catalog.md).
