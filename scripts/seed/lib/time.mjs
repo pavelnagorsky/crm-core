@@ -30,19 +30,22 @@ export function toZonedParts(date, timezone) {
 
 /**
  * Converts a local wall-clock string (YYYY-MM-DDTHH:mm:ss, no offset) interpreted
- * in the given IANA timezone to a UTC Date. One correction pass, as in TimeService.
+ * in the given IANA timezone to a UTC Date (two passes, see TimeUtils.localToUtc).
  */
 export function localToUtc(localDateStr, timezone) {
   const [datePart, timePart] = localDateStr.split('T');
   const [year, month, day] = datePart.split('-').map(Number);
   const [hour, minute, second = 0] = timePart.split(':').map(Number);
 
-  const utcGuess = new Date(Date.UTC(year, month - 1, day, hour, minute, second));
-  const zonedParts = toZonedParts(utcGuess, timezone);
-  const guessMinutes = hour * 60 + minute;
-  const zonedMinutes = zonedParts.hour * 60 + zonedParts.minute;
-  const offsetMinutes = guessMinutes - zonedMinutes;
-  return new Date(utcGuess.getTime() + offsetMinutes * 60_000);
+  const wallTime = Date.UTC(year, month - 1, day, hour, minute, second);
+  // Offset from the full zoned date-time: comparing only minutes of day loses a
+  // day when the UTC guess and its local form fall on opposite sides of midnight.
+  const offsetAt = (instant) => {
+    const p = toZonedParts(new Date(instant), timezone);
+    return Date.UTC(p.year, p.month - 1, p.day, p.hour, p.minute, p.second) - instant;
+  };
+  const first = wallTime - offsetAt(wallTime);
+  return new Date(wallTime - offsetAt(first));
 }
 
 /** Parses "YYYY-MM-DD" as UTC midnight, matching Prisma "@db.Date". */

@@ -3,10 +3,15 @@ import {
   seed as hairSalonSeed,
   meta as hairSalonMeta,
 } from './seeds/hair-salon.mjs';
+import {
+  seed as centralniySeed,
+  meta as centralniyMeta,
+} from './seeds/barbershop-centralniy.mjs';
 
 // Registry of available seeds. Add new demo seeds here.
 const SEEDS = {
   'hair-salon': { run: hairSalonSeed, meta: hairSalonMeta },
+  'barbershop-centralniy': { run: centralniySeed, meta: centralniyMeta },
 };
 
 function printAvailable() {
