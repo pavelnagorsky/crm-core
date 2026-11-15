@@ -1,0 +1,8 @@
+{{> greeting name=recipientFirstName body=(tv "body")}}
+{{> billingDetails}}
+{{#if instructions}}
+<p style="margin: 0 0 28px; font-size: 15px; line-height: 24px; color: #1C252E; white-space: pre-line;">{{instructions}}</p>
+{{/if}}
+{{> button href=actionLink label=(tv "action")}}
+<p style="margin: 0; font-size: 14px; line-height: 22px; color: #637381;">{{tv "hint"}}</p>
+{{> linkFallback href=actionLink}}

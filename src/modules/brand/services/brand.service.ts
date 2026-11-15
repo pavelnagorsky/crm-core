@@ -20,6 +20,7 @@ import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../../audit/interfaces/audit-log-event.interface.js';
 import { diffFields } from '../../audit/utils/diff-fields.js';
 import { TokenEpochRegistryService } from '../../auth/services/token-epoch-registry.service.js';
+import { BillingFacade } from '../../billing/billing.facade.js';
 import { BookingDeletionPolicyService } from '../../bookings/deletion-policy/services/booking-deletion-policy.service.js';
 import {
   BRAND_PROFILE_CACHE,
@@ -43,6 +44,7 @@ export class BrandService {
     private readonly bookingDeletionPolicy: BookingDeletionPolicyService,
     private readonly access: AccessService,
     private readonly cache: AppCacheService,
+    private readonly billing: BillingFacade,
   ) {}
 
   /** Creates the brand with its first location inside the caller's transaction; call `recordCreated` after commit. */
@@ -66,6 +68,13 @@ export class BrandService {
     });
     await this.access.assignInitialOwner(brand.id, userId, tx);
     await this.tokenEpochRegistry.bump(userId, tx);
+    const [origin] = brand.locations;
+    await this.billing.startSubscription(
+      brand.id,
+      userId,
+      { countryCode: origin.countryCode, timezone: origin.timezone },
+      tx,
+    );
     return brand;
   }
 
@@ -196,6 +205,7 @@ export class BrandService {
       });
       if (count === 0) throw new NotFoundException('Brand not found');
       await this.bookingDeletionPolicy.assertBrandDeletionAllowed(brandId, tx);
+      await this.billing.cancelOpenPayments(brandId, tx);
       return tx.brand.findUniqueOrThrow({ where: { id: brandId } });
     });
     await this.cache.invalidate(CacheDependency.brandLifecycle(brandId));
@@ -209,6 +219,52 @@ export class BrandService {
       actor,
       payload: { name: brand.name },
     } satisfies AuditLogEvent);
+  }
+
+  /** Billing launch: every brand, deleted ones too, oldest first. */
+  findAllForBillingLaunch(): Promise<Pick<Brand, 'id' | 'createdAt'>[]> {
+    return this.db.brand.findMany({
+      select: { id: true, createdAt: true },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+  }
+
+  /** Names by id, deleted brands included (billing history, admin lists). */
+  async findNames(brandIds: string[]): Promise<Map<string, string>> {
+    if (!brandIds.length) return new Map();
+    const rows = await this.db.brand.findMany({
+      where: { id: { in: [...new Set(brandIds)] } },
+      select: { id: true, name: true },
+    });
+    return new Map(rows.map((r) => [r.id, r.name]));
+  }
+
+  async findName(brandId: string): Promise<string | null> {
+    const brand = await this.db.brand.findUnique({
+      where: { id: brandId },
+      select: { name: true },
+    });
+    return brand?.name ?? null;
+  }
+
+  /** Admin search by brand name, deleted brands included. */
+  async findIdsByName(search: string, take: number): Promise<string[]> {
+    const rows = await this.db.brand.findMany({
+      where: { name: { contains: search, mode: 'insensitive' } },
+      select: { id: true },
+      take,
+    });
+    return rows.map((r) => r.id);
+  }
+
+  /** Brand ids that are not deleted, from the given ones. */
+  async findActiveIds(brandIds: string[]): Promise<Set<string>> {
+    if (!brandIds.length) return new Set();
+    const rows = await this.db.brand.findMany({
+      where: { id: { in: brandIds }, ...ACTIVE_BRAND_WHERE },
+      select: { id: true },
+    });
+    return new Set(rows.map((r) => r.id));
   }
 
   async acquireActiveOperationLock(

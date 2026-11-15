@@ -1,6 +1,18 @@
 # Тарифы и подписки: план
 
-Статус: план, реализация не начата. Обновлён 2026-11-15.
+Статус: фазы 1–4 реализованы 2026-11-15 (миграции `20261115120000_billing_plans`, `20261115130000_billing_subscriptions`, `20261115140000_billing_offline_payments`). Фазы 5–6 (bePaid, автопродление) не начаты; контракт под них проверен фейковым `REDIRECT`-провайдером в тестах. Интеграция для фронтенда: [frontend-billing.md](./frontend-billing.md).
+
+**Отступления от плана при реализации:**
+
+- **Скрипт запуска** — `src/cli/billing-launch.ts` в сборке, а не `scripts/billing-launch.ts`: ему нужен DI Nest. Запуск: `npm run build && npm run billing:launch -- --trial-ends=YYYY-MM-DD`. Повторный проход через 60 секунд встроен в скрипт. Модуль контекста — `BillingLaunchModule`; он импортирует `AuthModule`, потому что `BrandService` зависит от `TokenEpochRegistryService`.
+- **Лимиты в `TRIAL` не действуют** даже при оплаченном вперёд тарифе: лимиты тарифа начинаются с оплаченного периода (`SubscriptionAccessService.limits`). При оплате в триале `payment-quote` всё равно проверяет, что тариф вмещает использование.
+- **Модули (10.1)** разделены так, чтобы ядро не зависело от доменов CRM и не было циклов: `BillingCoreModule` (тарифы, настройки, подписка, платежи, состояние, `BillingFacade`), `BillingUsageModule` (подсчёт через `StaffService` и `LocationService`), `BillingMailModule` (письма и ссылки), `BillingJobsModule` (кроны напоминаний и истечения заявок), `BillingOwnerModule` (публичные цены и раздел «Подписка» владельца), `BillingAdminModule` (админка платформы), `BillingLaunchModule` (только скрипт запуска).
+- **Смена тарифа** оркестрируется в HTTP-модулях (`BrandPlanChangeService`, `AdminSubscriptionBillingService`): проверка лимитов через `BillingUsageService`, затем `SubscriptionPlanService` внутри `SubscriptionService.withLock`. Ядро не знает о сотрудниках и филиалах.
+- **`payment-quote` и `applyPayment` считают период одной функцией** `PaymentProjectionCalculator.project` (пересчёт остатка + период 4.3), поэтому сумма и даты в предпросмотре совпадают с применённой оплатой. `nextAction` строит `PaymentNextActionService` через `PaymentProviderRegistry.nextAction` по провайдеру платежа.
+- Владелец и админ получают разные DTO одного платежа: у владельца нет `adminNote`, `providerData`, `actorId`.
+- **Ссылки в письмах**: владельцу — `{FRONTEND}/app/brands/:brandId/billing`, админу — `{FRONTEND}/admin/billing/payments?search=KL-…`.
+- **Вопрос 16.1 закрыт:** контакты — `support@klendo.by` (оплата, приостановка) и `sales@klendo.by` (тариф «Сеть»), константа `BILLING_CONTACTS`. Реквизиты после юрлица — в `BillingSettings.offlinePaymentInstructions`.
+
 
 Модуль биллинга целиком: тарифы и цены по странам с кэшем, публичный API цен, подписка бренда с пробным месяцем, офлайн-оплата с подтверждением админом, платёжный слой под будущий bePaid, смена тарифа, лимиты, блокировка после просрочки, напоминания, админка платформы.
 
@@ -455,7 +467,7 @@ SQL в миграциях:
 
 ## 4. Жизненный цикл
 
-Все изменения подписки — через `SubscriptionService`, в транзакции с `SELECT … FOR UPDATE` на `Subscription`. Каждое пишет `SubscriptionEvent`. После коммита — сброс кэша бренда (7.2).
+Все изменения подписки — через `SubscriptionService.withLock` (транзакция, `SELECT … FOR UPDATE` на `Subscription`, сброс кэша после коммита); сами операции — в `SubscriptionStartService`, `SubscriptionPeriodService`, `SubscriptionPlanService`, `SubscriptionTermsService`. Каждое пишет `SubscriptionEvent`. После коммита — сброс кэша бренда (7.2).
 
 ### 4.1 Старт подписки
 
@@ -484,7 +496,7 @@ await this.billing.startSubscription(brand.id, userId, { countryCode: location.c
 ### 4.2 Оплата
 
 Два слоя:
-- `SubscriptionPaymentService` — заявки, статусы, подтверждение. Не знает, как платят.
+- `PaymentRequestService` (заявки), `PaymentConfirmationService` (подтверждение), `ManualPaymentService` (ручные оплаты админа), `SubscriptionPaymentService` (чтение). Не знают, как платят.
 - `PaymentProvider` (10.2) — как начать оплату и узнать результат. Сейчас для заявок только `OFFLINE`.
 
 #### Запрос на продление
@@ -541,7 +553,7 @@ await this.billing.startSubscription(brand.id, userId, { countryCode: location.c
 Одна точка входа для всех провайдеров: кнопка админа сейчас, вебхук и сверка потом.
 
 ```text
-SubscriptionPaymentService.confirm(paymentId, { paidAt, method, externalId?, reference?, amount, currency, actor })
+PaymentConfirmationService.confirm(paymentId, { paidAt, method, externalId?, reference?, amount, currency, actor })
   amount / currency ≠ снимок → PAYMENT_MISMATCH, logger.error, не применяем
 
   lock Subscription FOR UPDATE
@@ -549,7 +561,7 @@ SubscriptionPaymentService.confirm(paymentId, { paidAt, method, externalId?, ref
     WHERE id = :id AND status IN (PENDING, CANCELED, EXPIRED, FAILED)
     → 0 строк: уже PAID, выходим (идемпотентно)
 
-  SubscriptionService.applyPayment(subscription, payment, tx):
+  PaymentApplicationService.apply → SubscriptionPeriodService.applyPayment(subscription, payment, tx):
     другой тариф и есть оплаченный остаток → пересчёт остатка (4.4)
     start  = periodStart(subscription, payment.paidAt)                   // 4.3
     anchor = start == paidUntil ? billingAnchorDay : localDay(start, tz) // 2.4
@@ -885,7 +897,7 @@ type PaymentNextAction =
 | POST | `…/:brandId/suspend` | `{ reason }` |
 | POST | `…/:brandId/resume` | — |
 
-Поиск по бренду и email: `BillingAdminService` получает `brandId` у `BrandService` и `AccessService` / `UserService` (до 500), затем фильтрует подписки.
+Поиск по бренду и email: `AdminSubscriptionFilter` получает `brandId` у `BrandService` и `AccessService` / `UserService` (до 500), затем фильтрует подписки.
 
 **Платежи**
 
@@ -942,7 +954,7 @@ type PaymentNextAction =
 
 ### 9.2 Кроны
 
-`SubscriptionNoticesCron` (`BillingNoticesModule`):
+`SubscriptionNoticesCron` (`BillingJobsModule`):
 
 ```text
 @Cron('0 */15 * * * *') sendNotices()
@@ -953,7 +965,7 @@ type PaymentNextAction =
   INSERT SubscriptionNotice … ON CONFLICT DO NOTHING → вставлено: отправить письмо
 ```
 
-`SubscriptionPaymentsCron` (`BillingApiModule`):
+`SubscriptionPaymentsCron` (`BillingJobsModule`):
 
 ```text
 @Cron('0 5 * * * *') expirePayments()
@@ -990,46 +1002,37 @@ type PaymentNextAction =
 
 ```text
 src/modules/billing/
-  billing-core.module.ts            // состояние, лимиты, фасад для других доменов
-  api/billing-api.module.ts         // контроллеры, платёжный слой
-  notices/billing-notices.module.ts // крон напоминаний и письма
-  cache/                            // billing-plans, billing-settings, subscription-state
-  compute/                          // чистые функции, без БД, только внутри модуля
-    subscription-state.calculator.ts
-    billing-period.calculator.ts    // periodStart (4.3), якорь (2.4)
-    pricing-country.resolver.ts     // 2.3
-    plan-conversion.calculator.ts   // 4.4
-    subscription-notice.calculator.ts
-    effective-limits.calculator.ts
+  billing-core.module.ts       // данные и правила; экспортирует фасад и сервисы ядра
+  billing.facade.ts            // API для доменов CRM
+  settings/ plans/             // BillingSettings; BillingPlan, BillingPlanPrice
+  subscriptions/services/
+    subscription.service.ts          // чтение, withLock (FOR UPDATE + сброс кэша)
+    subscription-event.service.ts    // SubscriptionEvent
+    subscription-notice.service.ts   // SubscriptionNotice
+    subscription-start.service.ts    // старт, пилот, бэкфилл
+    subscription-period.service.ts   // применение оплаты, грейс (внутренний)
+    subscription-plan.service.ts     // смена и назначение тарифа
+    subscription-terms.service.ts    // триал, страна, приостановка
+    subscription-access.service.ts   // состояние и лимиты из кэша
   payments/
     payment-provider.registry.ts
-    offline/offline-payment.provider.ts
-    complimentary/complimentary-payment.provider.ts
-  controllers/
-    public-billing-plans.controller.ts
-    user-subscription-states.controller.ts
-    brand-subscription.controller.ts
-    admin-billing-plans.controller.ts
-    admin-billing-settings.controller.ts
-    admin-subscriptions.controller.ts
-    admin-subscription-payments.controller.ts
-  services/
-    billing-plan.service.ts           // BillingPlan, BillingPlanPrice
-    billing-settings.service.ts       // BillingSettings
-    subscription.service.ts           // Subscription, SubscriptionEvent
-    subscription-payment.service.ts   // SubscriptionPayment
-    subscription-access.service.ts    // состояние из кэша
-    billing-usage.service.ts          // API: использование через StaffService и LocationService
-    billing-admin.service.ts          // API: поиск подписок
-    subscription-payments.cron.ts     // API
-    subscription-notices.cron.ts      // notices
-  billing.facade.ts
-  dto/ enums/ interfaces/             // по одному классу, enum или интерфейсу на файл
+    offline/ complimentary/          // провайдеры
+    services/                        // чтение, заявки, подтверждение, применение (внутр.), ручные оплаты
+  compute/                     // чистые калькуляторы, без БД и DI
+  cache/                       // billing-plans, billing-settings, subscription-state
+  usage/billing-usage.module.ts      // использование через StaffService и LocationService
+  mail/billing-mail.module.ts        // письма о платежах и окончании доступа, ссылки
+  jobs/billing-jobs.module.ts        // SubscriptionNoticesCron, SubscriptionPaymentsCron
+  owner/billing-owner.module.ts      // публичные цены, раздел «Подписка» владельца
+  admin/billing-admin.module.ts      // тарифы, настройки, подписки и платежи в админке
+  launch/billing-launch.module.ts    // только npm run billing:launch
+  dto/ enums/ interfaces/      // по одному классу, enum или интерфейсу на файл
+  testing/                     // фикстуры и заглушки для спеков
 ```
 
 Таблицы биллинга принадлежат только его сервисам. Добавить строку в `docs/architecture/domain-ownership.md`.
 
-**`BillingCoreModule`** импортирует только `DatabaseModule` и `AppCacheModule`, экспортирует `BillingFacade`, `SubscriptionAccessService`, `SubscriptionService`. Не глобальный: его явно импортируют бренды, сотрудники, филиалы и записи.
+**`BillingCoreModule`** импортирует только `DatabaseModule` и `AppCacheModule`, экспортирует `BillingFacade` и сервисы ядра, кроме внутренних `SubscriptionPeriodService` и `PaymentApplicationService`. Не глобальный: его явно импортируют бренды, сотрудники, филиалы и записи.
 
 ```ts
 // BillingFacade
@@ -1038,7 +1041,7 @@ assertUsageIncreaseAllowed(brandId, resource, count: () => Promise<number>, tx):
 isOnlineBookingOpen(brandId): Promise<boolean>                                                      // запись, booking-setup
 ```
 
-Ядро не считает сотрудников и филиалы само: `StaffModule` и `LocationModule` импортируют ядро, обратная зависимость дала бы цикл. Подсчёт передаёт вызывающий домен, а для экрана «Подписка» использование собирает `BillingUsageService` в `BillingApiModule`.
+Ядро не считает сотрудников и филиалы само: `StaffModule` и `LocationModule` импортируют ядро, обратная зависимость дала бы цикл. Подсчёт передаёт вызывающий домен, а для экрана «Подписка» использование собирает `BillingUsageService` в `BillingUsageModule`.
 
 Новые методы владельцев таблиц: `StaffService.countActiveSeats(brandId, tx?)`, `LocationService.countActive(brandId, tx?)`, `AccessService.findBrandOwnerIds(brandId)`.
 
@@ -1051,17 +1054,27 @@ flowchart LR
   LocationModule --> BillingCoreModule
   BookingsModule --> BillingCoreModule
   BookingChannelsModule --> BillingCoreModule
-  BillingApiModule --> BillingCoreModule
-  BillingApiModule --> StaffModule
-  BillingApiModule --> LocationModule
-  BillingApiModule --> BrandModule
-  BillingApiModule --> AccessModule
-  BillingApiModule --> UserModule
-  BillingApiModule --> NotificationsModule
-  BillingNoticesModule --> BillingCoreModule
-  BillingNoticesModule --> NotificationsModule
-  BillingNoticesModule --> AccessModule
-  BillingNoticesModule --> UserModule
+  BillingUsageModule --> BillingCoreModule
+  BillingUsageModule --> StaffModule
+  BillingUsageModule --> LocationModule
+  BillingMailModule --> BillingCoreModule
+  BillingMailModule --> BillingUsageModule
+  BillingMailModule --> AccessModule
+  BillingMailModule --> UserModule
+  BillingMailModule --> BrandModule
+  BillingJobsModule --> BillingCoreModule
+  BillingJobsModule --> BillingMailModule
+  BillingOwnerModule --> BillingCoreModule
+  BillingOwnerModule --> BillingUsageModule
+  BillingOwnerModule --> BillingMailModule
+  BillingOwnerModule --> BrandModule
+  BillingAdminModule --> BillingCoreModule
+  BillingAdminModule --> BillingUsageModule
+  BillingAdminModule --> BillingMailModule
+  BillingAdminModule --> BrandModule
+  BillingAdminModule --> AccessModule
+  BillingAdminModule --> UserModule
+  BillingAdminModule --> LocationModule
 ```
 
 **Конфиг.** Всё, что меняется без деплоя, — в `BillingSettings`. В `configuration.ts` — необязательные `billing.frontendRevalidateUrl` и `billing.frontendRevalidateSecret` (7.3), интерфейс `billing-config.interface.ts`. Ключи провайдера добавятся сюда (11.2).
@@ -1213,7 +1226,7 @@ interface PaymentProvider {
 **День D:**
 1. Письмо всем владельцам (разовая рассылка вне модуля): «Klendo становится платным. Месяц бесплатно, до {D + 29} включительно. Цены — на странице «Тарифы»».
 2. Обновить соглашение (12.5).
-3. `scripts/billing-launch.ts --trial-ends=YYYY-MM-DD` (D + 30), идемпотентный:
+3. `npm run billing:launch -- --trial-ends=YYYY-MM-DD` (D + 30, `src/cli/billing-launch.ts`), идемпотентный:
    1. `launchedAt = now`. Дальше `BrandService.create` создаёт подписки сам.
    2. Бэкфилл каждому бренду без подписки, включая удалённые: `trialStartedAt = now`, `trialEndsAt` — дата на границе суток; `countryCode` и `timezone` — самого старого активного филиала, иначе любого, иначе `BY`, `Europe/Minsk`.
    3. Триал получают все. `trialUserId` — только у самого старого бренда владельца, если свободен.
@@ -1230,7 +1243,7 @@ interface PaymentProvider {
 | 1. Тарифы и цены | `feature/billing-plans` | `BillingPlan`, `BillingPlanPrice`, `BillingSettings`, сид BY, кэш, публичный API цен, админские тарифы и настройки | Маркетинг на API (12.1), админка тарифов и настроек | сейчас |
 | 2. Подписка и триал (скрыта до запуска) | `feature/billing-subscriptions` | `Subscription`, `SubscriptionEvent`, `SubscriptionNotice`, состояние, `startSubscription`, пилот, `Claim.BILLING`, `trial-eligibility`, `subscription-states`, `GET …/subscription`, лимиты, онлайн-запись (6.2), крон и 4 письма, админский список, продление триала (одному и массово) | Раздел «Подписка» без оплаты, баннеры, ошибки лимитов, страница блокировки, публичная запись, админский список | сейчас: без `launchedAt` ни на кого не влияет |
 | 3. Офлайн-оплата | `feature/billing-offline-payments` | `SubscriptionPayment`, платёжный слой (10.2), запрос на продление, продление льготного периода, `confirm` и `applyPayment` (4.3), смена тарифа, зачёт и продление админом, 3 письма об оплате | «Продлить», `PaymentNextActionView`, открытая заявка, смена тарифа, история, очередь в админке | до D + 23 |
-| 4. Запуск | — | `scripts/billing-launch.ts` | Юридические тексты (12.5) | день D (13) |
+| 4. Запуск | — | `src/cli/billing-launch.ts` | Юридические тексты (12.5) | день D (13) |
 | 5. Онлайн-оплата | `feature/billing-online-payments` | bePaid, вебхук, сверка (11.2) | `REDIRECT`, экран возврата | после юрлица и договора с bePaid |
 | 6. Автопродление | `feature/billing-auto-renew` | 11.3 | Галочка, переключатель, карта | после фазы 5, по спросу |
 
@@ -1269,5 +1282,5 @@ interface PaymentProvider {
 
 | # | Вопрос | Предложение |
 | --- | --- | --- |
-| 1 | Контакты в тексте «Мы свяжемся с вами» | Telegram и email поддержки. Текст в настройках |
+| 1 | ~~Контакты в тексте «Мы свяжемся с вами»~~ | Решено: `support@klendo.by`, `sales@klendo.by` |
 | 2 | Промокоды и скидки | Не в этом плане. Пока — индивидуальная цена, зачёт другой суммы или продление без оплаты админом |

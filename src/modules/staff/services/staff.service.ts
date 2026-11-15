@@ -10,6 +10,8 @@ import { DatabaseService } from '../../../database/database.service.js';
 import { AppCacheService } from '../../../shared/cache/app-cache.service.js';
 import { CacheDependency } from '../../../shared/cache/cache-dependency.js';
 import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
+import { BillingFacade } from '../../billing/billing.facade.js';
+import { UsageResource } from '../../billing/enums/usage-resource.enum.js';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
 import { stableOrderBy } from '../../../shared/database/stable-order-by.js';
 import { OrderDirection } from '../../../shared/enums/order-direction.enum.js';
@@ -183,7 +185,54 @@ export class StaffService {
     private readonly users: UserService,
     private readonly epochs: TokenEpochRegistryService,
     private readonly cache: AppCacheService,
+    private readonly billing: BillingFacade,
   ) {}
+
+  /** Billing seats: active staff in non-deleted locations of the brand. */
+  countActiveSeats(
+    brandId: string,
+    tx: Prisma.TransactionClient = this.db,
+  ): Promise<number> {
+    return tx.staff.count({
+      where: {
+        status: StaffStatus.ACTIVE,
+        location: { ...ACTIVE_LOCATION_WHERE, brandId },
+      },
+    });
+  }
+
+  /** Seats of several brands at once (admin lists); brands without staff are absent. */
+  async countActiveSeatsByBrands(
+    brandIds: string[],
+  ): Promise<Map<string, number>> {
+    if (!brandIds.length) return new Map();
+    const rows = await this.db.staff.findMany({
+      where: {
+        status: StaffStatus.ACTIVE,
+        location: { ...ACTIVE_LOCATION_WHERE, brandId: { in: brandIds } },
+      },
+      select: { location: { select: { brandId: true } } },
+    });
+    const counts = new Map<string, number>();
+    for (const row of rows)
+      counts.set(
+        row.location.brandId,
+        (counts.get(row.location.brandId) ?? 0) + 1,
+      );
+    return counts;
+  }
+
+  private assertSeatAvailable(
+    brandId: string,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    return this.billing.assertUsageIncreaseAllowed(
+      brandId,
+      UsageResource.STAFF,
+      () => this.countActiveSeats(brandId, tx),
+      tx,
+    );
+  }
 
   listInLocation(locationId: string): Promise<StaffWithAvatar[]> {
     return this.db.staff.findMany({
@@ -397,25 +446,29 @@ export class StaffService {
     dto: CreateStaffDto,
     actor: AuditActor,
   ): Promise<StaffWithAvatar> {
-    const staff = await this.db.staff.create({
-      data: {
-        locationId,
-        name: dto.name,
-        roleTitle: dto.roleTitle ?? null,
-        description: this.normalizeDescription(dto.description) ?? null,
-        phone: dto.phone ?? null,
-        email: dto.email ?? null,
-        avatarFileId: dto.avatarFileId ?? null,
-        employmentType: dto.employmentType ?? null,
-        taxId: dto.taxId ?? null,
-        employeeNumber: dto.employeeNumber ?? null,
-        payoutMethod: dto.payoutMethod ?? null,
-        payoutNote: dto.payoutNote ?? null,
-        staffServices: dto.serviceIds?.length
-          ? { create: dto.serviceIds.map((serviceId) => ({ serviceId })) }
-          : undefined,
-      },
-      include: { avatarFile: true },
+    const location = await this.locationService.findById(locationId);
+    const staff = await this.db.$transaction(async (tx) => {
+      await this.assertSeatAvailable(location.brandId, tx);
+      return tx.staff.create({
+        data: {
+          locationId,
+          name: dto.name,
+          roleTitle: dto.roleTitle ?? null,
+          description: this.normalizeDescription(dto.description) ?? null,
+          phone: dto.phone ?? null,
+          email: dto.email ?? null,
+          avatarFileId: dto.avatarFileId ?? null,
+          employmentType: dto.employmentType ?? null,
+          taxId: dto.taxId ?? null,
+          employeeNumber: dto.employeeNumber ?? null,
+          payoutMethod: dto.payoutMethod ?? null,
+          payoutNote: dto.payoutNote ?? null,
+          staffServices: dto.serviceIds?.length
+            ? { create: dto.serviceIds.map((serviceId) => ({ serviceId })) }
+            : undefined,
+        },
+        include: { avatarFile: true },
+      });
     });
     await this.cache.invalidate(CacheDependency.staffDirectory(locationId));
     const event: AuditLogEvent = {
@@ -713,6 +766,8 @@ export class StaffService {
       });
       if (dto.status === StaffStatus.INACTIVE)
         await this.protectPlatformAccount(current.userId, actor.id, tx);
+      if (dto.status === StaffStatus.ACTIVE)
+        await this.assertSeatAvailable(location.brandId, tx);
       if (dto.status === StaffStatus.INACTIVE) {
         await this.access.revokeStaffAccess(
           location.brandId,

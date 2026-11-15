@@ -2,6 +2,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { StaffResponseDto } from '../dto/staff-response.dto.js';
 import { StaffSearchRequestDto } from '../dto/staff-search-request.dto.js';
 import { StaffService } from './staff.service.js';
+import { createBillingFacadeStub } from '../../billing/testing/billing-facade.stub.js';
 
 describe('StaffService.search', () => {
   const findMany = vi.fn();
@@ -17,6 +18,7 @@ describe('StaffService.search', () => {
     {} as never,
     {} as never,
     { invalidate: vi.fn() } as never,
+    createBillingFacadeStub(),
   );
 
   beforeEach(() => {
@@ -104,6 +106,7 @@ describe('StaffService.matchActiveByNames', () => {
     {} as never,
     {} as never,
     { invalidate: vi.fn() } as never,
+    createBillingFacadeStub(),
   );
 
   beforeEach(() => {

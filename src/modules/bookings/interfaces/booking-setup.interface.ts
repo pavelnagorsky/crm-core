@@ -6,4 +6,6 @@ export interface BookingSetup {
   catalog: BookingServiceCatalog;
   staff: BookingStaff[];
   products: PublicCatalogProduct[];
+  /** False while the brand's subscription blocks online booking (plan section 6.2). */
+  isOnlineBookingAvailable: boolean;
 }

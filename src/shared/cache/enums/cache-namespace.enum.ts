@@ -9,4 +9,7 @@ export enum CacheNamespace {
   PUBLIC_BOOKING_PAGE_LIST = 'booking-pages.public-list',
   REVIEW_LOCATION_OVERVIEW = 'reviews.location-overview',
   REVIEW_STAFF_SUMMARIES = 'reviews.staff-summaries',
+  BILLING_PLANS = 'billing.plans',
+  BILLING_SETTINGS = 'billing.settings',
+  SUBSCRIPTION_STATE = 'billing.subscription-state',
 }

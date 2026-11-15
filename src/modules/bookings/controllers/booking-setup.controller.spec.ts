@@ -20,6 +20,8 @@ import { BookingsExportService } from '../export/services/bookings-export.servic
 import { BookingAccessService } from '../services/booking-access.service.js';
 import { BookingClientTokenService } from '../services/booking-client-token.service.js';
 import { BookingReadService } from '../services/read/booking-read.service.js';
+import { BillingFacade } from '../../billing/billing.facade.js';
+import { createBillingFacadeStub } from '../../billing/testing/billing-facade.stub.js';
 import { BookingSetupService } from '../services/setup/booking-setup.service.js';
 import { BookingMutationService } from '../services/write/booking-mutation.service.js';
 import { BookingsController } from './bookings.controller.js';
@@ -94,6 +96,7 @@ describe('Public booking setup products (HTTP)', () => {
       providers: [
         BookingsFacade,
         BookingSetupService,
+        { provide: BillingFacade, useValue: createBillingFacadeStub() },
         { provide: BookingSelectionService, useValue: {} },
         { provide: BookingSchedulingService, useValue: {} },
         { provide: ProductsService, useValue: products },
@@ -153,6 +156,7 @@ describe('Public booking setup products (HTTP)', () => {
         categories: [],
         staff: [],
         products: expectedProducts,
+        isOnlineBookingAvailable: true,
       });
       expect(products.listForPublicCatalog).toHaveBeenCalledWith(locationId);
       expect(catalog.loadForBooking).toHaveBeenCalledWith(locationId);

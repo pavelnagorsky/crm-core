@@ -34,6 +34,29 @@ export class UserService {
     });
   }
 
+  /** Users with a confirmed email: billing notices go only to them. */
+  async findVerifiedContacts(userIds: string[]) {
+    if (!userIds.length) return [];
+    return this.db.user.findMany({
+      where: {
+        id: { in: [...new Set(userIds)] },
+        email: { not: null },
+        emailVerifiedAt: { not: null },
+      },
+      select: { id: true, firstName: true, lastName: true, email: true },
+    });
+  }
+
+  /** Ids of users whose email contains the text, for admin searches. */
+  async findIdsByEmail(search: string, take = 500): Promise<string[]> {
+    const rows = await this.db.user.findMany({
+      where: { email: { contains: search, mode: 'insensitive' } },
+      select: { id: true },
+      take,
+    });
+    return rows.map((row) => row.id);
+  }
+
   create(data: Prisma.UserCreateInput): Promise<User> {
     return this.db.user.create({ data });
   }

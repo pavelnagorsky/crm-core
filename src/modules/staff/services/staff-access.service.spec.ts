@@ -4,6 +4,7 @@ import { Read } from '../../access/utils/permission.js';
 import { tokenPayload } from '../../auth/testing/factories/token-payload.factory.js';
 import { StaffAccessService } from './staff-access.service.js';
 import { StaffService } from './staff.service.js';
+import { createBillingFacadeStub } from '../../billing/testing/billing-facade.stub.js';
 
 describe('Own staff data access', () => {
   const db = { staff: { findFirst: vi.fn() } };
@@ -15,6 +16,7 @@ describe('Own staff data access', () => {
     {} as never,
     {} as never,
     { invalidate: vi.fn() } as never,
+    createBillingFacadeStub(),
   );
   const service = new StaffAccessService(staff);
 

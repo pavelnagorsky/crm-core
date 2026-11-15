@@ -11,7 +11,14 @@ describe('BrandService first location', () => {
       create: vi.fn().mockResolvedValue({
         id: 'brand-1',
         name: 'Brand',
-        locations: [{ id: 'location-1', name: 'First location' }],
+        locations: [
+          {
+            id: 'location-1',
+            name: 'First location',
+            countryCode: 'BY',
+            timezone: 'Europe/Minsk',
+          },
+        ],
       }),
       updateMany: vi.fn(),
       delete: vi.fn(),
@@ -26,6 +33,10 @@ describe('BrandService first location', () => {
   const bookingDeletionPolicy = { assertBrandDeletionAllowed: vi.fn() };
   const access = { assignInitialOwner: vi.fn() };
   const events = { emit: vi.fn() };
+  const billing = {
+    startSubscription: vi.fn(),
+    cancelOpenPayments: vi.fn(),
+  };
   const actor = { id: 'user-1', name: 'Anna', role: AuditActorRole.OWNER };
   const service = new BrandService(
     db as never,
@@ -34,6 +45,7 @@ describe('BrandService first location', () => {
     bookingDeletionPolicy as never,
     access as never,
     { invalidate: vi.fn() } as never,
+    billing as never,
   );
   const dto = {
     name: 'Brand',
@@ -59,6 +71,7 @@ describe('BrandService first location', () => {
       data: { deletedAt: expect.any(Date) },
     });
     expect(db.brand.delete).not.toHaveBeenCalled();
+    expect(billing.cancelOpenPayments).toHaveBeenCalledWith('brand-1', db);
     expect(
       bookingDeletionPolicy.assertBrandDeletionAllowed,
     ).toHaveBeenCalledWith('brand-1', db);
@@ -112,6 +125,12 @@ describe('BrandService first location', () => {
       db,
     );
     expect(epoch.bump).toHaveBeenCalled();
+    expect(billing.startSubscription).toHaveBeenCalledWith(
+      'brand-1',
+      'user-1',
+      { countryCode: 'BY', timezone: 'Europe/Minsk' },
+      db,
+    );
     expect(
       db.brand.create.mock.calls[0][0].data.locations.create,
     ).not.toHaveProperty('staff');

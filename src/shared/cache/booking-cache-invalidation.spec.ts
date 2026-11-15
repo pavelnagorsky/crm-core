@@ -8,6 +8,7 @@ import { ServiceWriteService } from '../../modules/services/service-write/servic
 import { StaffService } from '../../modules/staff/services/staff.service.js';
 import { AppCacheService } from './app-cache.service.js';
 import { createTestCache } from './testing/create-test-cache.js';
+import { createBillingFacadeStub } from '../../modules/billing/testing/billing-facade.stub.js';
 
 const actor = { id: 'owner', name: 'Owner', role: AuditActorRole.OWNER };
 
@@ -56,6 +57,7 @@ describe('Cache invalidation through domain writes', () => {
       {} as never,
       {} as never,
       cache,
+      createBillingFacadeStub(),
     );
     expect(
       (await staff.listActiveWithServices('location'))[0].staffServices,
@@ -265,6 +267,7 @@ describe('Cache invalidation through domain writes', () => {
       } as never,
       cache,
       { emit: vi.fn() } as never,
+      createBillingFacadeStub(),
     );
     await locations.getBookingSettings('location');
     await expect(locations.delete('location', actor)).rejects.toThrow(
@@ -279,6 +282,7 @@ describe('Cache invalidation through domain writes', () => {
       { assertBrandDeletionAllowed: vi.fn() } as never,
       {} as never,
       cache,
+      createBillingFacadeStub(),
     );
     await brands.delete('brand', actor);
     await expect(locations.getBookingSettings('location')).rejects.toThrow(

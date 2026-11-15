@@ -28,6 +28,8 @@
 | `PayrollPeriod`, `PayrollResult`                                                      | `PayrollPeriodService`                                             | `PayrollPeriodService` внутри Payroll controllers                                                | `StaffEarningsService` участвует в materialization периода.                               |
 | `AuditLog`                                                                            | `AuditService`                                               | `AuditService` / `AUDIT_EVENT`                                                             | События AUDIT_EVENT обрабатываются AuditService; durable outbox пока отсутствует.                       |
 | `File`                                                                                | `FilesService`                                               | `FilesService`                                                                             | Booking pages используют файлы для cover/media.                                           |
+| `BillingPlan`, `BillingPlanPrice`, `BillingSettings` | `BillingPlanService`, `BillingSettingsService` (BillingCoreModule) | `SubscriptionAccessService` (каталог), `BillingFacade` | Кэш `billingPlans()` / `billingSettings()`; изменения только из админки платформы. |
+| `Subscription`, `SubscriptionPayment`, `SubscriptionEvent`, `SubscriptionNotice` | `SubscriptionService`, `SubscriptionEventService`, `SubscriptionNoticeService`, `SubscriptionPaymentService` (BillingCoreModule); изменения — через `SubscriptionService.withLock` | `BillingFacade` для доменов CRM | Staff, Location, Brand и Bookings вызывают только `BillingFacade`: старт подписки, проверка лимита, онлайн-запись, отмена заявок при удалении бренда. Использование (сотрудники, филиалы) биллинг читает через `StaffService` и `LocationService` в `BillingUsageService`. |
 
 | Представление | Владелец | Публичный API | Назначение |
 | --- | --- | --- | --- |
@@ -41,6 +43,7 @@
 - OrderPricingCalculator не экспортируется. Общая денежная арифметика лежит в shared/money и не зависит от orders.
 - UserService владеет сохранённым tokenEpoch. Auth и AccessManagement вызывают его через TokenEpochRegistryService; при изменении ролей версия обновляется в той же транзакции.
 - Членство, permissions, generic invitations и grants принадлежат AccessModule; привязка сотрудника остаётся операцией StaffService.
+- Биллинг: BillingCoreModule не зависит от доменов CRM, поэтому Staff, Location и Brand импортируют его без циклов. Подсчёт использования (`BillingUsageModule`), письма (`BillingMailModule`), кроны (`BillingJobsModule`), HTTP владельца (`BillingOwnerModule`) и админки (`BillingAdminModule`) — отдельные модули поверх ядра. Расчёты состояния, периодов, цен и лимитов — чистые калькуляторы в `billing/compute`, не экспортируются. [План](../subscriptions-plan.md).
 - Аудит редактирования/удаления заказа и отмены/удаления брони публикуется после успешного commit. Остальные события и надёжность доставки описаны в [ограничениях ревью](./README.md#оставшийся-технический-долг).
 
 ## Направление Зависимостей

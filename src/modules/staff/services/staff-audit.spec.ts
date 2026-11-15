@@ -1,5 +1,6 @@
 import { AuditActorRole } from '../../audit/enums/audit-actor-role.enum.js';
 import { StaffService } from './staff.service.js';
+import { createBillingFacadeStub } from '../../billing/testing/billing-facade.stub.js';
 
 describe('Staff assignments and shifts audit', () => {
   const actor = { id: 'owner', name: 'Owner', role: AuditActorRole.OWNER };
@@ -26,6 +27,7 @@ describe('Staff assignments and shifts audit', () => {
     {} as never,
     {} as never,
     { invalidate: vi.fn() } as never,
+    createBillingFacadeStub(),
   );
   beforeEach(() => {
     vi.resetAllMocks();

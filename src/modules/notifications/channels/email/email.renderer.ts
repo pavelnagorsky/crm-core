@@ -19,13 +19,32 @@ export type EmailTemplate =
   | 'booking-status-changed'
   | 'booking-reminder'
   | 'review-request'
-  | 'staff-booking-event';
+  | 'staff-booking-event'
+  | 'subscription-trial-ending'
+  | 'subscription-period-ending'
+  | 'subscription-access-ended'
+  | 'subscription-access-limited'
+  | 'subscription-payment-requested'
+  | 'subscription-payment-received'
+  | 'admin-subscription-payment-requested';
 
 type CompiledTemplate = Handlebars.TemplateDelegate;
 
 const LANG_TO_INTL_LOCALE: Record<string, string> = { ru: 'ru-RU' };
 const PLATFORM_BUTTON_COLOR = '#00A76F';
 const BRAND_BUTTON_COLOR = '#1C252E';
+/** Sent by Klendo itself: Klendo sender, logo and footer; the brand is named in the text. */
+const PLATFORM_TEMPLATES: ReadonlySet<EmailTemplate> = new Set([
+  'confirm-email',
+  'reset-password',
+  'subscription-trial-ending',
+  'subscription-period-ending',
+  'subscription-access-ended',
+  'subscription-access-limited',
+  'subscription-payment-requested',
+  'subscription-payment-received',
+  'admin-subscription-payment-requested',
+]);
 /** Sent to the brand's own team: the salon's contacts mean nothing to them. */
 const TEAM_TEMPLATES: ReadonlySet<EmailTemplate> = new Set([
   'access-invitation',
@@ -39,6 +58,8 @@ const PLATFORM_FOOTER_PATHS = {
   termsOfService: '/terms-of-service',
 } as const;
 const PARTIALS: Record<string, string> = {
+  billingDetails: 'billing-details',
+  billingRow: 'billing-row',
   bookingDetails: 'booking-details',
   button: 'button',
   greeting: 'greeting',
@@ -54,6 +75,13 @@ const EMAIL_TEMPLATES: EmailTemplate[] = [
   'booking-reminder',
   'review-request',
   'staff-booking-event',
+  'subscription-trial-ending',
+  'subscription-period-ending',
+  'subscription-access-ended',
+  'subscription-access-limited',
+  'subscription-payment-requested',
+  'subscription-payment-received',
+  'admin-subscription-payment-requested',
 ];
 
 @Injectable()
@@ -136,8 +164,7 @@ export class EmailRenderer implements OnModuleInit {
     if (!contentTemplate)
       throw new Error(`Email template not found: ${template}`);
 
-    const isPlatform =
-      template === 'confirm-email' || template === 'reset-password';
+    const isPlatform = PLATFORM_TEMPLATES.has(template);
     const senderName = isPlatform
       ? 'Klendo'
       : String(data.brandName ?? '').trim();

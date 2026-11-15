@@ -35,6 +35,28 @@
         }
       }
     },
+    "billing": {
+      "scope": "B",
+      "group": "Бизнес и доступы",
+      "actions": {
+        "read": {
+          "label": "Просмотр подписки и платежей",
+          "defaultRoles": [
+            "OWNER"
+          ],
+          "configurableRoles": [],
+          "dependencies": []
+        },
+        "write": {
+          "label": "Оплата и смена тарифа",
+          "defaultRoles": [
+            "OWNER"
+          ],
+          "configurableRoles": [],
+          "dependencies": []
+        }
+      }
+    },
     "location.create": {
       "scope": "B",
       "group": "Бизнес и доступы",

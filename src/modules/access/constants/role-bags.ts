@@ -8,6 +8,7 @@ export const ROLE_BAGS: Readonly<Record<BusinessRole, readonly Permission[]>> =
     [BusinessRole.OWNER]: [
       Read(Claim.BRAND),
       Write(Claim.BRAND_SETTINGS),
+      ReadWrite(Claim.BILLING),
       Write(Claim.LOCATION_CREATE),
       Read(Claim.LOCATION),
       Write(Claim.LOCATION_SETTINGS),

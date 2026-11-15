@@ -290,6 +290,38 @@ export class AccessService {
     );
   }
 
+  /** Owners per brand, oldest membership first. Brands without owners are absent. */
+  async findOwnerIdsByBrands(
+    brandIds: string[],
+  ): Promise<Map<string, string[]>> {
+    const result = new Map<string, string[]>();
+    if (!brandIds.length) return result;
+    const rows = await this.db.brandMembership.findMany({
+      where: {
+        brandId: { in: [...new Set(brandIds)] },
+        role: BusinessRole.OWNER,
+      },
+      select: { brandId: true, userId: true },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+    for (const row of rows)
+      result.set(row.brandId, [...(result.get(row.brandId) ?? []), row.userId]);
+    return result;
+  }
+
+  /** Brands the users own, for the admin search by owner email. */
+  async findBrandIdsOwnedBy(userIds: string[]): Promise<string[]> {
+    if (!userIds.length) return [];
+    const rows = await this.db.brandMembership.findMany({
+      where: {
+        userId: { in: [...new Set(userIds)] },
+        role: BusinessRole.OWNER,
+      },
+      select: { brandId: true },
+    });
+    return [...new Set(rows.map((row) => row.brandId))];
+  }
+
   async memberUserIds(brandId: string) {
     const rows = await this.db.brandMembership.findMany({
       where: { brandId },

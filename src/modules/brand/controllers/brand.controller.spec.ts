@@ -2,6 +2,7 @@ import { BusinessRole, UserRole } from '@prisma/client';
 import { tokenPayload } from '../../auth/testing/factories/token-payload.factory.js';
 import { BrandService } from '../services/brand.service.js';
 import { BrandController } from './brand.controller.js';
+import { createBillingFacadeStub } from '../../billing/testing/billing-facade.stub.js';
 
 describe('Brand creation', () => {
   const createBrand = vi.fn();
@@ -45,6 +46,7 @@ describe('Brand search access boundaries', () => {
     {} as never,
     {} as never,
     { invalidate: vi.fn() } as never,
+    createBillingFacadeStub(),
   );
   const controller = new BrandController(service, {} as never);
   const brands = ['brand-1', 'brand-2'].map((id) => ({

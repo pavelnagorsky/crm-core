@@ -43,6 +43,52 @@
 | `POST /auth/vk` | `vkOAuth` | P: `existing-auth` | — |
 | `POST /auth/yandex` | `yandexOAuth` | P: `existing-auth` | — |
 
+## billing
+
+[Исходники](../../src/modules/billing/controllers/)
+
+`billing` — claim бренда только для OWNER, не настраивается в политиках ролей. Блокировка кабинета при неоплате выполняется на фронтенде по `isBlocked`; backend закрывает только публичную онлайн-запись (`ONLINE_BOOKING_UNAVAILABLE`). [Интеграция для фронтенда](../frontend-billing.md).
+
+| API | Метод | Проверка | Уточнение |
+| --- | --- | --- | --- |
+| `GET /public/billing/plans` | `findPlans` | P: `public` | Rate limit, `Cache-Control: public, max-age=300`. |
+| `GET /users/me/trial-eligibility` | `trialEligibility` | U: `own-account` | — |
+| `GET /users/me/subscription-states` | `states` | U: `accessible-brands` | Бренды из токена, без `FREE`; `isOwner` по роли в бренде. |
+| `GET /brands/:brandId/subscription` | `details` | B: `billing:read` | Состояние, лимиты, использование, открытая заявка. |
+| `GET /brands/:brandId/subscription/payment-quote` | `paymentQuote` | B: `billing:read` | — |
+| `POST /brands/:brandId/subscription/payments` | `requestPayment` | B: `billing:write` | Новая заявка отменяет открытую. |
+| `GET /brands/:brandId/subscription/payments` | `payments` | B: `billing:read` | Без `adminNote` и `providerData`. |
+| `GET /brands/:brandId/subscription/payments/:id` | `findPayment` | B: `billing:read` | — |
+| `POST /brands/:brandId/subscription/payments/:id/cancel` | `cancelPayment` | B: `billing:write` | Только своя `PENDING` заявка. |
+| `GET /brands/:brandId/subscription/plan-change-quote` | `planChangeQuote` | B: `billing:read` | — |
+| `POST /brands/:brandId/subscription/plan-change` | `changePlan` | B: `billing:write` | Только при оплаченном остатке, не для `CUSTOM`. |
+| `GET /brands/:brandId/subscription/events` | `events` | B: `billing:read` | Без `actorId`. |
+| `GET /admin/billing/plans` | `findPlans` | P: администратор платформы | — |
+| `POST /admin/billing/plans` | `createPlan` | P: администратор платформы | — |
+| `PATCH /admin/billing/plans/:id` | `updatePlan` | P: администратор платформы | — |
+| `POST /admin/billing/plans/:id/archive` | `archivePlan` | P: администратор платформы | — |
+| `POST /admin/billing/plans/:id/restore` | `restorePlan` | P: администратор платформы | — |
+| `GET /admin/billing/plans/:id/prices` | `findPrices` | P: администратор платформы | — |
+| `POST /admin/billing/plans/:id/prices` | `addPrice` | P: администратор платформы | — |
+| `DELETE /admin/billing/plans/:id/prices/:priceId` | `deletePrice` | P: администратор платформы | — |
+| `GET /admin/billing/countries` | `countries` | P: администратор платформы | — |
+| `GET /admin/billing/settings` | `findSettings` | P: администратор платформы | — |
+| `PUT /admin/billing/settings` | `updateSettings` | P: администратор платформы | — |
+| `GET /admin/billing/subscriptions` | `search` | P: администратор платформы | — |
+| `POST /admin/billing/subscriptions/extend-trials` | `extendTrials` | P: администратор платформы | — |
+| `GET /admin/billing/subscriptions/:brandId` | `findOne` | P: администратор платформы | — |
+| `POST /admin/billing/subscriptions/:brandId/start` | `start` | P: администратор платформы | — |
+| `POST /admin/billing/subscriptions/:brandId/extend-trial` | `extendTrial` | P: администратор платформы | — |
+| `POST /admin/billing/subscriptions/:brandId/extend` | `extend` | P: администратор платформы | — |
+| `POST /admin/billing/subscriptions/:brandId/payments` | `recordPayment` | P: администратор платформы | — |
+| `PUT /admin/billing/subscriptions/:brandId/plan` | `assignPlan` | P: администратор платформы | — |
+| `PUT /admin/billing/subscriptions/:brandId/country` | `changeCountry` | P: администратор платформы | — |
+| `POST /admin/billing/subscriptions/:brandId/suspend` | `suspend` | P: администратор платформы | — |
+| `POST /admin/billing/subscriptions/:brandId/resume` | `resume` | P: администратор платформы | — |
+| `GET /admin/billing/payments` | `search` | P: администратор платформы | — |
+| `POST /admin/billing/payments/:id/confirm` | `confirm` | P: администратор платформы | — |
+| `POST /admin/billing/payments/:id/cancel` | `cancel` | P: администратор платформы | — |
+
 ## booking-pages
 
 [Исходник](../../src/modules/booking-channels/controllers/booking-pages.controller.ts)

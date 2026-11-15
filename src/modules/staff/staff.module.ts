@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AppCacheModule } from '../../shared/cache/app-cache.module.js';
 import { I18nModule } from '../../shared/i18n/i18n.module.js';
 import { AccessModule } from '../access/access.module.js';
+import { BillingCoreModule } from '../billing/billing-core.module.js';
 import { LocationModule } from '../location/location.module.js';
 import { ServiceCatalogModule } from '../services/catalog/service-catalog.module.js';
 import { ReviewsModule } from '../reviews/reviews.module.js';
@@ -22,6 +23,7 @@ import { StaffService } from './services/staff.service.js';
     AccessModule,
     UserModule,
     ReviewsModule,
+    BillingCoreModule,
   ],
   controllers: [StaffAnalyticsController, StaffController],
   providers: [

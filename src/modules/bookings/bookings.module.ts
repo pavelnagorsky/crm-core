@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { PassportModule } from '@nestjs/passport';
 import { I18nModule } from '../../shared/i18n/i18n.module.js';
 import { AccessModule } from '../access/access.module.js';
+import { BillingCoreModule } from '../billing/billing-core.module.js';
 import { CalendarModule } from '../calendar/calendar.module.js';
 import { ClientsModule } from '../clients/clients.module.js';
 import { LocationModule } from '../location/location.module.js';
@@ -40,6 +41,7 @@ import { JwtBookingClientStrategy } from './strategies/jwt-booking-client.strate
   imports: [
     PassportModule,
     AccessModule,
+    BillingCoreModule,
     LocationModule,
     CalendarModule,
     ClientsModule,

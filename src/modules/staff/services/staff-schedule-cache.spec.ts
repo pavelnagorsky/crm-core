@@ -2,6 +2,7 @@ import { createTestCache } from '../../../shared/cache/testing/create-test-cache
 import { AppCacheService } from '../../../shared/cache/app-cache.service.js';
 import { CacheDependency } from '../../../shared/cache/cache-dependency.js';
 import { StaffService } from './staff.service.js';
+import { createBillingFacadeStub } from '../../billing/testing/billing-facade.stub.js';
 
 describe('Staff schedule cache coverage', () => {
   const day = (value: string) => new Date(value);
@@ -42,6 +43,7 @@ describe('Staff schedule cache coverage', () => {
       {} as never,
       {} as never,
       cache,
+      createBillingFacadeStub(),
     );
   });
   afterEach(async () => {
@@ -70,6 +72,7 @@ describe('Staff schedule cache coverage', () => {
       {} as never,
       {} as never,
       cache,
+      createBillingFacadeStub(),
     );
     await readDay('location', 'anna', '2026-10-27');
     expect(findMany).toHaveBeenCalledTimes(1);

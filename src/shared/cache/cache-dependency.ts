@@ -13,4 +13,8 @@ export const CacheDependency = {
   locationProducts: (id: string) => dependency('products.location', id),
   locationReviews: (id: string) => dependency('reviews.location', id),
   publicBookingPages: () => dependency('booking-pages.public', 'all'),
+  billingPlans: () => dependency('billing.plans', 'all'),
+  billingSettings: () => dependency('billing.settings', 'all'),
+  subscription: (brandId: string) =>
+    dependency('billing.subscription', brandId),
 };

@@ -15,6 +15,13 @@ export const EMAIL_CHIP_TONES: Record<string, EmailChipTone> = {
   'staff-booking-event.REQUESTED': EmailChipTone.WARNING,
   'staff-booking-event.RESCHEDULED': EmailChipTone.INFO,
   'staff-booking-event.CANCELLED': EmailChipTone.ERROR,
+  'subscription-trial-ending': EmailChipTone.WARNING,
+  'subscription-period-ending': EmailChipTone.WARNING,
+  'subscription-access-ended': EmailChipTone.ERROR,
+  'subscription-access-limited': EmailChipTone.ERROR,
+  'subscription-payment-requested': EmailChipTone.INFO,
+  'subscription-payment-received': EmailChipTone.SUCCESS,
+  'admin-subscription-payment-requested': EmailChipTone.INFO,
 };
 
 /** Klendo product palette: "lighter" background with "dark" text. */

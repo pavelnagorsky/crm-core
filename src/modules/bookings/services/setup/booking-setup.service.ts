@@ -5,6 +5,7 @@ import { assignStaff } from '../../../../shared/scheduling/assign-staff.js';
 import { normalizeStaffAssignments } from '../../../../shared/scheduling/normalize-staff-assignments.js';
 import { TimeUtils } from '../../../../shared/time/time.utils.js';
 import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
+import { BillingFacade } from '../../../billing/billing.facade.js';
 import { ProductsService } from '../../../products/services/products.service.js';
 import { ServiceCatalogFacade } from '../../../services/catalog/service-catalog.facade.js';
 import { BundleMetrics } from '../../../services/utils/bundle-metrics.js';
@@ -27,15 +28,20 @@ export class BookingSetupService {
     private readonly locationService: LocationService,
     private readonly selection: BookingSelectionService,
     private readonly scheduling: BookingSchedulingService,
+    private readonly billing: BillingFacade,
   ) {}
 
   async getBookingSetup(locationId: string): Promise<BookingSetup> {
-    const [catalog, staff, products] = await Promise.all([
-      this.serviceCatalog.loadForBooking(locationId),
-      this.staffService.listActiveWithServices(locationId),
-      this.productsService.listForPublicCatalog(locationId),
-    ]);
-    return { catalog, staff, products };
+    const [catalog, staff, products, isOnlineBookingAvailable] =
+      await Promise.all([
+        this.serviceCatalog.loadForBooking(locationId),
+        this.staffService.listActiveWithServices(locationId),
+        this.productsService.listForPublicCatalog(locationId),
+        this.locationService
+          .getBookingSettings(locationId)
+          .then(({ brandId }) => this.billing.isOnlineBookingOpen(brandId)),
+      ]);
+    return { catalog, staff, products, isOnlineBookingAvailable };
   }
 
   async resolveBookingSelection(

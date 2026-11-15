@@ -2,6 +2,7 @@ import { BusinessRole, StaffStatus, UserRole } from '@prisma/client';
 import { AccessService } from '../../access/services/access.service.js';
 import { AuditActorRole } from '../../audit/enums/audit-actor-role.enum.js';
 import { StaffService } from './staff.service.js';
+import { createBillingFacadeStub } from '../../billing/testing/billing-facade.stub.js';
 
 describe('Staff access revocation transaction', () => {
   const staff = {
@@ -36,6 +37,7 @@ describe('Staff access revocation transaction', () => {
     { findById: vi.fn().mockResolvedValue({ role: UserRole.USER }) } as never,
     epochs as never,
     { invalidate: vi.fn() } as never,
+    createBillingFacadeStub(),
   );
   const actor = { id: 'owner-1', name: 'Owner', role: AuditActorRole.OWNER };
   let transactionActive: boolean;

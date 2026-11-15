@@ -4,3 +4,9 @@ export const CATALOG_CACHE_POLICY = {
 };
 
 export const SETTINGS_CACHE_POLICY = CATALOG_CACHE_POLICY;
+
+/** Billing state is recomputed from dates on every read; the TTL only bounds staleness across replicas. */
+export const BILLING_CACHE_POLICY = {
+  ttlMs: 5 * 60_000,
+  refreshAheadMs: 60_000,
+};

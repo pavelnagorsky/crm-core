@@ -9,6 +9,8 @@ import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { resolveLocationLocale } from '../../../shared/geo/resolve-location-locale.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { TokenEpochRegistryService } from '../../auth/services/token-epoch-registry.service.js';
+import { BillingFacade } from '../../billing/billing.facade.js';
+import { UsageResource } from '../../billing/enums/usage-resource.enum.js';
 import { BookingDeletionPolicyService } from '../../bookings/deletion-policy/services/booking-deletion-policy.service.js';
 import { BrandService } from '../../brand/services/brand.service.js';
 import { AUDIT_EVENT } from '../../audit/constants/audit.constants.js';
@@ -27,6 +29,8 @@ import { CreateLocationDto } from '../dto/create-location.dto.js';
 import { UpdateLocationDto } from '../dto/update-location.dto.js';
 import { LocationPublicProfile } from '../interfaces/location-public-profile.interface.js';
 
+type LocationOrigin = Pick<Location, 'countryCode' | 'timezone'>;
+
 @Injectable()
 export class LocationService {
   constructor(
@@ -36,6 +40,7 @@ export class LocationService {
     private readonly bookingDeletionPolicy: BookingDeletionPolicyService,
     private readonly cache: AppCacheService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly billing: BillingFacade,
   ) {}
 
   async create(
@@ -45,8 +50,14 @@ export class LocationService {
   ): Promise<Location> {
     const locale = resolveLocationLocale(dto);
     await this.brandService.findById(brandId);
-    const location = await this.db.location.create({
-      data: { ...dto, ...locale, brandId },
+    const location = await this.db.$transaction(async (tx) => {
+      await this.billing.assertUsageIncreaseAllowed(
+        brandId,
+        UsageResource.LOCATION,
+        () => this.countActive(brandId, tx),
+        tx,
+      );
+      return tx.location.create({ data: { ...dto, ...locale, brandId } });
     });
     this.eventEmitter.emit(AUDIT_EVENT, {
       brandId,
@@ -63,6 +74,56 @@ export class LocationService {
       await this.brandService.findMemberUserIds(brandId),
     );
     return location;
+  }
+
+  /** Billing usage: non-deleted locations of the brand. */
+  countActive(
+    brandId: string,
+    tx: Prisma.TransactionClient = this.db,
+  ): Promise<number> {
+    return tx.location.count({ where: { brandId, ...ACTIVE_LOCATION_WHERE } });
+  }
+
+  async countActiveByBrands(brandIds: string[]): Promise<Map<string, number>> {
+    if (!brandIds.length) return new Map();
+    const rows = await this.db.location.groupBy({
+      by: ['brandId'],
+      where: { brandId: { in: brandIds }, ...ACTIVE_LOCATION_WHERE },
+      _count: { _all: true },
+    });
+    return new Map(rows.map((r) => [r.brandId, r._count._all]));
+  }
+
+  /**
+   * Billing launch: country and timezone of the oldest active location, else of any
+   * location; brands without locations are absent.
+   */
+  async findBillingOrigins(
+    brandIds: string[],
+  ): Promise<Map<string, LocationOrigin>> {
+    if (!brandIds.length) return new Map();
+    const rows = await this.db.location.findMany({
+      where: { brandId: { in: brandIds } },
+      select: {
+        brandId: true,
+        countryCode: true,
+        timezone: true,
+        deletedAt: true,
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+    const origins = new Map<string, LocationOrigin>();
+    const pick = (active: boolean) => {
+      for (const row of rows)
+        if ((row.deletedAt === null) === active && !origins.has(row.brandId))
+          origins.set(row.brandId, {
+            countryCode: row.countryCode,
+            timezone: row.timezone,
+          });
+    };
+    pick(true);
+    pick(false);
+    return origins;
   }
 
   async listByBrand(brandId: string): Promise<Location[]> {

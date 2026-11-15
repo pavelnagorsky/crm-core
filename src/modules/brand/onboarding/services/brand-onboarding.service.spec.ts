@@ -5,6 +5,7 @@ import { ServiceCategoriesService } from '../../../services/categories/services/
 import { ServiceWriteService } from '../../../services/service-write/services/service-write.service.js';
 import { StaffService } from '../../../staff/services/staff.service.js';
 import { BrandOnboardingService } from './brand-onboarding.service.js';
+import { createBillingFacadeStub } from '../../../billing/testing/billing-facade.stub.js';
 
 describe('BrandOnboardingService', () => {
   const tx = {
@@ -36,6 +37,7 @@ describe('BrandOnboardingService', () => {
     users as never,
     {} as never,
     cache as never,
+    createBillingFacadeStub(),
   );
   const onboarding = new BrandOnboardingService(
     db as never,

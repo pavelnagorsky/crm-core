@@ -152,4 +152,118 @@ describe('EmailRenderer', () => {
       expect(email.html).not.toContain('>Телефон</td>');
     });
   });
+
+  describe('billing emails', () => {
+    const billing = {
+      brandName: 'Салон <Лето>',
+      recipientFirstName: 'Ольга',
+      timezone: 'Europe/Minsk',
+      actionLink: 'https://klendo.by/app/brands/b1/billing',
+    };
+
+    it('sends billing emails from Klendo and names the brand in the text', () => {
+      const email = renderer.render('subscription-trial-ending', {
+        ...billing,
+        daysLeft: 7,
+        planName: 'Мастер',
+        suggestedPlan: true,
+        lastDay: new Date('2026-12-13T12:00:00Z'),
+      });
+      expect(email.subject).toBe(
+        'Klendo — Пробный период Салон <Лето> закончится через 7 дн.',
+      );
+      expect(email.html).toContain('Салон &lt;Лето&gt;');
+      expect(email.html).not.toContain('Салон <Лето>');
+      expect(email.html).toContain('Рекомендуем');
+      expect(email.html).toContain('Мастер');
+      expect(email.html).toContain('13 декабря');
+      expect(email.html).toContain('>Выбрать тариф</a>');
+      expect(email.html).toContain(`href="${billing.actionLink}"`);
+      expect(email.html).toContain('support@klendo.by');
+    });
+
+    it('offers to discuss terms when no standard plan fits', () => {
+      const email = renderer.render('subscription-trial-ending', {
+        ...billing,
+        variant: 'DISCUSS',
+        daysLeft: 3,
+      });
+      expect(email.html).toContain('sales@klendo.by');
+      expect(email.html).toContain('>Обсудить условия</a>');
+    });
+
+    it.each([
+      'subscription-trial-ending',
+      'subscription-period-ending',
+      'subscription-access-ended',
+      'subscription-access-limited',
+    ] as const)('%s with an open request says we will contact', (template) => {
+      const email = renderer.render(template, {
+        ...billing,
+        variant: 'PENDING',
+        daysLeft: 1,
+        paymentNumber: 'KL-000123',
+      });
+      expect(email.html).toContain('мы свяжемся с вами');
+      expect(email.html).toContain('>Открыть заявку</a>');
+      expect(email.html).toContain('KL-000123');
+    });
+
+    it('confirms a payment request with the fixed amount and instructions', () => {
+      const email = renderer.render('subscription-payment-requested', {
+        ...billing,
+        paymentNumber: 'KL-000123',
+        planName: 'Команда',
+        billingPeriod: 'YEAR',
+        amount: '590.00 BYN',
+        expiresAt: new Date('2026-11-20T12:00:00Z'),
+        instructions: 'Реквизиты:\nр/с 123',
+      });
+      expect(email.subject).toBe('Klendo — Заявка KL-000123 на оплату Klendo');
+      expect(email.html).toContain('свяжемся с вами');
+      expect(email.html).toContain('590.00 BYN');
+      expect(email.html).toContain('Год');
+      expect(email.html).toContain('20 ноября');
+      expect(email.html).toContain('Реквизиты:\nр/с 123');
+      expect(email.html).toContain('sales@klendo.by');
+    });
+
+    it('leaves out instructions and empty rows', () => {
+      const email = renderer.render('subscription-payment-requested', {
+        ...billing,
+        paymentNumber: 'KL-000124',
+        instructions: null,
+      });
+      expect(email.html).not.toContain('>Сумма</td>');
+      expect(email.html).not.toContain('white-space: pre-line');
+    });
+
+    it('names the new last day in the subject of a received payment', () => {
+      const email = renderer.render('subscription-payment-received', {
+        ...billing,
+        lastDay: new Date('2027-12-13T12:00:00Z'),
+        planName: 'Мастер',
+        billingPeriod: 'YEAR',
+      });
+      expect(email.subject).toContain('Оплата получена, Klendo работает до');
+      expect(email.subject).toContain('13 декабря');
+    });
+
+    it('shows the owner to the admin of a new request', () => {
+      const email = renderer.render('admin-subscription-payment-requested', {
+        ...billing,
+        recipientFirstName: null,
+        actionLink: 'https://klendo.by/admin/billing/payments?search=KL-000123',
+        paymentNumber: 'KL-000123',
+        ownerEmail: 'owner@example.test',
+        comment: 'Позвоните после 18:00',
+      });
+      expect(email.subject).toBe(
+        'Klendo — Новая заявка KL-000123: Салон <Лето>',
+      );
+      expect(email.html).toContain('owner@example.test');
+      expect(email.html).toContain('Позвоните после 18:00');
+      expect(email.html).toContain('search&#x3D;KL-000123');
+    });
+  });
 });

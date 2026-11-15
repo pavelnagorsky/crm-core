@@ -510,6 +510,7 @@ model Brand {
   productCategories   ProductCategory[]
   products            Product[]
   suppliers           Supplier[]
+  subscription        Subscription?
 
   @@index([deletedAt])
 }
@@ -1758,4 +1759,248 @@ model AccessAudit {
   createdAt  DateTime @default(now())
 
   @@index([brandId, createdAt])
+}
+
+// Billing: plans, prices, settings, subscriptions. See docs/subscriptions-plan.md.
+// SQL checks and partial unique indexes live in migrations/20261115*_billing_*.
+
+enum BillingPeriod {
+  MONTH
+  YEAR
+}
+
+enum BillingPlanStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+enum BillingPlanPricingMode {
+  STANDARD
+  CUSTOM
+}
+
+enum SubscriptionPaymentStatus {
+  PENDING
+  PAID
+  FAILED
+  CANCELED
+  EXPIRED
+}
+
+// New providers: ALTER TYPE ... ADD VALUE.
+enum SubscriptionPaymentProvider {
+  OFFLINE
+  COMPLIMENTARY
+}
+
+enum SubscriptionPaymentMethod {
+  BANK_TRANSFER
+  ERIP
+  CASH
+  CARD
+  OTHER
+  NONE
+}
+
+enum SubscriptionEventType {
+  TRIAL_STARTED
+  TRIAL_SKIPPED
+  TRIAL_EXTENDED
+  GRACE_EXTENDED
+  PAYMENT_CREATED
+  PAYMENT_CANCELED
+  PAYMENT_EXPIRED
+  PAYMENT_FAILED
+  PAYMENT_APPLIED
+  PAYMENT_MISMATCH
+  PLAN_CHANGED
+  PERIOD_EXTENDED
+  CUSTOM_TERMS_CHANGED
+  COUNTRY_CHANGED
+  SUSPENDED
+  RESUMED
+}
+
+enum SubscriptionNoticeKind {
+  TRIAL_ENDING
+  PERIOD_ENDING
+  ACCESS_ENDED
+  ACCESS_LIMITED
+}
+
+enum BillingActorRole {
+  OWNER
+  ADMIN
+  SYSTEM
+  PROVIDER
+}
+
+model BillingPlan {
+  id            String                 @id @default(uuid())
+  code          String                 @unique @db.VarChar(50)
+  name          String                 @db.VarChar(100)
+  position      Int                    @db.SmallInt
+  status        BillingPlanStatus      @default(ACTIVE)
+  isPublic      Boolean                @default(true)
+  pricingMode   BillingPlanPricingMode @default(STANDARD)
+  staffLimit    Int?
+  locationLimit Int?
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+  updatedById   String?
+
+  prices        BillingPlanPrice[]
+  subscriptions Subscription[]
+  payments      SubscriptionPayment[]
+
+  @@index([status, position])
+}
+
+// Immutable row. Current price: latest effectiveFrom <= now for (planId, countryCode, billingPeriod).
+model BillingPlanPrice {
+  id            String        @id @default(uuid())
+  planId        String
+  countryCode   String        @db.VarChar(2)
+  currency      String        @db.VarChar(3)
+  billingPeriod BillingPeriod
+  amount        Decimal       @db.Decimal(10, 2)
+  effectiveFrom DateTime
+  createdById   String?
+  createdAt     DateTime      @default(now())
+
+  plan BillingPlan @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@unique([planId, countryCode, billingPeriod, effectiveFrom])
+  @@index([countryCode])
+}
+
+// Single row (id = 1), created by migration.
+model BillingSettings {
+  id                         Int                         @id @default(1)
+  defaultCountryCode         String                      @default("BY") @db.VarChar(2)
+  trialDays                  Int                         @default(30) @db.SmallInt
+  graceDays                  Int                         @default(3) @db.SmallInt
+  reminderDaysBefore         Int[]                       @default([7, 3, 1])
+  paymentProvider            SubscriptionPaymentProvider @default(OFFLINE)
+  paymentRequestTtlDays      Int                         @default(14) @db.SmallInt
+  pendingRequestGraceDays    Int                         @default(3) @db.SmallInt
+  offlinePaymentInstructions String?                     @db.VarChar(5000)
+  adminNotifyEmail           String?                     @db.VarChar(254)
+  launchedAt                 DateTime?
+  enforcementEnabled         Boolean                     @default(false)
+  updatedAt                  DateTime                    @updatedAt
+  updatedById                String?
+}
+
+model Subscription {
+  id               String         @id @default(uuid())
+  brandId          String         @unique
+  countryCode      String         @db.VarChar(2)
+  timezone         String         @db.VarChar(64)
+  planId           String?
+  billingPeriod    BillingPeriod?
+  billingAnchorDay Int?           @db.SmallInt
+
+  trialStartedAt     DateTime
+  trialEndsAt        DateTime
+  trialUserId        String?
+  paidUntil          DateTime?
+  accessEndsAt       DateTime
+  graceExtendedUntil DateTime?
+  graceExtendedFor   DateTime?
+
+  customStaffLimit    Int?
+  customLocationLimit Int?
+  customCurrency      String?  @db.VarChar(3)
+  customMonthlyPrice  Decimal? @db.Decimal(10, 2)
+  customYearlyPrice   Decimal? @db.Decimal(10, 2)
+
+  suspendedAt   DateTime?
+  suspendReason String?   @db.VarChar(500)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  brand    Brand                 @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  plan     BillingPlan?          @relation(fields: [planId], references: [id], onDelete: Restrict)
+  payments SubscriptionPayment[]
+  events   SubscriptionEvent[]
+  notices  SubscriptionNotice[]
+
+  @@index([accessEndsAt])
+  @@index([planId])
+}
+
+model SubscriptionEvent {
+  id             String                @id @default(uuid())
+  subscriptionId String
+  brandId        String
+  type           SubscriptionEventType
+  actorId        String?
+  actorRole      BillingActorRole
+  payload        Json
+  createdAt      DateTime              @default(now())
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId, createdAt, id])
+}
+
+model SubscriptionNotice {
+  id             String                 @id @default(uuid())
+  subscriptionId String
+  kind           SubscriptionNoticeKind
+  anchorAt       DateTime
+  daysBefore     Int                    @db.SmallInt
+  sentAt         DateTime               @default(now())
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriptionId, kind, anchorAt, daysBefore])
+}
+
+// Shared by all providers. Provider-specific data: externalId and providerData only.
+model SubscriptionPayment {
+  id             String @id @default(uuid())
+  number         Int    @unique @default(autoincrement())
+  subscriptionId String
+  brandId        String
+
+  planId        String
+  planName      String        @db.VarChar(100)
+  billingPeriod BillingPeriod
+  countryCode   String        @db.VarChar(2)
+  currency      String        @db.VarChar(3)
+  amount        Decimal       @db.Decimal(10, 2)
+
+  provider SubscriptionPaymentProvider
+  status   SubscriptionPaymentStatus   @default(PENDING)
+  method   SubscriptionPaymentMethod?
+
+  externalId    String? @db.VarChar(255)
+  providerData  Json?
+  reference     String? @db.VarChar(255)
+  failureReason String? @db.VarChar(500)
+  ownerComment  String? @db.VarChar(1000)
+
+  expiresAt   DateTime?
+  paidAt      DateTime?
+  confirmedAt DateTime?
+  periodStart DateTime?
+  periodEnd   DateTime?
+
+  createdById   String?
+  createdByRole BillingActorRole
+  confirmedById String?
+  adminNote     String?          @db.VarChar(2000)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  plan         BillingPlan  @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@unique([provider, externalId])
+  @@index([brandId, createdAt, id])
+  @@index([status, createdAt, id])
+  @@index([status, expiresAt])
 }

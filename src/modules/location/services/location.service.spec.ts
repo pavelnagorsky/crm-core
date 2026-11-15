@@ -9,6 +9,7 @@ import { UpdateLocationDto } from '../dto/update-location.dto.js';
 import { LocationService } from './location.service.js';
 import { AuditActorRole } from '../../audit/enums/audit-actor-role.enum.js';
 import { AuditEvent } from '../../audit/enums/audit-event.enum.js';
+import { createBillingFacadeStub } from '../../billing/testing/billing-facade.stub.js';
 
 describe('LocationService locale and business type', () => {
   const location = {
@@ -46,6 +47,7 @@ describe('LocationService locale and business type', () => {
     bookingDeletionPolicy as never,
     { invalidate: vi.fn() } as never,
     events as never,
+    createBillingFacadeStub(),
   );
 
   beforeEach(() => {

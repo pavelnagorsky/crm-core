@@ -15,8 +15,14 @@ export class BookingSetupResponseDto {
   @ApiProperty({ type: () => PublicProductCatalogDto })
   products: PublicProductCatalogDto;
 
+  @ApiProperty({
+    description:
+      'False while the brand subscription is blocked: show the page, but no booking form',
+  })
+  isOnlineBookingAvailable: boolean;
+
   static fromEntity(
-    { catalog, staff, products }: BookingSetup,
+    { catalog, staff, products, isOnlineBookingAvailable }: BookingSetup,
     staffReviewSummaries: ReadonlyMap<string, ReviewStaffSummary> = new Map(),
   ): BookingSetupResponseDto {
     const uncategorizedServices = catalog.services.filter(
@@ -42,6 +48,7 @@ export class BookingSetupResponseDto {
       ),
     );
     dto.products = PublicProductCatalogDto.fromEntities(products);
+    dto.isOnlineBookingAvailable = isOnlineBookingAvailable;
     return dto;
   }
 }

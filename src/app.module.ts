@@ -21,6 +21,9 @@ import { ClientsAnalyticsModule } from './modules/clients/analytics/clients-anal
 import { ClientsModule } from './modules/clients/clients.module.js';
 import { DashboardModule } from './modules/dashboard/dashboard.module.js';
 import { FilesModule } from './modules/files/files.module.js';
+import { BillingAdminModule } from './modules/billing/admin/billing-admin.module.js';
+import { BillingOwnerModule } from './modules/billing/owner/billing-owner.module.js';
+import { BillingJobsModule } from './modules/billing/jobs/billing-jobs.module.js';
 import { FeedbackModule } from './modules/feedback/feedback.module.js';
 import { SupportModule } from './modules/support/support.module.js';
 import { HealthModule } from './modules/health/health.module.js';
@@ -70,6 +73,9 @@ import { AppThrottlerGuard } from './shared/guards/app-throttler.guard.js';
     HealthModule,
     FilesModule,
     FeedbackModule,
+    BillingOwnerModule,
+    BillingAdminModule,
+    BillingJobsModule,
     SupportModule,
     ReviewImportModule,
     DashboardModule,

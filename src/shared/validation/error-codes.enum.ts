@@ -685,4 +685,84 @@ export const ErrorCode = {
     code: 'REVIEW_IMPORT_TOO_MANY_ROWS',
     message: 'Import file exceeds the row limit',
   },
+  PLAN_STAFF_LIMIT_REACHED: {
+    code: 'PLAN_STAFF_LIMIT_REACHED',
+    message: 'The subscription plan has no free staff seats',
+  },
+  PLAN_LOCATION_LIMIT_REACHED: {
+    code: 'PLAN_LOCATION_LIMIT_REACHED',
+    message: 'The subscription plan has no free locations',
+  },
+  PLAN_USAGE_EXCEEDS_LIMITS: {
+    code: 'PLAN_USAGE_EXCEEDS_LIMITS',
+    message: 'Current usage exceeds the limits of this plan',
+  },
+  BILLING_PLAN_NOT_AVAILABLE: {
+    code: 'BILLING_PLAN_NOT_AVAILABLE',
+    message: 'This plan is not available for purchase',
+  },
+  BILLING_PLAN_PRICE_MISSING: {
+    code: 'BILLING_PLAN_PRICE_MISSING',
+    message: 'This plan has no current price in the pricing country',
+  },
+  BILLING_PLAN_CODE_EXISTS: {
+    code: 'BILLING_PLAN_CODE_EXISTS',
+    message: 'A plan with this code already exists',
+  },
+  BILLING_PLAN_LAST_PUBLIC: {
+    code: 'BILLING_PLAN_LAST_PUBLIC',
+    message: 'The last public standard plan cannot be archived',
+  },
+  BILLING_PRICE_EFFECTIVE_FROM_PAST: {
+    code: 'BILLING_PRICE_EFFECTIVE_FROM_PAST',
+    message: 'Price version cannot start in the past',
+  },
+  BILLING_PRICE_ALREADY_EFFECTIVE: {
+    code: 'BILLING_PRICE_ALREADY_EFFECTIVE',
+    message: 'A price version that is already in effect cannot be deleted',
+  },
+  BILLING_PRICE_CURRENCY_MISMATCH: {
+    code: 'BILLING_PRICE_CURRENCY_MISMATCH',
+    message: 'Currency does not match the currency of the country',
+  },
+  BILLING_PROVIDER_NOT_AVAILABLE: {
+    code: 'BILLING_PROVIDER_NOT_AVAILABLE',
+    message: 'Payment provider is not available',
+  },
+  SUBSCRIPTION_NOT_STARTED: {
+    code: 'SUBSCRIPTION_NOT_STARTED',
+    message: 'The brand has no subscription yet',
+  },
+  SUBSCRIPTION_PAYMENT_NOT_CONFIRMABLE: {
+    code: 'SUBSCRIPTION_PAYMENT_NOT_CONFIRMABLE',
+    message: 'This payment cannot be confirmed',
+  },
+  SUBSCRIPTION_PAYMENT_NOT_CANCELABLE: {
+    code: 'SUBSCRIPTION_PAYMENT_NOT_CANCELABLE',
+    message: 'Only a pending payment can be canceled',
+  },
+  SUBSCRIPTION_PAYMENT_DATE_INVALID: {
+    code: 'SUBSCRIPTION_PAYMENT_DATE_INVALID',
+    message: 'Payment date cannot be in the future or before the request',
+  },
+  SUBSCRIPTION_NO_PAID_PERIOD: {
+    code: 'SUBSCRIPTION_NO_PAID_PERIOD',
+    message: 'There is no paid period left to convert',
+  },
+  SUBSCRIPTION_PLAN_MANAGED_BY_SUPPORT: {
+    code: 'SUBSCRIPTION_PLAN_MANAGED_BY_SUPPORT',
+    message: 'This plan is managed by support',
+  },
+  SUBSCRIPTION_PLAN_REQUIRED: {
+    code: 'SUBSCRIPTION_PLAN_REQUIRED',
+    message: 'The subscription needs a plan for this action',
+  },
+  SUBSCRIPTION_ALREADY_EXISTS: {
+    code: 'SUBSCRIPTION_ALREADY_EXISTS',
+    message: 'The brand already has a subscription',
+  },
+  ONLINE_BOOKING_UNAVAILABLE: {
+    code: 'ONLINE_BOOKING_UNAVAILABLE',
+    message: 'Online booking is temporarily unavailable',
+  },
 } as const satisfies Record<string, ErrorCodeEntry>;

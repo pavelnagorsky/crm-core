@@ -107,3 +107,44 @@ describe('TimeUtils zoned calendar-day ranges', () => {
     expect(range.lt?.toISOString()).toBe('2026-11-11T21:00:00.000Z');
   });
 });
+
+describe('TimeUtils.addMonthsAnchoredInTz', () => {
+  const tz = 'Europe/Minsk';
+  const at = (date: string) => TimeUtils.zonedDateStart(date, tz);
+  const chain = (start: string, anchor: number, steps: number, months = 1) => {
+    const result: string[] = [];
+    let current = at(start);
+    for (let i = 0; i < steps; i++) {
+      current = TimeUtils.addMonthsAnchoredInTz(current, months, anchor, tz);
+      result.push(TimeUtils.zonedDateStr(current, tz));
+    }
+    return result;
+  };
+
+  it('keeps the anchor day instead of drifting after a short month', () => {
+    expect(chain('2027-01-31', 31, 3)).toEqual([
+      '2027-02-28',
+      '2027-03-31',
+      '2027-04-30',
+    ]);
+  });
+
+  it('returns to February 29 in a leap year with a yearly period', () => {
+    expect(chain('2028-02-29', 29, 4, 12)).toEqual([
+      '2029-02-28',
+      '2030-02-28',
+      '2031-02-28',
+      '2032-02-29',
+    ]);
+  });
+
+  it('lands on local midnight across DST in other timezones', () => {
+    const end = TimeUtils.addMonthsAnchoredInTz(
+      TimeUtils.zonedDateStart('2027-03-14', 'America/New_York'),
+      1,
+      14,
+      'America/New_York',
+    );
+    expect(end.toISOString()).toBe('2027-04-14T04:00:00.000Z');
+  });
+});

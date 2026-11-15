@@ -1,1 +1,1 @@
-export const PERMISSIONS_VERSION = 2;
+export const PERMISSIONS_VERSION = 3;

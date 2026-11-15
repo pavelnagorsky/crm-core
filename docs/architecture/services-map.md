@@ -80,6 +80,19 @@
 | AuditService / AuditRenderer | Хранение/чтение аудита и локализованное представление событий. |
 | NotificationsService / EmailChannel / EmailRenderer | Обработка событий уведомлений, доставка email и рендеринг шаблонов. |
 | FilesService | Метаданные файлов и интеграция с хранилищем. |
+| [BillingFacade](../../src/modules/billing/billing.facade.ts) | Публичный API биллинга для доменов CRM: старт подписки бренда, проверка лимита мест и филиалов, доступность онлайн-записи, отмена заявок при удалении бренда. |
+| BillingPlanService / BillingSettingsService | Тарифы, версии цен по странам и настройки биллинга с процессным кэшем. |
+| SubscriptionService / SubscriptionEventService / SubscriptionNoticeService | Чтение подписки и блокировка `withLock` (транзакция, `FOR UPDATE`, сброс кэша), журнал событий, отметки отправленных напоминаний. |
+| SubscriptionStartService / SubscriptionPeriodService / SubscriptionPlanService / SubscriptionTermsService | Операции над подпиской: старт и бэкфилл, продление периода, смена тарифа, триал, страна, приостановка. |
+| SubscriptionPaymentService / PaymentRequestService / PaymentConfirmationService / ManualPaymentService | Чтение платежей; создание и отмена заявок; подтверждение и применение оплаты; ручные оплаты и бесплатные продления админа. |
+| SubscriptionAccessService | Вычисляемое состояние подписки, действующие лимиты и каталог цен с кэшем. |
+| PaymentProviderRegistry | Платёжные провайдеры (`OFFLINE`, `COMPLIMENTARY`; позже bePaid) за единым интерфейсом `PaymentProvider`. |
+| BillingUsageService | Подсчёт сотрудников и филиалов через StaffService и LocationService. |
+| BrandSubscriptionQueryService / BrandPaymentRequestService / BrandPlanChangeService / UserSubscriptionStatesService | Раздел «Подписка» владельца: экран и история, заявки на оплату, смена тарифа, состояния брендов пользователя (BillingOwnerModule). |
+| AdminSubscriptionsQueryService / AdminSubscriptionLifecycleService / AdminSubscriptionBillingService / AdminSubscriptionPaymentsService / AdminBillingPlansService | Админка платформы: поиск и карточка подписки, жизненный цикл, тариф и оплаты, платежи, тарифы (BillingAdminModule). |
+| PaymentMailService / SubscriptionNoticeMailService / BillingLinkService | Письма биллинга о платежах и окончании доступа, ссылки на экран оплаты (BillingMailModule). |
+| SubscriptionNoticesCron / SubscriptionPaymentsCron | Напоминания об окончании доступа и истечение заявок (BillingJobsModule). |
+| BillingLaunchService | Запуск платных тарифов и бэкфилл подписок; только из `npm run billing:launch`. |
 | MoneyUtils / UnitCostUtils / QuantityUtils / TimeUtils / XlsxUtils | Статические утилиты, не DI-сервисы. |
 
 Иерархия модулей и восстановление SQL view: [services-catalog.md](./services-catalog.md).

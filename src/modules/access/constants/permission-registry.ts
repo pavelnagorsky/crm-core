@@ -29,6 +29,13 @@ export const PERMISSION_REGISTRY: Readonly<
       [PermissionAccess.WRITE]: action(),
     },
   },
+  [Claim.BILLING]: {
+    scope: PermissionScope.BRAND,
+    actions: {
+      [PermissionAccess.READ]: action(),
+      [PermissionAccess.WRITE]: action(),
+    },
+  },
   [Claim.LOCATION_CREATE]: {
     scope: PermissionScope.BRAND,
     actions: {

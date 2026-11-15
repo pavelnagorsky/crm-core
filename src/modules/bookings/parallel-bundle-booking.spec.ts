@@ -17,6 +17,7 @@ import { BookingSlotLockService } from './services/booking-slot-lock.service.js'
 import { BookingSetupService } from './services/setup/booking-setup.service.js';
 import { StaffSelectionMode } from './enums/staff-selection-mode.enum.js';
 import { BookingCalendarReadService } from './services/read/booking-calendar-read.service.js';
+import { createBillingFacadeStub } from '../billing/testing/billing-facade.stub.js';
 
 function setup() {
   const services = [
@@ -184,6 +185,7 @@ function setup() {
     scheduling,
     { created: vi.fn(), notifyCreated: vi.fn() } as never,
     reservation,
+    createBillingFacadeStub(),
   );
   const resolve = new BookingSetupService(
     catalog as never,
@@ -192,6 +194,7 @@ function setup() {
     locations as never,
     selection,
     scheduling,
+    createBillingFacadeStub(),
   );
   const request = {
     locationId: 'location',

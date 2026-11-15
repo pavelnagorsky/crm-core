@@ -168,6 +168,28 @@ export class TimeUtils {
   }
 
   /**
+   * Shifts a UTC Date by N calendar months in the target timezone and lands on the
+   * anchor day, clamped to the target month's length, at 00:00. Unlike addMonthsInTz,
+   * the day does not drift: anchor 31 gives Jan 31 → Feb 28 → Mar 31 → Apr 30.
+   */
+  static addMonthsAnchoredInTz(
+    date: Date,
+    months: number,
+    anchorDay: number,
+    timezone: string,
+  ): Date {
+    const p = TimeUtils.toZonedParts(date, timezone);
+    const totalMonths = p.year * 12 + (p.month - 1) + months;
+    const year = Math.floor(totalMonths / 12);
+    const month = (totalMonths % 12) + 1;
+    const day = Math.min(
+      anchorDay,
+      getDaysInMonth(new Date(year, month - 1, 1)),
+    );
+    return TimeUtils.zonedDayStart(year, month, day, timezone);
+  }
+
+  /**
    * Returns the UTC instant of HH:00 on the given calendar day in the target timezone.
    * Handles out-of-range hour (e.g. 24, -1) and day via Date.UTC normalization.
    */

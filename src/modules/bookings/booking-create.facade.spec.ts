@@ -81,7 +81,7 @@ function catalogDeps(db: {
   ];
 }
 
-function setup() {
+function setup(billing?: { isOnlineBookingOpen: ReturnType<typeof vi.fn> }) {
   const clients = { resolveForBooking: vi.fn() };
   const staff = {
     resolveStaffForService: vi.fn().mockResolvedValue([]),
@@ -120,8 +120,9 @@ function setup() {
     ...channelDeps(),
     ...commercialDeps(),
     ...catalogDeps(db),
+    billing,
   );
-  return { service, clients, staff };
+  return { service, clients, staff, db };
 }
 
 function pricingSetup() {
@@ -287,6 +288,32 @@ describe('BookingCreateFacade client ban', () => {
       HttpStatus.BAD_REQUEST,
     );
     expect(clients.resolveForBooking).not.toHaveBeenCalled();
+  });
+});
+
+describe('BookingCreateFacade online booking availability', () => {
+  it('rejects a public booking while the brand subscription blocks online booking', async () => {
+    const billing = { isOnlineBookingOpen: vi.fn().mockResolvedValue(false) };
+    const { service, clients, staff, db } = setup(billing);
+    const transaction = vi.fn();
+    Object.assign(db, { $transaction: transaction });
+
+    const error = await service
+      .createPublicBooking('business-1', dto, publicAttribution)
+      .then(
+        () => null,
+        (caught: unknown) => caught,
+      );
+
+    expect(error).toBeInstanceOf(AppException);
+    expect((error as AppException).errorCode).toBe(
+      'ONLINE_BOOKING_UNAVAILABLE',
+    );
+    expect((error as AppException).getStatus()).toBe(HttpStatus.FORBIDDEN);
+    expect(billing.isOnlineBookingOpen).toHaveBeenCalledWith('brand-1');
+    expect(clients.resolveForBooking).not.toHaveBeenCalled();
+    expect(staff.resolveStaffForService).not.toHaveBeenCalled();
+    expect(transaction).not.toHaveBeenCalled();
   });
 });
 
@@ -1159,12 +1186,21 @@ function createBookingService(
   earnings: ConstructorParameters<typeof BookingReservationService>[5],
   services: ConstructorParameters<typeof BookingSelectionService>[1],
   location: ConstructorParameters<typeof BookingReservationService>[1],
+  billing: { isOnlineBookingOpen: ReturnType<typeof vi.fn> } = {
+    isOnlineBookingOpen: vi.fn().mockResolvedValue(true),
+  },
 ): BookingCreateFacade {
   const slots = new BookingSlotLockService(staff, calendar);
+  // Online booking is open unless a test says otherwise (plan section 6.2).
+  const bookingLocation = Object.assign(Object.create(location), {
+    getBookingSettings:
+      (location as { getBookingSettings?: unknown }).getBookingSettings ??
+      vi.fn().mockResolvedValue({ brandId: 'brand-1' }),
+  }) as typeof location;
   return new BookingCreateFacade(
     clients,
     limiter,
-    location,
+    bookingLocation,
     new BookingSelectionService(location, services, orders),
     new BookingSchedulingService(db, staff, calendar),
     new BookingEventsService(emitter, clientTokens, location, {
@@ -1178,5 +1214,6 @@ function createBookingService(
       orders,
       earnings,
     ),
+    billing as never,
   );
 }

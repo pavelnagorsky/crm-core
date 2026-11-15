@@ -60,6 +60,14 @@ const regularExpressions = {
     /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:?\d{2})$/i,
   // Several staff names in one cell — "Анна, Мария", "Анна; Мария", "Анна / Мария" or one per line
   staffNameSeparators: /\s*[,;/\r\n]+\s*/,
+  // ISO 3166-1 alpha-2 country code — BY, RU, KZ
+  countryCode: /^[A-Z]{2}$/,
+  // ISO 4217 currency code — BYN, RUB
+  currencyCode: /^[A-Z]{3}$/,
+  // Billing plan code — master, team-plus
+  billingPlanCode: /^[a-z0-9][a-z0-9-]*$/,
+  // Subscription payment number as the owner writes it — KL-000123, KL000123, 123
+  paymentNumber: /^(?:KL-?)?(\d{1,9})$/i,
 };
 
 export default regularExpressions;

@@ -1,6 +1,7 @@
 export enum Claim {
   BRAND = 'brand',
   BRAND_SETTINGS = 'brand.settings',
+  BILLING = 'billing',
   LOCATION_CREATE = 'location.create',
   LOCATION = 'location',
   LOCATION_SETTINGS = 'location.settings',

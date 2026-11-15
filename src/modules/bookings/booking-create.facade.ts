@@ -10,6 +10,7 @@ import { TimeUtils } from '../../shared/time/time.utils.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { AuditActorRole } from '../audit/enums/audit-actor-role.enum.js';
 import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
+import { BillingFacade } from '../billing/billing.facade.js';
 import { ClientsService } from '../clients/services/clients.service.js';
 import { LocationService } from '../location/services/location.service.js';
 import { StaffBookingEvent } from '../notifications/enums/staff-booking-event.enum.js';
@@ -52,6 +53,7 @@ export class BookingCreateFacade {
     private readonly scheduling: BookingSchedulingService,
     private readonly events: BookingEventsService,
     private readonly reservations: BookingReservationService,
+    private readonly billing: BillingFacade,
   ) {}
 
   async createPublicBooking(
@@ -61,6 +63,7 @@ export class BookingCreateFacade {
     context: PublicBookingRequestContext = { ip: 'unknown' },
   ): Promise<BookingWithItems> {
     this.assertPublicClientFields(dto);
+    await this.assertOnlineBookingOpen(locationId);
     this.rateLimiter.assertAllowed(dto.phone, context.ip);
     const request: BookingCreationRequest | undefined = dto.idempotencyKey
       ? {
@@ -358,5 +361,16 @@ export class BookingCreateFacade {
       'anonymous' in dto &&
       dto.anonymous === true
     );
+  }
+
+  /** Plan section 6.2: a blocked brand keeps its page, but takes no online bookings. */
+  private async assertOnlineBookingOpen(locationId: string): Promise<void> {
+    const { brandId } =
+      await this.locationService.getBookingSettings(locationId);
+    if (!(await this.billing.isOnlineBookingOpen(brandId)))
+      throw new AppException(
+        ErrorCode.ONLINE_BOOKING_UNAVAILABLE,
+        HttpStatus.FORBIDDEN,
+      );
   }
 }

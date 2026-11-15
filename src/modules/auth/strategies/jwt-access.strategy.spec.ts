@@ -40,7 +40,7 @@ describe('Access JWT claim migration', () => {
     expect(strategy.validate(token)).toBe(token);
   });
 
-  it.each([undefined, 1, 3])(
+  it.each([undefined, 1, 2])(
     'refreshes an unsupported permissions format %s even with empty or global grants',
     (version) => {
       for (const permissions of [{}, { '*': ['*'] }]) {

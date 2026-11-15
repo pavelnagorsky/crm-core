@@ -43,3 +43,12 @@ export type CountryCode = keyof typeof COUNTRY_DEFAULTS;
 
 export type CountryCurrency =
   (typeof COUNTRY_DEFAULTS)[CountryCode]['currency'];
+
+/** Defaults of a country code from outside input; undefined for an unknown one. */
+export function countryDefault(
+  countryCode: string,
+): CountryDefault | undefined {
+  return (COUNTRY_DEFAULTS as Record<string, CountryDefault | undefined>)[
+    countryCode
+  ];
+}
