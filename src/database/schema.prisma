@@ -1886,7 +1886,6 @@ model BillingSettings {
   pendingRequestGraceDays    Int                         @default(3) @db.SmallInt
   offlinePaymentInstructions String?                     @db.VarChar(5000)
   adminNotifyEmail           String?                     @db.VarChar(254)
-  launchedAt                 DateTime?
   enforcementEnabled         Boolean                     @default(false)
   updatedAt                  DateTime                    @updatedAt
   updatedById                String?

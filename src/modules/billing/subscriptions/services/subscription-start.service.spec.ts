@@ -40,17 +40,6 @@ describe('SubscriptionStartService', () => {
     const origin = { countryCode: 'BY', timezone: TZ };
     const now = new Date('2026-11-15T09:00:00Z');
 
-    it('does nothing before the launch', async () => {
-      settings.read.mockResolvedValue({
-        ...BILLING_SETTINGS,
-        launchedAt: null,
-      });
-      await service.start('brand-1', 'owner-1', origin, tx as never, now);
-      expect(settings.read).toHaveBeenCalledWith(tx);
-      expect(tx.subscription.createManyAndReturn).not.toHaveBeenCalled();
-      expect(tx.subscription.create).not.toHaveBeenCalled();
-    });
-
     it('starts a trial from the local day start, inside the brand transaction', async () => {
       tx.subscription.createManyAndReturn.mockImplementation(
         async ({ data }) => data,

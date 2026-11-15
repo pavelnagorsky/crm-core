@@ -95,7 +95,7 @@ export class LocationService {
   }
 
   /**
-   * Billing launch: country and timezone of the oldest active location, else of any
+   * Billing origin: country and timezone of the oldest active location, else of any
    * location; brands without locations are absent.
    */
   async findBillingOrigins(

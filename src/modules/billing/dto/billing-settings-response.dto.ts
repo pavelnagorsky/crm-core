@@ -34,14 +34,6 @@ export class BillingSettingsResponseDto {
   @ApiProperty({ type: String, nullable: true })
   adminNotifyEmail: string | null;
 
-  @ApiProperty({
-    type: String,
-    format: 'date-time',
-    nullable: true,
-    description: 'Set by the launch script only',
-  })
-  launchedAt: Date | null;
-
   @ApiProperty()
   enforcementEnabled: boolean;
 
@@ -65,7 +57,6 @@ export class BillingSettingsResponseDto {
       pendingRequestGraceDays: settings.pendingRequestGraceDays,
       offlinePaymentInstructions: settings.offlinePaymentInstructions,
       adminNotifyEmail: settings.adminNotifyEmail,
-      launchedAt: settings.launchedAt,
       enforcementEnabled: settings.enforcementEnabled,
       updatedAt: settings.updatedAt,
       providers: providers.map(PaymentProviderDto.fromEntity),

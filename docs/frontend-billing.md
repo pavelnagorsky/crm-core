@@ -20,7 +20,7 @@
 | Письма владельцу и админу (напоминания, заявка, оплата) | Ссылки ведут в `/app/brands/:brandId/billing` и `/admin/billing/payments?search=KL-…` |
 | Новый claim `billing` (только OWNER), `PERMISSIONS_VERSION = 3` | Видимость раздела «Подписка» |
 
-**Запуск платных тарифов.** Биллинг запущен на stage 2026-11-15 (`launchedAt` проставлен): у всех существующих брендов триал до 2026-12-15, новые бренды получают подписку при создании. Режим «без запуска» (`launchedAt = null`) остаётся в коде: подписок нет, все бренды в состоянии `FREE`, баннеров, лимитов и блокировок нет, `subscription-states` возвращает пустой массив. Фронтенд должен корректно работать и в нём (например, на чистой локальной базе).
+**Биллинг включён всегда.** Отдельного запуска нет: каждый новый бренд получает подписку с триалом при создании. На stage у брендов, существовавших на 2026-11-15, триал до 2026-12-15. Бренд без подписки (например, созданный сидом) — в состоянии `FREE`: баннеров, лимитов и блокировок нет, в `subscription-states` его нет. Фронтенд должен корректно показывать и такой бренд.
 
 Блокировка и лимиты дополнительно включаются флагом `enforcementEnabled` в настройках. Пока он выключен, `isBlocked` всегда `false`, а лимиты не проверяются, но состояние, даты и баннеры уже работают.
 
@@ -88,7 +88,7 @@
 
 | `state` | Что значит | Доступ |
 | --- | --- | --- |
-| `FREE` | Биллинг не запущен, подписки нет | Полный, ничего не показывать |
+| `FREE` | У бренда нет подписки (например, создан сидом) | Полный, ничего не показывать |
 | `TRIAL` | Пробный период | Полный, лимитов нет |
 | `ACTIVE` | Оплачено | Полный, лимиты тарифа |
 | `PAST_DUE` | Оплата закончилась, идут льготные дни (3 дня, плюс 3 дня при открытой заявке) | Полный, красный баннер |
@@ -317,7 +317,7 @@ responseValue: {
 | `PLAN_USAGE_EXCEEDS_LIMITS` | 409 | Оплата или смена на тариф, который не вмещает использование | `{ staff: { limit, used }, locations: { limit, used } }` |
 | `BILLING_PLAN_NOT_AVAILABLE` | 409 | Тариф архивный, непубличный или `CUSTOM` | — |
 | `BILLING_PLAN_PRICE_MISSING` | 409 | У тарифа нет цены в стране бренда | — |
-| `SUBSCRIPTION_NOT_STARTED` | 409 | Действие в `FREE` (биллинг не запущен) | — |
+| `SUBSCRIPTION_NOT_STARTED` | 409 | Действие в `FREE` (у бренда нет подписки) | — |
 | `SUBSCRIPTION_NO_PAID_PERIOD` | 409 | Смена тарифа без оплаченного остатка | — |
 | `SUBSCRIPTION_PLAN_MANAGED_BY_SUPPORT` | 409 | Владелец меняет тариф `CUSTOM` | — |
 | `SUBSCRIPTION_PAYMENT_NOT_CANCELABLE` | 409 | Заявка уже не `PENDING` | `{ status }` |
@@ -331,7 +331,7 @@ responseValue: {
 | `SUBSCRIPTION_PAYMENT_NOT_CONFIRMABLE` | 409 | Админ: уже `PAID` или не `OFFLINE` | `{ status, provider }` |
 | `SUBSCRIPTION_PAYMENT_DATE_INVALID` | 400 | Админ: `paidAt` в будущем или раньше заявки | — |
 | `SUBSCRIPTION_PLAN_REQUIRED` | 409 | Админ: продление без тарифа у подписки | — |
-| `SUBSCRIPTION_ALREADY_EXISTS` | 409 | Админ: старт пилота для бренда с подпиской | — |
+| `SUBSCRIPTION_ALREADY_EXISTS` | 409 | Админ: старт подписки для бренда, у которого она уже есть | — |
 
 Не найдено — обычный `404`. Ошибки валидации — стандартный `400`; так же, без отдельного кода, отвечают «сумма должна быть больше 0» (`…/payments` админа), «ровно одно из `days` и `until`» (`…/extend`) и «`trialEndsOn` в прошлом» (`…/start`).
 
@@ -359,9 +359,9 @@ responseValue: {
 
 `GET` / `PUT /admin/billing/settings` → один плоский объект: поля настроек и `providers`.
 
-Поля: `defaultCountryCode`, `trialDays`, `graceDays`, `reminderDaysBefore` (например `[7, 3, 1]`), `paymentProvider`, `paymentRequestTtlDays`, `pendingRequestGraceDays`, `offlinePaymentInstructions` (текст в `nextAction.instructions`), `adminNotifyEmail` (кому письма о новых заявках), `enforcementEnabled`, а также только для чтения `launchedAt` и `updatedAt`.
+Поля: `defaultCountryCode`, `trialDays`, `graceDays`, `reminderDaysBefore` (например `[7, 3, 1]`), `paymentProvider`, `paymentRequestTtlDays`, `pendingRequestGraceDays`, `offlinePaymentInstructions` (текст в `nextAction.instructions`), `adminNotifyEmail` (кому письма о новых заявках), `enforcementEnabled`, а также только для чтения `updatedAt`.
 
-`providers`: `[{ code, ownerInitiated, adminConfirmable, webhooks, statusPolling, recurring }]` — варианты для выбора `paymentProvider`. `PUT` принимает все поля настроек целиком (не частично), кроме `launchedAt`, `updatedAt` и `providers`: `launchedAt` только для чтения. По умолчанию: `trialDays` 30, `graceDays` 3, `reminderDaysBefore` `[7, 3, 1]`, `paymentRequestTtlDays` 14, `pendingRequestGraceDays` 3, `enforcementEnabled` `false`.
+`providers`: `[{ code, ownerInitiated, adminConfirmable, webhooks, statusPolling, recurring }]` — варианты для выбора `paymentProvider`. `PUT` принимает все поля настроек целиком (не частично), кроме `updatedAt` и `providers`. По умолчанию: `trialDays` 30, `graceDays` 3, `reminderDaysBefore` `[7, 3, 1]`, `paymentRequestTtlDays` 14, `pendingRequestGraceDays` 3, `enforcementEnabled` `false`.
 
 ### 10.3 «Подписки»
 
@@ -370,7 +370,7 @@ responseValue: {
 | GET | `/admin/billing/subscriptions` | query: `state[]`, `planCode[]`, `countryCode[]`, `accessEndsBefore`, `accessEndsAfter`, `hasPendingPayment`, `overLimit`, `needsCustomPlan`, `search` (бренд или email владельца), `orderBy`: `accessEndsAt` / `createdAt` | страница `AdminSubscriptionItem` |
 | POST | `/admin/billing/subscriptions/extend-trials` | `{ until, reason, dryRun? }` | `{ count, dryRun }` — сначала вызвать с `dryRun: true` и показать подтверждение «Будет продлено N брендов» |
 | GET | `/admin/billing/subscriptions/:brandId` | — | карточка (ниже) |
-| POST | `…/:brandId/start` | `{ trialEndsOn: 'YYYY-MM-DD' }` | карточка; пилот до общего запуска |
+| POST | `…/:brandId/start` | `{ trialEndsOn: 'YYYY-MM-DD' }` | карточка; старт подписки бренду без неё (`FREE`) |
 | POST | `…/:brandId/extend-trial` | `{ days, reason }` | карточка |
 | POST | `…/:brandId/extend` | `{ days \| until, reason }` | карточка; подарить дни (`COMPLIMENTARY`) |
 | POST | `…/:brandId/payments` | `{ planCode, billingPeriod, amount, currency, paidAt, method, reference?, adminNote? }` | карточка; зачесть оплату без заявки |
@@ -415,4 +415,4 @@ responseValue: {
 6. Публичная запись: `isOnlineBookingAvailable` и `ONLINE_BOOKING_UNAVAILABLE`.
 7. Онбординг второго бренда: предупреждение по `trial-eligibility`.
 8. Админка: тарифы, цены, настройки, подписки, платежи.
-9. Проверить режим `FREE` (до запуска) — интерфейс выглядит как сейчас.
+9. Проверить бренд в `FREE` (без подписки, например из сида) — интерфейс выглядит как раньше.

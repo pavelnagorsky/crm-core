@@ -34,7 +34,6 @@ export function billingSettings(
     pendingRequestGraceDays: 3,
     offlinePaymentInstructions: 'Pay by ERIP',
     adminNotifyEmail: null,
-    launchedAt: new Date('2026-01-01T00:00:00Z'),
     enforcementEnabled: true,
     updatedAt: NOW,
     updatedById: null,

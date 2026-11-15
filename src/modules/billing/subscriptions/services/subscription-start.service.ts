@@ -26,10 +26,7 @@ export class SubscriptionStartService {
     private readonly settings: BillingSettingsService,
   ) {}
 
-  /**
-   * New brand after launch, inside BrandService.create. Settings are read in the
-   * transaction: a brand created right after launch must not miss its subscription.
-   */
+  /** Every new brand, inside BrandService.create. */
   async start(
     brandId: string,
     ownerUserId: string,
@@ -38,7 +35,6 @@ export class SubscriptionStartService {
     now = new Date(),
   ): Promise<void> {
     const settings = await this.settings.read(tx);
-    if (!settings.launchedAt) return;
     const tz = origin.timezone;
     const dayStart = BillingPeriodCalculator.dayStart(now, tz);
     const trialEndsAt = TimeUtils.addDaysInTz(dayStart, settings.trialDays, tz);
@@ -89,7 +85,7 @@ export class SubscriptionStartService {
     );
   }
 
-  /** Pilot: one brand before launch (plan section 4.1). */
+  /** A brand without a subscription, started by an admin (plan section 4.1). */
   async startPilot(
     brandId: string,
     origin: SubscriptionOrigin,

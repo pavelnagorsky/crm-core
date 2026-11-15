@@ -24,7 +24,6 @@ export const BILLING_SETTINGS = {
   trialDays: 30,
   graceDays: 3,
   pendingRequestGraceDays: 3,
-  launchedAt: new Date('2026-11-01T00:00:00Z') as Date | null,
 };
 
 const price = (planId: string, period: BillingPeriod, amount: string) => ({

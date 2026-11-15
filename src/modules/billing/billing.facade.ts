@@ -27,7 +27,7 @@ export class BillingFacade {
     private readonly access: SubscriptionAccessService,
   ) {}
 
-  /** BrandService.create, inside its transaction. Nothing before launch. */
+  /** BrandService.create, inside its transaction. */
   startSubscription(
     brandId: string,
     ownerUserId: string,

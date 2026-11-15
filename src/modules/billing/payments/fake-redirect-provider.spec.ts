@@ -293,7 +293,6 @@ describe('Fake REDIRECT provider through the shared payment flow', () => {
     pendingRequestGraceDays: 3,
     offlinePaymentInstructions: null,
     adminNotifyEmail: null,
-    launchedAt: new Date('2026-10-01T00:00:00Z'),
     enforcementEnabled: true,
     updatedAt: new Date('2026-10-01T00:00:00Z'),
     updatedById: null,

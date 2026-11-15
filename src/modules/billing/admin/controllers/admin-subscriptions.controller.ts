@@ -108,7 +108,8 @@ export class AdminSubscriptionsController {
 
   @Post(':brandId/start')
   @ApiOperation({
-    summary: 'Pilot: start a trial for one brand before the launch',
+    summary:
+      'Start a trial for a brand that has no subscription (e.g. a seeded one)',
   })
   @ApiOkResponse({ type: ApiResponse(AdminSubscriptionDetailsResponseDto) })
   @ApiNotFoundResponse({ description: 'Brand not found' })

@@ -25,7 +25,7 @@ export class AdminSubscriptionLifecycleService {
     private readonly query: AdminSubscriptionsQueryService,
   ) {}
 
-  /** Pilot: a subscription for one brand before the launch (plan section 4.1). */
+  /** A subscription for a brand that has none, e.g. one created by a seed (plan section 4.1). */
   async start(
     brandId: string,
     dto: StartSubscriptionDto,
