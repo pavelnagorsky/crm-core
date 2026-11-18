@@ -66,7 +66,7 @@ export class ManualCreateBookingDto extends CreateBookingDto {
     enum: SETTABLE_BOOKING_STATUSES,
     required: false,
     description:
-      'Initial status. Omitted: CONFIRMED, or with isCustomTime COMPLETED once the visit has ended. Takes precedence over isCustomTime. COMPLETED and NO_SHOW require a visit that has already started (400 BOOKING_STATUS_BEFORE_START); COMPLETED also requires order:write (403 BOOKING_COMPLETED_CREATE_FORBIDDEN). COMPLETED and NO_SHOW never email the client.',
+      'Initial status. Omitted: CONFIRMED, or with isCustomTime COMPLETED once the visit has ended. Takes precedence over isCustomTime. COMPLETED and NO_SHOW require a visit that has already started (400 BOOKING_STATUS_BEFORE_START) and never email the client. COMPLETED needs no extra permission, as on a status change, and syncs order and payroll like a completion.',
   })
   @IsOptional()
   @IsEnum(SETTABLE_BOOKING_STATUSES)

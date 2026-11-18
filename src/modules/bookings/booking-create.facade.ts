@@ -28,7 +28,6 @@ import { BookingCreationRequest } from './interfaces/booking-creation-request.in
 import { BookingPricingResult } from './interfaces/booking-pricing-result.interface.js';
 import { BookingSelectionRequest } from './interfaces/booking-selection-request.interface.js';
 import { BookingWithItems } from './interfaces/booking-with-items.interface.js';
-import { ManualBookingAccess } from './interfaces/manual-booking-access.interface.js';
 import { PublicBookingRequestContext } from './interfaces/public-booking-request-context.interface.js';
 import { ResolvedBookingClient } from './interfaces/resolved-booking-client.interface.js';
 import { canHaveStatus } from './rules/booking-initial-status.rules.js';
@@ -115,7 +114,7 @@ export class BookingCreateFacade {
     locationId: string,
     dto: ManualCreateBookingDto,
     actor: AuditActor,
-    access: ManualBookingAccess = { canComplete: true },
+    ownStaffId?: string,
   ): Promise<BookingWithItems> {
     if (dto.anonymous === true && dto.clientId)
       throw new AppException(
@@ -131,7 +130,7 @@ export class BookingCreateFacade {
       },
       actor,
       dto,
-      access,
+      ownStaffId,
     );
     this.logger.log(
       `booking created (manual): id=${booking.id} locationId=${locationId} source=${booking.source} items=${booking.items.length} bundleId=${booking.bundleId ?? '-'} actor=${actor.name}`,
@@ -152,7 +151,7 @@ export class BookingCreateFacade {
     attribution: BookingAttribution,
     actor: AuditActor | null,
     dto: CreateBookingDto | ManualCreateBookingDto,
-    access: ManualBookingAccess = { canComplete: true },
+    ownStaffId?: string,
     tx?: Prisma.TransactionClient,
     request?: BookingCreationRequest,
   ): Promise<BookingCreationResult> {
@@ -214,10 +213,8 @@ export class BookingCreateFacade {
       // Custom time is the journal's "book anyway": the staff member's schedule is not checked.
       allowConflicts: isCustomTime,
     });
-    if (
-      access.ownStaffId &&
-      !items.some((item) => item.staffId === access.ownStaffId)
-    )
+    // Whoever may create the booking may also complete it, as on a status change.
+    if (ownStaffId && !items.some((item) => item.staffId === ownStaffId))
       throw new AppException(
         ErrorCode.BOOKING_OWN_STAFF_REQUIRED,
         HttpStatus.FORBIDDEN,
@@ -235,11 +232,6 @@ export class BookingCreateFacade {
         isCustomTime,
         envelopeEnd,
         location.isBookingConfirmationRequired && !internal,
-      );
-    if (status === BookingStatus.COMPLETED && !access.canComplete)
-      throw new AppException(
-        ErrorCode.BOOKING_COMPLETED_CREATE_FORBIDDEN,
-        HttpStatus.FORBIDDEN,
       );
     const client =
       publicClient ??

@@ -47,7 +47,7 @@ describe('Manual booking API permissions', () => {
     expect(create.createManualBooking).not.toHaveBeenCalled();
   });
 
-  it('allows booking without client management and passes only the financial creation choice', async () => {
+  it('allows booking without client or order management for a manager', async () => {
     const token = tokenPayload('MANAGER');
     removeGrant(token.permissions!['L:location-1'], Write(Claim.ORDER));
     removeGrant(token.permissions!['G:brand-1'], Write(Claim.CLIENT));
@@ -57,7 +57,7 @@ describe('Manual booking API permissions', () => {
       'location-1',
       dto,
       expect.objectContaining({ id: token.sub }),
-      { canComplete: false, ownStaffId: undefined },
+      undefined,
     );
     expect(staff.resolveOwnProfile).not.toHaveBeenCalled();
   });
@@ -74,7 +74,7 @@ describe('Manual booking API permissions', () => {
       'location-1',
       dto,
       expect.objectContaining({ id: token.sub }),
-      { canComplete: false, ownStaffId: 'anna' },
+      'anna',
     );
   });
 

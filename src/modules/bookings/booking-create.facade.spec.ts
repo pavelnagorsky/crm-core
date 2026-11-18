@@ -822,7 +822,6 @@ describe('BookingCreateFacade custom time', () => {
           endAt: '2020-09-20T10:30:00',
         },
         { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER },
-        { canComplete: false },
       );
 
       expect(booking.source).toBe(BookingSource.MANUAL);
@@ -898,12 +897,11 @@ describe('BookingCreateFacade custom time', () => {
   it('resolves a client automatically for manual booking without a client-management flag', async () => {
     const { service, tx, clients } = customTimeSetup();
 
-    await service.createManualBooking(
-      'business-1',
-      dto,
-      { id: 'user-1', name: 'Staff', role: AuditActorRole.STAFF },
-      { canComplete: false },
-    );
+    await service.createManualBooking('business-1', dto, {
+      id: 'user-1',
+      name: 'Staff',
+      role: AuditActorRole.STAFF,
+    });
 
     expect(clients.resolveForBooking).toHaveBeenCalledWith(
       'brand-1',
@@ -1017,22 +1015,25 @@ describe('BookingCreateFacade custom time', () => {
     );
   });
 
-  it('rejects creating a completed booking with custom time before writing the booking or client', async () => {
-    const { service, tx } = customTimeSetup();
-    await expect(
-      service.createManualBooking(
-        'business-1',
-        {
-          ...dto,
-          isCustomTime: true,
-          startAt: '2020-09-20T10:04:00',
-          endAt: '2020-09-20T10:30:00',
-        },
-        { id: 'user-1', name: 'Staff', role: AuditActorRole.STAFF },
-        { canComplete: false },
-      ),
-    ).rejects.toMatchObject({ status: 403 });
-    expect(tx.booking.create).not.toHaveBeenCalled();
+  it('lets a master complete their elapsed custom-time visit like a status change', async () => {
+    const { service, tx, orders, earnings } = customTimeSetup();
+    await service.createManualBooking(
+      'business-1',
+      {
+        ...dto,
+        isCustomTime: true,
+        startAt: '2020-09-20T10:04:00',
+        endAt: '2020-09-20T10:30:00',
+      },
+      { id: 'user-1', name: 'Staff', role: AuditActorRole.STAFF },
+      'staff-1',
+    );
+    expect(tx.booking.create.mock.calls[0][0].data.status).toBe(
+      BookingStatus.COMPLETED,
+    );
+    expect(orders.syncCompletedBooking).toHaveBeenCalledOnce();
+    expect(earnings.recordForCompletedBooking).toHaveBeenCalledOnce();
+    expect(earnings.syncForCompletedBooking).toHaveBeenCalledOnce();
   });
 
   it('keeps an ongoing booking with custom time confirmed under the manual channel', async () => {
@@ -1156,40 +1157,6 @@ describe('BookingCreateFacade custom time', () => {
       vi.useRealTimers();
     }
   });
-
-  it('rejects an elapsed booking with a coded error when the caller cannot complete it', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-09-20T07:30:00.000Z'));
-    try {
-      const { service, tx } = customTimeSetup();
-
-      const error = await service
-        .createManualBooking(
-          'business-1',
-          {
-            ...dto,
-            isCustomTime: true,
-            startAt: '2026-09-20T10:04:00',
-            endAt: '2026-09-20T10:30:00',
-          },
-          { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER },
-          { canComplete: false },
-        )
-        .then(
-          () => null,
-          (caught: unknown) => caught,
-        );
-
-      expect(error).toBeInstanceOf(AppException);
-      expect((error as AppException).errorCode).toBe(
-        'BOOKING_COMPLETED_CREATE_FORBIDDEN',
-      );
-      expect((error as AppException).getStatus()).toBe(403);
-      expect(tx.booking.create).not.toHaveBeenCalled();
-    } finally {
-      vi.useRealTimers();
-    }
-  });
 });
 
 describe('BookingCreateFacade manual status', () => {
@@ -1277,23 +1244,21 @@ describe('BookingCreateFacade manual status', () => {
     expect(earnings.recordForCompletedBooking).toHaveBeenCalledOnce();
   });
 
-  it('rejects COMPLETED without the completion permission', async () => {
-    const { service, tx } = customTimeSetup();
-    await expect(
-      service.createManualBooking(
-        'business-1',
-        { ...dto, ...elapsed, status: BookingStatus.COMPLETED },
-        owner,
-        { canComplete: false },
-      ),
-    ).rejects.toMatchObject({
-      errorCode: 'BOOKING_COMPLETED_CREATE_FORBIDDEN',
-      status: HttpStatus.FORBIDDEN,
-    });
-    expect(tx.booking.create).not.toHaveBeenCalled();
+  it('lets a master create their own started visit as COMPLETED', async () => {
+    const { service, tx, orders } = customTimeSetup();
+    await service.createManualBooking(
+      'business-1',
+      { ...dto, ...elapsed, status: BookingStatus.COMPLETED },
+      { id: 'user-2', name: 'Anna', role: AuditActorRole.STAFF },
+      'staff-1',
+    );
+    expect(tx.booking.create.mock.calls[0][0].data.status).toBe(
+      BookingStatus.COMPLETED,
+    );
+    expect(orders.syncCompletedBooking).toHaveBeenCalledOnce();
   });
 
-  it('records a no-show of a started visit without completion permission, payroll or email', async () => {
+  it('records a no-show of a started visit without payroll or email', async () => {
     const { service, tx, orders, earnings, clients } = customTimeSetup();
     clients.resolveForBooking.mockResolvedValue({
       id: 'client-1',
@@ -1307,7 +1272,6 @@ describe('BookingCreateFacade manual status', () => {
       'business-1',
       { ...dto, startAt: '2026-09-20T10:15:00', status: BookingStatus.NO_SHOW },
       owner,
-      { canComplete: false },
     );
     const data = tx.booking.create.mock.calls[0][0].data;
     expect(data.status).toBe(BookingStatus.NO_SHOW);
@@ -1483,7 +1447,7 @@ describe('BookingCreateFacade own bookings', () => {
       'business-1',
       { ...dto, startAt: '2099-09-20T10:00:00' },
       master,
-      { canComplete: false, ownStaffId: 'staff-1' },
+      'staff-1',
     );
     expect(tx.booking.create).toHaveBeenCalledOnce();
   });
@@ -1495,7 +1459,7 @@ describe('BookingCreateFacade own bookings', () => {
         'business-1',
         { ...dto, startAt: '2099-09-20T10:00:00' },
         master,
-        { canComplete: false, ownStaffId: 'staff-2' },
+        'staff-2',
       ),
     ).rejects.toMatchObject({
       errorCode: 'BOOKING_OWN_STAFF_REQUIRED',

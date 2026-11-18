@@ -169,7 +169,7 @@ export class BookingsController {
   })
   @ApiForbiddenResponse({
     description:
-      'BOOKING_COMPLETED_CREATE_FORBIDDEN: the booking would be created as completed and the caller lacks order:write; BOOKING_OWN_STAFF_REQUIRED: with booking.own:write only, the caller performs none of the services',
+      'BOOKING_OWN_STAFF_REQUIRED: with booking.own:write only, the caller performs none of the services. Custom prices also need sale.price.override:write, products order:write',
     type: ForbiddenException,
   })
   @Permissions([Write(Claim.BOOKING), Write(Claim.BOOKING_OWN)])
@@ -194,14 +194,7 @@ export class BookingsController {
       locationId,
       dto,
       auditActorFromToken(tokenPayload, locationId),
-      {
-        canComplete: hasPermission(
-          tokenPayload,
-          Write(Claim.ORDER),
-          locationId,
-        ),
-        ownStaffId: await this.access.createStaffId(tokenPayload, locationId),
-      },
+      await this.access.createStaffId(tokenPayload, locationId),
     );
     return BaseResponseDto.success(
       BookingWriteResponseDto.fromBooking(booking),

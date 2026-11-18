@@ -3,7 +3,7 @@
 `BookingCreateFacade` coordinates public and manual creation. It checks visibility,
 rate limits and client permissions, resolves the selection and schedule, then
 reserves the booking. Public client bans are checked before staff resolution;
-manual clients are resolved after completion permission checks. Audit and client
+manual clients are resolved after staff and status checks. Audit and client
 notifications follow a successful reservation.
 
 Public creation accepts an optional UUID `idempotencyKey`, scoped to the location.
@@ -24,8 +24,7 @@ optional flag defaults to false, is persisted on the booking and is returned in
 booking detail/search responses. The channel remains `MANUAL`.
 
 Bookings with custom time accept an optional actual `endAt`, confirm ongoing
-visits and complete elapsed visits with the usual order/payroll sync and
-completion permission check. Custom time is the journal's "book anyway": like a
+visits and complete elapsed visits with the usual order/payroll sync. Custom time is the journal's "book anyway": like a
 manual interval on update it skips working hours, blocks and other bookings of the
 staff member (a free qualified staff member is still preferred when none is
 requested); only one staff member on two overlapping services of the same
@@ -34,9 +33,10 @@ bookings are confirmed: staff booking from the journal has already agreed.
 
 Manual creation takes an optional `status` (`PENDING`, `CONFIRMED`, `COMPLETED`,
 `NO_SHOW`) that overrides both defaults. `COMPLETED` and `NO_SHOW` need a visit
-that has started (`BOOKING_STATUS_BEFORE_START`), `COMPLETED` needs `order:write`
-(`BOOKING_COMPLETED_CREATE_FORBIDDEN`) and runs the same order/payroll sync as a
-completion. Neither queues a client email: the creation notice is computed from the
+that has started (`BOOKING_STATUS_BEFORE_START`). Creating a booking as `COMPLETED`
+(explicitly or by elapsed custom time) needs no permission beyond creating it, as
+completing it by a status change needs none beyond managing it, and runs the same
+order/payroll sync as a completion. Neither queues a client email: the creation notice is computed from the
 final status. `clientId` books a stored brand client (`BOOKING_CLIENT_NOT_FOUND`
 otherwise; not with `anonymous`). An email in the request fills an empty client
 email, by `ClientsService.completeEmail`, for both a selected client and one found
