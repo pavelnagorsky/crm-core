@@ -570,7 +570,13 @@
       "responsibleWarehouse": "Ответственный от склада",
       "signature": "Подпись",
       "document": "Документ",
-      "order": "Заказ"
+      "order": "Заказ",
+      "purpose": "Назначение",
+      "purposeBoth": "Для продажи и внутреннего использования",
+      "purposes": {
+        "SALE": "Для продажи",
+        "INTERNAL": "Для внутреннего использования"
+      }
     }
   },
   "cancelledBy": {
@@ -798,6 +804,8 @@
       "status": "Статус",
       "categoryId": "Категория",
       "imageFileId": "Изображение",
+      "isForSale": "Для продажи",
+      "isForInternalUse": "Для внутреннего использования",
       "retailPrice": "Цена продажи",
       "trackInventory": "Складской учёт",
       "reorderLevel": "Минимальный остаток",

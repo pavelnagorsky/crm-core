@@ -1,6 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsInt, IsOptional, Max, Min } from 'class-validator';
+import { IsOptionalProductPurpose } from '../../../products/decorators/is-optional-product-purpose.decorator.js';
+import { ProductPurpose } from '../../../products/enums/product-purpose.enum.js';
 
 export class InventoryKpiQueryDto {
   @ApiProperty({ type: Number, default: 90, required: false })
@@ -24,4 +26,7 @@ export class InventoryKpiQueryDto {
   @Min(1)
   @Max(20)
   topLimit: number = 5;
+
+  @IsOptionalProductPurpose()
+  purpose?: ProductPurpose;
 }

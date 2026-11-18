@@ -15,8 +15,8 @@ export class ProductLocationResponseDto {
   @ApiProperty({ type: String })
   locationId: string;
 
-  @ApiPrice()
-  retailPrice: string;
+  @ApiPrice({ nullable: true })
+  retailPrice: string | null;
 
   @ApiProperty({ enum: ProductStatus, enumName: 'ProductStatus' })
   status: ProductStatus;
@@ -35,7 +35,10 @@ export class ProductLocationResponseDto {
 
   static fromEntity(entity: ProductLocation): ProductLocationResponseDto {
     return Object.assign(new ProductLocationResponseDto(), entity, {
-      retailPrice: MoneyUtils.format(entity.retailPrice),
+      retailPrice:
+        entity.retailPrice == null
+          ? null
+          : MoneyUtils.format(entity.retailPrice),
       reorderLevel: QuantityUtils.format(entity.reorderLevel),
     });
   }

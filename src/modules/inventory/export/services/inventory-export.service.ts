@@ -16,8 +16,11 @@ import { XlsxColumn } from '../../../../shared/xlsx/interfaces/xlsx-column.inter
 import { XlsxFile } from '../../../../shared/xlsx/interfaces/xlsx-file.interface.js';
 import { XlsxUtils } from '../../../../shared/xlsx/xlsx.utils.js';
 import { LocationService } from '../../../location/services/location.service.js';
+import { ProductPurpose } from '../../../products/enums/product-purpose.enum.js';
+import { ProductPurposeFlags } from '../../../products/interfaces/product-purpose-flags.interface.js';
 import { InventoryExportRequestDto } from '../dto/inventory-export-request.dto.js';
 import { InventoryMovementExportRequestDto } from '../dto/inventory-movement-export-request.dto.js';
+import { InventoryStatementExportRequestDto } from '../dto/inventory-statement-export-request.dto.js';
 import { InventoryBalanceView } from '../../interfaces/inventory-balance-view.interface.js';
 import { InventoryFacade } from '../../inventory.facade.js';
 
@@ -34,6 +37,7 @@ type InventoryBalanceRow = {
   lowStock: string;
   outOfStock: string;
   updatedAt: string;
+  purpose: string;
 };
 
 type InventoryMovementRow = {
@@ -81,6 +85,7 @@ export class InventoryExportService {
       { header: inventory.lowStock, key: 'lowStock' },
       { header: inventory.outOfStock, key: 'outOfStock' },
       { header: inventory.updatedAt, key: 'updatedAt' },
+      { header: inventory.purpose, key: 'purpose' },
     ];
     const [location, { items }] = await Promise.all([
       this.locations.findById(locationId),
@@ -141,6 +146,7 @@ export class InventoryExportService {
 
   async streamInventoryStatement(
     locationId: string,
+    dto: InventoryStatementExportRequestDto = {},
     lang = DEFAULT_LANG,
   ): Promise<XlsxFile> {
     const messages = this.locale.get(lang);
@@ -152,6 +158,7 @@ export class InventoryExportService {
         page: 1,
         pageSize: 1,
         isExport: true,
+        purpose: dto.purpose,
       }),
     ]);
 
@@ -180,6 +187,11 @@ export class InventoryExportService {
     sheet.getCell('B3').value = day;
     sheet.getCell('A2').font = { bold: true };
     sheet.getCell('A3').font = { bold: true };
+    if (dto.purpose) {
+      sheet.getCell('A4').value = inventory.purpose;
+      sheet.getCell('B4').value = labelOf(inventory.purposes, dto.purpose);
+      sheet.getCell('A4').font = { bold: true };
+    }
 
     sheet.addRow([]);
     const header = sheet.addRow([
@@ -247,6 +259,7 @@ export class InventoryExportService {
       name: item.name,
       sku: item.sku ?? '',
       barcode: item.barcode ?? '',
+      purpose: this.purposeLabel(item, messages),
       unit: productUnitLabelOf(
         messages.productUnit,
         item.unit,
@@ -263,6 +276,18 @@ export class InventoryExportService {
         ? TimeUtils.zonedDateTimeStr(item.updatedAt, timezone)
         : '',
     };
+  }
+
+  private purposeLabel(
+    item: ProductPurposeFlags,
+    messages: I18nLocale,
+  ): string {
+    const inventory = messages.documents.inventory;
+    if (item.isForSale && item.isForInternalUse) return inventory.purposeBoth;
+    return labelOf(
+      inventory.purposes,
+      item.isForSale ? ProductPurpose.SALE : ProductPurpose.INTERNAL,
+    );
   }
 
   private toMovementRow(

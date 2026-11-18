@@ -40,6 +40,12 @@ export class ProductResponseDto {
   @ApiProperty({ enum: ProductStatus, enumName: 'ProductStatus' })
   status: ProductStatus;
 
+  @ApiProperty({ type: Boolean })
+  isForSale: boolean;
+
+  @ApiProperty({ type: Boolean })
+  isForInternalUse: boolean;
+
   @ApiProperty({ type: () => ProductLocationResponseDto, isArray: true })
   locations: ProductLocationResponseDto[];
 
@@ -67,6 +73,8 @@ export class ProductResponseDto {
     dto.barcode = entity.barcode;
     dto.unit = entity.unit;
     dto.status = entity.status;
+    dto.isForSale = entity.isForSale;
+    dto.isForInternalUse = entity.isForInternalUse;
     dto.locations = entity.locations.map(ProductLocationResponseDto.fromEntity);
     dto.packagings = entity.packagings.map(
       ProductPackagingResponseDto.fromEntity,

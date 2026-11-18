@@ -13,6 +13,8 @@ export const PRODUCT_AUDIT_FIELDS: FieldDescriptor<Record<string, unknown>>[] =
     { key: 'status', i18n: 'serviceStatus' },
     { key: 'categoryId' },
     { key: 'imageFileId' },
+    { key: 'isForSale' },
+    { key: 'isForInternalUse' },
     {
       key: 'retailPrice',
       format: (value) =>

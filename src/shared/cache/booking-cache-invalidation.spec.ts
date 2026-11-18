@@ -131,6 +131,8 @@ describe('Cache invalidation through domain writes', () => {
           id: 'product',
           brandId: 'brand',
           name: 'Product',
+          isForSale: true,
+          isForInternalUse: false,
         }),
       },
       productCategory: { findMany: vi.fn().mockResolvedValue([]) },
@@ -144,6 +146,10 @@ describe('Cache invalidation through domain writes', () => {
           retailPrice: (price = new Prisma.Decimal('20')),
         })),
       },
+      $queryRaw: vi.fn(async () => [
+        { id: 'product', isForSale: true, isForInternalUse: false },
+      ]),
+      $transaction: vi.fn((run: (tx: unknown) => unknown) => run(db)),
     };
     const locations = {
       getBookingSettings: async () => ({ brandId: 'brand' }),

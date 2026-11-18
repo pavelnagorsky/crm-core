@@ -14,4 +14,6 @@ export interface InventoryBalanceView {
   lowStock: boolean;
   outOfStock: boolean;
   updatedAt: Date | null;
+  isForSale: boolean;
+  isForInternalUse: boolean;
 }

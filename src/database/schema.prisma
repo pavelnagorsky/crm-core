@@ -5,6 +5,7 @@ generator client {
 // SQL-managed read views: ServiceCatalogView and InventoryStockView.
 // Definitions and catalog_ru collation: migrations/20261017160000_catalog_read_views/migration.sql.
 // Active business filters: migrations/20261017170000_filter_deleted_business_views/migration.sql.
+// Product purpose columns in InventoryStockView: migrations/20261118120000_product_purpose/migration.sql.
 // Provision empty databases with prisma migrate deploy; db push does not create these views.
 // See ../../docs/architecture/services-catalog.md for restoration and verification.
 
@@ -613,18 +614,22 @@ model Supplier {
 }
 
 model Product {
-  id          String        @id @default(uuid())
-  brandId     String
-  categoryId  String?
-  imageFileId String?
-  name        String        @db.VarChar(150)
-  description String?       @db.VarChar(2000)
-  sku         String?       @db.VarChar(80)
-  barcode     String?       @db.VarChar(80)
-  unit        ProductUnit   @default(PIECE)
-  status      ProductStatus @default(ACTIVE)
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id               String        @id @default(uuid())
+  brandId          String
+  categoryId       String?
+  imageFileId      String?
+  name             String        @db.VarChar(150)
+  description      String?       @db.VarChar(2000)
+  sku              String?       @db.VarChar(80)
+  barcode          String?       @db.VarChar(80)
+  unit             ProductUnit   @default(PIECE)
+  status           ProductStatus @default(ACTIVE)
+  /// Sold to clients: orders and the public catalog. DB CHECK keeps at least one purpose flag set.
+  isForSale        Boolean       @default(true)
+  /// Consumed by the business itself and written off through inventory documents.
+  isForInternalUse Boolean       @default(false)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
 
   brand      Brand              @relation(fields: [brandId], references: [id], onDelete: Cascade)
   category   ProductCategory?   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
@@ -657,7 +662,8 @@ model ProductLocation {
   id             String        @id @default(uuid())
   productId      String
   locationId     String
-  retailPrice    Decimal       @db.Decimal(10, 2)
+  /// Null when the product is not sold (internal use only).
+  retailPrice    Decimal?      @db.Decimal(10, 2)
   status         ProductStatus @default(ACTIVE)
   trackInventory Boolean       @default(true)
   reorderLevel   Decimal       @default(0) @db.Decimal(14, 3)

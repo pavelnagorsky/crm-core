@@ -41,6 +41,8 @@ function balance(
     lowStock: false,
     outOfStock: false,
     updatedAt: new Date('2026-10-01T10:00:00.000Z'),
+    isForSale: true,
+    isForInternalUse: false,
     ...overrides,
   };
 }
@@ -93,6 +95,7 @@ describe('InventoryExportService', () => {
           lowStock: true,
           outOfStock: true,
           updatedAt: null,
+          isForInternalUse: true,
         }),
       ],
       totalItems: 2,
@@ -136,6 +139,7 @@ describe('InventoryExportService', () => {
     expect(grid.row(1).text(8)).toBe('Валюта');
     expect(grid.row(1).text(9)).toBe('Минимальный остаток');
     expect(grid.row(1).text(12)).toBe('Обновлён');
+    expect(grid.row(1).text(13)).toBe('Назначение');
     expect(grid.row(2).text(1)).toBe('Шампунь');
     expect(grid.row(2).text(2)).toBe('SKU-1');
     expect(grid.row(2).text(3)).toBe('4600000000001');
@@ -147,12 +151,16 @@ describe('InventoryExportService', () => {
     expect(grid.row(2).text(10)).toBe('Нет');
     expect(grid.row(2).text(11)).toBe('Нет');
     expect(grid.row(2).text(12)).toBe('01.10.2026 13:00');
+    expect(grid.row(2).text(13)).toBe('Для продажи');
     expect(grid.row(3).text(2)).toBe('');
     expect(grid.row(3).text(3)).toBe('');
     expect(grid.row(3).text(8)).toBe('BYN');
     expect(grid.row(3).text(10)).toBe('Да');
     expect(grid.row(3).text(11)).toBe('Да');
     expect(grid.row(3).text(12)).toBe('');
+    expect(grid.row(3).text(13)).toBe(
+      'Для продажи и внутреннего использования',
+    );
   });
 
   it('exports every movement matching the movement filters as xlsx', async () => {

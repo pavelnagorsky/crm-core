@@ -3,6 +3,8 @@ import { IsArray, IsEnum, IsOptional, IsUUID } from 'class-validator';
 import { IsCalendarDate } from '../../../../shared/time/decorators/is-calendar-date.validator.js';
 import { PaginationRequestDto } from '../../../../shared/dto/pagination-request.dto.js';
 import { ToArray } from '../../../../shared/transforms/to-array.transform.js';
+import { IsOptionalProductPurpose } from '../../../products/decorators/is-optional-product-purpose.decorator.js';
+import { ProductPurpose } from '../../../products/enums/product-purpose.enum.js';
 import { InventoryTurnoverOrderBy } from '../enums/inventory-turnover-order-by.enum.js';
 
 export class InventoryTurnoverRequestDto extends PaginationRequestDto<InventoryTurnoverOrderBy> {
@@ -26,6 +28,9 @@ export class InventoryTurnoverRequestDto extends PaginationRequestDto<InventoryT
   @IsArray()
   @IsUUID('all', { each: true })
   productIds?: string[];
+
+  @IsOptionalProductPurpose()
+  purpose?: ProductPurpose;
 
   @ApiProperty({ enum: InventoryTurnoverOrderBy, required: false })
   @IsOptional()

@@ -39,6 +39,12 @@ export class InventoryReplenishmentItemDto {
   @ApiProperty({ type: String, format: 'date-time', nullable: true })
   updatedAt: string | null;
 
+  @ApiProperty({ type: Boolean })
+  isForSale: boolean;
+
+  @ApiProperty({ type: Boolean })
+  isForInternalUse: boolean;
+
   static fromEntity(
     entity: InventoryReplenishmentItemView,
   ): InventoryReplenishmentItemDto {

@@ -18,7 +18,9 @@ import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { PaginatedResult } from '../../../shared/interfaces/paginated-result.interface.js';
 import { TimeUtils } from '../../../shared/time/time.utils.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
+import { ProductPurpose } from '../../products/enums/product-purpose.enum.js';
 import { ProductsService } from '../../products/services/products.service.js';
+import { productPurposeWhere } from '../../products/utils/product-purpose.filter.js';
 import { documentInclude } from '../constants/inventory-document.include.js';
 import { InventoryCountsRequestDto } from '../dto/inventory-counts-request.dto.js';
 import { InventoryDocumentSearchRequestDto } from '../dto/inventory-document-search-request.dto.js';
@@ -159,17 +161,30 @@ export class InventoryReadService {
       from?: string;
       to?: string;
       supplierId?: string;
+      purpose?: ProductPurpose;
     },
   ): Prisma.InventoryDocumentWhereInput {
-    const occurredAt = this.occurredAtDateWhere(filter);
-    return {
+    const where: Prisma.InventoryDocumentWhereInput = {
       location: ACTIVE_LOCATION_WHERE,
       locationId,
       type: filter.type,
       status: filter.status,
       supplierId: filter.supplierId,
-      ...(occurredAt ? { occurredAt } : {}),
     };
+    const occurredAt = this.occurredAtDateWhere(filter);
+    if (occurredAt) where.occurredAt = occurredAt;
+    if (filter.purpose) {
+      // A document matches when at least one of its lines has a product with that purpose.
+      where.items = {
+        some: {
+          productLocation: {
+            locationId,
+            product: productPurposeWhere(filter.purpose),
+          },
+        },
+      };
+    }
+    return where;
   }
 
   private occurredAtDateWhere(

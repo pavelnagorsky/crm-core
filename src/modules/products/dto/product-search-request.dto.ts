@@ -7,6 +7,8 @@ import {
   MaxLength,
 } from 'class-validator';
 import { PaginationRequestDto } from '../../../shared/dto/pagination-request.dto.js';
+import { IsOptionalProductPurpose } from '../decorators/is-optional-product-purpose.decorator.js';
+import { ProductPurpose } from '../enums/product-purpose.enum.js';
 import { ProductSearchOrderBy } from '../enums/product-search-order-by.enum.js';
 import { ProductStatus } from '../enums/product-status.enum.js';
 
@@ -30,6 +32,9 @@ export class ProductSearchRequestDto extends PaginationRequestDto<ProductSearchO
   @IsOptional()
   @IsEnum(ProductStatus)
   status?: ProductStatus;
+
+  @IsOptionalProductPurpose()
+  purpose?: ProductPurpose;
 
   @ApiProperty({
     enum: ProductSearchOrderBy,

@@ -1,4 +1,4 @@
-import { InventoryMovementType, ProductUnit } from '@prisma/client';
+import { InventoryMovementType, Prisma, ProductUnit } from '@prisma/client';
 import ExcelJS from 'exceljs';
 import { PassThrough } from 'stream';
 import { OrderDirection } from '../../../../shared/enums/order-direction.enum.js';
@@ -6,6 +6,7 @@ import { LocaleService } from '../../../../shared/i18n/locale.service.js';
 import { MoneyUtils } from '../../../../shared/money/money.utils.js';
 import { QuantityUtils } from '../../../../shared/quantity/quantity.utils.js';
 import { XlsxUtils } from '../../../../shared/xlsx/xlsx.utils.js';
+import { ProductPurpose } from '../../../products/enums/product-purpose.enum.js';
 import { InventoryTurnoverOrderBy } from '../enums/inventory-turnover-order-by.enum.js';
 import { InventoryReportMovementRow } from '../interfaces/inventory-report-movement-row.interface.js';
 import { InventoryTurnoverBucketRow } from '../interfaces/inventory-turnover-bucket-row.interface.js';
@@ -228,6 +229,32 @@ describe('InventoryReportService', () => {
     );
     expect(workbook.worksheets).toHaveLength(1);
     expect(db.$queryRaw).toHaveBeenCalledTimes(1);
+    expect((db.$queryRaw.mock.calls[0][0] as Prisma.Sql).sql).toContain(
+      'AND TRUE',
+    );
+  });
+
+  it('filters the statement by product purpose and names the filter', async () => {
+    const { service, db } = setup();
+    db.$queryRaw.mockResolvedValueOnce([
+      bucket(InventoryMovementType.WRITE_OFF, '-1.000', '-10.00'),
+    ]);
+
+    const file = await service.exportVedomost('location-1', {
+      from: '2026-10-01',
+      to: '2026-10-31',
+      page: 1,
+      pageSize: 25,
+      purpose: ProductPurpose.INTERNAL,
+    });
+
+    expect((db.$queryRaw.mock.calls[0][0] as Prisma.Sql).sql).toContain(
+      'p."isForInternalUse" = true',
+    );
+    const grid = await XlsxUtils.read(await collect(file.stream));
+    expect(grid?.row(5).text(1)).toBe('Назначение');
+    expect(grid?.row(5).text(2)).toBe('Для внутреннего использования');
+    expect(grid?.row(7).text(1)).toBe('Товар');
   });
 
   it('refuses a movement type the statement has no column for', async () => {

@@ -4,9 +4,11 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { ProductStatus, ProductUnit } from '@prisma/client';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
+import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { AuditActorRole } from '../../audit/enums/audit-actor-role.enum.js';
 import { LocationService } from '../../location/services/location.service.js';
 import { ProductLocationSearchOrderBy } from '../enums/product-location-search-order-by.enum.js';
+import { ProductPurpose } from '../enums/product-purpose.enum.js';
 import { ProductsService } from './products.service.js';
 
 const actor = { id: 'owner-1', name: 'Owner', role: AuditActorRole.OWNER };
@@ -37,6 +39,7 @@ function setup() {
       findMany: vi.fn(),
       count: vi.fn(),
       upsert: vi.fn(),
+      updateMany: vi.fn(),
     },
     $transaction: vi.fn(
       (values: unknown[] | ((tx: unknown) => unknown)): unknown =>
@@ -91,6 +94,7 @@ describe('ProductsService', () => {
           brandId: 'brand-1',
           brand: { deletedAt: null },
           status: ProductStatus.ACTIVE,
+          isForSale: true,
         },
       }),
     );
@@ -100,6 +104,7 @@ describe('ProductsService', () => {
           locationId: 'location-1',
           location: { deletedAt: null, brand: { deletedAt: null } },
           status: ProductStatus.ACTIVE,
+          retailPrice: { not: null },
         },
       }),
     );
@@ -339,6 +344,325 @@ describe('ProductsService', () => {
       ),
     ).rejects.toBeInstanceOf(AppException);
     expect(db.productLocation.upsert).not.toHaveBeenCalled();
+  });
+
+  describe('product purpose', () => {
+    const product = (overrides: Record<string, unknown> = {}) => ({
+      id: 'product-1',
+      brandId: 'brand-1',
+      name: 'Shampoo',
+      unit: ProductUnit.PIECE,
+      isForSale: true,
+      isForInternalUse: false,
+      ...overrides,
+    });
+
+    function setupLocation(overrides: Record<string, unknown> = {}) {
+      const context = setup();
+      context.locations.findById.mockResolvedValue({
+        id: 'location-1',
+        brandId: 'brand-1',
+      });
+      context.db.product.findFirst.mockResolvedValue(product(overrides));
+      context.db.$queryRaw.mockResolvedValue([product(overrides)]);
+      context.db.productLocation.findUnique.mockResolvedValue(null);
+      context.db.productLocation.upsert.mockResolvedValue({ id: 'setting-1' });
+      return context;
+    }
+
+    it('creates products for sale by default', async () => {
+      const { db, service } = setup();
+      db.product.create.mockResolvedValue(product());
+
+      await service.create('brand-1', { name: 'Shampoo' }, actor);
+
+      expect(db.product.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          isForSale: true,
+          isForInternalUse: false,
+        }),
+      });
+    });
+
+    it('rejects a product without any purpose', async () => {
+      const { db, service } = setup();
+
+      await expect(
+        service.create(
+          'brand-1',
+          { name: 'Shampoo', isForSale: false, isForInternalUse: false },
+          actor,
+        ),
+      ).rejects.toMatchObject({
+        errorCode: ErrorCode.PRODUCT_PURPOSE_REQUIRED.code,
+      });
+      expect(db.product.create).not.toHaveBeenCalled();
+    });
+
+    it('rejects removing the last purpose on update', async () => {
+      const { db, service } = setup();
+      db.product.findFirst.mockResolvedValue(product());
+      db.$queryRaw.mockResolvedValue([product()]);
+
+      await expect(
+        service.update('brand-1', 'product-1', { isForSale: false }, actor),
+      ).rejects.toMatchObject({
+        errorCode: ErrorCode.PRODUCT_PURPOSE_REQUIRED.code,
+      });
+      expect(db.product.update).not.toHaveBeenCalled();
+    });
+
+    it('rejects internal use while a location does not track the product, naming it', async () => {
+      const { db, service } = setup();
+      db.product.findFirst.mockResolvedValue(product());
+      db.$queryRaw.mockResolvedValue([product()]);
+      db.productLocation.findMany.mockResolvedValue([
+        { location: { id: 'location-2', name: 'Центр' } },
+      ]);
+
+      await expect(
+        service.update(
+          'brand-1',
+          'product-1',
+          { isForInternalUse: true },
+          actor,
+        ),
+      ).rejects.toMatchObject({
+        errorCode: ErrorCode.PRODUCT_INTERNAL_USE_REQUIRES_INVENTORY.code,
+        payload: { locations: [{ id: 'location-2', name: 'Центр' }] },
+      });
+      expect(db.productLocation.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            productId: 'product-1',
+            trackInventory: false,
+          }),
+        }),
+      );
+      expect(db.product.update).not.toHaveBeenCalled();
+    });
+
+    it('allows internal use when every location tracks the product', async () => {
+      const { db, service } = setup();
+      db.product.findFirst.mockResolvedValue(product());
+      db.$queryRaw.mockResolvedValue([product()]);
+      db.productLocation.findMany.mockResolvedValue([]);
+      db.product.update.mockResolvedValue(
+        product({ isForSale: false, isForInternalUse: true }),
+      );
+
+      await service.update(
+        'brand-1',
+        'product-1',
+        { isForSale: false, isForInternalUse: true },
+        actor,
+      );
+
+      expect(db.product.update).toHaveBeenCalledWith({
+        where: { id: 'product-1' },
+        data: expect.objectContaining({
+          isForSale: false,
+          isForInternalUse: true,
+        }),
+      });
+    });
+
+    it('decides the purpose change from the locked row, not a stale read', async () => {
+      const { db, service } = setup();
+      db.product.findFirst.mockResolvedValue(product());
+      db.$queryRaw.mockResolvedValue([
+        product({ isForSale: false, isForInternalUse: true }),
+      ]);
+      db.product.update.mockResolvedValue(product({ isForInternalUse: true }));
+
+      await service.update('brand-1', 'product-1', { isForSale: true }, actor);
+
+      expect(db.product.update).toHaveBeenCalledWith({
+        where: { id: 'product-1' },
+        data: expect.objectContaining({
+          isForSale: true,
+          isForInternalUse: true,
+        }),
+      });
+      expect(db.productLocation.findMany).not.toHaveBeenCalled();
+    });
+
+    it('requires a retail price for a product that is for sale', async () => {
+      const { db, service } = setupLocation();
+
+      await expect(
+        service.upsertLocation(
+          'location-1',
+          'product-1',
+          {
+            retailPrice: null,
+            status: ProductStatus.ACTIVE,
+            trackInventory: true,
+          },
+          actor,
+        ),
+      ).rejects.toMatchObject({
+        errorCode: ErrorCode.PRODUCT_RETAIL_PRICE_REQUIRED.code,
+      });
+      expect(db.productLocation.upsert).not.toHaveBeenCalled();
+    });
+
+    it('accepts an internal-only product without a retail price', async () => {
+      const { db, service } = setupLocation({
+        isForSale: false,
+        isForInternalUse: true,
+      });
+
+      await service.upsertLocation(
+        'location-1',
+        'product-1',
+        {
+          retailPrice: null,
+          status: ProductStatus.ACTIVE,
+          trackInventory: true,
+          reorderLevel: '5.000',
+        },
+        actor,
+      );
+
+      expect(db.productLocation.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          create: expect.objectContaining({
+            retailPrice: null,
+            trackInventory: true,
+            reorderLevel: '5.000',
+          }),
+        }),
+      );
+    });
+
+    it('requires inventory tracking for an internal-only product', async () => {
+      const { db, service } = setupLocation({
+        isForSale: false,
+        isForInternalUse: true,
+      });
+
+      await expect(
+        service.upsertLocation(
+          'location-1',
+          'product-1',
+          {
+            retailPrice: null,
+            status: ProductStatus.ACTIVE,
+            trackInventory: false,
+          },
+          actor,
+        ),
+      ).rejects.toMatchObject({
+        errorCode: ErrorCode.PRODUCT_INTERNAL_USE_REQUIRES_INVENTORY.code,
+      });
+      expect(db.productLocation.upsert).not.toHaveBeenCalled();
+    });
+
+    it('requires inventory tracking for a dual-purpose product too', async () => {
+      const { db, service } = setupLocation({ isForInternalUse: true });
+
+      await expect(
+        service.upsertLocation(
+          'location-1',
+          'product-1',
+          {
+            retailPrice: '10.00',
+            status: ProductStatus.ACTIVE,
+            trackInventory: false,
+          },
+          actor,
+        ),
+      ).rejects.toMatchObject({
+        errorCode: ErrorCode.PRODUCT_INTERNAL_USE_REQUIRES_INVENTORY.code,
+      });
+      expect(db.productLocation.upsert).not.toHaveBeenCalled();
+    });
+
+    it('offers only priced products under the sale filter at a location', async () => {
+      const { db, service } = setup();
+      db.productLocation.findMany.mockResolvedValue([]);
+      db.productLocation.count.mockResolvedValue(0);
+
+      await service.searchLocation('location-1', {
+        page: 1,
+        pageSize: 25,
+        purpose: ProductPurpose.SALE,
+      });
+
+      expect(db.productLocation.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            retailPrice: { not: null },
+            product: { isForSale: true },
+          }),
+        }),
+      );
+    });
+
+    it('sells only priced products that are for sale', async () => {
+      const { db, service } = setup();
+      db.productLocation.findMany.mockResolvedValue([]);
+
+      await service.resolveForSale('location-1', ['product-1']);
+
+      expect(db.productLocation.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            retailPrice: { not: null },
+            product: { status: ProductStatus.ACTIVE, isForSale: true },
+          }),
+        }),
+      );
+    });
+
+    it.each([
+      [ProductPurpose.SALE, { isForSale: true }],
+      [ProductPurpose.INTERNAL, { isForInternalUse: true }],
+    ])(
+      'filters location products by purpose %s',
+      async (purpose, condition) => {
+        const { db, service } = setup();
+        db.productLocation.findMany.mockResolvedValue([]);
+        db.productLocation.count.mockResolvedValue(0);
+
+        await service.searchLocation('location-1', {
+          page: 1,
+          pageSize: 25,
+          purpose,
+          search: 'sham',
+        });
+
+        expect(db.productLocation.findMany).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({
+              product: expect.objectContaining({
+                ...condition,
+                OR: expect.any(Array),
+              }),
+            }),
+          }),
+        );
+      },
+    );
+
+    it('filters brand products by purpose', async () => {
+      const { db, service } = setup();
+      db.product.findMany.mockResolvedValue([]);
+      db.product.count.mockResolvedValue(0);
+
+      await service.search('brand-1', {
+        page: 1,
+        pageSize: 25,
+        purpose: ProductPurpose.INTERNAL,
+      });
+
+      expect(db.product.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({ isForInternalUse: true }),
+        }),
+      );
+    });
   });
 
   it('rejects a no-op status transition', async () => {

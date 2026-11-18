@@ -138,5 +138,8 @@ export interface DocumentMessages {
     signature: string;
     document: string;
     order: string;
+    purpose: string;
+    purposeBoth: string;
+    purposes: Record<string, string>;
   };
 }

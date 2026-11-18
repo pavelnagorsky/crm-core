@@ -61,6 +61,8 @@ flowchart TD
 
 [Миграция 20261017170000_filter_deleted_business_views](../../src/database/migrations/20261017170000_filter_deleted_business_views/migration.sql) обновляет оба view: записи удалённых филиалов и брендов исключаются через `deletedAt IS NULL`. Такое же условие входит в Prisma-запросы карточек, категорий и каталога бронирования. После восстановления бизнеса данные снова видны без копирования или пересоздания записей. Проверка выполняется в самих выборках и не зависит от HTTP-пути.
 
+[Миграция 20261118120000_product_purpose](../../src/database/migrations/20261118120000_product_purpose/migration.sql) добавляет в конец `InventoryStockView` колонки назначения товара `isForSale` и `isForInternalUse`. `CREATE OR REPLACE VIEW` позволяет добавлять колонки только в конец списка.
+
 View управляются SQL-миграциями и читаются через Prisma `$queryRaw`; деклараций `view` в `schema.prisma` нет. В начале схемы оставлена ссылка на миграцию и этот документ. Не нужно создавать вместо view Prisma `model`: это превратило бы представление в таблицу.
 
 После настройки `DATABASE_URL` для новой PostgreSQL-базы с поддержкой ICU выполните из корня репозитория:

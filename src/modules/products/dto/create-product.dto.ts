@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
+  IsBoolean,
   IsEnum,
   IsOptional,
   IsString,
@@ -71,4 +72,23 @@ export class CreateProductDto {
   @IsOptional()
   @IsEnum(ProductStatus)
   status?: ProductStatus;
+
+  @ApiProperty({
+    type: Boolean,
+    required: false,
+    description: 'Sold to clients. At least one purpose must be enabled.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  isForSale?: boolean;
+
+  @ApiProperty({
+    type: Boolean,
+    required: false,
+    description:
+      'Consumed by the business and written off through inventory documents.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  isForInternalUse?: boolean;
 }

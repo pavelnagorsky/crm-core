@@ -12,4 +12,6 @@ export interface InventoryReplenishmentItemView {
   missingQuantity: Prisma.Decimal;
   stockValue: Prisma.Decimal;
   updatedAt: Date | null;
+  isForSale: boolean;
+  isForInternalUse: boolean;
 }

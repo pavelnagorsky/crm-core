@@ -19,6 +19,8 @@ import { XlsxFile } from '../../../../shared/xlsx/interfaces/xlsx-file.interface
 import { XlsxSheet } from '../../../../shared/xlsx/interfaces/xlsx-sheet.interface.js';
 import { XlsxUtils } from '../../../../shared/xlsx/xlsx.utils.js';
 import { LocationService } from '../../../location/services/location.service.js';
+import { ProductPurpose } from '../../../products/enums/product-purpose.enum.js';
+import { productPurposeSql } from '../../../products/utils/product-purpose.filter.js';
 import { InventoryReportQueryDto } from '../dto/inventory-report-query.dto.js';
 import { InventoryTurnoverExportRequestDto } from '../dto/inventory-turnover-export-request.dto.js';
 import { InventoryTurnoverRequestDto } from '../dto/inventory-turnover-request.dto.js';
@@ -91,13 +93,16 @@ export class InventoryReportService {
 
   private async buildTurnover(
     locationId: string,
-    dto: Pick<InventoryTurnoverRequestDto, 'from' | 'to' | 'productIds'>,
+    dto: Pick<
+      InventoryTurnoverRequestDto,
+      'from' | 'to' | 'productIds' | 'purpose'
+    >,
   ): Promise<InventoryTurnoverView> {
     this.assertPeriod(dto.from, dto.to);
     const location = await this.locations.findById(locationId);
     const { start, end } = this.bounds(dto.from, dto.to, location.timezone);
     const buckets = await this.db.$queryRaw<InventoryTurnoverBucketRow[]>(
-      this.bucketQuery(locationId, start, end, dto.productIds),
+      this.bucketQuery(locationId, start, end, dto.productIds, dto.purpose),
     );
     return {
       locationName: location.name,
@@ -105,6 +110,7 @@ export class InventoryReportService {
       timezone: location.timezone,
       from: dto.from,
       to: dto.to,
+      purpose: dto.purpose ?? null,
       lines: inventoryTurnoverLines(buckets),
     };
   }
@@ -120,6 +126,12 @@ export class InventoryReportService {
     sheet.addRow([common.location, report.locationName]);
     sheet.addRow([common.period, `${report.from} — ${report.to}`]);
     sheet.addRow([common.currency, report.currency]);
+    if (report.purpose) {
+      sheet.addRow([
+        inventory.purpose,
+        labelOf(inventory.purposes, report.purpose),
+      ]);
+    }
     sheet.addRow([]);
     sheet.addRow([
       inventory.product,
@@ -188,6 +200,7 @@ export class InventoryReportService {
     start: Date,
     end: Date,
     productIds: string[] | undefined,
+    purpose: ProductPurpose | undefined,
   ): Prisma.Sql {
     return Prisma.sql`
       SELECT
@@ -217,6 +230,7 @@ export class InventoryReportService {
         INNER JOIN "Product" p ON p.id = pl."productId"
         WHERE im."locationId" = ${locationId}
           AND im."occurredAt" < ${end}
+          AND ${productPurposeSql(purpose, 'p')}
           ${
             productIds?.length
               ? Prisma.sql`AND p.id IN (${Prisma.join(productIds)})`

@@ -47,6 +47,12 @@ export class InventoryBalanceResponseDto {
   @ApiProperty({ type: Date, nullable: true })
   updatedAt: Date | null;
 
+  @ApiProperty({ type: Boolean })
+  isForSale: boolean;
+
+  @ApiProperty({ type: Boolean })
+  isForInternalUse: boolean;
+
   static fromEntity(entity: InventoryBalanceView): InventoryBalanceResponseDto {
     return Object.assign(new InventoryBalanceResponseDto(), entity, {
       quantityOnHand: QuantityUtils.format(entity.quantityOnHand),

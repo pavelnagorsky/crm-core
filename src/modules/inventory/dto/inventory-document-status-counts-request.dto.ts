@@ -1,6 +1,8 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsEnum, IsOptional, IsUUID } from 'class-validator';
 import { IsCalendarDate } from '../../../shared/time/decorators/is-calendar-date.validator.js';
+import { IsOptionalProductPurpose } from '../../products/decorators/is-optional-product-purpose.decorator.js';
+import { ProductPurpose } from '../../products/enums/product-purpose.enum.js';
 import { InventoryDocumentType } from '../enums/inventory-document-type.enum.js';
 
 export class InventoryDocumentStatusCountsRequestDto {
@@ -23,4 +25,7 @@ export class InventoryDocumentStatusCountsRequestDto {
   @IsOptional()
   @IsUUID()
   supplierId?: string;
+
+  @IsOptionalProductPurpose()
+  purpose?: ProductPurpose;
 }

@@ -43,6 +43,7 @@ import { InventoryDocumentStatusCountResponseDto } from '../dto/inventory-docume
 import { InventoryDocumentStatusCountsRequestDto } from '../dto/inventory-document-status-counts-request.dto.js';
 import { InventoryExportRequestDto } from '../export/dto/inventory-export-request.dto.js';
 import { InventoryMovementExportRequestDto } from '../export/dto/inventory-movement-export-request.dto.js';
+import { InventoryStatementExportRequestDto } from '../export/dto/inventory-statement-export-request.dto.js';
 import { InventoryMovementResponseDto } from '../dto/inventory-movement-response.dto.js';
 import { InventoryMovementSearchRequestDto } from '../dto/inventory-movement-search-request.dto.js';
 import { InventoryMovementSearchResponseDto } from '../dto/inventory-movement-search-response.dto.js';
@@ -154,11 +155,14 @@ export class InventoryController {
   @Get('export/inventory-statement')
   async exportInventoryStatement(
     @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Query() dto: InventoryStatementExportRequestDto,
     @Res({ passthrough: true })
     res: { setHeader: (name: string, value: string) => void },
   ): Promise<StreamableFile> {
-    const { stream, filename } =
-      await this.exports.streamInventoryStatement(locationId);
+    const { stream, filename } = await this.exports.streamInventoryStatement(
+      locationId,
+      dto,
+    );
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     return new StreamableFile(stream, { type: XlsxUtils.mimeType });
   }

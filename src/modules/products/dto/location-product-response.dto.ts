@@ -36,11 +36,17 @@ export class LocationProductResponseDto {
   @ApiProperty({ enum: ProductUnit, enumName: 'ProductUnit' })
   unit: ProductUnit;
 
-  @ApiPrice()
-  retailPrice: string;
+  @ApiPrice({ nullable: true })
+  retailPrice: string | null;
 
   @ApiProperty({ enum: ProductStatus, enumName: 'ProductStatus' })
   status: ProductStatus;
+
+  @ApiProperty({ type: Boolean })
+  isForSale: boolean;
+
+  @ApiProperty({ type: Boolean })
+  isForInternalUse: boolean;
 
   @ApiProperty({ type: Boolean })
   trackInventory: boolean;
@@ -67,7 +73,12 @@ export class LocationProductResponseDto {
       packagings: entity.product.packagings.map(
         ProductPackagingResponseDto.fromEntity,
       ),
-      retailPrice: MoneyUtils.format(entity.retailPrice),
+      retailPrice:
+        entity.retailPrice == null
+          ? null
+          : MoneyUtils.format(entity.retailPrice),
+      isForSale: entity.product.isForSale,
+      isForInternalUse: entity.product.isForInternalUse,
       status: entity.status,
       trackInventory: entity.trackInventory,
       reorderLevel: QuantityUtils.format(entity.reorderLevel),

@@ -1,5 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { IsOptional, IsString, IsUUID, MaxLength } from 'class-validator';
+import { IsOptionalProductPurpose } from '../decorators/is-optional-product-purpose.decorator.js';
+import { ProductPurpose } from '../enums/product-purpose.enum.js';
 
 export class ProductStatusCountsRequestDto {
   @ApiProperty({ type: String, required: false })
@@ -12,4 +14,7 @@ export class ProductStatusCountsRequestDto {
   @IsOptional()
   @IsUUID()
   categoryId?: string;
+
+  @IsOptionalProductPurpose()
+  purpose?: ProductPurpose;
 }

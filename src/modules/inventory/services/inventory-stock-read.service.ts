@@ -5,6 +5,7 @@ import { CountRow } from '../../../shared/database/interfaces/count-row.interfac
 import { paginationSql } from '../../../shared/database/pagination-sql.js';
 import { OrderDirection } from '../../../shared/enums/order-direction.enum.js';
 import { PaginatedResult } from '../../../shared/interfaces/paginated-result.interface.js';
+import { productPurposeSql } from '../../products/utils/product-purpose.filter.js';
 import { InventoryCountsRequestDto } from '../dto/inventory-counts-request.dto.js';
 import { InventorySearchRequestDto } from '../dto/inventory-search-request.dto.js';
 import { InventorySearchOrderBy } from '../enums/inventory-search-order-by.enum.js';
@@ -33,7 +34,8 @@ export class InventoryStockReadService {
         >`SELECT COUNT(*) AS "totalItems" FROM "InventoryStockView" WHERE ${where}`;
         const items = await tx.$queryRaw<InventoryBalanceView[]>`
         SELECT "productLocationId", "productId", "name", "sku", "barcode", "unit",
-          "quantityOnHand", "averageUnitCost", "stockValue", "reorderLevel", "lowStock", "outOfStock", "updatedAt"
+          "quantityOnHand", "averageUnitCost", "stockValue", "reorderLevel", "lowStock", "outOfStock", "updatedAt",
+          "isForSale", "isForInternalUse"
         FROM "InventoryStockView" WHERE ${where}
         ORDER BY ${this.orderBy(dto)}, "productLocationId" COLLATE "C" ASC ${paginationSql(dto)}`;
         return { items, totalItems: Number(count.totalItems) };
@@ -62,7 +64,10 @@ export class InventoryStockReadService {
     locationId: string,
     filter: InventoryCountsRequestDto,
   ): Prisma.Sql[] {
-    const conditions = [Prisma.sql`"locationId" = ${locationId}`];
+    const conditions = [
+      Prisma.sql`"locationId" = ${locationId}`,
+      productPurposeSql(filter.purpose),
+    ];
     if (filter.productIds?.length)
       conditions.push(
         Prisma.sql`"productId" IN (${Prisma.join(filter.productIds)})`,

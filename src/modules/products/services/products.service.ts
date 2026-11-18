@@ -45,12 +45,16 @@ import { UpdateProductCategoryDto } from '../dto/update-product-category.dto.js'
 import { UpdateProductDto } from '../dto/update-product.dto.js';
 import { UpsertProductLocationDto } from '../dto/upsert-product-location.dto.js';
 import { ProductLocationSearchOrderBy } from '../enums/product-location-search-order-by.enum.js';
+import { ProductPurpose } from '../enums/product-purpose.enum.js';
 import { ProductSearchOrderBy } from '../enums/product-search-order-by.enum.js';
 import { BrandProductCatalog } from '../interfaces/brand-product-catalog.interface.js';
 import { LocationProductView } from '../interfaces/location-product-view.interface.js';
+import { ProductPurposeFlags } from '../interfaces/product-purpose-flags.interface.js';
 import { ProductStatusCount } from '../interfaces/product-status-count.interface.js';
 import { ProductWithDetails } from '../interfaces/product-with-details.interface.js';
 import { PublicCatalogProduct } from '../interfaces/public-catalog-product.interface.js';
+import { SellableLocationProductView } from '../interfaces/sellable-location-product-view.interface.js';
+import { productPurposeWhere } from '../utils/product-purpose.filter.js';
 
 const productDetailsInclude = {
   category: true,
@@ -188,6 +192,10 @@ export class ProductsService {
     actor: AuditActor,
   ): Promise<Product> {
     await this.assertCategory(brandId, dto.categoryId);
+    const purpose = this.purpose(
+      dto.isForSale ?? true,
+      dto.isForInternalUse ?? false,
+    );
     try {
       const product = await this.db.product.create({
         data: {
@@ -200,6 +208,7 @@ export class ProductsService {
           barcode: this.optionalCode(dto.barcode),
           unit: dto.unit,
           status: dto.status,
+          ...purpose,
         },
       });
       await this.cache.invalidate(CacheDependency.brandProducts(brandId));
@@ -215,6 +224,8 @@ export class ProductsService {
           sku: product.sku,
           barcode: product.barcode,
           unit: product.unit,
+          isForSale: product.isForSale,
+          isForInternalUse: product.isForInternalUse,
         },
       );
       return product;
@@ -232,10 +243,21 @@ export class ProductsService {
   ): Promise<Product> {
     const old = await this.findProductForMutation(brandId, productId);
     await this.assertCategory(brandId, dto.categoryId);
+    const purposeRequested =
+      dto.isForSale != null || dto.isForInternalUse != null;
     try {
       const product = await this.db.$transaction(async (tx) => {
+        const current =
+          dto.unit != null || purposeRequested
+            ? await this.lockProduct(brandId, productId, tx)
+            : old;
+        const purpose = purposeRequested
+          ? this.changedPurpose(current, dto)
+          : null;
+        if (purpose?.isForInternalUse && !current.isForInternalUse) {
+          await this.assertTrackedAtEveryLocation(productId, tx);
+        }
         if (dto.unit != null) {
-          await this.lockProduct(brandId, productId, tx);
           const used = await tx.product.count({
             where: {
               brand: ACTIVE_BRAND_WHERE,
@@ -272,6 +294,7 @@ export class ProductsService {
                 ? this.optionalCode(dto.barcode)
                 : undefined,
             unit: dto.unit,
+            ...purpose,
           },
         });
       });
@@ -292,6 +315,8 @@ export class ProductsService {
           'sku',
           'barcode',
           'unit',
+          'isForSale',
+          'isForInternalUse',
         ],
       );
       return product;
@@ -367,38 +392,35 @@ export class ProductsService {
     actor: AuditActor,
   ): Promise<ProductLocation> {
     const location = await this.locations.findById(locationId);
-    const product = await this.findProductForMutation(
-      location.brandId,
-      productId,
-    );
-    const old = await this.db.productLocation.findUnique({
-      where: {
-        location: ACTIVE_LOCATION_WHERE,
-        productId_locationId: { productId, locationId },
-      },
-    });
-    if (old?.trackInventory && !dto.trackInventory) {
-      throw new AppException(
-        ErrorCode.PRODUCT_INVENTORY_TRACKING_IMMUTABLE,
-        HttpStatus.CONFLICT,
-      );
-    }
-    const row = await this.db.productLocation.upsert({
-      where: { productId_locationId: { productId, locationId } },
-      create: {
-        productId,
-        locationId,
+    await this.findProductForMutation(location.brandId, productId);
+    const { product, old, row } = await this.db.$transaction(async (tx) => {
+      // Locked so a concurrent purpose change cannot slip between the check and the write.
+      const product = await this.lockProduct(location.brandId, productId, tx);
+      const old = await tx.productLocation.findUnique({
+        where: {
+          location: ACTIVE_LOCATION_WHERE,
+          productId_locationId: { productId, locationId },
+        },
+      });
+      if (old?.trackInventory && !dto.trackInventory) {
+        throw new AppException(
+          ErrorCode.PRODUCT_INVENTORY_TRACKING_IMMUTABLE,
+          HttpStatus.CONFLICT,
+        );
+      }
+      this.assertLocationMatchesPurpose(product, dto);
+      const values = {
         retailPrice: dto.retailPrice,
         status: dto.status,
         trackInventory: dto.trackInventory,
         reorderLevel: dto.reorderLevel ?? '0.000',
-      },
-      update: {
-        retailPrice: dto.retailPrice,
-        status: dto.status,
-        trackInventory: dto.trackInventory,
-        reorderLevel: dto.reorderLevel ?? '0.000',
-      },
+      };
+      const row = await tx.productLocation.upsert({
+        where: { productId_locationId: { productId, locationId } },
+        create: { productId, locationId, ...values },
+        update: values,
+      });
+      return { product, old, row };
     });
     await this.cache.invalidate(CacheDependency.locationProducts(locationId));
     this.emit(
@@ -514,22 +536,19 @@ export class ProductsService {
       location: ACTIVE_LOCATION_WHERE,
       locationId,
     };
+    const product = productPurposeWhere(dto.purpose);
     const search = dto.search?.trim();
     if (search) {
-      where.product = {
-        OR: [
-          { name: { contains: search, mode: 'insensitive' } },
-          { sku: { contains: search, mode: 'insensitive' } },
-          { barcode: { contains: search, mode: 'insensitive' } },
-        ],
-      };
+      product.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { sku: { contains: search, mode: 'insensitive' } },
+        { barcode: { contains: search, mode: 'insensitive' } },
+      ];
     }
-    if (dto.categoryId) {
-      where.product = {
-        ...(where.product as object),
-        categoryId: dto.categoryId,
-      };
-    }
+    if (dto.categoryId) product.categoryId = dto.categoryId;
+    if (Object.keys(product).length > 0) where.product = product;
+    // At a location "for sale" means it can be sold there, so a price is required too.
+    if (dto.purpose === ProductPurpose.SALE) where.retailPrice = { not: null };
     if (dto.status) where.status = dto.status;
     if (dto.trackInventory !== undefined) {
       where.trackInventory = dto.trackInventory;
@@ -576,10 +595,11 @@ export class ProductsService {
     );
     return catalog.products.flatMap((product) => {
       const offer = byProduct.get(product.id);
-      return offer
+      return offer?.retailPrice
         ? [
             {
               ...offer,
+              retailPrice: offer.retailPrice,
               product: {
                 ...product,
                 category: product.categoryId
@@ -601,6 +621,7 @@ export class ProductsService {
           brandId,
           brand: ACTIVE_BRAND_WHERE,
           status: ProductStatus.ACTIVE,
+          isForSale: true,
         },
         select: PUBLIC_PRODUCT_SELECT,
         orderBy: [{ name: 'asc' }, { id: 'asc' }],
@@ -619,6 +640,7 @@ export class ProductsService {
         locationId,
         location: ACTIVE_LOCATION_WHERE,
         status: ProductStatus.ACTIVE,
+        retailPrice: { not: null },
       },
       select: PUBLIC_PRODUCT_OFFER_SELECT,
     });
@@ -645,18 +667,19 @@ export class ProductsService {
     locationId: string,
     productIds: string[],
     tx?: Prisma.TransactionClient,
-  ): Promise<LocationProductView[]> {
+  ): Promise<SellableLocationProductView[]> {
     return (tx ?? this.db).productLocation.findMany({
       where: {
         locationId,
         productId: { in: productIds },
         status: ProductStatus.ACTIVE,
+        retailPrice: { not: null },
         location: ACTIVE_LOCATION_WHERE,
-        product: { status: ProductStatus.ACTIVE },
+        product: { status: ProductStatus.ACTIVE, isForSale: true },
       },
       include: locationProductInclude,
       orderBy: { id: 'asc' },
-    }) as Promise<LocationProductView[]>;
+    }) as Promise<SellableLocationProductView[]>;
   }
 
   private productWhere(
@@ -665,11 +688,13 @@ export class ProductsService {
       search?: string;
       categoryId?: string;
       status?: ProductStatus;
+      purpose?: ProductPurpose;
     },
   ): Prisma.ProductWhereInput {
     const where: Prisma.ProductWhereInput = {
       brand: ACTIVE_BRAND_WHERE,
       brandId,
+      ...productPurposeWhere(filter.purpose),
     };
     const search = filter.search?.trim();
     if (search) {
@@ -691,7 +716,9 @@ export class ProductsService {
     const primary: Prisma.ProductLocationOrderByWithRelationInput =
       field === ProductLocationSearchOrderBy.NAME
         ? { product: { name: direction } }
-        : { [field]: direction };
+        : field === ProductLocationSearchOrderBy.RETAIL_PRICE
+          ? { retailPrice: { sort: direction, nulls: 'last' } }
+          : { [field]: direction };
     return [primary, { id: direction }];
   }
 
@@ -711,6 +738,78 @@ export class ProductsService {
     categoryId: string | null | undefined,
   ): Promise<void> {
     if (categoryId) await this.findCategory(brandId, categoryId);
+  }
+
+  private purpose(
+    isForSale: boolean,
+    isForInternalUse: boolean,
+  ): ProductPurposeFlags {
+    if (!isForSale && !isForInternalUse) {
+      throw new AppException(
+        ErrorCode.PRODUCT_PURPOSE_REQUIRED,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    return { isForSale, isForInternalUse };
+  }
+
+  /** The new purpose flags, or null when the update leaves them unchanged. */
+  private changedPurpose(
+    old: Product,
+    dto: UpdateProductDto,
+  ): ProductPurposeFlags | null {
+    const isForSale = dto.isForSale ?? old.isForSale;
+    const isForInternalUse = dto.isForInternalUse ?? old.isForInternalUse;
+    if (
+      isForSale === old.isForSale &&
+      isForInternalUse === old.isForInternalUse
+    ) {
+      return null;
+    }
+    return this.purpose(isForSale, isForInternalUse);
+  }
+
+  private assertLocationMatchesPurpose(
+    product: ProductPurposeFlags,
+    dto: UpsertProductLocationDto,
+  ): void {
+    if (product.isForSale && dto.retailPrice == null) {
+      throw new AppException(
+        ErrorCode.PRODUCT_RETAIL_PRICE_REQUIRED,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (product.isForInternalUse && !dto.trackInventory) {
+      throw new AppException(
+        ErrorCode.PRODUCT_INTERNAL_USE_REQUIRES_INVENTORY,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+  }
+
+  /**
+   * Internal use is recorded by write-offs, which need stock tracking. Tracking is not
+   * switched on implicitly: it cannot be turned off again and would start from zero stock.
+   */
+  private async assertTrackedAtEveryLocation(
+    productId: string,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    const untracked = await tx.productLocation.findMany({
+      where: {
+        productId,
+        trackInventory: false,
+        location: ACTIVE_LOCATION_WHERE,
+      },
+      select: { location: { select: { id: true, name: true } } },
+    });
+    if (untracked.length > 0) {
+      throw new AppException(
+        ErrorCode.PRODUCT_INTERNAL_USE_REQUIRES_INVENTORY,
+        HttpStatus.CONFLICT,
+        { locations: untracked.map(({ location }) => location) },
+      );
+    }
   }
 
   private rethrowProductUnique(error: any): void {

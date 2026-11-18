@@ -11,6 +11,8 @@ import {
 import { PaginationRequestDto } from '../../../shared/dto/pagination-request.dto.js';
 import { ParseBoolean } from '../../../shared/transforms/parse-boolean.transform.js';
 import { ToArray } from '../../../shared/transforms/to-array.transform.js';
+import { IsOptionalProductPurpose } from '../decorators/is-optional-product-purpose.decorator.js';
+import { ProductPurpose } from '../enums/product-purpose.enum.js';
 import { ProductLocationSearchOrderBy } from '../enums/product-location-search-order-by.enum.js';
 import { ProductStatus } from '../enums/product-status.enum.js';
 
@@ -34,6 +36,9 @@ export class LocationProductSearchRequestDto extends PaginationRequestDto<Produc
   @IsOptional()
   @IsEnum(ProductStatus)
   status?: ProductStatus;
+
+  @IsOptionalProductPurpose()
+  purpose?: ProductPurpose;
 
   @ApiProperty({ type: Boolean, required: false })
   @IsOptional()

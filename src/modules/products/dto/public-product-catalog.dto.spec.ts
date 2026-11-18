@@ -25,7 +25,7 @@ function product(
   group: ProductCategory | null,
 ): Prisma.ProductLocationGetPayload<{
   include: { product: { include: { category: true; imageFile: true } } };
-}> {
+}> & { retailPrice: Prisma.Decimal } {
   return {
     id: 'location-product-' + id,
     locationId: 'location',
@@ -49,6 +49,8 @@ function product(
       barcode: 'internal-barcode',
       status: ProductStatus.ACTIVE,
       unit: ProductUnit.PIECE,
+      isForSale: true,
+      isForInternalUse: false,
       createdAt: date,
       updatedAt: date,
     },

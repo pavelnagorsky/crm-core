@@ -11,6 +11,8 @@ import {
 import { PaginationRequestDto } from '../../../shared/dto/pagination-request.dto.js';
 import { ParseBoolean } from '../../../shared/transforms/parse-boolean.transform.js';
 import { ToArray } from '../../../shared/transforms/to-array.transform.js';
+import { IsOptionalProductPurpose } from '../../products/decorators/is-optional-product-purpose.decorator.js';
+import { ProductPurpose } from '../../products/enums/product-purpose.enum.js';
 import { InventorySearchOrderBy } from '../enums/inventory-search-order-by.enum.js';
 
 export class InventorySearchRequestDto extends PaginationRequestDto<InventorySearchOrderBy> {
@@ -32,6 +34,9 @@ export class InventorySearchRequestDto extends PaginationRequestDto<InventorySea
   @IsArray()
   @IsUUID('all', { each: true })
   productIds?: string[];
+
+  @IsOptionalProductPurpose()
+  purpose?: ProductPurpose;
 
   @ApiProperty({ type: Boolean, required: false })
   @IsOptional()

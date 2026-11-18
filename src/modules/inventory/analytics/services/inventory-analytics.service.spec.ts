@@ -1,4 +1,5 @@
-import { Prisma, ProductUnit } from '@prisma/client';
+import { InventoryMovementType, Prisma, ProductUnit } from '@prisma/client';
+import { ProductPurpose } from '../../../products/enums/product-purpose.enum.js';
 import { InventoryAnalyticsService } from './inventory-analytics.service.js';
 
 function setup() {
@@ -67,5 +68,48 @@ describe('InventoryAnalyticsService', () => {
       }),
     ]);
     expect(db.$queryRaw).toHaveBeenCalledTimes(2);
+  });
+
+  it('applies the purpose filter to both KPI queries', async () => {
+    const { service, db } = setup();
+    db.$queryRaw.mockResolvedValue([]);
+
+    await service.getKpi('location-1', {
+      deadStockDays: 90,
+      movementDays: 30,
+      topLimit: 5,
+      purpose: ProductPurpose.INTERNAL,
+    });
+
+    const [summary, replenishment] = db.$queryRaw.mock.calls.map(
+      ([query]) => query as Prisma.Sql,
+    );
+    expect(summary.sql).toContain('p."isForInternalUse" = true');
+    expect(replenishment.sql).toContain('p."isForInternalUse" = true');
+  });
+
+  it('treats sales and write-offs as usage when counting dead stock', async () => {
+    const { service, db } = setup();
+    db.$queryRaw.mockResolvedValue([]);
+
+    const result = await service.getKpi('location-1', {
+      deadStockDays: 90,
+      movementDays: 30,
+      topLimit: 5,
+    });
+
+    const [summary] = db.$queryRaw.mock.calls.map(
+      ([query]) => query as Prisma.Sql,
+    );
+    expect(summary.sql).toContain('i."isForSale" AND im."type"');
+    expect(summary.sql).toContain('i."isForInternalUse" AND im."type"');
+    expect(summary.values).toEqual(
+      expect.arrayContaining([
+        InventoryMovementType.SALE,
+        InventoryMovementType.WRITE_OFF,
+      ]),
+    );
+    expect(summary.sql).not.toContain('isForInternalUse" = true');
+    expect(result.totalProducts).toBe(0);
   });
 });

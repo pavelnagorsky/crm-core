@@ -3,6 +3,8 @@ import { InventoryMovementType, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
 import { activeLocationSql } from '../../../../shared/database/active-business.sql.js';
 import { MoneyUtils } from '../../../../shared/money/money.utils.js';
+import { ProductPurpose } from '../../../products/enums/product-purpose.enum.js';
+import { productPurposeSql } from '../../../products/utils/product-purpose.filter.js';
 import { InventoryKpiQueryDto } from '../dto/inventory-kpi-query.dto.js';
 import { InventoryKpiSummaryRow } from '../interfaces/inventory-kpi-summary-row.interface.js';
 import { InventoryKpiView } from '../interfaces/inventory-kpi-view.interface.js';
@@ -25,10 +27,11 @@ export class InventoryAnalyticsService {
           locationId,
           deadStockSince,
           movementSince,
+          dto.purpose,
         ),
       ),
       this.db.$queryRaw<InventoryReplenishmentItemView[]>(
-        this.topReplenishmentQuery(locationId, topLimit),
+        this.topReplenishmentQuery(locationId, topLimit, dto.purpose),
       ),
     ]);
     const summary = summaryRows[0] ?? {
@@ -54,6 +57,7 @@ export class InventoryAnalyticsService {
     locationId: string,
     deadStockSince: Date,
     movementSince: Date,
+    purpose: ProductPurpose | undefined,
   ): Prisma.Sql {
     return Prisma.sql`
       WITH inventory AS (
@@ -61,20 +65,29 @@ export class InventoryAnalyticsService {
           pl.id AS "productLocationId",
           COALESCE(ib."quantityOnHand", 0::numeric) AS "quantityOnHand",
           COALESCE(ib."stockValue", 0::numeric) AS "stockValue",
-          pl."reorderLevel" AS "reorderLevel"
+          pl."reorderLevel" AS "reorderLevel",
+          p."isForSale" AS "isForSale",
+          p."isForInternalUse" AS "isForInternalUse"
         FROM "ProductLocation" pl
+        INNER JOIN "Product" p ON p.id = pl."productId"
         LEFT JOIN "InventoryBalance" ib ON ib."productLocationId" = pl.id
         WHERE pl."locationId" = ${locationId}
           AND ${activeLocationSql(Prisma.sql`pl."locationId"`)}
           AND pl."trackInventory" = true
+          AND ${productPurposeSql(purpose, 'p')}
       ),
-      recent_sales AS (
+      -- Stock is "used" by sales for products for sale and by write-offs for internal ones.
+      -- A purpose filter narrows usage to that purpose only.
+      recent_usage AS (
         SELECT DISTINCT im."productLocationId"
         FROM "InventoryMovement" im
         INNER JOIN inventory i ON i."productLocationId" = im."productLocationId"
         WHERE im."locationId" = ${locationId}
-          AND im."type" = CAST(${InventoryMovementType.SALE} AS "InventoryMovementType")
           AND im."occurredAt" >= ${deadStockSince}
+          AND (
+            (${purpose !== ProductPurpose.INTERNAL} AND i."isForSale" AND im."type" = CAST(${InventoryMovementType.SALE} AS "InventoryMovementType"))
+            OR (${purpose !== ProductPurpose.SALE} AND i."isForInternalUse" AND im."type" = CAST(${InventoryMovementType.WRITE_OFF} AS "InventoryMovementType"))
+          )
       ),
       recent_movements AS (
         SELECT DISTINCT im."productLocationId"
@@ -96,17 +109,18 @@ export class InventoryAnalyticsService {
         ) AS "stockValue",
         COUNT(*) FILTER (
           WHERE i."quantityOnHand" > 0::numeric
-            AND rs."productLocationId" IS NULL
+            AND ru."productLocationId" IS NULL
         )::int AS "deadStockCount",
         (SELECT COUNT(*)::int FROM recent_movements) AS "movingProductsCount"
       FROM inventory i
-      LEFT JOIN recent_sales rs ON rs."productLocationId" = i."productLocationId"
+      LEFT JOIN recent_usage ru ON ru."productLocationId" = i."productLocationId"
     `;
   }
 
   private topReplenishmentQuery(
     locationId: string,
     topLimit: number,
+    purpose: ProductPurpose | undefined,
   ): Prisma.Sql {
     return Prisma.sql`
       WITH inventory AS (
@@ -124,13 +138,16 @@ export class InventoryAnalyticsService {
             0::numeric
           ) AS "missingQuantity",
           COALESCE(ib."stockValue", 0::numeric) AS "stockValue",
-          ib."updatedAt" AS "updatedAt"
+          ib."updatedAt" AS "updatedAt",
+          p."isForSale" AS "isForSale",
+          p."isForInternalUse" AS "isForInternalUse"
         FROM "ProductLocation" pl
         INNER JOIN "Product" p ON p.id = pl."productId"
         LEFT JOIN "InventoryBalance" ib ON ib."productLocationId" = pl.id
         WHERE pl."locationId" = ${locationId}
           AND ${activeLocationSql(Prisma.sql`pl."locationId"`)}
           AND pl."trackInventory" = true
+          AND ${productPurposeSql(purpose, 'p')}
       )
       SELECT
         "productLocationId",
@@ -143,7 +160,9 @@ export class InventoryAnalyticsService {
         "reorderLevel",
         "missingQuantity",
         "stockValue",
-        "updatedAt"
+        "updatedAt",
+        "isForSale",
+        "isForInternalUse"
       FROM inventory
       WHERE "quantityOnHand" <= "reorderLevel"
       ORDER BY

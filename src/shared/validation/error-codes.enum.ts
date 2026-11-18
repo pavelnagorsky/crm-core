@@ -397,6 +397,19 @@ export const ErrorCode = {
     message:
       'Inventory tracking cannot be disabled after it has been enabled for a location',
   },
+  PRODUCT_PURPOSE_REQUIRED: {
+    code: 'PRODUCT_PURPOSE_REQUIRED',
+    message: 'Product must be for sale, for internal use, or both',
+  },
+  PRODUCT_RETAIL_PRICE_REQUIRED: {
+    code: 'PRODUCT_RETAIL_PRICE_REQUIRED',
+    message: 'Retail price is required for products that are for sale',
+  },
+  PRODUCT_INTERNAL_USE_REQUIRES_INVENTORY: {
+    code: 'PRODUCT_INTERNAL_USE_REQUIRES_INVENTORY',
+    message:
+      'Inventory tracking must be enabled at every location of a product for internal use',
+  },
 
   PRODUCT_UNIT_IMMUTABLE: {
     code: 'PRODUCT_UNIT_IMMUTABLE',

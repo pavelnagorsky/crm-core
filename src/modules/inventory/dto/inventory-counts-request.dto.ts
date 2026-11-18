@@ -7,6 +7,8 @@ import {
   MaxLength,
 } from 'class-validator';
 import { ToArray } from '../../../shared/transforms/to-array.transform.js';
+import { IsOptionalProductPurpose } from '../../products/decorators/is-optional-product-purpose.decorator.js';
+import { ProductPurpose } from '../../products/enums/product-purpose.enum.js';
 
 export class InventoryCountsRequestDto {
   @ApiProperty({ type: String, required: false })
@@ -27,4 +29,7 @@ export class InventoryCountsRequestDto {
   @IsArray()
   @IsUUID('all', { each: true })
   productIds?: string[];
+
+  @IsOptionalProductPurpose()
+  purpose?: ProductPurpose;
 }
