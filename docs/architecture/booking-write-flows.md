@@ -25,8 +25,34 @@ booking detail/search responses. The channel remains `MANUAL`.
 
 Bookings with custom time accept an optional actual `endAt`, confirm ongoing
 visits and complete elapsed visits with the usual order/payroll sync and
-completion permission check. Ordinary manual bookings keep the location's
-confirmation policy. The migration restores `isCustomTime: true` for historical
+completion permission check. Custom time is the journal's "book anyway": like a
+manual interval on update it skips working hours, blocks and other bookings of the
+staff member (a free qualified staff member is still preferred when none is
+requested); only one staff member on two overlapping services of the same
+booking is rejected (`BOOKING_STAFF_ASSIGNMENT_OVERLAP`). Ordinary manual
+bookings are confirmed: staff booking from the journal has already agreed.
+
+Manual creation takes an optional `status` (`PENDING`, `CONFIRMED`, `COMPLETED`,
+`NO_SHOW`) that overrides both defaults. `COMPLETED` and `NO_SHOW` need a visit
+that has started (`BOOKING_STATUS_BEFORE_START`), `COMPLETED` needs `order:write`
+(`BOOKING_COMPLETED_CREATE_FORBIDDEN`) and runs the same order/payroll sync as a
+completion. Neither queues a client email: the creation notice is computed from the
+final status. `clientId` books a stored brand client (`BOOKING_CLIENT_NOT_FOUND`
+otherwise; not with `anonymous`). An email in the request fills an empty client
+email, by `ClientsService.completeEmail`, for both a selected client and one found
+by phone; a filled email is never overwritten and online bookings never change a
+profile. A caller with only `booking.own:write` must perform one of the services.
+
+`BookingHistoryReadService` serves the booking dialog: the client summary (brand-wide
+completed visits, no-shows, last visit, last visit in the location, nearest active
+booking, services and bundles by frequency) and popular services per staff member
+for the last 90 days. A bundle visit counts for the bundle, a visit without a bundle
+for each of its services; only `COMPLETED` visits count. Bundle titles come from
+`ServiceCatalogFacade.findBundleTitles`. `CalendarFacade.checkManualSlot` explains an
+unavailable start time with the earliest obstacle: `BOOKING`, `BLOCK`,
+`OUTSIDE_SCHEDULE` or `NO_STAFF`.
+
+The migration restores `isCustomTime: true` for historical
 bookings identified by their legacy source in a `BOOKING_CREATED` audit entry.
 Other existing bookings default to false; previously unsaved flags cannot be
 inferred reliably without that evidence.

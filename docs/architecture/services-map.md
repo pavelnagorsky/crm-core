@@ -16,8 +16,9 @@
 | BookingClientController / BookingClientService | Просмотр, слоты, отмена и перенос по клиентской ссылке. Стратегия загружает запись один раз; при изменениях проверяется версия записи в транзакции. |
 | BookingLifecycleService | Статусы, завершение, отмена и удаление с финансовыми последствиями. |
 | BookingSlotLockService / BookingWriteLockService | Блокировки сотрудников/дней и защита от устаревших изменений. |
+| BookingHistoryReadService | История клиента по бренду и популярные услуги сотрудников для окна ручной записи; названия комплексов через ServiceCatalogFacade. |
 | [CalendarFacade](../../src/modules/calendar/calendar.facade.ts) | Публичный API календарных событий и доступности. |
-| CalendarAvailabilityService | Загрузка смен/событий и проверка доступности через вычислитель. |
+| CalendarAvailabilityService | Загрузка смен/событий и проверка доступности через вычислитель, включая причину недоступности времени (slot-check). |
 | CalendarCalculator | Чистая обработка повторений, блокировок и свободных интервалов. Приватен для CalendarModule. |
 | CalendarViewFacade | Сборка HTTP-представления календаря с данными бронирований через публичные API. |
 

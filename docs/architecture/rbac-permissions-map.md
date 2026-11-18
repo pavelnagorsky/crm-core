@@ -187,7 +187,9 @@
 | `GET /public/bookings/me/available-slots` | `getClientAvailableSlots` | P: `booking-client-token` | Слоты только для записи из токена, с сохранением услуг и сотрудников. |
 | `POST /public/bookings/me/reschedule` | `rescheduleByClientToken` | P: `booking-client-token` | Только предстоящая PENDING/CONFIRMED; повторная проверка слотов в транзакции. |
 | `POST /public/bookings/me/cancel` | `cancelByClientToken` | P: `booking-client-token` | Действующая клиентская политика отмены; не обход к возврату произвольного заказа. |
-| `POST /locations/:locationId/bookings/manual` | `createManual` | L: `booking:write` | Произвольная цена: также sale.price.override:write. Товары: order:write. Клиент находится или создаётся автоматически независимо от client:write. Произвольное время (`isCustomTime: true`, канал `MANUAL`) с немедленным COMPLETED: order:write. |
+| `POST /locations/:locationId/bookings/manual` | `createManual` | L: `booking:write` или `booking.own:write` | При own-записи сотрудник должен выполнять хотя бы одну услугу (`403 BOOKING_OWN_STAFF_REQUIRED`). Произвольная цена: также sale.price.override:write. Товары: order:write. Клиент выбирается по `clientId` или находится/создаётся по телефону независимо от client:write. Создание в статусе COMPLETED (явном или по произвольному времени): order:write. |
+| `GET /locations/:locationId/bookings/popular-services` | `getPopularServices` | L: `booking:read` или `booking.own:read` | Агрегаты по всем сотрудникам филиала без данных клиентов. |
+| `GET /locations/:locationId/clients/:clientId/booking-summary` | `getClientBookingSummary` | L: `booking:read` или `booking.own:read` | История клиента по всем активным филиалам бренда; клиент должен принадлежать бренду филиала. |
 | `GET /locations/:locationId/bookings/status-counts` | `getStatusCounts` | L: `booking:read` или `booking.own:read` | При own-чтении обязательно участие в записи; списки и счётчики ограничены до пагинации. |
 | `GET /locations/:locationId/bookings/export` | `export` | L: `booking.export:read` | — |
 | `GET /locations/:locationId/bookings/:id` | `findById` | L: `booking:read` или `booking.own:read` | При own-чтении обязательно участие в записи; списки и счётчики ограничены до пагинации. Поле `review` заполняется только при `review:read`. |
@@ -221,6 +223,7 @@
 | --- | --- | --- | --- |
 | `GET /locations/:locationId/calendar/public/available-slots` | `getAvailableSlots` | P: `public` | — |
 | `GET /locations/:locationId/calendar/available-slots` | `getManualAvailableSlots` | L: `booking:read` или `booking.own:read` | При own-чтении свой календарь и общие блокировки; чужой блок по ID закрыт. Исключение событий при переносе требует участия в редактируемой записи. |
+| `GET /locations/:locationId/calendar/slot-check` | `checkManualSlot` | L: `booking:read` или `booking.own:read` | Показывает только интервал препятствия, без данных чужой записи. |
 | `GET /locations/:locationId/calendar` | `getCalendar` | L: `booking:read` или `booking.own:read` | При own-чтении свой календарь и общие блокировки; чужой блок по ID закрыт. Исключение событий при переносе требует участия в редактируемой записи. |
 | `GET /locations/:locationId/calendar/:eventId` | `getEvent` | L: `booking:read` или `booking.own:read` | При own-чтении свой календарь и общие блокировки; чужой блок по ID закрыт. Исключение событий при переносе требует участия в редактируемой записи. |
 | `POST /locations/:locationId/calendar` | `create` | L: `calendar.blocks:write` | — |
@@ -247,8 +250,8 @@
 | `PUT /brands/:brandId/clients/:id` | `update` | G: `client:write` | — |
 | `PATCH /brands/:brandId/clients/:id/ban` | `setBan` | G: `client.ban:write` | — |
 | `GET /brands/:brandId/clients/export` | `export` | G: `client.export:read` | — |
-| `GET /brands/:brandId/clients/:id` | `findById` | G: `client:read` | — |
-| `GET /brands/:brandId/clients` | `search` | G: `client:read` | — |
+| `GET /brands/:brandId/clients/:id` | `findById` | G: `client:read`, или `booking:write` / `booking.own:write` в филиале бренда | Проверка в `ClientReadGuard`. |
+| `GET /brands/:brandId/clients` | `search` | G: `client:read`, или `booking:write` / `booking.own:write` в филиале бренда | Проверка в `ClientReadGuard`. |
 
 ## dashboard
 

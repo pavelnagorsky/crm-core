@@ -46,6 +46,9 @@ flowchart LR
   BookingsFacade --> BookingReadService
   BookingsFacade --> BookingMutationService
   BookingsFacade --> BookingSetupService
+  BookingsFacade --> BookingHistoryReadService
+  BookingHistoryReadService --> ClientsService
+  BookingHistoryReadService --> ServiceCatalogFacade
   BookingsController --> BookingCreateFacade
   BookingsController --> BookingsExportService
 
