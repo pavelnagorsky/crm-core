@@ -39,6 +39,7 @@ import { auditActorFromToken } from '../../audit/utils/audit-actor-from-token.js
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 import { TokenPayload } from '../../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
+import { ClientReadAccess } from '../decorators/client-read-access.decorator.js';
 import { ClientExportRequestDto } from '../export/dto/client-export-request.dto.js';
 import { ClientsExportService } from '../export/services/clients-export.service.js';
 import { ClientResponseDto } from '../dto/client-response.dto.js';
@@ -184,10 +185,13 @@ export class ClientsController {
     return new StreamableFile(stream, { type: XlsxUtils.mimeType });
   }
 
-  @ApiOperation({ summary: 'Get client by ID' })
+  @ApiOperation({
+    summary:
+      'Get client by ID. Open to client:read and to anyone who can create a manual booking in a brand location',
+  })
   @ApiOkResponse({ type: ApiResponse(ClientResponseDto) })
   @ApiNotFoundResponse({ description: 'Client not found' })
-  @Permissions(Read(Claim.CLIENT))
+  @ClientReadAccess()
   @Get(':id')
   async findById(
     @Param('brandId', ParseUUIDPipe) brandId: string,
@@ -197,9 +201,15 @@ export class ClientsController {
     return BaseResponseDto.success(ClientResponseDto.fromEntity(client));
   }
 
-  @ApiOperation({ summary: 'Search clients' })
+  @ApiOperation({
+    summary:
+      'Search clients. Open to client:read and to anyone who can create a manual booking in a brand location',
+  })
   @ApiOkResponse({ type: ApiResponse(ClientSearchResponseDto) })
-  @Permissions(Read(Claim.CLIENT))
+  @ApiBadRequestResponse({
+    description: 'phone has fewer than 3 or more than 20 digits',
+  })
+  @ClientReadAccess()
   @Get()
   async search(
     @Param('brandId', ParseUUIDPipe) brandId: string,

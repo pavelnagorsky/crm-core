@@ -17,6 +17,7 @@ import {
   StreamableFile,
 } from '@nestjs/common';
 import {
+  ApiBadRequestResponse,
   ApiConflictResponse,
   ApiCreatedResponse,
   ApiForbiddenResponse,
@@ -59,7 +60,9 @@ import { BookingSetupResponseDto } from '../dto/booking-setup-response.dto.js';
 import { BookingStatusCountResponseDto } from '../dto/booking-status-count-response.dto.js';
 import { BookingWriteResponseDto } from '../dto/booking-write-response.dto.js';
 import { CancelBookingDto } from '../dto/cancel-booking.dto.js';
+import { ClientBookingSummaryResponseDto } from '../dto/client-booking-summary-response.dto.js';
 import { ClientLinkResponseDto } from '../dto/client-link-response.dto.js';
+import { StaffPopularServicesDto } from '../dto/staff-popular-services.dto.js';
 import { ManualCreateBookingDto } from '../dto/manual-create-booking.dto.js';
 import { UpdateBookingStatusDto } from '../dto/update-booking-status.dto.js';
 import { UpdateBookingDto } from '../dto/update-booking.dto.js';
@@ -147,16 +150,29 @@ export class BookingsController {
 
   // ─── Owner / Staff ────────────────────────────────────────────────────────────
 
-  @ApiOperation({ summary: 'Create a booking manually' })
+  @ApiOperation({
+    summary:
+      'Create a booking manually. booking:write creates any booking; booking.own:write only one in which the caller performs a service',
+  })
   @ApiCreatedResponse({ type: ApiResponse(BookingWriteResponseDto) })
-  @ApiNotFoundResponse({ description: 'Location, service, or staff not found' })
-  @ApiConflictResponse({ description: 'Slot is no longer available' })
+  @ApiBadRequestResponse({
+    description:
+      'BOOKING_STATUS_BEFORE_START: COMPLETED or NO_SHOW for a visit that has not started; BOOKING_CLIENT_CONFLICT: clientId with anonymous; BOOKING_STAFF_ASSIGNMENT_OVERLAP: custom time puts one staff member on overlapping services',
+  })
+  @ApiNotFoundResponse({
+    description:
+      'Location, service, or staff not found; BOOKING_CLIENT_NOT_FOUND: clientId is unknown or belongs to another brand',
+  })
+  @ApiConflictResponse({
+    description:
+      'BOOKING_SLOT_UNAVAILABLE / BOOKING_NO_STAFF_AVAILABLE: the slot is taken or outside working hours. Never returned with isCustomTime',
+  })
   @ApiForbiddenResponse({
     description:
-      'BOOKING_COMPLETED_CREATE_FORBIDDEN: the visit has already ended, so it would be created as completed, and the caller lacks order write permission',
+      'BOOKING_COMPLETED_CREATE_FORBIDDEN: the booking would be created as completed and the caller lacks order:write; BOOKING_OWN_STAFF_REQUIRED: with booking.own:write only, the caller performs none of the services',
     type: ForbiddenException,
   })
-  @Permissions(Write(Claim.BOOKING))
+  @Permissions([Write(Claim.BOOKING), Write(Claim.BOOKING_OWN)])
   @Post('locations/:locationId/bookings/manual')
   async createManual(
     @Param('locationId', ParseUUIDPipe) locationId: string,
@@ -178,7 +194,14 @@ export class BookingsController {
       locationId,
       dto,
       auditActorFromToken(tokenPayload, locationId),
-      hasPermission(tokenPayload, Write(Claim.ORDER), locationId),
+      {
+        canComplete: hasPermission(
+          tokenPayload,
+          Write(Claim.ORDER),
+          locationId,
+        ),
+        ownStaffId: await this.access.createStaffId(tokenPayload, locationId),
+      },
     );
     return BaseResponseDto.success(
       BookingWriteResponseDto.fromBooking(booking),
@@ -199,6 +222,50 @@ export class BookingsController {
     );
     return BaseResponseDto.success(
       counts.map((r) => Object.assign(new BookingStatusCountResponseDto(), r)),
+    );
+  }
+
+  @ApiOperation({
+    summary:
+      'Services and bundles each staff member of the location completed most in the last 90 days, for quick picks in the booking dialog',
+    description:
+      'One entry per staff member with completed visits in the period; staff without history are absent. Items are not filtered by the current catalog or staff skills.',
+  })
+  @ApiOkResponse({ type: ApiResponseArray(StaffPopularServicesDto) })
+  @ApiNotFoundResponse({ description: 'Location not found' })
+  @Permissions([Read(Claim.BOOKING), Read(Claim.BOOKING_OWN)])
+  @Get('locations/:locationId/bookings/popular-services')
+  async getPopularServices(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+  ): Promise<BaseResponseDto<StaffPopularServicesDto[]>> {
+    const popular = await this.bookings.getPopularServices(locationId);
+    return BaseResponseDto.success(
+      popular.map(StaffPopularServicesDto.fromEntity),
+    );
+  }
+
+  @ApiOperation({
+    summary:
+      'Booking history of a brand client for the booking dialog: visit counts, last visit, upcoming booking and services taken before',
+    description:
+      'Counts completed visits only, across all active locations of the brand. Services of bundle visits count for the bundle.',
+  })
+  @ApiOkResponse({ type: ApiResponse(ClientBookingSummaryResponseDto) })
+  @ApiNotFoundResponse({
+    description: 'Location not found, or the client is not in its brand',
+  })
+  @Permissions([Read(Claim.BOOKING), Read(Claim.BOOKING_OWN)])
+  @Get('locations/:locationId/clients/:clientId/booking-summary')
+  async getClientBookingSummary(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Param('clientId', ParseUUIDPipe) clientId: string,
+  ): Promise<BaseResponseDto<ClientBookingSummaryResponseDto>> {
+    const summary = await this.bookings.getClientBookingSummary(
+      locationId,
+      clientId,
+    );
+    return BaseResponseDto.success(
+      ClientBookingSummaryResponseDto.fromSummary(summary),
     );
   }
 

@@ -239,6 +239,23 @@ export const ErrorCode = {
     code: 'BOOKING_COMPLETED_CREATE_FORBIDDEN',
     message: 'Creating a completed booking is not allowed',
   },
+  BOOKING_STATUS_BEFORE_START: {
+    code: 'BOOKING_STATUS_BEFORE_START',
+    message:
+      'A visit that has not started yet cannot be completed or marked as a no-show',
+  },
+  BOOKING_CLIENT_NOT_FOUND: {
+    code: 'BOOKING_CLIENT_NOT_FOUND',
+    message: 'Client not found in this brand',
+  },
+  BOOKING_CLIENT_CONFLICT: {
+    code: 'BOOKING_CLIENT_CONFLICT',
+    message: 'Set either a client or an anonymous booking, not both',
+  },
+  BOOKING_OWN_STAFF_REQUIRED: {
+    code: 'BOOKING_OWN_STAFF_REQUIRED',
+    message: 'You can only create bookings in which you perform a service',
+  },
   BOOKING_TIME_INVALID: {
     code: 'BOOKING_TIME_INVALID',
     message: 'Booking end time must be after start time',

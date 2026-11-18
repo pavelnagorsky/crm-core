@@ -32,6 +32,7 @@ import { BookingMutationService } from './services/write/booking-mutation.servic
 import { BookingRescheduleService } from './services/write/booking-reschedule.service.js';
 import { PublicBookingRateLimiter } from './services/public-booking-rate-limiter.js';
 import { BookingCalendarReadService } from './services/read/booking-calendar-read.service.js';
+import { BookingHistoryReadService } from './services/read/booking-history-read.service.js';
 import { BookingReadService } from './services/read/booking-read.service.js';
 import { BookingSetupService } from './services/setup/booking-setup.service.js';
 import { BookingStaffNotificationService } from './services/booking-staff-notification.service.js';
@@ -74,6 +75,7 @@ import { JwtBookingClientStrategy } from './strategies/jwt-booking-client.strate
     BookingMutationService,
     BookingCalendarReadService,
     BookingReadService,
+    BookingHistoryReadService,
     BookingSetupService,
     BookingsExportService,
     PublicBookingRateLimiter,

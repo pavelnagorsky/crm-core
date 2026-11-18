@@ -71,7 +71,7 @@ export class BookingSchedulingService {
           );
         }
         const interval = intervals[index];
-        return this.calendar.filterAvailableStaff(
+        const free = await this.calendar.filterAvailableStaff(
           locationId,
           qualified,
           TimeUtils.zonedDateStr(interval.startAt, timezone),
@@ -79,6 +79,13 @@ export class BookingSchedulingService {
           interval.endAt,
           timezone,
         );
+        if (!request.allowConflicts)
+          return free.map((staff) => ({ id: staff.id, busy: false }));
+        const freeIds = new Set(free.map((staff) => staff.id));
+        return qualified.map((staff) => ({
+          id: staff.id,
+          busy: !freeIds.has(staff.id),
+        }));
       }),
     );
     const staffIds = [
@@ -109,13 +116,14 @@ export class BookingSchedulingService {
     const team = assignStaff(
       candidates.map((group, index) => ({
         itemId: String(index),
-        staffIds: group
-          .map((staff) => staff.id)
+        staffIds: [...group]
           .sort(
             (a, b) =>
-              (countByStaff.get(a) ?? 0) - (countByStaff.get(b) ?? 0) ||
-              a.localeCompare(b),
-          ),
+              Number(a.busy) - Number(b.busy) ||
+              (countByStaff.get(a.id) ?? 0) - (countByStaff.get(b.id) ?? 0) ||
+              a.id.localeCompare(b.id),
+          )
+          .map((staff) => staff.id),
       })),
       executionMode === PrismaBookingExecutionMode.PARALLEL,
     );

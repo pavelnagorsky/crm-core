@@ -71,15 +71,8 @@ describe('Staff booking API', () => {
     bookings.getStatusCounts.mockResolvedValue([]);
   });
 
-  it.each([
-    'createManual',
-    'export',
-    'delete',
-    'addProduct',
-    'addItems',
-    'generateClientToken',
-  ] as const)('denies the administrative endpoint %s', (operation) => {
-    const context = {
+  const staffContext = (operation: keyof BookingsController) =>
+    ({
       getHandler: () => BookingsController.prototype[operation],
       getClass: () => BookingsController,
       switchToHttp: () => ({
@@ -88,9 +81,30 @@ describe('Staff booking API', () => {
           params: { locationId: 'location-1' },
         }),
       }),
-    } as unknown as ExecutionContext;
-    expect(() => guard.canActivate(context)).toThrow(ForbiddenException);
+    }) as unknown as ExecutionContext;
+
+  it.each([
+    'export',
+    'delete',
+    'addProduct',
+    'addItems',
+    'generateClientToken',
+  ] as const)('denies the administrative endpoint %s', (operation) => {
+    expect(() => guard.canActivate(staffContext(operation))).toThrow(
+      ForbiddenException,
+    );
   });
+
+  it.each([
+    'createManual',
+    'getClientBookingSummary',
+    'getPopularServices',
+  ] as const)(
+    'opens the booking dialog endpoint %s to own-booking staff',
+    (operation) => {
+      expect(guard.canActivate(staffContext(operation))).toBe(true);
+    },
+  );
 
   it.each([
     BookingStatus.CONFIRMED,

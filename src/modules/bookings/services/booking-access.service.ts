@@ -33,6 +33,19 @@ export class BookingAccessService {
     );
   }
 
+  /** Own staff profile when the caller creates only bookings they take part in; undefined for booking:write. */
+  createStaffId(
+    token: TokenPayloadDto,
+    locationId: string,
+  ): Promise<string | undefined> {
+    return this.staffAccess.resolveStaffId(
+      token,
+      locationId,
+      Write(Claim.BOOKING),
+      Write(Claim.BOOKING_OWN),
+    );
+  }
+
   async assertManage(
     token: TokenPayloadDto,
     booking: BookingWithItems,

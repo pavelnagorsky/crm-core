@@ -8,12 +8,14 @@ import {
   Prisma,
 } from '@prisma/client';
 import { AppException } from '../../shared/exceptions/app.exception.js';
+import { AUDIT_EVENT } from '../audit/constants/audit.constants.js';
 import { AuditActorRole } from '../audit/enums/audit-actor-role.enum.js';
 import { NOTIFICATION_EVENT } from '../notifications/services/notifications.service.js';
 import { OrderPricingCalculator } from '../orders/calculators/order-pricing.calculator.js';
 import { BookingCreateFacade } from './booking-create.facade.js';
 import { CLIENT_NOTICE_DELAY_MS } from './rules/booking-client-notice.rules.js';
 import { CreateBookingDto } from './dto/create-booking.dto.js';
+import { ManualCreateBookingDto } from './dto/manual-create-booking.dto.js';
 import { BookingSource } from './enums/booking-source.enum.js';
 import { BookingStatus } from './enums/booking-status.enum.js';
 import { BookingEventsService } from './services/booking-events.service.js';
@@ -652,6 +654,13 @@ function customTimeSetup(
       email: null,
       bannedAt: null,
     }),
+    findForBooking: vi.fn().mockResolvedValue(null),
+    completeEmail: vi.fn(
+      async (_brandId: string, client: object, email: string) => ({
+        ...client,
+        email,
+      }),
+    ),
   };
   const calendar = {
     filterAvailableStaff: vi.fn().mockResolvedValue([{ id: 'staff-1' }]),
@@ -813,7 +822,7 @@ describe('BookingCreateFacade custom time', () => {
           endAt: '2020-09-20T10:30:00',
         },
         { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER },
-        false,
+        { canComplete: false },
       );
 
       expect(booking.source).toBe(BookingSource.MANUAL);
@@ -893,7 +902,7 @@ describe('BookingCreateFacade custom time', () => {
       'business-1',
       dto,
       { id: 'user-1', name: 'Staff', role: AuditActorRole.STAFF },
-      false,
+      { canComplete: false },
     );
 
     expect(clients.resolveForBooking).toHaveBeenCalledWith(
@@ -1020,7 +1029,7 @@ describe('BookingCreateFacade custom time', () => {
           endAt: '2020-09-20T10:30:00',
         },
         { id: 'user-1', name: 'Staff', role: AuditActorRole.STAFF },
-        false,
+        { canComplete: false },
       ),
     ).rejects.toMatchObject({ status: 403 });
     expect(tx.booking.create).not.toHaveBeenCalled();
@@ -1073,27 +1082,37 @@ describe('BookingCreateFacade custom time', () => {
     }
   });
 
-  it('rejects custom time when the requested interval conflicts', async () => {
-    const { service } = customTimeSetup({ isSlotFree: false });
+  it('books custom time over a busy interval of the staff member', async () => {
+    const { service, tx, calendar } = customTimeSetup({ isSlotFree: false });
+    calendar.filterAvailableStaff.mockResolvedValue([]);
 
-    const error = await service
-      .createManualBooking(
+    const booking = await service.createManualBooking(
+      'business-1',
+      {
+        ...dto,
+        isCustomTime: true,
+        startAt: '2099-09-20T10:04:00',
+        endAt: '2099-09-20T10:30:00',
+      },
+      { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER },
+    );
+
+    expect(booking.status).toBe(BookingStatus.CONFIRMED);
+    expect(tx.booking.create).toHaveBeenCalledOnce();
+    expect(calendar.isSlotFree).not.toHaveBeenCalled();
+  });
+
+  it('still rejects an ordinary manual booking over a busy interval', async () => {
+    const { service, tx } = customTimeSetup({ isSlotFree: false });
+
+    await expect(
+      service.createManualBooking(
         'business-1',
-        {
-          ...dto,
-          isCustomTime: true,
-          startAt: '2026-09-20T10:04:00',
-          endAt: '2026-09-20T10:30:00',
-        },
+        { ...dto, startAt: '2099-09-20T10:04:00' },
         { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER },
-      )
-      .then(
-        () => null,
-        (caught: unknown) => caught,
-      );
-
-    expect(error).toBeInstanceOf(AppException);
-    expect((error as AppException).errorCode).toBe('BOOKING_SLOT_UNAVAILABLE');
+      ),
+    ).rejects.toMatchObject({ errorCode: 'BOOKING_SLOT_UNAVAILABLE' });
+    expect(tx.booking.create).not.toHaveBeenCalled();
   });
 
   it('completes an elapsed booking with custom time under the manual channel and syncs order and earnings', async () => {
@@ -1154,7 +1173,7 @@ describe('BookingCreateFacade custom time', () => {
             endAt: '2026-09-20T10:30:00',
           },
           { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER },
-          false,
+          { canComplete: false },
         )
         .then(
           () => null,
@@ -1170,6 +1189,319 @@ describe('BookingCreateFacade custom time', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('BookingCreateFacade manual status', () => {
+  const owner = { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER };
+  const elapsed = { startAt: '2026-09-20T10:00:00' };
+  const now = new Date('2026-09-20T07:30:00.000Z');
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(now);
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it.each([BookingStatus.PENDING, BookingStatus.CONFIRMED] as const)(
+    'stores an explicit %s status for an upcoming visit',
+    async (status) => {
+      const { service, tx } = customTimeSetup();
+      await service.createManualBooking(
+        'business-1',
+        { ...dto, startAt: '2026-09-21T10:00:00', status },
+        owner,
+      );
+      expect(tx.booking.create.mock.calls[0][0].data.status).toBe(status);
+    },
+  );
+
+  it('prefers the explicit status over custom time', async () => {
+    const { service, tx, orders } = customTimeSetup();
+    await service.createManualBooking(
+      'business-1',
+      {
+        ...dto,
+        ...elapsed,
+        isCustomTime: true,
+        status: BookingStatus.CONFIRMED,
+      },
+      owner,
+    );
+    expect(tx.booking.create.mock.calls[0][0].data.status).toBe(
+      BookingStatus.CONFIRMED,
+    );
+    expect(orders.syncCompletedBooking).not.toHaveBeenCalled();
+  });
+
+  it.each([BookingStatus.COMPLETED, BookingStatus.NO_SHOW] as const)(
+    'rejects %s for a visit that has not started',
+    async (status) => {
+      const { service, tx, clients } = customTimeSetup();
+      const error = await service
+        .createManualBooking(
+          'business-1',
+          { ...dto, startAt: '2026-09-20T10:31:00', status },
+          owner,
+        )
+        .catch((caught: unknown) => caught);
+      expect(error).toBeInstanceOf(AppException);
+      expect((error as AppException).errorCode).toBe(
+        'BOOKING_STATUS_BEFORE_START',
+      );
+      expect((error as AppException).getStatus()).toBe(HttpStatus.BAD_REQUEST);
+      expect(clients.resolveForBooking).not.toHaveBeenCalled();
+      expect(tx.booking.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it('completes a started visit with the usual order and payroll sync, without an email', async () => {
+    const { service, tx, orders, earnings, clients } = customTimeSetup();
+    clients.resolveForBooking.mockResolvedValue({
+      id: 'client-1',
+      firstName: 'Anna',
+      lastName: 'Ivanova',
+      phone: '+375291112233',
+      email: 'anna@example.test',
+      bannedAt: null,
+    });
+    await service.createManualBooking(
+      'business-1',
+      { ...dto, ...elapsed, status: BookingStatus.COMPLETED },
+      owner,
+    );
+    const data = tx.booking.create.mock.calls[0][0].data;
+    expect(data.status).toBe(BookingStatus.COMPLETED);
+    expect(data.clientNoticeType).toBeNull();
+    expect(orders.syncCompletedBooking).toHaveBeenCalledOnce();
+    expect(earnings.recordForCompletedBooking).toHaveBeenCalledOnce();
+  });
+
+  it('rejects COMPLETED without the completion permission', async () => {
+    const { service, tx } = customTimeSetup();
+    await expect(
+      service.createManualBooking(
+        'business-1',
+        { ...dto, ...elapsed, status: BookingStatus.COMPLETED },
+        owner,
+        { canComplete: false },
+      ),
+    ).rejects.toMatchObject({
+      errorCode: 'BOOKING_COMPLETED_CREATE_FORBIDDEN',
+      status: HttpStatus.FORBIDDEN,
+    });
+    expect(tx.booking.create).not.toHaveBeenCalled();
+  });
+
+  it('records a no-show of a started visit without completion permission, payroll or email', async () => {
+    const { service, tx, orders, earnings, clients } = customTimeSetup();
+    clients.resolveForBooking.mockResolvedValue({
+      id: 'client-1',
+      firstName: 'Anna',
+      lastName: 'Ivanova',
+      phone: '+375291112233',
+      email: 'anna@example.test',
+      bannedAt: null,
+    });
+    await service.createManualBooking(
+      'business-1',
+      { ...dto, startAt: '2026-09-20T10:15:00', status: BookingStatus.NO_SHOW },
+      owner,
+      { canComplete: false },
+    );
+    const data = tx.booking.create.mock.calls[0][0].data;
+    expect(data.status).toBe(BookingStatus.NO_SHOW);
+    expect(data.clientNoticeAt).toBeNull();
+    expect(orders.syncCompletedBooking).not.toHaveBeenCalled();
+    expect(earnings.recordForCompletedBooking).not.toHaveBeenCalled();
+  });
+
+  it('records the creation status in the audit entry', async () => {
+    const { service, emitter } = customTimeSetup();
+    await service.createManualBooking(
+      'business-1',
+      { ...dto, ...elapsed, status: BookingStatus.NO_SHOW },
+      owner,
+    );
+    expect(emitter.emit).toHaveBeenCalledWith(
+      AUDIT_EVENT,
+      expect.objectContaining({
+        payload: expect.objectContaining({ status: BookingStatus.NO_SHOW }),
+      }),
+    );
+  });
+});
+
+describe('BookingCreateFacade manual client', () => {
+  const owner = { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER };
+  const stored = {
+    id: 'client-7',
+    brandId: 'brand-1',
+    firstName: 'Мария',
+    lastName: 'Петрова',
+    phone: '+375297776655',
+    email: null,
+    bannedAt: null,
+  };
+  const upcoming = { startAt: '2099-09-20T10:00:00' };
+
+  it('books the selected client by id with the profile contacts', async () => {
+    const { service, tx, clients } = customTimeSetup();
+    clients.findForBooking.mockResolvedValue({
+      ...stored,
+      email: 'maria@example.test',
+    });
+    await service.createManualBooking(
+      'business-1',
+      {
+        ...upcoming,
+        serviceId: 'service-1',
+        staffId: 'staff-1',
+        clientId: 'client-7',
+      } as ManualCreateBookingDto,
+      owner,
+    );
+    const data = tx.booking.create.mock.calls[0][0].data;
+    expect(clients.findForBooking).toHaveBeenCalledWith('brand-1', 'client-7');
+    expect(clients.resolveForBooking).not.toHaveBeenCalled();
+    expect(data.clientId).toBe('client-7');
+    expect(data.clientFirstName).toBe('Мария');
+    expect(data.clientPhone).toBe('+375297776655');
+    expect(data.clientEmail).toBe('maria@example.test');
+    expect(clients.completeEmail).not.toHaveBeenCalled();
+  });
+
+  it('ignores request name and phone when a client id is given', async () => {
+    const { service, tx, clients } = customTimeSetup();
+    clients.findForBooking.mockResolvedValue(stored);
+    await service.createManualBooking(
+      'business-1',
+      { ...dto, ...upcoming, clientId: 'client-7' },
+      owner,
+    );
+    expect(tx.booking.create.mock.calls[0][0].data.clientPhone).toBe(
+      stored.phone,
+    );
+    expect(clients.resolveForBooking).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unknown or foreign client with a coded 404 before writing', async () => {
+    const { service, tx } = customTimeSetup();
+    const error = await service
+      .createManualBooking(
+        'business-1',
+        { ...dto, ...upcoming, clientId: 'client-other-brand' },
+        owner,
+      )
+      .catch((caught: unknown) => caught);
+    expect((error as AppException).errorCode).toBe('BOOKING_CLIENT_NOT_FOUND');
+    expect((error as AppException).getStatus()).toBe(HttpStatus.NOT_FOUND);
+    expect(tx.booking.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a client id on an anonymous booking', async () => {
+    const { service, clients } = customTimeSetup();
+    await expect(
+      service.createManualBooking(
+        'business-1',
+        { ...dto, ...upcoming, clientId: 'client-7', anonymous: true },
+        owner,
+      ),
+    ).rejects.toMatchObject({
+      errorCode: 'BOOKING_CLIENT_CONFLICT',
+      status: HttpStatus.BAD_REQUEST,
+    });
+    expect(clients.findForBooking).not.toHaveBeenCalled();
+  });
+
+  it('saves a typed email to a selected client without one and queues the email to it', async () => {
+    const { service, tx, clients } = customTimeSetup();
+    clients.findForBooking.mockResolvedValue(stored);
+    await service.createManualBooking(
+      'business-1',
+      {
+        ...dto,
+        ...upcoming,
+        clientId: 'client-7',
+        email: 'maria@example.test',
+        notifyClient: true,
+      },
+      owner,
+    );
+    expect(clients.completeEmail).toHaveBeenCalledWith(
+      'brand-1',
+      stored,
+      'maria@example.test',
+      owner,
+    );
+    const data = tx.booking.create.mock.calls[0][0].data;
+    expect(data.clientEmail).toBe('maria@example.test');
+    expect(data.clientNoticeType).toBe(ClientNoticeType.CREATED);
+  });
+
+  it('fills the missing email of a client found by phone', async () => {
+    const { service, clients } = customTimeSetup();
+    await service.createManualBooking(
+      'business-1',
+      { ...dto, ...upcoming, email: 'anna@example.test' },
+      owner,
+    );
+    expect(clients.completeEmail).toHaveBeenCalledWith(
+      'brand-1',
+      expect.objectContaining({ id: 'client-1' }),
+      'anna@example.test',
+      owner,
+    );
+  });
+
+  it('never changes a stored client from an online booking', async () => {
+    const { service, clients } = setup();
+    clients.resolveForBooking.mockResolvedValue({
+      id: 'client-1',
+      email: null,
+      bannedAt: null,
+    });
+    await service
+      .createPublicBooking(
+        'business-1',
+        { ...dto, email: 'guest@example.test' },
+        publicAttribution,
+      )
+      .catch(() => undefined);
+    expect(
+      (clients as { completeEmail?: unknown }).completeEmail,
+    ).toBeUndefined();
+  });
+});
+
+describe('BookingCreateFacade own bookings', () => {
+  const master = { id: 'user-2', name: 'Anna', role: AuditActorRole.STAFF };
+
+  it('lets a master create a booking they perform', async () => {
+    const { service, tx } = customTimeSetup();
+    await service.createManualBooking(
+      'business-1',
+      { ...dto, startAt: '2099-09-20T10:00:00' },
+      master,
+      { canComplete: false, ownStaffId: 'staff-1' },
+    );
+    expect(tx.booking.create).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a booking the master does not take part in', async () => {
+    const { service, tx } = customTimeSetup();
+    await expect(
+      service.createManualBooking(
+        'business-1',
+        { ...dto, startAt: '2099-09-20T10:00:00' },
+        master,
+        { canComplete: false, ownStaffId: 'staff-2' },
+      ),
+    ).rejects.toMatchObject({
+      errorCode: 'BOOKING_OWN_STAFF_REQUIRED',
+      status: HttpStatus.FORBIDDEN,
+    });
+    expect(tx.booking.create).not.toHaveBeenCalled();
   });
 });
 

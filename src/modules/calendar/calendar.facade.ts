@@ -9,6 +9,8 @@ import { GetCalendarRequestDto } from './dto/get-calendar-request.dto.js';
 import { GetCalendarResponseDto } from './dto/get-calendar-response.dto.js';
 import { ManualAvailableSlotsRequestDto } from './dto/manual-available-slots-request.dto.js';
 import { MoveCalendarEventDto } from './dto/move-calendar-event.dto.js';
+import { SlotCheckRequestDto } from './dto/slot-check-request.dto.js';
+import { SlotCheckResult } from './interfaces/slot-check-result.interface.js';
 import { UpdateCalendarEventDto } from './dto/update-calendar-event.dto.js';
 import { BookingCalendarEventInput } from './interfaces/booking-calendar-event-input.interface.js';
 import { CalendarBookingFeed } from './interfaces/calendar-booking-feed.interface.js';
@@ -140,6 +142,13 @@ export class CalendarFacade {
       dto,
       excludedCalendarEventIds,
     );
+  }
+
+  checkManualSlot(
+    locationId: string,
+    dto: SlotCheckRequestDto,
+  ): Promise<SlotCheckResult> {
+    return this.availability.checkManualSlot(locationId, dto);
   }
 
   getManualRescheduleSlots(

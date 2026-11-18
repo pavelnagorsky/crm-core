@@ -35,6 +35,7 @@ import { BookingCalendarReadService } from './services/read/booking-calendar-rea
 import { BookingReadService } from './services/read/booking-read.service.js';
 import { BillingFacade } from '../billing/billing.facade.js';
 import { BookingSetupService } from './services/setup/booking-setup.service.js';
+import { BookingHistoryReadService } from './services/read/booking-history-read.service.js';
 import { BookingLifecycleService } from './services/write/booking-lifecycle.service.js';
 import { BookingMutationService } from './services/write/booking-mutation.service.js';
 import { BookingRescheduleService } from './services/write/booking-reschedule.service.js';
@@ -165,6 +166,7 @@ describe('BookingsFacade.completeElapsed', () => {
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
+        { provide: BookingHistoryReadService, useValue: {} },
         {
           provide: BillingFacade,
           useValue: { isOnlineBookingOpen: vi.fn().mockResolvedValue(true) },
@@ -322,6 +324,7 @@ describe('BookingsFacade.updateStatus transactionality', () => {
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
+        { provide: BookingHistoryReadService, useValue: {} },
         {
           provide: BillingFacade,
           useValue: { isOnlineBookingOpen: vi.fn().mockResolvedValue(true) },
@@ -391,6 +394,7 @@ describe('BookingsFacade.search', () => {
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
+        { provide: BookingHistoryReadService, useValue: {} },
         {
           provide: BillingFacade,
           useValue: { isOnlineBookingOpen: vi.fn().mockResolvedValue(true) },
@@ -843,6 +847,7 @@ describe('BookingsFacade catalog selection', () => {
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
+        { provide: BookingHistoryReadService, useValue: {} },
         {
           provide: BillingFacade,
           useValue: { isOnlineBookingOpen: vi.fn().mockResolvedValue(true) },
@@ -1097,6 +1102,7 @@ describe('BookingsFacade.update details and item prices', () => {
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
+        { provide: BookingHistoryReadService, useValue: {} },
         {
           provide: BillingFacade,
           useValue: { isOnlineBookingOpen: vi.fn().mockResolvedValue(true) },
@@ -1320,6 +1326,7 @@ describe('BookingsFacade.update manual interval', () => {
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
+        { provide: BookingHistoryReadService, useValue: {} },
         {
           provide: BillingFacade,
           useValue: { isOnlineBookingOpen: vi.fn().mockResolvedValue(true) },
@@ -1586,6 +1593,7 @@ describe('BookingsFacade.addProduct', () => {
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
+        { provide: BookingHistoryReadService, useValue: {} },
         {
           provide: BillingFacade,
           useValue: { isOnlineBookingOpen: vi.fn().mockResolvedValue(true) },
@@ -1689,6 +1697,7 @@ describe('BookingsFacade.cancel draft product cleanup', () => {
         BookingSlotLockService,
         BookingReadService,
         BookingSetupService,
+        { provide: BookingHistoryReadService, useValue: {} },
         {
           provide: BillingFacade,
           useValue: { isOnlineBookingOpen: vi.fn().mockResolvedValue(true) },

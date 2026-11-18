@@ -13,4 +13,6 @@ export interface BookingScheduleRequest {
   timezone: string;
   manualItems: ManualBookingItemDto[];
   customEndAt: Date | null;
+  /** Assign qualified staff even when busy or off shift; free staff are still preferred. */
+  allowConflicts?: boolean;
 }

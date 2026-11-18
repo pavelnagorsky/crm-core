@@ -18,6 +18,9 @@ import { BookingWithItems } from './interfaces/booking-with-items.interface.js';
 import { BookingMutationService } from './services/write/booking-mutation.service.js';
 import { BookingReadService } from './services/read/booking-read.service.js';
 import { BookingSetupService } from './services/setup/booking-setup.service.js';
+import { BookingHistoryReadService } from './services/read/booking-history-read.service.js';
+import { ClientBookingSummary } from './interfaces/client-booking-summary.interface.js';
+import { StaffPopularServices } from './interfaces/staff-popular-services.interface.js';
 
 @Injectable()
 export class BookingsFacade {
@@ -26,10 +29,22 @@ export class BookingsFacade {
     private readonly setup: BookingSetupService,
     private readonly mutation: BookingMutationService,
     private readonly locations: LocationService,
+    private readonly history: BookingHistoryReadService,
   ) {}
 
   async getBookingSetup(locationId: string): Promise<BookingSetup> {
     return this.setup.getBookingSetup(locationId);
+  }
+
+  getClientBookingSummary(
+    locationId: string,
+    clientId: string,
+  ): Promise<ClientBookingSummary> {
+    return this.history.clientSummary(locationId, clientId);
+  }
+
+  getPopularServices(locationId: string): Promise<StaffPopularServices[]> {
+    return this.history.popularServices(locationId);
   }
 
   async resolveBookingSelection(

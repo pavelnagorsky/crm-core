@@ -9,6 +9,12 @@ const regularExpressions = {
   // E.164: + followed by 7–15 digits
   phone: /^\+\d{7,15}$/,
   locationPhone: /^\+(?:375\d{9}|7\d{10})$/,
+  // Every character that is not a digit, for reducing typed phones to digits
+  nonDigit: /\D/g,
+  // Digits of a typed phone fragment: from 3 digits, room for 00/8 trunk prefixes
+  phoneSearchDigits: /^\d{3,20}$/,
+  // A search term typed as a phone: digits with spaces, brackets, dashes, dots or +
+  phoneLike: /^[\d\s()+.-]+$/,
   contactScheme: /^(?:https?:[\s\S]*|(?![a-z][a-z\d+.-]*:)[\s\S]*)$/i,
   iframeStart: /^<iframe\b/i,
   time: /^([01]\d|2[0-3]):[0-5]\d$/,

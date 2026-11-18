@@ -14,20 +14,26 @@ function booking(overrides: Partial<CreateBookingDto> = {}): CreateBookingDto {
 }
 
 describe('UpdateBookingDto custom time flag', () => {
-  it.each([undefined, true, false])('accepts isCustomTime=%s', async (isCustomTime) => {
-    const dto = Object.assign(new UpdateBookingDto(), { isCustomTime });
-    expect(await validate(dto, { whitelist: true })).toHaveLength(0);
-    expect(dto.isCustomTime).toBe(isCustomTime);
-  });
+  it.each([undefined, true, false])(
+    'accepts isCustomTime=%s',
+    async (isCustomTime) => {
+      const dto = Object.assign(new UpdateBookingDto(), { isCustomTime });
+      expect(await validate(dto, { whitelist: true })).toHaveLength(0);
+      expect(dto.isCustomTime).toBe(isCustomTime);
+    },
+  );
 
-  it.each(['true', 'false', 0, 1])('rejects isCustomTime=%s', async (isCustomTime) => {
-    const dto = Object.assign(new UpdateBookingDto(), { isCustomTime });
-    expect(await validate(dto)).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({ property: 'isCustomTime' }),
-      ]),
-    );
-  });
+  it.each(['true', 'false', 0, 1])(
+    'rejects isCustomTime=%s',
+    async (isCustomTime) => {
+      const dto = Object.assign(new UpdateBookingDto(), { isCustomTime });
+      expect(await validate(dto)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ property: 'isCustomTime' }),
+        ]),
+      );
+    },
+  );
 });
 
 describe('CreateBookingDto channel ids', () => {
@@ -114,5 +120,57 @@ describe('ManualCreateBookingDto anonymous client validation', () => {
     );
 
     expect(messages.length).toBeGreaterThan(0);
+  });
+});
+
+describe('ManualCreateBookingDto client and status', () => {
+  const manual = (fields: Record<string, unknown>) =>
+    Object.assign(new ManualCreateBookingDto(), {
+      serviceId: '22222222-2222-4222-8222-222222222222',
+      startAt: '2026-09-20T10:00:00',
+      ...fields,
+    });
+  const properties = async (dto: ManualCreateBookingDto) =>
+    (await validate(dto, { whitelist: true })).map((error) => error.property);
+
+  it('books a stored client by id without name and phone', async () => {
+    expect(
+      await properties(
+        manual({ clientId: '55555555-5555-4555-8555-555555555555' }),
+      ),
+    ).toEqual([]);
+  });
+
+  it('still requires name and phone without a client id', async () => {
+    expect(await properties(manual({}))).toEqual(['firstName', 'phone']);
+  });
+
+  it('rejects a malformed client id', async () => {
+    expect(await properties(manual({ clientId: 'client-1' }))).toEqual([
+      'clientId',
+    ]);
+  });
+
+  it.each(['PENDING', 'CONFIRMED', 'COMPLETED', 'NO_SHOW'])(
+    'accepts status %s',
+    async (status) => {
+      expect(
+        await properties(
+          manual({ firstName: 'Ann', phone: '+375291112233', status }),
+        ),
+      ).toEqual([]);
+    },
+  );
+
+  it('does not create a cancelled booking', async () => {
+    expect(
+      await properties(
+        manual({
+          firstName: 'Ann',
+          phone: '+375291112233',
+          status: 'CANCELLED',
+        }),
+      ),
+    ).toEqual(['status']);
   });
 });

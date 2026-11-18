@@ -8,6 +8,7 @@ import { stableOrderBy } from '../../../shared/database/stable-order-by.js';
 import { OrderDirection } from '../../../shared/enums/order-direction.enum.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { PaginatedResult } from '../../../shared/interfaces/paginated-result.interface.js';
+import { phoneSearchPatterns } from '../../../shared/phone/phone-search-patterns.js';
 import regularExpressions from '../../../shared/regular-expressions.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { AUDIT_EVENT } from '../../audit/constants/audit.constants.js';
@@ -176,55 +177,112 @@ export class ClientsService {
       brand: ACTIVE_BRAND_WHERE,
       brandId,
     };
-
     const search = dto.search?.trim();
-    if (search) {
-      const searchTerms = search
-        .split(regularExpressions.whitespace)
-        .filter(Boolean);
-      where.OR = [
-        { firstName: { contains: search, mode: 'insensitive' } },
-        { lastName: { contains: search, mode: 'insensitive' } },
-        { phone: { contains: search } },
-        { email: { contains: search, mode: 'insensitive' } },
-        { notes: { contains: search, mode: 'insensitive' } },
-        { gender: { contains: search, mode: 'insensitive' } },
-        { banReason: { contains: search, mode: 'insensitive' } },
-      ];
-      if (searchTerms.length > 1) {
-        where.OR.push({
-          AND: searchTerms.map((term) => ({
-            OR: [
-              { firstName: { contains: term, mode: 'insensitive' } },
-              { lastName: { contains: term, mode: 'insensitive' } },
-            ],
-          })),
-        });
-      }
-    }
+    if (search) where.OR = this.searchConditions(search);
     if (dto.banned === true) where.bannedAt = { not: null };
     else if (dto.banned === false) where.bannedAt = null;
 
     const direction = dto.orderDirection ?? OrderDirection.DESC;
-    const orderBy: Prisma.ClientOrderByWithRelationInput = {
-      [dto.orderBy ?? ClientSearchOrderBy.CREATED_AT]: direction,
-    };
+    const orderBy = stableOrderBy<Prisma.ClientOrderByWithRelationInput>(
+      { [dto.orderBy ?? ClientSearchOrderBy.CREATED_AT]: direction },
+      direction,
+    );
+    const skip = dto.isExport ? 0 : (dto.page - 1) * dto.pageSize;
+    const take = dto.isExport ? undefined : dto.pageSize;
 
-    const findArgs: Prisma.ClientFindManyArgs = {
-      where,
-      orderBy: stableOrderBy(orderBy, direction),
-    };
-    if (!dto.isExport) {
-      findArgs.skip = (dto.page - 1) * dto.pageSize;
-      findArgs.take = dto.pageSize;
+    if (!dto.phone) {
+      const [items, totalItems] = await this.db.$transaction([
+        this.db.client.findMany({ where, orderBy, skip, take }),
+        this.db.client.count({ where }),
+      ]);
+      return { items, totalItems };
     }
 
-    const [items, totalItems] = await this.db.$transaction([
-      this.db.client.findMany(findArgs),
-      this.db.client.count({ where }),
+    // Numbers that start with the typed digits rank first; each group keeps the requested order.
+    const patterns = phoneSearchPatterns(dto.phone);
+    const startsWithTyped: Prisma.ClientWhereInput = {
+      OR: patterns.rankPrefixes.map((prefix) => ({
+        phone: { startsWith: prefix },
+      })),
+    };
+    const first: Prisma.ClientWhereInput = { AND: [where, startsWithTyped] };
+    const rest: Prisma.ClientWhereInput = {
+      AND: [
+        where,
+        { OR: this.phoneConditions(dto.phone) },
+        { NOT: startsWithTyped },
+      ],
+    };
+    const [firstCount, restCount] = await this.db.$transaction([
+      this.db.client.count({ where: first }),
+      this.db.client.count({ where: rest }),
     ]);
+    // The page window [skip, skip + take) runs over the first group, then the rest.
+    const firstLeft = Math.max(0, firstCount - skip);
+    const firstTake =
+      take === undefined ? undefined : Math.min(take, firstLeft);
+    const restTake =
+      take === undefined ? undefined : take - Math.min(take, firstLeft);
+    const [firstItems, restItems] = await Promise.all([
+      firstLeft === 0
+        ? []
+        : this.db.client.findMany({
+            where: first,
+            orderBy,
+            skip,
+            take: firstTake,
+          }),
+      restTake === 0
+        ? []
+        : this.db.client.findMany({
+            where: rest,
+            orderBy,
+            skip: Math.max(0, skip - firstCount),
+            take: restTake,
+          }),
+    ]);
+    return {
+      items: [...firstItems, ...restItems],
+      totalItems: firstCount + restCount,
+    };
+  }
 
-    return { items, totalItems };
+  /** An existing client of the brand picked for a booking; null when unknown or foreign. */
+  findForBooking(brandId: string, clientId: string): Promise<Client | null> {
+    return this.db.client.findFirst({
+      where: { brand: ACTIVE_BRAND_WHERE, id: clientId, brandId },
+    });
+  }
+
+  /**
+   * Saves an email typed while booking a client whose profile has none. A filled email is
+   * never overwritten, also when another request filled it in the meantime.
+   */
+  async completeEmail(
+    brandId: string,
+    client: Client,
+    email: string,
+    actor: AuditActor,
+  ): Promise<Client> {
+    if (client.email) return client;
+    const { count } = await this.db.client.updateMany({
+      where: { id: client.id, brandId, email: null },
+      data: { email },
+    });
+    if (count === 0) return this.findInBrand(brandId, client.id);
+    const updated = { ...client, email };
+    const event: AuditLogEvent = {
+      brandId,
+      entityType: AuditEntity.CLIENT,
+      entityId: client.id,
+      eventType: AuditEvent.CLIENT_UPDATED,
+      actionType: AuditActionType.MODIFY,
+      occurredAt: new Date(),
+      actor,
+      payload: { changes: diffFields(client, updated, CLIENT_AUDIT_FIELDS) },
+    };
+    this.eventEmitter.emit(AUDIT_EVENT, event);
+    return updated;
   }
 
   async findExistingPhones(
@@ -302,6 +360,47 @@ export class ClientsService {
       },
     };
     this.eventEmitter.emit(AUDIT_EVENT, event);
+  }
+
+  private searchConditions(search: string): Prisma.ClientWhereInput[] {
+    const conditions: Prisma.ClientWhereInput[] = [
+      { firstName: { contains: search, mode: 'insensitive' } },
+      { lastName: { contains: search, mode: 'insensitive' } },
+      { phone: { contains: search } },
+      { email: { contains: search, mode: 'insensitive' } },
+      { notes: { contains: search, mode: 'insensitive' } },
+      { gender: { contains: search, mode: 'insensitive' } },
+      { banReason: { contains: search, mode: 'insensitive' } },
+    ];
+    const terms = search.split(regularExpressions.whitespace).filter(Boolean);
+    if (terms.length > 1) {
+      conditions.push({
+        AND: terms.map((term) => ({
+          OR: [
+            { firstName: { contains: term, mode: 'insensitive' } },
+            { lastName: { contains: term, mode: 'insensitive' } },
+          ],
+        })),
+      });
+    }
+    // A number typed with spaces or brackets still finds the stored "+375…" form.
+    const digits = search.replace(regularExpressions.nonDigit, '');
+    if (
+      regularExpressions.phoneLike.test(search) &&
+      regularExpressions.phoneSearchDigits.test(digits)
+    )
+      conditions.push(...this.phoneConditions(digits));
+    return conditions;
+  }
+
+  private phoneConditions(digits: string): Prisma.ClientWhereInput[] {
+    const patterns = phoneSearchPatterns(digits);
+    return [
+      { phone: { contains: patterns.contains } },
+      ...patterns.trunkPrefixes.map((prefix) => ({
+        phone: { startsWith: prefix },
+      })),
+    ];
   }
 
   private buildClientFields(dto: CreateClientDto | UpdateClientDto) {

@@ -1,7 +1,8 @@
 import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
-import { BookingVisibility } from '@prisma/client';
+import { BookingVisibility, CalendarEventType } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
 import { AppException } from '../../../../shared/exceptions/app.exception.js';
+import { assignStaff } from '../../../../shared/scheduling/assign-staff.js';
 import { TimeUtils } from '../../../../shared/time/time.utils.js';
 import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
 import { normalizeStaffAssignments } from '../../../../shared/scheduling/normalize-staff-assignments.js';
@@ -13,6 +14,9 @@ import { CalendarCalculator } from '../../calculators/calendar.calculator.js';
 import { AvailableSlotsDayDto } from '../../dto/available-slots-day.dto.js';
 import { AvailableSlotsRequestDto } from '../../dto/available-slots-request.dto.js';
 import { ManualAvailableSlotsRequestDto } from '../../dto/manual-available-slots-request.dto.js';
+import { SlotCheckRequestDto } from '../../dto/slot-check-request.dto.js';
+import { SlotConflictReason } from '../../enums/slot-conflict-reason.enum.js';
+import { SlotCheckResult } from '../../interfaces/slot-check-result.interface.js';
 import { CalendarRescheduleItem } from '../../interfaces/calendar-reschedule-item.interface.js';
 import { CalendarSlotCandidate } from '../../interfaces/calendar-slot-candidate.interface.js';
 import { CalendarSlotItem } from '../../interfaces/calendar-slot-item.interface.js';
@@ -103,6 +107,125 @@ export class CalendarAvailabilityService {
       rangeEnd: new Date(`${to}T23:59:59.999Z`),
       excludedCalendarEventIds,
     });
+  }
+
+  /**
+   * Whether a manual visit fits at a given start under the manual-slot rules, and otherwise the
+   * first obstacle. Services follow each other, or start together in a parallel bundle.
+   */
+  async checkManualSlot(
+    locationId: string,
+    dto: SlotCheckRequestDto,
+  ): Promise<SlotCheckResult> {
+    const { business, slotItems, executionMode, candidatesByService } =
+      await this.loadSlotCandidates(locationId, dto);
+    const { timezone } = business;
+    const date = dto.startAt.slice(0, 10);
+    const startMinute = TimeUtils.hhmmToMinutes(dto.startAt.slice(11, 16));
+    const parallel = executionMode === 'PARALLEL';
+    let cursor = startMinute;
+    const items = slotItems.map((item, index) => {
+      const start = parallel ? startMinute : cursor;
+      const end = start + item.durationMinutes;
+      cursor = end;
+      return {
+        itemId: String(index),
+        start,
+        end,
+        candidates: candidatesByService.get(item.serviceId) ?? [],
+      };
+    });
+    const endMinute = Math.max(...items.map((item) => item.end));
+    const staffIds = [
+      ...new Set(
+        items.flatMap((item) => item.candidates.map((staff) => staff.id)),
+      ),
+    ];
+    const startAt = TimeUtils.localToUtc(dto.startAt, timezone);
+    const [shifts, events] = await Promise.all([
+      this.staff.listShiftsForStaff(
+        staffIds,
+        TimeUtils.dateOnly(date),
+        TimeUtils.dateOnly(date),
+      ),
+      staffIds.length
+        ? this.db.calendarEvent.findMany({
+            where: blockingEventsWhere(
+              locationId,
+              staffIds,
+              startAt,
+              new Date(startAt.getTime() + (endMinute - startMinute) * 60_000),
+            ),
+            include: {
+              cancelledOccurrences: { select: { occurrenceDate: true } },
+            },
+          })
+        : [],
+    ]);
+    const shiftsByStaffDate = this.compute.groupShiftsByStaffDate(shifts);
+    const expand = (bookings: boolean) =>
+      this.compute.expandBlockEvents(
+        events.filter(
+          (event) => (event.type === CalendarEventType.BOOKING) === bookings,
+        ),
+        [date],
+        staffIds,
+        timezone,
+      );
+    const bookingsByStaffDate = expand(true);
+    const blocksByStaffDate = expand(false);
+    const checked = items.map((item) => ({
+      ...item,
+      conflicts: item.candidates.map((staff) => ({
+        staffId: staff.id,
+        conflict: this.compute.findSlotConflict(
+          staff.id,
+          date,
+          item.start,
+          item.end,
+          shiftsByStaffDate,
+          bookingsByStaffDate,
+          blocksByStaffDate,
+        ),
+      })),
+    }));
+    const local = (minute: number) =>
+      minute >= 1440
+        ? `${TimeUtils.addDaysStr(date, 1)}T${TimeUtils.minutesToHHmm(minute - 1440)}:00`
+        : `${date}T${TimeUtils.minutesToHHmm(minute)}:00`;
+    const result: SlotCheckResult = {
+      available: false,
+      reason: null,
+      staffId: null,
+      conflictStart: null,
+      conflictEnd: null,
+      startAt: local(startMinute),
+      endAt: local(endMinute),
+    };
+    const team = assignStaff(
+      checked.map((item) => ({
+        itemId: item.itemId,
+        staffIds: item.conflicts
+          .filter((entry) => !entry.conflict)
+          .map((entry) => entry.staffId),
+      })),
+      parallel,
+    );
+    if (team) return { ...result, available: true };
+    // Report the first service nobody can take; a single possible staff member gives a precise reason.
+    const blocked = checked.find((item) =>
+      item.conflicts.every((entry) => entry.conflict),
+    );
+    const only = blocked?.conflicts.length === 1 ? blocked.conflicts[0] : null;
+    if (!only?.conflict)
+      return { ...result, reason: SlotConflictReason.NO_STAFF };
+    return {
+      ...result,
+      reason: only.conflict.reason,
+      staffId: only.staffId,
+      conflictStart: local(only.conflict.start),
+      conflictEnd: local(only.conflict.end),
+    };
   }
 
   getRescheduleSlots(

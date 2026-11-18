@@ -101,7 +101,11 @@ export class CreateBookingDto {
   startAt: string;
 
   @ApiProperty({ type: String, maxLength: 100 })
-  @ValidateIf((dto) => dto.anonymous !== true || dto.firstName !== undefined)
+  // Manual bookings may skip the client (anonymous) or pick a stored one (clientId).
+  @ValidateIf(
+    (dto) =>
+      (dto.anonymous !== true && !dto.clientId) || dto.firstName !== undefined,
+  )
   @IsString()
   @MaxLength(100)
   firstName: string;
@@ -117,7 +121,10 @@ export class CreateBookingDto {
   @MaxLength(100)
   lastName?: string | null;
 
-  @ValidateIf((dto) => dto.anonymous !== true || dto.phone !== undefined)
+  @ValidateIf(
+    (dto) =>
+      (dto.anonymous !== true && !dto.clientId) || dto.phone !== undefined,
+  )
   @IsPhone()
   phone: string;
 

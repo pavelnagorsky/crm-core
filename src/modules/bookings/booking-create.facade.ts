@@ -4,7 +4,7 @@ import {
   Injectable,
   Logger,
 } from '@nestjs/common';
-import { BookingVisibility, Prisma } from '@prisma/client';
+import { BookingVisibility, Client, Prisma } from '@prisma/client';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { TimeUtils } from '../../shared/time/time.utils.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
@@ -28,8 +28,10 @@ import { BookingCreationRequest } from './interfaces/booking-creation-request.in
 import { BookingPricingResult } from './interfaces/booking-pricing-result.interface.js';
 import { BookingSelectionRequest } from './interfaces/booking-selection-request.interface.js';
 import { BookingWithItems } from './interfaces/booking-with-items.interface.js';
+import { ManualBookingAccess } from './interfaces/manual-booking-access.interface.js';
 import { PublicBookingRequestContext } from './interfaces/public-booking-request-context.interface.js';
 import { ResolvedBookingClient } from './interfaces/resolved-booking-client.interface.js';
+import { canHaveStatus } from './rules/booking-initial-status.rules.js';
 import { isSelfBookingBlocked } from './rules/client-ban.rules.js';
 import { bookingRequestHash } from './rules/booking-request-hash.js';
 import {
@@ -73,7 +75,15 @@ export class BookingCreateFacade {
       : undefined;
     const result: BookingCreationOutcome = request
       ? await this.reservations.reserveOnce(locationId, request, (tx) =>
-          this.create(locationId, attribution, null, dto, true, tx, request),
+          this.create(
+            locationId,
+            attribution,
+            null,
+            dto,
+            undefined,
+            tx,
+            request,
+          ),
         )
       : {
           ...(await this.create(locationId, attribution, null, dto)),
@@ -105,8 +115,13 @@ export class BookingCreateFacade {
     locationId: string,
     dto: ManualCreateBookingDto,
     actor: AuditActor,
-    canComplete = true,
+    access: ManualBookingAccess = { canComplete: true },
   ): Promise<BookingWithItems> {
+    if (dto.anonymous === true && dto.clientId)
+      throw new AppException(
+        ErrorCode.BOOKING_CLIENT_CONFLICT,
+        HttpStatus.BAD_REQUEST,
+      );
     const { booking, currency, bundleTitle } = await this.create(
       locationId,
       {
@@ -116,7 +131,7 @@ export class BookingCreateFacade {
       },
       actor,
       dto,
-      canComplete,
+      access,
     );
     this.logger.log(
       `booking created (manual): id=${booking.id} locationId=${locationId} source=${booking.source} items=${booking.items.length} bundleId=${booking.bundleId ?? '-'} actor=${actor.name}`,
@@ -137,7 +152,7 @@ export class BookingCreateFacade {
     attribution: BookingAttribution,
     actor: AuditActor | null,
     dto: CreateBookingDto | ManualCreateBookingDto,
-    canComplete = true,
+    access: ManualBookingAccess = { canComplete: true },
     tx?: Prisma.TransactionClient,
     request?: BookingCreationRequest,
   ): Promise<BookingCreationResult> {
@@ -158,7 +173,15 @@ export class BookingCreateFacade {
     }
 
     const startAt = TimeUtils.localToUtc(dto.startAt, location.timezone);
-    const publicClient = this.isInternalSource(attribution.source)
+    const internal = this.isInternalSource(attribution.source);
+    const requestedStatus =
+      internal && 'status' in dto ? dto.status : undefined;
+    if (requestedStatus && !canHaveStatus(requestedStatus, startAt, new Date()))
+      throw new AppException(
+        ErrorCode.BOOKING_STATUS_BEFORE_START,
+        HttpStatus.BAD_REQUEST,
+      );
+    const publicClient = internal
       ? null
       : await this.resolveBookingClient(
           location.brandId,
@@ -173,9 +196,7 @@ export class BookingCreateFacade {
 
     const selection = await this.selection.resolveForBooking(locationId, dto);
     const isCustomTime =
-      this.isInternalSource(attribution.source) &&
-      'isCustomTime' in dto &&
-      dto.isCustomTime === true;
+      internal && 'isCustomTime' in dto && dto.isCustomTime === true;
     const customEndAt =
       isCustomTime && 'endAt' in dto && dto.endAt
         ? TimeUtils.localToUtc(dto.endAt, location.timezone)
@@ -190,7 +211,17 @@ export class BookingCreateFacade {
       timezone: location.timezone,
       manualItems: this.manualItems(dto),
       customEndAt,
+      // Custom time is the journal's "book anyway": the staff member's schedule is not checked.
+      allowConflicts: isCustomTime,
     });
+    if (
+      access.ownStaffId &&
+      !items.some((item) => item.staffId === access.ownStaffId)
+    )
+      throw new AppException(
+        ErrorCode.BOOKING_OWN_STAFF_REQUIRED,
+        HttpStatus.FORBIDDEN,
+      );
     const envelopeStart = new Date(
       Math.min(...items.map((item) => item.startAt.getTime())),
     );
@@ -198,13 +229,14 @@ export class BookingCreateFacade {
       Math.max(...items.map((item) => item.endAt.getTime())),
     );
     // Confirmation is for online requests; staff booking from the journal has already agreed.
-    const status = this.initialStatus(
-      isCustomTime,
-      envelopeEnd,
-      location.isBookingConfirmationRequired &&
-        !this.isInternalSource(attribution.source),
-    );
-    if (status === BookingStatus.COMPLETED && !canComplete)
+    const status =
+      requestedStatus ??
+      this.initialStatus(
+        isCustomTime,
+        envelopeEnd,
+        location.isBookingConfirmationRequired && !internal,
+      );
+    if (status === BookingStatus.COMPLETED && !access.canComplete)
       throw new AppException(
         ErrorCode.BOOKING_COMPLETED_CREATE_FORBIDDEN,
         HttpStatus.FORBIDDEN,
@@ -215,8 +247,8 @@ export class BookingCreateFacade {
         location.brandId,
         attribution.source,
         dto,
+        actor,
       ));
-    const internal = this.isInternalSource(attribution.source);
     const notifyClient = internal
       ? (('notifyClient' in dto ? dto.notifyClient : undefined) ??
         location.notifyClientOnStaffChanges)
@@ -318,6 +350,7 @@ export class BookingCreateFacade {
     brandId: string,
     source: BookingSource,
     dto: CreateBookingDto | ManualCreateBookingDto,
+    actor: AuditActor | null = null,
   ): Promise<ResolvedBookingClient> {
     if (this.isAnonymousManualBooking(source, dto)) {
       return {
@@ -330,18 +363,15 @@ export class BookingCreateFacade {
       };
     }
 
-    const firstName = dto.firstName?.trim();
-    const phone = dto.phone?.trim();
-    if (!firstName || !phone) {
-      throw new BadRequestException('Client first name and phone are required');
-    }
-    const client = await this.clientsService.resolveForBooking(
-      brandId,
-      phone,
-      firstName,
-      dto.lastName?.trim() || '',
-      dto.email,
-    );
+    let client = await this.findOrCreateClient(brandId, source, dto);
+    // Staff may add the missing email of a known client; an online guest never changes a profile.
+    if (this.isInternalSource(source) && actor && dto.email && !client.email)
+      client = await this.clientsService.completeEmail(
+        brandId,
+        client,
+        dto.email,
+        actor,
+      );
     return {
       id: client.id,
       firstName: client.firstName,
@@ -350,6 +380,38 @@ export class BookingCreateFacade {
       email: client.email,
       bannedAt: client.bannedAt,
     };
+  }
+
+  /** The client picked by id on a manual booking, or the one found or created by phone. */
+  private async findOrCreateClient(
+    brandId: string,
+    source: BookingSource,
+    dto: CreateBookingDto | ManualCreateBookingDto,
+  ): Promise<Client> {
+    if (this.isInternalSource(source) && 'clientId' in dto && dto.clientId) {
+      const client = await this.clientsService.findForBooking(
+        brandId,
+        dto.clientId,
+      );
+      if (!client)
+        throw new AppException(
+          ErrorCode.BOOKING_CLIENT_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
+      return client;
+    }
+    const firstName = dto.firstName?.trim();
+    const phone = dto.phone?.trim();
+    if (!firstName || !phone) {
+      throw new BadRequestException('Client first name and phone are required');
+    }
+    return this.clientsService.resolveForBooking(
+      brandId,
+      phone,
+      firstName,
+      dto.lastName?.trim() || '',
+      dto.email,
+    );
   }
 
   private isAnonymousManualBooking(

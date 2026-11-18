@@ -23,6 +23,7 @@ import { BookingReadService } from '../services/read/booking-read.service.js';
 import { BillingFacade } from '../../billing/billing.facade.js';
 import { createBillingFacadeStub } from '../../billing/testing/billing-facade.stub.js';
 import { BookingSetupService } from '../services/setup/booking-setup.service.js';
+import { BookingHistoryReadService } from '../services/read/booking-history-read.service.js';
 import { BookingMutationService } from '../services/write/booking-mutation.service.js';
 import { BookingsController } from './bookings.controller.js';
 
@@ -96,6 +97,7 @@ describe('Public booking setup products (HTTP)', () => {
       providers: [
         BookingsFacade,
         BookingSetupService,
+        { provide: BookingHistoryReadService, useValue: {} },
         { provide: BillingFacade, useValue: createBillingFacadeStub() },
         { provide: BookingSelectionService, useValue: {} },
         { provide: BookingSchedulingService, useValue: {} },

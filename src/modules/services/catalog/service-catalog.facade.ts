@@ -172,6 +172,10 @@ export class ServiceCatalogFacade {
     return this.services.findIdsByFilter(locationId, filter);
   }
 
+  findBundleTitles(bundleIds: readonly string[]): Promise<Map<string, string>> {
+    return this.bundles.findTitles(bundleIds);
+  }
+
   countBookableServices(locationId: string): Promise<number> {
     return this.services.countBookable(locationId);
   }

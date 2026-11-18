@@ -2,6 +2,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
+import { hasStaffOverlap } from '../../../shared/scheduling/has-staff-overlap.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { AuditActorRole } from '../../audit/enums/audit-actor-role.enum.js';
 import { CalendarFacade } from '../../calendar/calendar.facade.js';
@@ -106,7 +107,15 @@ export class BookingReservationService {
     } = input;
     await this.lockActiveLocation(locationId, tx);
     await this.slots.lockSlots(items, timezone, tx);
-    await this.slots.assertSlotsAvailable(locationId, items, timezone, tx);
+    // Custom time books over the schedule, as a manual interval does on update; one staff
+    // member still cannot do two services of this booking at once.
+    if (!input.isCustomTime)
+      await this.slots.assertSlotsAvailable(locationId, items, timezone, tx);
+    else if (hasStaffOverlap(items))
+      throw new AppException(
+        ErrorCode.BOOKING_STAFF_ASSIGNMENT_OVERLAP,
+        HttpStatus.BAD_REQUEST,
+      );
 
     const createdItems = [];
     for (const item of items) {

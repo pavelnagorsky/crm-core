@@ -361,3 +361,177 @@ describe('ClientsService.search ban filter', () => {
     });
   });
 });
+
+describe('ClientsService.search by phone', () => {
+  const findMany = vi.fn();
+  const count = vi.fn();
+  const service = new ClientsService(
+    {
+      client: { findMany, count },
+      $transaction: (ops: Promise<unknown>[]) => Promise.all(ops),
+    } as never,
+    { emit: vi.fn() } as unknown as EventEmitter2,
+  );
+  const client = (id: string) => ({ id }) as Client;
+
+  beforeEach(() => {
+    findMany.mockReset();
+    count.mockReset();
+  });
+
+  function search(page: number, pageSize: number, phone = '8029233') {
+    return service.search('business-1', {
+      page,
+      pageSize,
+      phone,
+    } as ClientSearchRequestDto);
+  }
+
+  it('lists numbers that start with the typed digits first and counts both groups', async () => {
+    count.mockResolvedValueOnce(2).mockResolvedValueOnce(5);
+    findMany
+      .mockResolvedValueOnce([client('starts-1'), client('starts-2')])
+      .mockResolvedValueOnce([client('inside-1'), client('inside-2')]);
+
+    const result = await search(1, 4);
+
+    expect(result.totalItems).toBe(7);
+    expect(result.items.map((item) => item.id)).toEqual([
+      'starts-1',
+      'starts-2',
+      'inside-1',
+      'inside-2',
+    ]);
+    const [first, rest] = findMany.mock.calls.map(([args]) => args);
+    expect(first).toMatchObject({ skip: 0, take: 2 });
+    expect(rest).toMatchObject({ skip: 0, take: 2 });
+    expect(JSON.stringify(first.where)).toContain('"startsWith":"+37529233"');
+    expect(rest.where.AND[1]).toEqual({
+      OR: [
+        { phone: { contains: '8029233' } },
+        { phone: { startsWith: '+37529233' } },
+      ],
+    });
+    expect(rest.where.AND[2]).toEqual({ NOT: first.where.AND[1] });
+    expect(rest.where.AND[0]).toEqual({
+      brand: { deletedAt: null },
+      brandId: 'business-1',
+    });
+  });
+
+  it('pages into the other numbers once the first group is exhausted', async () => {
+    count.mockResolvedValueOnce(2).mockResolvedValueOnce(10);
+    findMany.mockResolvedValueOnce([client('inside-5')]);
+
+    await search(2, 6);
+
+    expect(findMany).toHaveBeenCalledOnce();
+    expect(findMany.mock.calls[0][0]).toMatchObject({ skip: 4, take: 6 });
+  });
+
+  it('skips the other numbers when the first group fills the page', async () => {
+    count.mockResolvedValueOnce(9).mockResolvedValueOnce(3);
+    findMany.mockResolvedValueOnce([]);
+
+    await search(1, 6);
+
+    expect(findMany).toHaveBeenCalledOnce();
+    expect(findMany.mock.calls[0][0]).toMatchObject({ skip: 0, take: 6 });
+  });
+});
+
+describe('ClientsService.search with a typed phone', () => {
+  it('finds a formatted number in the general search by its digits', async () => {
+    const findMany = vi.fn().mockResolvedValue([]);
+    const service = new ClientsService(
+      {
+        client: { findMany, count: vi.fn().mockResolvedValue(0) },
+        $transaction: (ops: Promise<unknown>[]) => Promise.all(ops),
+      } as never,
+      { emit: vi.fn() } as unknown as EventEmitter2,
+    );
+    await service.search('business-1', {
+      page: 1,
+      pageSize: 25,
+      search: '+375 (29) 233',
+    } as ClientSearchRequestDto);
+    expect(findMany.mock.calls[0][0].where.OR).toContainEqual({
+      phone: { contains: '37529233' },
+    });
+  });
+});
+
+describe('ClientsService.completeEmail', () => {
+  const stored = {
+    id: 'c1',
+    brandId: 'business-1',
+    firstName: 'Анна',
+    lastName: 'Иванова',
+    phone: '+375291112233',
+    email: null,
+  } as Client;
+
+  function setup(updated: number) {
+    const updateMany = vi.fn().mockResolvedValue({ count: updated });
+    const findFirst = vi
+      .fn()
+      .mockResolvedValue({ ...stored, email: 'other@example.test' });
+    const emit = vi.fn();
+    const service = new ClientsService(
+      { client: { updateMany, findFirst } } as never,
+      { emit } as unknown as EventEmitter2,
+    );
+    return { service, updateMany, findFirst, emit };
+  }
+
+  it('saves an email only while the profile has none and audits it', async () => {
+    const { service, updateMany, emit } = setup(1);
+
+    const result = await service.completeEmail(
+      'business-1',
+      stored,
+      'anna@example.test',
+      actor,
+    );
+
+    expect(result.email).toBe('anna@example.test');
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: 'c1', brandId: 'business-1', email: null },
+      data: { email: 'anna@example.test' },
+    });
+    expect(emit).toHaveBeenCalledWith(
+      AUDIT_EVENT,
+      expect.objectContaining({
+        entityId: 'c1',
+        eventType: AuditEvent.CLIENT_UPDATED,
+        actor,
+      }),
+    );
+  });
+
+  it('keeps an email someone filled in the meantime', async () => {
+    const { service, emit } = setup(0);
+    const result = await service.completeEmail(
+      'business-1',
+      stored,
+      'anna@example.test',
+      actor,
+    );
+    expect(result.email).toBe('other@example.test');
+    expect(emit).not.toHaveBeenCalled();
+  });
+
+  it('never overwrites a filled email', async () => {
+    const { service, updateMany } = setup(1);
+    const filled = { ...stored, email: 'kept@example.test' };
+    expect(
+      await service.completeEmail(
+        'business-1',
+        filled,
+        'new@example.test',
+        actor,
+      ),
+    ).toBe(filled);
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+});

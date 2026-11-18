@@ -9,6 +9,8 @@ import {
 } from '@prisma/client';
 import { TimeUtils } from '../../../shared/time/time.utils.js';
 import { CalendarEventItemDto } from '../dto/calendar-event-item.dto.js';
+import { SlotConflictReason } from '../enums/slot-conflict-reason.enum.js';
+import { SlotConflict } from '../interfaces/slot-conflict.interface.js';
 import { ClosedTimeItemDto } from '../dto/closed-time-item.dto.js';
 import { CalendarRescheduleItem } from '../interfaces/calendar-reschedule-item.interface.js';
 import { CalendarShift } from '../interfaces/calendar-shift.interface.js';
@@ -601,6 +603,58 @@ export class CalendarCalculator {
         executionMode === 'PARALLEL',
       ) !== null
     );
+  }
+
+  /**
+   * The earliest obstacle to a staff member taking [start, end) on the date, in minutes from
+   * local midnight; null when the time is free. An end past 1440 runs past midnight.
+   */
+  findSlotConflict(
+    staffId: string,
+    date: string,
+    start: number,
+    end: number,
+    shiftsByStaffDate: Map<string, Map<string, CalendarShift>>,
+    bookingsByStaffDate: Map<string, Map<string, Interval[]>>,
+    blocksByStaffDate: Map<string, Map<string, Interval[]>>,
+  ): SlotConflict | null {
+    const conflicts: SlotConflict[] = [];
+    const shift = shiftsByStaffDate.get(staffId)?.get(date);
+    if (!shift) {
+      conflicts.push({
+        reason: SlotConflictReason.OUTSIDE_SCHEDULE,
+        start,
+        end,
+      });
+    } else {
+      const shiftStart = TimeUtils.timeToMinutes(shift.startTime);
+      const shiftEnd = TimeUtils.timeToMinutes(shift.endTime);
+      if (start < shiftStart)
+        conflicts.push({
+          reason: SlotConflictReason.OUTSIDE_SCHEDULE,
+          start,
+          end: Math.min(shiftStart, end),
+        });
+      if (end > shiftEnd)
+        conflicts.push({
+          reason: SlotConflictReason.OUTSIDE_SCHEDULE,
+          start: Math.max(shiftEnd, start),
+          end,
+        });
+    }
+    const overlapping = (
+      intervals: Map<string, Map<string, Interval[]>>,
+      reason: SlotConflictReason,
+    ) =>
+      (intervals.get(staffId)?.get(date) ?? [])
+        .filter((interval) => start < interval.end && end > interval.start)
+        .map((interval) => ({ reason, ...interval }));
+    conflicts.push(
+      ...overlapping(bookingsByStaffDate, SlotConflictReason.BOOKING),
+      ...overlapping(blocksByStaffDate, SlotConflictReason.BLOCK),
+    );
+    conflicts.sort((a, b) => a.start - b.start || a.end - b.end);
+    return conflicts[0] ?? null;
   }
 
   private isStaffFreeOnDate(

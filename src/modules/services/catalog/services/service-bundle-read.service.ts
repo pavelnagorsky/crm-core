@@ -93,4 +93,14 @@ export class ServiceBundleReadService {
       include: serviceBundleCatalogInclude,
     });
   }
+
+  /** Current titles of bundles in any status, for naming past visits. */
+  async findTitles(ids: readonly string[]): Promise<Map<string, string>> {
+    if (ids.length === 0) return new Map();
+    const bundles = await this.db.serviceBundle.findMany({
+      where: { id: { in: [...ids] } },
+      select: { id: true, title: true },
+    });
+    return new Map(bundles.map((bundle) => [bundle.id, bundle.title]));
+  }
 }

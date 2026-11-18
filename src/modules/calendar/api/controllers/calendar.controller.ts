@@ -42,6 +42,8 @@ import { GetCalendarRequestDto } from '../../dto/get-calendar-request.dto.js';
 import { GetCalendarResponseDto } from '../../dto/get-calendar-response.dto.js';
 import { ManualAvailableSlotsRequestDto } from '../../dto/manual-available-slots-request.dto.js';
 import { MoveCalendarEventDto } from '../../dto/move-calendar-event.dto.js';
+import { SlotCheckRequestDto } from '../../dto/slot-check-request.dto.js';
+import { SlotCheckResponseDto } from '../../dto/slot-check-response.dto.js';
 import { UpdateCalendarEventDto } from '../../dto/update-calendar-event.dto.js';
 import { CalendarViewFacade } from '../calendar-view.facade.js';
 
@@ -93,6 +95,28 @@ export class CalendarController {
       await this.access.readStaffId(token, locationId),
     );
     return BaseResponseDto.success(days);
+  }
+
+  @ApiOperation({
+    summary:
+      'Check whether a manual visit fits at a given start and why not: another booking, a block, or working hours. Same rules and selection parameters as manual available slots',
+  })
+  @ApiOkResponse({ type: ApiResponse(SlotCheckResponseDto) })
+  @ApiNotFoundResponse({
+    description: 'Location, service, bundle, or requested staff not found',
+  })
+  @Permissions([Read(Claim.BOOKING), Read(Claim.BOOKING_OWN)])
+  @Get('slot-check')
+  @Header('Cache-Control', 'no-store')
+  async checkManualSlot(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Query() dto: SlotCheckRequestDto,
+  ): Promise<BaseResponseDto<SlotCheckResponseDto>> {
+    return BaseResponseDto.success(
+      SlotCheckResponseDto.fromResult(
+        await this.calendar.checkManualSlot(locationId, dto),
+      ),
+    );
   }
 
   // ─── Owner ───────────────────────────────────────────────────────────────────
