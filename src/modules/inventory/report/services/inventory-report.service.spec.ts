@@ -253,7 +253,7 @@ describe('InventoryReportService', () => {
     );
     const grid = await XlsxUtils.read(await collect(file.stream));
     expect(grid?.row(5).text(1)).toBe('Назначение');
-    expect(grid?.row(5).text(2)).toBe('Для внутреннего использования');
+    expect(grid?.row(5).text(2)).toBe('Расходник');
     expect(grid?.row(7).text(1)).toBe('Товар');
   });
 

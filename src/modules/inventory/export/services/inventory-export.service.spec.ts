@@ -159,7 +159,7 @@ describe('InventoryExportService', () => {
     expect(grid.row(3).text(11)).toBe('Да');
     expect(grid.row(3).text(12)).toBe('');
     expect(grid.row(3).text(13)).toBe(
-      'Для продажи и внутреннего использования',
+      'Для продажи и расходник',
     );
   });
 

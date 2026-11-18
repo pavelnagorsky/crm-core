@@ -572,10 +572,10 @@
       "document": "Документ",
       "order": "Заказ",
       "purpose": "Назначение",
-      "purposeBoth": "Для продажи и внутреннего использования",
+      "purposeBoth": "Для продажи и расходник",
       "purposes": {
         "SALE": "Для продажи",
-        "INTERNAL": "Для внутреннего использования"
+        "INTERNAL": "Расходник"
       }
     }
   },
@@ -805,7 +805,7 @@
       "categoryId": "Категория",
       "imageFileId": "Изображение",
       "isForSale": "Для продажи",
-      "isForInternalUse": "Для внутреннего использования",
+      "isForInternalUse": "Расходник",
       "retailPrice": "Цена продажи",
       "trackInventory": "Складской учёт",
       "reorderLevel": "Минимальный остаток",
