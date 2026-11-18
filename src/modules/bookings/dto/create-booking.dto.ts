@@ -18,6 +18,13 @@ import { IsPhone } from '../../../shared/decorators/is-phone.decorator.js';
 import { IsLocalDateTime } from '../../../shared/time/decorators/is-local-date-time.validator.js';
 import { AtMostOneBookingChannelConstraint } from '../decorators/at-most-one-booking-channel.constraint.js';
 
+/** The contact rule of the request's own DTO class; a manual booking may omit the client. */
+function requiresClientContacts(dto: CreateBookingDto): boolean {
+  const rule = (dto.constructor as Partial<typeof CreateBookingDto>)
+    .requiresClientContacts;
+  return rule ? rule(dto) : true;
+}
+
 export class CreateBookingDto {
   @ApiProperty({
     type: String,
@@ -101,10 +108,9 @@ export class CreateBookingDto {
   startAt: string;
 
   @ApiProperty({ type: String, maxLength: 100 })
-  // Manual bookings may skip the client (anonymous) or pick a stored one (clientId).
   @ValidateIf(
-    (dto) =>
-      (dto.anonymous !== true && !dto.clientId) || dto.firstName !== undefined,
+    (dto: CreateBookingDto) =>
+      requiresClientContacts(dto) || dto.firstName !== undefined,
   )
   @IsString()
   @MaxLength(100)
@@ -122,8 +128,8 @@ export class CreateBookingDto {
   lastName?: string | null;
 
   @ValidateIf(
-    (dto) =>
-      (dto.anonymous !== true && !dto.clientId) || dto.phone !== undefined,
+    (dto: CreateBookingDto) =>
+      requiresClientContacts(dto) || dto.phone !== undefined,
   )
   @IsPhone()
   phone: string;
@@ -144,4 +150,9 @@ export class CreateBookingDto {
   @IsString()
   @MaxLength(1000)
   notes?: string;
+
+  /** Whether firstName and phone must be sent; an online guest always gives them. */
+  static requiresClientContacts(_dto: CreateBookingDto): boolean {
+    return true;
+  }
 }

@@ -113,6 +113,7 @@ export class BookingSchedulingService {
     const countByStaff = new Map(
       counts.map((row) => [row.staffId, row._count.id]),
     );
+    const preferred = (id: string) => (id === request.preferredStaffId ? 0 : 1);
     const team = assignStaff(
       candidates.map((group, index) => ({
         itemId: String(index),
@@ -120,6 +121,7 @@ export class BookingSchedulingService {
           .sort(
             (a, b) =>
               Number(a.busy) - Number(b.busy) ||
+              preferred(a.id) - preferred(b.id) ||
               (countByStaff.get(a.id) ?? 0) - (countByStaff.get(b.id) ?? 0) ||
               a.id.localeCompare(b.id),
           )

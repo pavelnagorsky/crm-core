@@ -15,4 +15,6 @@ export interface BookingScheduleRequest {
   customEndAt: Date | null;
   /** Assign qualified staff even when busy or off shift; free staff are still preferred. */
   allowConflicts?: boolean;
+  /** Staff member ranked first for every service they can take, after free over busy. */
+  preferredStaffId?: string;
 }

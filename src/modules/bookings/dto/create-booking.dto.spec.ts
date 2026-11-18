@@ -174,3 +174,17 @@ describe('ManualCreateBookingDto client and status', () => {
     ).toEqual(['status']);
   });
 });
+
+describe('CreateBookingDto client contacts', () => {
+  it('requires name and phone online even when manual-only fields are sent', async () => {
+    const dto = Object.assign(new CreateBookingDto(), {
+      serviceId: '22222222-2222-4222-8222-222222222222',
+      startAt: '2026-09-20T10:00:00',
+      anonymous: true,
+      clientId: '55555555-5555-4555-8555-555555555555',
+    });
+    expect((await validate(dto)).map((error) => error.property).sort()).toEqual(
+      ['firstName', 'phone'],
+    );
+  });
+});

@@ -38,10 +38,14 @@ that has started (`BOOKING_STATUS_BEFORE_START`). Creating a booking as `COMPLET
 completing it by a status change needs none beyond managing it, and runs the same
 order/payroll sync as a completion. Neither queues a client email: the creation notice is computed from the
 final status. `clientId` books a stored brand client (`BOOKING_CLIENT_NOT_FOUND`
-otherwise; not with `anonymous`). An email in the request fills an empty client
-email, by `ClientsService.completeEmail`, for both a selected client and one found
-by phone; a filled email is never overwritten and online bookings never change a
-profile. A caller with only `booking.own:write` must perform one of the services.
+otherwise; not with `anonymous`). For a client picked by `clientId`, an email in the
+request fills an empty profile email inside the reservation transaction
+(`ClientsService.fillMissingEmail`), so a failed booking leaves the profile as it
+was; the audit entry is published after commit. A filled email is never
+overwritten. Clients found by phone and online bookings never change a profile. A
+caller with only `booking.own:write` must perform one of the services; scheduling
+gives that staff member every service they can take (free staff first), colleagues
+take the rest.
 
 `BookingHistoryReadService` serves the booking dialog: the client summary (brand-wide
 completed visits, no-shows, last visit, last visit in the location, nearest active

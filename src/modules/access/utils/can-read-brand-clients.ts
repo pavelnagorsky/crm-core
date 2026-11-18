@@ -1,7 +1,7 @@
-import { Claim } from '../../access/enums/claim.enum.js';
-import { Permission } from '../../access/interfaces/permission.interface.js';
-import { hasPermission } from '../../access/utils/assert-permission.js';
-import { Read, Write } from '../../access/utils/permission.js';
+import { Claim } from '../enums/claim.enum.js';
+import { Permission } from '../interfaces/permission.interface.js';
+import { hasPermission } from './assert-permission.js';
+import { Read, Write } from './permission.js';
 import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
 
 /** Who may create a manual booking in a location: they pick or add the client while booking. */

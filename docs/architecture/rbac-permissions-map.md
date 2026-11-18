@@ -189,7 +189,7 @@
 | `POST /public/bookings/me/cancel` | `cancelByClientToken` | P: `booking-client-token` | Действующая клиентская политика отмены; не обход к возврату произвольного заказа. |
 | `POST /locations/:locationId/bookings/manual` | `createManual` | L: `booking:write` или `booking.own:write` | При own-записи сотрудник должен выполнять хотя бы одну услугу (`403 BOOKING_OWN_STAFF_REQUIRED`). Произвольная цена: также sale.price.override:write. Товары: order:write. Клиент выбирается по `clientId` или находится/создаётся по телефону независимо от client:write. Создание в статусе COMPLETED (явном или по произвольному времени) не требует дополнительных прав, как и завершение через смену статуса; проводит услуги и начисления так же. |
 | `GET /locations/:locationId/bookings/popular-services` | `getPopularServices` | L: `booking:read` или `booking.own:read` | Агрегаты по всем сотрудникам филиала без данных клиентов. |
-| `GET /locations/:locationId/clients/:clientId/booking-summary` | `getClientBookingSummary` | L: `booking:read` или `booking.own:read` | История клиента по всем активным филиалам бренда; клиент должен принадлежать бренду филиала. |
+| `GET /locations/:locationId/clients/:clientId/booking-summary` | `getClientBookingSummary` | L: `location:read`, плюс G: `client:read` или `booking:write` / `booking.own:write` в филиале бренда | Как карточка клиента (`BookingAccessService.assertClientRead`). История по всем активным филиалам и мастерам бренда; клиент должен принадлежать бренду филиала. |
 | `GET /locations/:locationId/bookings/status-counts` | `getStatusCounts` | L: `booking:read` или `booking.own:read` | При own-чтении обязательно участие в записи; списки и счётчики ограничены до пагинации. |
 | `GET /locations/:locationId/bookings/export` | `export` | L: `booking.export:read` | — |
 | `GET /locations/:locationId/bookings/:id` | `findById` | L: `booking:read` или `booking.own:read` | При own-чтении обязательно участие в записи; списки и счётчики ограничены до пагинации. Поле `review` заполняется только при `review:read`. |
@@ -251,7 +251,8 @@
 | `PATCH /brands/:brandId/clients/:id/ban` | `setBan` | G: `client.ban:write` | — |
 | `GET /brands/:brandId/clients/export` | `export` | G: `client.export:read` | — |
 | `GET /brands/:brandId/clients/:id` | `findById` | G: `client:read`, или `booking:write` / `booking.own:write` в филиале бренда | Проверка в `ClientReadGuard`. |
-| `GET /brands/:brandId/clients` | `search` | G: `client:read`, или `booking:write` / `booking.own:write` в филиале бренда | Проверка в `ClientReadGuard`. |
+| `GET /brands/:brandId/clients/lookup` | `lookup` | G: `client:read`, или `booking:write` / `booking.own:write` в филиале бренда | Проверка в `ClientReadGuard`. Требует phone или search, pageSize до 20, без isExport и orderBy. |
+| `GET /brands/:brandId/clients` | `search` | G: `client:read` | — |
 
 ## dashboard
 

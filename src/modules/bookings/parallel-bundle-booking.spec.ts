@@ -175,6 +175,7 @@ function setup() {
     slots,
     {} as never,
     {} as never,
+    {} as never,
   );
   const clients = { resolveForBooking: vi.fn() };
   const create = new BookingCreateFacade(

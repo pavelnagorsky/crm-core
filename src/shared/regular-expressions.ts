@@ -11,8 +11,8 @@ const regularExpressions = {
   locationPhone: /^\+(?:375\d{9}|7\d{10})$/,
   // Every character that is not a digit, for reducing typed phones to digits
   nonDigit: /\D/g,
-  // Digits of a typed phone fragment: from 3 digits, room for 00/8 trunk prefixes
-  phoneSearchDigits: /^\d{3,20}$/,
+  // Digits of a typed phone fragment, room for 00/80 trunk prefixes
+  phoneSearchDigits: /^\d{1,20}$/,
   // A search term typed as a phone: digits with spaces, brackets, dashes, dots or +
   phoneLike: /^[\d\s()+.-]+$/,
   contactScheme: /^(?:https?:[\s\S]*|(?![a-z][a-z\d+.-]*:)[\s\S]*)$/i,

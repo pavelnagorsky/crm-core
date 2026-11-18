@@ -8,7 +8,10 @@ import { stableOrderBy } from '../../../shared/database/stable-order-by.js';
 import { OrderDirection } from '../../../shared/enums/order-direction.enum.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { PaginatedResult } from '../../../shared/interfaces/paginated-result.interface.js';
-import { phoneSearchPatterns } from '../../../shared/phone/phone-search-patterns.js';
+import {
+  isPhoneSearchable,
+  phoneSearchPatterns,
+} from '../../../shared/phone/phone-search-patterns.js';
 import regularExpressions from '../../../shared/regular-expressions.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { AUDIT_EVENT } from '../../audit/constants/audit.constants.js';
@@ -255,22 +258,33 @@ export class ClientsService {
   }
 
   /**
-   * Saves an email typed while booking a client whose profile has none. A filled email is
-   * never overwritten, also when another request filled it in the meantime.
+   * Inside the booking transaction: saves an email typed for a client whose profile has none,
+   * so it is kept only with the booking. A filled email, also one filled concurrently, is never
+   * overwritten. Returns the email the profile holds afterwards.
    */
-  async completeEmail(
+  async fillMissingEmail(
+    clientId: string,
+    email: string,
+    tx: Prisma.TransactionClient,
+  ): Promise<string | null> {
+    await tx.client.updateMany({
+      where: { id: clientId, email: null },
+      data: { email },
+    });
+    const client = await tx.client.findUniqueOrThrow({
+      where: { id: clientId },
+      select: { email: true },
+    });
+    return client.email;
+  }
+
+  /** Audits an email saved by fillMissingEmail, once its transaction has committed. */
+  emitEmailFilled(
     brandId: string,
     client: Client,
     email: string,
     actor: AuditActor,
-  ): Promise<Client> {
-    if (client.email) return client;
-    const { count } = await this.db.client.updateMany({
-      where: { id: client.id, brandId, email: null },
-      data: { email },
-    });
-    if (count === 0) return this.findInBrand(brandId, client.id);
-    const updated = { ...client, email };
+  ): void {
     const event: AuditLogEvent = {
       brandId,
       entityType: AuditEntity.CLIENT,
@@ -279,10 +293,11 @@ export class ClientsService {
       actionType: AuditActionType.MODIFY,
       occurredAt: new Date(),
       actor,
-      payload: { changes: diffFields(client, updated, CLIENT_AUDIT_FIELDS) },
+      payload: {
+        changes: diffFields(client, { ...client, email }, CLIENT_AUDIT_FIELDS),
+      },
     };
     this.eventEmitter.emit(AUDIT_EVENT, event);
-    return updated;
   }
 
   async findExistingPhones(
@@ -385,10 +400,7 @@ export class ClientsService {
     }
     // A number typed with spaces or brackets still finds the stored "+375…" form.
     const digits = search.replace(regularExpressions.nonDigit, '');
-    if (
-      regularExpressions.phoneLike.test(search) &&
-      regularExpressions.phoneSearchDigits.test(digits)
-    )
+    if (regularExpressions.phoneLike.test(search) && isPhoneSearchable(digits))
       conditions.push(...this.phoneConditions(digits));
     return conditions;
   }

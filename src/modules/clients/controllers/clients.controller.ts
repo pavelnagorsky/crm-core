@@ -42,6 +42,7 @@ import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
 import { ClientReadAccess } from '../decorators/client-read-access.decorator.js';
 import { ClientExportRequestDto } from '../export/dto/client-export-request.dto.js';
 import { ClientsExportService } from '../export/services/clients-export.service.js';
+import { ClientLookupRequestDto } from '../dto/client-lookup-request.dto.js';
 import { ClientResponseDto } from '../dto/client-response.dto.js';
 import { ClientSearchRequestDto } from '../dto/client-search-request.dto.js';
 import { ClientSearchResponseDto } from '../dto/client-search-response.dto.js';
@@ -187,7 +188,38 @@ export class ClientsController {
 
   @ApiOperation({
     summary:
-      'Get client by ID. Open to client:read and to anyone who can create a manual booking in a brand location',
+      'Find clients to book: by phone digits or a search term, one short page. Open to client:read and to anyone who can create a manual booking in a brand location',
+    description:
+      'For the booking dialog. Requires phone or search; pageSize is at most 20 (default 6); no export and no custom order: phone matches that start with the typed digits first, then newest clients first. The full client list stays behind client:read (GET /brands/{brandId}/clients).',
+  })
+  @ApiOkResponse({ type: ApiResponse(ClientSearchResponseDto) })
+  @ApiBadRequestResponse({
+    description:
+      'Neither phone nor search, phone too short or too long, pageSize above 20, or isExport/orderBy sent',
+  })
+  @ClientReadAccess()
+  @Get('lookup')
+  async lookup(
+    @Param('brandId', ParseUUIDPipe) brandId: string,
+    @Query() dto: ClientLookupRequestDto,
+  ): Promise<BaseResponseDto<ClientSearchResponseDto>> {
+    const { items, totalItems } = await this.clientsService.search(
+      brandId,
+      dto,
+    );
+    return BaseResponseDto.success(
+      new ClientSearchResponseDto(
+        items.map(ClientResponseDto.fromEntity),
+        dto.page,
+        dto.pageSize,
+        totalItems,
+      ),
+    );
+  }
+
+  @ApiOperation({
+    summary:
+      'Get client by ID, full card. Open to client:read and to anyone who can create a manual booking in a brand location',
   })
   @ApiOkResponse({ type: ApiResponse(ClientResponseDto) })
   @ApiNotFoundResponse({ description: 'Client not found' })
@@ -201,15 +233,13 @@ export class ClientsController {
     return BaseResponseDto.success(ClientResponseDto.fromEntity(client));
   }
 
-  @ApiOperation({
-    summary:
-      'Search clients. Open to client:read and to anyone who can create a manual booking in a brand location',
-  })
+  @ApiOperation({ summary: 'Search clients' })
   @ApiOkResponse({ type: ApiResponse(ClientSearchResponseDto) })
   @ApiBadRequestResponse({
-    description: 'phone has fewer than 3 or more than 20 digits',
+    description:
+      'phone has fewer than 3 digits besides a trunk prefix, or more than 20 digits',
   })
-  @ClientReadAccess()
+  @Permissions(Read(Claim.CLIENT))
   @Get()
   async search(
     @Param('brandId', ParseUUIDPipe) brandId: string,

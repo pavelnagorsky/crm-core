@@ -15,6 +15,7 @@ import {
 import { bookingWithItemsInclude } from '../../constants/booking-with-items.include.js';
 import { BookingStatus } from '../../enums/booking-status.enum.js';
 import { BookingFrequencyRow } from '../../interfaces/booking-frequency-row.interface.js';
+import { StaffBookingFrequencyRow } from '../../interfaces/staff-booking-frequency-row.interface.js';
 import { BookingFrequency } from '../../interfaces/booking-frequency.interface.js';
 import { BookingWithItems } from '../../interfaces/booking-with-items.interface.js';
 import { ClientBookingSummary } from '../../interfaces/client-booking-summary.interface.js';
@@ -125,7 +126,7 @@ export class BookingHistoryReadService {
   ): Promise<StaffPopularServices[]> {
     await this.locations.findById(locationId);
     const since = new Date(now.getTime() - POPULAR_SERVICES_DAYS * 86_400_000);
-    const rows = await this.db.$queryRaw<BookingFrequencyRow[]>(Prisma.sql`
+    const rows = await this.db.$queryRaw<StaffBookingFrequencyRow[]>(Prisma.sql`
       WITH visits AS (
         SELECT b."id" AS "bookingId", b."bundleId", b."startAt",
                bi."staffId", bi."serviceId", bi."serviceTitle"
@@ -176,16 +177,16 @@ export class BookingHistoryReadService {
     ]);
     const byStaff = new Map<string, BookingFrequency[]>();
     for (const row of rows) {
-      const items = byStaff.get(row.staffId!) ?? [];
+      const items = byStaff.get(row.staffId) ?? [];
       items.push(this.frequency(row, bundleTitles));
-      byStaff.set(row.staffId!, items);
+      byStaff.set(row.staffId, items);
     }
     return [...byStaff].map(([staffId, items]) => ({ staffId, items }));
   }
 
   private clientServiceRows(clientId: string): Promise<BookingFrequencyRow[]> {
     return this.db.$queryRaw<BookingFrequencyRow[]>(Prisma.sql`
-      SELECT NULL AS "staffId", ${ServiceCatalogKind.SERVICE}::text AS kind,
+      SELECT ${ServiceCatalogKind.SERVICE}::text AS kind,
              bi."serviceId" AS id, b."locationId",
              (ARRAY_AGG(bi."serviceTitle" ORDER BY b."startAt" DESC))[1] AS title,
              COUNT(DISTINCT b."id")::int AS count,
@@ -205,7 +206,7 @@ export class BookingHistoryReadService {
 
   private clientBundleRows(clientId: string): Promise<BookingFrequencyRow[]> {
     return this.db.$queryRaw<BookingFrequencyRow[]>(Prisma.sql`
-      SELECT NULL AS "staffId", ${ServiceCatalogKind.BUNDLE}::text AS kind,
+      SELECT ${ServiceCatalogKind.BUNDLE}::text AS kind,
              b."bundleId" AS id, b."locationId",
              NULL AS title,
              COUNT(*)::int AS count,

@@ -189,7 +189,7 @@ export class BookingCreateFacade {
         );
     if (
       publicClient &&
-      isSelfBookingBlocked(attribution.source, publicClient.bannedAt)
+      isSelfBookingBlocked(attribution.source, publicClient.client.bannedAt)
     )
       throw new AppException(ErrorCode.CLIENT_BANNED, HttpStatus.FORBIDDEN);
 
@@ -212,8 +212,9 @@ export class BookingCreateFacade {
       customEndAt,
       // Custom time is the journal's "book anyway": the staff member's schedule is not checked.
       allowConflicts: isCustomTime,
+      // A master booking for themselves takes the services they can do; colleagues the rest.
+      preferredStaffId: ownStaffId,
     });
-    // Whoever may create the booking may also complete it, as on a status change.
     if (ownStaffId && !items.some((item) => item.staffId === ownStaffId))
       throw new AppException(
         ErrorCode.BOOKING_OWN_STAFF_REQUIRED,
@@ -226,6 +227,7 @@ export class BookingCreateFacade {
       Math.max(...items.map((item) => item.endAt.getTime())),
     );
     // Confirmation is for online requests; staff booking from the journal has already agreed.
+    // A completed status needs no permission beyond creating the booking, as on a status change.
     const status =
       requestedStatus ??
       this.initialStatus(
@@ -233,14 +235,16 @@ export class BookingCreateFacade {
         envelopeEnd,
         location.isBookingConfirmationRequired && !internal,
       );
-    const client =
+    const { client: resolved, picked } =
       publicClient ??
       (await this.resolveBookingClient(
         location.brandId,
         attribution.source,
         dto,
-        actor,
       ));
+    // Staff may add the missing email of a client they picked; it is saved with the booking.
+    const emailToFill = picked && !picked.email && dto.email ? dto.email : null;
+    const client = emailToFill ? { ...resolved, email: emailToFill } : resolved;
     const notifyClient = internal
       ? (('notifyClient' in dto ? dto.notifyClient : undefined) ??
         location.notifyClientOnStaffChanges)
@@ -263,6 +267,7 @@ export class BookingCreateFacade {
         locationId,
         timezone: location.timezone,
         client,
+        clientEmailToFill: emailToFill,
         items,
         attribution,
         executionMode: selection.executionMode,
@@ -281,6 +286,14 @@ export class BookingCreateFacade {
       },
       tx,
     );
+    // A picked client exists only on manual bookings, which commit their own transaction.
+    if (picked && emailToFill && actor && booking.clientEmail === emailToFill)
+      this.clientsService.emitEmailFilled(
+        location.brandId,
+        picked,
+        emailToFill,
+        actor,
+      );
 
     return {
       booking,
@@ -338,32 +351,57 @@ export class BookingCreateFacade {
     }
   }
 
+  /**
+   * The booking's client: none for an anonymous booking, the one picked by clientId on a
+   * manual booking (returned as `picked`), or the one found or created by phone.
+   */
   private async resolveBookingClient(
     brandId: string,
     source: BookingSource,
     dto: CreateBookingDto | ManualCreateBookingDto,
-    actor: AuditActor | null = null,
-  ): Promise<ResolvedBookingClient> {
+  ): Promise<{ client: ResolvedBookingClient; picked: Client | null }> {
+    // createManualBooking has already rejected clientId together with anonymous.
+    if (this.isInternalSource(source) && 'clientId' in dto && dto.clientId) {
+      const picked = await this.clientsService.findForBooking(
+        brandId,
+        dto.clientId,
+      );
+      if (!picked)
+        throw new AppException(
+          ErrorCode.BOOKING_CLIENT_NOT_FOUND,
+          HttpStatus.NOT_FOUND,
+        );
+      return { client: this.bookingClient(picked), picked };
+    }
     if (this.isAnonymousManualBooking(source, dto)) {
       return {
-        id: null,
-        firstName: dto.firstName?.trim() ?? '',
-        lastName: dto.lastName?.trim() ?? '',
-        phone: dto.phone?.trim() || null,
-        email: dto.email ?? null,
-        bannedAt: null,
+        client: {
+          id: null,
+          firstName: dto.firstName?.trim() ?? '',
+          lastName: dto.lastName?.trim() ?? '',
+          phone: dto.phone?.trim() || null,
+          email: dto.email ?? null,
+          bannedAt: null,
+        },
+        picked: null,
       };
     }
+    const firstName = dto.firstName?.trim();
+    const phone = dto.phone?.trim();
+    if (!firstName || !phone) {
+      throw new BadRequestException('Client first name and phone are required');
+    }
+    const found = await this.clientsService.resolveForBooking(
+      brandId,
+      phone,
+      firstName,
+      dto.lastName?.trim() || '',
+      dto.email,
+    );
+    return { client: this.bookingClient(found), picked: null };
+  }
 
-    let client = await this.findOrCreateClient(brandId, source, dto);
-    // Staff may add the missing email of a known client; an online guest never changes a profile.
-    if (this.isInternalSource(source) && actor && dto.email && !client.email)
-      client = await this.clientsService.completeEmail(
-        brandId,
-        client,
-        dto.email,
-        actor,
-      );
+  private bookingClient(client: Client): ResolvedBookingClient {
     return {
       id: client.id,
       firstName: client.firstName,
@@ -372,38 +410,6 @@ export class BookingCreateFacade {
       email: client.email,
       bannedAt: client.bannedAt,
     };
-  }
-
-  /** The client picked by id on a manual booking, or the one found or created by phone. */
-  private async findOrCreateClient(
-    brandId: string,
-    source: BookingSource,
-    dto: CreateBookingDto | ManualCreateBookingDto,
-  ): Promise<Client> {
-    if (this.isInternalSource(source) && 'clientId' in dto && dto.clientId) {
-      const client = await this.clientsService.findForBooking(
-        brandId,
-        dto.clientId,
-      );
-      if (!client)
-        throw new AppException(
-          ErrorCode.BOOKING_CLIENT_NOT_FOUND,
-          HttpStatus.NOT_FOUND,
-        );
-      return client;
-    }
-    const firstName = dto.firstName?.trim();
-    const phone = dto.phone?.trim();
-    if (!firstName || !phone) {
-      throw new BadRequestException('Client first name and phone are required');
-    }
-    return this.clientsService.resolveForBooking(
-      brandId,
-      phone,
-      firstName,
-      dto.lastName?.trim() || '',
-      dto.email,
-    );
   }
 
   private isAnonymousManualBooking(

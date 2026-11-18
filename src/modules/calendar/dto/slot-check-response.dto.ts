@@ -15,7 +15,7 @@ export class SlotCheckResponseDto {
     enumName: 'SlotConflictReason',
     nullable: true,
     description:
-      'Null when available. BOOKING / BLOCK / OUTSIDE_SCHEDULE: the first obstacle of the one staff member who could take the service. NO_STAFF: several staff members could take it and none is free, or nobody performs it',
+      'Null when available. BOOKING / BLOCK / OUTSIDE_SCHEDULE: the first obstacle of the one staff member who could take the first service nobody can take. NO_STAFF: several staff members could take that service and none is free, nobody performs it, or every service has a free staff member but no team of distinct staff can be formed (parallel bundle)',
   })
   reason: SlotConflictReason | null;
 

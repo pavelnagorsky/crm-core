@@ -161,11 +161,11 @@ export class BookingsController {
   })
   @ApiNotFoundResponse({
     description:
-      'Location, service, or staff not found; BOOKING_CLIENT_NOT_FOUND: clientId is unknown or belongs to another brand',
+      'BOOKING_BUSINESS_NOT_FOUND / BOOKING_SERVICE_NOT_FOUND / BOOKING_BUNDLE_NOT_FOUND; BOOKING_STAFF_NOT_FOUND: a requested staff member is inactive, not in the location or does not perform the service (also with isCustomTime); BOOKING_CLIENT_NOT_FOUND: clientId is unknown or belongs to another brand',
   })
   @ApiConflictResponse({
     description:
-      'BOOKING_SLOT_UNAVAILABLE / BOOKING_NO_STAFF_AVAILABLE: the slot is taken or outside working hours. Never returned with isCustomTime',
+      'BOOKING_NO_STAFF_AVAILABLE: no qualified staff member is free for a service (with isCustomTime: nobody performs it, or a parallel bundle has fewer distinct qualified staff than services). BOOKING_SLOT_UNAVAILABLE: the slot was taken while saving (never with isCustomTime)',
   })
   @ApiForbiddenResponse({
     description:
@@ -241,18 +241,21 @@ export class BookingsController {
     summary:
       'Booking history of a brand client for the booking dialog: visit counts, last visit, upcoming booking and services taken before',
     description:
-      'Counts completed visits only, across all active locations of the brand. Services of bundle visits count for the bundle.',
+      'Counts completed visits only, across all active locations of the brand and all staff. Services of bundle visits count for the bundle. Same access as the client card: location:read here, plus client:read on the brand or booking:write / booking.own:write in a location of the brand.',
   })
   @ApiOkResponse({ type: ApiResponse(ClientBookingSummaryResponseDto) })
   @ApiNotFoundResponse({
     description: 'Location not found, or the client is not in its brand',
   })
-  @Permissions([Read(Claim.BOOKING), Read(Claim.BOOKING_OWN)])
+  @Permissions(Read(Claim.LOCATION))
   @Get('locations/:locationId/clients/:clientId/booking-summary')
   async getClientBookingSummary(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('clientId', ParseUUIDPipe) clientId: string,
+    @TokenPayload() token: TokenPayloadDto,
   ): Promise<BaseResponseDto<ClientBookingSummaryResponseDto>> {
+    const { brandId } = await this.locations.getBookingSettings(locationId);
+    this.access.assertClientRead(token, brandId);
     const summary = await this.bookings.getClientBookingSummary(
       locationId,
       clientId,

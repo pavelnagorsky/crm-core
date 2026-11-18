@@ -10,7 +10,7 @@ export interface BookingCreatedPayload {
   totalPrice?: string;
   currency: string;
   source?: string;
-  /** Status the booking was created with; absent in entries written before it was recorded. */
+  /** Status the booking was created with. */
   status?: string;
   isCustomTime?: boolean;
   executionMode?: string;

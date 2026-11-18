@@ -2,6 +2,7 @@ import { ForbiddenException, Injectable } from '@nestjs/common';
 import { Claim } from '../../access/enums/claim.enum.js';
 import { Read, Write } from '../../access/utils/permission.js';
 import { hasPermission } from '../../access/utils/assert-permission.js';
+import { canReadBrandClients } from '../../access/utils/can-read-brand-clients.js';
 import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
 import { StaffAccessService } from '../../staff/services/staff-access.service.js';
 import { BookingStatus } from '../enums/booking-status.enum.js';
@@ -72,6 +73,12 @@ export class BookingAccessService {
         'Completed bookings can only be edited by a manager or owner',
       );
     }
+  }
+
+  /** Client history follows client reading: client:read, or creating bookings in the brand. */
+  assertClientRead(token: TokenPayloadDto, brandId: string): void {
+    if (!canReadBrandClients(token, brandId))
+      throw new ForbiddenException('Access denied');
   }
 
   /** Reviews are a separate permission: staff reading their own bookings do not see them. */

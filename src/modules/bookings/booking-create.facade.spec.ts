@@ -655,12 +655,8 @@ function customTimeSetup(
       bannedAt: null,
     }),
     findForBooking: vi.fn().mockResolvedValue(null),
-    completeEmail: vi.fn(
-      async (_brandId: string, client: object, email: string) => ({
-        ...client,
-        email,
-      }),
-    ),
+    fillMissingEmail: vi.fn(async (_clientId: string, email: string) => email),
+    emitEmailFilled: vi.fn(),
   };
   const calendar = {
     filterAvailableStaff: vi.fn().mockResolvedValue([{ id: 'staff-1' }]),
@@ -804,7 +800,17 @@ function customTimeSetup(
     earnings as never,
     ...catalogDeps(db),
   );
-  return { service, tx, db, calendar, clients, orders, earnings, emitter };
+  return {
+    service,
+    tx,
+    db,
+    calendar,
+    clients,
+    staff,
+    orders,
+    earnings,
+    emitter,
+  };
 }
 
 describe('BookingCreateFacade custom time', () => {
@@ -1332,7 +1338,7 @@ describe('BookingCreateFacade manual client', () => {
     expect(data.clientFirstName).toBe('Мария');
     expect(data.clientPhone).toBe('+375297776655');
     expect(data.clientEmail).toBe('maria@example.test');
-    expect(clients.completeEmail).not.toHaveBeenCalled();
+    expect(clients.fillMissingEmail).not.toHaveBeenCalled();
   });
 
   it('ignores request name and phone when a client id is given', async () => {
@@ -1392,49 +1398,73 @@ describe('BookingCreateFacade manual client', () => {
       },
       owner,
     );
-    expect(clients.completeEmail).toHaveBeenCalledWith(
+    expect(clients.fillMissingEmail).toHaveBeenCalledWith(
+      'client-7',
+      'maria@example.test',
+      tx,
+    );
+    const data = tx.booking.create.mock.calls[0][0].data;
+    expect(data.clientEmail).toBe('maria@example.test');
+    expect(data.clientNoticeType).toBe(ClientNoticeType.CREATED);
+    expect(clients.emitEmailFilled).toHaveBeenCalledWith(
       'brand-1',
       stored,
       'maria@example.test',
       owner,
     );
-    const data = tx.booking.create.mock.calls[0][0].data;
-    expect(data.clientEmail).toBe('maria@example.test');
-    expect(data.clientNoticeType).toBe(ClientNoticeType.CREATED);
+    expect(clients.emitEmailFilled.mock.invocationCallOrder[0]).toBeGreaterThan(
+      tx.booking.create.mock.invocationCallOrder[0],
+    );
   });
 
-  it('fills the missing email of a client found by phone', async () => {
-    const { service, clients } = customTimeSetup();
+  it('keeps an email filled concurrently and does not audit a change it did not make', async () => {
+    const { service, tx, clients } = customTimeSetup();
+    clients.findForBooking.mockResolvedValue(stored);
+    clients.fillMissingEmail.mockResolvedValue('other@example.test');
+    await service.createManualBooking(
+      'business-1',
+      {
+        ...dto,
+        ...upcoming,
+        clientId: 'client-7',
+        email: 'maria@example.test',
+      },
+      owner,
+    );
+    expect(tx.booking.create.mock.calls[0][0].data.clientEmail).toBe(
+      'other@example.test',
+    );
+    expect(clients.emitEmailFilled).not.toHaveBeenCalled();
+  });
+
+  it('leaves the profile unchanged when the booking cannot be reserved', async () => {
+    const { service, clients } = customTimeSetup({ isSlotFree: false });
+    clients.findForBooking.mockResolvedValue(stored);
+    await expect(
+      service.createManualBooking(
+        'business-1',
+        {
+          ...dto,
+          ...upcoming,
+          clientId: 'client-7',
+          email: 'maria@example.test',
+        },
+        owner,
+      ),
+    ).rejects.toMatchObject({ errorCode: 'BOOKING_SLOT_UNAVAILABLE' });
+    expect(clients.fillMissingEmail).not.toHaveBeenCalled();
+    expect(clients.emitEmailFilled).not.toHaveBeenCalled();
+  });
+
+  it('does not change a client found by phone', async () => {
+    const { service, tx, clients } = customTimeSetup();
     await service.createManualBooking(
       'business-1',
       { ...dto, ...upcoming, email: 'anna@example.test' },
       owner,
     );
-    expect(clients.completeEmail).toHaveBeenCalledWith(
-      'brand-1',
-      expect.objectContaining({ id: 'client-1' }),
-      'anna@example.test',
-      owner,
-    );
-  });
-
-  it('never changes a stored client from an online booking', async () => {
-    const { service, clients } = setup();
-    clients.resolveForBooking.mockResolvedValue({
-      id: 'client-1',
-      email: null,
-      bannedAt: null,
-    });
-    await service
-      .createPublicBooking(
-        'business-1',
-        { ...dto, email: 'guest@example.test' },
-        publicAttribution,
-      )
-      .catch(() => undefined);
-    expect(
-      (clients as { completeEmail?: unknown }).completeEmail,
-    ).toBeUndefined();
+    expect(clients.fillMissingEmail).not.toHaveBeenCalled();
+    expect(tx.booking.create.mock.calls[0][0].data.clientEmail).toBeNull();
   });
 });
 
@@ -1450,6 +1480,38 @@ describe('BookingCreateFacade own bookings', () => {
       'staff-1',
     );
     expect(tx.booking.create).toHaveBeenCalledOnce();
+  });
+
+  it('gives "any staff" services to the master before a less busy colleague', async () => {
+    const { service, tx, staff, calendar, db } = customTimeSetup();
+    const both = [{ id: 'staff-1' }, { id: 'staff-2' }];
+    staff.resolveStaffForService.mockResolvedValue(both);
+    calendar.filterAvailableStaff.mockResolvedValue(both);
+    db.bookingItem.groupBy.mockResolvedValue([
+      { staffId: 'staff-1', _count: { id: 5 } },
+    ]);
+    const anyStaff = { ...dto, staffId: undefined };
+
+    await service.createManualBooking(
+      'business-1',
+      { ...anyStaff, startAt: '2099-09-20T10:00:00' },
+      { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER },
+    );
+    await service.createManualBooking(
+      'business-1',
+      { ...anyStaff, startAt: '2099-09-20T12:00:00' },
+      master,
+      'staff-1',
+    );
+
+    const staffOf = (call: number) =>
+      (
+        tx.booking.create.mock.calls[call][0].data.items.create[0] as {
+          staffId?: string;
+        }
+      ).staffId;
+    expect(staffOf(0)).toBe('staff-2');
+    expect(staffOf(1)).toBe('staff-1');
   });
 
   it('rejects a booking the master does not take part in', async () => {
@@ -1509,6 +1571,7 @@ function createBookingService(
       slots,
       orders,
       earnings,
+      clients,
     ),
     billing as never,
   );

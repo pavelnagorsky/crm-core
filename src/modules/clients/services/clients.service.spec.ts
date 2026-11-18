@@ -461,7 +461,7 @@ describe('ClientsService.search with a typed phone', () => {
   });
 });
 
-describe('ClientsService.completeEmail', () => {
+describe('ClientsService email filled while booking', () => {
   const stored = {
     id: 'c1',
     brandId: 'business-1',
@@ -471,67 +471,47 @@ describe('ClientsService.completeEmail', () => {
     email: null,
   } as Client;
 
-  function setup(updated: number) {
-    const updateMany = vi.fn().mockResolvedValue({ count: updated });
-    const findFirst = vi
-      .fn()
-      .mockResolvedValue({ ...stored, email: 'other@example.test' });
-    const emit = vi.fn();
+  it('fills only an empty email inside the given transaction and returns what is stored', async () => {
+    const tx = {
+      client: {
+        updateMany: vi.fn().mockResolvedValue({ count: 0 }),
+        findUniqueOrThrow: vi
+          .fn()
+          .mockResolvedValue({ email: 'other@example.test' }),
+      },
+    };
     const service = new ClientsService(
-      { client: { updateMany, findFirst } } as never,
-      { emit } as unknown as EventEmitter2,
-    );
-    return { service, updateMany, findFirst, emit };
-  }
-
-  it('saves an email only while the profile has none and audits it', async () => {
-    const { service, updateMany, emit } = setup(1);
-
-    const result = await service.completeEmail(
-      'business-1',
-      stored,
-      'anna@example.test',
-      actor,
+      {} as never,
+      { emit: vi.fn() } as unknown as EventEmitter2,
     );
 
-    expect(result.email).toBe('anna@example.test');
-    expect(updateMany).toHaveBeenCalledWith({
-      where: { id: 'c1', brandId: 'business-1', email: null },
+    expect(
+      await service.fillMissingEmail('c1', 'anna@example.test', tx as never),
+    ).toBe('other@example.test');
+    expect(tx.client.updateMany).toHaveBeenCalledWith({
+      where: { id: 'c1', email: null },
       data: { email: 'anna@example.test' },
     });
+  });
+
+  it('audits only the email change', () => {
+    const emit = vi.fn();
+    const service = new ClientsService(
+      {} as never,
+      { emit } as unknown as EventEmitter2,
+    );
+    service.emitEmailFilled('business-1', stored, 'anna@example.test', actor);
     expect(emit).toHaveBeenCalledWith(
       AUDIT_EVENT,
       expect.objectContaining({
+        brandId: 'business-1',
         entityId: 'c1',
         eventType: AuditEvent.CLIENT_UPDATED,
         actor,
+        payload: {
+          changes: [{ field: 'email', from: '—', to: 'anna@example.test' }],
+        },
       }),
     );
-  });
-
-  it('keeps an email someone filled in the meantime', async () => {
-    const { service, emit } = setup(0);
-    const result = await service.completeEmail(
-      'business-1',
-      stored,
-      'anna@example.test',
-      actor,
-    );
-    expect(result.email).toBe('other@example.test');
-    expect(emit).not.toHaveBeenCalled();
-  });
-
-  it('never overwrites a filled email', async () => {
-    const { service, updateMany } = setup(1);
-    const filled = { ...stored, email: 'kept@example.test' };
-    expect(
-      await service.completeEmail(
-        'business-1',
-        filled,
-        'new@example.test',
-        actor,
-      ),
-    ).toBe(filled);
-    expect(updateMany).not.toHaveBeenCalled();
   });
 });

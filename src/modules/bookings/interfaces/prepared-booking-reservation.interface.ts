@@ -12,6 +12,8 @@ export interface PreparedBookingReservation {
   locationId: string;
   timezone: string;
   client: ResolvedBookingClient;
+  /** Email to save to the client profile, only if it has none, in the booking transaction. */
+  clientEmailToFill?: string | null;
   items: ResolvedBookingItem[];
   attribution: BookingAttribution;
   executionMode: BookingExecutionMode;

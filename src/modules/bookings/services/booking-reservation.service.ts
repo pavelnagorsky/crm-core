@@ -6,6 +6,7 @@ import { hasStaffOverlap } from '../../../shared/scheduling/has-staff-overlap.js
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { AuditActorRole } from '../../audit/enums/audit-actor-role.enum.js';
 import { CalendarFacade } from '../../calendar/calendar.facade.js';
+import { ClientsService } from '../../clients/services/clients.service.js';
 import { LocationService } from '../../location/services/location.service.js';
 import { OrdersFacade } from '../../orders/orders.facade.js';
 import { StaffEarningsService } from '../../payroll/earnings/services/staff-earnings.service.js';
@@ -28,6 +29,7 @@ export class BookingReservationService {
     private readonly slots: BookingSlotLockService,
     private readonly orders: OrdersFacade,
     private readonly staffEarnings: StaffEarningsService,
+    private readonly clients: ClientsService,
   ) {}
 
   async reserveOnce(
@@ -130,6 +132,15 @@ export class BookingReservationService {
       );
       createdItems.push({ ...item, calendarEventId: calendarEvent.id });
     }
+    // Saved with the booking: a failed reservation leaves the profile unchanged.
+    const clientEmail =
+      input.clientEmailToFill && client.id
+        ? await this.clients.fillMissingEmail(
+            client.id,
+            input.clientEmailToFill,
+            tx,
+          )
+        : client.email;
 
     const booking = await tx.booking.create({
       data: {
@@ -150,7 +161,7 @@ export class BookingReservationService {
         clientFirstName: client.firstName,
         clientLastName: client.lastName,
         clientPhone: client.phone,
-        clientEmail: client.email,
+        clientEmail,
         notes,
         internalNotes,
         idempotencyKey: input.request?.idempotencyKey ?? null,

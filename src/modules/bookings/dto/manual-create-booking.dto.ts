@@ -148,4 +148,9 @@ export class ManualCreateBookingDto extends CreateBookingDto {
   @IsOptional()
   @IsBoolean()
   notifyClient?: boolean;
+
+  /** Staff may skip the client (anonymous) or pick a stored one (clientId). */
+  static override requiresClientContacts(dto: ManualCreateBookingDto): boolean {
+    return dto.anonymous !== true && !dto.clientId;
+  }
 }

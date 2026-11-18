@@ -6,7 +6,7 @@ import {
   UnauthorizedException,
 } from '@nestjs/common';
 import { AuthenticatedRequest } from '../../auth/interfaces/authenticated-request.interface.js';
-import { canReadBrandClients } from '../rules/client-read-access.rules.js';
+import { canReadBrandClients } from '../../access/utils/can-read-brand-clients.js';
 
 @Injectable()
 export class ClientReadGuard implements CanActivate {

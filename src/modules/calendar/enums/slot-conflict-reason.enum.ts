@@ -6,6 +6,6 @@ export enum SlotConflictReason {
   BLOCK = 'BLOCK',
   /** No shift that day, or the visit runs outside the shift or past midnight. */
   OUTSIDE_SCHEDULE = 'OUTSIDE_SCHEDULE',
-  /** Several staff members could do it, but none is free, or no one performs the service. */
+  /** Several staff members could do it but none is free, no one performs it, or no distinct team fits. */
   NO_STAFF = 'NO_STAFF',
 }

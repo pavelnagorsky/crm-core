@@ -37,7 +37,7 @@ describe('Client reading for booking creators', () => {
       }),
     }) as unknown as ExecutionContext;
 
-  it.each(['search', 'findById'] as const)(
+  it.each(['lookup', 'findById'] as const)(
     'keeps authentication and token freshness on %s',
     (operation) => {
       expect(
@@ -49,7 +49,7 @@ describe('Client reading for booking creators', () => {
     },
   );
 
-  it.each(['search', 'findById'] as const)(
+  it.each(['lookup', 'findById'] as const)(
     'opens %s to a master who can create own bookings',
     (operation) => {
       expect(
@@ -58,7 +58,7 @@ describe('Client reading for booking creators', () => {
     },
   );
 
-  it.each(['search', 'findById'] as const)(
+  it.each(['lookup', 'findById'] as const)(
     'closes %s to a master whose own booking writing was disabled',
     (operation) => {
       const token = tokenPayload('STAFF');
@@ -74,13 +74,13 @@ describe('Client reading for booking creators', () => {
   it('does not open clients of another brand through a booking right', () => {
     expect(() =>
       readGuard.canActivate(
-        context('search', tokenPayload('STAFF'), 'brand-2'),
+        context('lookup', tokenPayload('STAFF'), 'brand-2'),
       ),
     ).toThrow(ForbiddenException);
   });
 
   it('requires an authenticated user', () => {
-    expect(() => readGuard.canActivate(context('search', undefined))).toThrow(
+    expect(() => readGuard.canActivate(context('lookup', undefined))).toThrow(
       UnauthorizedException,
     );
   });
@@ -94,6 +94,15 @@ describe('Client reading for booking creators', () => {
       expect(readGuard.canActivate(context('findById', token))).toBe(true);
     },
   );
+
+  it('keeps the full client list behind client:read', () => {
+    const token = tokenPayload('STAFF');
+    expect(() => permissionGuard.canActivate(context('search', token))).toThrow(
+      ForbiddenException,
+    );
+    addGrant(token.permissions!['G:brand-1'], Read(Claim.CLIENT));
+    expect(permissionGuard.canActivate(context('search', token))).toBe(true);
+  });
 
   it.each(['create', 'update', 'setBan', 'import', 'export'] as const)(
     'does not grant %s to a master through booking or client reading',

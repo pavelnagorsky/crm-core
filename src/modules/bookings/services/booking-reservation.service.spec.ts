@@ -18,6 +18,7 @@ describe('BookingReservationService idempotency', () => {
     {} as never,
     {} as never,
     {} as never,
+    {} as never,
   );
   const create = vi.fn();
 
