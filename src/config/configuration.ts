@@ -42,11 +42,11 @@ export default () => {
       emailPw: process.env['EMAIL_PW'],
     },
     notificationsConfig: {
-      // Enabled by default. NOTIFICATIONS_ENABLED=false (dev/stage) mutes only emails to a business's clients: those
+      // Enabled by default. CLIENT_NOTIFICATIONS_ENABLED=false (dev/stage) mutes only emails to a business's clients: those
       // environments hold fake bookings that may still carry real contacts. Emails to CRM accounts (registration,
       // password reset, invitations, staff and billing notices) are always sent.
       clientNotificationsEnabled:
-        process.env['NOTIFICATIONS_ENABLED'] !== 'false',
+        process.env['CLIENT_NOTIFICATIONS_ENABLED'] !== 'false',
     },
     app: {
       locale: process.env['APP_LOCALE'] ?? 'ru',

@@ -65,7 +65,7 @@ export class NotificationsService {
     }
   }
 
-  /** Emails to CRM accounts always go out; only emails to a business's clients follow `NOTIFICATIONS_ENABLED`. */
+  /** Emails to CRM accounts always go out; only emails to a business's clients follow `CLIENT_NOTIFICATIONS_ENABLED`. */
   private isMuted(notification: AbstractNotification): boolean {
     return (
       notification.audience === NotificationAudience.CLIENT &&
