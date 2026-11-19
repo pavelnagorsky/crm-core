@@ -50,6 +50,7 @@ function setup(options: {
       ),
     ),
     listShiftsForStaff: vi.fn().mockResolvedValue(shifts),
+    listShiftsForAvailability: vi.fn().mockResolvedValue(shifts),
   };
   const catalog = {
     resolveServicesForAvailability: vi.fn().mockResolvedValue(services),
@@ -64,7 +65,9 @@ function setup(options: {
     },
   };
   const locations = {
-    getBookingSettings: vi.fn().mockResolvedValue({ timezone: 'UTC' }),
+    getBookingSettings: vi
+      .fn()
+      .mockResolvedValue({ timezone: 'UTC', slotIntervalMinutes: 15 }),
   };
   return new CalendarAvailabilityService(
     db as never,
@@ -141,7 +144,7 @@ describe('Manual slot check', () => {
       request({}),
     );
     expect(off).toMatchObject({
-      reason: SlotConflictReason.OUTSIDE_SCHEDULE,
+      reason: SlotConflictReason.NO_SHIFT,
       conflictStart: '2026-11-20T14:00:00',
       conflictEnd: '2026-11-20T16:00:00',
     });
@@ -207,6 +210,44 @@ describe('Manual slot check', () => {
     });
   });
 
+  it('checks only the start for one booking step without services', async () => {
+    const options = {
+      staff: [
+        { id: 'anna', services: ['haircut'] },
+        { id: 'owner', services: [] },
+      ],
+      events: [event('anna', CalendarEventType.BOOKING, '14:15', '15:00')],
+    };
+    const free = await setup(options).checkManualSlot(
+      'location',
+      request({ serviceIds: undefined }),
+    );
+    expect(free).toMatchObject({
+      available: true,
+      endAt: '2026-11-20T14:15:00',
+    });
+    const busy = await setup(options).checkManualSlot(
+      'location',
+      request({ serviceIds: undefined, startAt: '2026-11-20T14:15:00' }),
+    );
+    expect(busy).toMatchObject({
+      available: false,
+      reason: SlotConflictReason.BOOKING,
+      staffId: 'anna',
+    });
+    // Without a staff member only those who perform services count.
+    const off = await setup({ ...options, shifts: {} }).checkManualSlot(
+      'location',
+      request({ serviceIds: undefined, staffId: undefined }),
+    );
+    expect(off).toMatchObject({
+      reason: SlotConflictReason.NO_SHIFT,
+      staffId: 'anna',
+      conflictStart: '2026-11-20T14:00:00',
+      conflictEnd: '2026-11-20T14:15:00',
+    });
+  });
+
   it('needs distinct free staff for a parallel bundle', async () => {
     const result = await setup({
       services: [service('haircut', 60), service('manicure', 60)],
@@ -221,5 +262,34 @@ describe('Manual slot check', () => {
       reason: SlotConflictReason.NO_STAFF,
       endAt: '2026-11-20T15:00:00',
     });
+  });
+});
+
+describe('Manual free starts without services', () => {
+  beforeEach(() => vi.useFakeTimers({ now: new Date('2026-11-20T00:00:00Z') }));
+  afterEach(() => vi.useRealTimers());
+
+  it('lists starts where the staff member is free for one booking step', async () => {
+    const days = await setup({
+      shifts: { anna: ['09:00', '10:00'] },
+      events: [event('anna', CalendarEventType.BOOKING, '09:15', '09:45')],
+    }).getManualAvailableSlots('location', {
+      staffId: 'anna',
+      from: '2026-11-20',
+      to: '2026-11-20',
+    });
+    expect(days).toEqual([
+      { date: '2026-11-20', slots: [{ time: '09:00' }, { time: '09:45' }] },
+    ]);
+  });
+
+  it('rejects a staff member from another location', async () => {
+    await expect(
+      setup({}).getManualAvailableSlots('location', {
+        staffId: 'stranger',
+        from: '2026-11-20',
+        to: '2026-11-20',
+      }),
+    ).rejects.toMatchObject({ status: 404 });
   });
 });

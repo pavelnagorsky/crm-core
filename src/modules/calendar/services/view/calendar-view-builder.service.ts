@@ -38,13 +38,14 @@ export class CalendarViewBuilderService {
     const queryStart = new Date(rangeStart.getTime() - 86_400_000);
     const queryEnd = new Date(rangeEnd.getTime() + 2 * 86_400_000 - 1);
 
-    const [shifts, events] = await Promise.all([
+    const [shifts, directory, events] = await Promise.all([
       this.staff.listShiftsInRange(
         locationId,
         rangeStart,
         rangeEnd,
         dto.staffIds,
       ),
+      this.staff.listActiveWithServices(locationId),
       this.db.calendarEvent.findMany({
         where: {
           location: ACTIVE_LOCATION_WHERE,
@@ -86,14 +87,19 @@ export class CalendarViewBuilderService {
     const staffNames = staffIds.length
       ? await this.staff.namesByIds(staffIds)
       : new Map<string, string>();
-    const shiftsByDate = this.compute.groupShiftsByDate(shifts);
-    const { minTime, maxTime, closedTime } =
-      this.compute.computeViewAndClosedTime(dates, shiftsByDate);
+    // Staff columns: active staff of the location, narrowed to the requested ones.
+    const requested = dto.staffIds?.length ? new Set(dto.staffIds) : null;
+    const columnStaffIds = directory
+      .filter((member) => !requested || requested.has(member.id))
+      .map((member) => member.id);
+    const { minTime, maxTime, closedTime, staffClosedTime } =
+      this.compute.computeViewAndClosedTime(dates, shifts, columnStaffIds);
     return {
       range: { from: dto.from, to: dto.to },
       timezone,
       view: { minTime, maxTime },
       closedTime,
+      staffClosedTime,
       events: [
         ...this.compute.expandEvents(
           blocks,

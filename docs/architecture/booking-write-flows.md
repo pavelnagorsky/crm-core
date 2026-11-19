@@ -53,8 +53,13 @@ booking, services and bundles by frequency) and popular services per staff membe
 for the last 90 days. A bundle visit counts for the bundle, a visit without a bundle
 for each of its services; only `COMPLETED` visits count. Bundle titles come from
 `ServiceCatalogFacade.findBundleTitles`. `CalendarFacade.checkManualSlot` explains an
-unavailable start time with the earliest obstacle: `BOOKING`, `BLOCK`,
-`OUTSIDE_SCHEDULE` or `NO_STAFF`.
+unavailable start time with the earliest obstacle: `BOOKING`, `BLOCK`, `NO_SHIFT`
+(no shift that day), `OUTSIDE_SCHEDULE` (the visit runs outside the shift) or
+`NO_STAFF`. Before services are chosen, manual `available-slots` and `slot-check`
+work on the start alone: the staff member (or anyone who performs services) must be
+free for one booking step. The calendar view returns `staffClosedTime` per active
+staff member next to the location-wide `closedTime`, so a staff column without a
+shift is shown closed while other staff work.
 
 The migration restores `isCustomTime: true` for historical
 bookings identified by their legacy source in a `BOOKING_CREATED` audit entry.

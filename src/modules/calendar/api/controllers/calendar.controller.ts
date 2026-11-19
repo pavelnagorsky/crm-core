@@ -76,7 +76,7 @@ export class CalendarController {
 
   @ApiOperation({
     summary:
-      'Get available slots for manual booking (owner / staff). Same free-time rules as the public list, without online-booking visibility, minimum notice, or the advance window.',
+      'Get available slots for manual booking (owner / staff). Same free-time rules as the public list, without online-booking visibility, minimum notice, or the advance window. Without serviceIds, serviceId, bundleId and bookingId: starts where staffId (or anyone who performs services) is free for one booking step (slotIntervalMinutes); staffAssignments are not allowed then.',
   })
   @ApiOkResponse({ type: ApiResponseArray(AvailableSlotsDayDto) })
   @ApiNotFoundResponse({ description: 'Location or service not found' })
@@ -99,7 +99,7 @@ export class CalendarController {
 
   @ApiOperation({
     summary:
-      'Check whether a manual visit fits at a given start and why not: another booking, a block, or working hours. Same rules and selection parameters as manual available slots',
+      'Check whether a manual visit fits at a given start and why not: another booking, a block, no shift that day, or working hours. Same rules and selection parameters as manual available slots; without services only the start is checked, for one booking step',
   })
   @ApiOkResponse({ type: ApiResponse(SlotCheckResponseDto) })
   @ApiNotFoundResponse({

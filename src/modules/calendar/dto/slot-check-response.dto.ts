@@ -15,7 +15,7 @@ export class SlotCheckResponseDto {
     enumName: 'SlotConflictReason',
     nullable: true,
     description:
-      'Null when available. BOOKING / BLOCK / OUTSIDE_SCHEDULE: the first obstacle of the one staff member who could take the first service nobody can take. NO_STAFF: several staff members could take that service and none is free, nobody performs it, or every service has a free staff member but no team of distinct staff can be formed (parallel bundle)',
+      'Null when available. BOOKING / BLOCK / NO_SHIFT / OUTSIDE_SCHEDULE: the first obstacle of the one staff member who could take the first service nobody can take. NO_STAFF: several staff members could take that service and none is free, nobody performs it, or every service has a free staff member but no team of distinct staff can be formed (parallel bundle)',
   })
   reason: SlotConflictReason | null;
 
@@ -32,7 +32,7 @@ export class SlotCheckResponseDto {
     nullable: true,
     example: '2026-11-20T15:30:00',
     description:
-      'Obstacle start, local wall time in the location timezone. BOOKING / BLOCK: the occupying event, clipped to the visit day. OUTSIDE_SCHEDULE: the part of the visit outside the shift. Null when available or for NO_STAFF',
+      'Obstacle start, local wall time in the location timezone. BOOKING / BLOCK: the occupying event, clipped to the visit day. NO_SHIFT: the whole visit. OUTSIDE_SCHEDULE: the part of the visit outside the shift. Null when available or for NO_STAFF',
   })
   conflictStart: string | null;
 
@@ -56,7 +56,7 @@ export class SlotCheckResponseDto {
     type: String,
     example: '2026-11-20T16:00:00',
     description:
-      'Visit end from catalog durations and buffers, local wall time',
+      'Visit end from catalog durations and buffers (one booking step without services), local wall time',
   })
   endAt: string;
 

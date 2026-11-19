@@ -4,7 +4,9 @@ export enum SlotConflictReason {
   BOOKING = 'BOOKING',
   /** A block (break, day off, location-wide closure) overlaps the visit. */
   BLOCK = 'BLOCK',
-  /** No shift that day, or the visit runs outside the shift or past midnight. */
+  /** The staff member has no shift that day. */
+  NO_SHIFT = 'NO_SHIFT',
+  /** The visit runs outside the shift: before its start, after its end or past midnight. */
   OUTSIDE_SCHEDULE = 'OUTSIDE_SCHEDULE',
   /** Several staff members could do it but none is free, no one performs it, or no distinct team fits. */
   NO_STAFF = 'NO_STAFF',

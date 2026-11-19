@@ -91,3 +91,61 @@ describe('Calendar blocking intervals', () => {
     ]);
   });
 });
+
+describe('Calendar closed time', () => {
+  const shift = (staffId: string, date: string, from: string, to: string) => ({
+    id: `${staffId}-${date}`,
+    staffId,
+    date: new Date(date),
+    startTime: new Date(`1970-01-01T${from}:00Z`),
+    endTime: new Date(`1970-01-01T${to}:00Z`),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  });
+
+  it('closes a staff column on a day without a shift while the location is open', () => {
+    const result = compute.computeViewAndClosedTime(
+      ['2026-11-20'],
+      [
+        shift('david', '2026-11-20', '10:00', '21:00'),
+        shift('artur', '2026-11-21', '10:00', '21:00'),
+      ],
+      ['artur', 'david'],
+    );
+    expect(result).toMatchObject({ minTime: '10:00', maxTime: '21:00' });
+    expect(result.closedTime).toEqual([]);
+    expect(result.staffClosedTime).toEqual([
+      {
+        staffId: 'artur',
+        date: '2026-11-20',
+        startTime: '10:00',
+        endTime: '21:00',
+      },
+    ]);
+  });
+
+  it('closes the part of the view outside a shorter shift', () => {
+    const result = compute.computeViewAndClosedTime(
+      ['2026-11-22'],
+      [
+        shift('david', '2026-11-22', '11:00', '19:00'),
+        shift('vlad', '2026-11-22', '10:00', '21:00'),
+      ],
+      ['david', 'vlad'],
+    );
+    expect(result.staffClosedTime).toEqual([
+      {
+        staffId: 'david',
+        date: '2026-11-22',
+        startTime: '10:00',
+        endTime: '11:00',
+      },
+      {
+        staffId: 'david',
+        date: '2026-11-22',
+        startTime: '19:00',
+        endTime: '21:00',
+      },
+    ]);
+  });
+});

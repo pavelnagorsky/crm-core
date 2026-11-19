@@ -12,6 +12,7 @@ import { CalendarEventItemDto } from '../dto/calendar-event-item.dto.js';
 import { SlotConflictReason } from '../enums/slot-conflict-reason.enum.js';
 import { SlotConflict } from '../interfaces/slot-conflict.interface.js';
 import { ClosedTimeItemDto } from '../dto/closed-time-item.dto.js';
+import { StaffClosedTimeItemDto } from '../dto/staff-closed-time-item.dto.js';
 import { CalendarRescheduleItem } from '../interfaces/calendar-reschedule-item.interface.js';
 import { CalendarShift } from '../interfaces/calendar-shift.interface.js';
 import { CalendarSlotCandidate } from '../interfaces/calendar-slot-candidate.interface.js';
@@ -325,19 +326,60 @@ export class CalendarCalculator {
   // ─── Calendar view ────────────────────────────────────────────────────────────
 
   /**
-   * Computes the calendar view bounds (earliest shift start / latest shift end across all days)
-   * and the closed-time blocks (gaps within those bounds where no staff is working).
+   * Computes the calendar view bounds (earliest shift start / latest shift end across all days),
+   * the closed-time blocks (gaps within those bounds where no staff is working) and, per staff
+   * member in `staffIds`, the gaps where that member is not working (no shift is the whole day).
    */
   computeViewAndClosedTime(
     dates: string[],
-    shiftsByDate: Map<string, StaffShift[]>,
-  ): { minTime: string; maxTime: string; closedTime: ClosedTimeItemDto[] } {
+    shifts: StaffShift[],
+    staffIds: string[],
+  ): {
+    minTime: string;
+    maxTime: string;
+    closedTime: ClosedTimeItemDto[];
+    staffClosedTime: StaffClosedTimeItemDto[];
+  } {
+    const shiftsByDate = this.groupShiftsByDate(shifts);
     const { viewMin, viewMax } = this.computeViewBounds(shiftsByDate);
     return {
       minTime: TimeUtils.minutesToHHmm(viewMin),
       maxTime: TimeUtils.minutesToHHmm(viewMax),
       closedTime: this.computeClosedTime(dates, shiftsByDate, viewMin, viewMax),
+      staffClosedTime: this.computeStaffClosedTime(
+        dates,
+        this.groupShiftsByStaffDate(shifts),
+        staffIds,
+        { start: viewMin, end: viewMax },
+      ),
     };
+  }
+
+  private computeStaffClosedTime(
+    dates: string[],
+    shiftsByStaffDate: Map<string, Map<string, CalendarShift>>,
+    staffIds: string[],
+    view: Interval,
+  ): StaffClosedTimeItemDto[] {
+    return staffIds.flatMap((staffId) =>
+      dates.flatMap((date) => {
+        const shift = shiftsByStaffDate.get(staffId)?.get(date);
+        const open = shift
+          ? [
+              {
+                start: TimeUtils.timeToMinutes(shift.startTime),
+                end: TimeUtils.timeToMinutes(shift.endTime),
+              },
+            ]
+          : [];
+        return this.subtractIntervals(view, open).map((block) => ({
+          staffId,
+          date,
+          startTime: TimeUtils.minutesToHHmm(block.start),
+          endTime: TimeUtils.minutesToHHmm(block.end),
+        }));
+      }),
+    );
   }
 
   private computeViewBounds(shiftsByDate: Map<string, StaffShift[]>): {
@@ -621,11 +663,7 @@ export class CalendarCalculator {
     const conflicts: SlotConflict[] = [];
     const shift = shiftsByStaffDate.get(staffId)?.get(date);
     if (!shift) {
-      conflicts.push({
-        reason: SlotConflictReason.OUTSIDE_SCHEDULE,
-        start,
-        end,
-      });
+      conflicts.push({ reason: SlotConflictReason.NO_SHIFT, start, end });
     } else {
       const shiftStart = TimeUtils.timeToMinutes(shift.startTime);
       const shiftEnd = TimeUtils.timeToMinutes(shift.endTime);

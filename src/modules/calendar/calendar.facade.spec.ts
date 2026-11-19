@@ -438,6 +438,7 @@ describe('CalendarFacade.getCalendar', () => {
   const bookings = { listForCalendar: vi.fn() };
   const staff = {
     namesByIds: vi.fn(),
+    listActiveWithServices: vi.fn(),
     listShiftsInRange: vi.fn((locationId, from, to, staffIds) =>
       db.staffShift.findMany({
         where: {
@@ -504,6 +505,7 @@ describe('CalendarFacade.getCalendar', () => {
       linkedEventIds: [],
     });
     staff.namesByIds.mockResolvedValue(new Map());
+    staff.listActiveWithServices.mockResolvedValue([]);
     const module = await Test.createTestingModule({
       providers: [
         CalendarFacade,
@@ -730,5 +732,39 @@ describe('CalendarFacade.getCalendar', () => {
     });
 
     expect(result.events).toEqual([]);
+  });
+
+  it('closes the column of a staff member without a shift on an open day', async () => {
+    db.calendarEvent.findMany.mockResolvedValue([]);
+    db.staffShift.findMany.mockResolvedValue([
+      {
+        staffId: 'david',
+        date: new Date('2026-11-20'),
+        startTime: new Date('1970-01-01T10:00:00Z'),
+        endTime: new Date('1970-01-01T21:00:00Z'),
+      },
+    ]);
+    staff.listActiveWithServices.mockResolvedValue([
+      { id: 'artur', staffServices: [] },
+      { id: 'david', staffServices: [] },
+    ]);
+
+    const all = await getCalendar({ from: '2026-11-20', to: '2026-11-20' });
+    expect(all.closedTime).toEqual([]);
+    expect(all.staffClosedTime).toEqual([
+      {
+        staffId: 'artur',
+        date: '2026-11-20',
+        startTime: '10:00',
+        endTime: '21:00',
+      },
+    ]);
+
+    const david = await getCalendar({
+      from: '2026-11-20',
+      to: '2026-11-20',
+      staffIds: ['david'],
+    });
+    expect(david.staffClosedTime).toEqual([]);
   });
 });

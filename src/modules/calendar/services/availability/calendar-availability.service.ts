@@ -20,10 +20,13 @@ import { SlotCheckResult } from '../../interfaces/slot-check-result.interface.js
 import { CalendarRescheduleItem } from '../../interfaces/calendar-reschedule-item.interface.js';
 import { CalendarSlotCandidate } from '../../interfaces/calendar-slot-candidate.interface.js';
 import { CalendarSlotItem } from '../../interfaces/calendar-slot-item.interface.js';
+import { CalendarSlotSelection } from '../../interfaces/calendar-slot-selection.interface.js';
 import { CalendarEventWithCancellations } from '../../interfaces/calendar-types.interface.js';
 import { blockingEventsWhere } from '../../rules/blocking-events-where.js';
 
 const MANUAL_AVAILABLE_SLOTS_MAX_DAYS = 62;
+/** Item key of a request without services (free starts only). */
+const START_ONLY_ITEM = 'start';
 
 @Injectable()
 export class CalendarAvailabilityService {
@@ -86,7 +89,7 @@ export class CalendarAvailabilityService {
       slotItems,
       executionMode,
       candidatesByService,
-    } = await this.loadSlotCandidates(locationId, dto);
+    } = await this.loadSlotCandidates(locationId, dto, true);
     if (candidateStaff.length === 0) return [];
 
     const todayStr = TimeUtils.zonedDateStr(new Date(), business.timezone);
@@ -112,13 +115,14 @@ export class CalendarAvailabilityService {
   /**
    * Whether a manual visit fits at a given start under the manual-slot rules, and otherwise the
    * first obstacle. Services follow each other, or start together in a parallel bundle.
+   * Without services only the start is checked, for one booking step.
    */
   async checkManualSlot(
     locationId: string,
     dto: SlotCheckRequestDto,
   ): Promise<SlotCheckResult> {
     const { business, slotItems, executionMode, candidatesByService } =
-      await this.loadSlotCandidates(locationId, dto);
+      await this.loadSlotCandidates(locationId, dto, true);
     const { timezone } = business;
     const date = dto.startAt.slice(0, 10);
     const startMinute = TimeUtils.hhmmToMinutes(dto.startAt.slice(11, 16));
@@ -408,29 +412,77 @@ export class CalendarAvailabilityService {
     return !blocked.some((b) => slotStart < b.end && slotEnd > b.start);
   }
 
+  /**
+   * `manual`: a request without services asks for free starts, see `resolveStartSelection`.
+   * The public list always needs a service.
+   */
   private async loadSlotCandidates(
     locationId: string,
     dto: AvailableSlotsRequestDto,
+    manual = false,
   ) {
+    const startOnly =
+      manual && !dto.bundleId && !dto.serviceId && !dto.serviceIds?.length;
     const [business, selection] = await Promise.all([
       this.locationService.getBookingSettings(locationId),
-      this.resolveSlotSelection(locationId, dto),
+      startOnly ? null : this.resolveSlotSelection(locationId, dto),
     ]);
 
     if (!business) throw new NotFoundException('Location not found');
-    return { business, ...selection };
+    return {
+      business,
+      ...(selection ??
+        (await this.resolveStartSelection(
+          locationId,
+          dto,
+          business.slotIntervalMinutes,
+        ))),
+    };
+  }
+
+  /**
+   * No service chosen yet: starts where the requested staff member, or anyone who performs
+   * services, is free for one booking step. The visit length is not known, so this is only
+   * a free start, not a fitting visit.
+   */
+  private async resolveStartSelection(
+    locationId: string,
+    dto: AvailableSlotsRequestDto,
+    stepMinutes: number,
+  ): Promise<CalendarSlotSelection> {
+    if (dto.staffAssignments?.length) {
+      throw new AppException(
+        ErrorCode.BOOKING_STAFF_ASSIGNMENT_INVALID,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const directory = await this.staff.listActiveWithServices(locationId);
+    const candidates = directory
+      .filter((member) =>
+        dto.staffId
+          ? member.id === dto.staffId
+          : member.staffServices.length > 0,
+      )
+      .map((member) => ({ id: member.id }));
+    if (dto.staffId && candidates.length === 0) {
+      throw new AppException(
+        ErrorCode.BOOKING_STAFF_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
+    }
+    return {
+      service: { durationMinutes: stepMinutes, bufferMinutes: 0 },
+      candidateStaff: candidates,
+      slotItems: [{ serviceId: START_ONLY_ITEM, durationMinutes: stepMinutes }],
+      executionMode: 'SEQUENTIAL',
+      candidatesByService: new Map([[START_ONLY_ITEM, candidates]]),
+    };
   }
 
   private async resolveSlotSelection(
     locationId: string,
     dto: AvailableSlotsRequestDto,
-  ): Promise<{
-    service: { durationMinutes: number; bufferMinutes: number };
-    candidateStaff: CalendarSlotCandidate[];
-    slotItems: CalendarSlotItem[];
-    executionMode: string;
-    candidatesByService: Map<string, CalendarSlotCandidate[]>;
-  }> {
+  ): Promise<CalendarSlotSelection> {
     if (dto.bundleId && (dto.serviceIds?.length || dto.serviceId)) {
       throw new AppException(
         ErrorCode.BOOKING_SELECTION_CONFLICT,
