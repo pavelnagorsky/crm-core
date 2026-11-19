@@ -7,6 +7,7 @@ import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { AbstractChannel } from '../channels/abstract.channel.js';
 import { EmailChannel } from '../channels/email/email.channel.js';
 import { DeliveryStrategy } from '../enums/delivery-strategy.enum.js';
+import { NotificationAudience } from '../enums/notification-audience.enum.js';
 import { HasEmailChannel } from '../interfaces/has-email-channel.interface.js';
 import { AbstractNotification } from '../messages/abstract.notification.js';
 
@@ -16,23 +17,23 @@ export const NOTIFICATION_EVENT = 'notification';
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
   private readonly channels: AbstractChannel[];
-  private readonly enabled: boolean;
+  private readonly clientNotificationsEnabled: boolean;
 
   constructor(
     private readonly emailChannel: EmailChannel,
     config: ConfigService,
   ) {
     this.channels = [emailChannel];
-    this.enabled = config.get<INotificationsConfig>(
+    this.clientNotificationsEnabled = config.get<INotificationsConfig>(
       'notificationsConfig',
-    )!.enabled;
+    )!.clientNotificationsEnabled;
   }
 
   @OnEvent(NOTIFICATION_EVENT, { suppressErrors: true })
   async handle(notification: AbstractNotification): Promise<void> {
-    if (!this.enabled) {
+    if (this.isMuted(notification)) {
       this.logger.log(
-        `Notifications disabled, skipping ${notification.constructor.name}`,
+        `Client notifications disabled, skipping ${notification.constructor.name}`,
       );
       return;
     }
@@ -49,7 +50,7 @@ export class NotificationsService {
   async sendEmail(
     notification: AbstractNotification & HasEmailChannel,
   ): Promise<void> {
-    if (!this.enabled)
+    if (this.isMuted(notification))
       throw new AppException(
         ErrorCode.EMAIL_DELIVERY_FAILED,
         HttpStatus.SERVICE_UNAVAILABLE,
@@ -62,6 +63,14 @@ export class NotificationsService {
         HttpStatus.BAD_GATEWAY,
       );
     }
+  }
+
+  /** Emails to CRM accounts always go out; only emails to a business's clients follow `NOTIFICATIONS_ENABLED`. */
+  private isMuted(notification: AbstractNotification): boolean {
+    return (
+      notification.audience === NotificationAudience.CLIENT &&
+      !this.clientNotificationsEnabled
+    );
   }
 
   private async dispatch(notification: AbstractNotification): Promise<void> {

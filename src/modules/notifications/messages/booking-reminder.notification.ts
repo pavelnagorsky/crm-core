@@ -1,5 +1,6 @@
 import { TimeUtils } from '../../../shared/time/time.utils.js';
 import { DeliveryStrategy } from '../enums/delivery-strategy.enum.js';
+import { NotificationAudience } from '../enums/notification-audience.enum.js';
 import { BookingNotificationData } from '../interfaces/booking-notification-data.interface.js';
 import { ChannelPayload } from '../interfaces/channel-payload.interface.js';
 import { HasEmailChannel } from '../interfaces/has-email-channel.interface.js';
@@ -10,6 +11,7 @@ export class BookingReminderNotification
   implements HasEmailChannel
 {
   readonly strategy = DeliveryStrategy.BEST_EFFORT;
+  readonly audience = NotificationAudience.CLIENT;
   readonly emailTemplate = 'booking-reminder' as const;
 
   constructor(

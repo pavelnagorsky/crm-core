@@ -1,4 +1,5 @@
 import { DeliveryStrategy } from '../enums/delivery-strategy.enum.js';
+import { NotificationAudience } from '../enums/notification-audience.enum.js';
 import { ChannelPayload } from '../interfaces/channel-payload.interface.js';
 import { HasEmailChannel } from '../interfaces/has-email-channel.interface.js';
 import { AbstractNotification } from './abstract.notification.js';
@@ -8,6 +9,7 @@ export class ConfirmEmailNotification
   implements HasEmailChannel
 {
   readonly strategy = DeliveryStrategy.REQUIRED;
+  readonly audience = NotificationAudience.ACCOUNT;
   readonly emailTemplate = 'confirm-email' as const;
 
   constructor(

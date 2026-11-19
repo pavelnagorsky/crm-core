@@ -1,4 +1,5 @@
 import { DeliveryStrategy } from '../enums/delivery-strategy.enum.js';
+import { NotificationAudience } from '../enums/notification-audience.enum.js';
 import { ChannelPayload } from '../interfaces/channel-payload.interface.js';
 import { HasEmailChannel } from '../interfaces/has-email-channel.interface.js';
 import { StaffBookingNotificationData } from '../interfaces/staff-booking-notification-data.interface.js';
@@ -9,6 +10,7 @@ export class StaffBookingNotification
   implements HasEmailChannel
 {
   readonly strategy = DeliveryStrategy.BEST_EFFORT;
+  readonly audience = NotificationAudience.ACCOUNT;
   readonly emailTemplate = 'staff-booking-event' as const;
 
   constructor(private readonly data: StaffBookingNotificationData) {

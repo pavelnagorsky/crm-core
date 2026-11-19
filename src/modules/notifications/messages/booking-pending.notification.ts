@@ -1,4 +1,5 @@
 import { DeliveryStrategy } from '../enums/delivery-strategy.enum.js';
+import { NotificationAudience } from '../enums/notification-audience.enum.js';
 import { BookingNotificationData } from '../interfaces/booking-notification-data.interface.js';
 import { ChannelPayload } from '../interfaces/channel-payload.interface.js';
 import { HasEmailChannel } from '../interfaces/has-email-channel.interface.js';
@@ -9,6 +10,7 @@ export class BookingPendingNotification
   implements HasEmailChannel
 {
   readonly strategy = DeliveryStrategy.BEST_EFFORT;
+  readonly audience = NotificationAudience.CLIENT;
   readonly emailTemplate = 'booking-pending' as const;
 
   constructor(
