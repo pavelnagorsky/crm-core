@@ -20,6 +20,10 @@ import { BookingWithItems } from '../../interfaces/booking-with-items.interface.
 import { BookingEventsService } from '../booking-events.service.js';
 import { BookingWriteLockService } from '../booking-write-lock.service.js';
 import { BookingReadService } from '../read/booking-read.service.js';
+import {
+  BookingClientLink,
+  BookingClientLinkService,
+} from './booking-client-link.service.js';
 import { BookingLifecycleService } from './booking-lifecycle.service.js';
 import { BookingRescheduleService } from './booking-reschedule.service.js';
 
@@ -34,6 +38,7 @@ export class BookingMutationService {
     private readonly events: BookingEventsService,
     private readonly lifecycle: BookingLifecycleService,
     private readonly reschedule: BookingRescheduleService,
+    private readonly clientLink: BookingClientLinkService,
   ) {}
 
   async update(
@@ -54,15 +59,20 @@ export class BookingMutationService {
       dto.staffId !== undefined ||
       Boolean(dto.staffAssignments?.length);
     const pricePatches = this.pricePatches(old, dto);
+    const clientLink = await this.clientLink.resolve(old, dto);
     const updateArgs = {
       where: { id: bookingId },
       data: {
         isCustomTime: dto.isCustomTime ?? undefined,
-        clientFirstName: dto.firstName ?? old.clientFirstName,
-        clientLastName: dto.lastName ?? old.clientLastName,
-        clientPhone: dto.phone ?? old.clientPhone,
-        clientEmail:
-          dto.email !== undefined ? (dto.email ?? null) : old.clientEmail,
+        ...(clientLink
+          ? this.clientLinkWrite(clientLink)
+          : {
+              clientFirstName: dto.firstName ?? old.clientFirstName,
+              clientLastName: dto.lastName ?? old.clientLastName,
+              clientPhone: dto.phone ?? old.clientPhone,
+              clientEmail:
+                dto.email !== undefined ? (dto.email ?? null) : old.clientEmail,
+            }),
         notes: dto.notes !== undefined ? (dto.notes ?? null) : undefined,
         internalNotes:
           dto.internalNotes !== undefined
@@ -72,6 +82,11 @@ export class BookingMutationService {
       },
       include: bookingWithItemsInclude,
     } satisfies Prisma.BookingUpdateArgs;
+    // A booking order follows the client the booking is moved to.
+    const syncOrderClient = clientLink
+      ? (booking: BookingWithItems, tx: Prisma.TransactionClient) =>
+          this.orders.syncBookingClient(booking, tx)
+      : undefined;
     let updated: BookingWithItems;
     if (manualIntervalChanging || slotChanging) {
       updated = await this.reschedule.reschedule(
@@ -79,11 +94,13 @@ export class BookingMutationService {
         dto,
         updateArgs.data,
         actor,
+        syncOrderClient,
       );
     } else {
       updated = await this.db.$transaction(async (tx) => {
         await this.write.lockUnchangedBooking(tx, old);
         const result = await tx.booking.update(updateArgs);
+        await syncOrderClient?.(result, tx);
         if (old.status === BookingStatus.COMPLETED && pricePatches.length > 0) {
           const order = await this.orders.syncCompletedBooking(
             result,
@@ -182,6 +199,27 @@ export class BookingMutationService {
       }
     }
     return patches;
+  }
+
+  private clientLinkWrite(
+    link: BookingClientLink,
+  ): Pick<
+    Prisma.BookingUpdateInput,
+    | 'client'
+    | 'clientFirstName'
+    | 'clientLastName'
+    | 'clientPhone'
+    | 'clientEmail'
+  > {
+    return {
+      client: link.clientId
+        ? { connect: { id: link.clientId } }
+        : { disconnect: true },
+      clientFirstName: link.clientFirstName,
+      clientLastName: link.clientLastName,
+      clientPhone: link.clientPhone,
+      clientEmail: link.clientEmail,
+    };
   }
 
   private itemPriceWrite(patches: UpdateBookingItemPriceDto[]): {

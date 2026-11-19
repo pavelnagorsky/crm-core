@@ -27,6 +27,7 @@ import { BookingSchedulingService } from './services/booking-scheduling.service.
 import { BookingSelectionService } from './services/booking-selection.service.js';
 import { BookingSlotLockService } from './services/booking-slot-lock.service.js';
 import { BookingWriteLockService } from './services/booking-write-lock.service.js';
+import { BookingClientLinkService } from './services/write/booking-client-link.service.js';
 import { BookingLifecycleService } from './services/write/booking-lifecycle.service.js';
 import { BookingMutationService } from './services/write/booking-mutation.service.js';
 import { BookingRescheduleService } from './services/write/booking-reschedule.service.js';
@@ -67,6 +68,7 @@ import { JwtBookingClientStrategy } from './strategies/jwt-booking-client.strate
     BookingWriteLockService,
     BookingLifecycleService,
     BookingRescheduleService,
+    BookingClientLinkService,
 
     BookingsFacade,
     BookingCreateFacade,

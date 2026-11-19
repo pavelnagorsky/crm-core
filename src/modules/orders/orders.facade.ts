@@ -70,6 +70,13 @@ export class OrdersFacade {
     return this.persistence.findById(locationId, orderId);
   }
 
+  syncBookingClient(
+    booking: BookingWithItems,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    return this.bookingSync.syncBookingClient(booking, tx);
+  }
+
   syncCompletedBooking(
     booking: BookingWithItems,
     actor: AuditActor,

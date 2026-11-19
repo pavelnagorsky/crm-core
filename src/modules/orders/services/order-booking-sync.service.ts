@@ -65,6 +65,24 @@ export class OrderBookingSyncService {
     }));
   }
 
+  /** Moves the booking's active order to the booking's current client. */
+  async syncBookingClient(
+    booking: BookingWithItems,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    await tx.order.updateMany({
+      where: { bookingId: booking.id, status: OrderStatus.ACTIVE },
+      data: {
+        clientId: booking.clientId,
+        clientName: this.clientName(
+          booking.clientFirstName,
+          booking.clientLastName,
+        ),
+        clientPhone: booking.clientPhone,
+      },
+    });
+  }
+
   async syncCompletedBooking(
     booking: BookingWithItems,
     actor: AuditActor,

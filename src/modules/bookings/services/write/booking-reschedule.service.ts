@@ -42,13 +42,18 @@ export class BookingRescheduleService {
     private readonly slots: BookingSlotLockService,
   ) {}
 
+  /** `afterUpdate` runs in the same transaction, after the booking row is saved. */
   reschedule(
     old: BookingWithItems,
     dto: UpdateBookingDto,
     data: Prisma.BookingUpdateInput,
     actor: AuditActor,
+    afterUpdate?: (
+      updated: BookingWithItems,
+      tx: Prisma.TransactionClient,
+    ) => Promise<void>,
   ): Promise<BookingWithItems> {
-    return this.moveBooking(old, dto, data, actor);
+    return this.moveBooking(old, dto, data, actor, false, afterUpdate);
   }
 
   rescheduleByClient(
@@ -66,6 +71,10 @@ export class BookingRescheduleService {
     data: Prisma.BookingUpdateInput,
     actor: AuditActor,
     clientInitiated = false,
+    afterUpdate?: (
+      updated: BookingWithItems,
+      tx: Prisma.TransactionClient,
+    ) => Promise<void>,
   ): Promise<BookingWithItems> {
     if (old.items.length === 0)
       throw new AppException(
@@ -161,6 +170,7 @@ export class BookingRescheduleService {
         },
         include: bookingWithItemsInclude,
       });
+      await afterUpdate?.(updated, tx);
       if (old.status === BookingStatus.COMPLETED) {
         const order = await this.orders.syncCompletedBooking(
           updated,

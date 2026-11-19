@@ -1,6 +1,6 @@
 import { BookingSelectionService } from './services/booking-selection.service.js';
 import { BookingSchedulingService } from './services/booking-scheduling.service.js';
-import { NotFoundException } from '@nestjs/common';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test } from '@nestjs/testing';
 import { BookingSource, CancelledBy, Prisma, UserRole } from '@prisma/client';
@@ -38,12 +38,18 @@ import { BookingSetupService } from './services/setup/booking-setup.service.js';
 import { BookingHistoryReadService } from './services/read/booking-history-read.service.js';
 import { BookingLifecycleService } from './services/write/booking-lifecycle.service.js';
 import { BookingMutationService } from './services/write/booking-mutation.service.js';
+import { BookingClientLinkService } from './services/write/booking-client-link.service.js';
+import { ClientsService } from '../clients/services/clients.service.js';
 import { BookingRescheduleService } from './services/write/booking-reschedule.service.js';
 import { booking } from './testing/factories/booking.factory.js';
 import { NO_CLIENT_NOTICE } from './rules/booking-client-notice.rules.js';
 
 const serviceCatalog = { loadForBooking: vi.fn() };
 const products = { listForPublicCatalog: vi.fn().mockResolvedValue([]) };
+const bookingClients = {
+  findForBooking: vi.fn(),
+  resolveForBooking: vi.fn(),
+};
 
 describe('Booking mutations during business deletion', () => {
   const now = new Date('2026-09-24T09:00:00.000Z');
@@ -154,6 +160,8 @@ describe('BookingsFacade.completeElapsed', () => {
       providers: [
         BookingsFacade,
         BookingMutationService,
+        BookingClientLinkService,
+        { provide: ClientsService, useValue: bookingClients },
         { provide: BookingClientTokenService, useValue: {} },
         BookingRescheduleService,
         BookingLifecycleService,
@@ -312,6 +320,8 @@ describe('BookingsFacade.updateStatus transactionality', () => {
       providers: [
         BookingsFacade,
         BookingMutationService,
+        BookingClientLinkService,
+        { provide: ClientsService, useValue: bookingClients },
         { provide: BookingClientTokenService, useValue: {} },
         BookingRescheduleService,
         BookingLifecycleService,
@@ -382,6 +392,8 @@ describe('BookingsFacade.search', () => {
       providers: [
         BookingsFacade,
         BookingMutationService,
+        BookingClientLinkService,
+        { provide: ClientsService, useValue: bookingClients },
         { provide: BookingClientTokenService, useValue: {} },
         BookingRescheduleService,
         BookingLifecycleService,
@@ -835,6 +847,8 @@ describe('BookingsFacade catalog selection', () => {
       providers: [
         BookingsFacade,
         BookingMutationService,
+        BookingClientLinkService,
+        { provide: ClientsService, useValue: bookingClients },
         { provide: BookingClientTokenService, useValue: {} },
         BookingRescheduleService,
         BookingLifecycleService,
@@ -1082,6 +1096,10 @@ describe('BookingsFacade.update details and item prices', () => {
     locationMemberships: [],
     tokenEpoch: 0,
   } as TokenPayloadDto);
+  const orders = {
+    syncCompletedBooking: vi.fn(),
+    syncBookingClient: vi.fn(),
+  };
   let service: BookingsFacade;
 
   beforeEach(async () => {
@@ -1090,6 +1108,8 @@ describe('BookingsFacade.update details and item prices', () => {
       providers: [
         BookingsFacade,
         BookingMutationService,
+        BookingClientLinkService,
+        { provide: ClientsService, useValue: bookingClients },
         { provide: BookingClientTokenService, useValue: {} },
         BookingRescheduleService,
         BookingLifecycleService,
@@ -1117,15 +1137,14 @@ describe('BookingsFacade.update details and item prices', () => {
           provide: LocationService,
           useValue: {
             getLocale: vi.fn().mockResolvedValue({ currency: 'BYN' }),
+            getBookingSettings: vi.fn().mockResolvedValue({ brandId: 'brand' }),
           },
         },
         { provide: ServiceCatalogFacade, useValue: serviceCatalog },
         { provide: StaffEarningsService, useValue: {} },
         {
           provide: OrdersFacade,
-          useValue: {
-            syncCompletedBooking: vi.fn(),
-          },
+          useValue: orders,
         },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
       ],
@@ -1281,6 +1300,133 @@ describe('BookingsFacade.update details and item prices', () => {
     expect((error as AppException).errorCode).toBe('BOOKING_ITEM_NOT_FOUND');
     expect(update).not.toHaveBeenCalled();
   });
+
+  describe('client', () => {
+    const profile = {
+      id: 'client-2',
+      firstName: 'Мария',
+      lastName: 'Иванова',
+      phone: '+375291112233',
+      email: 'maria@example.com',
+    };
+
+    it('links a picked brand client and takes the contacts from the profile', async () => {
+      const current = booking({ clientId: null, clientFirstName: 'Гость' });
+      bookingClients.findForBooking.mockResolvedValueOnce(profile);
+      update.mockResolvedValueOnce({ ...current, clientId: 'client-2' });
+
+      await service.update(current, auditActorFromToken(token, 'biz'), {
+        clientId: 'client-2',
+        firstName: 'Игнор',
+        phone: '+375290000000',
+      });
+
+      expect(bookingClients.findForBooking).toHaveBeenCalledWith(
+        'brand',
+        'client-2',
+      );
+      expect(update.mock.calls[0][0].data).toMatchObject({
+        client: { connect: { id: 'client-2' } },
+        clientFirstName: 'Мария',
+        clientLastName: 'Иванова',
+        clientPhone: '+375291112233',
+        clientEmail: 'maria@example.com',
+      });
+      expect(orders.syncBookingClient).toHaveBeenCalledWith(
+        expect.objectContaining({ clientId: 'client-2' }),
+        expect.anything(),
+      );
+    });
+
+    it('rejects an unknown or foreign client without writing', async () => {
+      bookingClients.findForBooking.mockResolvedValueOnce(null);
+
+      await expect(
+        service.update(booking(), auditActorFromToken(token, 'biz'), {
+          clientId: 'client-2',
+        }),
+      ).rejects.toMatchObject({ errorCode: 'BOOKING_CLIENT_NOT_FOUND' });
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      { clientId: 'client-2', anonymous: true },
+      { clientId: 'client-2', linkClientByPhone: true },
+      { anonymous: true, linkClientByPhone: true },
+    ])('rejects conflicting client modes %j', async (dto) => {
+      await expect(
+        service.update(booking(), auditActorFromToken(token, 'biz'), dto),
+      ).rejects.toMatchObject({ errorCode: 'BOOKING_CLIENT_CONFLICT' });
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it('unlinks the client and clears the contact snapshot when anonymous', async () => {
+      const current = booking({ clientEmail: 'a@example.com' });
+      update.mockResolvedValueOnce({ ...current, clientId: null });
+
+      await service.update(current, auditActorFromToken(token, 'biz'), {
+        anonymous: true,
+      });
+
+      expect(update.mock.calls[0][0].data).toMatchObject({
+        client: { disconnect: true },
+        clientFirstName: '',
+        clientLastName: '',
+        clientPhone: null,
+        clientEmail: null,
+      });
+      expect(bookingClients.findForBooking).not.toHaveBeenCalled();
+      expect(orders.syncBookingClient).toHaveBeenCalled();
+    });
+
+    it('finds or creates a client by phone and links it', async () => {
+      bookingClients.resolveForBooking.mockResolvedValueOnce(profile);
+      update.mockResolvedValueOnce(booking({ clientId: 'client-2' }));
+
+      await service.update(booking(), auditActorFromToken(token, 'biz'), {
+        linkClientByPhone: true,
+        firstName: ' Мария ',
+        lastName: 'Петрова',
+        phone: '+375291112233',
+      });
+
+      expect(bookingClients.resolveForBooking).toHaveBeenCalledWith(
+        'brand',
+        '+375291112233',
+        'Мария',
+        'Петрова',
+        undefined,
+      );
+      expect(update.mock.calls[0][0].data).toMatchObject({
+        client: { connect: { id: 'client-2' } },
+        clientLastName: 'Иванова',
+      });
+    });
+
+    it('requires a first name and phone to link by phone', async () => {
+      await expect(
+        service.update(booking(), auditActorFromToken(token, 'biz'), {
+          linkClientByPhone: true,
+          firstName: 'Мария',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      expect(bookingClients.resolveForBooking).not.toHaveBeenCalled();
+      expect(update).not.toHaveBeenCalled();
+    });
+
+    it('keeps the linked client when only contact fields change', async () => {
+      const current = booking();
+      update.mockResolvedValueOnce({ ...current, clientFirstName: 'Новое' });
+
+      await service.update(current, auditActorFromToken(token, 'biz'), {
+        firstName: 'Новое',
+      });
+
+      expect(update.mock.calls[0][0].data.client).toBeUndefined();
+      expect(update.mock.calls[0][0].data.clientFirstName).toBe('Новое');
+      expect(orders.syncBookingClient).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe('BookingsFacade.update manual interval', () => {
@@ -1305,6 +1451,10 @@ describe('BookingsFacade.update manual interval', () => {
     locationMemberships: [],
     tokenEpoch: 0,
   } as TokenPayloadDto);
+  const orders = {
+    syncCompletedBooking: vi.fn(),
+    syncBookingClient: vi.fn(),
+  };
   let service: BookingsFacade;
 
   beforeEach(async () => {
@@ -1314,6 +1464,8 @@ describe('BookingsFacade.update manual interval', () => {
       providers: [
         BookingsFacade,
         BookingMutationService,
+        BookingClientLinkService,
+        { provide: ClientsService, useValue: bookingClients },
         { provide: BookingClientTokenService, useValue: {} },
         BookingRescheduleService,
         BookingLifecycleService,
@@ -1341,15 +1493,14 @@ describe('BookingsFacade.update manual interval', () => {
           provide: LocationService,
           useValue: {
             findById: vi.fn().mockResolvedValue({ timezone: 'UTC' }),
+            getBookingSettings: vi.fn().mockResolvedValue({ brandId: 'brand' }),
           },
         },
         { provide: ServiceCatalogFacade, useValue: serviceCatalog },
         { provide: StaffEarningsService, useValue: {} },
         {
           provide: OrdersFacade,
-          useValue: {
-            syncCompletedBooking: vi.fn(),
-          },
+          useValue: orders,
         },
         { provide: EventEmitter2, useValue: { emit: vi.fn() } },
       ],
@@ -1462,6 +1613,26 @@ describe('BookingsFacade.update manual interval', () => {
         }),
       }),
     );
+  });
+
+  it('moves the order to the new client in the reschedule transaction', async () => {
+    const current = twoItemVisit();
+    const updated = twoItemVisit({ clientId: null });
+    findFirst.mockResolvedValue(current);
+    bookingUpdate.mockResolvedValue(updated);
+
+    await service.update(current, auditActorFromToken(token, 'biz'), {
+      startAt: '2026-09-24T10:15:00',
+      endAt: '2026-09-24T12:45:00',
+      anonymous: true,
+    });
+
+    expect(bookingUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ client: { disconnect: true } }),
+      }),
+    );
+    expect(orders.syncBookingClient).toHaveBeenCalledWith(updated, db);
   });
 
   it('rejects manual intervals whose end is not after start', async () => {
@@ -1581,6 +1752,8 @@ describe('BookingsFacade.addProduct', () => {
       providers: [
         BookingsFacade,
         BookingMutationService,
+        BookingClientLinkService,
+        { provide: ClientsService, useValue: bookingClients },
         { provide: BookingClientTokenService, useValue: {} },
         BookingRescheduleService,
         BookingLifecycleService,
@@ -1685,6 +1858,8 @@ describe('BookingsFacade.cancel draft product cleanup', () => {
       providers: [
         BookingsFacade,
         BookingMutationService,
+        BookingClientLinkService,
+        { provide: ClientsService, useValue: bookingClients },
         { provide: BookingClientTokenService, useValue: {} },
         BookingRescheduleService,
         BookingLifecycleService,
@@ -1795,5 +1970,6 @@ function createMutationService(
       reschedule,
     ),
     reschedule,
+    new BookingClientLinkService(bookingClients as never, location),
   );
 }

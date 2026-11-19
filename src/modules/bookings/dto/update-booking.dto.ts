@@ -75,6 +75,37 @@ export class UpdateBookingDto {
   @IsLocalDateTime()
   endAt?: string;
 
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    required: false,
+    description:
+      'Link an existing brand client. The booking takes the client name, phone and email from the profile; firstName, lastName, phone and email in the request are ignored. Also syncs the client of the booking active order. Cannot be combined with anonymous or linkClientByPhone (400 BOOKING_CLIENT_CONFLICT). Unknown or foreign client: 404 BOOKING_CLIENT_NOT_FOUND.',
+  })
+  @IsOptional()
+  @IsUUID()
+  clientId?: string;
+
+  @ApiProperty({
+    type: Boolean,
+    required: false,
+    description:
+      'true: unlink the client (clientId = null) like an anonymous manual booking. The contact snapshot takes firstName, lastName, phone and email from the request; omitted ones are cleared. Also syncs the client of the booking active order. false or omitted: no effect. Cannot be combined with clientId or linkClientByPhone (400 BOOKING_CLIENT_CONFLICT).',
+  })
+  @IsOptional()
+  @IsBoolean()
+  anonymous?: boolean;
+
+  @ApiProperty({
+    type: Boolean,
+    required: false,
+    description:
+      'true: find the brand client by phone or create one from firstName, lastName, phone and email (as a manual booking without clientId does) and link it, also replacing a linked client. firstName and phone are required (400). The booking takes the contact snapshot from the found profile; an existing profile is not changed. Also syncs the client of the booking active order. Cannot be combined with clientId or anonymous (400 BOOKING_CLIENT_CONFLICT). Without clientId, anonymous or linkClientByPhone the contact fields only edit the snapshot of this booking and the linked client stays.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  linkClientByPhone?: boolean;
+
   @ApiProperty({ type: String, required: false, nullable: true })
   @IsOptional()
   @IsPhone()
