@@ -77,7 +77,7 @@ export enum DashboardWidgetKey {
    * Bar height is the count. `sharePct` is that bar's share of `breakdown.total`.
    * There is no comparison with the previous period.
    */
-  BOOKINGS_BY_SOURCE = 'BOOKINGS_BY_SOURCE',
+  BOOKINGS_BY_CHANNEL = 'BOOKINGS_BY_CHANNEL',
 
   /**
    * Big number: cancelled bookings as a percent of cancelled + confirmed + completed.

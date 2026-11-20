@@ -192,7 +192,29 @@ const SERVICE_WEIGHTS = {
   'Химическая завивка': 1,
 };
 
-const BOOKING_SOURCE_WEIGHTS = [
+// Marketing sources of seeded bookings: online ones always have one, manual ones mostly do.
+const ONLINE_TRAFFIC_WEIGHTS = [
+  [['DIRECT', null], 22],
+  [['INSTAGRAM', null], 24],
+  [['YANDEX_MAPS', null], 14],
+  [['TWO_GIS', null], 8],
+  [['SEARCH', 'yandex'], 10],
+  [['SEARCH', 'google'], 4],
+  [['VK', null], 6],
+  [['TELEGRAM', null], 4],
+  [['PAID_ADS', 'yandex_direct'], 5],
+  [['PAID_ADS', 'vk_ads'], 3],
+];
+const MANUAL_TRAFFIC_WEIGHTS = [
+  [[null, null], 30],
+  [['PHONE_CALL', null], 25],
+  [['WALK_IN', null], 15],
+  [['REFERRAL', null], 12],
+  [['INSTAGRAM', null], 10],
+  [['OFFLINE', 'листовки'], 8],
+];
+
+const BOOKING_CHANNEL_WEIGHTS = [
   ['PUBLIC_PAGE', 5],
   ['WIDGET', 3],
   ['MANUAL', 2],
@@ -1432,7 +1454,10 @@ async function placeBooking(prisma, p) {
   const endAt = new Date(startAt.getTime() + service.durationMinutes * 60_000);
 
   const status = resolveStatus(endAt, now, rng);
-  const source = rng.weighted(BOOKING_SOURCE_WEIGHTS);
+  const channel = rng.weighted(BOOKING_CHANNEL_WEIGHTS);
+  const [trafficSource, trafficSourceDetail] = rng.weighted(
+    channel === 'MANUAL' ? MANUAL_TRAFFIC_WEIGHTS : ONLINE_TRAFFIC_WEIGHTS,
+  );
   const isCancelled = status === 'CANCELLED';
 
   // Rare custom price (discount for a regular).
@@ -1465,7 +1490,9 @@ async function placeBooking(prisma, p) {
       endAt,
       executionMode: 'SEQUENTIAL',
       status,
-      source,
+      channel,
+      trafficSource,
+      trafficSourceDetail,
       clientFirstName: client.firstName,
       clientLastName: client.lastName,
       clientPhone: client.phone,

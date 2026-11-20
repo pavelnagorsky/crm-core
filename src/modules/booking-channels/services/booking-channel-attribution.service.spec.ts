@@ -1,7 +1,7 @@
 import { HttpStatus } from '@nestjs/common';
 import { BookingChannelStatus } from '../enums/booking-channel-status.enum.js';
 import { BookingChannelAttributionService } from './booking-channel-attribution.service.js';
-import { BookingSource } from '../../bookings/enums/booking-source.enum.js';
+import { BookingChannel } from '../../bookings/enums/booking-channel.enum.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 
 function service() {
@@ -29,7 +29,7 @@ describe('BookingChannelAttributionService', () => {
     await expect(
       attribution.resolve('b1', undefined, undefined),
     ).resolves.toEqual({
-      source: BookingSource.PUBLIC_PAGE,
+      channel: BookingChannel.PUBLIC_PAGE,
       bookingPageId: null,
       bookingWidgetId: null,
     });
@@ -63,7 +63,7 @@ describe('BookingChannelAttributionService', () => {
     await expect(
       attribution.resolve('b1', undefined, 'widget-1'),
     ).resolves.toEqual({
-      source: BookingSource.WIDGET,
+      channel: BookingChannel.WIDGET,
       bookingPageId: null,
       bookingWidgetId: 'widget-1',
     });

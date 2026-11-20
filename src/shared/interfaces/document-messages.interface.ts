@@ -60,13 +60,18 @@ export interface DocumentMessages {
     notes: string;
     genderMale: string;
     genderFemale: string;
+    acquisitionSource: string;
   };
   bookings: {
     sheet: string;
     startAt: string;
     endAt: string;
     status: string;
-    source: string;
+    channel: string;
+    trafficSource: string;
+    utmSource: string;
+    utmMedium: string;
+    utmCampaign: string;
     clientFirstName: string;
     clientLastName: string;
     clientPhone: string;

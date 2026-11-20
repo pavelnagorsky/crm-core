@@ -25,7 +25,7 @@ import {
   mergeRevenueSeries,
   pct,
   ratio,
-  sourceLabel,
+  channelLabel,
   sumCount,
   sumDecimals,
   sumRevenue,
@@ -109,8 +109,8 @@ export class DashboardWidgetFactory {
         );
       case DashboardWidgetKey.BOOKINGS_SERIES:
         return this.bookingsSeries(key, ctx);
-      case DashboardWidgetKey.BOOKINGS_BY_SOURCE:
-        return this.bookingsBySource(key, ctx);
+      case DashboardWidgetKey.BOOKINGS_BY_CHANNEL:
+        return this.bookingsByChannel(key, ctx);
       case DashboardWidgetKey.BOOKINGS_HEATMAP:
         return this.bookingsHeatmap(key, ctx);
       case DashboardWidgetKey.REVENUE_BY_STAFF:
@@ -353,16 +353,16 @@ export class DashboardWidgetFactory {
     };
   }
 
-  private bookingsBySource(
+  private bookingsByChannel(
     key: DashboardWidgetKey,
     ctx: DashboardReadContext,
   ): WidgetDto {
-    const rows = ctx.sourceRows;
+    const rows = ctx.channelRows;
     const total = rows.reduce((s, r) => s + r.count, 0);
     const items: WidgetBreakdownItemDto[] = rows
       .map((r) => ({
-        id: r.source,
-        label: sourceLabel(r.source),
+        id: r.channel,
+        label: channelLabel(r.channel),
         value: r.count,
         sharePct: pct(r.count, total),
       }))
@@ -370,7 +370,7 @@ export class DashboardWidgetFactory {
     return {
       key,
       kind: WidgetKind.BREAKDOWN,
-      breakdown: { dimension: 'source', items, total },
+      breakdown: { dimension: 'channel', items, total },
       meta: this.buildMeta(ctx, false),
     };
   }

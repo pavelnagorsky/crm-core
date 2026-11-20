@@ -1,9 +1,9 @@
-import { BookingSource } from '../enums/booking-source.enum.js';
+import { BookingChannel } from '../enums/booking-channel.enum.js';
 
 /** Public page and widget cannot book a banned phone. The journal still can. */
 export function isSelfBookingBlocked(
-  source: BookingSource,
+  channel: BookingChannel,
   bannedAt: Date | null,
 ): boolean {
-  return source !== BookingSource.MANUAL && bannedAt !== null;
+  return channel !== BookingChannel.MANUAL && bannedAt !== null;
 }

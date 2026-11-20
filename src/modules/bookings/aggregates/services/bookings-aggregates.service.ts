@@ -23,7 +23,7 @@ import { HeatmapCell } from '../../interfaces/heatmap-cell.interface.js';
 import { OccupancyBookedHours } from '../../interfaces/occupancy-booked-hours.interface.js';
 import { SeriesRow } from '../../interfaces/series-row.interface.js';
 import { ServiceCount } from '../../interfaces/service-count.interface.js';
-import { SourceCount } from '../../interfaces/source-count.interface.js';
+import { ChannelCount } from '../../interfaces/channel-count.interface.js';
 import { StaffCount } from '../../interfaces/staff-count.interface.js';
 import {
   CLIENT_RECENCY_BOUNDS,
@@ -141,16 +141,16 @@ export class BookingsAggregatesService {
     }));
   }
 
-  async countBySource(
+  async countByChannel(
     range: AggregateRange,
     statuses?: BookingStatus[],
-  ): Promise<SourceCount[]> {
+  ): Promise<ChannelCount[]> {
     const grouped = await this.db.booking.groupBy({
-      by: ['source'],
+      by: ['channel'],
       where: this.buildWhere(range, statuses),
       _count: { _all: true },
     });
-    return grouped.map((g) => ({ source: g.source, count: g._count._all }));
+    return grouped.map((g) => ({ channel: g.channel, count: g._count._all }));
   }
 
   /**

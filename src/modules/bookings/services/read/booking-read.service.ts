@@ -248,8 +248,11 @@ export class BookingReadService {
         return { startAt: direction };
       case BookingSearchOrderBy.STATUS:
         return { status: direction };
-      case BookingSearchOrderBy.SOURCE:
-        return { source: direction };
+      case BookingSearchOrderBy.CHANNEL:
+        return { channel: direction };
+      case BookingSearchOrderBy.TRAFFIC_SOURCE:
+        // Manual bookings without a source go last in both directions.
+        return { trafficSource: { sort: direction, nulls: 'last' } };
       case BookingSearchOrderBy.CREATED_AT:
         return { createdAt: direction };
       case BookingSearchOrderBy.START_AT:

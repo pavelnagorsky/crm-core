@@ -6,5 +6,6 @@ export enum BookingSearchOrderBy {
   STAFF_NAME = 'staffName',
   PRICE = 'price',
   STATUS = 'status',
-  SOURCE = 'source',
+  CHANNEL = 'channel',
+  TRAFFIC_SOURCE = 'trafficSource',
 }

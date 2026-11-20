@@ -338,11 +338,34 @@
     "COMPLETED": "Завершено",
     "NO_SHOW": "Не явился"
   },
-  "bookingSource": {
+  "bookingChannel": {
     "PUBLIC_PAGE": "Онлайн",
     "WIDGET": "Виджет",
     "MANUAL": "Вручную"
   },
+  "trafficSource": {
+    "DIRECT": "Прямой заход",
+    "INSTAGRAM": "Instagram",
+    "VK": "ВКонтакте",
+    "TELEGRAM": "Telegram",
+    "WHATSAPP": "WhatsApp",
+    "TIKTOK": "TikTok",
+    "FACEBOOK": "Facebook",
+    "YANDEX_MAPS": "Яндекс Карты",
+    "TWO_GIS": "2ГИС",
+    "GOOGLE_MAPS": "Google Карты",
+    "SEARCH": "Поисковые системы",
+    "PAID_ADS": "Платная реклама",
+    "WEBSITE": "Другие сайты",
+    "MAILING": "Рассылки",
+    "OFFLINE": "Офлайн-реклама",
+    "REFERRAL": "Рекомендация",
+    "PHONE_CALL": "Звонок",
+    "WALK_IN": "Пришёл сам",
+    "OTHER": "Другое",
+    "NONE": "Не указан"
+  },
+  "trafficDetailOther": "Остальные",
   "staffStatus": {
     "ACTIVE": "Активный",
     "INACTIVE": "Неактивный"
@@ -492,14 +515,19 @@
       "gender": "Пол",
       "notes": "Заметки",
       "genderMale": "Мужской",
-      "genderFemale": "Женский"
+      "genderFemale": "Женский",
+      "acquisitionSource": "Источник привлечения"
     },
     "bookings": {
       "sheet": "Записи",
       "startAt": "Начало",
       "endAt": "Конец",
       "status": "Статус",
-      "source": "Источник",
+      "channel": "Канал",
+      "trafficSource": "Источник",
+      "utmSource": "UTM source",
+      "utmMedium": "UTM medium",
+      "utmCampaign": "UTM campaign",
       "clientFirstName": "Имя клиента",
       "clientLastName": "Фамилия клиента",
       "clientPhone": "Телефон клиента",

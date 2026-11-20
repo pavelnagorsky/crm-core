@@ -5,7 +5,7 @@ export class WidgetBreakdownDto {
   @ApiProperty({
     type: String,
     description:
-      'Dimension name, e.g. "source" | "service" | "staff" | "weekday" | "saleType"',
+      'Dimension name, e.g. "channel" | "trafficSource" | "service" | "staff" | "weekday" | "saleType"',
   })
   dimension: string;
 

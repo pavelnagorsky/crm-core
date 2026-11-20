@@ -28,7 +28,7 @@ describe('AuditRenderer catalog and booking labels', () => {
           endTime: '2026-09-20T09:00:00.000Z',
           totalPrice: '130.00',
           currency: 'BYN',
-          source: 'MANUAL',
+          channel: 'MANUAL',
           executionMode: 'PARALLEL',
         },
       }),

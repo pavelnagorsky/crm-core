@@ -9,7 +9,7 @@ export interface BookingCreatedPayload {
   price?: string;
   totalPrice?: string;
   currency: string;
-  source?: string;
+  channel?: string;
   /** Status the booking was created with. */
   status?: string;
   isCustomTime?: boolean;

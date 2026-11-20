@@ -103,13 +103,13 @@ describe('ManualCreateBookingDto anonymous client validation', () => {
     );
   });
 
-  it('strips the source field from manual requests', async () => {
+  it('strips the channel field from manual requests', async () => {
     const dto = Object.assign(manual({ isCustomTime: true }), {
-      source: 'MANUAL',
+      channel: 'MANUAL',
     });
 
     expect(await validate(dto, { whitelist: true })).toHaveLength(0);
-    expect(dto).not.toHaveProperty('source');
+    expect(dto).not.toHaveProperty('channel');
     expect(dto.isCustomTime).toBe(true);
   });
 

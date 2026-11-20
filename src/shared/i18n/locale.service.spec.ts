@@ -21,7 +21,7 @@ describe('LocaleService', () => {
       many: 'штук',
       short: 'шт',
     });
-    expect(messages.bookingSource.MANUAL).toBe('Вручную');
+    expect(messages.bookingChannel.MANUAL).toBe('Вручную');
     expect(messages.earningType.BONUS).toBe('Бонус');
     expect(messages.earningType.CORRECTION).toBe('Корректировка');
     expect(messages.salaryMode.GUARANTEED_MINIMUM).toBe(

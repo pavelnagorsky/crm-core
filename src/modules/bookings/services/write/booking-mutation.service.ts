@@ -15,7 +15,7 @@ import { UpdateBookingItemPriceDto } from '../../dto/update-booking-item-price.d
 import { UpdateBookingStatusDto } from '../../dto/update-booking-status.dto.js';
 import { UpdateBookingDto } from '../../dto/update-booking.dto.js';
 import { BookingStatus } from '../../enums/booking-status.enum.js';
-import { BookingSource } from '../../enums/booking-source.enum.js';
+import { BookingChannel } from '../../enums/booking-channel.enum.js';
 import { BookingWithItems } from '../../interfaces/booking-with-items.interface.js';
 import { BookingEventsService } from '../booking-events.service.js';
 import { BookingWriteLockService } from '../booking-write-lock.service.js';
@@ -47,7 +47,7 @@ export class BookingMutationService {
     dto: UpdateBookingDto,
   ): Promise<BookingWithItems> {
     const bookingId = old.id;
-    if (dto.isCustomTime === true && old.source !== BookingSource.MANUAL)
+    if (dto.isCustomTime === true && old.channel !== BookingChannel.MANUAL)
       throw new AppException(
         ErrorCode.BOOKING_CUSTOM_TIME_MANUAL_ONLY,
         HttpStatus.BAD_REQUEST,

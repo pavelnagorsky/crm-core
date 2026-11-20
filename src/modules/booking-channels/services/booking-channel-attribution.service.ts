@@ -3,8 +3,8 @@ import { DatabaseService } from '../../../database/database.service.js';
 import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
-import { BookingSource } from '../../bookings/enums/booking-source.enum.js';
-import { BookingAttribution } from '../../bookings/interfaces/booking-attribution.interface.js';
+import { BookingChannel } from '../../bookings/enums/booking-channel.enum.js';
+import { ResolvedBookingChannel } from '../../bookings/interfaces/resolved-booking-channel.interface.js';
 import { BookingChannelStatus } from '../enums/booking-channel-status.enum.js';
 
 @Injectable()
@@ -15,7 +15,7 @@ export class BookingChannelAttributionService {
     locationId: string,
     pageId: string | undefined,
     widgetId: string | undefined,
-  ): Promise<BookingAttribution> {
+  ): Promise<ResolvedBookingChannel> {
     if (pageId && widgetId) {
       throw new AppException(
         ErrorCode.BOOKING_CHANNEL_CONFLICT,
@@ -38,7 +38,7 @@ export class BookingChannelAttributionService {
           HttpStatus.NOT_FOUND,
         );
       return {
-        source: BookingSource.PUBLIC_PAGE,
+        channel: BookingChannel.PUBLIC_PAGE,
         bookingPageId: page.id,
         bookingWidgetId: null,
       };
@@ -59,13 +59,13 @@ export class BookingChannelAttributionService {
           HttpStatus.NOT_FOUND,
         );
       return {
-        source: BookingSource.WIDGET,
+        channel: BookingChannel.WIDGET,
         bookingPageId: null,
         bookingWidgetId: widget.id,
       };
     }
     return {
-      source: BookingSource.PUBLIC_PAGE,
+      channel: BookingChannel.PUBLIC_PAGE,
       bookingPageId: null,
       bookingWidgetId: null,
     };

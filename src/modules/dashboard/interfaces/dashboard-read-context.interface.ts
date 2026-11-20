@@ -3,7 +3,7 @@ import { ResolvedRange } from './resolved-range.interface.js';
 import { AggregateSnapshot } from '../../bookings/interfaces/aggregate-snapshot.interface.js';
 import { HeatmapCell } from '../../bookings/interfaces/heatmap-cell.interface.js';
 import { SeriesRow } from '../../bookings/interfaces/series-row.interface.js';
-import { SourceCount } from '../../bookings/interfaces/source-count.interface.js';
+import { ChannelCount } from '../../bookings/interfaces/channel-count.interface.js';
 import { StaffCount } from '../../bookings/interfaces/staff-count.interface.js';
 import { ProductSalesSeriesRow } from '../../orders/aggregates/interfaces/product-sales-series-row.interface.js';
 import { ProductSalesSnapshot } from '../../orders/aggregates/interfaces/product-sales-snapshot.interface.js';
@@ -21,7 +21,7 @@ export interface DashboardReadContext {
   previousProductSnapshot?: ProductSalesSnapshot;
   productSeries: ProductSalesSeriesRow[];
   previousProductSeries: ProductSalesSeriesRow[];
-  sourceRows: SourceCount[];
+  channelRows: ChannelCount[];
   heatmapCells: HeatmapCell[];
   staffRevenueRows: StaffCount[];
   staffCompletedRows: StaffCount[];

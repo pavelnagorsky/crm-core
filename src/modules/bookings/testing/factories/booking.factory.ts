@@ -1,6 +1,6 @@
 import {
   BookingExecutionMode,
-  BookingSource,
+  BookingChannel,
   BookingStatus,
   Prisma,
 } from '@prisma/client';
@@ -20,7 +20,9 @@ export function booking(options: BookingFixtureOptions = {}): BookingWithItems {
     endAt,
     clientId: 'client',
     status: BookingStatus.CONFIRMED,
-    source: BookingSource.MANUAL,
+    channel: BookingChannel.MANUAL,
+    trafficSource: null,
+    trafficSourceDetail: null,
     isCustomTime: false,
     executionMode: BookingExecutionMode.SEQUENTIAL,
     bundleId: null,

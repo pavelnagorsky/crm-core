@@ -1,9 +1,9 @@
 import { CreateBookingDto } from '../dto/create-booking.dto.js';
-import { BookingSource } from '../enums/booking-source.enum.js';
+import { BookingChannel } from '../enums/booking-channel.enum.js';
 import { bookingRequestHash } from './booking-request-hash.js';
 
 const attribution = {
-  source: BookingSource.PUBLIC_PAGE,
+  channel: BookingChannel.PUBLIC_PAGE,
   bookingPageId: 'page',
   bookingWidgetId: null,
 };
@@ -105,7 +105,7 @@ describe('bookingRequestHash', () => {
     ).not.toBe(hash);
     expect(
       bookingRequestHash('location', request, {
-        source: BookingSource.WIDGET,
+        channel: BookingChannel.WIDGET,
         bookingPageId: null,
         bookingWidgetId: 'widget',
       }),

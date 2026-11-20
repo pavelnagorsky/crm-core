@@ -1,6 +1,6 @@
 import { PrismaPg } from '@prisma/adapter-pg';
 import {
-  BookingSource,
+  BookingChannel,
   BookingStatus,
   Prisma,
   PrismaClient,
@@ -104,7 +104,7 @@ describe.skipIf(!url)('BookingHistoryReadService on PostgreSQL', () => {
           startAt,
           endAt,
           status,
-          source: BookingSource.MANUAL,
+          channel: BookingChannel.MANUAL,
           clientFirstName: 'Maria',
           clientLastName: `Test ${order}`,
           bundleId: extra.bundleId ?? null,

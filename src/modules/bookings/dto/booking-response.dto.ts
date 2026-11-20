@@ -3,8 +3,9 @@ import { Prisma } from '@prisma/client';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
 import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { BookingExecutionMode } from '../enums/booking-execution-mode.enum.js';
-import { BookingSource } from '../enums/booking-source.enum.js';
+import { BookingChannel } from '../enums/booking-channel.enum.js';
 import { BookingStatus } from '../enums/booking-status.enum.js';
+import { TrafficSource } from '../../../shared/traffic/enums/traffic-source.enum.js';
 import { BookingWithItems } from '../interfaces/booking-with-items.interface.js';
 import { BookingClientNoticeDto } from './booking-client-notice.dto.js';
 import { BookingItemResponseDto } from './booking-item-response.dto.js';
@@ -34,8 +35,47 @@ export class BookingResponseDto {
   @ApiProperty({ enum: BookingStatus })
   status: BookingStatus;
 
-  @ApiProperty({ enum: BookingSource })
-  source: BookingSource;
+  @ApiProperty({
+    enum: BookingChannel,
+    enumName: 'BookingChannel',
+    description:
+      'Where the booking was made: public booking page, site widget or staff journal',
+  })
+  channel: BookingChannel;
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description: 'Booking page of a PUBLIC_PAGE booking; null once deleted',
+  })
+  bookingPageId: string | null;
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description: 'Widget of a WIDGET booking; null once deleted',
+  })
+  bookingWidgetId: string | null;
+
+  @ApiProperty({
+    enum: TrafficSource,
+    enumName: 'TrafficSource',
+    nullable: true,
+    description:
+      'Marketing source. Always set on online bookings (DIRECT when nothing is known) and read-only there; on a manual booking null means not specified',
+  })
+  trafficSource: TrafficSource | null;
+
+  @ApiProperty({
+    type: String,
+    maxLength: 64,
+    nullable: true,
+    description:
+      'Source detail ("Уточнение"): campaign, platform, site or engine, lowercase',
+  })
+  trafficSourceDetail: string | null;
 
   @ApiProperty({
     type: Boolean,
@@ -103,7 +143,11 @@ export class BookingResponseDto {
     dto.executionMode = booking.executionMode as BookingExecutionMode;
     dto.bundleId = booking.bundleId;
     dto.status = booking.status as BookingStatus;
-    dto.source = booking.source as BookingSource;
+    dto.channel = booking.channel as BookingChannel;
+    dto.bookingPageId = booking.bookingPageId;
+    dto.bookingWidgetId = booking.bookingWidgetId;
+    dto.trafficSource = booking.trafficSource as TrafficSource | null;
+    dto.trafficSourceDetail = booking.trafficSourceDetail;
     dto.isCustomTime = booking.isCustomTime;
     dto.notifyClient = booking.notifyClient;
     dto.clientNotice = BookingClientNoticeDto.fromBooking(booking);

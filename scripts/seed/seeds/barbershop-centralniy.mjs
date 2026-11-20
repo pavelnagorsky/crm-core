@@ -32,6 +32,28 @@ const MIN = 60_000;
 const HOUR = 3_600_000;
 const DAY = 86_400_000;
 const ZERO = D(0);
+// Marketing sources of seeded bookings: online ones always have one, manual ones mostly do.
+const ONLINE_TRAFFIC_WEIGHTS = [
+  [['DIRECT', null], 22],
+  [['INSTAGRAM', null], 24],
+  [['YANDEX_MAPS', null], 14],
+  [['TWO_GIS', null], 8],
+  [['SEARCH', 'yandex'], 10],
+  [['SEARCH', 'google'], 4],
+  [['VK', null], 6],
+  [['TELEGRAM', null], 4],
+  [['PAID_ADS', 'yandex_direct'], 5],
+  [['PAID_ADS', 'vk_ads'], 3],
+];
+const MANUAL_TRAFFIC_WEIGHTS = [
+  [[null, null], 30],
+  [['PHONE_CALL', null], 25],
+  [['WALK_IN', null], 15],
+  [['REFERRAL', null], 12],
+  [['INSTAGRAM', null], 10],
+  [['OFFLINE', 'листовки'], 8],
+];
+
 const MONTHS_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
 const EARNING_TOTAL_FIELD = {
   FIXED_SALARY: 'fixedSalaryTotal', HOURLY: 'hourlyTotal', SERVICE_COMMISSION: 'serviceCommissionTotal',
@@ -470,7 +492,8 @@ export async function seed(prisma) {
     if (createdAt < BOOKINGS_OPEN_AT) createdAt = new Date(BOOKINGS_OPEN_AT.getTime() + rng.int(0, Math.max(1, Math.floor((Math.min(startAt, now) - BOOKINGS_OPEN_AT) / MIN) - 180)) * MIN);
     if (createdAt >= startAt) createdAt = new Date(startAt.getTime() - rng.int(3, 20) * HOUR);
     createdAt = secs(createdAt);
-    const source = createdAt < PUBLISHED_AT ? 'MANUAL' : rng.weighted([['PUBLIC_PAGE', 40], ['WIDGET', 15], ['MANUAL', 45]]);
+    const channel = createdAt < PUBLISHED_AT ? 'MANUAL' : rng.weighted([['PUBLIC_PAGE', 40], ['WIDGET', 15], ['MANUAL', 45]]);
+    const [trafficSource, trafficSourceDetail] = rng.weighted(channel === 'MANUAL' ? MANUAL_TRAFFIC_WEIGHTS : ONLINE_TRAFFIC_WEIGHTS);
     const lead = startAt - createdAt;
     const due = lead > 24 * HOUR ? new Date(startAt - 24 * HOUR) : lead > 6 * HOUR ? new Date(startAt - 2 * HOUR) : null;
     // Emails only on bookings of elapsed days: nothing for the stage crons to send.
@@ -494,10 +517,10 @@ export async function seed(prisma) {
     const bookingId = randomUUID();
     const completedAt = new Date(endAt.getTime() + rng.int(1, 9) * MIN + rng.int(0, 59) * 1000);
     const booking = {
-      id: bookingId, locationId, clientId: client.id, startAt, endAt, executionMode: 'SEQUENTIAL', status, source, isCustomTime: false,
-      bookingPageId: source === 'PUBLIC_PAGE' ? page.id : null, bookingWidgetId: source === 'WIDGET' ? widget.id : null,
+      id: bookingId, locationId, clientId: client.id, startAt, endAt, executionMode: 'SEQUENTIAL', status, channel, trafficSource, trafficSourceDetail, isCustomTime: false,
+      bookingPageId: channel === 'PUBLIC_PAGE' ? page.id : null, bookingWidgetId: channel === 'WIDGET' ? widget.id : null,
       clientFirstName: client.firstName, clientLastName: client.lastName, clientPhone: client.phone, clientEmail: email,
-      notes: source !== 'MANUAL' && rng.chance(0.2) ? rng.pick(NOTES) : null, internalNotes: rng.chance(0.1) ? rng.pick(INTERNAL_NOTES) : null,
+      notes: channel !== 'MANUAL' && rng.chance(0.2) ? rng.pick(NOTES) : null, internalNotes: rng.chance(0.1) ? rng.pick(INTERNAL_NOTES) : null,
       cancellationReason: isCancelled ? rng.pick(CANCEL_REASONS) : null, cancelledBy, cancelledAt,
       reminderDueAt, reminderSentAt, reviewRequestSentAt: null, createdAt,
       updatedAt: isCancelled ? cancelledAt : status === 'COMPLETED' ? completedAt : status === 'NO_SHOW' ? plus(endAt, 25 * MIN) : createdAt,
@@ -524,15 +547,15 @@ export async function seed(prisma) {
       return item;
     });
     bump(`${past ? 'past' : 'future'}:${status}`);
-    bump(`source:${source}`);
+    bump(`channel:${channel}`);
 
     const priceOf = (it) => D(it.customPrice ?? it.listPrice);
     const total = items.reduce((a, it) => a.plus(priceOf(it)), ZERO);
     addAudit({
       entityType: 'BOOKING', entityId: bookingId, eventType: 'BOOKING_CREATED', actionType: 'CREATE', occurredAt: createdAt,
-      ...(source === 'MANUAL' ? ownerActor : clientActor(booking)),
+      ...(channel === 'MANUAL' ? ownerActor : clientActor(booking)),
       payload: {
-        items: items.map((it) => ({ price: priceOf(it).toFixed(2), staffName: s.name, serviceName: it.serviceTitle })), source,
+        items: items.map((it) => ({ price: priceOf(it).toFixed(2), staffName: s.name, serviceName: it.serviceTitle })), channel,
         endTime: iso(endAt), currency, startTime: iso(startAt), totalPrice: total.toFixed(2), isCustomTime: false, executionMode: 'SEQUENTIAL',
       },
     });
@@ -954,8 +977,8 @@ export async function seed(prisma) {
       : secs(new Date(BOOKINGS_OPEN_AT.getTime() + rng.float() * (now.getTime() - DAY - BOOKINGS_OPEN_AT.getTime())));
     return { ...c, createdAt, updatedAt: createdAt };
   });
-  const pageBookings = out.bookings.filter((b) => b.source === 'PUBLIC_PAGE').length;
-  const widgetBookings = out.bookings.filter((b) => b.source === 'WIDGET').length;
+  const pageBookings = out.bookings.filter((b) => b.channel === 'PUBLIC_PAGE').length;
+  const widgetBookings = out.bookings.filter((b) => b.channel === 'WIDGET').length;
   const pageStats = { pageId: page.id, views: pageBookings * rng.int(7, 10), formOpens: pageBookings * 2 + rng.int(0, pageBookings) };
   const widgetStats = { widgetId: widget.id, views: widgetBookings * rng.int(7, 10), formOpens: widgetBookings * 2 + rng.int(0, widgetBookings) };
 

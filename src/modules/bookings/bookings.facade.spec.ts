@@ -3,7 +3,7 @@ import { BookingSchedulingService } from './services/booking-scheduling.service.
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test } from '@nestjs/testing';
-import { BookingSource, CancelledBy, Prisma, UserRole } from '@prisma/client';
+import { BookingChannel, CancelledBy, Prisma, UserRole } from '@prisma/client';
 import { DatabaseService } from '../../database/database.service.js';
 import { OrderDirection } from '../../shared/enums/order-direction.enum.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
@@ -565,8 +565,15 @@ describe('BookingsFacade.search', () => {
       [{ status: OrderDirection.ASC }, { id: OrderDirection.ASC }],
     ],
     [
-      BookingSearchOrderBy.SOURCE,
-      [{ source: OrderDirection.ASC }, { id: OrderDirection.ASC }],
+      BookingSearchOrderBy.CHANNEL,
+      [{ channel: OrderDirection.ASC }, { id: OrderDirection.ASC }],
+    ],
+    [
+      BookingSearchOrderBy.TRAFFIC_SOURCE,
+      [
+        { trafficSource: { sort: OrderDirection.ASC, nulls: 'last' } },
+        { id: OrderDirection.ASC },
+      ],
     ],
   ])('orders by %s', async (orderBy, expected) => {
     await service.search('biz', {
@@ -1206,10 +1213,10 @@ describe('BookingsFacade.update details and item prices', () => {
       );
 
       expect(update.mock.calls[0][0].data.isCustomTime).toBe(isCustomTime);
-      expect(update.mock.calls[0][0].data.source).toBeUndefined();
+      expect(update.mock.calls[0][0].data.channel).toBeUndefined();
       expect(update.mock.calls[0][0].data.status).toBeUndefined();
       expect(result.isCustomTime).toBe(isCustomTime);
-      expect(result.source).toBe(BookingSource.MANUAL);
+      expect(result.channel).toBe(BookingChannel.MANUAL);
       expect(result.status).toBe(current.status);
     },
   );
@@ -1228,13 +1235,17 @@ describe('BookingsFacade.update details and item prices', () => {
     expect(result.isCustomTime).toBe(true);
   });
 
-  it.each([BookingSource.PUBLIC_PAGE, BookingSource.WIDGET])(
+  it.each([BookingChannel.PUBLIC_PAGE, BookingChannel.WIDGET])(
     'rejects custom time for %s without writing',
-    async (source) => {
+    async (channel) => {
       await expect(
-        service.update(booking({ source }), auditActorFromToken(token, 'biz'), {
-          isCustomTime: true,
-        }),
+        service.update(
+          booking({ channel }),
+          auditActorFromToken(token, 'biz'),
+          {
+            isCustomTime: true,
+          },
+        ),
       ).rejects.toMatchObject({ errorCode: 'BOOKING_CUSTOM_TIME_MANUAL_ONLY' });
       expect(db.$transaction).not.toHaveBeenCalled();
       expect(update).not.toHaveBeenCalled();
@@ -1510,7 +1521,7 @@ describe('BookingsFacade.update manual interval', () => {
 
   function twoItemVisit(overrides: Partial<BookingWithItems> = {}) {
     return booking({
-      source: BookingSource.MANUAL,
+      channel: BookingChannel.MANUAL,
       startAt: new Date('2026-09-24T10:00:00.000Z'),
       endAt: new Date('2026-09-24T12:00:00.000Z'),
       items: [

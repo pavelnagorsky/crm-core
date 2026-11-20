@@ -151,7 +151,7 @@ export class BookingReservationService {
         executionMode,
         bundleId,
         status,
-        source: attribution.source,
+        channel: attribution.channel,
         isCustomTime: input.isCustomTime,
         notifyClient: input.notifyClient,
         ...input.clientNotice,

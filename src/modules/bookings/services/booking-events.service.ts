@@ -68,7 +68,7 @@ export class BookingEventsService {
           ),
         ),
         currency,
-        source: booking.source,
+        channel: booking.channel,
         status: booking.status,
         isCustomTime: booking.isCustomTime,
         executionMode: booking.executionMode,

@@ -16,7 +16,7 @@ import { BookingCreateFacade } from './booking-create.facade.js';
 import { CLIENT_NOTICE_DELAY_MS } from './rules/booking-client-notice.rules.js';
 import { CreateBookingDto } from './dto/create-booking.dto.js';
 import { ManualCreateBookingDto } from './dto/manual-create-booking.dto.js';
-import { BookingSource } from './enums/booking-source.enum.js';
+import { BookingChannel } from './enums/booking-channel.enum.js';
 import { BookingStatus } from './enums/booking-status.enum.js';
 import { BookingEventsService } from './services/booking-events.service.js';
 import { BookingReservationService } from './services/booking-reservation.service.js';
@@ -34,7 +34,7 @@ const dto: CreateBookingDto = {
 };
 
 const publicAttribution = {
-  source: BookingSource.PUBLIC_PAGE,
+  channel: BookingChannel.PUBLIC_PAGE,
   bookingPageId: null,
   bookingWidgetId: null,
 };
@@ -495,7 +495,7 @@ describe('BookingCreateFacade calendar link', () => {
     expect(tx.booking.create).toHaveBeenCalledWith(
       expect.objectContaining({
         data: expect.objectContaining({
-          source: BookingSource.PUBLIC_PAGE,
+          channel: BookingChannel.PUBLIC_PAGE,
           isCustomTime: false,
           bookingPageId: null,
           bookingWidgetId: null,
@@ -702,7 +702,7 @@ function customTimeSetup(
             startAt: Date;
             endAt: Date;
             status: BookingStatus;
-            source: BookingSource;
+            channel: BookingChannel;
             isCustomTime: boolean;
             executionMode: string;
             clientId: string | null;
@@ -729,7 +729,7 @@ function customTimeSetup(
             startAt: args.data.startAt,
             endAt: args.data.endAt,
             status: args.data.status,
-            source: args.data.source,
+            channel: args.data.channel,
             isCustomTime: args.data.isCustomTime,
             executionMode: args.data.executionMode,
             bundleId: null,
@@ -830,7 +830,7 @@ describe('BookingCreateFacade custom time', () => {
         { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER },
       );
 
-      expect(booking.source).toBe(BookingSource.MANUAL);
+      expect(booking.channel).toBe(BookingChannel.MANUAL);
       expect(booking.isCustomTime).toBe(false);
       expect(booking.status).toBe(BookingStatus.CONFIRMED);
       expect(booking.endAt.toISOString()).toBe('2020-09-20T08:04:00.000Z');
@@ -1064,12 +1064,12 @@ describe('BookingCreateFacade custom time', () => {
           startAt: Date;
           endAt: Date;
           status: BookingStatus;
-          source: BookingSource;
+          channel: BookingChannel;
           isCustomTime: boolean;
           items: { create: { startAt: Date; endAt: Date }[] };
         };
       };
-      expect(created.data.source).toBe(BookingSource.MANUAL);
+      expect(created.data.channel).toBe(BookingChannel.MANUAL);
       expect(created.data.isCustomTime).toBe(true);
       expect(created.data.status).toBe(BookingStatus.CONFIRMED);
       expect(created.data.startAt.toISOString()).toBe(
@@ -1140,7 +1140,7 @@ describe('BookingCreateFacade custom time', () => {
       );
 
       const booking = await tx.booking.create.mock.results[0].value;
-      expect(booking.source).toBe(BookingSource.MANUAL);
+      expect(booking.channel).toBe(BookingChannel.MANUAL);
       expect(booking.isCustomTime).toBe(true);
       expect(booking.status).toBe(BookingStatus.COMPLETED);
       expect(orders.syncCompletedBooking).toHaveBeenCalledWith(

@@ -1,4 +1,4 @@
-import { BookingSource, BookingStatus, Prisma } from '@prisma/client';
+import { BookingChannel, BookingStatus, Prisma } from '@prisma/client';
 import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { AggregateSnapshot } from '../../bookings/interfaces/aggregate-snapshot.interface.js';
 import { SeriesRow } from '../../bookings/interfaces/series-row.interface.js';
@@ -155,13 +155,13 @@ export function mergeRevenueSeries(
   );
 }
 
-export function sourceLabel(s: BookingSource): string {
+export function channelLabel(s: BookingChannel): string {
   switch (s) {
-    case BookingSource.PUBLIC_PAGE:
+    case BookingChannel.PUBLIC_PAGE:
       return 'Online';
-    case BookingSource.WIDGET:
+    case BookingChannel.WIDGET:
       return 'Widget';
-    case BookingSource.MANUAL:
+    case BookingChannel.MANUAL:
       return 'Manual';
     default: {
       const _exhaustive: never = s;

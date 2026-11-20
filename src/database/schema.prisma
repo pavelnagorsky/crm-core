@@ -138,10 +138,43 @@ enum CancelledBy {
   STAFF
 }
 
-enum BookingSource {
+enum BookingChannel {
   PUBLIC_PAGE
   WIDGET
   MANUAL
+}
+
+enum TrafficSource {
+  DIRECT
+  INSTAGRAM
+  VK
+  TELEGRAM
+  WHATSAPP
+  TIKTOK
+  FACEBOOK
+  YANDEX_MAPS
+  TWO_GIS
+  GOOGLE_MAPS
+  SEARCH
+  PAID_ADS
+  WEBSITE
+  MAILING
+  OFFLINE
+  REFERRAL
+  PHONE_CALL
+  WALK_IN
+  OTHER
+}
+
+enum ClickIdType {
+  GCLID
+  GBRAID
+  WBRAID
+  YCLID
+  YSCLID
+  FBCLID
+  TTCLID
+  MSCLKID
 }
 
 enum BookingExecutionMode {
@@ -570,6 +603,7 @@ model Location {
   orderOperations            OrderOperation[]
   orderReturns               OrderReturn[]
   reviews                    Review[]
+  trafficStats               BookingTrafficStat[]
 
   @@index([brandId, deletedAt])
 }
@@ -1013,17 +1047,28 @@ model Client {
   bannedAt  DateTime?
   banReason String?   @db.VarChar(500)
 
+  // Where the client came from: the source of the first booking in the brand, or set by staff.
+  acquisitionSource       TrafficSource?
+  acquisitionSourceDetail String?        @db.VarChar(64)
+  // The first booking; null for a client added by staff or by import before any booking.
+  acquisitionBookingId    String?        @unique
+  acquiredAt              DateTime?
+  // Imported clients were acquired before Klendo and are never counted as new.
+  importedAt              DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  brand    Brand     @relation(fields: [brandId], references: [id], onDelete: Cascade)
-  user     User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
-  bookings Booking[]
-  orders   Order[]
-  reviews  Review[]
+  brand              Brand     @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  user               User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
+  bookings           Booking[] @relation("BookingClient")
+  acquisitionBooking Booking?  @relation("ClientAcquisition", fields: [acquisitionBookingId], references: [id], onDelete: SetNull)
+  orders             Order[]
+  reviews            Review[]
 
   @@unique([brandId, phone])
   @@index([brandId])
+  @@index([brandId, acquiredAt])
   @@index([userId])
 }
 
@@ -1266,9 +1311,14 @@ model Booking {
   executionMode BookingExecutionMode @default(SEQUENTIAL)
   bundleId      String?
 
-  status       BookingStatus @default(CONFIRMED)
-  source       BookingSource
-  isCustomTime Boolean       @default(false)
+  status       BookingStatus  @default(CONFIRMED)
+  channel      BookingChannel
+  isCustomTime Boolean        @default(false)
+
+  // Marketing source. Online bookings always have one (DIRECT when nothing is known) and it is
+  // read-only; on a manual booking staff pick it, null meaning not specified.
+  trafficSource       TrafficSource?
+  trafficSourceDetail String?        @db.VarChar(64)
 
   bookingPageId   String?
   bookingWidgetId String?
@@ -1302,18 +1352,21 @@ model Booking {
   updatedAt DateTime  @updatedAt
   deletedAt DateTime?
 
-  location      Location       @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  client        Client?        @relation(fields: [clientId], references: [id], onDelete: Restrict)
-  bundle        ServiceBundle? @relation(fields: [bundleId], references: [id], onDelete: SetNull)
-  items         BookingItem[]
-  earnings      StaffEarning[]
-  bookingPage   BookingPage?   @relation(fields: [bookingPageId], references: [id], onDelete: SetNull)
-  bookingWidget BookingWidget? @relation(fields: [bookingWidgetId], references: [id], onDelete: SetNull)
-  orders        Order[]
-  review        Review?
+  location       Location             @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  client         Client?              @relation("BookingClient", fields: [clientId], references: [id], onDelete: Restrict)
+  acquiredClient Client?              @relation("ClientAcquisition")
+  bundle         ServiceBundle?       @relation(fields: [bundleId], references: [id], onDelete: SetNull)
+  items          BookingItem[]
+  earnings       StaffEarning[]
+  bookingPage    BookingPage?         @relation(fields: [bookingPageId], references: [id], onDelete: SetNull)
+  bookingWidget  BookingWidget?       @relation(fields: [bookingWidgetId], references: [id], onDelete: SetNull)
+  orders         Order[]
+  review         Review?
+  trafficTouch   BookingTrafficTouch?
 
   @@unique([locationId, idempotencyKey])
   @@index([locationId, deletedAt, startAt])
+  @@index([locationId, deletedAt, createdAt])
   @@index([clientId, deletedAt, startAt])
   @@index([status])
   @@index([bundleId])
@@ -1321,6 +1374,25 @@ model Booking {
   @@index([bookingWidgetId])
   @@index([clientNoticeAt])
   @@index([reminderDueAt])
+}
+
+/// The touch that led to an online booking, written once with it. The click id is erased after 90 days.
+model BookingTrafficTouch {
+  bookingId    String       @id
+  utmSource    String?      @db.VarChar(100)
+  utmMedium    String?      @db.VarChar(100)
+  utmCampaign  String?      @db.VarChar(150)
+  utmContent   String?      @db.VarChar(150)
+  utmTerm      String?      @db.VarChar(150)
+  referrerHost String?      @db.VarChar(253)
+  clickIdType  ClickIdType?
+  clickId      String?      @db.VarChar(255)
+  touchedAt    DateTime?
+  createdAt    DateTime     @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
 }
 
 enum ClientNoticeType {
@@ -1516,6 +1588,23 @@ model BookingWidgetStats {
   formOpens Int    @default(0)
 
   widget BookingWidget @relation(fields: [widgetId], references: [id], onDelete: Cascade)
+}
+
+/// Views and form opens of a booking page or widget per UTC hour and traffic source. Kept 25 months.
+model BookingTrafficStat {
+  locationId String
+  hourStart  DateTime
+  channel    BookingChannel
+  // Page or widget id; no foreign key, so the history outlives a deleted channel.
+  channelId  String
+  source     TrafficSource
+  views      Int            @default(0)
+  formOpens  Int            @default(0)
+
+  location Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+
+  @@id([locationId, hourStart, channelId, source])
+  @@index([hourStart])
 }
 
 model AuditLog {

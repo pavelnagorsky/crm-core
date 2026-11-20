@@ -1,18 +1,18 @@
 import { createHash } from 'node:crypto';
 import { CreateBookingDto } from '../dto/create-booking.dto.js';
-import { BookingAttribution } from '../interfaces/booking-attribution.interface.js';
+import { ResolvedBookingChannel } from '../interfaces/resolved-booking-channel.interface.js';
 
 /** Hash guest intent before resolving mutable prices, client profiles or available staff. */
 export function bookingRequestHash(
   locationId: string,
   dto: CreateBookingDto,
-  attribution: BookingAttribution,
+  attribution: ResolvedBookingChannel,
 ): string {
   return createHash('sha256')
     .update(
       JSON.stringify({
         locationId,
-        source: attribution.source,
+        channel: attribution.channel,
         bookingPageId: attribution.bookingPageId,
         bookingWidgetId: attribution.bookingWidgetId,
         bundleId: dto.bundleId ?? null,

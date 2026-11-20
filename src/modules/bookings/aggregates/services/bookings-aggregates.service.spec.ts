@@ -35,7 +35,7 @@ describe('BookingsAggregatesService location scope', () => {
   );
 
   it('preserves a mandatory location filter in Prisma queries', async () => {
-    await service.countBySource(range);
+    await service.countByChannel(range);
     expect(db.booking.groupBy).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({
@@ -73,7 +73,7 @@ describe('BookingsAggregatesService location scope', () => {
     const query = db.$queryRaw.mock.calls[0][0] as Prisma.Sql;
     expect(query.sql).toContain('WHERE FALSE');
     expect(query.sql).not.toContain('IN ()');
-    await service.countBySource({ ...range, locationIds: [] });
+    await service.countByChannel({ ...range, locationIds: [] });
     expect(db.booking.groupBy).toHaveBeenCalledWith(
       expect.objectContaining({
         where: expect.objectContaining({ locationId: { in: [] } }),

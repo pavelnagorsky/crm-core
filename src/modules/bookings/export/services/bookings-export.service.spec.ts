@@ -1,4 +1,4 @@
-import { BookingSource, BookingStatus, Prisma } from '@prisma/client';
+import { BookingChannel, BookingStatus, Prisma } from '@prisma/client';
 import { PassThrough } from 'stream';
 import { booking as bookingFixture } from '../../testing/factories/booking.factory.js';
 import { BookingFixtureOptions } from '../../testing/interfaces/booking-fixture-options.interface.js';
@@ -37,7 +37,7 @@ const bookingStatus = {
   CANCELLED: 'Отменено',
 };
 
-const bookingSource = {
+const bookingChannel = {
   MANUAL: 'Вручную',
   WIDGET: 'Виджет',
 };
@@ -101,7 +101,7 @@ describe('BookingsExportService', () => {
     locale.get.mockReturnValue({
       documents: { bookings: labels },
       bookingStatus,
-      bookingSource,
+      bookingChannel,
     } as unknown as ReturnType<LocaleService['get']>);
   });
 
@@ -115,7 +115,7 @@ describe('BookingsExportService', () => {
         booking({
           id: 'booking-2',
           status: BookingStatus.CANCELLED,
-          source: BookingSource.WIDGET,
+          channel: BookingChannel.WIDGET,
           clientEmail: null,
           notes: null,
           internalNotes: null,

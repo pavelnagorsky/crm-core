@@ -19,9 +19,9 @@ import { CreateBookingDto } from './dto/create-booking.dto.js';
 import { ManualBookingItemDto } from './dto/manual-booking-item.dto.js';
 import { ManualBookingProductDto } from './dto/manual-booking-product.dto.js';
 import { ManualCreateBookingDto } from './dto/manual-create-booking.dto.js';
-import { BookingSource } from './enums/booking-source.enum.js';
+import { BookingChannel } from './enums/booking-channel.enum.js';
 import { BookingStatus } from './enums/booking-status.enum.js';
-import { BookingAttribution } from './interfaces/booking-attribution.interface.js';
+import { ResolvedBookingChannel } from './interfaces/resolved-booking-channel.interface.js';
 import { BookingCreationOutcome } from './interfaces/booking-creation-outcome.interface.js';
 import { BookingCreationResult } from './interfaces/booking-creation-result.interface.js';
 import { BookingCreationRequest } from './interfaces/booking-creation-request.interface.js';
@@ -60,7 +60,7 @@ export class BookingCreateFacade {
   async createPublicBooking(
     locationId: string,
     dto: CreateBookingDto,
-    attribution: BookingAttribution,
+    attribution: ResolvedBookingChannel,
     context: PublicBookingRequestContext = { ip: 'unknown' },
   ): Promise<BookingWithItems> {
     this.assertPublicClientFields(dto);
@@ -91,7 +91,7 @@ export class BookingCreateFacade {
     if (!result.created) return result.booking;
     const { booking, timezone, currency, bundleTitle } = result;
     this.logger.log(
-      `booking created (public): id=${booking.id} locationId=${locationId} source=${booking.source} items=${booking.items.length} bundleId=${booking.bundleId ?? '-'} startAt=${booking.startAt.toISOString()}`,
+      `booking created (public): id=${booking.id} locationId=${locationId} channel=${booking.channel} items=${booking.items.length} bundleId=${booking.bundleId ?? '-'} startAt=${booking.startAt.toISOString()}`,
     );
     const actor: AuditActor = {
       name: [booking.clientFirstName, booking.clientLastName]
@@ -124,7 +124,7 @@ export class BookingCreateFacade {
     const { booking, currency, bundleTitle } = await this.create(
       locationId,
       {
-        source: BookingSource.MANUAL,
+        channel: BookingChannel.MANUAL,
         bookingPageId: null,
         bookingWidgetId: null,
       },
@@ -133,7 +133,7 @@ export class BookingCreateFacade {
       ownStaffId,
     );
     this.logger.log(
-      `booking created (manual): id=${booking.id} locationId=${locationId} source=${booking.source} items=${booking.items.length} bundleId=${booking.bundleId ?? '-'} actor=${actor.name}`,
+      `booking created (manual): id=${booking.id} locationId=${locationId} channel=${booking.channel} items=${booking.items.length} bundleId=${booking.bundleId ?? '-'} actor=${actor.name}`,
     );
     this.events.created(booking, actor, currency, bundleTitle);
     return booking;
@@ -148,7 +148,7 @@ export class BookingCreateFacade {
 
   private async create(
     locationId: string,
-    attribution: BookingAttribution,
+    attribution: ResolvedBookingChannel,
     actor: AuditActor | null,
     dto: CreateBookingDto | ManualCreateBookingDto,
     ownStaffId?: string,
@@ -162,7 +162,7 @@ export class BookingCreateFacade {
         HttpStatus.NOT_FOUND,
       );
     if (
-      !this.isInternalSource(attribution.source) &&
+      !this.isInternalChannel(attribution.channel) &&
       location.bookingVisibility === BookingVisibility.PRIVATE
     ) {
       throw new AppException(
@@ -172,7 +172,7 @@ export class BookingCreateFacade {
     }
 
     const startAt = TimeUtils.localToUtc(dto.startAt, location.timezone);
-    const internal = this.isInternalSource(attribution.source);
+    const internal = this.isInternalChannel(attribution.channel);
     const requestedStatus =
       internal && 'status' in dto ? dto.status : undefined;
     if (requestedStatus && !canHaveStatus(requestedStatus, startAt, new Date()))
@@ -184,12 +184,12 @@ export class BookingCreateFacade {
       ? null
       : await this.resolveBookingClient(
           location.brandId,
-          attribution.source,
+          attribution.channel,
           dto,
         );
     if (
       publicClient &&
-      isSelfBookingBlocked(attribution.source, publicClient.client.bannedAt)
+      isSelfBookingBlocked(attribution.channel, publicClient.client.bannedAt)
     )
       throw new AppException(ErrorCode.CLIENT_BANNED, HttpStatus.FORBIDDEN);
 
@@ -239,7 +239,7 @@ export class BookingCreateFacade {
       publicClient ??
       (await this.resolveBookingClient(
         location.brandId,
-        attribution.source,
+        attribution.channel,
         dto,
       ));
     // Staff may add the missing email of a client they picked; it is saved with the booking.
@@ -279,8 +279,8 @@ export class BookingCreateFacade {
         notifyClient,
         clientNotice,
         notes: dto.notes ?? null,
-        internalNotes: this.manualInternalNotes(dto, attribution.source),
-        products: this.manualProducts(dto, attribution.source),
+        internalNotes: this.manualInternalNotes(dto, attribution.channel),
+        products: this.manualProducts(dto, attribution.channel),
         actor,
         request,
       },
@@ -309,23 +309,23 @@ export class BookingCreateFacade {
 
   private manualProducts(
     dto: CreateBookingDto | ManualCreateBookingDto,
-    source: BookingSource,
+    channel: BookingChannel,
   ): ManualBookingProductDto[] {
-    if (!this.isInternalSource(source) || !('products' in dto)) return [];
+    if (!this.isInternalChannel(channel) || !('products' in dto)) return [];
     return dto.products ?? [];
   }
 
   private manualInternalNotes(
     dto: CreateBookingDto | ManualCreateBookingDto,
-    source: BookingSource,
+    channel: BookingChannel,
   ): string | null {
-    if (!this.isInternalSource(source) || !('internalNotes' in dto))
+    if (!this.isInternalChannel(channel) || !('internalNotes' in dto))
       return null;
     return dto.internalNotes ?? null;
   }
 
-  private isInternalSource(source: BookingSource): boolean {
-    return source === BookingSource.MANUAL;
+  private isInternalChannel(channel: BookingChannel): boolean {
+    return channel === BookingChannel.MANUAL;
   }
 
   private initialStatus(
@@ -357,11 +357,11 @@ export class BookingCreateFacade {
    */
   private async resolveBookingClient(
     brandId: string,
-    source: BookingSource,
+    channel: BookingChannel,
     dto: CreateBookingDto | ManualCreateBookingDto,
   ): Promise<{ client: ResolvedBookingClient; picked: Client | null }> {
     // createManualBooking has already rejected clientId together with anonymous.
-    if (this.isInternalSource(source) && 'clientId' in dto && dto.clientId) {
+    if (this.isInternalChannel(channel) && 'clientId' in dto && dto.clientId) {
       const picked = await this.clientsService.findForBooking(
         brandId,
         dto.clientId,
@@ -373,7 +373,7 @@ export class BookingCreateFacade {
         );
       return { client: this.bookingClient(picked), picked };
     }
-    if (this.isAnonymousManualBooking(source, dto)) {
+    if (this.isAnonymousManualBooking(channel, dto)) {
       return {
         client: {
           id: null,
@@ -413,11 +413,11 @@ export class BookingCreateFacade {
   }
 
   private isAnonymousManualBooking(
-    source: BookingSource,
+    channel: BookingChannel,
     dto: CreateBookingDto | ManualCreateBookingDto,
   ): dto is ManualCreateBookingDto {
     return (
-      this.isInternalSource(source) &&
+      this.isInternalChannel(channel) &&
       'anonymous' in dto &&
       dto.anonymous === true
     );

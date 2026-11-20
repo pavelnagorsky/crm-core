@@ -146,11 +146,11 @@ describe('Staff booking API', () => {
       );
 
       expect(details.responseValue).toMatchObject({
-        source: 'MANUAL',
+        channel: 'MANUAL',
         isCustomTime,
       });
       expect(search.responseValue?.items[0]).toMatchObject({
-        source: 'MANUAL',
+        channel: 'MANUAL',
         isCustomTime,
       });
     },

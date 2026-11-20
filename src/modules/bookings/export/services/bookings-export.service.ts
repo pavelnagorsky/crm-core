@@ -19,7 +19,7 @@ type BookingRow = {
   startAt: string;
   endAt: string;
   status: string;
-  source: string;
+  channel: string;
   clientFirstName: string;
   clientLastName: string;
   clientPhone: string;
@@ -53,7 +53,7 @@ export class BookingsExportService {
       { header: text.startAt, key: 'startAt' },
       { header: text.endAt, key: 'endAt' },
       { header: text.status, key: 'status' },
-      { header: text.source, key: 'source' },
+      { header: text.channel, key: 'channel' },
       { header: text.clientFirstName, key: 'clientFirstName' },
       { header: text.clientLastName, key: 'clientLastName' },
       { header: text.clientPhone, key: 'clientPhone', width: 18 },
@@ -108,7 +108,7 @@ export class BookingsExportService {
       startAt: TimeUtils.zonedDateTimeStr(booking.startAt, timezone),
       endAt: TimeUtils.zonedDateTimeStr(booking.endAt, timezone),
       status: labelOf(messages.bookingStatus, booking.status),
-      source: labelOf(messages.bookingSource, booking.source),
+      channel: labelOf(messages.bookingChannel, booking.channel),
       clientFirstName: booking.clientFirstName,
       clientLastName: booking.clientLastName,
       clientPhone: booking.clientPhone ?? '',

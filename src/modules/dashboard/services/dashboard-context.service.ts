@@ -62,7 +62,7 @@ export class DashboardContextService {
       previousProductSnapshot,
       productSeries,
       previousProductSeries,
-      sourceRows,
+      channelRows,
       heatmapCells,
       staffRevenueRows,
       staffCompletedRows,
@@ -114,8 +114,8 @@ export class DashboardContextService {
             timezone: range.timezone,
           })
         : Promise.resolve([]),
-      selected.has(DashboardWidgetKey.BOOKINGS_BY_SOURCE)
-        ? this.bookingsAggregates.countBySource(current)
+      selected.has(DashboardWidgetKey.BOOKINGS_BY_CHANNEL)
+        ? this.bookingsAggregates.countByChannel(current)
         : Promise.resolve([]),
       selected.has(DashboardWidgetKey.BOOKINGS_HEATMAP)
         ? this.bookingsAggregates.heatmapByWeekdayHour(current, range.timezone)
@@ -144,7 +144,7 @@ export class DashboardContextService {
       previousProductSnapshot,
       productSeries,
       previousProductSeries,
-      sourceRows,
+      channelRows,
       heatmapCells,
       staffRevenueRows,
       staffCompletedRows,
