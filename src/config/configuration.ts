@@ -40,6 +40,8 @@ export default () => {
     emailConfig: {
       email: process.env['EMAIL'],
       emailPw: process.env['EMAIL_PW'],
+      smtpHost: process.env['SMTP_HOST'] ?? 'smtp.hoster.by',
+      smtpPort: parseInt(process.env['SMTP_PORT'] ?? '', 10) || 465,
     },
     notificationsConfig: {
       // Enabled by default. CLIENT_NOTIFICATIONS_ENABLED=false (dev/stage) mutes only emails to a business's clients: those

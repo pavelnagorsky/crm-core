@@ -4,6 +4,7 @@ export interface StaffBookingNotificationData {
   event: StaffBookingEvent;
   recipientEmail: string;
   recipientFirstName: string | null;
+  bookingId: string;
   locationId: string;
   clientName: string;
   clientPhone: string | null;

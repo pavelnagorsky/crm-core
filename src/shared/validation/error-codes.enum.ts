@@ -647,6 +647,18 @@ export const ErrorCode = {
     code: 'EMAIL_DELIVERY_FAILED',
     message: 'Email could not be sent; please try again',
   },
+  EMAIL_RETRY_UNAVAILABLE: {
+    code: 'EMAIL_RETRY_UNAVAILABLE',
+    message: 'This email cannot be sent again; see reason',
+  },
+  EMAIL_CANCEL_UNAVAILABLE: {
+    code: 'EMAIL_CANCEL_UNAVAILABLE',
+    message: 'Only emails that are waiting or failed can be cancelled',
+  },
+  EMAIL_PREVIEW_UNAVAILABLE: {
+    code: 'EMAIL_PREVIEW_UNAVAILABLE',
+    message: 'The content of this email is not stored',
+  },
   ACCESS_GRANT_INVALID: {
     code: 'ACCESS_GRANT_INVALID',
     message: 'Invalid role, scope, or staff binding',

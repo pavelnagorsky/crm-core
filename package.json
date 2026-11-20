@@ -64,6 +64,7 @@
     "passport-custom": "^1.2.1",
     "passport-jwt": "^4.0.1",
     "pg": "^8.23.0",
+    "pg-boss": "12.38.2",
     "pino": "^10.4.0",
     "pino-abstract-transport": "^3.0.0",
     "pino-http": "^11.0.0",

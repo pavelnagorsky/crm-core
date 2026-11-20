@@ -28,6 +28,7 @@ import {
 } from '../../rules/booking-client-notice.rules.js';
 import { reminderDueAt } from '../../rules/booking-reminder.rules.js';
 import { BookingWriteLockService } from '../booking-write-lock.service.js';
+import { NotificationsService } from '../../../notifications/services/notifications.service.js';
 
 @Injectable()
 export class BookingRescheduleService {
@@ -40,6 +41,7 @@ export class BookingRescheduleService {
     private readonly staffEarnings: StaffEarningsService,
     private readonly write: BookingWriteLockService,
     private readonly slots: BookingSlotLockService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   /** `afterUpdate` runs in the same transaction, after the booking row is saved. */
@@ -170,6 +172,9 @@ export class BookingRescheduleService {
         },
         include: bookingWithItemsInclude,
       });
+      // Emails not yet sent name the old time.
+      if (nextStartAt.getTime() !== old.startAt.getTime())
+        await this.notifications.cancelPendingForBooking(old.id, tx);
       await afterUpdate?.(updated, tx);
       if (old.status === BookingStatus.COMPLETED) {
         const order = await this.orders.syncCompletedBooking(

@@ -10,6 +10,9 @@ import { ReviewRequestNotification } from '../../messages/review-request.notific
 import { ResetPasswordNotification } from '../../messages/reset-password.notification.js';
 import { EmailChannel } from './email.channel.js';
 import { EmailRenderer } from './email.renderer.js';
+import { EmailTemplate } from '../../enums/email-template.enum.js';
+import { HasEmailChannel } from '../../interfaces/has-email-channel.interface.js';
+import { AbstractNotification } from '../../messages/abstract.notification.js';
 
 const { sendMail } = vi.hoisted(() => ({ sendMail: vi.fn() }));
 vi.mock('nodemailer', () => ({
@@ -30,6 +33,22 @@ describe('Email branding', () => {
     renderer,
     locations as unknown as LocationService,
   );
+  const send = async (
+    notification: AbstractNotification & HasEmailChannel,
+    roundTrip = false,
+  ) => {
+    const payload = notification.toEmail();
+    await channel.transmit(
+      await channel.compose({
+        template: notification.emailTemplate,
+        to: payload.to,
+        // What the worker reads back from the delivery log.
+        data: roundTrip
+          ? JSON.parse(JSON.stringify(payload.data))
+          : payload.data,
+      }),
+    );
+  };
   const booking: BookingNotificationData = {
     id: 'booking',
     locationId: 'location',
@@ -63,7 +82,7 @@ describe('Email branding', () => {
   ])(
     'uses Klendo and an embedded PNG for platform email %s',
     async (notification) => {
-      await channel.send(notification);
+      await send(notification);
 
       const mail = sendMail.mock.calls[0][0];
       expect(mail.from).toEqual({
@@ -103,7 +122,7 @@ describe('Email branding', () => {
     new BookingReminderNotification(booking, 'https://example.com/manage'),
     new BookingStatusChangedNotification(booking, 'RESCHEDULED'),
   ])('uses the location brand for client email %s', async (notification) => {
-    await channel.send(notification);
+    await send(notification);
 
     const mail = sendMail.mock.calls[0][0];
     expect(locations.findPublicProfile).toHaveBeenCalledWith('location');
@@ -125,7 +144,7 @@ describe('Email branding', () => {
     locations.findPublicProfile.mockResolvedValue({
       brand: { name: 'Studio Brand', logoFile: null },
     });
-    await channel.send(
+    await send(
       new BookingReminderNotification(booking, 'https://example.com/manage'),
     );
 
@@ -137,8 +156,18 @@ describe('Email branding', () => {
     );
   });
 
+  it('renders the same email from data read back from the log', async () => {
+    const notification = new BookingReminderNotification(
+      booking,
+      'https://example.com/manage',
+    );
+    await send(notification);
+    await send(notification, true);
+    expect(sendMail.mock.calls[1][0].html).toBe(sendMail.mock.calls[0][0].html);
+  });
+
   it('uses business branding for employee invitations', async () => {
-    await channel.send(
+    await send(
       new AccessInvitationNotification(
         'employee@example.com',
         'https://example.com/invite',
@@ -162,7 +191,7 @@ describe('Email branding', () => {
   });
 
   it('escapes brand names in HTML and ignores unsafe logo URLs', () => {
-    const mail = renderer.render('access-invitation', {
+    const mail = renderer.render(EmailTemplate.ACCESS_INVITATION, {
       brandName: '<script>alert(1)</script>',
       brandLogoUrl: 'javascript:alert(1)',
     });
@@ -172,13 +201,13 @@ describe('Email branding', () => {
   });
 
   it('requires business branding rather than showing Klendo as the business', () => {
-    expect(() => renderer.render('booking-reminder', {})).toThrow(
+    expect(() => renderer.render(EmailTemplate.BOOKING_REMINDER, {})).toThrow(
       'Brand name required',
     );
   });
 
   it('renders the review request with the management link and visit details', async () => {
-    await channel.send(
+    await send(
       new ReviewRequestNotification(booking, 'https://example.com/manage'),
     );
     const mail = sendMail.mock.calls[0][0];

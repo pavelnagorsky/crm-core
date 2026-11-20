@@ -1,4 +1,5 @@
-import { EventEmitter2 } from '@nestjs/event-emitter';
+import { BookingReminderNotification } from '../../notifications/messages/booking-reminder.notification.js';
+import { NotificationsService } from '../../notifications/services/notifications.service.js';
 import { Test } from '@nestjs/testing';
 import { BookingStatus, ClientNoticeType } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
@@ -28,7 +29,7 @@ describe('BookingCronService.sendReminders', () => {
       .fn()
       .mockResolvedValue(new Map([['biz', { timezone: 'UTC' }]])),
   };
-  const emitter = { emit: vi.fn() };
+  const notifications = { enqueue: vi.fn() };
   const database = {
     ...db,
     $transaction: vi.fn(async (callback) => callback(db)),
@@ -54,7 +55,7 @@ describe('BookingCronService.sendReminders', () => {
         BookingCronService,
         { provide: DatabaseService, useValue: database },
         { provide: BookingsFacade, useValue: bookings },
-        { provide: EventEmitter2, useValue: emitter },
+        { provide: NotificationsService, useValue: notifications },
         { provide: LocationService, useValue: business },
         { provide: ReviewsFacade, useValue: reviews },
         { provide: BookingClientTokenService, useValue: clientTokens },
@@ -91,7 +92,10 @@ describe('BookingCronService.sendReminders', () => {
     expect(where.reminderSentAt).toBeNull();
     expect(where.clientNoticeAt).toBeNull();
     expect(where.status).toBe(BookingStatus.CONFIRMED);
-    expect(emitter.emit).toHaveBeenCalledTimes(1);
+    expect(notifications.enqueue).toHaveBeenCalledExactlyOnceWith(
+      expect.any(BookingReminderNotification),
+      db,
+    );
     expect(where.location).toEqual({
       deletedAt: null,
       brand: { deletedAt: null },
@@ -115,7 +119,7 @@ describe('BookingCronService.sendReminders', () => {
     business.getLocalesByIds.mockResolvedValue(new Map());
     await service.sendReminders();
     expect(db.booking.updateMany).not.toHaveBeenCalled();
-    expect(emitter.emit).not.toHaveBeenCalled();
+    expect(notifications.enqueue).not.toHaveBeenCalled();
   });
 
   it('rechecks business state before sending a reminder', async () => {
@@ -123,7 +127,7 @@ describe('BookingCronService.sendReminders', () => {
     business.acquireActiveOperationLock.mockResolvedValue(false);
     await service.sendReminders();
     expect(db.booking.updateMany).not.toHaveBeenCalled();
-    expect(emitter.emit).not.toHaveBeenCalled();
+    expect(notifications.enqueue).not.toHaveBeenCalled();
   });
 });
 
@@ -133,7 +137,7 @@ describe('BookingCronService.sendReviewRequests', () => {
     acquireActiveOperationLock: vi.fn(),
     getLocalesByIds: vi.fn(),
   };
-  const emitter = { emit: vi.fn() };
+  const notifications = { enqueue: vi.fn() };
   const database = {
     ...db,
     $transaction: vi.fn(async (callback) => callback(db)),
@@ -182,7 +186,7 @@ describe('BookingCronService.sendReviewRequests', () => {
         BookingCronService,
         { provide: DatabaseService, useValue: database },
         { provide: BookingsFacade, useValue: { completeElapsed: vi.fn() } },
-        { provide: EventEmitter2, useValue: emitter },
+        { provide: NotificationsService, useValue: notifications },
         { provide: LocationService, useValue: locations },
         { provide: ReviewsFacade, useValue: reviews },
         { provide: BookingClientTokenService, useValue: clientTokens },
@@ -223,8 +227,8 @@ describe('BookingCronService.sendReviewRequests', () => {
       data: { reviewRequestSentAt: expect.any(Date) },
     });
     expect(clientTokens.generateClientToken).toHaveBeenCalledWith('b1');
-    expect(emitter.emit).toHaveBeenCalledTimes(1);
-    const notification = emitter.emit.mock.calls[0][1];
+    expect(notifications.enqueue).toHaveBeenCalledTimes(1);
+    const notification = notifications.enqueue.mock.calls[0][0];
     expect(notification).toBeInstanceOf(ReviewRequestNotification);
     expect(notification.toEmail()).toMatchObject({
       to: 'a@example.com',
@@ -241,34 +245,34 @@ describe('BookingCronService.sendReviewRequests', () => {
     reviews.findReviewedBookingIds.mockResolvedValue(new Set(['b1']));
     await service.sendReviewRequests();
     expect(db.booking.updateMany).not.toHaveBeenCalled();
-    expect(emitter.emit).not.toHaveBeenCalled();
+    expect(notifications.enqueue).not.toHaveBeenCalled();
   });
 
   it('does nothing when there are no candidates', async () => {
     db.booking.findMany.mockResolvedValue([]);
     await service.sendReviewRequests();
     expect(reviews.findReviewedBookingIds).not.toHaveBeenCalled();
-    expect(emitter.emit).not.toHaveBeenCalled();
+    expect(notifications.enqueue).not.toHaveBeenCalled();
   });
 
   it('sends nothing when another run claimed the booking first', async () => {
     db.booking.updateMany.mockResolvedValue({ count: 0 });
     await service.sendReviewRequests();
-    expect(emitter.emit).not.toHaveBeenCalled();
+    expect(notifications.enqueue).not.toHaveBeenCalled();
   });
 
   it('rechecks the location state before sending', async () => {
     locations.acquireActiveOperationLock.mockResolvedValue(false);
     await service.sendReviewRequests();
     expect(db.booking.updateMany).not.toHaveBeenCalled();
-    expect(emitter.emit).not.toHaveBeenCalled();
+    expect(notifications.enqueue).not.toHaveBeenCalled();
   });
 
   it('skips locations missing from the active locale lookup', async () => {
     locations.getLocalesByIds.mockResolvedValue(new Map());
     await service.sendReviewRequests();
     expect(db.booking.updateMany).not.toHaveBeenCalled();
-    expect(emitter.emit).not.toHaveBeenCalled();
+    expect(notifications.enqueue).not.toHaveBeenCalled();
   });
 });
 
@@ -283,7 +287,13 @@ describe('BookingCronService.sendClientNotices', () => {
     acquireActiveOperationLock: vi.fn(),
     getBookingSettings: vi.fn(),
   };
-  const events = { notifyCreated: vi.fn(), notifyStatus: vi.fn() };
+  const notifications = { enqueue: vi.fn() };
+  const created = { kind: 'created' };
+  const moved = { kind: 'moved' };
+  const events = {
+    createdNotification: vi.fn(() => created),
+    statusNotification: vi.fn(() => moved),
+  };
   const pending = (overrides: Parameters<typeof booking>[0] = {}) =>
     booking({
       locationId: 'biz',
@@ -312,7 +322,7 @@ describe('BookingCronService.sendClientNotices', () => {
         BookingCronService,
         { provide: DatabaseService, useValue: database },
         { provide: BookingsFacade, useValue: {} },
-        { provide: EventEmitter2, useValue: { emit: vi.fn() } },
+        { provide: NotificationsService, useValue: notifications },
         { provide: LocationService, useValue: locations },
         { provide: ReviewsFacade, useValue: {} },
         { provide: BookingClientTokenService, useValue: {} },
@@ -345,8 +355,22 @@ describe('BookingCronService.sendClientNotices', () => {
         updatedAt: due.updatedAt,
       },
     });
-    expect(events.notifyCreated).toHaveBeenCalledWith(due, 'Europe/Minsk');
-    expect(events.notifyStatus).not.toHaveBeenCalled();
+    expect(events.createdNotification).toHaveBeenCalledWith(
+      due,
+      'Europe/Minsk',
+    );
+    expect(events.statusNotification).not.toHaveBeenCalled();
+    // Queued in the claim's transaction.
+    expect(notifications.enqueue).toHaveBeenCalledExactlyOnceWith(created, db);
+  });
+
+  it('leaves the notice in place when the email cannot be queued', async () => {
+    db.booking.findMany.mockResolvedValue([pending()]);
+    notifications.enqueue.mockRejectedValueOnce(new Error('queue down'));
+
+    await expect(service.sendClientNotices()).resolves.toBeUndefined();
+    // The real transaction rolls back the cleared notice; the next run retries it.
+    expect(database.$transaction).toHaveBeenCalledOnce();
   });
 
   it('sends a due move email with the start before the series', async () => {
@@ -359,9 +383,13 @@ describe('BookingCronService.sendClientNotices', () => {
 
     await service.sendClientNotices();
 
-    expect(events.notifyStatus).toHaveBeenCalledWith(due, 'RESCHEDULED', {
-      previousStartAt: from,
-    });
+    expect(events.statusNotification).toHaveBeenCalledWith(
+      due,
+      'RESCHEDULED',
+      { previousStartAt: from },
+      'Europe/Minsk',
+    );
+    expect(notifications.enqueue).toHaveBeenCalledExactlyOnceWith(moved, db);
   });
 
   it('skips the email when another worker already claimed it', async () => {
@@ -370,7 +398,8 @@ describe('BookingCronService.sendClientNotices', () => {
 
     await service.sendClientNotices();
 
-    expect(events.notifyCreated).not.toHaveBeenCalled();
+    expect(events.createdNotification).not.toHaveBeenCalled();
+    expect(notifications.enqueue).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -383,7 +412,8 @@ describe('BookingCronService.sendClientNotices', () => {
     await service.sendClientNotices();
 
     expect(db.booking.updateMany).toHaveBeenCalledOnce();
-    expect(events.notifyCreated).not.toHaveBeenCalled();
+    expect(events.createdNotification).not.toHaveBeenCalled();
+    expect(notifications.enqueue).not.toHaveBeenCalled();
   });
 
   it('drops a move email once the location turned the setting off', async () => {
@@ -400,6 +430,7 @@ describe('BookingCronService.sendClientNotices', () => {
 
     await service.sendClientNotices();
 
-    expect(events.notifyStatus).not.toHaveBeenCalled();
+    expect(events.statusNotification).not.toHaveBeenCalled();
+    expect(notifications.enqueue).not.toHaveBeenCalled();
   });
 });

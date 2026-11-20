@@ -295,6 +295,16 @@ export class LocationService {
     return location;
   }
 
+  /** Names by id, deleted locations included (admin history). */
+  async findNames(locationIds: string[]): Promise<Map<string, string>> {
+    if (!locationIds.length) return new Map();
+    const rows = await this.db.location.findMany({
+      where: { id: { in: [...new Set(locationIds)] } },
+      select: { id: true, name: true },
+    });
+    return new Map(rows.map((row) => [row.id, row.name]));
+  }
+
   async getLocalesByIds(
     locationIds: string[],
   ): Promise<Map<string, { timezone: string; currency: string }>> {

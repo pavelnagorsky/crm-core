@@ -1,14 +1,15 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { BookingStatus, ClientNoticeType, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 import { LocationService } from '../../location/services/location.service.js';
 import { BookingNotificationData } from '../../notifications/interfaces/booking-notification-data.interface.js';
+import { HasEmailChannel } from '../../notifications/interfaces/has-email-channel.interface.js';
+import { AbstractNotification } from '../../notifications/messages/abstract.notification.js';
 import { BookingReminderNotification } from '../../notifications/messages/booking-reminder.notification.js';
 import { ReviewRequestNotification } from '../../notifications/messages/review-request.notification.js';
-import { NOTIFICATION_EVENT } from '../../notifications/services/notifications.service.js';
+import { NotificationsService } from '../../notifications/services/notifications.service.js';
 import { ReviewsFacade } from '../../reviews/reviews.facade.js';
 import { BookingsFacade } from '../bookings.facade.js';
 import { BookingWithItems } from '../interfaces/booking-with-items.interface.js';
@@ -27,7 +28,7 @@ export class BookingCronService {
   constructor(
     private readonly db: DatabaseService,
     private readonly bookings: BookingsFacade,
-    private readonly eventEmitter: EventEmitter2,
+    private readonly notifications: NotificationsService,
     private readonly locationService: LocationService,
     private readonly reviews: ReviewsFacade,
     private readonly clientTokens: BookingClientTokenService,
@@ -64,29 +65,29 @@ export class BookingCronService {
       bookings.map(async (booking) => {
         const locale = locales.get(booking.locationId);
         if (!locale) return;
-        const claimed = await this.claim(booking.locationId, {
-          where: {
-            id: booking.id,
-            deletedAt: null,
-            reminderSentAt: null,
-            clientNoticeAt: null,
-            updatedAt: booking.updatedAt,
-            status: BookingStatus.CONFIRMED,
-            location: ACTIVE_LOCATION_WHERE,
+        await this.claim(
+          booking,
+          {
+            where: {
+              id: booking.id,
+              deletedAt: null,
+              reminderSentAt: null,
+              clientNoticeAt: null,
+              updatedAt: booking.updatedAt,
+              status: BookingStatus.CONFIRMED,
+              location: ACTIVE_LOCATION_WHERE,
+            },
+            // Bookkeeping, not an edit: keeps the version staff hold in an open form valid.
+            data: { reminderSentAt: now, updatedAt: booking.updatedAt },
           },
-          // Bookkeeping, not an edit: keeps the version staff hold in an open form valid.
-          data: { reminderSentAt: now, updatedAt: booking.updatedAt },
-        });
-        if (claimed)
-          this.eventEmitter.emit(
-            NOTIFICATION_EVENT,
+          () =>
             new BookingReminderNotification(
               this.notificationData(booking, locale.timezone),
               this.clientTokens.managementUrl(
                 this.clientTokens.generateClientToken(booking.id),
               ),
             ),
-          );
+        );
       }),
     );
   }
@@ -132,27 +133,27 @@ export class BookingCronService {
       bookings.map(async (booking) => {
         const locale = locales.get(booking.locationId);
         if (!locale) return;
-        const claimed = await this.claim(booking.locationId, {
-          where: {
-            id: booking.id,
-            deletedAt: null,
-            reviewRequestSentAt: null,
-            updatedAt: booking.updatedAt,
-            status: BookingStatus.COMPLETED,
-            location: reviewableLocation,
+        await this.claim(
+          booking,
+          {
+            where: {
+              id: booking.id,
+              deletedAt: null,
+              reviewRequestSentAt: null,
+              updatedAt: booking.updatedAt,
+              status: BookingStatus.COMPLETED,
+              location: reviewableLocation,
+            },
+            data: { reviewRequestSentAt: now },
           },
-          data: { reviewRequestSentAt: now },
-        });
-        if (claimed)
-          this.eventEmitter.emit(
-            NOTIFICATION_EVENT,
+          () =>
             new ReviewRequestNotification(
               this.notificationData(booking, locale.timezone),
               this.clientTokens.managementUrl(
                 this.clientTokens.generateClientToken(booking.id),
               ),
             ),
-          );
+        );
       }),
     );
   }
@@ -191,33 +192,39 @@ export class BookingCronService {
       bookings.map(async (booking) => {
         const location = settings.get(booking.locationId);
         if (!location) return;
-        const claimed = await this.claim(booking.locationId, {
-          // Restoring the version below would undo an edit made since the select; retry next minute.
-          where: {
-            id: booking.id,
-            deletedAt: null,
-            clientNoticeAt: booking.clientNoticeAt,
-            updatedAt: booking.updatedAt,
-            location: ACTIVE_LOCATION_WHERE,
+        await this.claim(
+          booking,
+          {
+            // Restoring the version below would undo an edit made since the select; retry next minute.
+            where: {
+              id: booking.id,
+              deletedAt: null,
+              clientNoticeAt: booking.clientNoticeAt,
+              updatedAt: booking.updatedAt,
+              location: ACTIVE_LOCATION_WHERE,
+            },
+            // Bookkeeping, not an edit: keeps the version staff hold in an open form valid.
+            data: { ...NO_CLIENT_NOTICE, updatedAt: booking.updatedAt },
           },
-          // Bookkeeping, not an edit: keeps the version staff hold in an open form valid.
-          data: { ...NO_CLIENT_NOTICE, updatedAt: booking.updatedAt },
-        });
-        if (
-          !claimed ||
-          !isClientNoticeSendable(
-            booking,
-            location.notifyClientOnStaffChanges,
-            now,
-          )
-        )
-          return;
-        if (booking.clientNoticeType === ClientNoticeType.CREATED)
-          this.events.notifyCreated(booking, location.timezone);
-        else
-          await this.events.notifyStatus(booking, 'RESCHEDULED', {
-            previousStartAt: booking.clientNoticeFromStartAt,
-          });
+          () => {
+            if (
+              !isClientNoticeSendable(
+                booking,
+                location.notifyClientOnStaffChanges,
+                now,
+              )
+            )
+              return null;
+            return booking.clientNoticeType === ClientNoticeType.CREATED
+              ? this.events.createdNotification(booking, location.timezone)
+              : this.events.statusNotification(
+                  booking,
+                  'RESCHEDULED',
+                  { previousStartAt: booking.clientNoticeFromStartAt },
+                  location.timezone,
+                );
+          },
+        );
       }),
     );
   }
@@ -229,19 +236,36 @@ export class BookingCronService {
       this.logger.log(`Auto-completed ${count} elapsed booking(s)`);
   }
 
-  /** Marks the booking as notified only if it is unchanged, so each email goes out once. */
-  private claim(
-    locationId: string,
+  /**
+   * Marks the booking as notified only if it is unchanged, so each email goes out once. The email
+   * is queued in the same transaction: a booking is never marked without its email queued.
+   */
+  private async claim(
+    booking: Pick<BookingWithItems, 'id' | 'locationId'>,
     update: Prisma.BookingUpdateManyArgs,
-  ): Promise<boolean> {
-    return this.db.$transaction(async (tx) => {
-      if (
-        !(await this.locationService.acquireActiveOperationLock(locationId, tx))
-      )
-        return false;
-      const { count } = await tx.booking.updateMany(update);
-      return count === 1;
-    });
+    notification: () => (AbstractNotification & HasEmailChannel) | null,
+  ): Promise<void> {
+    try {
+      await this.db.$transaction(async (tx) => {
+        if (
+          !(await this.locationService.acquireActiveOperationLock(
+            booking.locationId,
+            tx,
+          ))
+        )
+          return;
+        const { count } = await tx.booking.updateMany(update);
+        if (count !== 1) return;
+        const email = notification();
+        if (email) await this.notifications.enqueue(email, tx);
+      });
+    } catch (error) {
+      // Rolled back: the booking stays unmarked and the next run picks it up.
+      this.logger.error(
+        `Failed to mark and queue a client email: bookingId=${booking.id} locationId=${booking.locationId}`,
+        error instanceof Error ? error.stack : String(error),
+      );
+    }
   }
 
   private notificationData(

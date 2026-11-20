@@ -1,4 +1,4 @@
-import { EmailTemplate } from '../channels/email/email.renderer.js';
+import { EmailTemplate } from '../enums/email-template.enum.js';
 import { ChannelPayload } from './channel-payload.interface.js';
 
 export interface HasEmailChannel {

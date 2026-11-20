@@ -2009,3 +2009,110 @@ model SubscriptionPayment {
   @@index([status, createdAt, id])
   @@index([status, expiresAt])
 }
+
+/// Who an email is addressed to: CLIENT emails follow CLIENT_NOTIFICATIONS_ENABLED, ACCOUNT emails always go out.
+enum EmailAudience {
+  CLIENT
+  ACCOUNT
+}
+
+/// QUEUED emails are retried by the job queue; DIRECT ones are sent once (one-time secrets, interactive sends) and never stored.
+enum EmailDeliveryMode {
+  QUEUED
+  DIRECT
+}
+
+enum EmailStatus {
+  QUEUED
+  SENDING
+  RETRYING
+  SENT
+  FAILED
+  SKIPPED
+  CANCELLED
+}
+
+enum EmailSkipReason {
+  CLIENT_NOTIFICATIONS_DISABLED
+  OUTDATED
+}
+
+enum EmailCancelReason {
+  ADMIN
+  BOOKING_CHANGED
+}
+
+enum EmailEventType {
+  QUEUED
+  RETRY_REQUESTED
+  ATTEMPT_FAILED
+  SENT
+  FAILED
+  SKIPPED
+  CANCELLED
+}
+
+/// Every outgoing email: the delivery log behind the platform admin notifications page.
+model EmailMessage {
+  id                String             @id @default(uuid())
+  template          String             @db.VarChar(100)
+  audience          EmailAudience
+  deliveryMode      EmailDeliveryMode
+  recipient         String             @db.VarChar(320)
+  /// Rendered subject; known after the first attempt.
+  subject           String?            @db.VarChar(500)
+  brandId           String?
+  locationId        String?
+  bookingId         String?
+  /// Template data; null for DIRECT emails, which are never stored.
+  payload           Json?
+  status            EmailStatus
+  skipReason        EmailSkipReason?
+  cancelReason      EmailCancelReason?
+  attempts          Int                @default(0)
+  lastError         String?            @db.VarChar(2000)
+  lastErrorCode     Int?
+  providerMessageId String?            @db.VarChar(500)
+  /// The pg-boss job allowed to deliver it; a stale job of an earlier attempt round finds another id and stops.
+  jobId             String?
+  /// After this moment the email is pointless (the visit has started): it is skipped and cannot be retried.
+  validUntil        DateTime?
+  queuedAt          DateTime           @default(now())
+  lastAttemptAt     DateTime?
+  nextAttemptAt     DateTime?
+  sentAt            DateTime?
+  failedAt          DateTime?
+  cancelledAt       DateTime?
+  cancelledById     String?
+  retriedAt         DateTime?
+  retriedById       String?
+  updatedAt         DateTime           @updatedAt
+
+  events EmailMessageEvent[]
+
+  @@index([queuedAt])
+  @@index([status, queuedAt])
+  @@index([recipient])
+  @@index([brandId, queuedAt])
+  @@index([locationId, queuedAt])
+  @@index([bookingId])
+}
+
+model EmailMessageEvent {
+  id         String         @id @default(uuid())
+  messageId  String
+  type       EmailEventType
+  attempt    Int?
+  occurredAt DateTime       @default(now())
+  durationMs Int?
+  error      String?        @db.VarChar(2000)
+  errorCode  Int?
+  /// The failure came from the SMTP server or the connection to it, not from the email data.
+  smtpError  Boolean        @default(false)
+  actorId    String?
+
+  message EmailMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId, occurredAt])
+  @@index([occurredAt])
+}

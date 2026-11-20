@@ -22,6 +22,7 @@ export const EMAIL_CHIP_TONES: Record<string, EmailChipTone> = {
   'subscription-payment-requested': EmailChipTone.INFO,
   'subscription-payment-received': EmailChipTone.SUCCESS,
   'admin-subscription-payment-requested': EmailChipTone.INFO,
+  'smtp-test': EmailChipTone.SUCCESS,
 };
 
 /** Klendo product palette: "lighter" background with "dark" text. */

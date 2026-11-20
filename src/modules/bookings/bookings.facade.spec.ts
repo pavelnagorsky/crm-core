@@ -43,6 +43,7 @@ import { ClientsService } from '../clients/services/clients.service.js';
 import { BookingRescheduleService } from './services/write/booking-reschedule.service.js';
 import { booking } from './testing/factories/booking.factory.js';
 import { NO_CLIENT_NOTICE } from './rules/booking-client-notice.rules.js';
+import { NotificationsService } from '../notifications/services/notifications.service.js';
 
 const serviceCatalog = { loadForBooking: vi.fn() };
 const products = { listForPublicCatalog: vi.fn().mockResolvedValue([]) };
@@ -172,6 +173,10 @@ describe('BookingsFacade.completeElapsed', () => {
           useValue: { notify: vi.fn() },
         },
         BookingSlotLockService,
+        {
+          provide: NotificationsService,
+          useValue: { cancelPendingForBooking: vi.fn() },
+        },
         BookingReadService,
         BookingSetupService,
         { provide: BookingHistoryReadService, useValue: {} },
@@ -332,6 +337,10 @@ describe('BookingsFacade.updateStatus transactionality', () => {
           useValue: { notify: vi.fn() },
         },
         BookingSlotLockService,
+        {
+          provide: NotificationsService,
+          useValue: { cancelPendingForBooking: vi.fn() },
+        },
         BookingReadService,
         BookingSetupService,
         { provide: BookingHistoryReadService, useValue: {} },
@@ -404,6 +413,10 @@ describe('BookingsFacade.search', () => {
           useValue: { notify: vi.fn() },
         },
         BookingSlotLockService,
+        {
+          provide: NotificationsService,
+          useValue: { cancelPendingForBooking: vi.fn() },
+        },
         BookingReadService,
         BookingSetupService,
         { provide: BookingHistoryReadService, useValue: {} },
@@ -859,6 +872,10 @@ describe('BookingsFacade catalog selection', () => {
           useValue: { notify: vi.fn() },
         },
         BookingSlotLockService,
+        {
+          provide: NotificationsService,
+          useValue: { cancelPendingForBooking: vi.fn() },
+        },
         BookingReadService,
         BookingSetupService,
         { provide: BookingHistoryReadService, useValue: {} },
@@ -1120,6 +1137,10 @@ describe('BookingsFacade.update details and item prices', () => {
           useValue: { notify: vi.fn() },
         },
         BookingSlotLockService,
+        {
+          provide: NotificationsService,
+          useValue: { cancelPendingForBooking: vi.fn() },
+        },
         BookingReadService,
         BookingSetupService,
         { provide: BookingHistoryReadService, useValue: {} },
@@ -1476,6 +1497,10 @@ describe('BookingsFacade.update manual interval', () => {
           useValue: { notify: vi.fn() },
         },
         BookingSlotLockService,
+        {
+          provide: NotificationsService,
+          useValue: { cancelPendingForBooking: vi.fn() },
+        },
         BookingReadService,
         BookingSetupService,
         { provide: BookingHistoryReadService, useValue: {} },
@@ -1764,6 +1789,10 @@ describe('BookingsFacade.addProduct', () => {
           useValue: { notify: vi.fn() },
         },
         BookingSlotLockService,
+        {
+          provide: NotificationsService,
+          useValue: { cancelPendingForBooking: vi.fn() },
+        },
         BookingReadService,
         BookingSetupService,
         { provide: BookingHistoryReadService, useValue: {} },
@@ -1870,6 +1899,10 @@ describe('BookingsFacade.cancel draft product cleanup', () => {
           useValue: { notify: vi.fn() },
         },
         BookingSlotLockService,
+        {
+          provide: NotificationsService,
+          useValue: { cancelPendingForBooking: vi.fn() },
+        },
         BookingReadService,
         BookingSetupService,
         { provide: BookingHistoryReadService, useValue: {} },
@@ -1951,6 +1984,7 @@ function createMutationService(
     earnings,
     write,
     slots,
+    { cancelPendingForBooking: vi.fn() } as never,
   );
   return new BookingMutationService(
     db,
@@ -1968,6 +2002,7 @@ function createMutationService(
       write,
       events,
       reschedule,
+      { cancelPendingForBooking: vi.fn() } as never,
     ),
     reschedule,
     new BookingClientLinkService(bookingClients as never, location),

@@ -58,6 +58,7 @@ function setup() {
     write as never,
     events as never,
     reschedule as never,
+    { cancelPendingForBooking: vi.fn() } as never,
   );
   return {
     old,

@@ -55,6 +55,7 @@ function setup() {
     {} as never,
     { lockActiveLocation: vi.fn(), lockUnchangedBooking: vi.fn() } as never,
     new BookingSlotLockService(staff as never, calendar as never),
+    { cancelPendingForBooking: vi.fn() } as never,
   );
   return { old, service, calendar, db, staff };
 }

@@ -31,6 +31,7 @@ import { assertClientCanManageBooking } from '../../rules/booking-client.rules.j
 import { BookingEventsService } from '../booking-events.service.js';
 import { BookingWriteLockService } from '../booking-write-lock.service.js';
 import { BookingRescheduleService } from './booking-reschedule.service.js';
+import { NotificationsService } from '../../../notifications/services/notifications.service.js';
 
 @Injectable()
 export class BookingLifecycleService {
@@ -44,6 +45,7 @@ export class BookingLifecycleService {
     private readonly write: BookingWriteLockService,
     private readonly events: BookingEventsService,
     private readonly reschedule: BookingRescheduleService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async updateStatus(
@@ -84,6 +86,9 @@ export class BookingLifecycleService {
         },
         include: bookingWithItemsInclude,
       });
+      // A pending "awaiting confirmation" or reminder email would contradict the new status.
+      if (dto.status !== old.status)
+        await this.notifications.cancelPendingForBooking(bookingId, tx);
       if (
         dto.status === BookingStatus.COMPLETED &&
         old.status !== BookingStatus.COMPLETED
@@ -241,6 +246,7 @@ export class BookingLifecycleService {
           ...NO_CLIENT_NOTICE,
         },
       });
+      await this.notifications.cancelPendingForBooking(booking.id, tx);
       await this.calendar.deleteBookingEvents(
         booking.items.flatMap((item) =>
           item.calendarEventId ? [item.calendarEventId] : [],
@@ -312,6 +318,8 @@ export class BookingLifecycleService {
         },
         include: bookingWithItemsInclude,
       });
+      // The cancellation email goes out after the commit; older pending ones would contradict it.
+      await this.notifications.cancelPendingForBooking(booking.id, tx);
       await this.calendar.deleteBookingEvents(
         booking.items.flatMap((item) =>
           item.calendarEventId ? [item.calendarEventId] : [],
