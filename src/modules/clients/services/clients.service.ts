@@ -176,11 +176,22 @@ export class ClientsService {
     lastName: string,
     email?: string,
   ): Promise<Client> {
-    return this.db.client.upsert({
-      where: { brandId_phone: { brandId, phone } },
-      update: {},
-      create: { brandId, firstName, lastName, phone, email: email ?? null },
-    });
+    const where = { brandId_phone: { brandId, phone } };
+    try {
+      return await this.db.client.upsert({
+        where,
+        update: {},
+        create: { brandId, firstName, lastName, phone, email: email ?? null },
+      });
+    } catch (e: unknown) {
+      // Two first bookings by a new phone at once: the one that lost the insert reads the winner.
+      if (
+        (e as { code?: string } | null)?.code !==
+        PrismaErrorCode.UNIQUE_CONSTRAINT_VIOLATION
+      )
+        throw e;
+      return this.db.client.findUniqueOrThrow({ where });
+    }
   }
 
   async search(

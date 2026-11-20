@@ -338,3 +338,34 @@ describe('ClientsService import and search', () => {
     });
   });
 });
+
+describe('ClientsService.resolveForBooking race', () => {
+  it('reads the client a concurrent first booking created', async () => {
+    const winner = stored({ id: 'winner' });
+    const upsert = vi.fn().mockRejectedValue({ code: 'P2002' });
+    const findUniqueOrThrow = vi.fn().mockResolvedValue(winner);
+    const service = new ClientsService(
+      { client: { upsert, findUniqueOrThrow } } as never,
+      {} as never,
+    );
+
+    await expect(
+      service.resolveForBooking('brand-1', '+375291112233', 'Анна', ''),
+    ).resolves.toBe(winner);
+    expect(findUniqueOrThrow).toHaveBeenCalledWith({
+      where: { brandId_phone: { brandId: 'brand-1', phone: '+375291112233' } },
+    });
+  });
+
+  it('rethrows other errors', async () => {
+    const service = new ClientsService(
+      {
+        client: { upsert: vi.fn().mockRejectedValue(new Error('down')) },
+      } as never,
+      {} as never,
+    );
+    await expect(
+      service.resolveForBooking('brand-1', '+375291112233', 'Анна', ''),
+    ).rejects.toThrow('down');
+  });
+});
