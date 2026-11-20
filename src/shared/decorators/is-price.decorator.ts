@@ -14,9 +14,27 @@ export const IsPrice = (): PropertyDecorator => (target, propertyKey) => {
   })(target, propertyKey);
 };
 
+/** A price greater than zero, such as a refund amount. */
+export const IsPositivePrice =
+  (description?: string): PropertyDecorator =>
+  (target, propertyKey) => {
+    ApiPrice({
+      description:
+        description ?? 'Positive monetary amount with 2 fractional digits.',
+    })(target, propertyKey);
+    CanonicalAmount()(target, propertyKey);
+    Matches(regularExpressions.positiveMoneyAmount, {
+      message: `${String(propertyKey)} must be a positive amount with at most 2 decimal places`,
+    })(target, propertyKey);
+  };
+
 export const IsOptionalPrice =
-  (): PropertyDecorator => (target, propertyKey) => {
-    ApiPrice({ required: false, nullable: true })(target, propertyKey);
+  (description?: string): PropertyDecorator =>
+  (target, propertyKey) => {
+    ApiPrice({ required: false, nullable: true, description })(
+      target,
+      propertyKey,
+    );
     IsOptional()(target, propertyKey);
     CanonicalAmount()(target, propertyKey);
     Matches(regularExpressions.moneyAmount, {

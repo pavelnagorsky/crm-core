@@ -1,5 +1,6 @@
 import { Prisma } from '@prisma/client';
 import { createHash } from 'node:crypto';
+import { paymentIntent } from '../../payments/rules/payment-request-hash.js';
 import { CreateOrderDto } from '../dto/create-order.dto.js';
 
 /** Hash the customer's intent, before mutable catalog prices or default dates are resolved. */
@@ -27,6 +28,8 @@ export function saleRequestHash(
             sellerStaffId: item.sellerStaffId ?? null,
           }))
           .sort((left, right) => left.productId.localeCompare(right.productId)),
+        // Only when present, so sales without a payment keep their earlier hash.
+        ...(dto.payment ? { payment: paymentIntent(dto.payment) } : {}),
       }),
     )
     .digest('hex');

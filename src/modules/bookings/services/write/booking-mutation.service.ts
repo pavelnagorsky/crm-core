@@ -17,6 +17,9 @@ import { UpdateBookingDto } from '../../dto/update-booking.dto.js';
 import { BookingStatus } from '../../enums/booking-status.enum.js';
 import { BookingSource } from '../../enums/booking-source.enum.js';
 import { BookingWithItems } from '../../interfaces/booking-with-items.interface.js';
+import { BookingWriteHooks } from '../../interfaces/booking-write-hooks.interface.js';
+import { VisitPaymentOutcome } from '../../interfaces/visit-payment-outcome.interface.js';
+import { PaymentOperationWithPayments } from '../../../payments/interfaces/payment-operation-with-payments.interface.js';
 import { BookingEventsService } from '../booking-events.service.js';
 import { BookingWriteLockService } from '../booking-write-lock.service.js';
 import { BookingReadService } from '../read/booking-read.service.js';
@@ -25,6 +28,7 @@ import {
   BookingClientLinkService,
 } from './booking-client-link.service.js';
 import { BookingLifecycleService } from './booking-lifecycle.service.js';
+import { BookingPaymentService } from './booking-payment.service.js';
 import { BookingRescheduleService } from './booking-reschedule.service.js';
 
 @Injectable()
@@ -39,12 +43,14 @@ export class BookingMutationService {
     private readonly lifecycle: BookingLifecycleService,
     private readonly reschedule: BookingRescheduleService,
     private readonly clientLink: BookingClientLinkService,
+    private readonly bookingPayment: BookingPaymentService,
   ) {}
 
   async update(
     old: BookingWithItems,
     actor: AuditActor,
     dto: UpdateBookingDto,
+    canReplacePayment = false,
   ): Promise<BookingWithItems> {
     const bookingId = old.id;
     if (dto.isCustomTime === true && old.source !== BookingSource.MANUAL)
@@ -60,6 +66,15 @@ export class BookingMutationService {
       Boolean(dto.staffAssignments?.length);
     const pricePatches = this.pricePatches(old, dto);
     const clientLink = await this.clientLink.resolve(old, dto);
+    // Confirming products and paying come after the edit, in the same transaction.
+    const paymentPlan = await this.bookingPayment.plan(
+      old.locationId,
+      {
+        payment: dto.payment,
+        confirmProductItemIds: dto.confirmProductItemIds,
+      },
+      canReplacePayment,
+    );
     const updateArgs = {
       where: { id: bookingId },
       data: {
@@ -83,10 +98,32 @@ export class BookingMutationService {
       include: bookingWithItemsInclude,
     } satisfies Prisma.BookingUpdateArgs;
     // A booking order follows the client the booking is moved to.
-    const syncOrderClient = clientLink
-      ? (booking: BookingWithItems, tx: Prisma.TransactionClient) =>
-          this.orders.syncBookingClient(booking, tx)
-      : undefined;
+    const payment: {
+      replay: PaymentOperationWithPayments | null;
+      outcome: VisitPaymentOutcome | null;
+    } = { replay: null, outcome: null };
+    const hooks: BookingWriteHooks = {
+      beforeLock: paymentPlan
+        ? async (tx) => {
+            payment.replay = await this.bookingPayment.lockForBooking(
+              tx,
+              old,
+              paymentPlan,
+            );
+          }
+        : undefined,
+      afterUpdate: async (booking, tx) => {
+        if (clientLink) await this.orders.syncBookingClient(booking, tx);
+        // A retry of the same payment has done its step already.
+        if (paymentPlan && !payment.replay)
+          payment.outcome = await this.bookingPayment.applyLocked(
+            tx,
+            booking,
+            paymentPlan,
+            actor,
+          );
+      },
+    };
     let updated: BookingWithItems;
     if (manualIntervalChanging || slotChanging) {
       updated = await this.reschedule.reschedule(
@@ -94,33 +131,43 @@ export class BookingMutationService {
         dto,
         updateArgs.data,
         actor,
-        syncOrderClient,
+        hooks,
       );
     } else {
-      updated = await this.db.$transaction(async (tx) => {
-        await this.write.lockUnchangedBooking(tx, old);
-        const result = await tx.booking.update(updateArgs);
-        await syncOrderClient?.(result, tx);
-        if (old.status === BookingStatus.COMPLETED && pricePatches.length > 0) {
-          const order = await this.orders.syncCompletedBooking(
-            result,
-            actor,
-            tx,
-          );
-          await this.staffEarnings.syncForCompletedBooking(
-            result,
-            actor,
-            tx,
-            order,
-          );
-        }
-        return result;
-      });
+      updated = await this.db.$transaction(
+        async (tx) => {
+          await hooks.beforeLock?.(tx);
+          await this.write.lockUnchangedBooking(tx, old);
+          const result = await tx.booking.update(updateArgs);
+          if (
+            old.status === BookingStatus.COMPLETED &&
+            pricePatches.length > 0
+          ) {
+            const order = await this.orders.syncCompletedBooking(
+              result,
+              actor,
+              tx,
+            );
+            await this.staffEarnings.syncForCompletedBooking(
+              result,
+              actor,
+              tx,
+              order,
+            );
+          }
+          await hooks.afterUpdate?.(result, tx);
+          return result;
+          // The hooks may complete, sell and pay the visit in the same transaction.
+        },
+        { maxWait: 5_000, timeout: 30_000 },
+      );
     }
 
     await this.events.updated(old, updated, actor);
+    if (payment.outcome)
+      await this.bookingPayment.publish(payment.outcome, actor);
 
-    return updated;
+    return payment.outcome?.booking ?? updated;
   }
 
   async addProduct(
@@ -147,7 +194,7 @@ export class BookingMutationService {
     canOverridePrice = false,
   ): Promise<OrderWithItems> {
     const booking = await this.read.findByIdInLocation(locationId, bookingId);
-    return this.db.$transaction((tx) =>
+    const added = await this.db.$transaction((tx) =>
       this.orders.addDraftProductsToBookingOrder(
         booking,
         dto.items,
@@ -156,6 +203,8 @@ export class BookingMutationService {
         canOverridePrice,
       ),
     );
+    this.orders.publishDraftProductsAdded(added, actor);
+    return added.order;
   }
 
   updateStatus(

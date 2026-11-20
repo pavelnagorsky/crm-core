@@ -344,6 +344,63 @@ export class BookingsAggregatesService {
     )`;
   }
 
+  /**
+   * Closed visits of one location that started in the range: COMPLETED, NO_SHOW or
+   * CANCELLED, and deleted bookings of any status. Columns: `bookingId`, `startAt`,
+   * `clientName`, `staffNames` (by service order) and `servicesDue` (services to be paid,
+   * as in the visit payment rules). Embedded in the finance summary of Orders.
+   */
+  closedVisitsSql(range: {
+    locationId: string;
+    from: Date;
+    to: Date;
+  }): Prisma.Sql {
+    const dueStatuses = Prisma.join(
+      [
+        BookingStatus.PENDING,
+        BookingStatus.CONFIRMED,
+        BookingStatus.COMPLETED,
+      ].map((status) => Prisma.sql`${status}`),
+    );
+    const closedStatuses = Prisma.join(
+      [
+        BookingStatus.COMPLETED,
+        BookingStatus.NO_SHOW,
+        BookingStatus.CANCELLED,
+      ].map((status) => Prisma.sql`${status}`),
+    );
+    return Prisma.sql`
+      SELECT b."id" AS "bookingId",
+             b."startAt" AS "startAt",
+             TRIM(b."clientFirstName" || ' ' || b."clientLastName") AS "clientName",
+             ARRAY(
+               SELECT staff_name."staffName"
+               FROM (
+                 SELECT si."staffName", MIN(si."sortOrder") AS position
+                 FROM "BookingItem" si
+                 WHERE si."bookingId" = b."id"
+                 GROUP BY si."staffName"
+               ) staff_name
+               ORDER BY staff_name.position, staff_name."staffName"
+             ) AS "staffNames",
+             CASE
+               WHEN b."deletedAt" IS NULL AND b."status"::text IN (${dueStatuses})
+               THEN COALESCE((
+                 SELECT SUM(COALESCE(di."customPrice", di."chargedPrice"))
+                 FROM "BookingItem" di
+                 WHERE di."bookingId" = b."id"
+               ), 0)
+               ELSE 0
+             END AS "servicesDue"
+      FROM "Booking" b
+      WHERE b."locationId" = ${range.locationId}
+        AND ${activeLocationSql(Prisma.sql`b."locationId"`)}
+        AND b."startAt" >= ${range.from}::timestamptz AT TIME ZONE 'UTC'
+        AND b."startAt" < ${range.to}::timestamptz AT TIME ZONE 'UTC'
+        AND (b."deletedAt" IS NOT NULL OR b."status"::text IN (${closedStatuses}))
+    `;
+  }
+
   async clientRevenue(range: ClientRevenueRange): Promise<ClientRevenueTotals> {
     if (range.locationIds.length === 0) return emptyClientRevenue();
     const rows = await this.db.$queryRaw<

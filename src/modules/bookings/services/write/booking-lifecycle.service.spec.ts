@@ -36,7 +36,9 @@ function setup() {
   const orders = {
     removeDraftProductsForBooking: vi.fn().mockResolvedValue([]),
     syncCompletedBooking: vi.fn(),
+    findBookingOrder: vi.fn().mockResolvedValue(null),
   };
+  const payments = { paidAmount: vi.fn() };
   const write = {
     lockUnchangedBooking: vi.fn().mockResolvedValue(NO_CLIENT_NOTICE),
     lockActiveLocation: vi.fn(),
@@ -59,6 +61,7 @@ function setup() {
     events as never,
     reschedule as never,
     { cancelPendingForBooking: vi.fn() } as never,
+    payments as never,
   );
   return {
     old,

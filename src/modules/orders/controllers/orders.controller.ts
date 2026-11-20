@@ -13,6 +13,7 @@ import {
   Query,
 } from '@nestjs/common';
 import {
+  ApiBadRequestResponse,
   ApiConflictResponse,
   ApiCreatedResponse,
   ApiNoContentResponse,
@@ -36,14 +37,17 @@ import { AddOrderItemsDto } from '../dto/add-order-items.dto.js';
 import { ConfirmOrderItemsDto } from '../dto/confirm-order-items.dto.js';
 import { CreateOrderReturnDto } from '../dto/create-order-return.dto.js';
 import { CreateOrderDto } from '../dto/create-order.dto.js';
+import { OrderPaymentResponseDto } from '../dto/order-payment-response.dto.js';
 import { OrderResponseDto } from '../dto/order-response.dto.js';
 import { OrderSearchRequestDto } from '../dto/order-search-request.dto.js';
 import { OrderSearchResponseDto } from '../dto/order-search-response.dto.js';
 import { OrderStatusCountResponseDto } from '../dto/order-status-count-response.dto.js';
 import { OrderStatusCountsRequestDto } from '../dto/order-status-counts-request.dto.js';
-import { ReverseOrderItemDto } from '../dto/reverse-order-item.dto.js';
 import { UpdateOrderStatusDto } from '../dto/update-order-status.dto.js';
 import { UpdateOrderDto } from '../dto/update-order.dto.js';
+import { PaymentInputDto } from '../../payments/dto/payment-input.dto.js';
+import { RefundInputDto } from '../../payments/dto/refund-input.dto.js';
+import { VoidPaymentOperationDto } from '../../payments/dto/void-payment-operation.dto.js';
 import { OrdersFacade } from '../orders.facade.js';
 
 @ApiTags('Orders')
@@ -84,9 +88,12 @@ export class OrdersController {
     @Query() dto: OrderSearchRequestDto,
   ): Promise<BaseResponseDto<OrderSearchResponseDto>> {
     const { items, totalItems } = await this.orders.search(locationId, dto);
+    const payments = await this.orders.paymentTotals(items);
     return BaseResponseDto.success(
       new OrderSearchResponseDto(
-        items.map(OrderResponseDto.fromEntity),
+        items.map((order) =>
+          OrderResponseDto.fromEntity(order, payments.get(order.id)),
+        ),
         dto.page,
         dto.pageSize,
         totalItems,
@@ -120,10 +127,10 @@ export class OrdersController {
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('orderId', ParseUUIDPipe) orderId: string,
   ): Promise<BaseResponseDto<OrderResponseDto>> {
+    const order = await this.orders.findById(locationId, orderId);
+    const payments = await this.orders.paymentTotals([order]);
     return BaseResponseDto.success(
-      OrderResponseDto.fromEntity(
-        await this.orders.findById(locationId, orderId),
-      ),
+      OrderResponseDto.fromEntity(order, payments.get(order.id)),
     );
   }
 
@@ -150,7 +157,10 @@ export class OrdersController {
 
   @ApiOperation({ summary: 'Void an internal order' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
-  @ApiConflictResponse({ description: 'Order status transition rejected' })
+  @ApiConflictResponse({
+    description:
+      'Order status transition rejected. ORDER_HAS_PAYMENTS: the paid amount is above 0; void the payment (a mistake) or refund the money first',
+  })
   @Permissions(Write(Claim.ORDER_VOID))
   @Patch(':orderId/status')
   async changeStatus(
@@ -164,26 +174,6 @@ export class OrdersController {
       orderId,
       dto.status,
       dto.reason,
-      auditActorFromToken(token, locationId),
-    );
-    return BaseResponseDto.success({ id: order.id });
-  }
-
-  @ApiOperation({ summary: 'Confirm a draft order item' })
-  @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
-  @ApiConflictResponse({ description: 'Order item cannot be confirmed' })
-  @Permissions(Write(Claim.ORDER))
-  @Patch(':orderId/items/:orderItemId/confirm')
-  async confirmItem(
-    @Param('locationId', ParseUUIDPipe) locationId: string,
-    @Param('orderId', ParseUUIDPipe) orderId: string,
-    @Param('orderItemId', ParseUUIDPipe) orderItemId: string,
-    @TokenPayload() token: TokenPayloadDto,
-  ): Promise<BaseResponseDto<IdResponseDto>> {
-    const order = await this.orders.confirmItem(
-      locationId,
-      orderId,
-      orderItemId,
       auditActorFromToken(token, locationId),
     );
     return BaseResponseDto.success({ id: order.id });
@@ -230,31 +220,20 @@ export class OrdersController {
     return BaseResponseDto.success({ id: order.id });
   }
 
-  @ApiOperation({ summary: 'Reverse a confirmed order item' })
-  @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
-  @ApiConflictResponse({ description: 'Order item cannot be reversed' })
-  @Permissions(Write(Claim.ORDER_RETURN))
-  @Patch(':orderId/items/:orderItemId/reverse')
-  async reverseItem(
-    @Param('locationId', ParseUUIDPipe) locationId: string,
-    @Param('orderId', ParseUUIDPipe) orderId: string,
-    @Param('orderItemId', ParseUUIDPipe) orderItemId: string,
-    @Body() dto: ReverseOrderItemDto,
-    @TokenPayload() token: TokenPayloadDto,
-  ): Promise<BaseResponseDto<IdResponseDto>> {
-    const order = await this.orders.reverseItem(
-      locationId,
-      orderId,
-      orderItemId,
-      dto.reason,
-      auditActorFromToken(token, locationId),
-    );
-    return BaseResponseDto.success({ id: order.id });
-  }
-
-  @ApiOperation({ summary: 'Create a product return for an active order' })
+  @ApiOperation({
+    summary: 'Create a product return for an active order',
+    description:
+      'Money paid beyond the amount due after the return goes back in the same transaction (at most the return total), dated like the return, by refund.method. A paid order stays PAID; an underpaid one may keep what it got. The visit of a visit order is locked first.',
+  })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
-  @ApiConflictResponse({ description: 'Order item cannot be returned' })
+  @ApiBadRequestResponse({
+    description:
+      'ORDER_RETURN_REFUND_REQUIRED: money goes back with this return and refund is missing. PAYMENT_DATE_INVALID: the return date is outside the payment date bounds',
+  })
+  @ApiConflictResponse({
+    description:
+      'Order item cannot be returned. PAYMENT_REFUND_EXCEEDS_PAID: the refund method was paid less; responseValue { paidAmount, method }',
+  })
   @Permissions(Write(Claim.ORDER_RETURN))
   @Post(':orderId/returns')
   async createReturn(
@@ -272,8 +251,105 @@ export class OrdersController {
     return BaseResponseDto.success({ id: order.id });
   }
 
+  @ApiOperation({
+    summary: 'Record or change the payment of a product sale',
+    description:
+      'Records how the client paid the whole amount due (the sale total), or replaces the active payment: the old records are voided and the new ones keep the old date unless occurredAt is set. MIXED parts must add up to the amount due plus active refunds.',
+  })
+  @ApiOkResponse({ type: ApiResponse(OrderPaymentResponseDto) })
+  @ApiBadRequestResponse({
+    description: 'PAYMENT_SPLIT_INVALID, PAYMENT_DATE_INVALID',
+  })
+  @ApiNotFoundResponse({ description: 'Order not found' })
+  @ApiConflictResponse({
+    description:
+      'ORDER_PAYMENT_VIA_BOOKING: a visit order is paid through PUT bookings/:id/payment. PAYMENT_AMOUNT_MISMATCH: responseValue { amountDue, requiredAmount }. PAYMENT_NOTHING_DUE. PAYMENT_IDEMPOTENCY_CONFLICT: responseValue { operationId }. ORDER_NOT_ACTIVE',
+  })
+  @Permissions(Write(Claim.ORDER))
+  @Put(':orderId/payment')
+  async recordPayment(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Param('orderId', ParseUUIDPipe) orderId: string,
+    @Body() dto: PaymentInputDto,
+    @TokenPayload() token: TokenPayloadDto,
+  ): Promise<BaseResponseDto<OrderPaymentResponseDto>> {
+    const operationId = await this.orders.recordPayment(
+      locationId,
+      orderId,
+      dto,
+      auditActorFromToken(token, locationId),
+    );
+    return BaseResponseDto.success({ id: orderId, operationId });
+  }
+
+  @ApiOperation({
+    summary: 'Refund money of an order',
+    description:
+      'A new money movement on its own date (default now); the day of the original payment does not change. Works for sales and visit orders.',
+  })
+  @ApiCreatedResponse({ type: ApiResponse(OrderPaymentResponseDto) })
+  @ApiBadRequestResponse({ description: 'PAYMENT_DATE_INVALID' })
+  @ApiNotFoundResponse({ description: 'Order not found' })
+  @ApiConflictResponse({
+    description:
+      'PAYMENT_REFUND_EXCEEDS_PAID: the amount is above what this method brought in net of its refunds (and the paid amount); responseValue { paidAmount, method }. PAYMENT_IDEMPOTENCY_CONFLICT: responseValue { operationId }',
+  })
+  @Permissions(Write(Claim.ORDER))
+  @Post(':orderId/refunds')
+  async refund(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Param('orderId', ParseUUIDPipe) orderId: string,
+    @Body() dto: RefundInputDto,
+    @TokenPayload() token: TokenPayloadDto,
+  ): Promise<BaseResponseDto<OrderPaymentResponseDto>> {
+    const operationId = await this.orders.refund(
+      locationId,
+      orderId,
+      dto,
+      auditActorFromToken(token, locationId),
+    );
+    return BaseResponseDto.success({ id: orderId, operationId });
+  }
+
+  @ApiOperation({
+    summary: 'Void a payment operation recorded by mistake',
+    description:
+      'Voids every active record of the payment or refund. Voiding it again changes nothing.',
+  })
+  @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
+  @ApiNotFoundResponse({
+    description: 'PAYMENT_OPERATION_NOT_FOUND: no such operation in the order',
+  })
+  @ApiConflictResponse({
+    description:
+      'PAYMENT_OPERATION_LINKED_TO_RETURN: a refund made with a product return. PAYMENT_VOID_HAS_REFUNDS: a payment while active refunds exist; change the payment instead. BOOKING_PAYMENT_NOT_ALLOWED: a refund of a deleted visit (voiding it would bring money back on record)',
+  })
+  @Permissions(Write(Claim.ORDER))
+  @Post(':orderId/payment-operations/:operationId/void')
+  @HttpCode(HttpStatus.OK)
+  async voidPaymentOperation(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Param('orderId', ParseUUIDPipe) orderId: string,
+    @Param('operationId', ParseUUIDPipe) operationId: string,
+    @Body() dto: VoidPaymentOperationDto,
+    @TokenPayload() token: TokenPayloadDto,
+  ): Promise<BaseResponseDto<IdResponseDto>> {
+    await this.orders.voidPaymentOperation(
+      locationId,
+      orderId,
+      operationId,
+      dto,
+      auditActorFromToken(token, locationId),
+    );
+    return BaseResponseDto.success({ id: orderId });
+  }
+
   @ApiOperation({ summary: 'Delete an active draft order' })
   @ApiNoContentResponse()
+  @ApiConflictResponse({
+    description:
+      'ORDER_HAS_PAYMENTS: the payment journal has records of the order, voided ones included',
+  })
   @Permissions(Write(Claim.ORDER))
   @Delete(':orderId')
   @HttpCode(HttpStatus.NO_CONTENT)

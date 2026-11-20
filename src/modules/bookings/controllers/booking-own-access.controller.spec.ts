@@ -5,6 +5,8 @@ import { Read, addGrant, removeGrant } from '../../access/utils/permission.js';
 import { PermissionGuard } from '../../auth/guards/permission.guard.js';
 import { tokenPayload } from '../../auth/testing/factories/token-payload.factory.js';
 import { StaffAccessService } from '../../staff/services/staff-access.service.js';
+import { Prisma } from '@prisma/client';
+import { PaymentInputMethod } from '../../payments/enums/payment-input-method.enum.js';
 import { BookingStatus } from '../enums/booking-status.enum.js';
 import { BookingAccessService } from '../services/booking-access.service.js';
 import { booking } from '../testing/factories/booking.factory.js';
@@ -19,6 +21,8 @@ describe('Staff booking API', () => {
     cancel: vi.fn(),
     search: vi.fn(),
     getStatusCounts: vi.fn(),
+    getPaymentSummary: vi.fn(),
+    pay: vi.fn(),
   };
   const staff = {
     resolveOwnProfile: vi.fn().mockResolvedValue({ id: 'anna' }),
@@ -69,6 +73,16 @@ describe('Staff booking API', () => {
     bookings.cancel.mockResolvedValue(current);
     bookings.search.mockResolvedValue({ items: [], totalItems: 0 });
     bookings.getStatusCounts.mockResolvedValue([]);
+    bookings.getPaymentSummary.mockResolvedValue({
+      bookingId: current.id,
+      orderId: null,
+      servicesAmount: new Prisma.Decimal(0),
+      productsAmount: new Prisma.Decimal(0),
+      amountDue: new Prisma.Decimal(0),
+      totals: null,
+    });
+    bookings.pay.mockResolvedValue({ orderId: 'order-1', operationId: 'op-1' });
+    bookings.update.mockResolvedValue(current);
   });
 
   const staffContext = (operation: keyof BookingsController) =>
@@ -254,6 +268,89 @@ describe('Staff booking API', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(bookings.cancel).not.toHaveBeenCalled();
     expect(bookings.updateStatus).not.toHaveBeenCalled();
+  });
+
+  it('opens paying a visit to own-booking staff', () => {
+    expect(guard.canActivate(staffContext('pay'))).toBe(true);
+  });
+
+  const payDto = {
+    method: PaymentInputMethod.CASH,
+    idempotencyKey: 'key-1',
+  };
+
+  it('lets a master record the payment of their visit without replacing one', async () => {
+    const result = await controller.pay(
+      'location-1',
+      current.id,
+      payDto,
+      tokenPayload('STAFF'),
+    );
+    expect(bookings.pay).toHaveBeenCalledWith(
+      current,
+      payDto,
+      expect.objectContaining({ id: 'user-1' }),
+      false,
+      'anna',
+    );
+    expect(result.responseValue).toEqual({
+      id: current.id,
+      orderId: 'order-1',
+      operationId: 'op-1',
+    });
+  });
+
+  it('lets an owner replace a payment', async () => {
+    await controller.pay('location-1', current.id, payDto, tokenPayload());
+    expect(bookings.pay).toHaveBeenCalledWith(
+      current,
+      payDto,
+      expect.anything(),
+      true,
+      undefined,
+    );
+  });
+
+  it('keeps product sales and visits of others away from a master', async () => {
+    await expect(
+      controller.pay(
+        'location-1',
+        current.id,
+        { ...payDto, confirmProductItemIds: ['item-1'] },
+        tokenPayload('STAFF'),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    bookings.findByIdInLocation.mockResolvedValue(
+      booking({ locationId: 'location-1', item: { staffId: 'boris' } }),
+    );
+    await expect(
+      controller.pay('location-1', current.id, payDto, tokenPayload('STAFF')),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(bookings.pay).not.toHaveBeenCalled();
+  });
+
+  it('needs order:write to sell products in a booking edit', async () => {
+    await expect(
+      controller.update(
+        'location-1',
+        current.id,
+        { confirmProductItemIds: ['item-1'] },
+        tokenPayload('STAFF'),
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(bookings.update).not.toHaveBeenCalled();
+    await controller.update(
+      'location-1',
+      current.id,
+      { payment: payDto },
+      tokenPayload('STAFF'),
+    );
+    expect(bookings.update).toHaveBeenCalledWith(
+      current,
+      expect.anything(),
+      { payment: payDto },
+      false,
+    );
   });
 
   it('passes mandatory participation to lists and counters', async () => {

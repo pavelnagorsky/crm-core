@@ -3,6 +3,7 @@ import {
   CalendarEventRepeatType,
   CalendarEventType,
 } from '@prisma/client';
+import { PaymentStatus } from '../../payments/enums/payment-status.enum.js';
 import { CalendarEventItemDto } from './calendar-event-item.dto.js';
 import { CalendarBookingView } from '../interfaces/calendar-booking-view.interface.js';
 
@@ -13,6 +14,7 @@ function booking(
     id: 'booking-1',
     entityId: 'booking-1',
     status: BookingStatus.CONFIRMED,
+    paymentStatus: PaymentStatus.NOT_SPECIFIED,
     staffId: 'staff-1',
     staffName: 'Анна',
     clientName: 'Мария Иванова',

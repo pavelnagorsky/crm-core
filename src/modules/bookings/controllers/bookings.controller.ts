@@ -64,6 +64,8 @@ import { ClientBookingSummaryResponseDto } from '../dto/client-booking-summary-r
 import { ClientLinkResponseDto } from '../dto/client-link-response.dto.js';
 import { StaffPopularServicesDto } from '../dto/staff-popular-services.dto.js';
 import { ManualCreateBookingDto } from '../dto/manual-create-booking.dto.js';
+import { PayBookingDto } from '../dto/pay-booking.dto.js';
+import { PayBookingResponseDto } from '../dto/pay-booking-response.dto.js';
 import { UpdateBookingStatusDto } from '../dto/update-booking-status.dto.js';
 import { UpdateBookingDto } from '../dto/update-booking.dto.js';
 import { BookingStatus } from '../enums/booking-status.enum.js';
@@ -169,7 +171,7 @@ export class BookingsController {
   })
   @ApiForbiddenResponse({
     description:
-      'BOOKING_OWN_STAFF_REQUIRED: with booking.own:write only, the caller performs none of the services. Custom prices also need sale.price.override:write, products order:write',
+      'BOOKING_OWN_STAFF_REQUIRED: with booking.own:write only, the caller performs none of the services. Custom prices also need sale.price.override:write, products and confirmProducts order:write. A payment needs no extra permission',
     type: ForbiddenException,
   })
   @Permissions([Write(Claim.BOOKING), Write(Claim.BOOKING_OWN)])
@@ -301,8 +303,9 @@ export class BookingsController {
     const review = this.access.canReadReview(token, locationId)
       ? await this.reviews.findForBooking(booking.id)
       : null;
+    const payment = await this.bookings.getPaymentSummary(booking);
     return BaseResponseDto.success(
-      BookingDetailsResponseDto.fromBooking(booking, review),
+      BookingDetailsResponseDto.fromBooking(booking, review, payment),
     );
   }
 
@@ -331,10 +334,18 @@ export class BookingsController {
     );
   }
 
-  @ApiOperation({ summary: 'Update an accessible booking' })
+  @ApiOperation({
+    summary: 'Update an accessible booking',
+    description:
+      'With payment and confirmProductItemIds the visit is paid after the edit in the same transaction, by the rules and errors of PUT bookings/:id/payment.',
+  })
   @ApiOkResponse({ type: ApiResponse(BookingWriteResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking not found' })
   @ApiConflictResponse({ description: 'Slot is no longer available' })
+  @ApiForbiddenResponse({
+    description:
+      'confirmProductItemIds and replacing an active payment need order:write',
+  })
   @Permissions([Write(Claim.BOOKING), Write(Claim.BOOKING_OWN)])
   @Put('locations/:locationId/bookings/:id')
   async update(
@@ -360,10 +371,13 @@ export class BookingsController {
         Write(Claim.SALE_PRICE_OVERRIDE),
         locationId,
       );
+    if (dto.confirmProductItemIds?.length)
+      assertPermission(tokenPayload, Write(Claim.ORDER), locationId);
     const booking = await this.bookings.update(
       current,
       auditActorFromToken(tokenPayload, locationId),
       dto,
+      hasPermission(tokenPayload, Write(Claim.ORDER), locationId),
     );
     return BaseResponseDto.success(
       BookingWriteResponseDto.fromBooking(booking),
@@ -394,6 +408,53 @@ export class BookingsController {
       dto,
     );
     return BaseResponseDto.success({ id: booking.id });
+  }
+
+  @ApiOperation({
+    summary: 'Pay a visit',
+    description:
+      'Records how the client paid the whole amount due of the visit (services by the booking plus sold products), or replaces the active payment. A started PENDING or CONFIRMED visit is completed in the same transaction (order services, earnings); a visit that has not started keeps its status (prepayment). confirmProductItemIds sells draft products first, so the payment covers them. NO_SHOW and CANCELLED: only already sold products are due. Any error rolls everything back. A retry with the same key returns the first result without effects, also for a master.',
+  })
+  @ApiOkResponse({ type: ApiResponse(PayBookingResponseDto) })
+  @ApiBadRequestResponse({
+    description: 'PAYMENT_SPLIT_INVALID, PAYMENT_DATE_INVALID',
+  })
+  @ApiNotFoundResponse({
+    description: 'Booking not found; ORDER_ITEM_NOT_FOUND',
+  })
+  @ApiForbiddenResponse({
+    description:
+      'booking.own:write for a visit of another master. Replacing an active payment and confirmProductItemIds need order:write',
+  })
+  @ApiConflictResponse({
+    description:
+      'PAYMENT_AMOUNT_MISMATCH: responseValue { amountDue, requiredAmount }. PAYMENT_NOTHING_DUE. PAYMENT_IDEMPOTENCY_CONFLICT: responseValue { operationId }. BOOKING_PAYMENT_NOT_ALLOWED: confirmProductItemIds for NO_SHOW or CANCELLED. ORDER_ITEM_NOT_DRAFT, ORDER_PRODUCT_NOT_SELLABLE, ORDER_SELLER_INVALID. Completion errors as in PATCH status',
+  })
+  @Permissions([Write(Claim.BOOKING), Write(Claim.BOOKING_OWN)])
+  @Put('locations/:locationId/bookings/:id/payment')
+  async pay(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: PayBookingDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
+  ): Promise<BaseResponseDto<PayBookingResponseDto>> {
+    const current = await this.bookings.findByIdInLocation(locationId, id);
+    // Paying is like completing: a master pays their own visit.
+    await this.access.assertManage(tokenPayload, current);
+    const participantStaffId = await this.access.manageStaffId(
+      tokenPayload,
+      locationId,
+    );
+    if (dto.confirmProductItemIds?.length)
+      assertPermission(tokenPayload, Write(Claim.ORDER), locationId);
+    const { orderId, operationId } = await this.bookings.pay(
+      current,
+      dto,
+      auditActorFromToken(tokenPayload, locationId),
+      hasPermission(tokenPayload, Write(Claim.ORDER), locationId),
+      participantStaffId,
+    );
+    return BaseResponseDto.success({ id: current.id, orderId, operationId });
   }
 
   @ApiOperation({ summary: 'Add a draft product sale to a booking order' })
@@ -487,6 +548,10 @@ export class BookingsController {
   @ApiOperation({ summary: 'Delete a booking' })
   @ApiNoContentResponse()
   @ApiNotFoundResponse({ description: 'Booking not found' })
+  @ApiConflictResponse({
+    description:
+      'BOOKING_HAS_PAYMENTS: the visit has a paid amount; void the payment or refund the money first',
+  })
   @Permissions(Write(Claim.BOOKING_DELETE))
   @Delete('locations/:locationId/bookings/:id')
   @HttpCode(HttpStatus.NO_CONTENT)

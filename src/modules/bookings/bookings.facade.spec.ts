@@ -35,7 +35,11 @@ import { BookingCalendarReadService } from './services/read/booking-calendar-rea
 import { BookingReadService } from './services/read/booking-read.service.js';
 import { BillingFacade } from '../billing/billing.facade.js';
 import { BookingSetupService } from './services/setup/booking-setup.service.js';
+import { PaymentStatus } from '../payments/enums/payment-status.enum.js';
+import { PaymentsFacade } from '../payments/payments.facade.js';
 import { BookingHistoryReadService } from './services/read/booking-history-read.service.js';
+import { BookingPaymentReadService } from './services/read/booking-payment-read.service.js';
+import { BookingPaymentService } from './services/write/booking-payment.service.js';
 import { BookingLifecycleService } from './services/write/booking-lifecycle.service.js';
 import { BookingMutationService } from './services/write/booking-mutation.service.js';
 import { BookingClientLinkService } from './services/write/booking-client-link.service.js';
@@ -166,6 +170,7 @@ describe('BookingsFacade.completeElapsed', () => {
         { provide: BookingClientTokenService, useValue: {} },
         BookingRescheduleService,
         BookingLifecycleService,
+        { provide: PaymentsFacade, useValue: { paidAmount: vi.fn() } },
         BookingWriteLockService,
         BookingEventsService,
         {
@@ -180,6 +185,14 @@ describe('BookingsFacade.completeElapsed', () => {
         BookingReadService,
         BookingSetupService,
         { provide: BookingHistoryReadService, useValue: {} },
+        {
+          provide: BookingPaymentService,
+          useValue: { plan: vi.fn().mockResolvedValue(null), publish: vi.fn() },
+        },
+        {
+          provide: BookingPaymentReadService,
+          useValue: { summaries: vi.fn(async () => new Map()) },
+        },
         {
           provide: BillingFacade,
           useValue: { isOnlineBookingOpen: vi.fn().mockResolvedValue(true) },
@@ -330,6 +343,7 @@ describe('BookingsFacade.updateStatus transactionality', () => {
         { provide: BookingClientTokenService, useValue: {} },
         BookingRescheduleService,
         BookingLifecycleService,
+        { provide: PaymentsFacade, useValue: { paidAmount: vi.fn() } },
         BookingWriteLockService,
         BookingEventsService,
         {
@@ -344,6 +358,14 @@ describe('BookingsFacade.updateStatus transactionality', () => {
         BookingReadService,
         BookingSetupService,
         { provide: BookingHistoryReadService, useValue: {} },
+        {
+          provide: BookingPaymentService,
+          useValue: { plan: vi.fn().mockResolvedValue(null), publish: vi.fn() },
+        },
+        {
+          provide: BookingPaymentReadService,
+          useValue: { summaries: vi.fn(async () => new Map()) },
+        },
         {
           provide: BillingFacade,
           useValue: { isOnlineBookingOpen: vi.fn().mockResolvedValue(true) },
@@ -406,6 +428,7 @@ describe('BookingsFacade.search', () => {
         { provide: BookingClientTokenService, useValue: {} },
         BookingRescheduleService,
         BookingLifecycleService,
+        { provide: PaymentsFacade, useValue: { paidAmount: vi.fn() } },
         BookingWriteLockService,
         BookingEventsService,
         {
@@ -420,6 +443,14 @@ describe('BookingsFacade.search', () => {
         BookingReadService,
         BookingSetupService,
         { provide: BookingHistoryReadService, useValue: {} },
+        {
+          provide: BookingPaymentService,
+          useValue: { plan: vi.fn().mockResolvedValue(null), publish: vi.fn() },
+        },
+        {
+          provide: BookingPaymentReadService,
+          useValue: { summaries: vi.fn(async () => new Map()) },
+        },
         {
           provide: BillingFacade,
           useValue: { isOnlineBookingOpen: vi.fn().mockResolvedValue(true) },
@@ -638,7 +669,10 @@ describe('BookingsFacade.search', () => {
 
 describe('BookingCalendarReadService.listForCalendar', () => {
   const findMany = vi.fn();
-  const db = { bookingItem: { findMany } };
+  const db = {
+    bookingItem: { findMany },
+    booking: { findMany: vi.fn(async () => []) },
+  };
 
   let service: BookingCalendarReadService;
 
@@ -648,6 +682,10 @@ describe('BookingCalendarReadService.listForCalendar', () => {
       providers: [
         BookingCalendarReadService,
         { provide: DatabaseService, useValue: db },
+        {
+          provide: BookingPaymentReadService,
+          useValue: { summaries: vi.fn(async () => new Map()) },
+        },
       ],
     }).compile();
     service = module.get(BookingCalendarReadService);
@@ -806,6 +844,7 @@ describe('BookingCalendarReadService.listForCalendar', () => {
         id: 'booking-1:anna',
         entityId: 'booking-1',
         status: BookingStatus.CONFIRMED,
+        paymentStatus: PaymentStatus.NOT_REQUIRED,
         staffId: 'anna',
         staffName: 'anna',
         clientName: 'Мария Иванова',
@@ -818,6 +857,7 @@ describe('BookingCalendarReadService.listForCalendar', () => {
         id: 'booking-1:ira',
         entityId: 'booking-1',
         status: BookingStatus.CONFIRMED,
+        paymentStatus: PaymentStatus.NOT_REQUIRED,
         staffId: 'ira',
         staffName: 'ira',
         clientName: 'Мария Иванова',
@@ -865,6 +905,7 @@ describe('BookingsFacade catalog selection', () => {
         { provide: BookingClientTokenService, useValue: {} },
         BookingRescheduleService,
         BookingLifecycleService,
+        { provide: PaymentsFacade, useValue: { paidAmount: vi.fn() } },
         BookingWriteLockService,
         BookingEventsService,
         {
@@ -879,6 +920,14 @@ describe('BookingsFacade catalog selection', () => {
         BookingReadService,
         BookingSetupService,
         { provide: BookingHistoryReadService, useValue: {} },
+        {
+          provide: BookingPaymentService,
+          useValue: { plan: vi.fn().mockResolvedValue(null), publish: vi.fn() },
+        },
+        {
+          provide: BookingPaymentReadService,
+          useValue: { summaries: vi.fn(async () => new Map()) },
+        },
         {
           provide: BillingFacade,
           useValue: { isOnlineBookingOpen: vi.fn().mockResolvedValue(true) },
@@ -1130,6 +1179,7 @@ describe('BookingsFacade.update details and item prices', () => {
         { provide: BookingClientTokenService, useValue: {} },
         BookingRescheduleService,
         BookingLifecycleService,
+        { provide: PaymentsFacade, useValue: { paidAmount: vi.fn() } },
         BookingWriteLockService,
         BookingEventsService,
         {
@@ -1144,6 +1194,14 @@ describe('BookingsFacade.update details and item prices', () => {
         BookingReadService,
         BookingSetupService,
         { provide: BookingHistoryReadService, useValue: {} },
+        {
+          provide: BookingPaymentService,
+          useValue: { plan: vi.fn().mockResolvedValue(null), publish: vi.fn() },
+        },
+        {
+          provide: BookingPaymentReadService,
+          useValue: { summaries: vi.fn(async () => new Map()) },
+        },
         {
           provide: BillingFacade,
           useValue: { isOnlineBookingOpen: vi.fn().mockResolvedValue(true) },
@@ -1490,6 +1548,7 @@ describe('BookingsFacade.update manual interval', () => {
         { provide: BookingClientTokenService, useValue: {} },
         BookingRescheduleService,
         BookingLifecycleService,
+        { provide: PaymentsFacade, useValue: { paidAmount: vi.fn() } },
         BookingWriteLockService,
         BookingEventsService,
         {
@@ -1504,6 +1563,14 @@ describe('BookingsFacade.update manual interval', () => {
         BookingReadService,
         BookingSetupService,
         { provide: BookingHistoryReadService, useValue: {} },
+        {
+          provide: BookingPaymentService,
+          useValue: { plan: vi.fn().mockResolvedValue(null), publish: vi.fn() },
+        },
+        {
+          provide: BookingPaymentReadService,
+          useValue: { summaries: vi.fn(async () => new Map()) },
+        },
         {
           provide: BillingFacade,
           useValue: { isOnlineBookingOpen: vi.fn().mockResolvedValue(true) },
@@ -1764,9 +1831,11 @@ describe('BookingsFacade.addProduct', () => {
       items: [],
     }),
     addDraftProductsToBookingOrder: vi.fn().mockResolvedValue({
-      id: 'order-1',
-      items: [],
+      order: { id: 'order-1', items: [] },
+      brandId: 'brand-1',
+      auditPayload: {},
     }),
+    publishDraftProductsAdded: vi.fn(),
   };
   let service: BookingsFacade;
 
@@ -1782,6 +1851,7 @@ describe('BookingsFacade.addProduct', () => {
         { provide: BookingClientTokenService, useValue: {} },
         BookingRescheduleService,
         BookingLifecycleService,
+        { provide: PaymentsFacade, useValue: { paidAmount: vi.fn() } },
         BookingWriteLockService,
         BookingEventsService,
         {
@@ -1796,6 +1866,14 @@ describe('BookingsFacade.addProduct', () => {
         BookingReadService,
         BookingSetupService,
         { provide: BookingHistoryReadService, useValue: {} },
+        {
+          provide: BookingPaymentService,
+          useValue: { plan: vi.fn().mockResolvedValue(null), publish: vi.fn() },
+        },
+        {
+          provide: BookingPaymentReadService,
+          useValue: { summaries: vi.fn(async () => new Map()) },
+        },
         {
           provide: BillingFacade,
           useValue: { isOnlineBookingOpen: vi.fn().mockResolvedValue(true) },
@@ -1892,6 +1970,7 @@ describe('BookingsFacade.cancel draft product cleanup', () => {
         { provide: BookingClientTokenService, useValue: {} },
         BookingRescheduleService,
         BookingLifecycleService,
+        { provide: PaymentsFacade, useValue: { paidAmount: vi.fn() } },
         BookingWriteLockService,
         BookingEventsService,
         {
@@ -1906,6 +1985,14 @@ describe('BookingsFacade.cancel draft product cleanup', () => {
         BookingReadService,
         BookingSetupService,
         { provide: BookingHistoryReadService, useValue: {} },
+        {
+          provide: BookingPaymentService,
+          useValue: { plan: vi.fn().mockResolvedValue(null), publish: vi.fn() },
+        },
+        {
+          provide: BookingPaymentReadService,
+          useValue: { summaries: vi.fn(async () => new Map()) },
+        },
         {
           provide: BillingFacade,
           useValue: { isOnlineBookingOpen: vi.fn().mockResolvedValue(true) },
@@ -2003,8 +2090,10 @@ function createMutationService(
       events,
       reschedule,
       { cancelPendingForBooking: vi.fn() } as never,
+      { paidAmount: vi.fn() } as never,
     ),
     reschedule,
     new BookingClientLinkService(bookingClients as never, location),
+    { plan: vi.fn().mockResolvedValue(null), publish: vi.fn() } as never,
   );
 }

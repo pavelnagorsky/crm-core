@@ -47,6 +47,19 @@ export class BookingAccessService {
     );
   }
 
+  /** Own staff profile when the caller manages only bookings they take part in. */
+  manageStaffId(
+    token: TokenPayloadDto,
+    locationId: string,
+  ): Promise<string | undefined> {
+    return this.staffAccess.resolveStaffId(
+      token,
+      locationId,
+      Write(Claim.BOOKING),
+      Write(Claim.BOOKING_OWN),
+    );
+  }
+
   async assertManage(
     token: TokenPayloadDto,
     booking: BookingWithItems,

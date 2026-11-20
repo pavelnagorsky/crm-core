@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import {
   OrderItemStatus,
   OrderItemType,
+  OrderReturnStatus,
   OrderStatus,
   Prisma,
 } from '@prisma/client';
@@ -9,9 +10,13 @@ import { DatabaseService } from '../../../../database/database.service.js';
 import { activeLocationSql } from '../../../../shared/database/active-business.sql.js';
 import { MoneyUtils } from '../../../../shared/money/money.utils.js';
 import { BookingsAggregatesService } from '../../../bookings/aggregates/services/bookings-aggregates.service.js';
+import { PaymentsAggregatesService } from '../../../payments/aggregates/services/payments-aggregates.service.js';
 import { AggregateRange } from '../../../bookings/interfaces/aggregate-range.interface.js';
 import { SeriesGranularity } from '../../../dashboard/enums/series-granularity.enum.js';
 import { ClientSalesRange } from '../interfaces/client-sales-range.interface.js';
+import { FinanceRange } from '../interfaces/finance-range.interface.js';
+import { NotSpecifiedResult } from '../interfaces/not-specified-result.interface.js';
+import { NotSpecifiedRow } from '../interfaces/not-specified-row.interface.js';
 import { ClientSalesSeriesRange } from '../interfaces/client-sales-series-range.interface.js';
 import { OrderClientRevenueBucket } from '../interfaces/order-client-revenue-bucket.interface.js';
 import { OrderClientRevenueTotals } from '../interfaces/order-client-revenue-totals.interface.js';
@@ -28,7 +33,132 @@ export class OrdersAggregatesService {
   constructor(
     private readonly db: DatabaseService,
     private readonly bookingsAggregates: BookingsAggregatesService,
+    private readonly paymentsAggregates: PaymentsAggregatesService,
   ) {}
+
+  /**
+   * Visits and sales of the range with something due and no active payment record:
+   * closed visits by their start (services as by the booking plus sold products) and active
+   * sales by their date. `items` are the first `limit` by time; `count` and `amount` cover all.
+   */
+  async notSpecified(
+    range: FinanceRange,
+    limit: number,
+    client: Prisma.TransactionClient = this.db,
+  ): Promise<NotSpecifiedResult> {
+    const visits = this.bookingsAggregates.closedVisitsSql(range);
+    const noRecords = this.paymentsAggregates.noActiveRecordsSql(
+      Prisma.sql`o."id"`,
+    );
+    const rows = await client.$queryRaw<
+      Array<{
+        kind: string;
+        orderId: string | null;
+        bookingId: string | null;
+        at: Date;
+        clientName: string | null;
+        staffNames: string[];
+        amountDue: string;
+        totalCount: bigint;
+        totalAmount: string;
+      }>
+    >(Prisma.sql`
+      WITH due_rows AS (
+        SELECT 'VISIT' AS kind,
+               o."id" AS "orderId",
+               v."bookingId" AS "bookingId",
+               v."startAt" AS at_utc,
+               v."clientName" AS "clientName",
+               v."staffNames" AS "staffNames",
+               v."servicesDue" + COALESCE(products.net, 0) AS "amountDue"
+        FROM (${visits}) v
+        LEFT JOIN "Order" o
+          ON o."bookingId" = v."bookingId" AND o."locationId" = ${range.locationId}
+        LEFT JOIN LATERAL (${this.productsNetSql()}) products ON TRUE
+        WHERE o."id" IS NULL OR ${noRecords}
+        UNION ALL
+        SELECT 'SALE' AS kind,
+               o."id" AS "orderId",
+               NULL AS "bookingId",
+               o."occurredAt" AS at_utc,
+               o."clientName" AS "clientName",
+               ARRAY(
+                 SELECT DISTINCT seller."sellerName"
+                 FROM "OrderItem" seller
+                 WHERE seller."orderId" = o."id"
+                   AND seller."type"::text = ${OrderItemType.PRODUCT}
+                   AND seller."status"::text = ${OrderItemStatus.CONFIRMED}
+                   AND seller."sellerName" IS NOT NULL
+                 ORDER BY seller."sellerName"
+               ) AS "staffNames",
+               COALESCE(products.net, 0) AS "amountDue"
+        FROM "Order" o
+        LEFT JOIN LATERAL (${this.productsNetSql()}) products ON TRUE
+        WHERE o."locationId" = ${range.locationId}
+          AND ${activeLocationSql(Prisma.sql`o."locationId"`)}
+          AND o."bookingId" IS NULL
+          AND o."status"::text = ${OrderStatus.ACTIVE}
+          AND o."occurredAt" >= ${range.from}::timestamptz AT TIME ZONE 'UTC'
+          AND o."occurredAt" < ${range.to}::timestamptz AT TIME ZONE 'UTC'
+          AND ${noRecords}
+      )
+      SELECT kind,
+             "orderId",
+             "bookingId",
+             at_utc AT TIME ZONE 'UTC' AS at,
+             NULLIF("clientName", '') AS "clientName",
+             "staffNames",
+             "amountDue"::text AS "amountDue",
+             COUNT(*) OVER () AS "totalCount",
+             (SUM("amountDue") OVER ())::text AS "totalAmount"
+      FROM due_rows
+      WHERE "amountDue" > 0
+      ORDER BY at_utc ASC, COALESCE("bookingId", "orderId") ASC
+      LIMIT ${limit}
+    `);
+    const items: NotSpecifiedRow[] = rows.map((row) => ({
+      kind: row.kind as NotSpecifiedRow['kind'],
+      orderId: row.orderId,
+      bookingId: row.bookingId,
+      at: new Date(row.at),
+      clientName: row.clientName,
+      staffNames: row.staffNames.filter((name) => name.trim()),
+      amountDue: MoneyUtils.decimal(row.amountDue),
+    }));
+    if (rows.length === 0 || rows.length < limit)
+      return {
+        items,
+        count: rows.length,
+        amount: items.reduce(
+          (sum, item) => sum.plus(item.amountDue),
+          MoneyUtils.decimal(0),
+        ),
+      };
+    return {
+      items,
+      count: Number(rows[0].totalCount),
+      amount: MoneyUtils.decimal(rows[0].totalAmount),
+    };
+  }
+
+  /** Sold products of order `o`: confirmed product lines minus their posted returns. Column `net`. */
+  private productsNetSql(): Prisma.Sql {
+    return Prisma.sql`
+      SELECT COALESCE(SUM(
+        sold."lineTotal" - COALESCE((
+          SELECT SUM(returned."lineTotal")
+          FROM "OrderReturnItem" returned
+          JOIN "OrderReturn" product_return ON product_return."id" = returned."returnId"
+          WHERE returned."orderItemId" = sold."id"
+            AND product_return."status"::text = ${OrderReturnStatus.POSTED}
+        ), 0)
+      ), 0) AS net
+      FROM "OrderItem" sold
+      WHERE sold."orderId" = o."id"
+        AND sold."type"::text = ${OrderItemType.PRODUCT}
+        AND sold."status"::text = ${OrderItemStatus.CONFIRMED}
+    `;
+  }
 
   async productSalesSnapshot(
     range: ProductSalesRange,

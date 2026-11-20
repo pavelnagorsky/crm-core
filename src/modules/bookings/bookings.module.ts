@@ -7,6 +7,7 @@ import { CalendarModule } from '../calendar/calendar.module.js';
 import { ClientsModule } from '../clients/clients.module.js';
 import { LocationModule } from '../location/location.module.js';
 import { OrdersModule } from '../orders/orders.module.js';
+import { PaymentsModule } from '../payments/payments.module.js';
 import { PayrollModule } from '../payroll/payroll.module.js';
 import { ProductsModule } from '../products/products.module.js';
 import { NotificationsModule } from '../notifications/notifications.module.js';
@@ -31,10 +32,12 @@ import { BookingWriteLockService } from './services/booking-write-lock.service.j
 import { BookingClientLinkService } from './services/write/booking-client-link.service.js';
 import { BookingLifecycleService } from './services/write/booking-lifecycle.service.js';
 import { BookingMutationService } from './services/write/booking-mutation.service.js';
+import { BookingPaymentService } from './services/write/booking-payment.service.js';
 import { BookingRescheduleService } from './services/write/booking-reschedule.service.js';
 import { PublicBookingRateLimiter } from './services/public-booking-rate-limiter.js';
 import { BookingCalendarReadService } from './services/read/booking-calendar-read.service.js';
 import { BookingHistoryReadService } from './services/read/booking-history-read.service.js';
+import { BookingPaymentReadService } from './services/read/booking-payment-read.service.js';
 import { BookingReadService } from './services/read/booking-read.service.js';
 import { BookingSetupService } from './services/setup/booking-setup.service.js';
 import { BookingStaffNotificationService } from './services/booking-staff-notification.service.js';
@@ -53,6 +56,7 @@ import { JwtBookingClientStrategy } from './strategies/jwt-booking-client.strate
     ServiceCatalogModule,
     ProductsModule,
     OrdersModule,
+    PaymentsModule,
     ReviewsModule,
     NotificationsModule,
     I18nModule,
@@ -71,6 +75,8 @@ import { JwtBookingClientStrategy } from './strategies/jwt-booking-client.strate
     BookingLifecycleService,
     BookingRescheduleService,
     BookingClientLinkService,
+    BookingPaymentService,
+    BookingPaymentReadService,
 
     BookingsFacade,
     BookingCreateFacade,

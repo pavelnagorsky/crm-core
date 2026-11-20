@@ -21,6 +21,7 @@ describe('OrdersAggregatesService', () => {
   const service = new OrdersAggregatesService(
     db as unknown as DatabaseService,
     bookings as unknown as BookingsAggregatesService,
+    {} as never,
   );
 
   beforeEach(() => vi.clearAllMocks());

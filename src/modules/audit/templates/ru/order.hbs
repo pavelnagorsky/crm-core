@@ -5,6 +5,16 @@
   {{#if (eq eventType 'ORDER_ITEM_REVERSED')}}Позиция заказа сторнирована{{/if}}
   {{#if (eq eventType 'ORDER_VOIDED')}}Отменён заказ{{/if}}
   {{#if (eq eventType 'ORDER_DELETED')}}Удалён заказ{{/if}}
+  {{#if (eq eventType 'PAYMENT_RECORDED')}}Записана оплата{{/if}}
+  {{#if (eq eventType 'PAYMENT_REPLACED')}}Изменена оплата{{/if}}
+  {{#if (eq eventType 'PAYMENT_VOIDED')}}Аннулирована {{#if (eq payload.operationType 'REFUND')}}запись возврата{{else}}оплата{{/if}}{{/if}}
+  {{#if (eq eventType 'PAYMENT_REFUNDED')}}Возвращены деньги{{/if}}
+  {{#if payload.parts}}:
+    {{#each payload.parts}}{{#unless @first}} + {{/unless}}{{#if (eq method 'CASH')}}наличные{{else}}карта{{/if}} {{amount}}{{/each}}
+    {{payload.currency}}{{/if}}
+  {{#if payload.previousParts}}. Было:
+    {{#each payload.previousParts}}{{#unless @first}} + {{/unless}}{{#if (eq method 'CASH')}}наличные{{else}}карта{{/if}} {{amount}}{{/each}}
+    {{payload.currency}}{{/if}}
   {{#if payload.totalAmount}}:
     {{payload.totalAmount}}
     {{payload.currency}}{{/if}}

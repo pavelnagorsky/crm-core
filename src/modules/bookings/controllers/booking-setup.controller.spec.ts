@@ -24,6 +24,8 @@ import { BillingFacade } from '../../billing/billing.facade.js';
 import { createBillingFacadeStub } from '../../billing/testing/billing-facade.stub.js';
 import { BookingSetupService } from '../services/setup/booking-setup.service.js';
 import { BookingHistoryReadService } from '../services/read/booking-history-read.service.js';
+import { BookingPaymentReadService } from '../services/read/booking-payment-read.service.js';
+import { BookingPaymentService } from '../services/write/booking-payment.service.js';
 import { BookingMutationService } from '../services/write/booking-mutation.service.js';
 import { BookingsController } from './bookings.controller.js';
 
@@ -98,6 +100,14 @@ describe('Public booking setup products (HTTP)', () => {
         BookingsFacade,
         BookingSetupService,
         { provide: BookingHistoryReadService, useValue: {} },
+        {
+          provide: BookingPaymentService,
+          useValue: { plan: vi.fn().mockResolvedValue(null), publish: vi.fn() },
+        },
+        {
+          provide: BookingPaymentReadService,
+          useValue: { summaries: vi.fn(async () => new Map()) },
+        },
         { provide: BillingFacade, useValue: createBillingFacadeStub() },
         { provide: BookingSelectionService, useValue: {} },
         { provide: BookingSchedulingService, useValue: {} },

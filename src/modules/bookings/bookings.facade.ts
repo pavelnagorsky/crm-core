@@ -21,6 +21,11 @@ import { BookingSetupService } from './services/setup/booking-setup.service.js';
 import { BookingHistoryReadService } from './services/read/booking-history-read.service.js';
 import { ClientBookingSummary } from './interfaces/client-booking-summary.interface.js';
 import { StaffPopularServices } from './interfaces/staff-popular-services.interface.js';
+import { PayBookingDto } from './dto/pay-booking.dto.js';
+import { VisitPaymentResult } from './interfaces/visit-payment-result.interface.js';
+import { VisitPaymentSummary } from './interfaces/visit-payment-summary.interface.js';
+import { BookingPaymentReadService } from './services/read/booking-payment-read.service.js';
+import { BookingPaymentService } from './services/write/booking-payment.service.js';
 
 @Injectable()
 export class BookingsFacade {
@@ -30,6 +35,8 @@ export class BookingsFacade {
     private readonly mutation: BookingMutationService,
     private readonly locations: LocationService,
     private readonly history: BookingHistoryReadService,
+    private readonly payment: BookingPaymentService,
+    private readonly paymentReads: BookingPaymentReadService,
   ) {}
 
   async getBookingSetup(locationId: string): Promise<BookingSetup> {
@@ -58,8 +65,30 @@ export class BookingsFacade {
     booking: BookingWithItems,
     actor: AuditActor,
     dto: UpdateBookingDto,
+    canReplacePayment = false,
   ): Promise<BookingWithItems> {
-    return this.mutation.update(booking, actor, dto);
+    return this.mutation.update(booking, actor, dto, canReplacePayment);
+  }
+
+  /** Pays the visit: completes a started one, confirms products, records the payment. */
+  pay(
+    booking: BookingWithItems,
+    dto: PayBookingDto,
+    actor: AuditActor,
+    canReplacePayment: boolean,
+    participantStaffId?: string,
+  ): Promise<VisitPaymentResult> {
+    return this.payment.pay(
+      booking,
+      dto,
+      actor,
+      canReplacePayment,
+      participantStaffId,
+    );
+  }
+
+  getPaymentSummary(booking: BookingWithItems): Promise<VisitPaymentSummary> {
+    return this.paymentReads.summary(booking);
   }
 
   async updateStatus(

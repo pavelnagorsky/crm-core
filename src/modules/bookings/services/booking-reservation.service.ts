@@ -15,10 +15,11 @@ import { bookingWithItemsInclude } from '../constants/booking-with-items.include
 import { BookingCreationOutcome } from '../interfaces/booking-creation-outcome.interface.js';
 import { BookingCreationRequest } from '../interfaces/booking-creation-request.interface.js';
 import { BookingCreationResult } from '../interfaces/booking-creation-result.interface.js';
-import { BookingWithItems } from '../interfaces/booking-with-items.interface.js';
+import { BookingReservationResult } from '../interfaces/booking-reservation-result.interface.js';
 import { PreparedBookingReservation } from '../interfaces/prepared-booking-reservation.interface.js';
 import { reminderDueAt } from '../rules/booking-reminder.rules.js';
 import { BookingSlotLockService } from './booking-slot-lock.service.js';
+import { BookingPaymentService } from './write/booking-payment.service.js';
 
 @Injectable()
 export class BookingReservationService {
@@ -30,6 +31,7 @@ export class BookingReservationService {
     private readonly orders: OrdersFacade,
     private readonly staffEarnings: StaffEarningsService,
     private readonly clients: ClientsService,
+    private readonly bookingPayment: BookingPaymentService,
   ) {}
 
   async reserveOnce(
@@ -80,17 +82,19 @@ export class BookingReservationService {
   async reserve(
     input: PreparedBookingReservation,
     tx?: Prisma.TransactionClient,
-  ): Promise<BookingWithItems> {
+  ): Promise<BookingReservationResult> {
     if (tx) return this.reserveInTransaction(input, tx);
-    return this.db.$transaction((client) =>
-      this.reserveInTransaction(input, client),
+    // A manual visit may be completed, sold and paid in the same transaction.
+    return this.db.$transaction(
+      (client) => this.reserveInTransaction(input, client),
+      { maxWait: 5_000, timeout: 30_000 },
     );
   }
 
   private async reserveInTransaction(
     input: PreparedBookingReservation,
     tx: Prisma.TransactionClient,
-  ): Promise<BookingWithItems> {
+  ): Promise<BookingReservationResult> {
     const {
       locationId,
       timezone,
@@ -107,6 +111,13 @@ export class BookingReservationService {
       products: manualProducts,
       actor,
     } = input;
+    // The payment key is the first lock of the transaction.
+    if (input.paymentPlan)
+      await this.bookingPayment.lockForNewBooking(
+        tx,
+        locationId,
+        input.paymentPlan,
+      );
     await this.lockActiveLocation(locationId, tx);
     await this.slots.lockSlots(items, timezone, tx);
     // Custom time books over the schedule, as a manual interval does on update; one staff
@@ -204,16 +215,25 @@ export class BookingReservationService {
         order,
       );
     }
-    if (manualProducts.length > 0) {
-      await this.orders.addDraftProductsToBookingOrder(
-        booking,
-        manualProducts,
-        operationActor,
-        tx,
-        true,
-      );
-    }
-    return booking;
+    const productsAdded =
+      manualProducts.length > 0
+        ? await this.orders.addDraftProductsToBookingOrder(
+            booking,
+            manualProducts,
+            operationActor,
+            tx,
+            true,
+          )
+        : null;
+    const payment = input.paymentPlan
+      ? await this.bookingPayment.applyLocked(
+          tx,
+          booking,
+          input.paymentPlan,
+          operationActor,
+        )
+      : null;
+    return { booking: payment?.booking ?? booking, productsAdded, payment };
   }
 
   private async lockActiveLocation(

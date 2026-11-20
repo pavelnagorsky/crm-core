@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
-import { Booking, CancelledBy, ClientNoticeType } from '@prisma/client';
+import { Booking, CancelledBy, ClientNoticeType, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
 import {
   ACTIVE_LOCATION_WHERE,
@@ -14,6 +14,7 @@ import { AuditActor } from '../../../audit/interfaces/audit-actor.interface.js';
 import { CalendarFacade } from '../../../calendar/calendar.facade.js';
 import { LocationService } from '../../../location/services/location.service.js';
 import { OrdersFacade } from '../../../orders/orders.facade.js';
+import { PaymentsFacade } from '../../../payments/payments.facade.js';
 import { StaffEarningsService } from '../../../payroll/earnings/services/staff-earnings.service.js';
 import { StaffBookingEvent } from '../../../notifications/enums/staff-booking-event.enum.js';
 import { bookingWithItemsInclude } from '../../constants/booking-with-items.include.js';
@@ -46,6 +47,7 @@ export class BookingLifecycleService {
     private readonly events: BookingEventsService,
     private readonly reschedule: BookingRescheduleService,
     private readonly notifications: NotificationsService,
+    private readonly payments: PaymentsFacade,
   ) {}
 
   async updateStatus(
@@ -93,14 +95,7 @@ export class BookingLifecycleService {
         dto.status === BookingStatus.COMPLETED &&
         old.status !== BookingStatus.COMPLETED
       ) {
-        const order = await this.orders.syncCompletedBooking(result, actor, tx);
-        await this.staffEarnings.recordForCompletedBooking(result, tx, order);
-        await this.staffEarnings.syncForCompletedBooking(
-          result,
-          actor,
-          tx,
-          order,
-        );
+        await this.syncCompletion(result, actor, tx);
       } else if (reversesCommission) {
         await this.orders.reverseCompletedBookingServices(result, tx);
         await this.staffEarnings.reverseForBooking(
@@ -130,6 +125,32 @@ export class BookingLifecycleService {
     if (dto.status === BookingStatus.CONFIRMED)
       await this.events.notifyStatus(old, 'CONFIRMED');
     return updated;
+  }
+
+  /**
+   * Completes a PENDING or CONFIRMED visit inside the caller's transaction, as PATCH status
+   * does: status, order services, staff earnings. The caller holds the booking lock and
+   * publishes BOOKING_STATUS_CHANGED after commit.
+   */
+  async completeInTransaction(
+    booking: BookingWithItems,
+    actor: AuditActor,
+    tx: Prisma.TransactionClient,
+  ): Promise<BookingWithItems> {
+    const result = await tx.booking.update({
+      where: { id: booking.id },
+      data: {
+        status: BookingStatus.COMPLETED,
+        ...NO_CLIENT_NOTICE,
+        reminderDueAt: reminderDueAt(
+          { status: BookingStatus.COMPLETED, startAt: booking.startAt },
+          new Date(),
+        ),
+      },
+      include: bookingWithItemsInclude,
+    });
+    await this.syncCompletion(result, actor, tx);
+    return result;
   }
 
   async completeElapsed(now = new Date()): Promise<number> {
@@ -238,6 +259,14 @@ export class BookingLifecycleService {
     let removedDraftProductItems: Record<string, unknown>[] = [];
     await this.db.$transaction(async (tx) => {
       await this.write.lockUnchangedBooking(tx, booking);
+      // Deleting fixes a mistake; money on record is voided or refunded first. Only writes
+      // that lock the booking raise the paid amount, so it cannot grow before commit.
+      const order = await this.orders.findBookingOrder(booking, tx);
+      if (order && (await this.payments.paidAmount(tx, order.id)).gt(0))
+        throw new AppException(
+          ErrorCode.BOOKING_HAS_PAYMENTS,
+          HttpStatus.CONFLICT,
+        );
       await tx.booking.update({
         where: { id: booking.id },
         data: {
@@ -277,6 +306,16 @@ export class BookingLifecycleService {
     this.logger.log(
       `booking deleted: id=${booking.id} locationId=${booking.locationId}`,
     );
+  }
+
+  private async syncCompletion(
+    booking: BookingWithItems,
+    actor: AuditActor,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    const order = await this.orders.syncCompletedBooking(booking, actor, tx);
+    await this.staffEarnings.recordForCompletedBooking(booking, tx, order);
+    await this.staffEarnings.syncForCompletedBooking(booking, actor, tx, order);
   }
 
   private optionalReason(reason?: string | null): string | null {

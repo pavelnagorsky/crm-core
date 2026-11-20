@@ -50,6 +50,7 @@ describe('OrderDraftMutationService transaction boundaries', () => {
         persistence as never,
         new OrderStateRules(),
         audit as never,
+        { hasOperations: vi.fn().mockResolvedValue(false) } as never,
       );
       await expect(
         service[operation](

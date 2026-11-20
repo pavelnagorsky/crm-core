@@ -10,8 +10,10 @@ import { orderInclude } from '../constants/order-include.constant.js';
 import { CreateOrderDto } from '../dto/create-order.dto.js';
 import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
 import { saleRequestHash } from '../rules/sale-request-hash.js';
+import { NESTED_PAYMENT_KEY_PREFIX } from '../../payments/constants/payment.constants.js';
 import { OrderAuditService } from './order-audit.service.js';
 import { OrderDraftService } from './order-draft.service.js';
+import { OrderPaymentService } from './order-payment.service.js';
 import { OrderPersistenceService } from './order-persistence.service.js';
 import { OrderProductTransitionService } from './order-product-transition.service.js';
 
@@ -23,6 +25,7 @@ export class OrderCreationService {
     private readonly persistence: OrderPersistenceService,
     private readonly transitions: OrderProductTransitionService,
     private readonly audits: OrderAuditService,
+    private readonly orderPayments: OrderPaymentService,
   ) {}
   async create(
     locationId: string,
@@ -30,6 +33,11 @@ export class OrderCreationService {
     actor: AuditActor,
     canOverridePrice = false,
   ): Promise<OrderWithItems> {
+    if (dto.payment && !dto.confirmImmediately) {
+      throw new BadRequestException(
+        'payment is accepted only with confirmImmediately',
+      );
+    }
     if (dto.confirmImmediately) {
       return this.createAndConfirmProductSale(
         locationId,
@@ -89,6 +97,10 @@ export class OrderCreationService {
       );
     }
     const requestHash = saleRequestHash(locationId, dto);
+    const now = new Date();
+    const paymentRequest = dto.payment
+      ? await this.orderPayments.prepareRequest(locationId, dto.payment, now)
+      : null;
     const result = await this.persistence.inTransaction(async (tx) => {
       await this.persistence.lockSaleRequest(tx, locationId, idempotencyKey);
       const existing = await tx.order.findFirst({
@@ -105,7 +117,12 @@ export class OrderCreationService {
             { orderId: existing.id },
           );
         }
-        return { order: existing, draft: null, created: false };
+        return {
+          order: existing,
+          draft: null,
+          created: false,
+          payment: null,
+        };
       }
       const draft = await this.drafts.resolveDraft(
         locationId,
@@ -143,7 +160,18 @@ export class OrderCreationService {
           tx,
           order.occurredAt,
         );
-      return { order: transition.order, draft, created: true };
+      const payment = paymentRequest
+        ? await this.orderPayments.recordInLockedSale(
+            tx,
+            transition.order,
+            paymentRequest,
+            NESTED_PAYMENT_KEY_PREFIX.SALE + idempotencyKey,
+            requestHash,
+            actor,
+            now,
+          )
+        : null;
+      return { order: transition.order, draft, created: true, payment };
     });
     if (result.created && result.draft) {
       this.audits.record(
@@ -158,6 +186,7 @@ export class OrderCreationService {
           currency: result.order.currency,
         },
       );
+      this.orderPayments.publish(result.payment, actor);
     }
     return result.order;
   }

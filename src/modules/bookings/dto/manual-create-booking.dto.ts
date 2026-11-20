@@ -20,6 +20,7 @@ import { BookingExecutionMode } from '../enums/booking-execution-mode.enum.js';
 import { ManualBookingItemDto } from './manual-booking-item.dto.js';
 import { IsLocalDateTime } from '../../../shared/time/decorators/is-local-date-time.validator.js';
 import { ManualBookingProductDto } from './manual-booking-product.dto.js';
+import { PaymentInputDto } from '../../payments/dto/payment-input.dto.js';
 
 export class ManualCreateBookingDto extends CreateBookingDto {
   @ApiProperty({
@@ -148,6 +149,28 @@ export class ManualCreateBookingDto extends CreateBookingDto {
   @IsOptional()
   @IsBoolean()
   notifyClient?: boolean;
+
+  @ApiProperty({
+    type: Boolean,
+    required: false,
+    default: false,
+    description:
+      'Confirm (sell) all products in the same transaction, so a payment covers them. Needs order:write. Not allowed for NO_SHOW (409 BOOKING_PAYMENT_NOT_ALLOWED).',
+  })
+  @IsOptional()
+  @IsBoolean()
+  confirmProducts?: boolean;
+
+  @ApiProperty({
+    type: () => PaymentInputDto,
+    required: false,
+    description:
+      'Payment of the visit, recorded after the booking (and confirmed products) in the same transaction. A started visit with status PENDING or CONFIRMED (explicit or default) is created COMPLETED. Nothing due (for example NO_SHOW): 409 PAYMENT_NOTHING_DUE. A key that was used before: 409 PAYMENT_IDEMPOTENCY_CONFLICT, nothing is created. Other payment errors as in PUT bookings/:id/payment.',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PaymentInputDto)
+  payment?: PaymentInputDto;
 
   /** Staff may skip the client (anonymous) or pick a stored one (clientId). */
   static override requiresClientContacts(dto: ManualCreateBookingDto): boolean {

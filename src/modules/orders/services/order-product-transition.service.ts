@@ -2,7 +2,6 @@ import { BadRequestException, HttpStatus, Injectable } from '@nestjs/common';
 import {
   OrderItemStatus,
   OrderItemType,
-  OrderReturnStatus,
   OrderStatus,
   Prisma,
 } from '@prisma/client';
@@ -22,6 +21,9 @@ import { orderInclude } from '../constants/order-include.constant.js';
 import { ConfirmOrderItemsDto } from '../dto/confirm-order-items.dto.js';
 import { OrderTransition } from '../interfaces/order-transition.interface.js';
 import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
+import { NESTED_PAYMENT_KEY_PREFIX } from '../../payments/constants/payment.constants.js';
+import { paymentIntent } from '../../payments/rules/payment-request-hash.js';
+import { OrderPaymentService } from './order-payment.service.js';
 import { OrderPersistenceService } from './order-persistence.service.js';
 
 const CONFIRM_PRODUCT_ITEMS_OPERATION = 'CONFIRM_PRODUCT_ITEMS';
@@ -35,30 +37,14 @@ export class OrderProductTransitionService {
     private readonly staff: StaffService,
     private readonly earnings: StaffEarningsService,
     private readonly persistence: OrderPersistenceService,
+    private readonly orderPayments: OrderPaymentService,
   ) {}
-
-  async confirmProductItem(
-    locationId: string,
-    orderId: string,
-    orderItemId: string,
-  ): Promise<OrderTransition> {
-    return this.persistence.inTransaction(async (tx) => {
-      await this.persistence.lockOrder(tx, orderId);
-      return this.confirmProductItemsInTransaction(
-        locationId,
-        orderId,
-        [orderItemId],
-        tx,
-        undefined,
-        { allowAlreadyConfirmed: true },
-      );
-    });
-  }
 
   async confirmItems(
     locationId: string,
     orderId: string,
     dto: ConfirmOrderItemsDto,
+    actor: AuditActor,
   ): Promise<OrderTransition> {
     this.assertUniqueOrderItemIds(dto.itemIds);
     const idempotencyKey = dto.idempotencyKey;
@@ -67,11 +53,11 @@ export class OrderProductTransitionService {
         'idempotencyKey is required for group confirmation',
       );
     }
-    const requestHash = this.confirmItemsRequestHash(
-      locationId,
-      orderId,
-      dto.itemIds,
-    );
+    const requestHash = this.confirmItemsRequestHash(locationId, orderId, dto);
+    const now = new Date();
+    const paymentRequest = dto.payment
+      ? await this.orderPayments.prepareRequest(locationId, dto.payment, now)
+      : null;
     const operation = {
       locationId,
       orderId,
@@ -88,15 +74,29 @@ export class OrderProductTransitionService {
           locationId,
           orderId,
         );
+        // A visit order is paid through its booking: refuse before any effect.
+        if (paymentRequest) this.orderPayments.assertSale(locked);
         await tx.orderOperation.create({ data: operation });
-        return this.confirmProductItemsInTransaction(
+        const transition = await this.confirmProductItemsInTransaction(
           locationId,
           orderId,
           dto.itemIds,
           tx,
-          undefined,
+          now,
           { order: locked },
         );
+        const payment = paymentRequest
+          ? await this.orderPayments.recordInLockedSale(
+              tx,
+              transition.order,
+              paymentRequest,
+              NESTED_PAYMENT_KEY_PREFIX.CONFIRM + idempotencyKey,
+              requestHash,
+              actor,
+              now,
+            )
+          : null;
+        return { ...transition, payment };
       });
     } catch (error) {
       const prismaError = error as { code?: string };
@@ -140,6 +140,7 @@ export class OrderProductTransitionService {
       }
       this.assertActive(order.status);
       this.assertStandaloneOrder(order);
+      await this.orderPayments.assertNothingPaid(tx, orderId);
       await this.earnings.reverseForProductOrder(
         locationId,
         orderId,
@@ -166,85 +167,6 @@ export class OrderProductTransitionService {
         include: orderInclude,
       });
       return { order: voided, changed: true };
-    });
-  }
-
-  async reverseProductItem(
-    locationId: string,
-    orderId: string,
-    orderItemId: string,
-    reason: string,
-    actor: AuditActor,
-  ): Promise<OrderTransition> {
-    return this.persistence.inTransaction(async (tx) => {
-      await this.persistence.lockOrder(tx, orderId);
-      const order = await this.persistence.findInTransaction(
-        tx,
-        locationId,
-        orderId,
-      );
-      this.assertActive(order.status);
-      const item = order.items.find((row) => row.id === orderItemId);
-      if (!item) {
-        throw new AppException(
-          ErrorCode.ORDER_ITEM_NOT_FOUND,
-          HttpStatus.NOT_FOUND,
-        );
-      }
-      if (item.status === OrderItemStatus.REVERSED) {
-        return { order, changed: false };
-      }
-      if (
-        item.status !== OrderItemStatus.CONFIRMED ||
-        item.type !== OrderItemType.PRODUCT
-      ) {
-        throw new AppException(
-          ErrorCode.ORDER_STATUS_INVALID,
-          HttpStatus.CONFLICT,
-        );
-      }
-      const postedReturns = item.returnItems.filter(
-        (returnItem) => returnItem.return.status === OrderReturnStatus.POSTED,
-      );
-      const returnedQuantity = postedReturns.reduce(
-        (sum, returnItem) => sum.plus(returnItem.quantity),
-        new Prisma.Decimal(0),
-      );
-      const returnedAmount = postedReturns.reduce(
-        (sum, returnItem) => sum.plus(returnItem.lineTotal),
-        new Prisma.Decimal(0),
-      );
-      const remainingQuantity = item.quantity.minus(returnedQuantity);
-      const remainingAmount = item.lineTotal.minus(returnedAmount);
-      if (remainingAmount.gt(0)) {
-        await this.earnings.reverseForProductOrderItemAmount(
-          locationId,
-          orderId,
-          orderItemId,
-          remainingAmount,
-          reason,
-          actor,
-          tx,
-        );
-      }
-      if (remainingQuantity.gt(0)) {
-        await this.inventory.reverseSaleItemQuantity(
-          locationId,
-          orderId,
-          orderItemId,
-          remainingQuantity,
-          new Date(),
-          tx,
-        );
-      }
-      await tx.orderItem.update({
-        where: { id: orderItemId },
-        data: { status: OrderItemStatus.REVERSED },
-      });
-      return {
-        order: await this.persistence.refreshTotals(tx, locationId, orderId),
-        changed: true,
-      };
     });
   }
 
@@ -441,14 +363,16 @@ export class OrderProductTransitionService {
   private confirmItemsRequestHash(
     locationId: string,
     orderId: string,
-    orderItemIds: string[],
+    dto: ConfirmOrderItemsDto,
   ): string {
     return createHash('sha256')
       .update(
         JSON.stringify({
           locationId,
           orderId,
-          itemIds: [...orderItemIds].sort(),
+          itemIds: [...dto.itemIds].sort(),
+          // Only when present, so confirmations without a payment keep their earlier hash.
+          ...(dto.payment ? { payment: paymentIntent(dto.payment) } : {}),
         }),
       )
       .digest('hex');

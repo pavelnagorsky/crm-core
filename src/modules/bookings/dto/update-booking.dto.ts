@@ -18,6 +18,7 @@ import { IsLocalDateTime } from '../../../shared/time/decorators/is-local-date-t
 import { IsPhone } from '../../../shared/decorators/is-phone.decorator.js';
 import { UpdateBookingItemPriceDto } from './update-booking-item-price.dto.js';
 import { BookingItemStaffAssignmentDto } from './booking-item-staff-assignment.dto.js';
+import { PaymentInputDto } from '../../payments/dto/payment-input.dto.js';
 
 export class UpdateBookingDto {
   @ApiProperty({
@@ -164,4 +165,30 @@ export class UpdateBookingDto {
   @IsString()
   @MaxLength(2000)
   internalNotes?: string;
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    isArray: true,
+    required: false,
+    description:
+      'Draft PRODUCT lines of the visit order to confirm after the edit, in the same transaction. Needs order:write. Errors as in PUT bookings/:id/payment.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(200)
+  @ArrayUnique()
+  @IsUUID(undefined, { each: true })
+  confirmProductItemIds?: string[];
+
+  @ApiProperty({
+    type: () => PaymentInputDto,
+    required: false,
+    description:
+      'Payment of the visit, applied after the edit (and confirmed products) in the same transaction, by the rules of PUT bookings/:id/payment: a started PENDING or CONFIRMED visit is completed; replacing an active payment needs order:write.',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PaymentInputDto)
+  payment?: PaymentInputDto;
 }
