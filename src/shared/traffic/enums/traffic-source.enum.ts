@@ -1,0 +1,22 @@
+/** Marketing source of a booking or of a client's first booking. Mirrors the Prisma enum. */
+export enum TrafficSource {
+  DIRECT = 'DIRECT',
+  INSTAGRAM = 'INSTAGRAM',
+  VK = 'VK',
+  TELEGRAM = 'TELEGRAM',
+  WHATSAPP = 'WHATSAPP',
+  TIKTOK = 'TIKTOK',
+  FACEBOOK = 'FACEBOOK',
+  YANDEX_MAPS = 'YANDEX_MAPS',
+  TWO_GIS = 'TWO_GIS',
+  GOOGLE_MAPS = 'GOOGLE_MAPS',
+  SEARCH = 'SEARCH',
+  PAID_ADS = 'PAID_ADS',
+  WEBSITE = 'WEBSITE',
+  MAILING = 'MAILING',
+  OFFLINE = 'OFFLINE',
+  REFERRAL = 'REFERRAL',
+  PHONE_CALL = 'PHONE_CALL',
+  WALK_IN = 'WALK_IN',
+  OTHER = 'OTHER',
+}

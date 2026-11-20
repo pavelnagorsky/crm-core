@@ -74,6 +74,28 @@ const regularExpressions = {
   billingPlanCode: /^[a-z0-9][a-z0-9-]*$/,
   // Subscription payment number as the owner writes it — KL-000123, KL000123, 123
   paymentNumber: /^(?:KL-?)?(\d{1,9})$/i,
+  // Control characters stripped from client-sent traffic values
+  controlChars: /\p{Cc}/gu,
+  // Whitespace runs, replaced in normalized traffic tokens
+  whitespaceRun: /\s+/g,
+  // A UTM value that carries an email address is personal data and is dropped
+  emailLike: /[^\s@]+@[^\s@]+\.[^\s@]+/,
+  // Seven or more digits in a row look like a phone number and are dropped from UTM values
+  longDigitRun: /\d{7,}/,
+  // Characters a traffic source detail may not hold; each run becomes "_"
+  trafficDetailUnsafe: /[^\p{L}\p{N}._-]+/gu,
+  // Repeated underscores of a normalized traffic detail
+  underscoreRun: /_{2,}/g,
+  // Leading and trailing underscores of a normalized traffic detail
+  edgeUnderscores: /^_+|_+$/g,
+  // URL scheme at the start of a referrer, before the host is parsed out of it
+  urlScheme: /^[a-z][a-z\d+.-]*:\/\//i,
+  // Trailing dots of a fully qualified host
+  trailingDots: /\.+$/,
+  // Mobile and www prefixes stripped from a referrer host
+  referrerHostPrefix: /^(?:www\d*|m)\./,
+  // Country zone after a search engine name - ru, com, com.tr, co.uk
+  searchEngineZone: /^[a-z]{2,3}(?:\.[a-z]{2,3})?$/,
 };
 
 export default regularExpressions;
