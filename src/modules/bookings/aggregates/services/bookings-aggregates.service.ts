@@ -213,7 +213,8 @@ export class BookingsAggregatesService {
       completedVisits: Number(row.completedVisits),
       completedRevenue: MoneyUtils.decimal(row.completedRevenue),
     });
-    const totalRow = rows.find((row) => row.sourceGrouped);
+    // The empty grouping set always yields the total row, even without bookings.
+    const totalRow = rows.find((row) => row.sourceGrouped)!;
     return {
       sources: rows
         .filter((row) => !row.sourceGrouped && row.detailGrouped)
@@ -221,17 +222,7 @@ export class BookingsAggregatesService {
       details: rows
         .filter((row) => !row.detailGrouped && row.detail !== null)
         .map(toRow),
-      total: totalRow
-        ? toRow(totalRow)
-        : {
-            source: null,
-            detail: null,
-            bookings: 0,
-            channelBookings: 0,
-            newClients: 0,
-            completedVisits: 0,
-            completedRevenue: MoneyUtils.decimal(0),
-          },
+      total: toRow(totalRow),
     };
   }
 

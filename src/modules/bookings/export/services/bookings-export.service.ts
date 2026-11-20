@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { BookingTrafficTouch } from '@prisma/client';
 import { labelOf } from '../../../../shared/i18n/label-of.js';
+import { trafficSourceLabel } from '../../../../shared/traffic/rules/traffic-source-label.js';
 import {
   DEFAULT_LANG,
   LocaleService,
@@ -126,7 +127,11 @@ export class BookingsExportService {
     timezone: string,
   ): BookingRow[] {
     const traffic = {
-      trafficSource: this.trafficSourceLabel(booking, messages),
+      trafficSource: trafficSourceLabel(
+        messages.trafficSource,
+        booking.trafficSource,
+        booking.trafficSourceDetail,
+      ),
       utmSource: touch?.utmSource ?? '',
       utmMedium: touch?.utmMedium ?? '',
       utmCampaign: touch?.utmCampaign ?? '',
@@ -150,16 +155,5 @@ export class BookingsExportService {
       cancellationReason: booking.cancellationReason ?? '',
       createdAt: TimeUtils.zonedDateTimeStr(booking.createdAt, timezone),
     }));
-  }
-
-  /** "Instagram" or "Платная реклама: vk_ads"; empty when no source is set. */
-  private trafficSourceLabel(
-    booking: BookingWithItems,
-    messages: I18nLocale,
-  ): string {
-    const label = labelOf(messages.trafficSource, booking.trafficSource);
-    return label && booking.trafficSourceDetail
-      ? `${label}: ${booking.trafficSourceDetail}`
-      : label;
   }
 }

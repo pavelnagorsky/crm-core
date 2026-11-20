@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Client } from '@prisma/client';
-import { labelOf } from '../../../../shared/i18n/label-of.js';
+import { trafficSourceLabel } from '../../../../shared/traffic/rules/traffic-source-label.js';
 import {
   DEFAULT_LANG,
   LocaleService,
@@ -79,7 +79,11 @@ export class ClientsExportService {
         : '',
       gender: this.genderLabel(client.gender, text),
       notes: client.notes ?? '',
-      acquisitionSource: this.acquisitionLabel(client, sources),
+      acquisitionSource: trafficSourceLabel(
+        sources,
+        client.acquisitionSource,
+        client.acquisitionSourceDetail,
+      ),
     };
   }
 
@@ -90,16 +94,5 @@ export class ClientsExportService {
     if (gender === 'MALE') return text.genderMale;
     if (gender === 'FEMALE') return text.genderFemale;
     return gender ?? '';
-  }
-
-  /** "ВКонтакте" or "Офлайн-реклама: листовки"; empty when unknown. */
-  private acquisitionLabel(
-    client: Client,
-    sources: Record<string, string>,
-  ): string {
-    const label = labelOf(sources, client.acquisitionSource);
-    return label && client.acquisitionSourceDetail
-      ? `${label}: ${client.acquisitionSourceDetail}`
-      : label;
   }
 }

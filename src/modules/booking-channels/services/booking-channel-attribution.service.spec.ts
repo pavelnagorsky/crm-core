@@ -24,7 +24,7 @@ describe('BookingChannelAttributionService', () => {
     expect((error as AppException).getStatus()).toBe(HttpStatus.BAD_REQUEST);
   });
 
-  it('keeps an unattributed public booking on the public page source', async () => {
+  it('keeps an unattributed public booking on the public page channel', async () => {
     const { service: attribution, db } = service();
     await expect(
       attribution.resolve('b1', undefined, undefined),

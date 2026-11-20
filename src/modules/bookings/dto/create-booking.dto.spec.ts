@@ -1,19 +1,9 @@
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
-import { PublicCreateBookingDto } from './public-create-booking.dto.js';
 import { CreateBookingDto } from './create-booking.dto.js';
+import { PublicCreateBookingDto } from './public-create-booking.dto.js';
 import { ManualCreateBookingDto } from './manual-create-booking.dto.js';
 import { UpdateBookingDto } from './update-booking.dto.js';
-
-function booking(overrides: Partial<CreateBookingDto> = {}): CreateBookingDto {
-  return Object.assign(new CreateBookingDto(), {
-    serviceId: '22222222-2222-4222-8222-222222222222',
-    startAt: '2026-09-20T10:00:00',
-    firstName: 'Ann',
-    phone: '+375291112233',
-    ...overrides,
-  });
-}
 
 describe('UpdateBookingDto custom time flag', () => {
   it.each([undefined, true, false])(

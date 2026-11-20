@@ -1,6 +1,10 @@
 import { Injectable } from '@nestjs/common';
 import { LocaleService } from '../../../shared/i18n/locale.service.js';
-import { trafficSourceBreakdown } from '../rules/traffic-source-widgets.js';
+import {
+  emptyTrafficSourceTotals,
+  trafficSourceBreakdown,
+  trafficSourceLabels,
+} from '../rules/traffic-source-widgets.js';
 import { BookingStatus } from '@prisma/client';
 import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import {
@@ -384,16 +388,13 @@ export class DashboardWidgetFactory {
     key: DashboardWidgetKey,
     ctx: DashboardReadContext,
   ): WidgetDto {
-    const messages = this.locale.get();
     return {
       key,
       kind: WidgetKind.BREAKDOWN,
-      breakdown: ctx.trafficTotals
-        ? trafficSourceBreakdown(ctx.trafficTotals, {
-            sources: messages.trafficSource,
-            otherDetails: messages.trafficDetailOther,
-          })
-        : { dimension: 'trafficSource', items: [], total: 0 },
+      breakdown: trafficSourceBreakdown(
+        ctx.trafficTotals ?? emptyTrafficSourceTotals(),
+        trafficSourceLabels(this.locale.get()),
+      ),
       meta: this.buildMeta(ctx, false),
     };
   }

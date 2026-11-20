@@ -27,8 +27,7 @@ import { OrderClientRevenueTotals } from '../../../orders/aggregates/interfaces/
 import { OrdersAggregatesService } from '../../../orders/aggregates/services/orders-aggregates.service.js';
 import { ClientsAnalyticsRequestDto } from '../dto/clients-analytics-request.dto.js';
 import { LocaleService } from '../../../../shared/i18n/locale.service.js';
-import { pct } from '../../../dashboard/rules/dashboard-metrics.js';
-import { trafficSourceId } from '../../../dashboard/rules/traffic-source-widgets.js';
+import { sourceBreakdown } from '../../../dashboard/rules/traffic-source-widgets.js';
 import { ClientsService } from '../../services/clients.service.js';
 import { ClientsAnalyticsWidgetKey } from '../enums/clients-analytics-widget-key.enum.js';
 import { ClientAnalyticsContext } from '../interfaces/client-analytics-context.interface.js';
@@ -205,24 +204,17 @@ export class ClientsAnalyticsService {
     key: ClientsAnalyticsWidgetKey,
     ctx: ClientAnalyticsContext,
   ): WidgetDto {
-    const rows = ctx.acquiredBySource ?? [];
-    const labels = this.locale.get().trafficSource;
-    const total = rows.reduce((sum, row) => sum + row.count, 0);
-    const items = rows
-      .map((row) => {
-        const id = trafficSourceId(row.source);
-        return {
-          id,
-          label: labels[id] ?? id,
-          value: row.count,
-          sharePct: pct(row.count, total),
-        };
-      })
-      .sort((a, b) => b.value - a.value || a.id.localeCompare(b.id));
     return {
       key,
       kind: WidgetKind.BREAKDOWN,
-      breakdown: { dimension: 'acquisitionSource', items, total },
+      breakdown: sourceBreakdown(
+        'acquisitionSource',
+        (ctx.acquiredBySource ?? []).map((row) => ({
+          source: row.source,
+          value: row.count,
+        })),
+        this.locale.get().trafficSource,
+      ),
       meta: {
         period: this.buckets.periodDto(ctx.range),
         timezone: ctx.range.timezone,

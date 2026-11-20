@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { I18nLocale } from '../../../shared/interfaces/i18n-locale.interface.js';
 import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { TrafficSource } from '../../../shared/traffic/enums/traffic-source.enum.js';
 import { TrafficSourceViews } from '../../booking-traffic/interfaces/traffic-source-views.interface.js';
@@ -27,6 +28,34 @@ export const TRAFFIC_SOURCE_TABLE_COLUMNS: WidgetTableColumnDto[] = [
   { key: 'conversionPct', unit: MetricUnit.PERCENT },
 ];
 
+/** A totals row with nothing counted. */
+export function emptyTrafficSourceRow(
+  source: TrafficSource | null = null,
+): TrafficSourceTotalsRow {
+  return {
+    source,
+    detail: null,
+    bookings: 0,
+    channelBookings: 0,
+    newClients: 0,
+    completedVisits: 0,
+    completedRevenue: new Prisma.Decimal(0),
+  };
+}
+
+/** Totals of a period without bookings. */
+export function emptyTrafficSourceTotals(): TrafficSourceTotals {
+  return { sources: [], details: [], total: emptyTrafficSourceRow() };
+}
+
+/** Russian row labels from the locale messages. */
+export function trafficSourceLabels(messages: I18nLocale): TrafficSourceLabels {
+  return {
+    sources: messages.trafficSource,
+    otherDetails: messages.trafficDetailOther,
+  };
+}
+
 export function trafficSourceId(source: TrafficSource | null): string {
   return source ?? TRAFFIC_SOURCE_NONE_ID;
 }
@@ -36,20 +65,41 @@ export function trafficSourceBreakdown(
   totals: TrafficSourceTotals,
   labels: TrafficSourceLabels,
 ): WidgetBreakdownDto {
-  const total = totals.total.bookings;
-  const items = totals.sources
-    .map((row) => {
-      const id = trafficSourceId(row.source);
+  return sourceBreakdown(
+    'trafficSource',
+    totals.sources.map((row) => ({
+      source: row.source,
+      value: row.bookings,
+      secondaryValue: row.newClients,
+    })),
+    labels.sources,
+  );
+}
+
+/** Bars per source, tallest first, with each bar's share of the total. */
+export function sourceBreakdown(
+  dimension: string,
+  rows: {
+    source: TrafficSource | null;
+    value: number;
+    secondaryValue?: number;
+  }[],
+  labels: Record<string, string>,
+): WidgetBreakdownDto {
+  const total = rows.reduce((sum, row) => sum + row.value, 0);
+  const items = rows
+    .map(({ source, value, secondaryValue }) => {
+      const id = trafficSourceId(source);
       return {
         id,
-        label: labels.sources[id] ?? id,
-        value: row.bookings,
-        secondaryValue: row.newClients,
-        sharePct: pct(row.bookings, total),
+        label: labels[id] ?? id,
+        value,
+        ...(secondaryValue === undefined ? {} : { secondaryValue }),
+        sharePct: pct(value, total),
       };
     })
     .sort((a, b) => b.value - a.value || a.id.localeCompare(b.id));
-  return { dimension: 'trafficSource', items, total };
+  return { dimension, items, total };
 }
 
 /**
@@ -192,14 +242,6 @@ function sumRows(rows: TrafficSourceTotalsRow[]): TrafficSourceTotalsRow {
       completedVisits: sum.completedVisits + row.completedVisits,
       completedRevenue: sum.completedRevenue.plus(row.completedRevenue),
     }),
-    {
-      source: rows[0]?.source ?? null,
-      detail: null,
-      bookings: 0,
-      channelBookings: 0,
-      newClients: 0,
-      completedVisits: 0,
-      completedRevenue: new Prisma.Decimal(0),
-    },
+    emptyTrafficSourceRow(rows[0]?.source ?? null),
   );
 }

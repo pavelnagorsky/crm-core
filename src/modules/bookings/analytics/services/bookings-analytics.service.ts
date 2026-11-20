@@ -14,12 +14,12 @@ import { DashboardRangeService } from '../../../dashboard/services/dashboard-ran
 import { StaffService } from '../../../staff/services/staff.service.js';
 import { LocaleService } from '../../../../shared/i18n/locale.service.js';
 import { BookingTrafficService } from '../../../booking-traffic/services/booking-traffic.service.js';
-import { TrafficSourceLabels } from '../../../dashboard/interfaces/traffic-source-labels.interface.js';
 import {
+  emptyTrafficSourceTotals,
   trafficSourceBreakdown,
+  trafficSourceLabels,
   trafficSourceTable,
 } from '../../../dashboard/rules/traffic-source-widgets.js';
-import { TrafficSourceTotals } from '../../interfaces/traffic-source-totals.interface.js';
 import { BookingsAggregatesService } from '../../aggregates/services/bookings-aggregates.service.js';
 import { AggregateRange } from '../../interfaces/aggregate-range.interface.js';
 import { AggregateSnapshot } from '../../interfaces/aggregate-snapshot.interface.js';
@@ -48,20 +48,6 @@ const HELD_NUMERATOR: BookingStatus[] = [
   BookingStatus.COMPLETED,
   BookingStatus.CONFIRMED,
 ];
-
-const EMPTY_TRAFFIC_TOTALS: TrafficSourceTotals = {
-  sources: [],
-  details: [],
-  total: {
-    source: null,
-    detail: null,
-    bookings: 0,
-    channelBookings: 0,
-    newClients: 0,
-    completedVisits: 0,
-    completedRevenue: MoneyUtils.decimal(0),
-  },
-};
 
 const EMPTY_OCCUPANCY: OccupancyData = {
   booked: { pastHeldMinutes: 0, futureConfirmedMinutes: 0 },
@@ -216,9 +202,9 @@ export class BookingsAnalyticsService {
       key,
       kind: WidgetKind.TABLE,
       table: trafficSourceTable(
-        ctx.trafficTotals ?? EMPTY_TRAFFIC_TOTALS,
+        ctx.trafficTotals ?? emptyTrafficSourceTotals(),
         ctx.trafficViews ?? null,
-        this.trafficLabels(),
+        trafficSourceLabels(this.locale.get()),
       ),
       meta: this.buildMeta(ctx, true, false),
     };
@@ -232,18 +218,10 @@ export class BookingsAnalyticsService {
       key,
       kind: WidgetKind.BREAKDOWN,
       breakdown: trafficSourceBreakdown(
-        ctx.trafficTotals ?? EMPTY_TRAFFIC_TOTALS,
-        this.trafficLabels(),
+        ctx.trafficTotals ?? emptyTrafficSourceTotals(),
+        trafficSourceLabels(this.locale.get()),
       ),
       meta: this.buildMeta(ctx, false, false),
-    };
-  }
-
-  private trafficLabels(): TrafficSourceLabels {
-    const messages = this.locale.get();
-    return {
-      sources: messages.trafficSource,
-      otherDetails: messages.trafficDetailOther,
     };
   }
 
