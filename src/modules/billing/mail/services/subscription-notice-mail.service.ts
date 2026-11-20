@@ -74,6 +74,7 @@ export class SubscriptionNoticeMailService {
           variant: PENDING_VARIANT,
         }
       : {
+          brandId,
           brandName,
           recipientFirstName: null,
           timezone: subscription.timezone,

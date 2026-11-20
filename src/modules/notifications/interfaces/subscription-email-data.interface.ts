@@ -2,6 +2,7 @@ import { BillingPeriod } from '@prisma/client';
 
 /** Data of the platform billing emails (plan section 9.4). Absent fields hide their rows. */
 export interface SubscriptionEmailData {
+  brandId: string;
   brandName: string;
   recipientFirstName: string | null;
   /** Subscription timezone: dates are shown as its local days. */

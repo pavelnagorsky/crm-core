@@ -7,26 +7,9 @@ import { fileURLToPath } from 'url';
 import { IAppConfig } from '../../../../config/interfaces/app-config.interface.js';
 import { IFrontendConfig } from '../../../../config/interfaces/frontend-config.interface.js';
 import { I18nLocale } from '../../../../shared/interfaces/i18n-locale.interface.js';
+import { EmailTemplate } from '../../enums/email-template.enum.js';
 import { RenderedEmail } from '../../interfaces/rendered-email.interface.js';
 import { EMAIL_CHIP_COLORS, EMAIL_CHIP_TONES } from './email-chips.js';
-
-export type EmailTemplate =
-  | 'confirm-email'
-  | 'reset-password'
-  | 'access-invitation'
-  | 'booking-confirmed'
-  | 'booking-pending'
-  | 'booking-status-changed'
-  | 'booking-reminder'
-  | 'review-request'
-  | 'staff-booking-event'
-  | 'subscription-trial-ending'
-  | 'subscription-period-ending'
-  | 'subscription-access-ended'
-  | 'subscription-access-limited'
-  | 'subscription-payment-requested'
-  | 'subscription-payment-received'
-  | 'admin-subscription-payment-requested';
 
 type CompiledTemplate = Handlebars.TemplateDelegate;
 
@@ -35,20 +18,21 @@ const PLATFORM_BUTTON_COLOR = '#00A76F';
 const BRAND_BUTTON_COLOR = '#1C252E';
 /** Sent by Klendo itself: Klendo sender, logo and footer; the brand is named in the text. */
 const PLATFORM_TEMPLATES: ReadonlySet<EmailTemplate> = new Set([
-  'confirm-email',
-  'reset-password',
-  'subscription-trial-ending',
-  'subscription-period-ending',
-  'subscription-access-ended',
-  'subscription-access-limited',
-  'subscription-payment-requested',
-  'subscription-payment-received',
-  'admin-subscription-payment-requested',
+  EmailTemplate.CONFIRM_EMAIL,
+  EmailTemplate.RESET_PASSWORD,
+  EmailTemplate.SUBSCRIPTION_TRIAL_ENDING,
+  EmailTemplate.SUBSCRIPTION_PERIOD_ENDING,
+  EmailTemplate.SUBSCRIPTION_ACCESS_ENDED,
+  EmailTemplate.SUBSCRIPTION_ACCESS_LIMITED,
+  EmailTemplate.SUBSCRIPTION_PAYMENT_REQUESTED,
+  EmailTemplate.SUBSCRIPTION_PAYMENT_RECEIVED,
+  EmailTemplate.ADMIN_SUBSCRIPTION_PAYMENT_REQUESTED,
+  EmailTemplate.SMTP_TEST,
 ]);
 /** Sent to the brand's own team: the salon's contacts mean nothing to them. */
 const TEAM_TEMPLATES: ReadonlySet<EmailTemplate> = new Set([
-  'access-invitation',
-  'staff-booking-event',
+  EmailTemplate.ACCESS_INVITATION,
+  EmailTemplate.STAFF_BOOKING_EVENT,
 ]);
 /** Klendo site pages linked from the footer of emails the platform sends itself. */
 const PLATFORM_FOOTER_PATHS = {
@@ -65,24 +49,6 @@ const PARTIALS: Record<string, string> = {
   greeting: 'greeting',
   linkFallback: 'link-fallback',
 };
-const EMAIL_TEMPLATES: EmailTemplate[] = [
-  'confirm-email',
-  'reset-password',
-  'access-invitation',
-  'booking-confirmed',
-  'booking-pending',
-  'booking-status-changed',
-  'booking-reminder',
-  'review-request',
-  'staff-booking-event',
-  'subscription-trial-ending',
-  'subscription-period-ending',
-  'subscription-access-ended',
-  'subscription-access-limited',
-  'subscription-payment-requested',
-  'subscription-payment-received',
-  'admin-subscription-payment-requested',
-];
 
 @Injectable()
 export class EmailRenderer implements OnModuleInit {
@@ -147,7 +113,7 @@ export class EmailRenderer implements OnModuleInit {
           'utf-8',
         ),
       );
-    for (const name of EMAIL_TEMPLATES) {
+    for (const name of Object.values(EmailTemplate)) {
       const source = readFileSync(
         join(templatesDir, this.lang, `${name}.hbs`),
         'utf-8',

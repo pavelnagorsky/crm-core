@@ -26,6 +26,10 @@ const regularExpressions = {
   decimalToken: /^-?\d+(\.\d+)?$/,
   // Non-negative money after canonicalization to 2 decimal places
   moneyAmount: /^\d+\.\d{2}$/,
+  // Positive money after canonicalization to 2 decimal places: not 0.00
+  positiveMoneyAmount: /^(?!0+\.00$)\d+\.\d{2}$/,
+  // Prefixes of payment keys nested in order operations; clients may not use them
+  reservedPaymentKeyPrefix: /^order-(?:sale|confirm|return):/,
   // Signed money after canonicalization to 2 decimal places
   signedAmount: /^-?\d+\.\d{2}$/,
   // Non-negative stock quantity with up to 3 decimal places

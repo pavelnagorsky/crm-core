@@ -93,6 +93,8 @@ channel, status or interval. Only `MANUAL` bookings can have `isCustomTime: true
 | `BookingWriteLockService` | Lock active locations and reject booking edits if status or `updatedAt` changed since reading. |
 | `BookingSlotLockService` | Acquire deduplicated staff/day advisory locks in a stable order and recheck availability using the transaction. |
 | `BookingEventsService` | Build booking audit payloads and send creation/status notifications. |
+| `BookingPaymentService` | Pay a visit: complete a started visit, confirm product lines and record the payment through `PaymentsFacade` in the caller's transaction. |
+| `BookingPaymentReadService` | Amount due and active journal of visits for the booking card and the calendar, in batches. |
 
 Changing `startAt`, `staffId` or item `staffAssignments` moves the existing item intervals and checks slot
 availability. Every member of the proposed team must still be active, belong to
@@ -135,6 +137,40 @@ staff accounts, with recipients resolved by `AccessService`.
 
 Only confirmed bookings complete automatically. An unconfirmed request is never
 completed, reminded or paid for by the cron; staff close it by hand.
+
+## Visit payment
+
+`PUT /locations/:locationId/bookings/:id/payment`, manual creation with `payment` and
+`confirmProducts`, and `PUT /locations/:locationId/bookings/:id` with `payment` and
+`confirmProductItemIds` share one rule, implemented in `BookingPaymentService`
+(design: [payments-plan.md](../payments-plan.md)):
+
+1. The payment key is locked first (`pg_advisory_xact_lock`). An earlier identical
+   request returns its operation and the whole step is skipped; the same key with
+   another request answers 409 `PAYMENT_IDEMPOTENCY_CONFLICT`. On creation any
+   earlier use of the key is a conflict, so a retried creation creates nothing.
+2. The booking is locked (`FOR UPDATE`, read again; creation and update already hold
+   it). NO_SHOW or CANCELLED refuse confirming products (409
+   `BOOKING_PAYMENT_NOT_ALLOWED`).
+3. A paid PENDING or CONFIRMED visit that has started is completed in the same
+   transaction (`BookingLifecycleService.completeInTransaction`: status, order
+   services, earnings). Manual creation applies the same rule to the computed status,
+   so the booking is created COMPLETED. A visit that has not started keeps its status
+   (prepayment).
+4. The visit order is created when missing and locked (`OrdersFacade.lockBookingOrder`),
+   chosen draft products are confirmed, the amount due is computed under the lock
+   (`rules/visit-payment-due.rules.ts`: services by the booking for PENDING,
+   CONFIRMED and COMPLETED, plus sold products) and the payment is recorded or replaces
+   the active one.
+5. After commit: `BOOKING_STATUS_CHANGED` for a completion, `ORDER_ITEM_CONFIRMED`,
+   `PAYMENT_RECORDED` or `PAYMENT_REPLACED`.
+
+Any error rolls everything back. Replacing an active payment needs `order:write`; a
+master records the first payment of their own visit. `PATCH status` takes no payment;
+cron, status changes and creation never record money. Deleting a booking with a paid
+amount answers 409 `BOOKING_HAS_PAYMENTS`. The update hooks of
+`BookingRescheduleService` (`BookingWriteHooks`) let the key lock run first and
+the payment run after the completed-visit sync, in the reschedule transaction.
 
 ## Parallel bundle teams
 

@@ -1,8 +1,11 @@
 import { Module } from '@nestjs/common';
 import { BookingsAggregatesModule } from '../bookings/aggregates/bookings-aggregates.module.js';
+import { BookingVisitsModule } from '../bookings/visits/booking-visits.module.js';
 import { ClientsModule } from '../clients/clients.module.js';
 import { InventoryModule } from '../inventory/inventory.module.js';
 import { LocationModule } from '../location/location.module.js';
+import { PaymentsAggregatesModule } from '../payments/aggregates/payments-aggregates.module.js';
+import { PaymentsModule } from '../payments/payments.module.js';
 import { PayrollModule } from '../payroll/payroll.module.js';
 import { ProductsModule } from '../products/products.module.js';
 import { StaffModule } from '../staff/staff.module.js';
@@ -16,6 +19,7 @@ import { OrderBookingSyncService } from './services/order-booking-sync.service.j
 import { OrderCreationService } from './services/order-creation.service.js';
 import { OrderDraftMutationService } from './services/order-draft-mutation.service.js';
 import { OrderDraftService } from './services/order-draft.service.js';
+import { OrderPaymentService } from './services/order-payment.service.js';
 import { OrderPersistenceService } from './services/order-persistence.service.js';
 import { OrderProductTransitionService } from './services/order-product-transition.service.js';
 import { OrderReturnService } from './services/order-return.service.js';
@@ -23,12 +27,15 @@ import { OrderReturnService } from './services/order-return.service.js';
 @Module({
   imports: [
     BookingsAggregatesModule,
+    BookingVisitsModule,
     LocationModule,
     ProductsModule,
     InventoryModule,
     StaffModule,
     PayrollModule,
     ClientsModule,
+    PaymentsModule,
+    PaymentsAggregatesModule,
   ],
   controllers: [OrdersController],
   providers: [
@@ -42,6 +49,7 @@ import { OrderReturnService } from './services/order-return.service.js';
     OrderBookingSyncService,
     OrderProductTransitionService,
     OrderReturnService,
+    OrderPaymentService,
     OrderStateRules,
     OrdersAggregatesService,
   ],

@@ -7,6 +7,9 @@ import { CalendarBookingFeed } from '../../../calendar/interfaces/calendar-booki
 import { CalendarBookingView } from '../../../calendar/interfaces/calendar-booking-view.interface.js';
 import { BookingStatus } from '../../enums/booking-status.enum.js';
 import { BookingWithItems } from '../../interfaces/booking-with-items.interface.js';
+import { PaymentStatus } from '../../../payments/enums/payment-status.enum.js';
+import { paymentStatus } from '../../../payments/rules/payment-state.rules.js';
+import { BookingPaymentReadService } from './booking-payment-read.service.js';
 
 const CALENDAR_VISIBLE_STATUSES: ReadonlySet<string> = new Set([
   BookingStatus.PENDING,
@@ -42,7 +45,10 @@ type CalendarItemRow = Prisma.BookingItemGetPayload<{
 
 @Injectable()
 export class BookingCalendarReadService {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly payments: BookingPaymentReadService,
+  ) {}
 
   async listForCalendar(
     locationId: string,
@@ -63,10 +69,14 @@ export class BookingCalendarReadService {
       select: calendarItemSelect,
     });
 
+    const visible = rows.filter((row) =>
+      CALENDAR_VISIBLE_STATUSES.has(row.booking.status),
+    );
+    const statuses = await this.paymentStatuses([
+      ...new Set(visible.map((row) => row.booking.id)),
+    ]);
     return {
-      bookings: this.toViews(
-        rows.filter((row) => CALENDAR_VISIBLE_STATUSES.has(row.booking.status)),
-      ),
+      bookings: this.toViews(visible, statuses),
       linkedEventIds: rows.flatMap((row) =>
         row.calendarEventId ? [row.calendarEventId] : [],
       ),
@@ -94,7 +104,40 @@ export class BookingCalendarReadService {
     return booking;
   }
 
-  private toViews(rows: CalendarItemRow[]): CalendarBookingView[] {
+  /**
+   * Payment status per booking. Services are due by all items of a booking, not only the
+   * ones inside the window, so the bookings are read whole.
+   */
+  private async paymentStatuses(
+    bookingIds: string[],
+  ): Promise<Map<string, PaymentStatus>> {
+    if (bookingIds.length === 0) return new Map();
+    const bookings = await this.db.booking.findMany({
+      where: { id: { in: bookingIds } },
+      select: {
+        id: true,
+        status: true,
+        deletedAt: true,
+        items: { select: { chargedPrice: true, customPrice: true } },
+      },
+    });
+    const summaries = await this.payments.summaries(bookings);
+    const zero = MoneyUtils.decimal(0);
+    return new Map(
+      [...summaries.values()].map((summary) => [
+        summary.bookingId,
+        paymentStatus(summary.amountDue, {
+          paidAmount: summary.totals?.paidAmount ?? zero,
+          hasRecords: summary.totals?.hasRecords ?? false,
+        }),
+      ]),
+    );
+  }
+
+  private toViews(
+    rows: CalendarItemRow[],
+    statuses: Map<string, PaymentStatus>,
+  ): CalendarBookingView[] {
     const clusters = this.clusters(rows);
     const bookingCount = new Map<string, number>();
     const staffCount = new Map<string, number>();
@@ -114,6 +157,7 @@ export class BookingCalendarReadService {
       staffIndex.set(staffKey, index + 1);
       return this.toView(
         cluster,
+        statuses.get(bookingId) ?? PaymentStatus.NOT_REQUIRED,
         this.cardId(
           bookingId,
           staffId,
@@ -170,7 +214,11 @@ export class BookingCalendarReadService {
     return `${bookingId}:${staffId}:${staffIndex}`;
   }
 
-  private toView(rows: CalendarItemRow[], id: string): CalendarBookingView {
+  private toView(
+    rows: CalendarItemRow[],
+    paymentStatus: PaymentStatus,
+    id: string,
+  ): CalendarBookingView {
     const ordered = [...rows].sort(
       (left, right) =>
         left.sortOrder - right.sortOrder ||
@@ -185,6 +233,7 @@ export class BookingCalendarReadService {
       id,
       entityId: ordered[0].booking.id,
       status: ordered[0].booking.status,
+      paymentStatus,
       clientName: [
         ordered[0].booking.clientFirstName,
         ordered[0].booking.clientLastName,

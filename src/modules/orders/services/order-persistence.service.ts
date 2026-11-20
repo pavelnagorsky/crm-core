@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import {
   OrderItemStatus,
+  OrderItemType,
   OrderReturnStatus,
   OrderStatus,
   Prisma,
@@ -18,7 +19,9 @@ import { OrderSearchRequestDto } from '../dto/order-search-request.dto.js';
 import { OrderStatusCountsRequestDto } from '../dto/order-status-counts-request.dto.js';
 import { OrderSearchOrderBy } from '../enums/order-search-order-by.enum.js';
 import { OrderStatusCount } from '../interfaces/order-status-count.interface.js';
+import { BookingOrderProducts } from '../interfaces/booking-order-products.interface.js';
 import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
+import { orderProductsNet } from '../rules/order-payment-due.rules.js';
 
 const ORDER_STATUSES = [OrderStatus.ACTIVE, OrderStatus.VOIDED];
 
@@ -144,6 +147,72 @@ export class OrderPersistenceService {
       throw new NotFoundException('Order not found');
     }
     return order;
+  }
+
+  /** The visit order of a booking, or null when the booking has none yet. */
+  async findForBookingInTransaction(
+    tx: Prisma.TransactionClient,
+    locationId: string,
+    bookingId: string,
+  ): Promise<OrderWithItems | null> {
+    const order = await tx.order.findUnique({
+      where: { location: ACTIVE_LOCATION_WHERE, bookingId },
+      include: orderInclude,
+    });
+    return order && order.locationId === locationId ? order : null;
+  }
+
+  /** The booking of an order in the location (null for a sale). 404 for an unknown order. */
+  async findBookingIdInTransaction(
+    tx: Prisma.TransactionClient,
+    locationId: string,
+    orderId: string,
+  ): Promise<string | null> {
+    const order = await tx.order.findFirst({
+      where: { location: ACTIVE_LOCATION_WHERE, id: orderId, locationId },
+      select: { bookingId: true },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+    return order.bookingId;
+  }
+
+  /** Visit order id and sold products of each booking that has an order. */
+  async productTotalsByBookings(
+    bookingIds: readonly string[],
+    client: Prisma.TransactionClient = this.db,
+  ): Promise<Map<string, BookingOrderProducts>> {
+    const ids = [...new Set(bookingIds)];
+    if (ids.length === 0) return new Map();
+    const orders = await client.order.findMany({
+      where: { location: ACTIVE_LOCATION_WHERE, bookingId: { in: ids } },
+      select: {
+        id: true,
+        bookingId: true,
+        items: {
+          where: {
+            type: OrderItemType.PRODUCT,
+            status: OrderItemStatus.CONFIRMED,
+          },
+          select: {
+            type: true,
+            status: true,
+            lineTotal: true,
+            returnItems: {
+              select: { lineTotal: true, return: { select: { status: true } } },
+            },
+          },
+        },
+      },
+    });
+    const result = new Map<string, BookingOrderProducts>();
+    for (const order of orders) {
+      if (!order.bookingId) continue;
+      result.set(order.bookingId, {
+        orderId: order.id,
+        productsNet: orderProductsNet(order),
+      });
+    }
+    return result;
   }
 
   async refreshTotals(

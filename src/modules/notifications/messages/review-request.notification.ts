@@ -1,23 +1,27 @@
-import { DeliveryStrategy } from '../enums/delivery-strategy.enum.js';
 import { NotificationAudience } from '../enums/notification-audience.enum.js';
 import { BookingNotificationData } from '../interfaces/booking-notification-data.interface.js';
 import { ChannelPayload } from '../interfaces/channel-payload.interface.js';
 import { HasEmailChannel } from '../interfaces/has-email-channel.interface.js';
 import { AbstractNotification } from './abstract.notification.js';
+import { EmailTemplate } from '../enums/email-template.enum.js';
+import { EmailReference } from '../interfaces/email-reference.interface.js';
 
 export class ReviewRequestNotification
   extends AbstractNotification
   implements HasEmailChannel
 {
-  readonly strategy = DeliveryStrategy.BEST_EFFORT;
   readonly audience = NotificationAudience.CLIENT;
-  readonly emailTemplate = 'review-request' as const;
+  readonly emailTemplate = EmailTemplate.REVIEW_REQUEST;
 
   constructor(
     private readonly booking: BookingNotificationData,
     private readonly manageLink: string,
   ) {
     super();
+  }
+
+  override reference(): EmailReference {
+    return { locationId: this.booking.locationId, bookingId: this.booking.id };
   }
 
   toEmail(): ChannelPayload {

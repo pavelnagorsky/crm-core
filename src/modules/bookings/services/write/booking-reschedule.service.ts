@@ -16,6 +16,7 @@ import { bookingWithItemsInclude } from '../../constants/booking-with-items.incl
 import { UpdateBookingDto } from '../../dto/update-booking.dto.js';
 import { BookingStatus } from '../../enums/booking-status.enum.js';
 import { BookingWithItems } from '../../interfaces/booking-with-items.interface.js';
+import { BookingWriteHooks } from '../../interfaces/booking-write-hooks.interface.js';
 import { BookingSlotLockService } from '../booking-slot-lock.service.js';
 import {
   assertClientCanManageBooking,
@@ -28,6 +29,7 @@ import {
 } from '../../rules/booking-client-notice.rules.js';
 import { reminderDueAt } from '../../rules/booking-reminder.rules.js';
 import { BookingWriteLockService } from '../booking-write-lock.service.js';
+import { NotificationsService } from '../../../notifications/services/notifications.service.js';
 
 @Injectable()
 export class BookingRescheduleService {
@@ -40,20 +42,18 @@ export class BookingRescheduleService {
     private readonly staffEarnings: StaffEarningsService,
     private readonly write: BookingWriteLockService,
     private readonly slots: BookingSlotLockService,
+    private readonly notifications: NotificationsService,
   ) {}
 
-  /** `afterUpdate` runs in the same transaction, after the booking row is saved. */
+  /** Hooks run in the same transaction: see BookingWriteHooks. */
   reschedule(
     old: BookingWithItems,
     dto: UpdateBookingDto,
     data: Prisma.BookingUpdateInput,
     actor: AuditActor,
-    afterUpdate?: (
-      updated: BookingWithItems,
-      tx: Prisma.TransactionClient,
-    ) => Promise<void>,
+    hooks: BookingWriteHooks = {},
   ): Promise<BookingWithItems> {
-    return this.moveBooking(old, dto, data, actor, false, afterUpdate);
+    return this.moveBooking(old, dto, data, actor, false, hooks);
   }
 
   rescheduleByClient(
@@ -71,10 +71,7 @@ export class BookingRescheduleService {
     data: Prisma.BookingUpdateInput,
     actor: AuditActor,
     clientInitiated = false,
-    afterUpdate?: (
-      updated: BookingWithItems,
-      tx: Prisma.TransactionClient,
-    ) => Promise<void>,
+    hooks: BookingWriteHooks = {},
   ): Promise<BookingWithItems> {
     if (old.items.length === 0)
       throw new AppException(
@@ -111,81 +108,89 @@ export class BookingRescheduleService {
         HttpStatus.BAD_REQUEST,
       );
     }
-    return this.db.$transaction(async (tx) => {
-      if (items.some((item) => item.endAt.getTime() > Date.now()))
-        await this.write.lockActiveLocation(old.locationId, tx);
-      const notice = await this.write.lockUnchangedBooking(tx, old);
-      await this.slots.lockSlots(items, location.timezone, tx);
-      if (!manualInterval) {
-        for (const item of items)
-          await this.assertStaffCanPerform(
+    return this.db.$transaction(
+      async (tx) => {
+        await hooks.beforeLock?.(tx);
+        if (items.some((item) => item.endAt.getTime() > Date.now()))
+          await this.write.lockActiveLocation(old.locationId, tx);
+        const notice = await this.write.lockUnchangedBooking(tx, old);
+        await this.slots.lockSlots(items, location.timezone, tx);
+        if (!manualInterval) {
+          for (const item of items)
+            await this.assertStaffCanPerform(
+              old.locationId,
+              item.serviceId,
+              item.staffId,
+              tx,
+            );
+        }
+        if (!manualInterval)
+          await this.slots.assertSlotsAvailable(
             old.locationId,
-            item.serviceId,
-            item.staffId,
+            items,
+            location.timezone,
             tx,
           );
-      }
-      if (!manualInterval)
-        await this.slots.assertSlotsAvailable(
-          old.locationId,
-          items,
-          location.timezone,
-          tx,
+        if (clientInitiated) {
+          assertClientCanManageBooking(old);
+          assertClientRescheduleTime(startAt, location);
+        }
+        await this.saveItemSchedule(old.locationId, items, tx);
+        const nextStartAt = new Date(
+          Math.min(...items.map((item) => item.startAt.getTime())),
         );
-      if (clientInitiated) {
-        assertClientCanManageBooking(old);
-        assertClientRescheduleTime(startAt, location);
-      }
-      await this.saveItemSchedule(old.locationId, items, tx);
-      const nextStartAt = new Date(
-        Math.min(...items.map((item) => item.startAt.getTime())),
-      );
-      const updated = await tx.booking.update({
-        where: { id: old.id },
-        data: {
-          ...data,
-          startAt: nextStartAt,
-          endAt: new Date(
-            Math.max(...items.map((item) => item.endAt.getTime())),
-          ),
-          // The reminder named the old time; the new time needs its own.
-          ...(nextStartAt.getTime() !== old.startAt.getTime() && {
-            reminderSentAt: null,
-            reminderDueAt: reminderDueAt(
-              { status: old.status, startAt: nextStartAt },
-              new Date(),
+        const updated = await tx.booking.update({
+          where: { id: old.id },
+          data: {
+            ...data,
+            startAt: nextStartAt,
+            endAt: new Date(
+              Math.max(...items.map((item) => item.endAt.getTime())),
             ),
-          }),
-          ...(clientInitiated
-            ? clientRescheduleClientNotice({ ...old, ...notice })
-            : staffRescheduleClientNotice(
-                { ...old, ...notice },
-                {
-                  startAt: nextStartAt,
-                  clientEmail: this.nextClientEmail(old, data),
-                },
-                location.notifyClientOnStaffChanges,
+            // The reminder named the old time; the new time needs its own.
+            ...(nextStartAt.getTime() !== old.startAt.getTime() && {
+              reminderSentAt: null,
+              reminderDueAt: reminderDueAt(
+                { status: old.status, startAt: nextStartAt },
                 new Date(),
-              )),
-        },
-        include: bookingWithItemsInclude,
-      });
-      await afterUpdate?.(updated, tx);
-      if (old.status === BookingStatus.COMPLETED) {
-        const order = await this.orders.syncCompletedBooking(
-          updated,
-          actor,
-          tx,
-        );
-        await this.staffEarnings.syncForCompletedBooking(
-          updated,
-          actor,
-          tx,
-          order,
-        );
-      }
-      return updated;
-    });
+              ),
+            }),
+            ...(clientInitiated
+              ? clientRescheduleClientNotice({ ...old, ...notice })
+              : staffRescheduleClientNotice(
+                  { ...old, ...notice },
+                  {
+                    startAt: nextStartAt,
+                    clientEmail: this.nextClientEmail(old, data),
+                  },
+                  location.notifyClientOnStaffChanges,
+                  new Date(),
+                )),
+          },
+          include: bookingWithItemsInclude,
+        });
+        // Emails not yet sent name the old time.
+        if (nextStartAt.getTime() !== old.startAt.getTime())
+          await this.notifications.cancelPendingForBooking(old.id, tx);
+        if (old.status === BookingStatus.COMPLETED) {
+          const order = await this.orders.syncCompletedBooking(
+            updated,
+            actor,
+            tx,
+          );
+          await this.staffEarnings.syncForCompletedBooking(
+            updated,
+            actor,
+            tx,
+            order,
+          );
+        }
+        await hooks.afterUpdate?.(updated, tx);
+        return updated;
+        // The hooks may complete, sell and pay the visit in the same transaction.
+      },
+      { maxWait: 5_000, timeout: 30_000 },
+    );
   }
 
   async restoreBookingEvents(

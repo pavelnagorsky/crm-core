@@ -331,6 +331,10 @@ enum AuditEvent {
   ORDER_ITEM_REVERSED
   ORDER_VOIDED
   ORDER_DELETED
+  PAYMENT_RECORDED
+  PAYMENT_REPLACED
+  PAYMENT_VOIDED
+  PAYMENT_REFUNDED
   REVIEW_CREATED
   REVIEW_UPDATED
   REVIEW_VISIBILITY_CHANGED
@@ -430,6 +434,16 @@ enum OrderItemStatus {
 enum OrderReturnStatus {
   POSTED
   VOIDED
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+}
+
+enum PaymentType {
+  PAYMENT
+  REFUND
 }
 
 enum StaffEarningType {
@@ -602,6 +616,8 @@ model Location {
   orders                     Order[]
   orderOperations            OrderOperation[]
   orderReturns               OrderReturn[]
+  paymentOperations          PaymentOperation[]
+  payments                   Payment[]
   reviews                    Review[]
   trafficStats               BookingTrafficStat[]
 
@@ -866,14 +882,16 @@ model Order {
   createdAt           DateTime    @default(now())
   updatedAt           DateTime    @updatedAt
 
-  location   Location            @relation(fields: [locationId], references: [id], onDelete: Restrict)
-  booking    Booking?            @relation(fields: [bookingId], references: [id], onDelete: SetNull)
-  client     Client?             @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  items      OrderItem[]
-  movements  InventoryMovement[]
-  earnings   StaffEarning[]
-  operations OrderOperation[]
-  returns    OrderReturn[]
+  location          Location            @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  booking           Booking?            @relation(fields: [bookingId], references: [id], onDelete: SetNull)
+  client            Client?             @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  items             OrderItem[]
+  movements         InventoryMovement[]
+  earnings          StaffEarning[]
+  operations        OrderOperation[]
+  returns           OrderReturn[]
+  paymentOperations PaymentOperation[]
+  payments          Payment[]
 
   @@unique([locationId, idempotencyKey])
   @@index([locationId, occurredAt])
@@ -961,6 +979,8 @@ model OrderReturn {
   order    Order             @relation(fields: [orderId], references: [id], onDelete: Cascade)
   items    OrderReturnItem[]
 
+  paymentOperation PaymentOperation?
+
   @@unique([locationId, idempotencyKey])
   @@index([orderId, occurredAt])
   @@index([locationId, occurredAt])
@@ -1000,6 +1020,63 @@ model OrderReturnItem {
   @@index([orderItemId])
   @@index([productLocationId])
   @@index([sellerStaffId])
+}
+
+// Money journal of orders, owned by the payments module. An operation is one action of a
+// person: a payment (one record per method) or a refund. Raw SQL in
+// migrations/20261120120000_payments adds CHECK (amount > 0) and a partial unique index:
+// one active payment record per method and order.
+model PaymentOperation {
+  id                  String      @id @default(uuid())
+  locationId          String
+  orderId             String
+  type                PaymentType
+  idempotencyKey      String      @db.VarChar(120)
+  requestHash         String      @db.Char(64)
+  orderReturnId       String?     @unique
+  replacesOperationId String?
+  reason              String?     @db.VarChar(500)
+  createdById         String?
+  createdByName       String      @db.VarChar(300)
+  createdAt           DateTime    @default(now())
+
+  location          Location           @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  order             Order              @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  orderReturn       OrderReturn?       @relation(fields: [orderReturnId], references: [id], onDelete: Restrict)
+  replacesOperation PaymentOperation?  @relation("PaymentOperationReplacement", fields: [replacesOperationId], references: [id], onDelete: Restrict)
+  replacedBy        PaymentOperation[] @relation("PaymentOperationReplacement")
+  payments          Payment[]
+
+  @@unique([locationId, idempotencyKey])
+  @@index([orderId])
+  @@index([replacesOperationId])
+}
+
+model Payment {
+  id            String        @id @default(uuid())
+  operationId   String
+  locationId    String
+  orderId       String
+  type          PaymentType
+  method        PaymentMethod
+  amount        Decimal       @db.Decimal(12, 2)
+  currency      String        @db.VarChar(3)
+  occurredAt    DateTime
+  createdById   String?
+  createdByName String        @db.VarChar(300)
+  createdAt     DateTime      @default(now())
+  voidedAt      DateTime?
+  voidedById    String?
+  voidedByName  String?       @db.VarChar(300)
+  voidReason    String?       @db.VarChar(500)
+
+  operation PaymentOperation @relation(fields: [operationId], references: [id], onDelete: Cascade)
+  location  Location         @relation(fields: [locationId], references: [id], onDelete: Restrict)
+  order     Order            @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([locationId, occurredAt])
+  @@index([orderId])
+  @@index([operationId])
 }
 
 model BrandMembership {
@@ -2097,4 +2174,111 @@ model SubscriptionPayment {
   @@index([brandId, createdAt, id])
   @@index([status, createdAt, id])
   @@index([status, expiresAt])
+}
+
+/// Who an email is addressed to: CLIENT emails follow CLIENT_NOTIFICATIONS_ENABLED, ACCOUNT emails always go out.
+enum EmailAudience {
+  CLIENT
+  ACCOUNT
+}
+
+/// QUEUED emails are retried by the job queue; DIRECT ones are sent once (one-time secrets, interactive sends) and never stored.
+enum EmailDeliveryMode {
+  QUEUED
+  DIRECT
+}
+
+enum EmailStatus {
+  QUEUED
+  SENDING
+  RETRYING
+  SENT
+  FAILED
+  SKIPPED
+  CANCELLED
+}
+
+enum EmailSkipReason {
+  CLIENT_NOTIFICATIONS_DISABLED
+  OUTDATED
+}
+
+enum EmailCancelReason {
+  ADMIN
+  BOOKING_CHANGED
+}
+
+enum EmailEventType {
+  QUEUED
+  RETRY_REQUESTED
+  ATTEMPT_FAILED
+  SENT
+  FAILED
+  SKIPPED
+  CANCELLED
+}
+
+/// Every outgoing email: the delivery log behind the platform admin notifications page.
+model EmailMessage {
+  id                String             @id @default(uuid())
+  template          String             @db.VarChar(100)
+  audience          EmailAudience
+  deliveryMode      EmailDeliveryMode
+  recipient         String             @db.VarChar(320)
+  /// Rendered subject; known after the first attempt.
+  subject           String?            @db.VarChar(500)
+  brandId           String?
+  locationId        String?
+  bookingId         String?
+  /// Template data; null for DIRECT emails, which are never stored.
+  payload           Json?
+  status            EmailStatus
+  skipReason        EmailSkipReason?
+  cancelReason      EmailCancelReason?
+  attempts          Int                @default(0)
+  lastError         String?            @db.VarChar(2000)
+  lastErrorCode     Int?
+  providerMessageId String?            @db.VarChar(500)
+  /// The pg-boss job allowed to deliver it; a stale job of an earlier attempt round finds another id and stops.
+  jobId             String?
+  /// After this moment the email is pointless (the visit has started): it is skipped and cannot be retried.
+  validUntil        DateTime?
+  queuedAt          DateTime           @default(now())
+  lastAttemptAt     DateTime?
+  nextAttemptAt     DateTime?
+  sentAt            DateTime?
+  failedAt          DateTime?
+  cancelledAt       DateTime?
+  cancelledById     String?
+  retriedAt         DateTime?
+  retriedById       String?
+  updatedAt         DateTime           @updatedAt
+
+  events EmailMessageEvent[]
+
+  @@index([queuedAt])
+  @@index([status, queuedAt])
+  @@index([recipient])
+  @@index([brandId, queuedAt])
+  @@index([locationId, queuedAt])
+  @@index([bookingId])
+}
+
+model EmailMessageEvent {
+  id         String         @id @default(uuid())
+  messageId  String
+  type       EmailEventType
+  attempt    Int?
+  occurredAt DateTime       @default(now())
+  durationMs Int?
+  error      String?        @db.VarChar(2000)
+  errorCode  Int?
+  /// The failure came from the SMTP server or the connection to it, not from the email data.
+  smtpError  Boolean        @default(false)
+  actorId    String?
+
+  message EmailMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([messageId, occurredAt])
+  @@index([occurredAt])
 }

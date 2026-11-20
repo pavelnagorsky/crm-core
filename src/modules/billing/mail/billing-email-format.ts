@@ -14,6 +14,7 @@ export class BillingEmailFormat {
     actionLink: string,
   ): SubscriptionEmailData {
     return {
+      brandId: payment.brandId,
       brandName,
       recipientFirstName: null,
       timezone,

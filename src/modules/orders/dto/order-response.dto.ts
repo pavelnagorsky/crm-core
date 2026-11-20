@@ -1,8 +1,11 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
 import { MoneyUtils } from '../../../shared/money/money.utils.js';
+import { PaymentSummaryDto } from '../../payments/dto/payment-summary.dto.js';
+import { OrderPaymentTotals } from '../../payments/interfaces/order-payment-totals.interface.js';
 import { OrderStatus } from '../enums/order-status.enum.js';
 import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
+import { orderAmountDue } from '../rules/order-payment-due.rules.js';
 import { OrderItemResponseDto } from './order-item-response.dto.js';
 
 export class OrderResponseDto {
@@ -69,7 +72,17 @@ export class OrderResponseDto {
   @ApiProperty({ type: () => OrderItemResponseDto, isArray: true })
   items: OrderItemResponseDto[];
 
-  static fromEntity(entity: OrderWithItems): OrderResponseDto {
+  @ApiProperty({
+    type: () => PaymentSummaryDto,
+    description:
+      'Payment of the order. amountDue counts the confirmed lines of the order minus returns (0 for a voided order). For a visit order before completion the booking services are not in the order yet: the booking card (GET bookings/:id, payment) holds the authoritative amount of a visit.',
+  })
+  payment: PaymentSummaryDto;
+
+  static fromEntity(
+    entity: OrderWithItems,
+    payment?: OrderPaymentTotals | null,
+  ): OrderResponseDto {
     const dto = new OrderResponseDto();
     dto.id = entity.id;
     dto.locationId = entity.locationId;
@@ -92,6 +105,7 @@ export class OrderResponseDto {
     dto.createdAt = entity.createdAt;
     dto.updatedAt = entity.updatedAt;
     dto.items = entity.items.map(OrderItemResponseDto.fromEntity);
+    dto.payment = PaymentSummaryDto.from(orderAmountDue(entity), payment);
     return dto;
   }
 }

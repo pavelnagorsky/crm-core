@@ -1,6 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import Handlebars from 'handlebars';
 import { EmailRenderer } from './email.renderer.js';
+import { EmailTemplate } from '../../enums/email-template.enum.js';
 
 describe('EmailRenderer', () => {
   const renderer = new EmailRenderer(
@@ -32,7 +33,7 @@ describe('EmailRenderer', () => {
   afterEach(() => vi.useRealTimers());
 
   it('names the event and the visit in the subject of a staff email', () => {
-    const email = renderer.render('staff-booking-event', {
+    const email = renderer.render(EmailTemplate.STAFF_BOOKING_EVENT, {
       ...visit,
       variant: 'REQUESTED',
     });
@@ -47,7 +48,7 @@ describe('EmailRenderer', () => {
   });
 
   it('shows the old time of a move and the year of a visit next year', () => {
-    const email = renderer.render('staff-booking-event', {
+    const email = renderer.render(EmailTemplate.STAFF_BOOKING_EVENT, {
       ...visit,
       variant: 'RESCHEDULED',
       startAt: new Date('2027-01-05T12:00:00Z'),
@@ -60,7 +61,7 @@ describe('EmailRenderer', () => {
   });
 
   it('greets without a name when the recipient has none', () => {
-    const email = renderer.render('staff-booking-event', {
+    const email = renderer.render(EmailTemplate.STAFF_BOOKING_EVENT, {
       ...visit,
       variant: 'CANCELLED',
       recipientFirstName: null,
@@ -88,7 +89,7 @@ describe('EmailRenderer', () => {
     ])(
       'reminds about a visit %s with a way to move or cancel it',
       (variant, subject, body) => {
-        const email = renderer.render('booking-reminder', {
+        const email = renderer.render(EmailTemplate.BOOKING_REMINDER, {
           ...client,
           variant,
         });
@@ -104,7 +105,7 @@ describe('EmailRenderer', () => {
     );
 
     it('tells which way a booking moved', () => {
-      const email = renderer.render('booking-status-changed', {
+      const email = renderer.render(EmailTemplate.BOOKING_STATUS_CHANGED, {
         ...client,
         status: 'RESCHEDULED',
         variant: 'RESCHEDULED',
@@ -122,7 +123,7 @@ describe('EmailRenderer', () => {
     });
 
     it('sends a cancellation with the reason and the salon phone but nothing to manage', () => {
-      const email = renderer.render('booking-status-changed', {
+      const email = renderer.render(EmailTemplate.BOOKING_STATUS_CHANGED, {
         ...client,
         status: 'CANCELLED',
         variant: 'CANCELLED',
@@ -140,7 +141,7 @@ describe('EmailRenderer', () => {
     });
 
     it('leaves out the address and phone rows when the location has none', () => {
-      const email = renderer.render('booking-confirmed', {
+      const email = renderer.render(EmailTemplate.BOOKING_CONFIRMED, {
         ...client,
         locationAddress: null,
         locationPhone: null,
@@ -162,7 +163,7 @@ describe('EmailRenderer', () => {
     };
 
     it('sends billing emails from Klendo and names the brand in the text', () => {
-      const email = renderer.render('subscription-trial-ending', {
+      const email = renderer.render(EmailTemplate.SUBSCRIPTION_TRIAL_ENDING, {
         ...billing,
         daysLeft: 7,
         planName: 'Мастер',
@@ -183,7 +184,7 @@ describe('EmailRenderer', () => {
     });
 
     it('offers to discuss terms when no standard plan fits', () => {
-      const email = renderer.render('subscription-trial-ending', {
+      const email = renderer.render(EmailTemplate.SUBSCRIPTION_TRIAL_ENDING, {
         ...billing,
         variant: 'DISCUSS',
         daysLeft: 3,
@@ -193,11 +194,11 @@ describe('EmailRenderer', () => {
     });
 
     it.each([
-      'subscription-trial-ending',
-      'subscription-period-ending',
-      'subscription-access-ended',
-      'subscription-access-limited',
-    ] as const)('%s with an open request says we will contact', (template) => {
+      EmailTemplate.SUBSCRIPTION_TRIAL_ENDING,
+      EmailTemplate.SUBSCRIPTION_PERIOD_ENDING,
+      EmailTemplate.SUBSCRIPTION_ACCESS_ENDED,
+      EmailTemplate.SUBSCRIPTION_ACCESS_LIMITED,
+    ])('%s with an open request says we will contact', (template) => {
       const email = renderer.render(template, {
         ...billing,
         variant: 'PENDING',
@@ -210,15 +211,18 @@ describe('EmailRenderer', () => {
     });
 
     it('confirms a payment request with the fixed amount and instructions', () => {
-      const email = renderer.render('subscription-payment-requested', {
-        ...billing,
-        paymentNumber: 'KL-000123',
-        planName: 'Команда',
-        billingPeriod: 'YEAR',
-        amount: '590.00 BYN',
-        expiresAt: new Date('2026-11-20T12:00:00Z'),
-        instructions: 'Реквизиты:\nр/с 123',
-      });
+      const email = renderer.render(
+        EmailTemplate.SUBSCRIPTION_PAYMENT_REQUESTED,
+        {
+          ...billing,
+          paymentNumber: 'KL-000123',
+          planName: 'Команда',
+          billingPeriod: 'YEAR',
+          amount: '590.00 BYN',
+          expiresAt: new Date('2026-11-20T12:00:00Z'),
+          instructions: 'Реквизиты:\nр/с 123',
+        },
+      );
       expect(email.subject).toBe('Klendo — Заявка KL-000123 на оплату Klendo');
       expect(email.html).toContain('свяжемся с вами');
       expect(email.html).toContain('590.00 BYN');
@@ -229,35 +233,45 @@ describe('EmailRenderer', () => {
     });
 
     it('leaves out instructions and empty rows', () => {
-      const email = renderer.render('subscription-payment-requested', {
-        ...billing,
-        paymentNumber: 'KL-000124',
-        instructions: null,
-      });
+      const email = renderer.render(
+        EmailTemplate.SUBSCRIPTION_PAYMENT_REQUESTED,
+        {
+          ...billing,
+          paymentNumber: 'KL-000124',
+          instructions: null,
+        },
+      );
       expect(email.html).not.toContain('>Сумма</td>');
       expect(email.html).not.toContain('white-space: pre-line');
     });
 
     it('names the new last day in the subject of a received payment', () => {
-      const email = renderer.render('subscription-payment-received', {
-        ...billing,
-        lastDay: new Date('2027-12-13T12:00:00Z'),
-        planName: 'Мастер',
-        billingPeriod: 'YEAR',
-      });
+      const email = renderer.render(
+        EmailTemplate.SUBSCRIPTION_PAYMENT_RECEIVED,
+        {
+          ...billing,
+          lastDay: new Date('2027-12-13T12:00:00Z'),
+          planName: 'Мастер',
+          billingPeriod: 'YEAR',
+        },
+      );
       expect(email.subject).toContain('Оплата получена, Klendo работает до');
       expect(email.subject).toContain('13 декабря');
     });
 
     it('shows the owner to the admin of a new request', () => {
-      const email = renderer.render('admin-subscription-payment-requested', {
-        ...billing,
-        recipientFirstName: null,
-        actionLink: 'https://klendo.by/admin/billing/payments?search=KL-000123',
-        paymentNumber: 'KL-000123',
-        ownerEmail: 'owner@example.test',
-        comment: 'Позвоните после 18:00',
-      });
+      const email = renderer.render(
+        EmailTemplate.ADMIN_SUBSCRIPTION_PAYMENT_REQUESTED,
+        {
+          ...billing,
+          recipientFirstName: null,
+          actionLink:
+            'https://klendo.by/admin/billing/payments?search=KL-000123',
+          paymentNumber: 'KL-000123',
+          ownerEmail: 'owner@example.test',
+          comment: 'Позвоните после 18:00',
+        },
+      );
       expect(email.subject).toBe(
         'Klendo — Новая заявка KL-000123: Салон <Лето>',
       );

@@ -50,6 +50,7 @@ export class BookingStaffNotificationService {
           NOTIFICATION_EVENT,
           new StaffBookingNotification({
             event,
+            bookingId: booking.id,
             recipientEmail: recipient.email,
             recipientFirstName: recipient.firstName,
             locationId: booking.locationId,

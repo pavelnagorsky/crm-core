@@ -14,6 +14,7 @@ import { OrderStateRules } from '../rules/order-state.rules.js';
 import { orderItemSnapshot } from '../utils/order-item-snapshot.js';
 import { OrderAuditService } from './order-audit.service.js';
 import { OrderDraftService } from './order-draft.service.js';
+import { PaymentsFacade } from '../../payments/payments.facade.js';
 import { OrderPersistenceService } from './order-persistence.service.js';
 @Injectable()
 export class OrderDraftMutationService {
@@ -23,6 +24,7 @@ export class OrderDraftMutationService {
     private readonly persistence: OrderPersistenceService,
     private readonly stateAssertions: OrderStateRules,
     private readonly audits: OrderAuditService,
+    private readonly payments: PaymentsFacade,
   ) {}
   async update(
     locationId: string,
@@ -211,6 +213,12 @@ export class OrderDraftMutationService {
       );
       this.stateAssertions.assertActive(order.status);
       this.stateAssertions.assertAllItemsDraft(order);
+      // The journal keeps its records, voided ones too: such an order stays.
+      if (await this.payments.hasOperations(tx, orderId))
+        throw new AppException(
+          ErrorCode.ORDER_HAS_PAYMENTS,
+          HttpStatus.CONFLICT,
+        );
       await tx.order.delete({ where: { id: orderId } });
       return order;
     });

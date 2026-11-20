@@ -60,6 +60,7 @@ function setup() {
     {} as never,
     write as never,
     slots as never,
+    { cancelPendingForBooking: vi.fn() } as never,
   );
   const service = new BookingClientService(
     reschedule,

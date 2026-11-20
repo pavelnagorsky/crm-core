@@ -176,6 +176,7 @@ function setup() {
     {} as never,
     {} as never,
     {} as never,
+    {} as never,
   );
   const clients = { resolveForBooking: vi.fn() };
   const create = new BookingCreateFacade(
@@ -187,6 +188,8 @@ function setup() {
     { created: vi.fn(), notifyCreated: vi.fn() } as never,
     reservation,
     createBillingFacadeStub(),
+    { plan: vi.fn().mockResolvedValue(null), publish: vi.fn() } as never,
+    {} as never,
   );
   const resolve = new BookingSetupService(
     catalog as never,
@@ -364,17 +367,21 @@ describe('Parallel bundle booking', () => {
         endDateTime: item.endAt,
       })),
     );
-    const read = new BookingCalendarReadService({
-      bookingItem: {
-        findMany: vi.fn(async () =>
-          result.items.map((item, index) => ({
-            ...item,
-            id: `item-${index}`,
-            booking: result,
-          })),
-        ),
-      },
-    } as never);
+    const read = new BookingCalendarReadService(
+      {
+        bookingItem: {
+          findMany: vi.fn(async () =>
+            result.items.map((item, index) => ({
+              ...item,
+              id: `item-${index}`,
+              booking: result,
+            })),
+          ),
+        },
+        booking: { findMany: vi.fn(async () => []) },
+      } as never,
+      { summaries: vi.fn(async () => new Map()) } as never,
+    );
     const feed = await read.listForCalendar(
       'location',
       result.startAt,

@@ -8,6 +8,7 @@ import { ResolvedBookingClient } from './resolved-booking-client.interface.js';
 import { ResolvedBookingItem } from './resolved-booking-item.interface.js';
 import { BookingCreationRequest } from './booking-creation-request.interface.js';
 import { ClientNoticeState } from './client-notice-state.interface.js';
+import { VisitPaymentPlan } from './visit-payment-plan.interface.js';
 
 export interface PreparedBookingReservation {
   locationId: string;
@@ -31,4 +32,6 @@ export interface PreparedBookingReservation {
   products: ManualBookingProductDto[];
   actor: AuditActor | null;
   request?: BookingCreationRequest;
+  /** Products to confirm and the payment, after the booking in the same transaction. */
+  paymentPlan?: VisitPaymentPlan | null;
 }

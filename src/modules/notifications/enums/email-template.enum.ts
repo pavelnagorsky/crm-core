@@ -1,0 +1,20 @@
+/** Email kinds; each value names its template file and its `email.<value>` texts. */
+export enum EmailTemplate {
+  CONFIRM_EMAIL = 'confirm-email',
+  RESET_PASSWORD = 'reset-password',
+  ACCESS_INVITATION = 'access-invitation',
+  BOOKING_CONFIRMED = 'booking-confirmed',
+  BOOKING_PENDING = 'booking-pending',
+  BOOKING_STATUS_CHANGED = 'booking-status-changed',
+  BOOKING_REMINDER = 'booking-reminder',
+  REVIEW_REQUEST = 'review-request',
+  STAFF_BOOKING_EVENT = 'staff-booking-event',
+  SUBSCRIPTION_TRIAL_ENDING = 'subscription-trial-ending',
+  SUBSCRIPTION_PERIOD_ENDING = 'subscription-period-ending',
+  SUBSCRIPTION_ACCESS_ENDED = 'subscription-access-ended',
+  SUBSCRIPTION_ACCESS_LIMITED = 'subscription-access-limited',
+  SUBSCRIPTION_PAYMENT_REQUESTED = 'subscription-payment-requested',
+  SUBSCRIPTION_PAYMENT_RECEIVED = 'subscription-payment-received',
+  ADMIN_SUBSCRIPTION_PAYMENT_REQUESTED = 'admin-subscription-payment-requested',
+  SMTP_TEST = 'smtp-test',
+}

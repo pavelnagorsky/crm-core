@@ -824,9 +824,12 @@ function customTimeSetup(
     syncCompletedBooking: vi
       .fn()
       .mockResolvedValue({ id: 'order-1', items: [] }),
-    addDraftProductsToBookingOrder: vi
-      .fn()
-      .mockResolvedValue({ id: 'order-1', items: [] }),
+    addDraftProductsToBookingOrder: vi.fn().mockResolvedValue({
+      order: { id: 'order-1', items: [] },
+      brandId: 'brand-1',
+      auditPayload: {},
+    }),
+    publishDraftProductsAdded: vi.fn(),
   };
   const earnings = {
     recordForCompletedBooking: vi.fn().mockResolvedValue([]),
@@ -1684,7 +1687,10 @@ function createBookingService(
       orders,
       earnings,
       bookingClients,
+      { plan: vi.fn().mockResolvedValue(null), publish: vi.fn() } as never,
     ),
     billing as never,
+    { plan: vi.fn().mockResolvedValue(null), publish: vi.fn() } as never,
+    orders,
   );
 }

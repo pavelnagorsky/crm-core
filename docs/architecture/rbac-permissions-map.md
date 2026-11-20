@@ -192,15 +192,16 @@
 | `GET /locations/:locationId/clients/:clientId/booking-summary` | `getClientBookingSummary` | L: `location:read`, плюс G: `client:read` или `booking:write` / `booking.own:write` в филиале бренда | Как карточка клиента (`BookingAccessService.assertClientRead`). История по всем активным филиалам и мастерам бренда; клиент должен принадлежать бренду филиала. |
 | `GET /locations/:locationId/bookings/status-counts` | `getStatusCounts` | L: `booking:read` или `booking.own:read` | При own-чтении обязательно участие в записи; списки и счётчики ограничены до пагинации. |
 | `GET /locations/:locationId/bookings/export` | `export` | L: `booking.export:read` | — |
-| `GET /locations/:locationId/bookings/:id` | `findById` | L: `booking:read` или `booking.own:read` | При own-чтении обязательно участие в записи; списки и счётчики ограничены до пагинации. Поле `review` заполняется только при `review:read`. |
+| `GET /locations/:locationId/bookings/:id` | `findById` | L: `booking:read` или `booking.own:read` | При own-чтении обязательно участие в записи; списки и счётчики ограничены до пагинации. Поле `review` заполняется только при `review:read`. Поле `payment` (сумма к оплате и журнал) видно всем, кто читает запись. |
 | `GET /locations/:locationId/bookings` | `search` | L: `booking:read` или `booking.own:read` | При own-чтении обязательно участие в записи; списки и счётчики ограничены до пагинации. |
-| `PUT /locations/:locationId/bookings/:id` | `update` | L: `booking:write` или `booking.own:write` | При own-праве достаточно участия в одной услуге; действие над всей записью. Изменение цены требует sale.price.override:write; завершённую запись STAFF не редактирует. |
+| `PUT /locations/:locationId/bookings/:id` | `update` | L: `booking:write` или `booking.own:write` | При own-праве достаточно участия в одной услуге; действие над всей записью. Изменение цены требует sale.price.override:write; завершённую запись STAFF не редактирует. `payment` - как в `PUT .../payment`; `confirmProductItemIds` и замена активной оплаты требуют order:write. |
+| `PUT /locations/:locationId/bookings/:id/payment` | `pay` | L: `booking:write` или `booking.own:write` | Как завершение: при own-праве достаточно участия в одной услуге, первая оплата своего визита без order:write. Замена активной оплаты и `confirmProductItemIds` требуют order:write. Повтор с тем же ключом возвращает результат до проверки права на замену. |
 | `PATCH /locations/:locationId/bookings/:id/status` | `updateStatus` | L: `booking:write` или `booking.own:write` | При own-праве достаточно участия в одной услуге. Завершение проводит услуги/начисления без order:write; отмена или откат завершённого требуют order.return:write. |
 | `POST /locations/:locationId/bookings/:id/products` | `addProduct` | L: `booking:read` + `order:write` | Произвольная цена: также sale.price.override:write. Клиента не создаёт. |
 | `POST /locations/:locationId/bookings/:id/items` | `addItems` | L: `booking:read` + `order:write` | Произвольная цена: также sale.price.override:write. Клиента не создаёт. |
 | `POST /locations/:locationId/bookings/:id/client-token` | `generateClientToken` | L: `booking.clientToken:write` | — |
 | `POST /locations/:locationId/bookings/:id/cancel` | `cancel` | L: `booking:write` или `booking.own:write` | При own-праве достаточно участия в одной услуге. Завершение проводит услуги/начисления без order:write; отмена или откат завершённого требуют order.return:write. |
-| `DELETE /locations/:locationId/bookings/:id` | `delete` | L: `booking.delete:write` | При сторнировании проведённого — также order.return:write. |
+| `DELETE /locations/:locationId/bookings/:id` | `delete` | L: `booking.delete:write` | При сторнировании проведённого — также order.return:write. Оплаченную запись (оплачено > 0) удалить нельзя: 409 BOOKING_HAS_PAYMENTS. |
 
 ## brand
 
@@ -261,6 +262,7 @@
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
 | `POST /locations/:locationId/dashboard/widgets` | `getWidgets` | L: `analytics.location:read` | Дополнительных проверок payroll:read/inventory:read по показателям нет. |
+| `GET /locations/:locationId/dashboard/finance-summary` | `getFinanceSummary` | L: `analytics.location:read` | Деньги филиала по способам и список "оплата не указана"; фильтра по сотрудникам нет. |
 
 ## files
 
@@ -339,11 +341,12 @@
 | `GET /locations/:locationId/orders/:orderId` | `findById` | L: `order:read` | — |
 | `PUT /locations/:locationId/orders/:orderId` | `update` | L: `order:write` | Изменение/сброс произвольной цены: также sale.price.override:write. Клиента не создаёт. |
 | `PATCH /locations/:locationId/orders/:orderId/status` | `changeStatus` | L: `order.void:write` | Текущий DTO допускает только VOIDED. Новые статусы потребуют явной проверки действия. |
-| `PATCH /locations/:locationId/orders/:orderId/items/:orderItemId/confirm` | `confirmItem` | L: `order:write` | — |
 | `POST /locations/:locationId/orders/:orderId/items` | `addItems` | L: `order:write` | Произвольная цена: также sale.price.override:write. Клиента не создаёт. |
-| `POST /locations/:locationId/orders/:orderId/items/confirm` | `confirmItems` | L: `order:write` | — |
-| `PATCH /locations/:locationId/orders/:orderId/items/:orderItemId/reverse` | `reverseItem` | L: `order.return:write` | — |
-| `POST /locations/:locationId/orders/:orderId/returns` | `createReturn` | L: `order.return:write` | — |
+| `POST /locations/:locationId/orders/:orderId/items/confirm` | `confirmItems` | L: `order:write` | `payment` только для продажи. |
+| `POST /locations/:locationId/orders/:orderId/returns` | `createReturn` | L: `order.return:write` | `refund` (возврат денег вместе с товаром) не требует order:write. |
+| `PUT /locations/:locationId/orders/:orderId/payment` | `recordPayment` | L: `order:write` | Только продажа; заказ визита оплачивается через запись. |
+| `POST /locations/:locationId/orders/:orderId/refunds` | `refund` | L: `order:write` | — |
+| `POST /locations/:locationId/orders/:orderId/payment-operations/:operationId/void` | `voidPaymentOperation` | L: `order:write` | — |
 | `DELETE /locations/:locationId/orders/:orderId` | `delete` | L: `order:write` | — |
 
 ## staff-compensation

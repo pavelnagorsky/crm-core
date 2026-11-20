@@ -13,6 +13,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { TrimString } from '../../../shared/transforms/trim-string.transform.js';
+import { PaymentDetailsDto } from '../../payments/dto/payment-details.dto.js';
 import { OrderProductItemDto } from './order-product-item.dto.js';
 
 export class CreateOrderDto {
@@ -73,4 +74,15 @@ export class CreateOrderDto {
   @ValidateNested({ each: true })
   @Type(() => OrderProductItemDto)
   items: OrderProductItemDto[];
+
+  @ApiProperty({
+    type: () => PaymentDetailsDto,
+    required: false,
+    description:
+      'How the client paid for the sale. Only with confirmImmediately: true (400 otherwise). Recorded atomically with the sale under its idempotencyKey and part of the sale request hash. Amount due: the sale total.',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PaymentDetailsDto)
+  payment?: PaymentDetailsDto;
 }

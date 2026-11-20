@@ -46,6 +46,10 @@ import { BookingReservationService } from './services/booking-reservation.servic
 import { BookingSchedulingService } from './services/booking-scheduling.service.js';
 import { BookingSelectionService } from './services/booking-selection.service.js';
 import { PublicBookingRateLimiter } from './services/public-booking-rate-limiter.js';
+import { BookingPaymentService } from './services/write/booking-payment.service.js';
+import { OrdersFacade } from '../orders/orders.facade.js';
+import { VisitPaymentPlan } from './interfaces/visit-payment-plan.interface.js';
+import { completesOnPayment } from './rules/visit-payment-due.rules.js';
 
 @Injectable()
 export class BookingCreateFacade {
@@ -59,6 +63,8 @@ export class BookingCreateFacade {
     private readonly events: BookingEventsService,
     private readonly reservations: BookingReservationService,
     private readonly billing: BillingFacade,
+    private readonly bookingPayment: BookingPaymentService,
+    private readonly orders: OrdersFacade,
   ) {}
 
   async createPublicBooking(
@@ -127,22 +133,39 @@ export class BookingCreateFacade {
         ErrorCode.BOOKING_CLIENT_CONFLICT,
         HttpStatus.BAD_REQUEST,
       );
-    const { booking, currency, bundleTitle } = await this.create(
+    // A new booking has no payment to replace.
+    const paymentPlan = await this.bookingPayment.plan(
       locationId,
       {
-        channel: BookingChannel.MANUAL,
-        bookingPageId: null,
-        bookingWidgetId: null,
+        payment: dto.payment,
+        confirmAllDraftProducts:
+          dto.confirmProducts === true && (dto.products?.length ?? 0) > 0,
       },
-      this.manualTraffic(dto),
-      actor,
-      dto,
-      ownStaffId,
+      false,
     );
+    const { booking, currency, bundleTitle, productsAdded, payment } =
+      await this.create(
+        locationId,
+        {
+          channel: BookingChannel.MANUAL,
+          bookingPageId: null,
+          bookingWidgetId: null,
+        },
+        this.manualTraffic(dto),
+        actor,
+        dto,
+        ownStaffId,
+        undefined,
+        undefined,
+        paymentPlan,
+      );
     this.logger.log(
       `booking created (manual): id=${booking.id} locationId=${locationId} channel=${booking.channel} items=${booking.items.length} bundleId=${booking.bundleId ?? '-'} actor=${actor.name}`,
     );
     this.events.created(booking, actor, currency, bundleTitle);
+    if (productsAdded)
+      this.orders.publishDraftProductsAdded(productsAdded, actor);
+    if (payment) await this.bookingPayment.publish(payment, actor);
     return booking;
   }
 
@@ -162,6 +185,7 @@ export class BookingCreateFacade {
     ownStaffId?: string,
     tx?: Prisma.TransactionClient,
     request?: BookingCreationRequest,
+    paymentPlan: VisitPaymentPlan | null = null,
   ): Promise<BookingCreationResult> {
     const location = await this.locationService.findById(locationId);
     if (!location)
@@ -236,13 +260,22 @@ export class BookingCreateFacade {
     );
     // Confirmation is for online requests; staff booking from the journal has already agreed.
     // A completed status needs no permission beyond creating the booking, as on a status change.
-    const status =
+    const plannedStatus =
       requestedStatus ??
       this.initialStatus(
         isCustomTime,
         envelopeEnd,
         location.isBookingConfirmationRequired && !internal,
       );
+    // Paying a visit that has started completes it, as on an existing booking.
+    const status =
+      paymentPlan?.payment &&
+      completesOnPayment(
+        { status: plannedStatus, startAt: envelopeStart },
+        paymentPlan.now,
+      )
+        ? BookingStatus.COMPLETED
+        : plannedStatus;
     const { client: resolved, picked } =
       publicClient ??
       (await this.resolveBookingClient(
@@ -270,7 +303,7 @@ export class BookingCreateFacade {
         )
       : NO_CLIENT_NOTICE;
 
-    const booking = await this.reservations.reserve(
+    const { booking, productsAdded, payment } = await this.reservations.reserve(
       {
         locationId,
         timezone: location.timezone,
@@ -292,6 +325,7 @@ export class BookingCreateFacade {
         products: this.manualProducts(dto, attribution.channel),
         actor,
         request,
+        paymentPlan,
       },
       tx,
     );
@@ -309,6 +343,8 @@ export class BookingCreateFacade {
       timezone: location.timezone,
       currency: location.currency,
       bundleTitle: selection.bundleTitle,
+      productsAdded,
+      payment,
     };
   }
 

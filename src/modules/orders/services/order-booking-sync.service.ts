@@ -19,6 +19,7 @@ import { LocationService } from '../../location/services/location.service.js';
 import { OrderPricingCalculator } from '../calculators/order-pricing.calculator.js';
 import { orderInclude } from '../constants/order-include.constant.js';
 import { OrderProductItemDto } from '../dto/order-product-item.dto.js';
+import { DraftProductsAdded } from '../interfaces/draft-products-added.interface.js';
 import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
 import { orderItemSnapshot } from '../utils/order-item-snapshot.js';
 import { OrderDraftService } from './order-draft.service.js';
@@ -167,7 +168,7 @@ export class OrderBookingSyncService {
     actor: AuditActor,
     tx: Prisma.TransactionClient,
     canOverridePrice = false,
-  ): Promise<OrderWithItems> {
+  ): Promise<DraftProductsAdded> {
     return this.addDraftProductsToBookingOrder(
       booking,
       [dto],
@@ -177,13 +178,18 @@ export class OrderBookingSyncService {
     );
   }
 
+  /**
+   * Adds draft products in the caller's transaction. The ORDER_UPDATED entry is returned,
+   * not emitted: the caller publishes it after commit (publishDraftProductsAdded), so a
+   * rolled-back booking write leaves no history.
+   */
   async addDraftProductsToBookingOrder(
     booking: BookingWithItems,
     items: OrderProductItemDto[],
     actor: AuditActor,
     tx: Prisma.TransactionClient,
     canOverridePrice = false,
-  ): Promise<OrderWithItems> {
+  ): Promise<DraftProductsAdded> {
     const location = await this.locations.findById(booking.locationId);
     const order = await this.ensureBookingOrder(
       booking,
@@ -225,20 +231,57 @@ export class OrderBookingSyncService {
       booking.locationId,
       locked.id,
     );
-    this.emitUpdated(location.brandId, booking.locationId, updated.id, actor, {
-      totalAmount: updated.totalAmount.toFixed(2),
-      currency: updated.currency,
-      itemChanges: {
-        added: resolved.created.map((item) => orderItemSnapshot(item)),
-        removed: [],
-        changed: resolved.updated.map((item) => ({
-          orderItemId: item.id,
-          before: orderItemSnapshot(item.before),
-          after: orderItemSnapshot(item.after),
-        })),
+    return {
+      order: updated,
+      brandId: location.brandId,
+      auditPayload: {
+        totalAmount: updated.totalAmount.toFixed(2),
+        currency: updated.currency,
+        itemChanges: {
+          added: resolved.created.map((item) => orderItemSnapshot(item)),
+          removed: [],
+          changed: resolved.updated.map((item) => ({
+            orderItemId: item.id,
+            before: orderItemSnapshot(item.before),
+            after: orderItemSnapshot(item.after),
+          })),
+        },
       },
-    });
-    return updated;
+    };
+  }
+
+  /** ORDER_UPDATED of draft products added to a visit order. Call after commit. */
+  publishDraftProductsAdded(
+    added: DraftProductsAdded,
+    actor: AuditActor,
+  ): void {
+    this.emitUpdated(
+      added.brandId,
+      added.order.locationId,
+      added.order.id,
+      actor,
+      added.auditPayload,
+    );
+  }
+
+  /**
+   * The visit order of a booking, created when missing, locked FOR UPDATE and read again.
+   * The caller holds the booking lock.
+   */
+  async lockBookingOrder(
+    booking: BookingWithItems,
+    actor: AuditActor,
+    tx: Prisma.TransactionClient,
+  ): Promise<OrderWithItems> {
+    const order = await this.ensureBookingOrder(booking, actor, tx);
+    await this.persistence.lockOrder(tx, order.id);
+    const locked = await this.persistence.findInTransaction(
+      tx,
+      booking.locationId,
+      order.id,
+    );
+    this.assertActive(locked.status);
+    return locked;
   }
 
   private emitUpdated(

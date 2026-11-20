@@ -598,6 +598,60 @@ export const ErrorCode = {
     code: 'ORDER_FUTURE_DATE',
     message: 'Order date cannot be in the future',
   },
+  ORDER_PAYMENT_VIA_BOOKING: {
+    code: 'ORDER_PAYMENT_VIA_BOOKING',
+    message: 'A visit order is paid through its booking',
+  },
+  ORDER_HAS_PAYMENTS: {
+    code: 'ORDER_HAS_PAYMENTS',
+    message:
+      'The order has payments; void the payment or refund the money first',
+  },
+  ORDER_RETURN_REFUND_REQUIRED: {
+    code: 'ORDER_RETURN_REFUND_REQUIRED',
+    message: 'Money goes back with this return; choose the refund method',
+  },
+
+  // payments
+  PAYMENT_AMOUNT_MISMATCH: {
+    code: 'PAYMENT_AMOUNT_MISMATCH',
+    message: 'Cash and card amounts do not add up to the amount due',
+  },
+  PAYMENT_SPLIT_INVALID: {
+    code: 'PAYMENT_SPLIT_INVALID',
+    message:
+      'A mixed payment needs positive cash and card amounts; cash or card payments take no amounts',
+  },
+  PAYMENT_NOTHING_DUE: {
+    code: 'PAYMENT_NOTHING_DUE',
+    message: 'Nothing is due for payment',
+  },
+  PAYMENT_DATE_INVALID: {
+    code: 'PAYMENT_DATE_INVALID',
+    message:
+      'Payment date cannot be in the future or more than 366 days in the past',
+  },
+  PAYMENT_IDEMPOTENCY_CONFLICT: {
+    code: 'PAYMENT_IDEMPOTENCY_CONFLICT',
+    message: 'This payment key was already used for a different operation',
+  },
+  PAYMENT_REFUND_EXCEEDS_PAID: {
+    code: 'PAYMENT_REFUND_EXCEEDS_PAID',
+    message: 'The refund is greater than the amount paid by this method',
+  },
+  PAYMENT_OPERATION_NOT_FOUND: {
+    code: 'PAYMENT_OPERATION_NOT_FOUND',
+    message: 'Payment operation not found',
+  },
+  PAYMENT_OPERATION_LINKED_TO_RETURN: {
+    code: 'PAYMENT_OPERATION_LINKED_TO_RETURN',
+    message: 'A refund made with a product return cannot be voided alone',
+  },
+  PAYMENT_VOID_HAS_REFUNDS: {
+    code: 'PAYMENT_VOID_HAS_REFUNDS',
+    message:
+      'The order has active refunds; change the payment or void the refunds first',
+  },
 
   // dashboard
   DASHBOARD_CUSTOM_RANGE_REQUIRED: {
@@ -607,6 +661,10 @@ export const ErrorCode = {
   DASHBOARD_CUSTOM_RANGE_INVALID: {
     code: 'DASHBOARD_CUSTOM_RANGE_INVALID',
     message: 'Invalid dashboard date range',
+  },
+  FINANCE_SUMMARY_RANGE_TOO_LONG: {
+    code: 'FINANCE_SUMMARY_RANGE_TOO_LONG',
+    message: 'Finance summary period cannot exceed 62 days',
   },
   ANALYTICS_BRAND_HAS_NO_LOCATIONS: {
     code: 'ANALYTICS_BRAND_HAS_NO_LOCATIONS',
@@ -633,6 +691,16 @@ export const ErrorCode = {
     code: 'BOOKING_CONCURRENT_UPDATE',
     message: 'Booking has changed; reload and retry',
   },
+  BOOKING_HAS_PAYMENTS: {
+    code: 'BOOKING_HAS_PAYMENTS',
+    message:
+      'The booking is paid; void the payment or refund the money before deleting it',
+  },
+  BOOKING_PAYMENT_NOT_ALLOWED: {
+    code: 'BOOKING_PAYMENT_NOT_ALLOWED',
+    message:
+      'This action is not allowed for the booking status or a deleted booking',
+  },
   ACCESS_POLICY_INVALID: {
     code: 'ACCESS_POLICY_INVALID',
     message: 'Invalid permission settings or dependencies',
@@ -654,6 +722,18 @@ export const ErrorCode = {
   EMAIL_DELIVERY_FAILED: {
     code: 'EMAIL_DELIVERY_FAILED',
     message: 'Email could not be sent; please try again',
+  },
+  EMAIL_RETRY_UNAVAILABLE: {
+    code: 'EMAIL_RETRY_UNAVAILABLE',
+    message: 'This email cannot be sent again; see reason',
+  },
+  EMAIL_CANCEL_UNAVAILABLE: {
+    code: 'EMAIL_CANCEL_UNAVAILABLE',
+    message: 'Only emails that are waiting or failed can be cancelled',
+  },
+  EMAIL_PREVIEW_UNAVAILABLE: {
+    code: 'EMAIL_PREVIEW_UNAVAILABLE',
+    message: 'The content of this email is not stored',
   },
   ACCESS_GRANT_INVALID: {
     code: 'ACCESS_GRANT_INVALID',

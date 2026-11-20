@@ -1,44 +1,46 @@
 import { HttpStatus, Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { OnEvent } from '@nestjs/event-emitter';
-import { INotificationsConfig } from '../../../config/interfaces/notifications-config.interface.js';
+import { EmailAudience, EmailCancelReason, Prisma } from '@prisma/client';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
-import { AbstractChannel } from '../channels/abstract.channel.js';
-import { EmailChannel } from '../channels/email/email.channel.js';
-import { DeliveryStrategy } from '../enums/delivery-strategy.enum.js';
 import { NotificationAudience } from '../enums/notification-audience.enum.js';
+import { EmailContent } from '../interfaces/email-content.interface.js';
+import { EmailMessageMeta } from '../interfaces/email-message-meta.interface.js';
 import { HasEmailChannel } from '../interfaces/has-email-channel.interface.js';
 import { AbstractNotification } from '../messages/abstract.notification.js';
+import { EmailDeliveryService } from './email-delivery.service.js';
+import { EmailLogService } from './email-log.service.js';
+import { EmailOutboxService } from './email-outbox.service.js';
 
 export const NOTIFICATION_EVENT = 'notification';
 
+type EmailNotification = AbstractNotification & HasEmailChannel;
+
+/** What other modules use to send notifications. */
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
-  private readonly channels: AbstractChannel[];
-  private readonly clientNotificationsEnabled: boolean;
 
   constructor(
-    private readonly emailChannel: EmailChannel,
-    config: ConfigService,
-  ) {
-    this.channels = [emailChannel];
-    this.clientNotificationsEnabled = config.get<INotificationsConfig>(
-      'notificationsConfig',
-    )!.clientNotificationsEnabled;
-  }
+    private readonly outbox: EmailOutboxService,
+    private readonly delivery: EmailDeliveryService,
+    private readonly log: EmailLogService,
+  ) {}
 
+  /** `NOTIFICATION_EVENT` listener: queues durable emails, sends one-time secrets directly. */
   @OnEvent(NOTIFICATION_EVENT, { suppressErrors: true })
-  async handle(notification: AbstractNotification): Promise<void> {
-    if (this.isMuted(notification)) {
-      this.logger.log(
-        `Client notifications disabled, skipping ${notification.constructor.name}`,
-      );
-      return;
-    }
+  async handle(notification: EmailNotification): Promise<void> {
     try {
-      await this.dispatch(notification);
+      if (notification.durable) await this.enqueue(notification);
+      else if (this.delivery.isMuted(this.meta(notification).audience))
+        this.logger.log(
+          `Client notifications disabled, skipping ${notification.constructor.name}`,
+        );
+      else
+        await this.delivery.sendDirect(
+          this.content(notification),
+          this.meta(notification),
+        );
     } catch (e: any) {
       this.logger.error(
         `Unhandled error delivering ${notification.constructor.name}: ${e.message}`,
@@ -47,61 +49,65 @@ export class NotificationsService {
     }
   }
 
-  async sendEmail(
-    notification: AbstractNotification & HasEmailChannel,
+  /**
+   * Logs and queues the email for delivery with retries. Inside `tx` it is queued only if the
+   * transaction commits, so marking a booking as notified and queueing its email go together.
+   * A muted client email is logged as skipped.
+   */
+  async enqueue(
+    notification: EmailNotification,
+    tx?: Prisma.TransactionClient,
   ): Promise<void> {
-    if (this.isMuted(notification))
+    await this.outbox.enqueue(
+      this.content(notification),
+      this.meta(notification),
+      tx,
+    );
+  }
+
+  /** Sends now and reports failure to the caller; the content is not logged. */
+  async sendEmail(notification: EmailNotification): Promise<void> {
+    const meta = this.meta(notification);
+    if (this.delivery.isMuted(meta.audience))
       throw new AppException(
         ErrorCode.EMAIL_DELIVERY_FAILED,
         HttpStatus.SERVICE_UNAVAILABLE,
       );
-    try {
-      await this.emailChannel.send(notification);
-    } catch {
+    const result = await this.delivery.sendDirect(
+      this.content(notification),
+      meta,
+    );
+    if (!result.sent)
       throw new AppException(
         ErrorCode.EMAIL_DELIVERY_FAILED,
         HttpStatus.BAD_GATEWAY,
       );
-    }
   }
 
-  /** Emails to CRM accounts always go out; only emails to a business's clients follow `CLIENT_NOTIFICATIONS_ENABLED`. */
-  private isMuted(notification: AbstractNotification): boolean {
-    return (
-      notification.audience === NotificationAudience.CLIENT &&
-      !this.clientNotificationsEnabled
+  /** The booking changed under its client emails: what has not gone out yet would mislead. */
+  async cancelPendingForBooking(
+    bookingId: string,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    const ids = await this.log.findPendingClientIds(bookingId, tx);
+    if (!ids.length) return;
+    await this.log.cancel(ids, EmailCancelReason.BOOKING_CHANGED, null, tx);
+    this.logger.log(
+      `pending client emails cancelled: bookingId=${bookingId} count=${ids.length}`,
     );
   }
 
-  private async dispatch(notification: AbstractNotification): Promise<void> {
-    const available = this.channels.filter((ch) => ch.canHandle(notification));
+  private content(notification: EmailNotification): EmailContent {
+    return { template: notification.emailTemplate, ...notification.toEmail() };
+  }
 
-    if (notification.strategy === DeliveryStrategy.FIRST_AVAILABLE) {
-      for (const ch of available) {
-        try {
-          await ch.send(notification);
-          return;
-        } catch (e: any) {
-          this.logger.warn(
-            `${ch.name} failed for ${notification.constructor.name}: ${e.message}`,
-          );
-        }
-      }
-      this.logger.warn(
-        `All channels failed for ${notification.constructor.name}`,
-      );
-    } else {
-      await Promise.all(
-        available.map((ch) =>
-          ch
-            .send(notification)
-            .catch((e: any) =>
-              this.logger.warn(
-                `${ch.name} failed for ${notification.constructor.name}: ${e.message}`,
-              ),
-            ),
-        ),
-      );
-    }
+  private meta(notification: EmailNotification): EmailMessageMeta {
+    return {
+      audience:
+        notification.audience === NotificationAudience.CLIENT
+          ? EmailAudience.CLIENT
+          : EmailAudience.ACCOUNT,
+      reference: notification.reference(),
+    };
   }
 }

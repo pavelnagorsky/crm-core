@@ -6,6 +6,7 @@ import {
 } from '@prisma/client';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
 import { TimeUtils } from '../../../shared/time/time.utils.js';
+import { PaymentStatus } from '../../payments/enums/payment-status.enum.js';
 import { CalendarBookingView } from '../interfaces/calendar-booking-view.interface.js';
 
 export class CalendarEventItemDto {
@@ -26,6 +27,15 @@ export class CalendarEventItemDto {
       'Booking status. Included for every calendar reader regardless of role. Null for blocks and integration events.',
   })
   status: BookingStatus | null;
+
+  @ApiProperty({
+    enum: PaymentStatus,
+    enumName: 'PaymentStatus',
+    nullable: true,
+    description:
+      'Payment status of the visit, the same on every card of a booking. Null for blocks and integration events. NOT_SPECIFIED is worth a mark only on past or completed visits.',
+  })
+  paymentStatus: PaymentStatus | null;
 
   @ApiProperty({
     type: String,
@@ -148,6 +158,7 @@ export class CalendarEventItemDto {
     dto.id = booking.id;
     dto.type = CalendarEventType.BOOKING;
     dto.status = booking.status;
+    dto.paymentStatus = booking.paymentStatus;
     dto.entityId = booking.entityId;
     dto.staffId = booking.staffId;
     dto.staffName = booking.staffName;
@@ -179,6 +190,7 @@ export class CalendarEventItemDto {
     dto.id = `${event.id}:${date}`;
     dto.type = type;
     dto.status = null;
+    dto.paymentStatus = null;
     dto.entityId = event.id;
     dto.staffId = event.staffId;
     dto.staffName = event.staffId ? staffName : null;

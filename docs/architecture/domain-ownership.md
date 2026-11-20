@@ -24,9 +24,11 @@
 | `ProductCategory`, `Product`, `ProductLocation`                                       | `ProductsService`                                            | `ProductsService`                                                                          | Inventory и Orders резолвят товары через `ProductsService`. Исключение: SQL-отчёты склада (остатки, KPI, ведомость, фильтр документов) присоединяют `Product` для метаданных и фильтра назначения; условие фильтра берётся только из `products/utils/product-purpose.filter.ts`. |
 | `InventoryBalance`, `InventoryDocument`, `InventoryDocumentItem`, `InventoryMovement` | `InventoryFacade`                                           | `InventoryFacade`                                                                         | Низкоуровневая блокировка остатков изолирована в `InventoryBalanceLockService`.           |
 | `Order`, `OrderItem`, `OrderOperation`, `OrderReturn`, `OrderReturnItem`              | `OrdersFacade` facade, реализация в order sub-services      | `OrdersFacade`               | Product transitions, persistence, booking sync и returns разделены на внутренние сервисы. |
+| `PaymentOperation`, `Payment` | `PaymentLedgerService` (запись), `PaymentReadService` (чтение) в PaymentsModule | `PaymentsFacade`, `PaymentsAggregatesService` | Журнал денег заказа. Payments не знает о записях и заказах: `orderId` - непрозрачная ссылка, валюту и сумму к оплате передаёт вызывающий. Запись только под блокировкой заказа, которую держит вызывающий. Сводка встраивает SQL-фрагмент `noActiveRecordsSql`. |
 | `StaffCompensationPlan`, `StaffCompensationServiceRate`                               | `StaffCompensationService`                                   | `StaffCompensationService` внутри Payroll module                                           | Наружу из Payroll сейчас не экспортируется.                                               |
 | `StaffEarning`                                                                        | `StaffEarningsService`                                       | `StaffEarningsService`                                                                     | Низкоуровневые вставки идут через `StaffEarningWriterService`.                            |
 | `PayrollPeriod`, `PayrollResult`                                                      | `PayrollPeriodService`                                             | `PayrollPeriodService` внутри Payroll controllers                                                | `StaffEarningsService` участвует в materialization периода.                               |
+| `EmailMessage`, `EmailMessageEvent` | `EmailLogService` (запись и список), `EmailStatsService` (отчёты админки) | `NotificationsService` | Журнал всех писем. Модули ставят письма через `NotificationsService.enqueue` (можно внутри своей транзакции) и отменяют неотправленные письма брони через `cancelPendingForBooking`. Очередь pg-boss хранит только id письма. |
 | `AuditLog`                                                                            | `AuditService`                                               | `AuditService` / `AUDIT_EVENT`                                                             | События AUDIT_EVENT обрабатываются AuditService; durable outbox пока отсутствует.                       |
 | `File`                                                                                | `FilesService`                                               | `FilesService`                                                                             | Booking pages используют файлы для cover/media.                                           |
 | `BillingPlan`, `BillingPlanPrice`, `BillingSettings` | `BillingPlanService`, `BillingSettingsService` (BillingCoreModule) | `SubscriptionAccessService` (каталог), `BillingFacade` | Кэш `billingPlans()` / `billingSettings()`; изменения только из админки платформы. |
@@ -45,6 +47,7 @@
 - UserService владеет сохранённым tokenEpoch. Auth и AccessManagement вызывают его через TokenEpochRegistryService; при изменении ролей версия обновляется в той же транзакции.
 - Членство, permissions, generic invitations и grants принадлежат AccessModule; привязка сотрудника остаётся операцией StaffService.
 - Биллинг: BillingCoreModule не зависит от доменов CRM, поэтому Staff, Location и Brand импортируют его без циклов. Подсчёт использования (`BillingUsageModule`), письма (`BillingMailModule`), кроны (`BillingJobsModule`), HTTP владельца (`BillingOwnerModule`) и админки (`BillingAdminModule`) — отдельные модули поверх ядра. Расчёты состояния, периодов, цен и лимитов — чистые калькуляторы в `billing/compute`, не экспортируются. [План](../subscriptions-plan.md).
+- Оплата: Bookings -> Orders -> Payments и Bookings -> Payments (пакетное чтение итогов). Payments не зависит от Orders: возврат товара вызывает Payments внутри своей транзакции. Оркестрация визита (завершение, проведение товаров, оплата) - `BookingPaymentService`, продажи и возвраты - Orders. Сводка Dashboard -> Orders aggregates -> Bookings aggregates, Payments aggregates. Порядок блокировок: ключ оплаты (advisory) -> запись -> заказ -> журнал.
 - Аудит редактирования/удаления заказа и отмены/удаления брони публикуется после успешного commit. Остальные события и надёжность доставки описаны в [ограничениях ревью](./README.md#оставшийся-технический-долг).
 
 ## Направление Зависимостей
@@ -72,6 +75,10 @@ flowchart LR
   CalendarFacade --> StaffService
   CalendarFacade --> ServiceCatalogFacade
 
+  PaymentsFacade[PaymentsFacade\npayment journal]
+  BookingsFacade --> OrdersFacade
+  BookingsFacade --> PaymentsFacade
+  OrdersFacade --> PaymentsFacade
   OrdersFacade --> InventoryFacade
   OrdersFacade --> StaffEarningsService
   OrdersFacade --> StaffService

@@ -25,6 +25,14 @@ import { OrderPricingCalculator } from '../calculators/order-pricing.calculator.
 import { CreateOrderReturnDto } from '../dto/create-order-return.dto.js';
 import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
 import { OrderStateRules } from '../rules/order-state.rules.js';
+import { NESTED_PAYMENT_KEY_PREFIX } from '../../payments/constants/payment.constants.js';
+import { PaymentChange } from '../../payments/interfaces/payment-change.interface.js';
+import { PaymentsFacade } from '../../payments/payments.facade.js';
+import { assertPaymentDate } from '../../payments/rules/payment-occurred-at.rules.js';
+import { LockedOrder } from '../interfaces/locked-order.interface.js';
+import { OrderReturnResult } from '../interfaces/order-return-result.interface.js';
+import { returnRefundAmount } from '../rules/order-payment-due.rules.js';
+import { OrderPaymentService } from './order-payment.service.js';
 import { OrderPersistenceService } from './order-persistence.service.js';
 import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 
@@ -38,6 +46,8 @@ export class OrderReturnService {
     private readonly stateAssertions: OrderStateRules,
     private readonly locations: LocationService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly payments: PaymentsFacade,
+    private readonly orderPayments: OrderPaymentService,
   ) {}
 
   async create(
@@ -45,7 +55,7 @@ export class OrderReturnService {
     orderId: string,
     dto: CreateOrderReturnDto,
     actor: AuditActor,
-  ): Promise<OrderWithItems> {
+  ): Promise<OrderReturnResult> {
     const idempotencyKey = dto.idempotencyKey;
     const reason = dto.reason;
     const requestHash = this.requestHash(orderId, dto);
@@ -59,8 +69,8 @@ export class OrderReturnService {
 
     try {
       return await this.persistence.inTransaction(async (tx) => {
-        await this.persistence.lockOrder(tx, orderId);
-        const order = await this.persistence.findInTransaction(
+        // Booking first, then the order: the refund depends on the visit's services.
+        const { order, visit } = await this.orderPayments.lockOrderWithVisit(
           tx,
           locationId,
           orderId,
@@ -120,6 +130,14 @@ export class OrderReturnService {
           locationId,
           orderId,
         );
+        const refund = await this.refundWithReturn(
+          tx,
+          { order: updated, visit },
+          orderReturn,
+          dto,
+          requestHash,
+          actor,
+        );
         this.emitUpdated(location.brandId, locationId, orderId, actor, {
           orderReturnId: orderReturn.id,
           reason,
@@ -135,7 +153,7 @@ export class OrderReturnService {
             })),
           },
         });
-        return updated;
+        return { order: updated, refund };
       });
     } catch (error) {
       if (!this.isReturnIdempotencyError(error)) {
@@ -147,8 +165,55 @@ export class OrderReturnService {
         idempotencyKey,
         requestHash,
       );
-      return existing;
+      return { order: existing, refund: null };
     }
+  }
+
+  /**
+   * Money goes back together with the goods: what was paid beyond the amount due after the
+   * return, at most the return total, dated like the return. Money that was never received
+   * is not refunded. `refund` is required only when something goes back; otherwise it is
+   * ignored, since the client asks for the method whenever something is paid.
+   */
+  private async refundWithReturn(
+    tx: Prisma.TransactionClient,
+    locked: LockedOrder,
+    orderReturn: Prisma.OrderReturnGetPayload<{ include: { items: true } }>,
+    dto: CreateOrderReturnDto,
+    requestHash: string,
+    actor: AuditActor,
+  ): Promise<PaymentChange | null> {
+    const { order } = locked;
+    const returnTotal = orderReturn.items.reduce(
+      (sum, item) => sum.plus(item.lineTotal),
+      new Prisma.Decimal(0),
+    );
+    const amount = returnRefundAmount(
+      await this.payments.paidAmount(tx, order.id),
+      this.orderPayments.amountDue(locked),
+      returnTotal,
+    );
+    if (amount.lte(0)) return null;
+    if (!dto.refund)
+      throw new AppException(
+        ErrorCode.ORDER_RETURN_REFUND_REQUIRED,
+        HttpStatus.BAD_REQUEST,
+      );
+    // The same bounds as any payment date.
+    assertPaymentDate(orderReturn.occurredAt, new Date());
+    return this.payments.refund(tx, {
+      locationId: order.locationId,
+      orderId: order.id,
+      currency: order.currency,
+      method: dto.refund.method,
+      amount,
+      occurredAt: orderReturn.occurredAt,
+      reason: orderReturn.reason,
+      idempotencyKey: NESTED_PAYMENT_KEY_PREFIX.RETURN + dto.idempotencyKey,
+      requestHash,
+      orderReturnId: orderReturn.id,
+      actor,
+    });
   }
 
   private resolveReturnItems(
@@ -297,6 +362,8 @@ export class OrderReturnService {
             .sort((left, right) =>
               left.orderItemId.localeCompare(right.orderItemId),
             ),
+          // Only when present, so returns without a refund keep their earlier hash.
+          ...(dto.refund ? { refund: { method: dto.refund.method } } : {}),
         }),
       )
       .digest('hex');

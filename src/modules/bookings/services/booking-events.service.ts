@@ -79,12 +79,21 @@ export class BookingEventsService {
   }
 
   notifyCreated(booking: BookingWithItems, timezone: string): void {
+    const notification = this.createdNotification(booking, timezone);
+    if (notification) this.eventEmitter.emit(NOTIFICATION_EVENT, notification);
+  }
+
+  /** The client's email about a new booking; null when there is no one to tell. */
+  createdNotification(
+    booking: BookingWithItems,
+    timezone: string,
+  ): BookingPendingNotification | BookingConfirmedNotification | null {
     if (
       booking.status !== BookingStatus.PENDING &&
       booking.status !== BookingStatus.CONFIRMED
     )
-      return;
-    if (!booking.clientEmail) return;
+      return null;
+    if (!booking.clientEmail) return null;
     const clientToken = this.bookingClientService.generateClientToken(
       booking.id,
     );
@@ -92,16 +101,13 @@ export class BookingEventsService {
       booking.status === BookingStatus.PENDING
         ? BookingPendingNotification
         : BookingConfirmedNotification;
-    this.eventEmitter.emit(
-      NOTIFICATION_EVENT,
-      new Notification(
-        {
-          ...this.notificationData(booking),
-          clientEmail: booking.clientEmail,
-          timezone,
-        },
-        this.bookingClientService.managementUrl(clientToken),
-      ),
+    return new Notification(
+      {
+        ...this.notificationData(booking),
+        clientEmail: booking.clientEmail,
+        timezone,
+      },
+      this.bookingClientService.managementUrl(clientToken),
     );
   }
 
@@ -191,26 +197,40 @@ export class BookingEventsService {
     const { timezone } = await this.locationService.getLocale(
       booking.locationId,
     );
-    this.eventEmitter.emit(
-      NOTIFICATION_EVENT,
-      new BookingStatusChangedNotification(
-        {
-          ...this.notificationData(booking),
-          clientEmail: booking.clientEmail,
-          timezone,
-        },
-        status,
-        {
-          ...details,
-          // A cancelled booking has nothing left to manage.
-          manageLink:
-            status === 'CANCELLED'
-              ? null
-              : this.bookingClientService.managementUrl(
-                  this.bookingClientService.generateClientToken(booking.id),
-                ),
-        },
-      ),
+    const notification = this.statusNotification(
+      booking,
+      status,
+      details,
+      timezone,
+    );
+    if (notification) this.eventEmitter.emit(NOTIFICATION_EVENT, notification);
+  }
+
+  /** The client's email about a status change; null when the booking has no email. */
+  statusNotification(
+    booking: BookingWithItems,
+    status: BookingStatusChangedStatus,
+    details: Omit<BookingStatusChangeDetails, 'manageLink'>,
+    timezone: string,
+  ): BookingStatusChangedNotification | null {
+    if (!booking.clientEmail) return null;
+    return new BookingStatusChangedNotification(
+      {
+        ...this.notificationData(booking),
+        clientEmail: booking.clientEmail,
+        timezone,
+      },
+      status,
+      {
+        ...details,
+        // A cancelled booking has nothing left to manage.
+        manageLink:
+          status === 'CANCELLED'
+            ? null
+            : this.bookingClientService.managementUrl(
+                this.bookingClientService.generateClientToken(booking.id),
+              ),
+      },
     );
   }
 
