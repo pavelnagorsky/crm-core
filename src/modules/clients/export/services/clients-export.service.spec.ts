@@ -18,6 +18,7 @@ const labels = {
   notes: 'Заметки',
   genderMale: 'Мужской',
   genderFemale: 'Женский',
+  acquisitionSource: 'Источник привлечения',
 };
 
 function collect(stream: PassThrough): Promise<Buffer> {
@@ -69,17 +70,22 @@ describe('ClientsExportService', () => {
   beforeEach(() => {
     clients.search.mockReset();
     locale.get.mockReset();
-    locale.get.mockReturnValue({ documents: { clients: labels } } as ReturnType<
-      LocaleService['get']
-    >);
+    locale.get.mockReturnValue({
+      documents: { clients: labels },
+      trafficSource: { OFFLINE: 'Офлайн-реклама', VK: 'ВКонтакте' },
+    } as unknown as ReturnType<LocaleService['get']>);
   });
 
   it('exports every client matching the table search and order as xlsx', async () => {
     clients.search.mockResolvedValue({
       items: [
-        client(),
+        client({
+          acquisitionSource: 'OFFLINE',
+          acquisitionSourceDetail: 'листовки',
+        }),
         client({
           id: 'client-2',
+          acquisitionSource: 'VK',
           gender: 'OTHER',
           email: null,
           birthDate: null,
@@ -120,5 +126,8 @@ describe('ClientsExportService', () => {
     expect(grid.row(3).text(5)).toBe('');
     expect(grid.row(3).text(6)).toBe('OTHER');
     expect(grid.row(3).text(7)).toBe('');
+    expect(grid.row(1).text(8)).toBe('Источник привлечения');
+    expect(grid.row(2).text(8)).toBe('Офлайн-реклама: листовки');
+    expect(grid.row(3).text(8)).toBe('ВКонтакте');
   });
 });

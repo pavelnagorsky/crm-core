@@ -235,6 +235,14 @@ export const ErrorCode = {
     code: 'BOOKING_CUSTOM_TIME_MANUAL_ONLY',
     message: 'Only manual bookings can use custom time',
   },
+  BOOKING_TRAFFIC_SOURCE_READ_ONLY: {
+    code: 'BOOKING_TRAFFIC_SOURCE_READ_ONLY',
+    message: 'The source of an online booking cannot be changed',
+  },
+  TRAFFIC_SOURCE_DETAIL_WITHOUT_SOURCE: {
+    code: 'TRAFFIC_SOURCE_DETAIL_WITHOUT_SOURCE',
+    message: 'A source detail needs a source',
+  },
   BOOKING_STATUS_BEFORE_START: {
     code: 'BOOKING_STATUS_BEFORE_START',
     message:

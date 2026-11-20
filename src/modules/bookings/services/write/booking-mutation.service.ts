@@ -17,6 +17,8 @@ import { UpdateBookingDto } from '../../dto/update-booking.dto.js';
 import { BookingStatus } from '../../enums/booking-status.enum.js';
 import { BookingChannel } from '../../enums/booking-channel.enum.js';
 import { BookingWithItems } from '../../interfaces/booking-with-items.interface.js';
+import { TrafficSource } from '../../../../shared/traffic/enums/traffic-source.enum.js';
+import { editTrafficSource } from '../../../../shared/traffic/rules/traffic-source-edit.rules.js';
 import { BookingEventsService } from '../booking-events.service.js';
 import { BookingWriteLockService } from '../booking-write-lock.service.js';
 import { BookingReadService } from '../read/booking-read.service.js';
@@ -58,6 +60,7 @@ export class BookingMutationService {
       dto.startAt !== undefined ||
       dto.staffId !== undefined ||
       Boolean(dto.staffAssignments?.length);
+    const trafficWrite = this.trafficWrite(old, dto);
     const pricePatches = this.pricePatches(old, dto);
     const clientLink = await this.clientLink.resolve(old, dto);
     const updateArgs = {
@@ -79,14 +82,19 @@ export class BookingMutationService {
             ? (dto.internalNotes ?? null)
             : undefined,
         ...this.itemPriceWrite(pricePatches),
+        ...trafficWrite,
       },
       include: bookingWithItemsInclude,
     } satisfies Prisma.BookingUpdateArgs;
-    // A booking order follows the client the booking is moved to.
-    const syncOrderClient = clientLink
-      ? (booking: BookingWithItems, tx: Prisma.TransactionClient) =>
-          this.orders.syncBookingClient(booking, tx)
-      : undefined;
+    // A booking order follows the client the booking is moved to; so does the client's first
+    // booking, and a corrected source of that booking.
+    const afterWrite =
+      clientLink || trafficWrite
+        ? async (booking: BookingWithItems, tx: Prisma.TransactionClient) => {
+            if (clientLink) await this.orders.syncBookingClient(booking, tx);
+            await this.clientLink.syncAcquisition(old, booking, tx);
+          }
+        : undefined;
     let updated: BookingWithItems;
     if (manualIntervalChanging || slotChanging) {
       updated = await this.reschedule.reschedule(
@@ -94,13 +102,13 @@ export class BookingMutationService {
         dto,
         updateArgs.data,
         actor,
-        syncOrderClient,
+        afterWrite,
       );
     } else {
       updated = await this.db.$transaction(async (tx) => {
         await this.write.lockUnchangedBooking(tx, old);
         const result = await tx.booking.update(updateArgs);
-        await syncOrderClient?.(result, tx);
+        await afterWrite?.(result, tx);
         if (old.status === BookingStatus.COMPLETED && pricePatches.length > 0) {
           const order = await this.orders.syncCompletedBooking(
             result,
@@ -181,6 +189,35 @@ export class BookingMutationService {
 
   delete(booking: BookingWithItems, actor: AuditActor): Promise<void> {
     return this.lifecycle.delete(booking, actor);
+  }
+
+  /** Staff pick the source of a manual booking only; an online one keeps what was recorded. */
+  private trafficWrite(
+    old: BookingWithItems,
+    dto: UpdateBookingDto,
+  ): Pick<
+    Prisma.BookingUpdateInput,
+    'trafficSource' | 'trafficSourceDetail'
+  > | null {
+    if (
+      dto.trafficSource === undefined &&
+      dto.trafficSourceDetail === undefined
+    )
+      return null;
+    if (old.channel !== BookingChannel.MANUAL)
+      throw new AppException(
+        ErrorCode.BOOKING_TRAFFIC_SOURCE_READ_ONLY,
+        HttpStatus.BAD_REQUEST,
+      );
+    const { source, detail } = editTrafficSource(
+      {
+        source: old.trafficSource as TrafficSource | null,
+        detail: old.trafficSourceDetail,
+      },
+      dto.trafficSource,
+      dto.trafficSourceDetail,
+    );
+    return { trafficSource: source, trafficSourceDetail: detail };
   }
 
   private pricePatches(

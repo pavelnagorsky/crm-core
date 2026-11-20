@@ -10,13 +10,11 @@ import {
   IsString,
   IsUUID,
   MaxLength,
-  Validate,
   ValidateIf,
 } from 'class-validator';
 import { MULTI_SERVICE_MAX_ITEMS } from '../../services/constants/multi-service.constants.js';
 import { IsPhone } from '../../../shared/decorators/is-phone.decorator.js';
 import { IsLocalDateTime } from '../../../shared/time/decorators/is-local-date-time.validator.js';
-import { AtMostOneBookingChannelConstraint } from '../decorators/at-most-one-booking-channel.constraint.js';
 
 /** The contact rule of the request's own DTO class; a manual booking may omit the client. */
 function requiresClientContacts(dto: CreateBookingDto): boolean {
@@ -39,27 +37,6 @@ export class CreateBookingDto {
 
   @StaffAssignments()
   staffAssignments?: StaffAssignmentDto[];
-
-  @ApiProperty({
-    type: String,
-    format: 'uuid',
-    required: false,
-    description: 'Published booking page that produced this booking',
-  })
-  @Validate(AtMostOneBookingChannelConstraint)
-  @IsOptional()
-  @IsUUID()
-  bookingPageId?: string;
-
-  @ApiProperty({
-    type: String,
-    format: 'uuid',
-    required: false,
-    description: 'Published booking widget that produced this booking',
-  })
-  @IsOptional()
-  @IsUUID()
-  bookingWidgetId?: string;
 
   @ApiProperty({
     type: String,

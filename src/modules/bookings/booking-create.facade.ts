@@ -19,9 +19,13 @@ import { CreateBookingDto } from './dto/create-booking.dto.js';
 import { ManualBookingItemDto } from './dto/manual-booking-item.dto.js';
 import { ManualBookingProductDto } from './dto/manual-booking-product.dto.js';
 import { ManualCreateBookingDto } from './dto/manual-create-booking.dto.js';
+import { PublicCreateBookingDto } from './dto/public-create-booking.dto.js';
 import { BookingChannel } from './enums/booking-channel.enum.js';
 import { BookingStatus } from './enums/booking-status.enum.js';
 import { ResolvedBookingChannel } from './interfaces/resolved-booking-channel.interface.js';
+import { ClassifiedTraffic } from '../../shared/traffic/interfaces/classified-traffic.interface.js';
+import { editTrafficSource } from '../../shared/traffic/rules/traffic-source-edit.rules.js';
+import { BookingTraffic } from './interfaces/booking-traffic.interface.js';
 import { BookingCreationOutcome } from './interfaces/booking-creation-outcome.interface.js';
 import { BookingCreationResult } from './interfaces/booking-creation-result.interface.js';
 import { BookingCreationRequest } from './interfaces/booking-creation-request.interface.js';
@@ -59,8 +63,9 @@ export class BookingCreateFacade {
 
   async createPublicBooking(
     locationId: string,
-    dto: CreateBookingDto,
+    dto: PublicCreateBookingDto,
     attribution: ResolvedBookingChannel,
+    traffic: ClassifiedTraffic,
     context: PublicBookingRequestContext = { ip: 'unknown' },
   ): Promise<BookingWithItems> {
     this.assertPublicClientFields(dto);
@@ -77,6 +82,7 @@ export class BookingCreateFacade {
           this.create(
             locationId,
             attribution,
+            traffic,
             null,
             dto,
             undefined,
@@ -85,7 +91,7 @@ export class BookingCreateFacade {
           ),
         )
       : {
-          ...(await this.create(locationId, attribution, null, dto)),
+          ...(await this.create(locationId, attribution, traffic, null, dto)),
           created: true,
         };
     if (!result.created) return result.booking;
@@ -128,6 +134,7 @@ export class BookingCreateFacade {
         bookingPageId: null,
         bookingWidgetId: null,
       },
+      this.manualTraffic(dto),
       actor,
       dto,
       ownStaffId,
@@ -149,6 +156,7 @@ export class BookingCreateFacade {
   private async create(
     locationId: string,
     attribution: ResolvedBookingChannel,
+    traffic: BookingTraffic,
     actor: AuditActor | null,
     dto: CreateBookingDto | ManualCreateBookingDto,
     ownStaffId?: string,
@@ -270,6 +278,7 @@ export class BookingCreateFacade {
         clientEmailToFill: emailToFill,
         items,
         attribution,
+        traffic,
         executionMode: selection.executionMode,
         bundleId: selection.bundleId,
         startAt: envelopeStart,
@@ -301,6 +310,16 @@ export class BookingCreateFacade {
       currency: location.currency,
       bundleTitle: selection.bundleTitle,
     };
+  }
+
+  /** The source staff picked for a manual booking; a detail alone is rejected. */
+  private manualTraffic(dto: ManualCreateBookingDto): BookingTraffic {
+    const picked = editTrafficSource(
+      { source: null, detail: null },
+      dto.trafficSource,
+      dto.trafficSourceDetail,
+    );
+    return { ...picked, touch: null };
   }
 
   private manualItems(dto: BookingSelectionRequest): ManualBookingItemDto[] {

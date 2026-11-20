@@ -755,6 +755,9 @@ describe.each(['page', 'widget'] as const)(
       const owner = {
         list: vi.fn().mockResolvedValue(records),
         findInLocation: vi.fn().mockResolvedValue(record),
+        findInLocationWithHistory: vi
+          .fn()
+          .mockResolvedValue({ ...record, initializationHistory: [] }),
       };
       const load = vi.fn().mockResolvedValue(
         new Map([
@@ -780,13 +783,20 @@ describe.each(['page', 'widget'] as const)(
       ]);
       const detail = await controller.findById('location', 'channel');
       expect(detail.responseValue?.stats).toEqual(totals);
-      expect(owner.findInLocation).toHaveBeenCalledWith('location', 'channel');
+      expect(
+        kind === 'page'
+          ? owner.findInLocation
+          : owner.findInLocationWithHistory,
+      ).toHaveBeenCalledWith('location', 'channel');
       expect(load).toHaveBeenLastCalledWith('location', ['channel']);
     });
 
     it('does not read stats when the channel is inaccessible', async () => {
       const owner = {
         findInLocation: vi.fn().mockRejectedValue(new Error('not found')),
+        findInLocationWithHistory: vi
+          .fn()
+          .mockRejectedValue(new Error('not found')),
       };
       const load = vi.fn();
       const stats = { forPages: load, forWidgets: load };

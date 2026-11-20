@@ -73,11 +73,20 @@ export enum DashboardWidgetKey {
   BOOKINGS_SERIES = 'BOOKINGS_SERIES',
 
   /**
-   * Bars of where bookings came from, tallest first: Online, Widget, Manual.
-   * Bar height is the count. `sharePct` is that bar's share of `breakdown.total`.
-   * There is no comparison with the previous period.
+   * Bars of the channels bookings were made through, tallest first: Online (booking page),
+   * Widget, Manual. Item ids are BookingChannel values. Bar height is the count. `sharePct` is
+   * that bar's share of `breakdown.total`. There is no comparison with the previous period.
    */
   BOOKINGS_BY_CHANNEL = 'BOOKINGS_BY_CHANNEL',
+
+  /**
+   * Bars of where bookings came from by marketing source, tallest first (dimension
+   * "trafficSource"). Bookings are counted by when they were made (createdAt in the period).
+   * Item ids are TrafficSource values or "NONE" (manual bookings without a source); labels are
+   * Russian. `value` is bookings, `secondaryValue` new clients (first bookings of a client in the
+   * brand), `sharePct` the share of `breakdown.total`. No comparison with the previous period.
+   */
+  BOOKINGS_BY_TRAFFIC_SOURCE = 'BOOKINGS_BY_TRAFFIC_SOURCE',
 
   /**
    * Big number: cancelled bookings as a percent of cancelled + confirmed + completed.

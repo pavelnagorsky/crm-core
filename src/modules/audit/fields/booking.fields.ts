@@ -11,4 +11,6 @@ export const BOOKING_AUDIT_FIELDS: FieldDescriptor<Booking>[] = [
   { key: 'clientEmail' },
   { key: 'notes' },
   { key: 'internalNotes' },
+  { key: 'trafficSource', i18n: 'trafficSource' },
+  { key: 'trafficSourceDetail' },
 ];

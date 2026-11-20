@@ -5,6 +5,7 @@ import { HeatmapCell } from '../../bookings/interfaces/heatmap-cell.interface.js
 import { SeriesRow } from '../../bookings/interfaces/series-row.interface.js';
 import { ChannelCount } from '../../bookings/interfaces/channel-count.interface.js';
 import { StaffCount } from '../../bookings/interfaces/staff-count.interface.js';
+import { TrafficSourceTotals } from '../../bookings/interfaces/traffic-source-totals.interface.js';
 import { ProductSalesSeriesRow } from '../../orders/aggregates/interfaces/product-sales-series-row.interface.js';
 import { ProductSalesSnapshot } from '../../orders/aggregates/interfaces/product-sales-snapshot.interface.js';
 import { ProductSalesStaffRow } from '../../orders/aggregates/interfaces/product-sales-staff-row.interface.js';
@@ -22,6 +23,7 @@ export interface DashboardReadContext {
   productSeries: ProductSalesSeriesRow[];
   previousProductSeries: ProductSalesSeriesRow[];
   channelRows: ChannelCount[];
+  trafficTotals?: TrafficSourceTotals;
   heatmapCells: HeatmapCell[];
   staffRevenueRows: StaffCount[];
   staffCompletedRows: StaffCount[];

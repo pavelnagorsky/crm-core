@@ -5,6 +5,7 @@ import { WidgetHeatmapDto } from './widget-heatmap.dto.js';
 import { WidgetMetaDto } from './widget-meta.dto.js';
 import { WidgetMetricDto } from './widget-metric.dto.js';
 import { WidgetSeriesDto } from './widget-series.dto.js';
+import { WidgetTableDto } from './widget-table.dto.js';
 
 export class WidgetDto {
   @ApiProperty({
@@ -33,6 +34,9 @@ export class WidgetDto {
 
   @ApiProperty({ type: () => WidgetHeatmapDto, required: false })
   heatmap?: WidgetHeatmapDto;
+
+  @ApiProperty({ type: () => WidgetTableDto, required: false })
+  table?: WidgetTableDto;
 
   @ApiProperty({ type: () => WidgetMetaDto, required: false })
   meta?: WidgetMetaDto;

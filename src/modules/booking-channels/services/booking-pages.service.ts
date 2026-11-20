@@ -266,14 +266,15 @@ export class BookingPagesService {
     };
   }
 
-  async assertPublished(pageId: string): Promise<void> {
+  /** The location of a published page of an active location; 404 otherwise. */
+  async getPublishedLocationId(pageId: string): Promise<string> {
     const page = await this.db.bookingPage.findFirst({
       where: {
         id: pageId,
         status: BookingChannelStatus.PUBLISHED,
         location: ACTIVE_LOCATION_WHERE,
       },
-      select: { id: true },
+      select: { locationId: true },
     });
     if (!page) {
       throw new AppException(
@@ -281,6 +282,7 @@ export class BookingPagesService {
         HttpStatus.NOT_FOUND,
       );
     }
+    return page.locationId;
   }
 
   private invalidatePublicList(): Promise<void> {

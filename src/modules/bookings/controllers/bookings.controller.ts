@@ -157,7 +157,7 @@ export class BookingsController {
   @ApiCreatedResponse({ type: ApiResponse(BookingWriteResponseDto) })
   @ApiBadRequestResponse({
     description:
-      'BOOKING_STATUS_BEFORE_START: COMPLETED or NO_SHOW for a visit that has not started; BOOKING_CLIENT_CONFLICT: clientId with anonymous; BOOKING_STAFF_ASSIGNMENT_OVERLAP: custom time puts one staff member on overlapping services',
+      'BOOKING_STATUS_BEFORE_START: COMPLETED or NO_SHOW for a visit that has not started; BOOKING_CLIENT_CONFLICT: clientId with anonymous; BOOKING_STAFF_ASSIGNMENT_OVERLAP: custom time puts one staff member on overlapping services; TRAFFIC_SOURCE_DETAIL_WITHOUT_SOURCE: trafficSourceDetail without trafficSource; validation: trafficSource DIRECT',
   })
   @ApiNotFoundResponse({
     description:
@@ -298,11 +298,14 @@ export class BookingsController {
   ): Promise<BaseResponseDto<BookingDetailsResponseDto>> {
     const booking = await this.bookings.findByIdInLocation(locationId, id);
     await this.access.assertRead(token, booking);
-    const review = this.access.canReadReview(token, locationId)
-      ? await this.reviews.findForBooking(booking.id)
-      : null;
+    const [review, traffic] = await Promise.all([
+      this.access.canReadReview(token, locationId)
+        ? this.reviews.findForBooking(booking.id)
+        : null,
+      this.bookings.findTrafficDetails(booking.id),
+    ]);
     return BaseResponseDto.success(
-      BookingDetailsResponseDto.fromBooking(booking, review),
+      BookingDetailsResponseDto.fromBooking(booking, review, traffic),
     );
   }
 
@@ -333,6 +336,10 @@ export class BookingsController {
 
   @ApiOperation({ summary: 'Update an accessible booking' })
   @ApiOkResponse({ type: ApiResponse(BookingWriteResponseDto) })
+  @ApiBadRequestResponse({
+    description:
+      'BOOKING_TRAFFIC_SOURCE_READ_ONLY: trafficSource or trafficSourceDetail on an online booking; TRAFFIC_SOURCE_DETAIL_WITHOUT_SOURCE: a detail without a source',
+  })
   @ApiNotFoundResponse({ description: 'Booking not found' })
   @ApiConflictResponse({ description: 'Slot is no longer available' })
   @Permissions([Write(Claim.BOOKING), Write(Claim.BOOKING_OWN)])

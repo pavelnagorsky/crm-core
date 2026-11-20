@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Client } from '@prisma/client';
+import { labelOf } from '../../../../shared/i18n/label-of.js';
 import {
   DEFAULT_LANG,
   LocaleService,
@@ -20,6 +21,7 @@ type ClientRow = {
   birthDate: string;
   gender: string;
   notes: string;
+  acquisitionSource: string;
 };
 
 @Injectable()
@@ -34,7 +36,8 @@ export class ClientsExportService {
     dto: ClientExportRequestDto,
     lang = DEFAULT_LANG,
   ): Promise<XlsxFile> {
-    const text = this.locale.get(lang).documents.clients;
+    const messages = this.locale.get(lang);
+    const text = messages.documents.clients;
     const columns: XlsxColumn<ClientRow>[] = [
       { header: text.firstName, key: 'firstName' },
       { header: text.lastName, key: 'lastName' },
@@ -43,6 +46,7 @@ export class ClientsExportService {
       { header: text.birthDate, key: 'birthDate' },
       { header: text.gender, key: 'gender' },
       { header: text.notes, key: 'notes', width: 40 },
+      { header: text.acquisitionSource, key: 'acquisitionSource', width: 28 },
     ];
     const { items } = await this.clientsService.search(brandId, {
       search: dto.search,
@@ -53,14 +57,18 @@ export class ClientsExportService {
       isExport: true,
     });
     return XlsxUtils.table(
-      items.map((client) => this.toRow(client, text)),
+      items.map((client) => this.toRow(client, text, messages.trafficSource)),
       columns,
       'clients',
       text.sheet,
     );
   }
 
-  private toRow(client: Client, text: DocumentMessages['clients']): ClientRow {
+  private toRow(
+    client: Client,
+    text: DocumentMessages['clients'],
+    sources: Record<string, string>,
+  ): ClientRow {
     return {
       firstName: client.firstName,
       lastName: client.lastName,
@@ -71,6 +79,7 @@ export class ClientsExportService {
         : '',
       gender: this.genderLabel(client.gender, text),
       notes: client.notes ?? '',
+      acquisitionSource: this.acquisitionLabel(client, sources),
     };
   }
 
@@ -81,5 +90,16 @@ export class ClientsExportService {
     if (gender === 'MALE') return text.genderMale;
     if (gender === 'FEMALE') return text.genderFemale;
     return gender ?? '';
+  }
+
+  /** "ВКонтакте" or "Офлайн-реклама: листовки"; empty when unknown. */
+  private acquisitionLabel(
+    client: Client,
+    sources: Record<string, string>,
+  ): string {
+    const label = labelOf(sources, client.acquisitionSource);
+    return label && client.acquisitionSourceDetail
+      ? `${label}: ${client.acquisitionSourceDetail}`
+      : label;
   }
 }

@@ -12,6 +12,14 @@ import { DashboardSeriesFactory } from '../../../dashboard/factories/dashboard-s
 import { ResolvedRange } from '../../../dashboard/interfaces/resolved-range.interface.js';
 import { DashboardRangeService } from '../../../dashboard/services/dashboard-range.service.js';
 import { StaffService } from '../../../staff/services/staff.service.js';
+import { LocaleService } from '../../../../shared/i18n/locale.service.js';
+import { BookingTrafficService } from '../../../booking-traffic/services/booking-traffic.service.js';
+import { TrafficSourceLabels } from '../../../dashboard/interfaces/traffic-source-labels.interface.js';
+import {
+  trafficSourceBreakdown,
+  trafficSourceTable,
+} from '../../../dashboard/rules/traffic-source-widgets.js';
+import { TrafficSourceTotals } from '../../interfaces/traffic-source-totals.interface.js';
 import { BookingsAggregatesService } from '../../aggregates/services/bookings-aggregates.service.js';
 import { AggregateRange } from '../../interfaces/aggregate-range.interface.js';
 import { AggregateSnapshot } from '../../interfaces/aggregate-snapshot.interface.js';
@@ -41,6 +49,20 @@ const HELD_NUMERATOR: BookingStatus[] = [
   BookingStatus.CONFIRMED,
 ];
 
+const EMPTY_TRAFFIC_TOTALS: TrafficSourceTotals = {
+  sources: [],
+  details: [],
+  total: {
+    source: null,
+    detail: null,
+    bookings: 0,
+    channelBookings: 0,
+    newClients: 0,
+    completedVisits: 0,
+    completedRevenue: MoneyUtils.decimal(0),
+  },
+};
+
 const EMPTY_OCCUPANCY: OccupancyData = {
   booked: { pastHeldMinutes: 0, futureConfirmedMinutes: 0 },
   capacityMinutes: 0,
@@ -56,6 +78,8 @@ export class BookingsAnalyticsService {
     private readonly metricFactory: DashboardMetricFactory,
     private readonly seriesFactory: DashboardSeriesFactory,
     private readonly buckets: DashboardBucketFactory,
+    private readonly traffic: BookingTrafficService,
+    private readonly locale: LocaleService,
   ) {}
 
   async getWidgets(
@@ -79,6 +103,10 @@ export class BookingsAnalyticsService {
         return this.lostRevenueWidget(key, ctx);
       case BookingsAnalyticsWidgetKey.PENDING_CONFIRMATION:
         return this.pendingConfirmationWidget(key, ctx);
+      case BookingsAnalyticsWidgetKey.TRAFFIC_SOURCES:
+        return this.trafficSourcesWidget(key, ctx);
+      case BookingsAnalyticsWidgetKey.BOOKINGS_BY_TRAFFIC_SOURCE:
+        return this.bookingsByTrafficSourceWidget(key, ctx);
       default: {
         const _exhaustive: never = key;
         throw new Error(
@@ -180,6 +208,45 @@ export class BookingsAnalyticsService {
     };
   }
 
+  private trafficSourcesWidget(
+    key: BookingsAnalyticsWidgetKey,
+    ctx: BookingsAnalyticsContext,
+  ): WidgetDto {
+    return {
+      key,
+      kind: WidgetKind.TABLE,
+      table: trafficSourceTable(
+        ctx.trafficTotals ?? EMPTY_TRAFFIC_TOTALS,
+        ctx.trafficViews ?? null,
+        this.trafficLabels(),
+      ),
+      meta: this.buildMeta(ctx, true, false),
+    };
+  }
+
+  private bookingsByTrafficSourceWidget(
+    key: BookingsAnalyticsWidgetKey,
+    ctx: BookingsAnalyticsContext,
+  ): WidgetDto {
+    return {
+      key,
+      kind: WidgetKind.BREAKDOWN,
+      breakdown: trafficSourceBreakdown(
+        ctx.trafficTotals ?? EMPTY_TRAFFIC_TOTALS,
+        this.trafficLabels(),
+      ),
+      meta: this.buildMeta(ctx, false, false),
+    };
+  }
+
+  private trafficLabels(): TrafficSourceLabels {
+    const messages = this.locale.get();
+    return {
+      sources: messages.trafficSource,
+      otherDetails: messages.trafficDetailOther,
+    };
+  }
+
   // ── data plumbing ────────────────────────────────────────────────────────
 
   private async buildContext(
@@ -201,6 +268,12 @@ export class BookingsAnalyticsService {
     const needsVisitsHeld = needs(BookingsAnalyticsWidgetKey.VISITS_HELD);
     const needsLostRevenue = needs(BookingsAnalyticsWidgetKey.LOST_REVENUE);
     const needsOccupancy = needs(BookingsAnalyticsWidgetKey.OCCUPANCY);
+    const needsTrafficTable = needs(BookingsAnalyticsWidgetKey.TRAFFIC_SOURCES);
+    const needsTrafficTotals =
+      needsTrafficTable ||
+      needs(BookingsAnalyticsWidgetKey.BOOKINGS_BY_TRAFFIC_SOURCE);
+    // Views are counted per page and widget, not per staff member.
+    const needsTrafficViews = needsTrafficTable && !dto.staffId;
 
     // "Visits held" only counts visits whose start time has passed, so cap the upper bound at now.
     const pastTo = range.to < now ? range.to : now;
@@ -225,6 +298,8 @@ export class BookingsAnalyticsService {
       pendingSnapshot,
       occupancy,
       previousOccupancy,
+      trafficTotals,
+      trafficViews,
     ] = await Promise.all([
       needsPastSnapshot ? this.aggregates.snapshot(pastRange) : undefined,
       needsPreviousPastSnapshot
@@ -243,6 +318,12 @@ export class BookingsAnalyticsService {
       compare && needsOccupancy
         ? this.loadPreviousOccupancy(locationId, dto, range, now)
         : undefined,
+      needsTrafficTotals
+        ? this.aggregates.trafficSourceTotals(fullRange)
+        : undefined,
+      needsTrafficViews
+        ? this.traffic.trafficBySource(locationId, range.from, range.to)
+        : null,
     ]);
 
     return {
@@ -260,6 +341,8 @@ export class BookingsAnalyticsService {
         : undefined,
       occupancy,
       previousOccupancy,
+      trafficTotals,
+      trafficViews,
     };
   }
 
@@ -387,12 +470,14 @@ export class BookingsAnalyticsService {
   private buildMeta(
     ctx: BookingsAnalyticsContext,
     withCurrency: boolean,
+    withPrevious = true,
   ): WidgetMetaDto {
     return {
       period: this.buckets.periodDto(ctx.range),
-      previousPeriod: ctx.range.compareWithPrevious
-        ? this.buckets.previousPeriodDto(ctx.range)
-        : undefined,
+      previousPeriod:
+        withPrevious && ctx.range.compareWithPrevious
+          ? this.buckets.previousPeriodDto(ctx.range)
+          : undefined,
       timezone: ctx.range.timezone,
       currency: withCurrency ? ctx.range.currency : undefined,
     };

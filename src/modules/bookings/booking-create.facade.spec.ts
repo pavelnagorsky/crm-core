@@ -18,6 +18,7 @@ import { CreateBookingDto } from './dto/create-booking.dto.js';
 import { ManualCreateBookingDto } from './dto/manual-create-booking.dto.js';
 import { BookingChannel } from './enums/booking-channel.enum.js';
 import { BookingStatus } from './enums/booking-status.enum.js';
+import { TrafficSource } from '../../shared/traffic/enums/traffic-source.enum.js';
 import { BookingEventsService } from './services/booking-events.service.js';
 import { BookingReservationService } from './services/booking-reservation.service.js';
 import { BookingSchedulingService } from './services/booking-scheduling.service.js';
@@ -37,6 +38,12 @@ const publicAttribution = {
   channel: BookingChannel.PUBLIC_PAGE,
   bookingPageId: null,
   bookingWidgetId: null,
+};
+
+const directTraffic = {
+  source: TrafficSource.DIRECT,
+  detail: null,
+  touch: null,
 };
 
 function channelDeps(): [never] {
@@ -192,7 +199,7 @@ describe('BookingCreateFacade client ban', () => {
     });
 
     const error = await service
-      .createPublicBooking('business-1', dto, publicAttribution)
+      .createPublicBooking('business-1', dto, publicAttribution, directTraffic)
       .then(
         () => null,
         (caught: unknown) => caught,
@@ -230,7 +237,7 @@ describe('BookingCreateFacade client ban', () => {
     clients.resolveForBooking.mockResolvedValue({ bannedAt: null });
 
     const error = await service
-      .createPublicBooking('business-1', dto, publicAttribution)
+      .createPublicBooking('business-1', dto, publicAttribution, directTraffic)
       .then(
         () => null,
         (caught: unknown) => caught,
@@ -251,6 +258,7 @@ describe('BookingCreateFacade client ban', () => {
         'business-1',
         { ...dto, lastName: undefined },
         publicAttribution,
+        directTraffic,
       )
       .then(
         () => null,
@@ -279,6 +287,7 @@ describe('BookingCreateFacade client ban', () => {
           anonymous: true,
         } as never,
         publicAttribution,
+        directTraffic,
       )
       .then(
         () => null,
@@ -301,7 +310,7 @@ describe('BookingCreateFacade online booking availability', () => {
     Object.assign(db, { $transaction: transaction });
 
     const error = await service
-      .createPublicBooking('business-1', dto, publicAttribution)
+      .createPublicBooking('business-1', dto, publicAttribution, directTraffic)
       .then(
         () => null,
         (caught: unknown) => caught,
@@ -352,7 +361,9 @@ describe('BookingCreateFacade pricing', () => {
 
 describe('BookingCreateFacade calendar link', () => {
   it('creates the linked calendar event as a booking event', async () => {
+    const bookingCreatedAt = new Date('2026-09-19T10:05:00.000Z');
     const clients = {
+      recordAcquisition: vi.fn().mockResolvedValue(true),
       resolveForBooking: vi.fn().mockResolvedValue({
         id: 'client-1',
         firstName: 'Анна',
@@ -421,6 +432,7 @@ describe('BookingCreateFacade calendar link', () => {
           customPrice: null,
           staffName: 'Мария',
           calendarEventId: 'event-1',
+          createdAt: bookingCreatedAt,
           items: [
             {
               id: 'booking-item-1',
@@ -482,8 +494,42 @@ describe('BookingCreateFacade calendar link', () => {
       ...catalogDeps(db),
     );
 
-    await service.createPublicBooking('business-1', dto, publicAttribution);
+    const touch = {
+      utmSource: 'ig',
+      utmMedium: null,
+      utmCampaign: 'spring',
+      utmContent: null,
+      utmTerm: null,
+      referrerHost: 'l.instagram.com',
+      clickIdType: null,
+      clickId: null,
+      touchedAt: new Date('2026-09-19T10:00:00.000Z'),
+    };
+    await service.createPublicBooking('business-1', dto, publicAttribution, {
+      source: TrafficSource.INSTAGRAM,
+      detail: null,
+      touch,
+    });
 
+    expect(tx.booking.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          trafficSource: TrafficSource.INSTAGRAM,
+          trafficSourceDetail: null,
+          trafficTouch: { create: touch },
+        }),
+      }),
+    );
+    expect(clients.recordAcquisition).toHaveBeenCalledWith(
+      'client-1',
+      {
+        bookingId: 'booking-1',
+        source: TrafficSource.INSTAGRAM,
+        detail: null,
+        acquiredAt: bookingCreatedAt,
+      },
+      tx,
+    );
     expect(tx.calendarEvent.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         locationId: 'business-1',
@@ -839,6 +885,66 @@ describe('BookingCreateFacade custom time', () => {
       expect(earnings.recordForCompletedBooking).not.toHaveBeenCalled();
     },
   );
+
+  it('stores the source staff picked, without a touch', async () => {
+    const { service, tx } = customTimeSetup();
+
+    await service.createManualBooking(
+      'business-1',
+      {
+        ...dto,
+        startAt: '2099-09-20T10:00:00',
+        trafficSource: TrafficSource.PHONE_CALL,
+        trafficSourceDetail: '  реклама на радио ',
+      },
+      { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER },
+    );
+
+    expect(tx.booking.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          channel: BookingChannel.MANUAL,
+          trafficSource: TrafficSource.PHONE_CALL,
+          trafficSourceDetail: 'реклама на радио',
+          trafficTouch: undefined,
+        }),
+      }),
+    );
+  });
+
+  it('leaves the source of a manual booking unset when staff picked none', async () => {
+    const { service, tx } = customTimeSetup();
+
+    await service.createManualBooking(
+      'business-1',
+      { ...dto, startAt: '2099-09-20T10:00:00' },
+      { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER },
+    );
+
+    expect(tx.booking.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          trafficSource: null,
+          trafficSourceDetail: null,
+        }),
+      }),
+    );
+  });
+
+  it('rejects a source detail without a source before writing', async () => {
+    const { service, tx } = customTimeSetup();
+
+    await expect(
+      service.createManualBooking(
+        'business-1',
+        { ...dto, startAt: '2099-09-20T10:00:00', trafficSourceDetail: 'x' },
+        { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER },
+      ),
+    ).rejects.toMatchObject({
+      errorCode: 'TRAFFIC_SOURCE_DETAIL_WITHOUT_SOURCE',
+    });
+    expect(tx.booking.create).not.toHaveBeenCalled();
+  });
 
   it('confirms a manual booking even when the location requires confirmation', async () => {
     const { service } = customTimeSetup();
@@ -1555,8 +1661,14 @@ function createBookingService(
       (location as { getBookingSettings?: unknown }).getBookingSettings ??
       vi.fn().mockResolvedValue({ brandId: 'brand-1' }),
   }) as typeof location;
+  // Acquisition is recorded in the reservation transaction; tests that care pass their own mock.
+  const bookingClients = Object.assign(Object.create(clients), {
+    recordAcquisition:
+      (clients as { recordAcquisition?: unknown }).recordAcquisition ??
+      vi.fn().mockResolvedValue(true),
+  }) as typeof clients;
   return new BookingCreateFacade(
-    clients,
+    bookingClients,
     limiter,
     bookingLocation,
     new BookingSelectionService(location, services, orders),
@@ -1571,7 +1683,7 @@ function createBookingService(
       slots,
       orders,
       earnings,
-      clients,
+      bookingClients,
     ),
     billing as never,
   );

@@ -14,6 +14,9 @@ describe('Staff booking API', () => {
   const current = booking({ locationId: 'location-1' });
   const bookings = {
     findByIdInLocation: vi.fn(),
+    findTrafficDetails: vi
+      .fn()
+      .mockResolvedValue({ touch: null, isClientAcquisition: false }),
     updateStatus: vi.fn(),
     update: vi.fn(),
     cancel: vi.fn(),

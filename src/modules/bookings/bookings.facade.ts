@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Booking, CancelledBy } from '@prisma/client';
+import { Booking, BookingTrafficTouch, CancelledBy } from '@prisma/client';
 import { PaginatedResult } from '../../shared/interfaces/paginated-result.interface.js';
 import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
 import { LocationService } from '../location/services/location.service.js';
@@ -15,6 +15,7 @@ import { UpdateBookingStatusDto } from './dto/update-booking-status.dto.js';
 import { UpdateBookingDto } from './dto/update-booking.dto.js';
 import { BookingStatus } from './enums/booking-status.enum.js';
 import { BookingWithItems } from './interfaces/booking-with-items.interface.js';
+import { BookingTrafficDetails } from './interfaces/booking-traffic-details.interface.js';
 import { BookingMutationService } from './services/write/booking-mutation.service.js';
 import { BookingReadService } from './services/read/booking-read.service.js';
 import { BookingSetupService } from './services/setup/booking-setup.service.js';
@@ -128,6 +129,16 @@ export class BookingsFacade {
       participantStaffId,
       await this.dayFilterTimezone(locationId, dto),
     );
+  }
+
+  findTrafficDetails(bookingId: string): Promise<BookingTrafficDetails> {
+    return this.read.findTrafficDetails(bookingId);
+  }
+
+  findTrafficTouches(
+    bookingIds: string[],
+  ): Promise<Map<string, BookingTrafficTouch>> {
+    return this.read.findTrafficTouches(bookingIds);
   }
 
   async cancel(

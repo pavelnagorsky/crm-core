@@ -9,15 +9,21 @@ import { LocationService } from '../../../location/services/location.service.js'
 import { BookingsFacade } from '../../bookings.facade.js';
 import { BookingSearchOrderBy } from '../../enums/booking-search-order-by.enum.js';
 import { BookingStatus as BookingStatusFilter } from '../../enums/booking-status.enum.js';
+import { BookingChannel as BookingChannelFilter } from '../../enums/booking-channel.enum.js';
 import { BookingWithItems } from '../../interfaces/booking-with-items.interface.js';
 import { BookingsExportService } from './bookings-export.service.js';
+import { TrafficSource } from '../../../../shared/traffic/enums/traffic-source.enum.js';
 
 const labels = {
   sheet: 'Записи',
   startAt: 'Начало',
   endAt: 'Конец',
   status: 'Статус',
-  source: 'Источник',
+  channel: 'Канал',
+  trafficSource: 'Источник',
+  utmSource: 'UTM source',
+  utmMedium: 'UTM medium',
+  utmCampaign: 'UTM campaign',
   clientFirstName: 'Имя клиента',
   clientLastName: 'Фамилия клиента',
   clientPhone: 'Телефон клиента',
@@ -40,6 +46,11 @@ const bookingStatus = {
 const bookingChannel = {
   MANUAL: 'Вручную',
   WIDGET: 'Виджет',
+};
+
+const trafficSource = {
+  PHONE_CALL: 'Звонок',
+  PAID_ADS: 'Платная реклама',
 };
 
 function collect(stream: PassThrough): Promise<Buffer> {
@@ -77,6 +88,7 @@ function booking(overrides: BookingFixtureOptions = {}): BookingWithItems {
 describe('BookingsExportService', () => {
   const bookings = {
     search: vi.fn<BookingsFacade['search']>(),
+    findTrafficTouches: vi.fn<BookingsFacade['findTrafficTouches']>(),
   };
   const locations = {
     getLocale: vi.fn<LocationService['getLocale']>(),
@@ -92,6 +104,27 @@ describe('BookingsExportService', () => {
 
   beforeEach(() => {
     bookings.search.mockReset();
+    bookings.findTrafficTouches.mockReset();
+    bookings.findTrafficTouches.mockResolvedValue(
+      new Map([
+        [
+          'booking-2',
+          {
+            bookingId: 'booking-2',
+            utmSource: 'vk_ads',
+            utmMedium: 'cpc',
+            utmCampaign: 'spring',
+            utmContent: null,
+            utmTerm: null,
+            referrerHost: null,
+            clickIdType: null,
+            clickId: null,
+            touchedAt: null,
+            createdAt: new Date(),
+          },
+        ],
+      ]),
+    );
     locations.getLocale.mockReset();
     locations.getLocale.mockResolvedValue({
       timezone: 'Europe/Minsk',
@@ -102,6 +135,7 @@ describe('BookingsExportService', () => {
       documents: { bookings: labels },
       bookingStatus,
       bookingChannel,
+      trafficSource,
     } as unknown as ReturnType<LocaleService['get']>);
   });
 
@@ -111,11 +145,14 @@ describe('BookingsExportService', () => {
         booking({
           startAt: new Date('2026-11-11T21:30:00Z'),
           endAt: new Date('2026-11-11T22:30:00Z'),
+          trafficSource: 'PHONE_CALL',
         }),
         booking({
           id: 'booking-2',
           status: BookingStatus.CANCELLED,
           channel: BookingChannel.WIDGET,
+          trafficSource: 'PAID_ADS',
+          trafficSourceDetail: 'vk_ads',
           clientEmail: null,
           notes: null,
           internalNotes: null,
@@ -136,6 +173,12 @@ describe('BookingsExportService', () => {
       startTo: '2026-09-30T23:59:59.000Z',
       createdFrom: '2026-09-01T00:00:00.000Z',
       createdTo: '2026-09-30T23:59:59.000Z',
+      channels: [BookingChannelFilter.WIDGET],
+      trafficSources: [TrafficSource.PAID_ADS],
+      trafficSourceNotSet: true,
+      trafficSourceDetail: 'vk_ads',
+      utmCampaign: 'spring',
+      newClientsOnly: true,
       orderBy: BookingSearchOrderBy.START_AT,
       orderDirection: OrderDirection.ASC,
     });
@@ -150,6 +193,12 @@ describe('BookingsExportService', () => {
       startTo: '2026-09-30T23:59:59.000Z',
       createdFrom: '2026-09-01T00:00:00.000Z',
       createdTo: '2026-09-30T23:59:59.000Z',
+      channels: [BookingChannelFilter.WIDGET],
+      trafficSources: [TrafficSource.PAID_ADS],
+      trafficSourceNotSet: true,
+      trafficSourceDetail: 'vk_ads',
+      utmCampaign: 'spring',
+      newClientsOnly: true,
       orderBy: BookingSearchOrderBy.START_AT,
       orderDirection: OrderDirection.ASC,
       page: 1,
@@ -162,27 +211,45 @@ describe('BookingsExportService', () => {
     expect(grid).not.toBeNull();
     if (!grid) return;
     expect(grid.rowCount).toBe(3);
-    expect(grid.row(1).text(1)).toBe('Начало');
-    expect(grid.row(1).text(11)).toBe('Цена');
-    expect(grid.row(1).text(16)).toBe('Создана');
+    expect(bookings.findTrafficTouches).toHaveBeenCalledWith([
+      'booking-1',
+      'booking-2',
+    ]);
+    const header = (column: number) => grid.row(1).text(column);
+    expect([4, 5, 6, 7, 8].map(header)).toEqual([
+      'Канал',
+      'Источник',
+      'UTM source',
+      'UTM medium',
+      'UTM campaign',
+    ]);
+    expect(header(1)).toBe('Начало');
+    expect(header(15)).toBe('Цена');
+    expect(header(20)).toBe('Создана');
     expect(locations.getLocale).toHaveBeenCalledWith('business-1');
     expect(grid.row(2).text(1)).toBe('12.11.2026 00:30');
     expect(grid.row(2).text(2)).toBe('12.11.2026 01:30');
-    expect(grid.row(2).text(16)).toBe('20.09.2026 11:00');
+    expect(grid.row(2).text(20)).toBe('20.09.2026 11:00');
     expect(grid.row(3).text(1)).toBe('24.09.2026 13:00');
     expect(grid.row(2).text(3)).toBe('Подтверждено');
     expect(grid.row(2).text(4)).toBe('Вручную');
-    expect(grid.row(2).text(5)).toBe('Анна');
-    expect(grid.row(2).text(7)).toBe('+375291112233');
-    expect(grid.row(2).text(10)).toBe('60');
-    expect(grid.row(2).text(11)).toBe('50.00');
-    expect(grid.row(2).text(13)).toBe('у окна');
-    expect(grid.row(2).text(15)).toBe('');
+    expect(grid.row(2).text(5)).toBe('Звонок');
+    expect(grid.row(2).text(6)).toBe('');
+    expect(grid.row(2).text(9)).toBe('Анна');
+    expect(grid.row(2).text(11)).toBe('+375291112233');
+    expect(grid.row(2).text(14)).toBe('60');
+    expect(grid.row(2).text(15)).toBe('50.00');
+    expect(grid.row(2).text(17)).toBe('у окна');
+    expect(grid.row(2).text(19)).toBe('');
     expect(grid.row(3).text(3)).toBe('Отменено');
     expect(grid.row(3).text(4)).toBe('Виджет');
-    expect(grid.row(3).text(8)).toBe('');
-    expect(grid.row(3).text(11)).toBe('40.00');
-    expect(grid.row(3).text(13)).toBe('');
-    expect(grid.row(3).text(15)).toBe('не смогу');
+    expect(grid.row(3).text(5)).toBe('Платная реклама: vk_ads');
+    expect(grid.row(3).text(6)).toBe('vk_ads');
+    expect(grid.row(3).text(7)).toBe('cpc');
+    expect(grid.row(3).text(8)).toBe('spring');
+    expect(grid.row(3).text(12)).toBe('');
+    expect(grid.row(3).text(15)).toBe('40.00');
+    expect(grid.row(3).text(17)).toBe('');
+    expect(grid.row(3).text(19)).toBe('не смогу');
   });
 });

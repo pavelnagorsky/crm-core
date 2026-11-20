@@ -39,9 +39,17 @@ describe('Public booking channel events (HTTP)', () => {
       expect(body).toMatchObject({ isSuccess: true, responseValue: null });
       expect(headers['cache-control']).toBe('no-store');
       if (kind === 'pages')
-        expect(stats.recordPage).toHaveBeenCalledExactlyOnceWith(id, 'VIEW');
+        expect(stats.recordPage).toHaveBeenCalledExactlyOnceWith(
+          id,
+          'VIEW',
+          undefined,
+        );
       else
-        expect(stats.recordWidget).toHaveBeenCalledExactlyOnceWith(id, 'VIEW');
+        expect(stats.recordWidget).toHaveBeenCalledExactlyOnceWith(
+          id,
+          'VIEW',
+          undefined,
+        );
     },
   );
 
@@ -69,7 +77,55 @@ describe('Public booking channel events (HTTP)', () => {
       .set('Referer', 'https://any.example/path?query=value')
       .send({ event: 'FORM_OPEN' })
       .expect(200);
-    expect(stats.recordWidget).toHaveBeenCalledExactlyOnceWith(id, 'FORM_OPEN');
+    expect(stats.recordWidget).toHaveBeenCalledExactlyOnceWith(
+      id,
+      'FORM_OPEN',
+      undefined,
+    );
+  });
+
+  it.each(['pages', 'widgets'])(
+    'passes the %s visit touch on, cleaned',
+    async (kind) => {
+      await request(app.getHttpServer())
+        .post(`/public/booking-${kind}/${id}/events`)
+        .send({
+          event: 'VIEW',
+          traffic: {
+            utmSource: '  instagram ',
+            utmMedium: 42,
+            utmCampaign: 'anna@example.com',
+            referrerHost: 'l.instagram.com',
+            fbclid: 'abc',
+            unknown: 'dropped',
+          },
+        })
+        .expect(200);
+      const recorded = kind === 'pages' ? stats.recordPage : stats.recordWidget;
+      const traffic = recorded.mock.calls[0][2] as Record<string, unknown>;
+      expect(traffic).toEqual({
+        utmSource: 'instagram',
+        referrerHost: 'l.instagram.com',
+        fbclid: 'abc',
+      });
+    },
+  );
+
+  it.each([
+    ['a string', 'utm_source=ig'],
+    ['an array', [{ utmSource: 'ig' }]],
+    ['a number', 7],
+    ['null', null],
+  ])('never rejects an event because traffic is %s', async (_name, traffic) => {
+    await request(app.getHttpServer())
+      .post(`/public/booking-pages/${id}/events`)
+      .send({ event: 'VIEW', traffic })
+      .expect(200);
+    expect(stats.recordPage).toHaveBeenCalledExactlyOnceWith(
+      id,
+      'VIEW',
+      undefined,
+    );
   });
 
   it('documents full widget settings and public appearance without allowedDomains', () => {

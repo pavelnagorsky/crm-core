@@ -17,7 +17,17 @@ releases the key. Replays skip creation audit and notifications. Changed intent 
 a deleted booking returns `BOOKING_IDEMPOTENCY_CONFLICT`. The response includes the
 current client-facing booking and a management link, including on replay.
 
-Booking channels (`source`) are `PUBLIC_PAGE` (online), `WIDGET` and `MANUAL`.
+Booking channels (`channel`, enum `BookingChannel`) are `PUBLIC_PAGE` (online),
+`WIDGET` and `MANUAL`. The marketing source is separate: `trafficSource` and
+`trafficSourceDetail`. Public creation takes the visitor's raw touch in `traffic`
+(`PublicCreateBookingDto`); `BookingTrafficService` classifies it and the reservation
+writes the source and the `BookingTrafficTouch` with the booking. `traffic` is not
+part of the idempotency hash. Manual creation takes `trafficSource` and
+`trafficSourceDetail` picked by staff; only manual bookings can change them later
+(`BOOKING_TRAFFIC_SOURCE_READ_ONLY`). The first booking of a brand client records the
+client's acquisition in the same transaction (`ClientsService.recordAcquisition`,
+guarded so concurrent first bookings acquire once; imported clients never). See
+[traffic-attribution.md](../traffic-attribution.md).
 Manual bookings can use custom time ("Произвольное время") by setting
 `isCustomTime: true` in `POST /locations/:locationId/bookings/manual`. This
 optional flag defaults to false, is persisted on the booking and is returned in
@@ -62,7 +72,7 @@ staff member next to the location-wide `closedTime`, so a staff column without a
 shift is shown closed while other staff work.
 
 The migration restores `isCustomTime: true` for historical
-bookings identified by their legacy source in a `BOOKING_CREATED` audit entry.
+bookings identified by their legacy channel in a `BOOKING_CREATED` audit entry.
 Other existing bookings default to false; previously unsaved flags cannot be
 inferred reliably without that evidence.
 
@@ -74,8 +84,9 @@ channel, status or interval. Only `MANUAL` bookings can have `isCustomTime: true
 | --- | --- |
 | `BookingSelectionService` | Resolve active services or a bundle and quote service/product prices. Fixed bundle prices are allocated across services with the remainder on the final item. |
 | `BookingSchedulingService` | Build sequential or parallel item intervals and choose available staff, preferring the least booked when no staff is requested. |
-| `BookingReservationService` | Lock the location and staff days, recheck availability, create calendar events and booking items, and sync orders/payroll in one transaction. |
-| `BookingMutationService` | Update client details, notes and item prices, add products, and delegate scheduling or lifecycle changes. |
+| `BookingReservationService` | Lock the location and staff days, recheck availability, create calendar events, booking items and the traffic touch, record the client acquisition, and sync orders/payroll in one transaction. |
+| `BookingMutationService` | Update client details, notes, item prices and the source of a manual booking, add products, and delegate scheduling or lifecycle changes. |
+| `BookingClientLinkService` | Resolve a client change of a booking update and keep the clients' first booking (acquisition) right after it. |
 | `BookingRescheduleService` | Prepare moved intervals and persist calendar events and booking items through one transaction path. |
 | `BookingClientService` | Client-token slot discovery, cancellation and rescheduling from the booking resolved by authentication. Preserves staff, services, durations and prices. |
 | `BookingLifecycleService` | Change status, complete elapsed bookings, cancel and soft-delete bookings with their order/payroll effects. |

@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { BookingTrafficTouch, Prisma } from '@prisma/client';
 import { stableOrderBy } from '../../../../shared/database/stable-order-by.js';
 import { OrderDirection } from '../../../../shared/enums/order-direction.enum.js';
 import { PaginatedResult } from '../../../../shared/interfaces/paginated-result.interface.js';
@@ -9,10 +9,13 @@ import { BookingSearchRequestDto } from '../../dto/booking-search-request.dto.js
 import { BookingSearchOrderBy } from '../../enums/booking-search-order-by.enum.js';
 import { BookingStatus } from '../../enums/booking-status.enum.js';
 import { BookingWithItems } from '../../interfaces/booking-with-items.interface.js';
+import { BookingTrafficDetails } from '../../interfaces/booking-traffic-details.interface.js';
 import { bookingWithItemsInclude } from '../../constants/booking-with-items.include.js';
 import { catalogItemMatch } from '../../utils/catalog-item-filter.js';
 import regularExpressions from '../../../../shared/regular-expressions.js';
 import { TimeUtils } from '../../../../shared/time/time.utils.js';
+
+const TOUCH_CHUNK = 1000;
 
 @Injectable()
 export class BookingReadService {
@@ -178,6 +181,7 @@ export class BookingReadService {
         ),
       });
     }
+    and.push(...this.trafficFilters(dto));
     if (and.length) where.AND = and;
     const search = dto.search?.trim();
     if (search) {
@@ -225,6 +229,61 @@ export class BookingReadService {
     }
 
     return where;
+  }
+
+  /** Channel, source and acquisition filters of the bookings list. */
+  private trafficFilters(
+    dto: Partial<BookingSearchRequestDto>,
+  ): Prisma.BookingWhereInput[] {
+    const filters: Prisma.BookingWhereInput[] = [];
+    if (dto.channels?.length) filters.push({ channel: { in: dto.channels } });
+    const sources: Prisma.BookingWhereInput[] = [];
+    if (dto.trafficSources?.length)
+      sources.push({ trafficSource: { in: dto.trafficSources } });
+    if (dto.trafficSourceNotSet) sources.push({ trafficSource: null });
+    if (sources.length) filters.push({ OR: sources });
+    const detail = dto.trafficSourceDetail?.trim();
+    if (detail)
+      filters.push({
+        trafficSourceDetail: { equals: detail, mode: 'insensitive' },
+      });
+    const campaign = dto.utmCampaign?.trim();
+    if (campaign)
+      filters.push({
+        trafficTouch: {
+          is: { utmCampaign: { equals: campaign, mode: 'insensitive' } },
+        },
+      });
+    if (dto.newClientsOnly) filters.push({ acquiredClient: { isNot: null } });
+    return filters;
+  }
+
+  /** The stored touch of an online booking and whether the booking acquired its client. */
+  async findTrafficDetails(bookingId: string): Promise<BookingTrafficDetails> {
+    const booking = await this.db.booking.findUnique({
+      where: { id: bookingId },
+      select: { trafficTouch: true, acquiredClient: { select: { id: true } } },
+    });
+    return {
+      touch: booking?.trafficTouch ?? null,
+      isClientAcquisition: Boolean(booking?.acquiredClient),
+    };
+  }
+
+  /** Touches of the given bookings, for the export; bookings without one are absent. */
+  async findTrafficTouches(
+    bookingIds: string[],
+  ): Promise<Map<string, BookingTrafficTouch>> {
+    const touches = new Map<string, BookingTrafficTouch>();
+    for (let offset = 0; offset < bookingIds.length; offset += TOUCH_CHUNK) {
+      const rows = await this.db.bookingTrafficTouch.findMany({
+        where: {
+          bookingId: { in: bookingIds.slice(offset, offset + TOUCH_CHUNK) },
+        },
+      });
+      for (const row of rows) touches.set(row.bookingId, row);
+    }
+    return touches;
   }
 
   private requireTimezone(timezone: string | undefined): string {

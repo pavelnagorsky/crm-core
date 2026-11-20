@@ -11,4 +11,6 @@ export const CLIENT_AUDIT_FIELDS: FieldDescriptor<Client>[] = [
   { key: 'notes' },
   { key: 'bannedAt', type: 'datetime' },
   { key: 'banReason' },
+  { key: 'acquisitionSource', i18n: 'trafficSource' },
+  { key: 'acquisitionSourceDetail' },
 ];

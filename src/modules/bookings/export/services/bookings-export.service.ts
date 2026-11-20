@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { BookingTrafficTouch } from '@prisma/client';
 import { labelOf } from '../../../../shared/i18n/label-of.js';
 import {
   DEFAULT_LANG,
@@ -20,6 +21,10 @@ type BookingRow = {
   endAt: string;
   status: string;
   channel: string;
+  trafficSource: string;
+  utmSource: string;
+  utmMedium: string;
+  utmCampaign: string;
   clientFirstName: string;
   clientLastName: string;
   clientPhone: string;
@@ -54,6 +59,10 @@ export class BookingsExportService {
       { header: text.endAt, key: 'endAt' },
       { header: text.status, key: 'status' },
       { header: text.channel, key: 'channel' },
+      { header: text.trafficSource, key: 'trafficSource', width: 28 },
+      { header: text.utmSource, key: 'utmSource' },
+      { header: text.utmMedium, key: 'utmMedium' },
+      { header: text.utmCampaign, key: 'utmCampaign' },
       { header: text.clientFirstName, key: 'clientFirstName' },
       { header: text.clientLastName, key: 'clientLastName' },
       { header: text.clientPhone, key: 'clientPhone', width: 18 },
@@ -83,6 +92,12 @@ export class BookingsExportService {
         startDateTo: dto.startDateTo,
         createdDateFrom: dto.createdDateFrom,
         createdDateTo: dto.createdDateTo,
+        channels: dto.channels,
+        trafficSources: dto.trafficSources,
+        trafficSourceNotSet: dto.trafficSourceNotSet,
+        trafficSourceDetail: dto.trafficSourceDetail,
+        utmCampaign: dto.utmCampaign,
+        newClientsOnly: dto.newClientsOnly,
         orderBy: dto.orderBy,
         orderDirection: dto.orderDirection,
         page: 1,
@@ -90,8 +105,13 @@ export class BookingsExportService {
         isExport: true,
       }),
     ]);
+    const touches = await this.bookings.findTrafficTouches(
+      items.map((booking) => booking.id),
+    );
     return XlsxUtils.table(
-      items.flatMap((booking) => this.toRows(booking, messages, timezone)),
+      items.flatMap((booking) =>
+        this.toRows(booking, touches.get(booking.id), messages, timezone),
+      ),
       columns,
       'bookings',
       text.sheet,
@@ -101,14 +121,22 @@ export class BookingsExportService {
 
   private toRows(
     booking: BookingWithItems,
+    touch: BookingTrafficTouch | undefined,
     messages: I18nLocale,
     timezone: string,
   ): BookingRow[] {
+    const traffic = {
+      trafficSource: this.trafficSourceLabel(booking, messages),
+      utmSource: touch?.utmSource ?? '',
+      utmMedium: touch?.utmMedium ?? '',
+      utmCampaign: touch?.utmCampaign ?? '',
+    };
     return booking.items.map((item) => ({
       startAt: TimeUtils.zonedDateTimeStr(booking.startAt, timezone),
       endAt: TimeUtils.zonedDateTimeStr(booking.endAt, timezone),
       status: labelOf(messages.bookingStatus, booking.status),
       channel: labelOf(messages.bookingChannel, booking.channel),
+      ...traffic,
       clientFirstName: booking.clientFirstName,
       clientLastName: booking.clientLastName,
       clientPhone: booking.clientPhone ?? '',
@@ -122,5 +150,16 @@ export class BookingsExportService {
       cancellationReason: booking.cancellationReason ?? '',
       createdAt: TimeUtils.zonedDateTimeStr(booking.createdAt, timezone),
     }));
+  }
+
+  /** "Instagram" or "Платная реклама: vk_ads"; empty when no source is set. */
+  private trafficSourceLabel(
+    booking: BookingWithItems,
+    messages: I18nLocale,
+  ): string {
+    const label = labelOf(messages.trafficSource, booking.trafficSource);
+    return label && booking.trafficSourceDetail
+      ? `${label}: ${booking.trafficSourceDetail}`
+      : label;
   }
 }

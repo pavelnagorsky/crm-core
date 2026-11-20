@@ -39,7 +39,7 @@ export class PublicBookingChannelEventsController {
     @Param('pageId', ParseUUIDPipe) pageId: string,
     @Body() dto: RecordBookingChannelEventDto,
   ): Promise<BaseResponseDto<null>> {
-    await this.stats.recordPage(pageId, dto.event);
+    await this.stats.recordPage(pageId, dto.event, dto.traffic);
     return BaseResponseDto.success(null);
   }
 
@@ -55,7 +55,7 @@ export class PublicBookingChannelEventsController {
     @Param('widgetId', ParseUUIDPipe) widgetId: string,
     @Body() dto: RecordBookingChannelEventDto,
   ): Promise<BaseResponseDto<null>> {
-    await this.stats.recordWidget(widgetId, dto.event);
+    await this.stats.recordWidget(widgetId, dto.event, dto.traffic);
     return BaseResponseDto.success(null);
   }
 }

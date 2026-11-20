@@ -7,6 +7,7 @@ import {
   IsBoolean,
   IsArray,
   IsEnum,
+  IsIn,
   IsOptional,
   IsString,
   IsUUID,
@@ -20,6 +21,9 @@ import { BookingExecutionMode } from '../enums/booking-execution-mode.enum.js';
 import { ManualBookingItemDto } from './manual-booking-item.dto.js';
 import { IsLocalDateTime } from '../../../shared/time/decorators/is-local-date-time.validator.js';
 import { ManualBookingProductDto } from './manual-booking-product.dto.js';
+import { MANUAL_TRAFFIC_SOURCES } from '../../../shared/traffic/constants/manual-traffic-sources.constants.js';
+import { TRAFFIC_DETAIL_MAX_LENGTH } from '../../../shared/traffic/constants/traffic-limits.constants.js';
+import { TrafficSource } from '../../../shared/traffic/enums/traffic-source.enum.js';
 
 export class ManualCreateBookingDto extends CreateBookingDto {
   @ApiProperty({
@@ -148,6 +152,29 @@ export class ManualCreateBookingDto extends CreateBookingDto {
   @IsOptional()
   @IsBoolean()
   notifyClient?: boolean;
+
+  @ApiProperty({
+    enum: TrafficSource,
+    enumName: 'TrafficSource',
+    required: false,
+    description:
+      'Where the client came from, picked by staff. Any source except DIRECT (400). Omitted: not specified. Also becomes the client acquisition source when this is the client first booking.',
+  })
+  @IsOptional()
+  @IsIn(MANUAL_TRAFFIC_SOURCES)
+  trafficSource?: TrafficSource;
+
+  @ApiProperty({
+    type: String,
+    maxLength: TRAFFIC_DETAIL_MAX_LENGTH,
+    required: false,
+    description:
+      'Source detail ("Уточнение"), only with trafficSource (400 TRAFFIC_SOURCE_DETAIL_WITHOUT_SOURCE)',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(TRAFFIC_DETAIL_MAX_LENGTH)
+  trafficSourceDetail?: string;
 
   /** Staff may skip the client (anonymous) or pick a stored one (clientId). */
   static override requiresClientContacts(dto: ManualCreateBookingDto): boolean {

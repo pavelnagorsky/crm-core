@@ -88,7 +88,7 @@ describe('Widget initialization history', () => {
     expect(history.findMany).not.toHaveBeenCalled();
   });
 
-  it('returns history only in the list, omitting internal fields and leaving the ID response unchanged', async () => {
+  it('returns history in the list and the ID response, omitting internal fields', async () => {
     const { service, db } = fixture();
     const createdAt = new Date('2026-11-04T10:00:00Z');
     const record = {
@@ -109,10 +109,22 @@ describe('Widget initialization history', () => {
       { createdAt, url: 'https://site.example/' },
     ]);
     const detail = await controller.findById('location', 'widget');
-    expect(detail.responseValue).not.toHaveProperty('initializationHistory');
-    expect(db.bookingWidget.findFirst).toHaveBeenCalledWith({
-      where: expect.objectContaining({ locationId: 'location', id: 'widget' }),
-    });
+    expect(detail.responseValue?.initializationHistory).toEqual([
+      { createdAt, url: 'https://site.example/' },
+    ]);
+    expect(db.bookingWidget.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          locationId: 'location',
+          id: 'widget',
+        }),
+        include: {
+          initializationHistory: {
+            orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          },
+        },
+      }),
+    );
     expect(BookingWidgetsController.prototype).not.toHaveProperty(
       'getInitializationHistory',
     );

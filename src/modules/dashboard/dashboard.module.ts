@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { I18nModule } from '../../shared/i18n/i18n.module.js';
 import { BookingsAggregatesModule } from '../bookings/aggregates/bookings-aggregates.module.js';
 import { LocationModule } from '../location/location.module.js';
 import { OrdersModule } from '../orders/orders.module.js';
@@ -12,7 +13,7 @@ import { DashboardContextService } from './services/dashboard-context.service.js
 import { DashboardRangeService } from './services/dashboard-range.service.js';
 
 @Module({
-  imports: [BookingsAggregatesModule, LocationModule, OrdersModule],
+  imports: [BookingsAggregatesModule, I18nModule, LocationModule, OrdersModule],
   controllers: [DashboardController],
   providers: [
     DashboardContextService,

@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
   IsArray,
+  IsBoolean,
   IsDateString,
   IsEnum,
   IsOptional,
@@ -14,6 +15,15 @@ import { OrderDirection } from '../../../../shared/enums/order-direction.enum.js
 import { toUuidArray } from '../../dto/booking-search-request.dto.js';
 import { BookingSearchOrderBy } from '../../enums/booking-search-order-by.enum.js';
 import { BookingStatus } from '../../enums/booking-status.enum.js';
+import { BookingChannel } from '../../enums/booking-channel.enum.js';
+import { ToArray } from '../../../../shared/transforms/to-array.transform.js';
+import { ParseBoolean } from '../../../../shared/transforms/parse-boolean.transform.js';
+import {
+  TRAFFIC_DETAIL_MAX_LENGTH,
+  UTM_CAMPAIGN_MAX_LENGTH,
+} from '../../../../shared/traffic/constants/traffic-limits.constants.js';
+import { TrafficSource } from '../../../../shared/traffic/enums/traffic-source.enum.js';
+
 import { catalogItemIdsDescription } from '../../utils/catalog-item-filter.js';
 
 export class BookingExportRequestDto {
@@ -126,6 +136,78 @@ export class BookingExportRequestDto {
   @IsOptional()
   @IsCalendarDate()
   createdDateTo?: string;
+
+  @ApiProperty({
+    enum: BookingChannel,
+    enumName: 'BookingChannel',
+    isArray: true,
+    required: false,
+    description:
+      'Only bookings made through these channels. Repeat the key: ?channels=PUBLIC_PAGE&channels=WIDGET',
+  })
+  @IsOptional()
+  @ToArray()
+  @IsArray()
+  @IsEnum(BookingChannel, { each: true })
+  channels?: BookingChannel[];
+
+  @ApiProperty({
+    enum: TrafficSource,
+    enumName: 'TrafficSource',
+    isArray: true,
+    required: false,
+    description:
+      'Only bookings from these sources. With trafficSourceNotSet, also bookings without a source.',
+  })
+  @IsOptional()
+  @ToArray()
+  @IsArray()
+  @IsEnum(TrafficSource, { each: true })
+  trafficSources?: TrafficSource[];
+
+  @ApiProperty({
+    type: Boolean,
+    required: false,
+    description:
+      'true: bookings without a source (manual ones where staff picked none); combined with trafficSources by OR',
+  })
+  @IsOptional()
+  @ParseBoolean()
+  @IsBoolean()
+  trafficSourceNotSet?: boolean;
+
+  @ApiProperty({
+    type: String,
+    maxLength: TRAFFIC_DETAIL_MAX_LENGTH,
+    required: false,
+    description: 'Source detail, exact match ignoring case',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(TRAFFIC_DETAIL_MAX_LENGTH)
+  trafficSourceDetail?: string;
+
+  @ApiProperty({
+    type: String,
+    maxLength: UTM_CAMPAIGN_MAX_LENGTH,
+    required: false,
+    description: 'utm_campaign of the online visit, exact match ignoring case',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(UTM_CAMPAIGN_MAX_LENGTH)
+  utmCampaign?: string;
+
+  @ApiProperty({
+    type: Boolean,
+    required: false,
+    description:
+      'true: only first bookings of a client in the brand (the booking that acquired the client)',
+  })
+  @IsOptional()
+  @ParseBoolean()
+  @IsBoolean()
+  newClientsOnly?: boolean;
 
   @ApiProperty({ enum: BookingSearchOrderBy, required: false })
   @IsOptional()

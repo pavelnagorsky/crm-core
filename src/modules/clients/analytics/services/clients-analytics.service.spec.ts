@@ -1,4 +1,6 @@
 import { Prisma } from '@prisma/client';
+import { LocaleService } from '../../../../shared/i18n/locale.service.js';
+import { ClientsService } from '../../services/clients.service.js';
 import { MoneyUtils } from '../../../../shared/money/money.utils.js';
 import { BookingsAggregatesService } from '../../../bookings/aggregates/services/bookings-aggregates.service.js';
 import { ClientRecencyBucket } from '../../../bookings/enums/client-recency-bucket.enum.js';
@@ -88,6 +90,9 @@ describe('ClientsAnalyticsService', () => {
   };
   const rangeService = { resolveForBrand: vi.fn() };
   const bucketService = new DashboardBucketFactory();
+  const clients = { countAcquiredBySource: vi.fn() };
+  const locale = new LocaleService();
+  locale.onModuleInit();
 
   let range: ResolvedBrandRange;
   let service: ClientsAnalyticsService;
@@ -121,6 +126,8 @@ describe('ClientsAnalyticsService', () => {
       rangeService as unknown as DashboardRangeService,
       new DashboardMetricFactory(),
       bucketService,
+      clients as unknown as ClientsService,
+      locale,
     );
   });
 
@@ -389,7 +396,7 @@ describe('ClientsAnalyticsService', () => {
     ).toBeUndefined();
   });
 
-  it('returns widgets in the requested order and loads cohort data for every non-dormant key', async () => {
+  it('returns widgets in the requested order and loads only the data each key needs', async () => {
     const keys = [
       ClientsAnalyticsWidgetKey.REVENUE_PER_CLIENT,
       ClientsAnalyticsWidgetKey.DORMANT_CLIENTS,
@@ -410,10 +417,46 @@ describe('ClientsAnalyticsService', () => {
       if (key === ClientsAnalyticsWidgetKey.DORMANT_CLIENTS) {
         expect(aggregates.clientRecency).toHaveBeenCalled();
         expect(aggregates.clientCohort).not.toHaveBeenCalled();
+      } else if (key === ClientsAnalyticsWidgetKey.NEW_CLIENTS_BY_SOURCE) {
+        expect(clients.countAcquiredBySource).toHaveBeenCalled();
+        expect(aggregates.clientCohort).not.toHaveBeenCalled();
+        expect(aggregates.clientRecency).not.toHaveBeenCalled();
       } else {
         expect(aggregates.clientCohort).toHaveBeenCalled();
         expect(aggregates.clientRecency).not.toHaveBeenCalled();
       }
     }
+  });
+
+  describe('NEW_CLIENTS_BY_SOURCE', () => {
+    it('counts clients acquired in the period by source, labels in Russian', async () => {
+      clients.countAcquiredBySource.mockResolvedValue([
+        { source: 'VK', count: 1 },
+        { source: null, count: 1 },
+        { source: 'INSTAGRAM', count: 2 },
+      ]);
+
+      const [widget] = await service.getWidgets('brand-1', {
+        keys: [ClientsAnalyticsWidgetKey.NEW_CLIENTS_BY_SOURCE],
+      } as ClientsAnalyticsRequestDto);
+
+      expect(clients.countAcquiredBySource).toHaveBeenCalledExactlyOnceWith(
+        'brand-1',
+        range.from,
+        range.to,
+      );
+      expect(aggregates.clientCohort).not.toHaveBeenCalled();
+      expect(widget.kind).toBe(WidgetKind.BREAKDOWN);
+      expect(widget.breakdown).toEqual({
+        dimension: 'acquisitionSource',
+        total: 4,
+        items: [
+          { id: 'INSTAGRAM', label: 'Instagram', value: 2, sharePct: 50 },
+          { id: 'NONE', label: 'Не указан', value: 1, sharePct: 25 },
+          { id: 'VK', label: 'ВКонтакте', value: 1, sharePct: 25 },
+        ],
+      });
+      expect(widget.meta?.previousPeriod).toBeUndefined();
+    });
   });
 });

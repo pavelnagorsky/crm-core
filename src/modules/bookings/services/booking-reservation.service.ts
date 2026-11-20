@@ -97,6 +97,7 @@ export class BookingReservationService {
       client,
       items,
       attribution,
+      traffic,
       executionMode,
       bundleId,
       startAt,
@@ -152,6 +153,10 @@ export class BookingReservationService {
         bundleId,
         status,
         channel: attribution.channel,
+        trafficSource: traffic.source,
+        trafficSourceDetail: traffic.detail,
+        // Written once with an online booking: the evidence behind its source.
+        trafficTouch: traffic.touch ? { create: traffic.touch } : undefined,
         isCustomTime: input.isCustomTime,
         notifyClient: input.notifyClient,
         ...input.clientNotice,
@@ -186,6 +191,19 @@ export class BookingReservationService {
       },
       include: bookingWithItemsInclude,
     });
+    // The first booking of a brand client tells where the client came from. Imported clients and
+    // clients acquired by a concurrent booking keep theirs: the update is guarded in the row lock.
+    if (client.id)
+      await this.clients.recordAcquisition(
+        client.id,
+        {
+          bookingId: booking.id,
+          source: traffic.source,
+          detail: traffic.detail,
+          acquiredAt: booking.createdAt,
+        },
+        tx,
+      );
     const operationActor = actor ?? {
       name: 'System',
       role: AuditActorRole.SYSTEM,

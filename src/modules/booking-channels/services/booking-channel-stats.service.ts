@@ -7,6 +7,9 @@ import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { ErrorCodeEntry } from '../../../shared/interfaces/error-code-entry.interface.js';
 import { BookingsAggregatesService } from '../../bookings/aggregates/services/bookings-aggregates.service.js';
 import { BookingChannelEvent } from '../enums/booking-channel-event.enum.js';
+import { BookingChannel } from '../../bookings/enums/booking-channel.enum.js';
+import { BookingTrafficService } from '../../booking-traffic/services/booking-traffic.service.js';
+import { TrafficTouch } from '../../../shared/traffic/interfaces/traffic-touch.interface.js';
 import { BookingChannelStats } from '../interfaces/booking-channel-stats.interface.js';
 import { BookingPagesService } from './booking-pages.service.js';
 import { BookingWidgetsService } from './booking-widgets.service.js';
@@ -18,6 +21,7 @@ export class BookingChannelStatsService {
     private readonly bookings: BookingsAggregatesService,
     private readonly pages: BookingPagesService,
     private readonly widgets: BookingWidgetsService,
+    private readonly traffic: BookingTrafficService,
   ) {}
 
   async forPages(
@@ -82,8 +86,13 @@ export class BookingChannelStatsService {
     return result;
   }
 
-  async recordPage(pageId: string, event: BookingChannelEvent): Promise<void> {
-    await this.pages.assertPublished(pageId);
+  /** Counts the event on the page and, by the visit's source, in the hourly traffic stats. */
+  async recordPage(
+    pageId: string,
+    event: BookingChannelEvent,
+    traffic?: TrafficTouch,
+  ): Promise<void> {
+    const locationId = await this.pages.getPublishedLocationId(pageId);
     const field = event === BookingChannelEvent.VIEW ? 'views' : 'formOpens';
     try {
       await this.db.bookingPageStats.upsert({
@@ -94,13 +103,22 @@ export class BookingChannelStatsService {
     } catch (error: unknown) {
       this.rethrowDeletedChannel(error, ErrorCode.BOOKING_PAGE_NOT_FOUND);
     }
+    await this.traffic.recordChannelEvent({
+      locationId,
+      channel: BookingChannel.PUBLIC_PAGE,
+      channelId: pageId,
+      event,
+      source: this.traffic.classify(traffic).source,
+    });
   }
 
+  /** Counts the event on the widget and, by the visit's source, in the hourly traffic stats. */
   async recordWidget(
     widgetId: string,
     event: BookingChannelEvent,
+    traffic?: TrafficTouch,
   ): Promise<void> {
-    await this.widgets.getPublished(widgetId);
+    const { locationId } = await this.widgets.getPublished(widgetId);
     const field = event === BookingChannelEvent.VIEW ? 'views' : 'formOpens';
     try {
       await this.db.bookingWidgetStats.upsert({
@@ -111,6 +129,13 @@ export class BookingChannelStatsService {
     } catch (error: unknown) {
       this.rethrowDeletedChannel(error, ErrorCode.BOOKING_WIDGET_NOT_FOUND);
     }
+    await this.traffic.recordChannelEvent({
+      locationId,
+      channel: BookingChannel.WIDGET,
+      channelId: widgetId,
+      event,
+      source: this.traffic.classify(traffic).source,
+    });
   }
 
   private emptyStats(ids: string[]): Map<string, BookingChannelStats> {

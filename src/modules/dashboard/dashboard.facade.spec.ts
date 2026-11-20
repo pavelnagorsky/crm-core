@@ -1,5 +1,7 @@
 import { BookingStatus } from '@prisma/client';
+import { LocaleService } from '../../shared/i18n/locale.service.js';
 import { MoneyUtils } from '../../shared/money/money.utils.js';
+import { TrafficSource } from '../../shared/traffic/enums/traffic-source.enum.js';
 import { BookingsAggregatesService } from '../bookings/aggregates/services/bookings-aggregates.service.js';
 import { AggregateSnapshot } from '../bookings/interfaces/aggregate-snapshot.interface.js';
 import { OrdersAggregatesService } from '../orders/aggregates/services/orders-aggregates.service.js';
@@ -49,6 +51,7 @@ describe('DashboardFacade product revenue', () => {
   const bookings = {
     snapshot: vi.fn().mockResolvedValue(bookingSnapshot()),
     series: vi.fn().mockResolvedValue([]),
+    trafficSourceTotals: vi.fn(),
   };
   const orders = {
     productSalesSnapshot: vi.fn().mockResolvedValue({
@@ -70,6 +73,9 @@ describe('DashboardFacade product revenue', () => {
     });
   });
 
+  const locale = new LocaleService();
+  locale.onModuleInit();
+
   function service(): DashboardFacade {
     const buckets = new DashboardBucketFactory();
     return new DashboardFacade(
@@ -82,6 +88,7 @@ describe('DashboardFacade product revenue', () => {
         new DashboardMetricFactory(),
         new DashboardSeriesFactory(buckets),
         buckets,
+        locale,
       ),
     );
   }
@@ -206,5 +213,58 @@ describe('DashboardFacade product revenue', () => {
     };
     expect(bookings.snapshot).toHaveBeenCalledWith(expected);
     expect(orders.productSalesSnapshot).toHaveBeenCalledWith(expected);
+  });
+
+  it('shows bookings by traffic source made in the period', async () => {
+    const row = (source: TrafficSource | null, bookings: number) => ({
+      source,
+      detail: null,
+      bookings,
+      channelBookings: 0,
+      newClients: 1,
+      completedVisits: 0,
+      completedRevenue: MoneyUtils.decimal(0),
+    });
+    bookings.trafficSourceTotals.mockResolvedValue({
+      sources: [row(TrafficSource.WALK_IN, 1), row(TrafficSource.TWO_GIS, 3)],
+      details: [],
+      total: row(null, 4),
+    });
+
+    const [widget] = await service().getWidgets('location-1', {
+      keys: [DashboardWidgetKey.BOOKINGS_BY_TRAFFIC_SOURCE],
+    } as DashboardWidgetsRequestDto);
+
+    expect(bookings.trafficSourceTotals).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        locationIds: ['location-1'],
+        from: range.from,
+        to: range.to,
+      }),
+    );
+    expect(widget).toMatchObject({
+      key: DashboardWidgetKey.BOOKINGS_BY_TRAFFIC_SOURCE,
+      kind: WidgetKind.BREAKDOWN,
+      breakdown: {
+        dimension: 'trafficSource',
+        total: 4,
+        items: [
+          {
+            id: 'TWO_GIS',
+            label: '2ГИС',
+            value: 3,
+            secondaryValue: 1,
+            sharePct: 75,
+          },
+          {
+            id: 'WALK_IN',
+            label: 'Пришёл сам',
+            value: 1,
+            secondaryValue: 1,
+            sharePct: 25,
+          },
+        ],
+      },
+    });
   });
 });

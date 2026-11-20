@@ -1,4 +1,6 @@
 import { BookingStatus, Prisma, StaffShift } from '@prisma/client';
+import { LocaleService } from '../../../../shared/i18n/locale.service.js';
+import { BookingTrafficService } from '../../../booking-traffic/services/booking-traffic.service.js';
 import { MoneyUtils } from '../../../../shared/money/money.utils.js';
 import { MetricGrowth } from '../../../dashboard/enums/metric-growth.enum.js';
 import { MetricUnit } from '../../../dashboard/enums/metric-unit.enum.js';
@@ -16,6 +18,8 @@ import { AggregateSnapshot } from '../../interfaces/aggregate-snapshot.interface
 import { BookingsAnalyticsRequestDto } from '../dto/bookings-analytics-request.dto.js';
 import { BookingsAnalyticsWidgetKey } from '../enums/bookings-analytics-widget-key.enum.js';
 import { BookingsAnalyticsService } from './bookings-analytics.service.js';
+import { TrafficSource } from '../../../../shared/traffic/enums/traffic-source.enum.js';
+import { TrafficSourceTotalsRow } from '../../interfaces/traffic-source-totals-row.interface.js';
 
 function snapshot(
   counts: Partial<
@@ -75,7 +79,11 @@ describe('BookingsAnalyticsService', () => {
     series: vi.fn(),
     lostRevenue: vi.fn(),
     occupancyBookedMinutes: vi.fn(),
+    trafficSourceTotals: vi.fn(),
   };
+  const traffic = { trafficBySource: vi.fn() };
+  const locale = new LocaleService();
+  locale.onModuleInit();
   const rangeService = { resolve: vi.fn() };
   const staffService = { listShiftsInRange: vi.fn() };
   const bucketService = new DashboardBucketFactory();
@@ -113,6 +121,8 @@ describe('BookingsAnalyticsService', () => {
       new DashboardMetricFactory(),
       new DashboardSeriesFactory(bucketService),
       bucketService,
+      traffic as unknown as BookingTrafficService,
+      locale,
     );
   });
 
@@ -431,6 +441,189 @@ describe('BookingsAnalyticsService', () => {
           (w) => w.key === BookingsAnalyticsWidgetKey.PENDING_CONFIRMATION,
         )?.metric?.previousValue,
       ).toBeUndefined();
+    });
+  });
+
+  describe('traffic sources', () => {
+    const row = (
+      source: TrafficSource | null,
+      detail: string | null,
+      bookings: number,
+      extra: Partial<TrafficSourceTotalsRow> = {},
+    ): TrafficSourceTotalsRow => ({
+      source,
+      detail,
+      bookings,
+      channelBookings: bookings,
+      newClients: 0,
+      completedVisits: 0,
+      completedRevenue: MoneyUtils.decimal(0),
+      ...extra,
+    });
+
+    beforeEach(() => {
+      aggregates.trafficSourceTotals.mockResolvedValue({
+        sources: [
+          row(TrafficSource.INSTAGRAM, null, 4, {
+            channelBookings: 3,
+            newClients: 2,
+            completedVisits: 1,
+            completedRevenue: MoneyUtils.decimal('25.50'),
+          }),
+          row(null, null, 2, { channelBookings: 0 }),
+        ],
+        details: Array.from({ length: 12 }, (_, i) =>
+          row(TrafficSource.INSTAGRAM, `camp${String(i).padStart(2, '0')}`, 1),
+        ),
+        total: row(null, null, 6, {
+          channelBookings: 3,
+          newClients: 2,
+          completedVisits: 1,
+          completedRevenue: MoneyUtils.decimal('25.50'),
+        }),
+      });
+      traffic.trafficBySource.mockResolvedValue([
+        { source: TrafficSource.INSTAGRAM, views: 30, formOpens: 6 },
+        { source: TrafficSource.DIRECT, views: 10, formOpens: 1 },
+      ]);
+    });
+
+    it('builds the table with source rows, top detail rows and the rest summed', async () => {
+      const [widget] = await widgets([
+        BookingsAnalyticsWidgetKey.TRAFFIC_SOURCES,
+      ]);
+
+      expect(widget.kind).toBe(WidgetKind.TABLE);
+      expect(aggregates.trafficSourceTotals).toHaveBeenCalledWith({
+        locationIds: ['biz'],
+        from: range.from,
+        to: range.to,
+      });
+      expect(traffic.trafficBySource).toHaveBeenCalledWith(
+        'biz',
+        range.from,
+        range.to,
+      );
+      const table = widget.table!;
+      expect(table.columns.map((column) => column.key)).toEqual([
+        'views',
+        'formOpens',
+        'bookings',
+        'newClients',
+        'completedVisits',
+        'completedRevenue',
+        'conversionPct',
+      ]);
+      expect(table.rows[0]).toEqual({
+        id: 'INSTAGRAM',
+        parentId: null,
+        label: 'Instagram',
+        values: {
+          views: 30,
+          formOpens: 6,
+          bookings: 4,
+          newClients: 2,
+          completedVisits: 1,
+          completedRevenue: 25.5,
+          conversionPct: 10,
+        },
+      });
+      const children = table.rows.filter((r) => r.parentId === 'INSTAGRAM');
+      expect(children).toHaveLength(11);
+      expect(children[0]).toMatchObject({
+        id: 'INSTAGRAM:camp00',
+        label: 'camp00',
+        values: {
+          views: null,
+          formOpens: null,
+          conversionPct: null,
+          bookings: 1,
+        },
+      });
+      expect(children[10]).toMatchObject({
+        id: 'INSTAGRAM:__other__',
+        label: 'Остальные',
+        values: { bookings: 2 },
+      });
+      expect(
+        table.rows.map((r) => r.id).filter((id) => !id.includes(':')),
+      ).toEqual(['INSTAGRAM', 'NONE', 'DIRECT']);
+      expect(table.rows.find((r) => r.id === 'NONE')).toMatchObject({
+        label: 'Не указан',
+        values: { views: 0, bookings: 2, conversionPct: null },
+      });
+      expect(table.rows.find((r) => r.id === 'DIRECT')).toMatchObject({
+        label: 'Прямой заход',
+        values: { views: 10, formOpens: 1, bookings: 0, conversionPct: 0 },
+      });
+      expect(table.totals).toEqual({
+        views: 40,
+        formOpens: 7,
+        bookings: 6,
+        newClients: 2,
+        completedVisits: 1,
+        completedRevenue: 25.5,
+        conversionPct: 7.5,
+      });
+      expect(widget.meta?.currency).toBe('USD');
+      expect(widget.meta?.previousPeriod).toBeUndefined();
+    });
+
+    it('drops views under a staff filter', async () => {
+      const [widget] = await widgets(
+        [BookingsAnalyticsWidgetKey.TRAFFIC_SOURCES],
+        { staffId: 'staff-1' },
+      );
+
+      expect(traffic.trafficBySource).not.toHaveBeenCalled();
+      expect(aggregates.trafficSourceTotals).toHaveBeenCalledWith(
+        expect.objectContaining({ staffId: 'staff-1' }),
+      );
+      expect(widget.table!.rows[0].values).toMatchObject({
+        views: null,
+        formOpens: null,
+        conversionPct: null,
+        bookings: 4,
+      });
+      expect(widget.table!.totals.views).toBeNull();
+      expect(widget.table!.rows.some((r) => r.id === 'DIRECT')).toBe(false);
+    });
+
+    it('builds the bookings by source breakdown with new clients', async () => {
+      const [widget] = await widgets([
+        BookingsAnalyticsWidgetKey.BOOKINGS_BY_TRAFFIC_SOURCE,
+      ]);
+
+      expect(traffic.trafficBySource).not.toHaveBeenCalled();
+      expect(widget.kind).toBe(WidgetKind.BREAKDOWN);
+      expect(widget.breakdown).toEqual({
+        dimension: 'trafficSource',
+        total: 6,
+        items: [
+          {
+            id: 'INSTAGRAM',
+            label: 'Instagram',
+            value: 4,
+            secondaryValue: 2,
+            sharePct: 66.7,
+          },
+          {
+            id: 'NONE',
+            label: 'Не указан',
+            value: 2,
+            secondaryValue: 0,
+            sharePct: 33.3,
+          },
+        ],
+      });
+    });
+
+    it('loads the totals once for both widgets', async () => {
+      await widgets([
+        BookingsAnalyticsWidgetKey.TRAFFIC_SOURCES,
+        BookingsAnalyticsWidgetKey.BOOKINGS_BY_TRAFFIC_SOURCE,
+      ]);
+      expect(aggregates.trafficSourceTotals).toHaveBeenCalledTimes(1);
     });
   });
 });

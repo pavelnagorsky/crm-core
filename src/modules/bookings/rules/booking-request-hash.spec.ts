@@ -1,4 +1,5 @@
 import { CreateBookingDto } from '../dto/create-booking.dto.js';
+import { PublicCreateBookingDto } from '../dto/public-create-booking.dto.js';
 import { BookingChannel } from '../enums/booking-channel.enum.js';
 import { bookingRequestHash } from './booking-request-hash.js';
 
@@ -110,5 +111,15 @@ describe('bookingRequestHash', () => {
         bookingWidgetId: 'widget',
       }),
     ).not.toBe(hash);
+  });
+
+  it('ignores the traffic touch: a retry may resend it changed', () => {
+    const withTraffic: PublicCreateBookingDto = {
+      ...request,
+      traffic: { utmSource: 'ig', touchedAt: new Date() },
+    };
+    expect(bookingRequestHash('location', withTraffic, attribution)).toBe(
+      bookingRequestHash('location', request, attribution),
+    );
   });
 });

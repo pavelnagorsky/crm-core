@@ -1,4 +1,5 @@
 import { BookingSelectionService } from './services/booking-selection.service.js';
+import { TrafficSource } from '../../shared/traffic/enums/traffic-source.enum.js';
 import { BookingSchedulingService } from './services/booking-scheduling.service.js';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
@@ -49,6 +50,9 @@ const products = { listForPublicCatalog: vi.fn().mockResolvedValue([]) };
 const bookingClients = {
   findForBooking: vi.fn(),
   resolveForBooking: vi.fn(),
+  recordAcquisition: vi.fn(),
+  clearAcquisitionBooking: vi.fn(),
+  syncAcquisitionSource: vi.fn(),
 };
 
 describe('Booking mutations during business deletion', () => {
@@ -425,6 +429,53 @@ describe('BookingsFacade.search', () => {
       ],
     }).compile();
     service = module.get(BookingsFacade);
+  });
+
+  it('filters by channel, source, detail, campaign and first bookings', async () => {
+    await service.search('biz', {
+      locationId: 'biz',
+      page: 1,
+      pageSize: 25,
+      channels: [BookingChannel.PUBLIC_PAGE, BookingChannel.WIDGET],
+      trafficSources: [TrafficSource.INSTAGRAM],
+      trafficSourceNotSet: true,
+      trafficSourceDetail: ' VK_Ads ',
+      utmCampaign: 'Spring',
+      newClientsOnly: true,
+    } as BookingSearchRequestDto);
+
+    expect(findMany.mock.calls[0][0].where.AND).toEqual([
+      { channel: { in: [BookingChannel.PUBLIC_PAGE, BookingChannel.WIDGET] } },
+      {
+        OR: [
+          { trafficSource: { in: [TrafficSource.INSTAGRAM] } },
+          { trafficSource: null },
+        ],
+      },
+      { trafficSourceDetail: { equals: 'VK_Ads', mode: 'insensitive' } },
+      {
+        trafficTouch: {
+          is: { utmCampaign: { equals: 'Spring', mode: 'insensitive' } },
+        },
+      },
+      { acquiredClient: { isNot: null } },
+    ]);
+    expect(count.mock.calls[0][0].where).toEqual(
+      findMany.mock.calls[0][0].where,
+    );
+  });
+
+  it('filters only bookings without a source', async () => {
+    await service.search('biz', {
+      locationId: 'biz',
+      page: 1,
+      pageSize: 25,
+      trafficSourceNotSet: true,
+    } as BookingSearchRequestDto);
+
+    expect(findMany.mock.calls[0][0].where.AND).toEqual([
+      { OR: [{ trafficSource: null }] },
+    ]);
   });
 
   it('filters by creation date and every text field', async () => {
@@ -1436,6 +1487,155 @@ describe('BookingsFacade.update details and item prices', () => {
       expect(update.mock.calls[0][0].data.client).toBeUndefined();
       expect(update.mock.calls[0][0].data.clientFirstName).toBe('Новое');
       expect(orders.syncBookingClient).not.toHaveBeenCalled();
+      expect(bookingClients.clearAcquisitionBooking).not.toHaveBeenCalled();
+      expect(bookingClients.recordAcquisition).not.toHaveBeenCalled();
+    });
+
+    it('moves the first booking: the old client loses it, the new one may take it', async () => {
+      const createdAt = new Date('2026-09-01T08:00:00.000Z');
+      const current = booking({
+        clientId: 'client-1',
+        createdAt,
+        trafficSource: TrafficSource.WALK_IN,
+      });
+      bookingClients.findForBooking.mockResolvedValueOnce(profile);
+      update.mockResolvedValueOnce({ ...current, clientId: 'client-2' });
+
+      await service.update(current, auditActorFromToken(token, 'biz'), {
+        clientId: 'client-2',
+      });
+
+      expect(bookingClients.clearAcquisitionBooking).toHaveBeenCalledWith(
+        'client-1',
+        'booking-1',
+        expect.anything(),
+      );
+      expect(bookingClients.recordAcquisition).toHaveBeenCalledWith(
+        'client-2',
+        {
+          bookingId: 'booking-1',
+          source: TrafficSource.WALK_IN,
+          detail: null,
+          acquiredAt: createdAt,
+        },
+        expect.anything(),
+      );
+      expect(
+        bookingClients.clearAcquisitionBooking.mock.invocationCallOrder[0],
+      ).toBeLessThan(
+        bookingClients.recordAcquisition.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('only clears the acquisition when the booking becomes anonymous', async () => {
+      const current = booking({ clientId: 'client-1' });
+      update.mockResolvedValueOnce({ ...current, clientId: null });
+
+      await service.update(current, auditActorFromToken(token, 'biz'), {
+        anonymous: true,
+      });
+
+      expect(bookingClients.clearAcquisitionBooking).toHaveBeenCalledWith(
+        'client-1',
+        'booking-1',
+        expect.anything(),
+      );
+      expect(bookingClients.recordAcquisition).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('traffic source', () => {
+    it('sets the source of a manual booking and syncs the client acquisition', async () => {
+      const current = booking({
+        channel: BookingChannel.MANUAL,
+        trafficSource: TrafficSource.PHONE_CALL,
+        trafficSourceDetail: 'старый номер',
+      });
+      update.mockResolvedValueOnce({
+        ...current,
+        trafficSource: TrafficSource.REFERRAL,
+        trafficSourceDetail: null,
+      });
+
+      await service.update(current, auditActorFromToken(token, 'biz'), {
+        trafficSource: TrafficSource.REFERRAL,
+      });
+
+      expect(update.mock.calls[0][0].data).toMatchObject({
+        trafficSource: TrafficSource.REFERRAL,
+        trafficSourceDetail: null,
+      });
+      expect(bookingClients.syncAcquisitionSource).toHaveBeenCalledWith(
+        'client',
+        'booking-1',
+        TrafficSource.REFERRAL,
+        null,
+        expect.anything(),
+      );
+    });
+
+    it('clears the source of a manual booking', async () => {
+      const current = booking({
+        channel: BookingChannel.MANUAL,
+        trafficSource: TrafficSource.OTHER,
+        trafficSourceDetail: 'x',
+      });
+      update.mockResolvedValueOnce({
+        ...current,
+        trafficSource: null,
+        trafficSourceDetail: null,
+      });
+
+      await service.update(current, auditActorFromToken(token, 'biz'), {
+        trafficSource: null,
+      });
+
+      expect(update.mock.calls[0][0].data).toMatchObject({
+        trafficSource: null,
+        trafficSourceDetail: null,
+      });
+    });
+
+    it('leaves the source alone when the request does not touch it', async () => {
+      const current = booking({ trafficSource: TrafficSource.VK });
+      update.mockResolvedValueOnce(current);
+
+      await service.update(current, auditActorFromToken(token, 'biz'), {
+        notes: 'x',
+      });
+
+      expect(update.mock.calls[0][0].data).not.toHaveProperty('trafficSource');
+      expect(bookingClients.syncAcquisitionSource).not.toHaveBeenCalled();
+    });
+
+    it.each([BookingChannel.PUBLIC_PAGE, BookingChannel.WIDGET])(
+      'keeps the recorded source of a %s booking read-only',
+      async (channel) => {
+        await expect(
+          service.update(
+            booking({ channel, trafficSource: TrafficSource.DIRECT }),
+            auditActorFromToken(token, 'biz'),
+            { trafficSourceDetail: 'x' },
+          ),
+        ).rejects.toMatchObject({
+          errorCode: 'BOOKING_TRAFFIC_SOURCE_READ_ONLY',
+          status: 400,
+        });
+        expect(update).not.toHaveBeenCalled();
+      },
+    );
+
+    it('rejects a detail without a source', async () => {
+      await expect(
+        service.update(
+          booking({ channel: BookingChannel.MANUAL }),
+          auditActorFromToken(token, 'biz'),
+          { trafficSourceDetail: 'x' },
+        ),
+      ).rejects.toMatchObject({
+        errorCode: 'TRAFFIC_SOURCE_DETAIL_WITHOUT_SOURCE',
+      });
+      expect(update).not.toHaveBeenCalled();
     });
   });
 });

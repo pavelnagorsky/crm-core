@@ -7,6 +7,7 @@ import request from 'supertest';
 import { TokenEpochRegistryService } from '../../auth/services/token-epoch-registry.service.js';
 import { PublicBookingCreateController } from '../../booking-channels/controllers/public-booking-create.controller.js';
 import { BookingChannelAttributionService } from '../../booking-channels/services/booking-channel-attribution.service.js';
+import { BookingTrafficService } from '../../booking-traffic/services/booking-traffic.service.js';
 import { BookingCreateFacade } from '../booking-create.facade.js';
 import { BookingsFacade } from '../bookings.facade.js';
 import { BookingStatus } from '../enums/booking-status.enum.js';
@@ -43,6 +44,7 @@ describe('Client booking API (HTTP)', () => {
     submitReview: vi.fn(),
   };
   const create = { createPublicBooking: vi.fn() };
+  const attribution = { resolve: vi.fn() };
   const current = () =>
     booking({
       id,
@@ -73,7 +75,11 @@ describe('Client booking API (HTTP)', () => {
         { provide: TokenEpochRegistryService, useValue: {} },
         {
           provide: BookingChannelAttributionService,
-          useValue: { resolve: vi.fn().mockResolvedValue({}) },
+          useValue: attribution,
+        },
+        {
+          provide: BookingTrafficService,
+          useValue: new BookingTrafficService({} as never, config),
         },
         {
           provide: JwtBookingClientStrategy,
@@ -103,6 +109,11 @@ describe('Client booking API (HTTP)', () => {
       reviewLinks: null,
     });
     create.createPublicBooking.mockResolvedValue(current());
+    attribution.resolve.mockResolvedValue({
+      channel: 'WIDGET',
+      bookingPageId: null,
+      bookingWidgetId: id,
+    });
   });
   afterEach(() => vi.useRealTimers());
 
@@ -165,7 +176,77 @@ describe('Client booking API (HTTP)', () => {
       expect.objectContaining({ idempotencyKey: key }),
       expect.anything(),
       expect.anything(),
+      expect.anything(),
     );
+  });
+
+  it('classifies the raw touch of an online booking and passes the channel ids on', async () => {
+    const { body } = await request(app.getHttpServer())
+      .post(`/public/locations/${locationId}/bookings`)
+      .send({
+        serviceId: id,
+        startAt: '2026-10-28T13:00:00',
+        firstName: 'Anna',
+        phone: '+375291112233',
+        bookingWidgetId: id,
+        traffic: {
+          utmSource: 'vk_ads',
+          utmMedium: 'cpc',
+          utmCampaign: 'Осень',
+          referrerHost: 'https://away.vk.com/away.php',
+          touchedAt: '2026-10-25T09:00:00.000Z',
+        },
+      })
+      .expect(201);
+
+    expect(attribution.resolve).toHaveBeenCalledWith(locationId, undefined, id);
+    expect(create.createPublicBooking).toHaveBeenCalledWith(
+      locationId,
+      expect.objectContaining({ bookingWidgetId: id }),
+      { channel: 'WIDGET', bookingPageId: null, bookingWidgetId: id },
+      {
+        source: 'PAID_ADS',
+        detail: 'vk_ads',
+        touch: {
+          utmSource: 'vk_ads',
+          utmMedium: 'cpc',
+          utmCampaign: 'Осень',
+          utmContent: null,
+          utmTerm: null,
+          referrerHost: 'away.vk.com',
+          clickIdType: null,
+          clickId: null,
+          touchedAt: new Date('2026-10-25T09:00:00.000Z'),
+        },
+      },
+      expect.anything(),
+    );
+    expect(body.responseValue.booking).not.toHaveProperty('trafficSource');
+    expect(body.responseValue.booking).not.toHaveProperty('channel');
+  });
+
+  it.each([
+    ['missing', undefined],
+    ['a string', 'utm_source=ig'],
+    ['junk', { utmSource: ['ig'], touchedAt: 'yesterday', gclid: 5 }],
+    ['our own site', { referrerHost: 'https://example.test/b/salon' }],
+  ])('books a direct visit when the touch is %s', async (_name, traffic) => {
+    await request(app.getHttpServer())
+      .post(`/public/locations/${locationId}/bookings`)
+      .send({
+        serviceId: id,
+        startAt: '2026-10-28T13:00:00',
+        firstName: 'Anna',
+        phone: '+375291112233',
+        traffic,
+      })
+      .expect(201);
+
+    expect(create.createPublicBooking.mock.calls[0][3]).toEqual({
+      source: 'DIRECT',
+      detail: null,
+      touch: null,
+    });
   });
 
   it('rejects an invalid idempotency key before creation', async () => {

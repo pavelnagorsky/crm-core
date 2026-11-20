@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
 import {
+  IsArray,
   IsBoolean,
   IsEnum,
   IsOptional,
@@ -9,6 +10,8 @@ import {
 } from 'class-validator';
 import { IsPhoneSearch } from '../../../shared/decorators/is-phone-search.decorator.js';
 import { PaginationRequestDto } from '../../../shared/dto/pagination-request.dto.js';
+import { ToArray } from '../../../shared/transforms/to-array.transform.js';
+import { TrafficSource } from '../../../shared/traffic/enums/traffic-source.enum.js';
 import { ClientSearchOrderBy } from '../enums/client-search-order-by.enum.js';
 
 export class ClientSearchRequestDto extends PaginationRequestDto<ClientSearchOrderBy> {
@@ -37,6 +40,20 @@ export class ClientSearchRequestDto extends PaginationRequestDto<ClientSearchOrd
   )
   @IsBoolean()
   banned?: boolean;
+
+  @ApiProperty({
+    enum: TrafficSource,
+    enumName: 'TrafficSource',
+    isArray: true,
+    required: false,
+    description:
+      'Only clients acquired from these sources. Repeat the key: ?acquisitionSources=INSTAGRAM&acquisitionSources=VK',
+  })
+  @IsOptional()
+  @ToArray()
+  @IsArray()
+  @IsEnum(TrafficSource, { each: true })
+  acquisitionSources?: TrafficSource[];
 
   @ApiProperty({ enum: ClientSearchOrderBy, required: false })
   @IsOptional()

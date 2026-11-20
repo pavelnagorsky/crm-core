@@ -26,6 +26,10 @@ import { OrderClientRevenueBucket } from '../../../orders/aggregates/interfaces/
 import { OrderClientRevenueTotals } from '../../../orders/aggregates/interfaces/order-client-revenue-totals.interface.js';
 import { OrdersAggregatesService } from '../../../orders/aggregates/services/orders-aggregates.service.js';
 import { ClientsAnalyticsRequestDto } from '../dto/clients-analytics-request.dto.js';
+import { LocaleService } from '../../../../shared/i18n/locale.service.js';
+import { pct } from '../../../dashboard/rules/dashboard-metrics.js';
+import { trafficSourceId } from '../../../dashboard/rules/traffic-source-widgets.js';
+import { ClientsService } from '../../services/clients.service.js';
 import { ClientsAnalyticsWidgetKey } from '../enums/clients-analytics-widget-key.enum.js';
 import { ClientAnalyticsContext } from '../interfaces/client-analytics-context.interface.js';
 
@@ -52,6 +56,8 @@ export class ClientsAnalyticsService {
     private readonly rangeService: DashboardRangeService,
     private readonly metricFactory: DashboardMetricFactory,
     private readonly buckets: DashboardBucketFactory,
+    private readonly clients: ClientsService,
+    private readonly locale: LocaleService,
   ) {}
 
   async getWidgets(
@@ -75,6 +81,8 @@ export class ClientsAnalyticsService {
         return this.dormantClients(key, ctx);
       case ClientsAnalyticsWidgetKey.REVENUE_PER_CLIENT:
         return this.revenuePerClient(key, ctx);
+      case ClientsAnalyticsWidgetKey.NEW_CLIENTS_BY_SOURCE:
+        return this.newClientsBySource(key, ctx);
       default: {
         const _exhaustive: never = key;
         throw new Error(
@@ -193,6 +201,35 @@ export class ClientsAnalyticsService {
     };
   }
 
+  private newClientsBySource(
+    key: ClientsAnalyticsWidgetKey,
+    ctx: ClientAnalyticsContext,
+  ): WidgetDto {
+    const rows = ctx.acquiredBySource ?? [];
+    const labels = this.locale.get().trafficSource;
+    const total = rows.reduce((sum, row) => sum + row.count, 0);
+    const items = rows
+      .map((row) => {
+        const id = trafficSourceId(row.source);
+        return {
+          id,
+          label: labels[id] ?? id,
+          value: row.count,
+          sharePct: pct(row.count, total),
+        };
+      })
+      .sort((a, b) => b.value - a.value || a.id.localeCompare(b.id));
+    return {
+      key,
+      kind: WidgetKind.BREAKDOWN,
+      breakdown: { dimension: 'acquisitionSource', items, total },
+      meta: {
+        period: this.buckets.periodDto(ctx.range),
+        timezone: ctx.range.timezone,
+      },
+    };
+  }
+
   private async buildContext(
     brandId: string,
     dto: ClientsAnalyticsRequestDto,
@@ -224,25 +261,36 @@ export class ClientsAnalyticsService {
       granularity: range.granularity,
       timezone: range.timezone,
     };
-    const [currentReport, previousReport, currentRecency, previousRecency] =
-      await Promise.all([
-        needsCohort
-          ? this.aggregates.clientCohort(currentCohortRange)
-          : undefined,
-        needsCohort && compare
-          ? this.aggregates.clientCohort(previousCohortRange)
-          : undefined,
-        needsRecency
-          ? this.aggregates.clientRecency(brandId, range.to, range.timezone)
-          : [],
-        needsRecency && compare
-          ? this.aggregates.clientRecency(
-              brandId,
-              range.previousTo,
-              range.timezone,
-            )
-          : undefined,
-      ]);
+    const needsAcquired = dto.keys.includes(
+      ClientsAnalyticsWidgetKey.NEW_CLIENTS_BY_SOURCE,
+    );
+    const [
+      currentReport,
+      previousReport,
+      currentRecency,
+      previousRecency,
+      acquiredBySource,
+    ] = await Promise.all([
+      needsCohort
+        ? this.aggregates.clientCohort(currentCohortRange)
+        : undefined,
+      needsCohort && compare
+        ? this.aggregates.clientCohort(previousCohortRange)
+        : undefined,
+      needsRecency
+        ? this.aggregates.clientRecency(brandId, range.to, range.timezone)
+        : [],
+      needsRecency && compare
+        ? this.aggregates.clientRecency(
+            brandId,
+            range.previousTo,
+            range.timezone,
+          )
+        : undefined,
+      needsAcquired
+        ? this.clients.countAcquiredBySource(brandId, range.from, range.to)
+        : undefined,
+    ]);
     let currentCohort = currentReport?.summary;
     let previousCohort = previousReport?.summary;
     let currentSeries = currentReport?.series ?? [];
@@ -330,6 +378,7 @@ export class ClientsAnalyticsService {
       previousSeries,
       currentRecency,
       previousRecency,
+      acquiredBySource,
     };
   }
 

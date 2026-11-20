@@ -26,7 +26,8 @@ import {
   requestOrigin,
 } from '../../../shared/http/request-context.js';
 import { BookingCreateFacade } from '../../bookings/booking-create.facade.js';
-import { CreateBookingDto } from '../../bookings/dto/create-booking.dto.js';
+import { PublicCreateBookingDto } from '../../bookings/dto/public-create-booking.dto.js';
+import { BookingTrafficService } from '../../booking-traffic/services/booking-traffic.service.js';
 import { BookingChannelAttributionService } from '../services/booking-channel-attribution.service.js';
 
 @ApiTags('Bookings')
@@ -36,6 +37,7 @@ export class PublicBookingCreateController {
     private readonly attribution: BookingChannelAttributionService,
     private readonly bookingCreateService: BookingCreateFacade,
     private readonly clientTokens: BookingClientTokenService,
+    private readonly traffic: BookingTrafficService,
   ) {}
 
   @ApiOperation({ summary: 'Book an appointment (public / client-facing)' })
@@ -53,7 +55,7 @@ export class PublicBookingCreateController {
   @Header('Cache-Control', 'no-store')
   async createPublic(
     @Param('locationId', ParseUUIDPipe) locationId: string,
-    @Body() dto: CreateBookingDto,
+    @Body() dto: PublicCreateBookingDto,
     @Req() req: Request,
   ): Promise<BaseResponseDto<PublicBookingCreatedResponseDto>> {
     const attribution = await this.attribution.resolve(
@@ -65,6 +67,7 @@ export class PublicBookingCreateController {
       locationId,
       dto,
       attribution,
+      this.traffic.classify(dto.traffic),
       { ip: clientIp(req), origin: requestOrigin(req) },
     );
     const token = this.clientTokens.generateClientToken(booking.id);

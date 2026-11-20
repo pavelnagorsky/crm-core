@@ -89,17 +89,29 @@ export class BookingWidgetsController {
     return BaseResponseDto.success(BookingWidgetResponseDto.fromEntity(widget));
   }
 
-  @ApiOperation({ summary: 'Get a booking widget' })
-  @ApiOkResponse({ type: ApiResponse(BookingWidgetResponseDto) })
+  @ApiOperation({
+    summary:
+      'Get a booking widget with its initialization history (the last 10 site pages it loaded on)',
+  })
+  @ApiOkResponse({ type: ApiResponse(BookingWidgetListItemResponseDto) })
   @ApiNotFoundResponse({ description: 'Booking widget not found' })
   @Permissions(Read(Claim.BOOKING_CHANNEL))
   @Get(':widgetId')
   async findById(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Param('widgetId', ParseUUIDPipe) widgetId: string,
-  ): Promise<BaseResponseDto<BookingWidgetResponseDto>> {
-    const widget = await this.widgets.findInLocation(locationId, widgetId);
-    return this.toResponse(widget);
+  ): Promise<BaseResponseDto<BookingWidgetListItemResponseDto>> {
+    const widget = await this.widgets.findInLocationWithHistory(
+      locationId,
+      widgetId,
+    );
+    const stats = await this.stats.forWidgets(locationId, [widget.id]);
+    return BaseResponseDto.success(
+      BookingWidgetListItemResponseDto.fromListEntity(
+        widget,
+        stats.get(widget.id),
+      ),
+    );
   }
 
   @ApiOperation({

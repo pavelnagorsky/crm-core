@@ -28,6 +28,10 @@ import { SetClientBanDto } from '../dto/set-client-ban.dto.js';
 import { UpdateClientDto } from '../dto/update-client.dto.js';
 import { ClientSearchOrderBy } from '../enums/client-search-order-by.enum.js';
 import { ClientImportRow } from '../import/interfaces/client-import-row.interface.js';
+import { AcquisitionSourceCount } from '../interfaces/acquisition-source-count.interface.js';
+import { ClientAcquisition } from '../interfaces/client-acquisition.interface.js';
+import { TrafficSource } from '../../../shared/traffic/enums/traffic-source.enum.js';
+import { editTrafficSource } from '../../../shared/traffic/rules/traffic-source-edit.rules.js';
 
 const PHONE_LOOKUP_CHUNK = 500;
 const IMPORT_INSERT_CHUNK = 200;
@@ -47,7 +51,11 @@ export class ClientsService {
     let client: Client;
     try {
       client = await this.db.client.create({
-        data: { brandId, ...this.buildClientFields(dto) },
+        data: {
+          brandId,
+          ...this.buildClientFields(dto),
+          ...this.acquisitionSourceWrite(null, dto),
+        },
       });
     } catch (e: any) {
       if (e?.code === PrismaErrorCode.UNIQUE_CONSTRAINT_VIOLATION) {
@@ -73,7 +81,10 @@ export class ClientsService {
     try {
       client = await this.db.client.update({
         where: { id: clientId },
-        data: this.buildClientFields(dto),
+        data: {
+          ...this.buildClientFields(dto),
+          ...this.acquisitionSourceWrite(old, dto),
+        },
       });
     } catch (e: any) {
       if (e?.code === PrismaErrorCode.UNIQUE_CONSTRAINT_VIOLATION) {
@@ -184,6 +195,8 @@ export class ClientsService {
     if (search) where.OR = this.searchConditions(search);
     if (dto.banned === true) where.bannedAt = { not: null };
     else if (dto.banned === false) where.bannedAt = null;
+    if (dto.acquisitionSources?.length)
+      where.acquisitionSource = { in: dto.acquisitionSources };
 
     const direction = dto.orderDirection ?? OrderDirection.DESC;
     const orderBy = stableOrderBy<Prisma.ClientOrderByWithRelationInput>(
@@ -300,6 +313,97 @@ export class ClientsService {
     this.eventEmitter.emit(AUDIT_EVENT, event);
   }
 
+  /**
+   * Inside the booking transaction: makes this booking the client's first one, unless the client
+   * already has one (also set by a concurrent booking: the row lock serializes the check) or was
+   * imported. A source staff set on the profile is kept; otherwise the booking's source is taken.
+   * Returns whether this booking acquired the client.
+   */
+  async recordAcquisition(
+    clientId: string,
+    acquisition: ClientAcquisition,
+    tx: Prisma.TransactionClient,
+  ): Promise<boolean> {
+    const unacquired: Prisma.ClientWhereInput = {
+      id: clientId,
+      acquiredAt: null,
+      importedAt: null,
+    };
+    const withSource = await tx.client.updateMany({
+      where: { ...unacquired, acquisitionSource: null },
+      data: {
+        acquisitionBookingId: acquisition.bookingId,
+        acquiredAt: acquisition.acquiredAt,
+        acquisitionSource: acquisition.source,
+        acquisitionSourceDetail: acquisition.detail,
+      },
+    });
+    if (withSource.count > 0) return true;
+    const keepingSource = await tx.client.updateMany({
+      where: unacquired,
+      data: {
+        acquisitionBookingId: acquisition.bookingId,
+        acquiredAt: acquisition.acquiredAt,
+      },
+    });
+    return keepingSource.count > 0;
+  }
+
+  /** The source of the client's first booking was corrected: the client's source follows it. */
+  async syncAcquisitionSource(
+    clientId: string,
+    bookingId: string,
+    source: TrafficSource | null,
+    detail: string | null,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    await tx.client.updateMany({
+      where: { id: clientId, acquisitionBookingId: bookingId },
+      data: { acquisitionSource: source, acquisitionSourceDetail: detail },
+    });
+  }
+
+  /**
+   * The client's first booking moved to another client: this client is no longer acquired by it.
+   * The next booking acquires the client again.
+   */
+  async clearAcquisitionBooking(
+    clientId: string,
+    bookingId: string,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    await tx.client.updateMany({
+      where: { id: clientId, acquisitionBookingId: bookingId },
+      data: {
+        acquisitionBookingId: null,
+        acquiredAt: null,
+        acquisitionSource: null,
+        acquisitionSourceDetail: null,
+      },
+    });
+  }
+
+  /** Clients of an active brand acquired in [from, to), per acquisition source. */
+  async countAcquiredBySource(
+    brandId: string,
+    from: Date,
+    to: Date,
+  ): Promise<AcquisitionSourceCount[]> {
+    const rows = await this.db.client.groupBy({
+      by: ['acquisitionSource'],
+      where: {
+        brandId,
+        brand: ACTIVE_BRAND_WHERE,
+        acquiredAt: { gte: from, lt: to },
+      },
+      _count: { _all: true },
+    });
+    return rows.map((row) => ({
+      source: row.acquisitionSource as TrafficSource | null,
+      count: row._count._all,
+    }));
+  }
+
   async findExistingPhones(
     brandId: string,
     phones: string[],
@@ -343,6 +447,8 @@ export class ClientsService {
             : null,
           gender: row.gender,
           notes: row.notes,
+          // Imported clients came before Klendo: their first booking here is not an acquisition.
+          importedAt: occurredAt,
         })),
         skipDuplicates: true,
         select: { id: true, firstName: true, lastName: true, phone: true },
@@ -413,6 +519,28 @@ export class ClientsService {
         phone: { startsWith: prefix },
       })),
     ];
+  }
+
+  /**
+   * Source fields of a create (old is null) or an update: an omitted source is kept, a changed
+   * source without a detail drops the old detail, and a detail needs a source.
+   */
+  private acquisitionSourceWrite(
+    old: Client | null,
+    dto: CreateClientDto | UpdateClientDto,
+  ): {
+    acquisitionSource: TrafficSource | null;
+    acquisitionSourceDetail: string | null;
+  } {
+    const { source, detail } = editTrafficSource(
+      {
+        source: (old?.acquisitionSource as TrafficSource | null) ?? null,
+        detail: old?.acquisitionSourceDetail ?? null,
+      },
+      dto.acquisitionSource,
+      dto.acquisitionSourceDetail,
+    );
+    return { acquisitionSource: source, acquisitionSourceDetail: detail };
   }
 
   private buildClientFields(dto: CreateClientDto | UpdateClientDto) {

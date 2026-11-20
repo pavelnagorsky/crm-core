@@ -65,6 +65,27 @@ export class BookingWidgetsService {
     return widget;
   }
 
+  /** A widget with its last initializations: the site pages it was embedded on, newest first. */
+  async findInLocationWithHistory(
+    locationId: string,
+    widgetId: string,
+  ): Promise<BookingWidgetWithInitializationHistory> {
+    const widget = await this.db.bookingWidget.findFirst({
+      where: { location: ACTIVE_LOCATION_WHERE, id: widgetId, locationId },
+      include: {
+        initializationHistory: {
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        },
+      },
+    });
+    if (!widget)
+      throw new AppException(
+        ErrorCode.BOOKING_WIDGET_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
+    return widget;
+  }
+
   async create(
     locationId: string,
     dto: SaveBookingWidgetDto,

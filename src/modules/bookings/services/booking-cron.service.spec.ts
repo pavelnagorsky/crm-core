@@ -403,3 +403,29 @@ describe('BookingCronService.sendClientNotices', () => {
     expect(events.notifyStatus).not.toHaveBeenCalled();
   });
 });
+
+describe('BookingCronService.purgeClickIds', () => {
+  it('erases click ids older than 90 days and keeps their type', async () => {
+    const updateMany = vi.fn().mockResolvedValue({ count: 2 });
+    const service = new BookingCronService(
+      { bookingTrafficTouch: { updateMany } } as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    await expect(
+      service.purgeClickIds(new Date('2026-11-20T04:00:00.000Z')),
+    ).resolves.toBe(2);
+    expect(updateMany).toHaveBeenCalledExactlyOnceWith({
+      where: {
+        clickId: { not: null },
+        createdAt: { lt: new Date('2026-08-22T04:00:00.000Z') },
+      },
+      data: { clickId: null },
+    });
+  });
+});

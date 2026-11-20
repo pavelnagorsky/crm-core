@@ -25,6 +25,9 @@ import { SeriesRow } from '../../interfaces/series-row.interface.js';
 import { ServiceCount } from '../../interfaces/service-count.interface.js';
 import { ChannelCount } from '../../interfaces/channel-count.interface.js';
 import { StaffCount } from '../../interfaces/staff-count.interface.js';
+import { TrafficSourceTotals } from '../../interfaces/traffic-source-totals.interface.js';
+import { TrafficSourceTotalsRow } from '../../interfaces/traffic-source-totals-row.interface.js';
+import { TrafficSource } from '../../../../shared/traffic/enums/traffic-source.enum.js';
 import {
   CLIENT_RECENCY_BOUNDS,
   isClientRecencyBucket,
@@ -151,6 +154,85 @@ export class BookingsAggregatesService {
       _count: { _all: true },
     });
     return grouped.map((g) => ({ channel: g.channel, count: g._count._all }));
+  }
+
+  /**
+   * Bookings created in [from, to) by traffic source, by source and lowercase detail, and in
+   * total, in one GROUPING SETS query. Anchored on createdAt: a booking counts when it was made,
+   * whatever its visit date. New clients are bookings that acquired their client. Revenue is of
+   * completed visits, scoped to the staff or catalog item filter like other booking aggregates.
+   */
+  async trafficSourceTotals(
+    range: AggregateRange,
+  ): Promise<TrafficSourceTotals> {
+    const rows = await this.db.$queryRaw<
+      Array<{
+        source: TrafficSource | null;
+        detail: string | null;
+        sourceGrouped: number;
+        detailGrouped: number;
+        bookings: bigint;
+        channelBookings: bigint;
+        newClients: bigint;
+        completedVisits: bigint;
+        completedRevenue: string;
+      }>
+    >(
+      Prisma.sql`
+        SELECT b."trafficSource"::text AS source,
+               LOWER(b."trafficSourceDetail") AS detail,
+               GROUPING(b."trafficSource")::int AS "sourceGrouped",
+               GROUPING(LOWER(b."trafficSourceDetail"))::int AS "detailGrouped",
+               COUNT(*)::bigint AS bookings,
+               COUNT(*) FILTER (
+                 WHERE b."bookingPageId" IS NOT NULL OR b."bookingWidgetId" IS NOT NULL
+               )::bigint AS "channelBookings",
+               COUNT(c."id")::bigint AS "newClients",
+               COUNT(*) FILTER (WHERE b."status"::text = ${BookingStatus.COMPLETED})::bigint AS "completedVisits",
+               COALESCE(
+                 SUM(item_totals.revenue) FILTER (WHERE b."status"::text = ${BookingStatus.COMPLETED}),
+                 0
+               )::text AS "completedRevenue"
+        FROM "Booking" b
+        LEFT JOIN "Client" c ON c."acquisitionBookingId" = b."id"
+        ${this.itemTotalsJoin(range)}
+        WHERE ${this.whereClause(range, undefined, 'createdAt')}
+        GROUP BY GROUPING SETS (
+          (b."trafficSource"),
+          (b."trafficSource", LOWER(b."trafficSourceDetail")),
+          ()
+        )
+      `,
+    );
+    const toRow = (row: (typeof rows)[number]): TrafficSourceTotalsRow => ({
+      source: row.sourceGrouped ? null : row.source,
+      detail: row.detailGrouped ? null : row.detail,
+      bookings: Number(row.bookings),
+      channelBookings: Number(row.channelBookings),
+      newClients: Number(row.newClients),
+      completedVisits: Number(row.completedVisits),
+      completedRevenue: MoneyUtils.decimal(row.completedRevenue),
+    });
+    const totalRow = rows.find((row) => row.sourceGrouped);
+    return {
+      sources: rows
+        .filter((row) => !row.sourceGrouped && row.detailGrouped)
+        .map(toRow),
+      details: rows
+        .filter((row) => !row.detailGrouped && row.detail !== null)
+        .map(toRow),
+      total: totalRow
+        ? toRow(totalRow)
+        : {
+            source: null,
+            detail: null,
+            bookings: 0,
+            channelBookings: 0,
+            newClients: 0,
+            completedVisits: 0,
+            completedRevenue: MoneyUtils.decimal(0),
+          },
+    };
   }
 
   /**
@@ -552,16 +634,18 @@ export class BookingsAggregatesService {
   private whereClause(
     range: AggregateRange,
     statuses?: BookingStatus[],
+    anchor: 'startAt' | 'createdAt' = 'startAt',
   ): Prisma.Sql {
-    // startAt is stored as naive `timestamp` in UTC. Cast the Date-typed bind params to
-    // `timestamp` explicitly so the comparison stays on the indexed column and doesn't
+    // startAt and createdAt are stored as naive `timestamp` in UTC. Cast the Date-typed bind
+    // params to `timestamp` explicitly so the comparison stays on the indexed column and doesn't
     // depend on session TIMEZONE (Prisma binds Date as timestamptz).
+    const anchorColumn = Prisma.raw(`b."${anchor}"`);
     const parts: Prisma.Sql[] = [
       this.activeLocationScope(range.locationIds),
       activeLocationSql(Prisma.sql`b."locationId"`),
       Prisma.sql`b."deletedAt" IS NULL`,
-      Prisma.sql`b."startAt" >= ${range.from}::timestamptz AT TIME ZONE 'UTC'`,
-      Prisma.sql`b."startAt" <  ${range.to}::timestamptz AT TIME ZONE 'UTC'`,
+      Prisma.sql`${anchorColumn} >= ${range.from}::timestamptz AT TIME ZONE 'UTC'`,
+      Prisma.sql`${anchorColumn} <  ${range.to}::timestamptz AT TIME ZONE 'UTC'`,
     ];
     if (statuses && statuses.length > 0) {
       parts.push(

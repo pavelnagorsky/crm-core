@@ -34,4 +34,14 @@ export enum ClientsAnalyticsWidgetKey {
    * add up to the big number, because a person who came in two different weeks is in both.
    */
   REVENUE_PER_CLIENT = 'REVENUE_PER_CLIENT',
+
+  /**
+   * Bars of new clients by where they came from, tallest first (kind `breakdown`, dimension
+   * "acquisitionSource"). A new client is one whose first booking in the brand was made in the
+   * period (acquiredAt); imported clients are never new. The source is the client's acquisition
+   * source as staff may have corrected it. Item ids are TrafficSource values or "NONE"; labels
+   * are Russian. `value` is clients, `sharePct` the share of `breakdown.total`. Brand-wide, no
+   * previous period.
+   */
+  NEW_CLIENTS_BY_SOURCE = 'NEW_CLIENTS_BY_SOURCE',
 }

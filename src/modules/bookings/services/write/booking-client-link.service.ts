@@ -1,5 +1,6 @@
 import { BadRequestException, HttpStatus, Injectable } from '@nestjs/common';
-import { Client } from '@prisma/client';
+import { Booking, Client, Prisma } from '@prisma/client';
+import { TrafficSource } from '../../../../shared/traffic/enums/traffic-source.enum.js';
 import { AppException } from '../../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
 import { ClientsService } from '../../../clients/services/clients.service.js';
@@ -74,6 +75,47 @@ export class BookingClientLinkService {
       dto.email,
     );
     return this.fromClient(found);
+  }
+
+  /**
+   * Inside the update transaction, keeps the clients' first booking right. A booking moved to
+   * another client stops acquiring the old one (its next booking acquires it again) and acquires
+   * the new one if that client has no first booking yet (a client just created by phone). A
+   * corrected source of the first booking becomes the client's source.
+   */
+  async syncAcquisition(
+    old: Booking,
+    updated: Booking,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    const source = updated.trafficSource as TrafficSource | null;
+    if (old.clientId !== updated.clientId) {
+      if (old.clientId)
+        await this.clients.clearAcquisitionBooking(old.clientId, old.id, tx);
+      if (updated.clientId)
+        await this.clients.recordAcquisition(
+          updated.clientId,
+          {
+            bookingId: updated.id,
+            source,
+            detail: updated.trafficSourceDetail,
+            acquiredAt: updated.createdAt,
+          },
+          tx,
+        );
+      return;
+    }
+    const sourceChanged =
+      old.trafficSource !== updated.trafficSource ||
+      old.trafficSourceDetail !== updated.trafficSourceDetail;
+    if (updated.clientId && sourceChanged)
+      await this.clients.syncAcquisitionSource(
+        updated.clientId,
+        updated.id,
+        source,
+        updated.trafficSourceDetail,
+        tx,
+      );
   }
 
   private fromClient(client: Client): BookingClientLink {

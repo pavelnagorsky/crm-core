@@ -70,6 +70,7 @@ Backend обменивает код на access token провайдера, по
 - [Роли и permissions](docs/architecture/rbac.md), [проверки API](docs/architecture/rbac-permissions-map.md), [контракты управления доступом](docs/architecture/rbac-contracts.md).
 - [Интеграция управления доступом на frontend](docs/frontend-access-management.md): участники, приглашения и настройки ролей.
 - [Заказы, возвраты и связь с бронированием](docs/orders.md).
+- [Источники записей и привлечение клиентов](docs/traffic-attribution.md).
 - [Удаление и восстановление бизнеса](docs/business-soft-delete.md).
 - [Демонстрационные данные](scripts/seed/README.md).
 

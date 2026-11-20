@@ -7,6 +7,7 @@ import {
   IsArray,
   IsBoolean,
   IsEmail,
+  IsIn,
   IsOptional,
   IsString,
   IsUUID,
@@ -17,6 +18,9 @@ import { MULTI_SERVICE_MAX_ITEMS } from '../../services/constants/multi-service.
 import { IsLocalDateTime } from '../../../shared/time/decorators/is-local-date-time.validator.js';
 import { IsPhone } from '../../../shared/decorators/is-phone.decorator.js';
 import { UpdateBookingItemPriceDto } from './update-booking-item-price.dto.js';
+import { MANUAL_TRAFFIC_SOURCES } from '../../../shared/traffic/constants/manual-traffic-sources.constants.js';
+import { TRAFFIC_DETAIL_MAX_LENGTH } from '../../../shared/traffic/constants/traffic-limits.constants.js';
+import { TrafficSource } from '../../../shared/traffic/enums/traffic-source.enum.js';
 import { BookingItemStaffAssignmentDto } from './booking-item-staff-assignment.dto.js';
 
 export class UpdateBookingDto {
@@ -164,4 +168,29 @@ export class UpdateBookingDto {
   @IsString()
   @MaxLength(2000)
   internalNotes?: string;
+
+  @ApiProperty({
+    enum: TrafficSource,
+    enumName: 'TrafficSource',
+    required: false,
+    nullable: true,
+    description:
+      'Manual bookings only (else 400 BOOKING_TRAFFIC_SOURCE_READ_ONLY). Omit to keep, null to clear. Any source except DIRECT. A changed source without trafficSourceDetail clears the detail. When this is the client first booking, the client acquisition source follows.',
+  })
+  @IsOptional()
+  @IsIn(MANUAL_TRAFFIC_SOURCES)
+  trafficSource?: TrafficSource | null;
+
+  @ApiProperty({
+    type: String,
+    maxLength: TRAFFIC_DETAIL_MAX_LENGTH,
+    required: false,
+    nullable: true,
+    description:
+      'Manual bookings only (else 400 BOOKING_TRAFFIC_SOURCE_READ_ONLY). Omit to keep, null to clear. Needs a source (400 TRAFFIC_SOURCE_DETAIL_WITHOUT_SOURCE).',
+  })
+  @IsOptional()
+  @IsString()
+  @MaxLength(TRAFFIC_DETAIL_MAX_LENGTH)
+  trafficSourceDetail?: string | null;
 }

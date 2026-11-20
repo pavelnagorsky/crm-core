@@ -1,5 +1,6 @@
 import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
+import { TrafficSource } from '../../../shared/traffic/enums/traffic-source.enum.js';
 import { BookingChannelEvent } from '../enums/booking-channel-event.enum.js';
 import { BookingChannelStatsService } from './booking-channel-stats.service.js';
 import { BookingPagesService } from './booking-pages.service.js';
@@ -7,9 +8,15 @@ import { BookingWidgetsService } from './booking-widgets.service.js';
 
 function fixture() {
   const db = {
-    bookingPage: { findFirst: vi.fn().mockResolvedValue({ id: 'page' }) },
+    bookingPage: {
+      findFirst: vi
+        .fn()
+        .mockResolvedValue({ id: 'page', locationId: 'location' }),
+    },
     bookingWidget: {
-      findFirst: vi.fn().mockResolvedValue({ id: 'widget' }),
+      findFirst: vi
+        .fn()
+        .mockResolvedValue({ id: 'widget', locationId: 'location' }),
     },
     bookingPageStats: {
       findMany: vi.fn().mockResolvedValue([]),
@@ -33,14 +40,24 @@ function fixture() {
     {} as never,
     { emit: vi.fn() } as never,
   );
+  const traffic = {
+    classify: vi.fn().mockReturnValue({
+      source: TrafficSource.INSTAGRAM,
+      detail: null,
+      touch: null,
+    }),
+    recordChannelEvent: vi.fn(),
+  };
   return {
     db,
     bookings,
+    traffic,
     service: new BookingChannelStatsService(
       db as never,
       bookings as never,
       pages,
       widgets,
+      traffic as never,
     ),
   };
 }
@@ -84,8 +101,25 @@ describe.each(['page', 'widget'] as const)(
       );
     });
 
+    it('counts the event under the classified source of the visit', async () => {
+      const { service, traffic } = fixture();
+      const touch = { utmSource: 'ig' };
+      if (kind === 'page')
+        await service.recordPage('id', BookingChannelEvent.FORM_OPEN, touch);
+      else
+        await service.recordWidget('id', BookingChannelEvent.FORM_OPEN, touch);
+      expect(traffic.classify).toHaveBeenCalledExactlyOnceWith(touch);
+      expect(traffic.recordChannelEvent).toHaveBeenCalledExactlyOnceWith({
+        locationId: 'location',
+        channel: kind === 'page' ? 'PUBLIC_PAGE' : 'WIDGET',
+        channelId: 'id',
+        event: BookingChannelEvent.FORM_OPEN,
+        source: TrafficSource.INSTAGRAM,
+      });
+    });
+
     it('rejects unavailable channels before writing', async () => {
-      const { service, db } = fixture();
+      const { service, db, traffic } = fixture();
       db.bookingPage.findFirst.mockResolvedValue(null);
       db.bookingWidget.findFirst.mockResolvedValue(null);
       await expect(
@@ -93,6 +127,7 @@ describe.each(['page', 'widget'] as const)(
       ).rejects.toMatchObject({ status: 404 });
       expect(db.bookingPageStats.upsert).not.toHaveBeenCalled();
       expect(db.bookingWidgetStats.upsert).not.toHaveBeenCalled();
+      expect(traffic.recordChannelEvent).not.toHaveBeenCalled();
     });
 
     it('handles deletion between validation and increment', async () => {

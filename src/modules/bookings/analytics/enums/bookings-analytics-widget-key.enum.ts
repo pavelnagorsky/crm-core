@@ -35,4 +35,26 @@ export enum BookingsAnalyticsWidgetKey {
    * requires booking confirmation. There is no sparkline and no previous period.
    */
   PENDING_CONFIRMATION = 'PENDING_CONFIRMATION',
+
+  /**
+   * Table of where bookings came from (kind `table`, `table.dimension` "trafficSource"). Bookings
+   * are counted by when they were made (createdAt in the period), not by visit date. Columns:
+   * views and formOpens of the booking pages and widgets, bookings, newClients (first bookings of
+   * a client in the brand), completedVisits, completedRevenue (`meta.currency`) and
+   * conversionPct = page and widget bookings / views * 100 (null without views).
+   *
+   * Top rows: one per source, id is the TrafficSource or "NONE" (manual bookings without a
+   * source). Under each, rows per lowercase detail (id "SOURCE:detail", parentId the source): the
+   * top 10 by bookings and "SOURCE:__other__" summing the rest; their views, formOpens and
+   * conversionPct are null. `table.totals` is the whole period. With `staffId` the bookings are
+   * those of the staff member and views, formOpens and conversionPct are null. No previous period.
+   */
+  TRAFFIC_SOURCES = 'TRAFFIC_SOURCES',
+
+  /**
+   * Bars of bookings by source, tallest first (kind `breakdown`, dimension "trafficSource"),
+   * counted by createdAt like TRAFFIC_SOURCES. `value` is bookings, `secondaryValue` new clients,
+   * `sharePct` the share of `breakdown.total`. Ids as in TRAFFIC_SOURCES. No previous period.
+   */
+  BOOKINGS_BY_TRAFFIC_SOURCE = 'BOOKINGS_BY_TRAFFIC_SOURCE',
 }

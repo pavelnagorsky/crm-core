@@ -766,7 +766,9 @@
       "customPrice": "Цена",
       "staffName": "Сотрудник",
       "notes": "Заметки клиента",
-      "internalNotes": "Внутренние заметки"
+      "internalNotes": "Внутренние заметки",
+      "trafficSource": "Источник",
+      "trafficSourceDetail": "Уточнение источника"
     },
     "CLIENT": {
       "firstName": "Имя",
@@ -777,7 +779,9 @@
       "gender": "Пол",
       "notes": "Заметки",
       "bannedAt": "Бан онлайн-записи",
-      "banReason": "Причина бана"
+      "banReason": "Причина бана",
+      "acquisitionSource": "Источник привлечения",
+      "acquisitionSourceDetail": "Уточнение источника"
     },
     "STAFF": {
       "name": "Имя",

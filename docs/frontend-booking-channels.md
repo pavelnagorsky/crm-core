@@ -7,6 +7,10 @@ OpenAPI: [booking-channels.openapi.json](./booking-channels.openapi.json).
 
 ## История инициализаций виджета
 
+`GET /locations/{locationId}/booking-widgets` и `GET /locations/{locationId}/booking-widgets/{widgetId}`
+возвращают `initializationHistory` (последние 10 инициализаций, новые первыми): по ней
+редактор ссылок показывает страницы сайта с виджетом.
+
 При запросе `GET /public/booking-widgets/{widgetId}` код виджета должен передавать
 полный URL страницы размещения в заголовке `X-Widget-Page-Url`:
 
@@ -178,7 +182,11 @@ Google: подключить контейнер по
 | Страница | `POST /public/booking-pages/{pageId}/events`     |
 | Виджет   | `POST /public/booking-widgets/{widgetId}/events` |
 
-Тело: `{ "event": "VIEW" }` или `{ "event": "FORM_OPEN" }`. Значение счётчика,
+Тело: `{ "event": "VIEW" }` или `{ "event": "FORM_OPEN" }`, с необязательным
+`traffic` - последним непрямым касанием посетителя, как при создании записи
+([источники записей](traffic-attribution.md)). Событие учитывается и в почасовой
+статистике по источнику (`BookingTrafficStat`); без `traffic` - как `DIRECT`.
+Значение счётчика,
 дату, sessionId или событие создания записи передавать не нужно. Успех: `200` и
 `BaseResponseDto` с `responseValue: null`. Каждое принятое событие увеличивает один
 счётчик на `1`. События не хранятся и не дедуплицируются; автоматически повторять

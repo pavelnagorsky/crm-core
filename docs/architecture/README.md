@@ -10,6 +10,7 @@
 - [domain-ownership.md](./domain-ownership.md) — владельцы таблиц и границы доступа к данным.
 - [flows.md](./flows.md) — связи доменов в основных бизнес-сценариях.
 - [booking-write-flows.md](./booking-write-flows.md) — запись бронирований, блокировки и восстановление интервалов.
+- [traffic-attribution.md](../traffic-attribution.md) - каналы и источники записей, привлечение клиентов, аналитика источников.
 - [services-catalog.md](./services-catalog.md) — каталог услуг, SQL view и развёртывание пустой базы.
 - [rbac.md](./rbac.md) — текущая модель ролей, defaults, области и вычисление permissions.
 - [rbac-permissions-map.md](./rbac-permissions-map.md) — проверки доступа к HTTP-маршрутам.
@@ -67,6 +68,8 @@ flowchart LR
   BookingChannelsModule --> ServiceCatalogModule
   BookingChannelsModule --> FilesModule
   BookingChannelsModule --> BookingsModule
+  BookingChannelsModule --> BookingTrafficModule
+  BookingsAnalyticsModule --> BookingTrafficModule
 
   OrdersModule --> ProductsModule
   OrdersModule --> InventoryModule

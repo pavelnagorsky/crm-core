@@ -2,6 +2,7 @@ import { ResolvedBrandRange } from '../../../dashboard/interfaces/resolved-brand
 import { ClientCohortBucket } from '../../../bookings/interfaces/client-cohort-bucket.interface.js';
 import { ClientCohortSummary } from '../../../bookings/interfaces/client-cohort-summary.interface.js';
 import { ClientRecencyRow } from '../../../bookings/interfaces/client-recency-row.interface.js';
+import { AcquisitionSourceCount } from '../../interfaces/acquisition-source-count.interface.js';
 
 export interface ClientAnalyticsContext {
   range: ResolvedBrandRange;
@@ -11,4 +12,5 @@ export interface ClientAnalyticsContext {
   previousSeries: ClientCohortBucket[];
   currentRecency: ClientRecencyRow[];
   previousRecency?: ClientRecencyRow[];
+  acquiredBySource?: AcquisitionSourceCount[];
 }

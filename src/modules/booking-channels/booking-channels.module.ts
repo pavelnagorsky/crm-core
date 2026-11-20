@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AppCacheModule } from '../../shared/cache/app-cache.module.js';
 import { BookingsAggregatesModule } from '../bookings/aggregates/bookings-aggregates.module.js';
+import { BookingTrafficModule } from '../booking-traffic/booking-traffic.module.js';
 import { BookingsModule } from '../bookings/bookings.module.js';
 import { FilesModule } from '../files/files.module.js';
 import { LocationModule } from '../location/location.module.js';
@@ -26,6 +27,7 @@ import { BookingWidgetsService } from './services/booking-widgets.service.js';
     FilesModule,
     BookingsModule,
     BookingsAggregatesModule,
+    BookingTrafficModule,
     ReviewsModule,
   ],
   controllers: [

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { CLICK_ID_RETENTION_DAYS } from '../../../shared/traffic/constants/traffic-limits.constants.js';
 import { BookingStatus, ClientNoticeType, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
@@ -19,6 +20,8 @@ import {
 import { reviewRequestWindow } from '../rules/booking-cron.rules.js';
 import { BookingClientTokenService } from './booking-client-token.service.js';
 import { BookingEventsService } from './booking-events.service.js';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 @Injectable()
 export class BookingCronService {
@@ -220,6 +223,25 @@ export class BookingCronService {
           });
       }),
     );
+  }
+
+  /**
+   * Daily: erases ad click ids older than the retention period. They identify a visitor at the
+   * ad platform; the click id type stays as evidence of the source.
+   */
+  @Cron(CronExpression.EVERY_DAY_AT_4AM)
+  async purgeClickIds(now = new Date()): Promise<number> {
+    const { count } = await this.db.bookingTrafficTouch.updateMany({
+      where: {
+        clickId: { not: null },
+        createdAt: {
+          lt: new Date(now.getTime() - CLICK_ID_RETENTION_DAYS * DAY_MS),
+        },
+      },
+      data: { clickId: null },
+    });
+    if (count > 0) this.logger.log(`Erased ${count} booking click id(s)`);
+    return count;
   }
 
   @Cron(CronExpression.EVERY_10_MINUTES)

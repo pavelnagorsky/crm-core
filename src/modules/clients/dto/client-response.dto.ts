@@ -1,5 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Client } from '@prisma/client';
+import { TrafficSource } from '../../../shared/traffic/enums/traffic-source.enum.js';
 
 export class ClientResponseDto {
   @ApiProperty({ type: String })
@@ -38,6 +39,34 @@ export class ClientResponseDto {
   @ApiProperty({ type: String, nullable: true })
   banReason: string | null;
 
+  @ApiProperty({
+    enum: TrafficSource,
+    enumName: 'TrafficSource',
+    nullable: true,
+    description:
+      'Where the client came from: the source of their first booking in the brand, or set by staff. Null: not known',
+  })
+  acquisitionSource: TrafficSource | null;
+
+  @ApiProperty({ type: String, maxLength: 64, nullable: true })
+  acquisitionSourceDetail: string | null;
+
+  @ApiProperty({
+    type: Date,
+    nullable: true,
+    description:
+      'When the first booking in the brand was made. Null for imported clients and clients without bookings',
+  })
+  acquiredAt: Date | null;
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    nullable: true,
+    description: 'The first booking in the brand',
+  })
+  acquisitionBookingId: string | null;
+
   @ApiProperty({ type: Date })
   createdAt: Date;
 
@@ -58,6 +87,10 @@ export class ClientResponseDto {
     dto.notes = client.notes;
     dto.bannedAt = client.bannedAt;
     dto.banReason = client.banReason;
+    dto.acquisitionSource = client.acquisitionSource as TrafficSource | null;
+    dto.acquisitionSourceDetail = client.acquisitionSourceDetail;
+    dto.acquiredAt = client.acquiredAt;
+    dto.acquisitionBookingId = client.acquisitionBookingId;
     dto.createdAt = client.createdAt;
     dto.updatedAt = client.updatedAt;
     return dto;

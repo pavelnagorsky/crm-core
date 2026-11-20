@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { LocaleService } from '../../../shared/i18n/locale.service.js';
+import { trafficSourceBreakdown } from '../rules/traffic-source-widgets.js';
 import { BookingStatus } from '@prisma/client';
 import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import {
@@ -40,6 +42,7 @@ export class DashboardWidgetFactory {
     private readonly metricFactory: DashboardMetricFactory,
     private readonly seriesFactory: DashboardSeriesFactory,
     private readonly buckets: DashboardBucketFactory,
+    private readonly locale: LocaleService,
   ) {}
   build(key: DashboardWidgetKey, ctx: DashboardReadContext): WidgetDto {
     switch (key) {
@@ -111,6 +114,8 @@ export class DashboardWidgetFactory {
         return this.bookingsSeries(key, ctx);
       case DashboardWidgetKey.BOOKINGS_BY_CHANNEL:
         return this.bookingsByChannel(key, ctx);
+      case DashboardWidgetKey.BOOKINGS_BY_TRAFFIC_SOURCE:
+        return this.bookingsByTrafficSource(key, ctx);
       case DashboardWidgetKey.BOOKINGS_HEATMAP:
         return this.bookingsHeatmap(key, ctx);
       case DashboardWidgetKey.REVENUE_BY_STAFF:
@@ -371,6 +376,24 @@ export class DashboardWidgetFactory {
       key,
       kind: WidgetKind.BREAKDOWN,
       breakdown: { dimension: 'channel', items, total },
+      meta: this.buildMeta(ctx, false),
+    };
+  }
+
+  private bookingsByTrafficSource(
+    key: DashboardWidgetKey,
+    ctx: DashboardReadContext,
+  ): WidgetDto {
+    const messages = this.locale.get();
+    return {
+      key,
+      kind: WidgetKind.BREAKDOWN,
+      breakdown: ctx.trafficTotals
+        ? trafficSourceBreakdown(ctx.trafficTotals, {
+            sources: messages.trafficSource,
+            otherDetails: messages.trafficDetailOther,
+          })
+        : { dimension: 'trafficSource', items: [], total: 0 },
       meta: this.buildMeta(ctx, false),
     };
   }

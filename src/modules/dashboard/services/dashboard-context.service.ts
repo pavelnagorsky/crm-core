@@ -67,6 +67,7 @@ export class DashboardContextService {
       staffRevenueRows,
       staffCompletedRows,
       productStaffRows,
+      trafficTotals,
     ] = await Promise.all([
       needsBookingSnapshot || needsRevenueBySaleType
         ? this.bookingsAggregates.snapshot(current)
@@ -131,6 +132,9 @@ export class DashboardContextService {
       needsStaff
         ? this.ordersAggregates.productSalesByStaff(current)
         : Promise.resolve([]),
+      selected.has(DashboardWidgetKey.BOOKINGS_BY_TRAFFIC_SOURCE)
+        ? this.bookingsAggregates.trafficSourceTotals(current)
+        : Promise.resolve(undefined),
     ]);
     return {
       locationId,
@@ -149,6 +153,7 @@ export class DashboardContextService {
       staffRevenueRows,
       staffCompletedRows,
       productStaffRows,
+      trafficTotals,
     };
   }
 }
