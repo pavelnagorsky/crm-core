@@ -21,8 +21,7 @@ describe('BookingPaymentService.pay', () => {
       $transaction: vi.fn((run: (client: typeof tx) => unknown) => run(tx)),
     };
     const payments = {
-      lockKey: vi.fn(),
-      findReplay: vi.fn().mockResolvedValue(null),
+      lockKeyForReplay: vi.fn().mockResolvedValue(null),
     };
     const lifecycle = { completeInTransaction: vi.fn() };
     const service = new BookingPaymentService(

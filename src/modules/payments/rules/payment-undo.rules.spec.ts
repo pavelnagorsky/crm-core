@@ -2,10 +2,7 @@ import { HttpStatus } from '@nestjs/common';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { PaymentType } from '../enums/payment-type.enum.js';
 import { thrownAppException } from '../testing/thrown-app-exception.js';
-import {
-  assertPaymentUndoable,
-  isOperationVoided,
-} from './payment-undo.rules.js';
+import { assertPaymentUndoable } from './payment-undo.rules.js';
 
 const createdAt = new Date('2026-11-21T10:00:00.000Z');
 const operation = {
@@ -73,21 +70,5 @@ describe('assertPaymentUndoable', () => {
       }),
     );
     expect(error.errorCode).toBe(ErrorCode.PAYMENT_UNDO_NOT_ALLOWED.code);
-  });
-});
-
-describe('isOperationVoided', () => {
-  it('is true when every record is voided', () => {
-    expect(
-      isOperationVoided({ payments: [{ voidedAt: createdAt }] }),
-    ).toBe(true);
-  });
-
-  it('is false while a record is active', () => {
-    expect(
-      isOperationVoided({
-        payments: [{ voidedAt: createdAt }, { voidedAt: null }],
-      }),
-    ).toBe(false);
   });
 });

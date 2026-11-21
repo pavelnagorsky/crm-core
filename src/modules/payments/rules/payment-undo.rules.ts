@@ -6,13 +6,6 @@ import { PaymentType } from '../enums/payment-type.enum.js';
 import { PaymentUndoContext } from '../interfaces/payment-undo-context.interface.js';
 import { UndoablePaymentOperation } from '../interfaces/undoable-payment-operation.interface.js';
 
-/** Whether every record of the operation is voided already: an undo has nothing to do. */
-export function isOperationVoided(operation: {
-  payments: readonly { voidedAt: Date | null }[];
-}): boolean {
-  return operation.payments.every((payment) => payment.voidedAt !== null);
-}
-
 /**
  * An undo fixes a mistaken click: only a first payment (not a replacement) of an order without
  * active refunds, only by its author (409 PAYMENT_UNDO_NOT_ALLOWED) and within 10 minutes of

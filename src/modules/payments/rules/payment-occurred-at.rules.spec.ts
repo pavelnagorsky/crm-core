@@ -2,6 +2,7 @@ import {
   assertPaymentDate,
   defaultSalePaymentDate,
   defaultVisitPaymentDate,
+  recordedPaymentDate,
   resolvePaymentDate,
 } from './payment-occurred-at.rules.js';
 
@@ -86,5 +87,22 @@ describe('defaultSalePaymentDate', () => {
     const today = new Date('2026-11-20T05:00:00.000Z');
     expect(defaultSalePaymentDate(yesterday, now, minsk)).toBe(yesterday);
     expect(defaultSalePaymentDate(today, now, minsk)).toBe(now);
+  });
+});
+
+describe('recordedPaymentDate', () => {
+  const explicit = new Date('2026-11-19T10:00:00.000Z');
+  const replaced = new Date('2026-11-18T10:00:00.000Z');
+
+  it('takes the explicit date first', () => {
+    expect(recordedPaymentDate(explicit, replaced, now)).toBe(explicit);
+  });
+
+  it('keeps the date of the replaced payment', () => {
+    expect(recordedPaymentDate(null, replaced, now)).toBe(replaced);
+  });
+
+  it('falls back to the default date', () => {
+    expect(recordedPaymentDate(null, undefined, now)).toBe(now);
   });
 });

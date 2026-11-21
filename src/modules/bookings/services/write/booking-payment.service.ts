@@ -1,22 +1,16 @@
-import {
-  ForbiddenException,
-  HttpStatus,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
-import { AppException } from '../../../../shared/exceptions/app.exception.js';
-import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
 import { AuditActionType } from '../../../audit/enums/audit-action-type.enum.js';
 import { AuditEvent } from '../../../audit/enums/audit-event.enum.js';
 import { AuditActor } from '../../../audit/interfaces/audit-actor.interface.js';
 import { LocationService } from '../../../location/services/location.service.js';
-import { OrderItemStatus } from '../../../orders/enums/order-item-status.enum.js';
-import { OrderItemType } from '../../../orders/enums/order-item-type.enum.js';
+import { OrderWithItems } from '../../../orders/interfaces/order-with-items.interface.js';
 import { OrderPaymentsFacade } from '../../../orders/order-payments.facade.js';
 import { OrdersFacade } from '../../../orders/orders.facade.js';
+import { assertVisitParticipant } from '../../../orders/rules/order-payment-correction.rules.js';
+import { PaymentInputDto } from '../../../payments/dto/payment-input.dto.js';
+import { PaymentChange } from '../../../payments/interfaces/payment-change.interface.js';
 import { PaymentOperationWithPayments } from '../../../payments/interfaces/payment-operation-with-payments.interface.js';
 import { PaymentsFacade } from '../../../payments/payments.facade.js';
 import {
@@ -35,10 +29,14 @@ import { VisitPaymentPlanInput } from '../../interfaces/visit-payment-plan-input
 import { VisitPaymentResult } from '../../interfaces/visit-payment-result.interface.js';
 import { VisitPaymentPlan } from '../../interfaces/visit-payment-plan.interface.js';
 import {
-  CLOSED_WITHOUT_VISIT_STATUSES,
   completesOnPayment,
   visitAmountDue,
 } from '../../rules/visit-payment-due.rules.js';
+import {
+  assertProductsConfirmable,
+  confirmsProducts,
+  productItemIdsToConfirm,
+} from '../../rules/visit-payment-step.rules.js';
 import { BookingEventsService } from '../booking-events.service.js';
 import { BookingLifecycleService } from './booking-lifecycle.service.js';
 
@@ -71,38 +69,17 @@ export class BookingPaymentService {
     input: VisitPaymentPlanInput,
     canReplace: boolean,
   ): Promise<VisitPaymentPlan | null> {
-    const confirmProductItemIds = input.confirmProductItemIds ?? [];
-    const confirmAllDraftProducts = input.confirmAllDraftProducts === true;
-    if (
-      !input.payment &&
-      confirmProductItemIds.length === 0 &&
-      !confirmAllDraftProducts
-    )
-      return null;
+    const products = {
+      confirmProductItemIds: input.confirmProductItemIds ?? [],
+      confirmAllDraftProducts: input.confirmAllDraftProducts === true,
+    };
+    if (!input.payment && !confirmsProducts(products)) return null;
     const now = new Date();
-    // Fails fast before any lock; PaymentsFacade.record checks again under the locks.
-    if (input.payment)
-      assertPaymentTrackingEnabled(
-        await this.locations.getPaymentTracking(locationId),
-      );
     const { timezone } = await this.locations.getLocale(locationId);
     const payment = input.payment
-      ? {
-          input: input.payment,
-          request: paymentRequest(
-            input.payment,
-            resolvePaymentDate(input.payment.occurredAt, timezone, now),
-          ),
-        }
+      ? await this.planPayment(locationId, input.payment, timezone, now)
       : null;
-    return {
-      payment,
-      confirmProductItemIds,
-      confirmAllDraftProducts,
-      canReplace,
-      timezone,
-      now,
-    };
+    return { ...products, payment, canReplace, timezone, now };
   }
 
   /**
@@ -126,28 +103,19 @@ export class BookingPaymentService {
       async (tx) => {
         const replay = await this.lockForBooking(tx, booking, plan);
         if (replay) return { replay, outcome: null };
-        const locked = await this.lockBooking(
+        const outcome = await this.payLocked(
           tx,
-          booking.locationId,
-          booking.id,
+          booking,
+          plan,
+          actor,
+          participantStaffId,
         );
-        if (
-          participantStaffId &&
-          !locked.items.some((item) => item.staffId === participantStaffId)
-        )
-          throw new ForbiddenException('Access denied');
-        return {
-          replay: null,
-          outcome: await this.applyLocked(tx, locked, plan, actor),
-        };
+        return { replay: null, outcome };
       },
       { maxWait: 5_000, timeout: 30_000 },
     );
     if (result.replay)
-      return {
-        orderId: result.replay.orderId,
-        operationId: result.replay.id,
-      };
+      return { orderId: result.replay.orderId, operationId: result.replay.id };
     const outcome = result.outcome!;
     await this.publish(outcome, actor);
     return { orderId: outcome.order!.id, operationId: outcome.operationId! };
@@ -163,12 +131,7 @@ export class BookingPaymentService {
     plan: VisitPaymentPlan,
   ): Promise<PaymentOperationWithPayments | null> {
     if (!plan.payment) return null;
-    await this.payments.lockKey(
-      tx,
-      booking.locationId,
-      plan.payment.input.idempotencyKey,
-    );
-    return this.payments.findReplay(
+    return this.payments.lockKeyForReplay(
       tx,
       booking.locationId,
       plan.payment.input.idempotencyKey,
@@ -186,9 +149,11 @@ export class BookingPaymentService {
     plan: VisitPaymentPlan,
   ): Promise<void> {
     if (!plan.payment) return;
-    const key = plan.payment.input.idempotencyKey;
-    await this.payments.lockKey(tx, locationId, key);
-    await this.payments.assertKeyUnused(tx, locationId, key);
+    await this.payments.lockUnusedKey(
+      tx,
+      locationId,
+      plan.payment.input.idempotencyKey,
+    );
   }
 
   /**
@@ -202,60 +167,26 @@ export class BookingPaymentService {
     plan: VisitPaymentPlan,
     actor: AuditActor,
   ): Promise<VisitPaymentOutcome> {
-    const confirmsProducts =
-      plan.confirmProductItemIds.length > 0 || plan.confirmAllDraftProducts;
-    if (
-      CLOSED_WITHOUT_VISIT_STATUSES.includes(booking.status as BookingStatus) &&
-      confirmsProducts
-    )
-      throw new AppException(
-        ErrorCode.BOOKING_PAYMENT_NOT_ALLOWED,
-        HttpStatus.CONFLICT,
-      );
-    let current = booking;
-    let completedFrom: BookingStatus | null = null;
-    if (plan.payment && completesOnPayment(booking, plan.now)) {
-      current = await this.lifecycle.completeInTransaction(booking, actor, tx);
-      completedFrom = booking.status as BookingStatus;
-    }
-    let order = await this.orders.lockBookingOrder(current, actor, tx);
-    const confirmedItemIds = plan.confirmAllDraftProducts
-      ? order.items
-          .filter(
-            (item) =>
-              item.type === OrderItemType.PRODUCT &&
-              item.status === OrderItemStatus.DRAFT,
-          )
-          .map((item) => item.id)
-      : plan.confirmProductItemIds;
-    if (confirmedItemIds.length > 0)
-      order = await this.orders.confirmBookingProducts(
-        order,
-        confirmedItemIds,
-        tx,
-        plan.now,
-      );
-    const change = plan.payment
-      ? await this.payments.record(tx, {
-          locationId: current.locationId,
-          orderId: order.id,
-          currency: order.currency,
-          amountDue: visitAmountDue(current, this.orders.productsNet(order)),
-          request: plan.payment.request,
-          defaultOccurredAt: defaultVisitPaymentDate(
-            current.startAt,
+    assertProductsConfirmable(booking, plan);
+    const completes = !!plan.payment && completesOnPayment(booking, plan.now);
+    const current = completes
+      ? await this.lifecycle.completeInTransaction(booking, actor, tx)
+      : booking;
+    const locked = await this.orders.lockBookingOrder(current, actor, tx);
+    const confirmedItemIds = productItemIdsToConfirm(plan, locked.items);
+    const order =
+      confirmedItemIds.length > 0
+        ? await this.orders.confirmBookingProducts(
+            locked,
+            confirmedItemIds,
+            tx,
             plan.now,
-            plan.timezone,
-          ),
-          idempotencyKey: plan.payment.input.idempotencyKey,
-          requestHash: this.requestHash(current.id, plan),
-          actor,
-          canReplace: plan.canReplace,
-        })
-      : null;
+          )
+        : locked;
+    const change = await this.recordPayment(tx, current, order, plan, actor);
     return {
       booking: current,
-      completedFrom,
+      completedFrom: completes ? (booking.status as BookingStatus) : null,
       order,
       confirmedItemIds,
       change,
@@ -290,20 +221,8 @@ export class BookingPaymentService {
     outcome: VisitPaymentOutcome,
     actor: AuditActor,
   ): Promise<void> {
-    const { booking } = outcome;
-    if (outcome.completedFrom) {
-      this.logger.log(
-        `booking status: id=${booking.id} locationId=${booking.locationId} from=${outcome.completedFrom} to=${BookingStatus.COMPLETED} (payment)`,
-      );
-      this.events.audit({
-        locationId: booking.locationId,
-        entityId: booking.id,
-        eventType: AuditEvent.BOOKING_STATUS_CHANGED,
-        actionType: AuditActionType.MODIFY,
-        actor,
-        payload: { from: outcome.completedFrom, to: BookingStatus.COMPLETED },
-      });
-    }
+    if (outcome.completedFrom)
+      this.publishCompleted(outcome.booking, outcome.completedFrom, actor);
     if (outcome.order && outcome.confirmedItemIds.length > 0)
       await this.orders.recordProductsConfirmed(
         outcome.order,
@@ -311,7 +230,88 @@ export class BookingPaymentService {
         actor,
       );
     if (outcome.change)
-      this.payments.publish(outcome.change, actor, booking.id);
+      this.payments.publish(outcome.change, actor, outcome.booking.id);
+  }
+
+  /** The payment of the step, validated: tracking enabled, split, expectations, date. */
+  private async planPayment(
+    locationId: string,
+    input: PaymentInputDto,
+    timezone: string,
+    now: Date,
+  ): Promise<NonNullable<VisitPaymentPlan['payment']>> {
+    // Fails fast before any lock; PaymentsFacade.record checks again under the locks.
+    assertPaymentTrackingEnabled(
+      await this.locations.getPaymentTracking(locationId),
+    );
+    return {
+      input,
+      request: paymentRequest(
+        input,
+        resolvePaymentDate(input.occurredAt, timezone, now),
+      ),
+    };
+  }
+
+  /** `pay` after the key lock: locks the booking and checks the participant again. */
+  private async payLocked(
+    tx: Prisma.TransactionClient,
+    booking: Pick<BookingWithItems, 'id' | 'locationId'>,
+    plan: VisitPaymentPlan,
+    actor: AuditActor,
+    participantStaffId: string | undefined,
+  ): Promise<VisitPaymentOutcome> {
+    const locked = await this.lockBooking(tx, booking.locationId, booking.id);
+    assertVisitParticipant(
+      { staffIds: locked.items.map((item) => item.staffId) },
+      participantStaffId,
+    );
+    return this.applyLocked(tx, locked, plan, actor);
+  }
+
+  /** Records or replaces the payment for the amount due under the order lock; null without one. */
+  private async recordPayment(
+    tx: Prisma.TransactionClient,
+    booking: BookingWithItems,
+    order: OrderWithItems,
+    plan: VisitPaymentPlan,
+    actor: AuditActor,
+  ): Promise<PaymentChange | null> {
+    if (!plan.payment) return null;
+    return this.payments.record(tx, {
+      locationId: booking.locationId,
+      orderId: order.id,
+      currency: order.currency,
+      amountDue: visitAmountDue(booking, this.orders.productsNet(order)),
+      request: plan.payment.request,
+      defaultOccurredAt: defaultVisitPaymentDate(
+        booking.startAt,
+        plan.now,
+        plan.timezone,
+      ),
+      idempotencyKey: plan.payment.input.idempotencyKey,
+      requestHash: this.requestHash(booking.id, plan),
+      actor,
+      canReplace: plan.canReplace,
+    });
+  }
+
+  private publishCompleted(
+    booking: BookingWithItems,
+    from: BookingStatus,
+    actor: AuditActor,
+  ): void {
+    this.logger.log(
+      `booking status: id=${booking.id} locationId=${booking.locationId} from=${from} to=${BookingStatus.COMPLETED} (payment)`,
+    );
+    this.events.audit({
+      locationId: booking.locationId,
+      entityId: booking.id,
+      eventType: AuditEvent.BOOKING_STATUS_CHANGED,
+      actionType: AuditActionType.MODIFY,
+      actor,
+      payload: { from, to: BookingStatus.COMPLETED },
+    });
   }
 
   /** Locks a booking that is not deleted and reads it again under the lock. */

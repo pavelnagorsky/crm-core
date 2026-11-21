@@ -425,7 +425,8 @@ export class BookingsController {
   })
   @ApiOkResponse({ type: ApiResponse(PayBookingResponseDto) })
   @ApiBadRequestResponse({
-    description: 'PAYMENT_SPLIT_INVALID, PAYMENT_DATE_INVALID',
+    description:
+      'PAYMENT_SPLIT_INVALID (a bad split, or expectedAmount with MIXED), PAYMENT_DATE_INVALID',
   })
   @ApiNotFoundResponse({
     description: 'Booking not found; ORDER_ITEM_NOT_FOUND',
@@ -448,10 +449,9 @@ export class BookingsController {
   ): Promise<BaseResponseDto<PayBookingResponseDto>> {
     const current = await this.bookings.findByIdInLocation(locationId, id);
     // Paying is like completing: a master pays their own visit.
-    await this.access.assertManage(tokenPayload, current);
-    const participantStaffId = await this.access.manageStaffId(
+    const participantStaffId = await this.access.assertManageParticipant(
       tokenPayload,
-      locationId,
+      current,
     );
     if (dto.confirmProductItemIds?.length)
       assertPermission(tokenPayload, Write(Claim.ORDER), locationId);
@@ -493,12 +493,15 @@ export class BookingsController {
   ): Promise<BaseResponseDto<IdResponseDto>> {
     const booking = await this.bookings.findByIdInLocation(locationId, id);
     // Undo is part of paying: a master undoes a payment of their own visit.
-    await this.access.assertManage(tokenPayload, booking);
+    const participantStaffId = await this.access.assertManageParticipant(
+      tokenPayload,
+      booking,
+    );
     await this.bookings.undoPayment(
       booking,
       dto.operationId,
       auditActorFromToken(tokenPayload, locationId),
-      await this.access.manageStaffId(tokenPayload, locationId),
+      participantStaffId,
     );
     return BaseResponseDto.success({ id: booking.id });
   }

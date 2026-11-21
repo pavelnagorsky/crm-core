@@ -1,14 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma } from '@prisma/client';
-import { MoneyUtils } from '../../shared/money/money.utils.js';
 import { AUDIT_EVENT } from '../audit/constants/audit.constants.js';
 import { AuditActionType } from '../audit/enums/audit-action-type.enum.js';
 import { AuditEntity } from '../audit/enums/audit-entity.enum.js';
 import { AuditEvent } from '../audit/enums/audit-event.enum.js';
 import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../audit/interfaces/audit-log-event.interface.js';
-import { PaymentAuditPayload } from '../audit/interfaces/payment-audit-payload.interface.js';
 import { LocationService } from '../location/services/location.service.js';
 import { PaymentChangeKind } from './enums/payment-change-kind.enum.js';
 import { OrderPaymentTotals } from './interfaces/order-payment-totals.interface.js';
@@ -20,6 +18,7 @@ import { UndoPaymentCommand } from './interfaces/undo-payment-command.interface.
 import { VoidPaymentCommand } from './interfaces/void-payment-command.interface.js';
 import { PaymentLedgerService } from './services/payment-ledger.service.js';
 import { PaymentReadService } from './services/payment-read.service.js';
+import { paymentAuditPayload } from './rules/payment-audit.rules.js';
 import { assertPaymentTrackingEnabled } from './rules/payment-tracking.rules.js';
 
 const AUDIT_EVENT_BY_CHANGE: Record<PaymentChangeKind, AuditEvent> = {
@@ -43,21 +42,32 @@ export class PaymentsFacade {
     private readonly eventEmitter: EventEmitter2,
   ) {}
 
-  lockKey(
-    tx: Prisma.TransactionClient,
-    locationId: string,
-    idempotencyKey: string,
-  ): Promise<void> {
-    return this.ledger.lockKey(tx, locationId, idempotencyKey);
-  }
-
-  findReplay(
+  /**
+   * First step of a keyed payment action: locks the key and returns the operation of an
+   * earlier identical request (a retry), which skips the action. Another request with the
+   * key: 409 PAYMENT_IDEMPOTENCY_CONFLICT.
+   */
+  async lockKeyForReplay(
     tx: Prisma.TransactionClient,
     locationId: string,
     idempotencyKey: string,
     requestHash: string,
   ): Promise<PaymentOperationWithPayments | null> {
+    await this.ledger.lockKey(tx, locationId, idempotencyKey);
     return this.ledger.findReplay(tx, locationId, idempotencyKey, requestHash);
+  }
+
+  /**
+   * First step of a payment of something created in the same request: locks the key, which
+   * no earlier request may have used (409 PAYMENT_IDEMPOTENCY_CONFLICT).
+   */
+  async lockUnusedKey(
+    tx: Prisma.TransactionClient,
+    locationId: string,
+    idempotencyKey: string,
+  ): Promise<void> {
+    await this.ledger.lockKey(tx, locationId, idempotencyKey);
+    await this.ledger.assertKeyUnused(tx, locationId, idempotencyKey);
   }
 
   findOperation(
@@ -67,14 +77,6 @@ export class PaymentsFacade {
     operationId: string,
   ): Promise<PaymentOperationWithPayments | null> {
     return this.ledger.findOperation(tx, locationId, orderId, operationId);
-  }
-
-  assertKeyUnused(
-    tx: Prisma.TransactionClient,
-    locationId: string,
-    idempotencyKey: string,
-  ): Promise<void> {
-    return this.ledger.assertKeyUnused(tx, locationId, idempotencyKey);
   }
 
   /**
@@ -143,11 +145,6 @@ export class PaymentsFacade {
     actor: AuditActor,
     bookingId: string | null = null,
   ): void {
-    const parts = (operation: PaymentOperationWithPayments) =>
-      operation.payments.map((payment) => ({
-        method: payment.method,
-        amount: MoneyUtils.format(payment.amount),
-      }));
     this.eventEmitter.emit(AUDIT_EVENT, {
       locationId: change.locationId,
       entityType: AuditEntity.ORDER,
@@ -156,22 +153,7 @@ export class PaymentsFacade {
       actionType: AuditActionType.ACTION,
       occurredAt: new Date(),
       actor,
-      payload: {
-        operationId: change.operation.id,
-        operationType: change.operation.type,
-        bookingId,
-        parts: parts(change.operation),
-        occurredAt:
-          change.operation.payments[0]?.occurredAt.toISOString() ?? null,
-        amountDue: change.amountDue
-          ? MoneyUtils.format(change.amountDue)
-          : null,
-        currency: change.currency,
-        reason: change.reason,
-        orderReturnId: change.operation.orderReturnId,
-        previousOperationId: change.previous?.id ?? null,
-        previousParts: change.previous ? parts(change.previous) : null,
-      } satisfies PaymentAuditPayload,
+      payload: paymentAuditPayload(change, bookingId),
     } satisfies AuditLogEvent);
   }
 }

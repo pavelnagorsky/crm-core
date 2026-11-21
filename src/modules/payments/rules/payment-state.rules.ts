@@ -1,5 +1,8 @@
-import { Prisma } from '@prisma/client';
+import { HttpStatus } from '@nestjs/common';
+import { Payment, Prisma } from '@prisma/client';
+import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { MoneyUtils } from '../../../shared/money/money.utils.js';
+import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { PaymentMethod } from '../enums/payment-method.enum.js';
 import { PaymentStatus } from '../enums/payment-status.enum.js';
 import { PaymentType } from '../enums/payment-type.enum.js';
@@ -80,5 +83,32 @@ export function paymentStatusOf(
       hasRecords: totals?.hasRecords ?? false,
     },
     tracked,
+  );
+}
+
+/**
+ * 409 PAYMENT_REFUND_EXCEEDS_PAID with `{ paidAmount, method }` for a refund that is not
+ * positive or exceeds what its method can give back (`refundLimit`).
+ */
+export function assertRefundWithinLimit(
+  amount: Prisma.Decimal,
+  limit: Prisma.Decimal,
+  method: PaymentMethod,
+): void {
+  if (amount.lte(0) || amount.gt(limit))
+    throw new AppException(
+      ErrorCode.PAYMENT_REFUND_EXCEEDS_PAID,
+      HttpStatus.CONFLICT,
+      { paidAmount: MoneyUtils.format(limit), method },
+    );
+}
+
+/** The operation of the active payment among the active records; null when there is none. */
+export function activePaymentOperationId(
+  records: readonly Pick<Payment, 'type' | 'operationId'>[],
+): string | null {
+  return (
+    records.find((record) => record.type === PaymentType.PAYMENT)
+      ?.operationId ?? null
   );
 }

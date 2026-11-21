@@ -47,23 +47,22 @@ export class BookingAccessService {
     );
   }
 
-  /** Own staff profile when the caller manages only bookings they take part in. */
-  manageStaffId(
-    token: TokenPayloadDto,
-    locationId: string,
-  ): Promise<string | undefined> {
-    return this.staffAccess.resolveStaffId(
-      token,
-      locationId,
-      Write(Claim.BOOKING),
-      Write(Claim.BOOKING_OWN),
-    );
-  }
-
   async assertManage(
     token: TokenPayloadDto,
     booking: BookingWithItems,
   ): Promise<void> {
+    await this.assertManageParticipant(token, booking);
+  }
+
+  /**
+   * As `assertManage`; returns the caller's own staff profile when they may manage only
+   * bookings they take part in (booking.own:write), so that a write checks it again on the
+   * locked booking. Undefined for booking:write.
+   */
+  async assertManageParticipant(
+    token: TokenPayloadDto,
+    booking: BookingWithItems,
+  ): Promise<string | undefined> {
     const staffId = await this.staffAccess.resolveStaffId(
       token,
       booking.locationId,
@@ -71,6 +70,7 @@ export class BookingAccessService {
       Write(Claim.BOOKING_OWN),
     );
     this.assertParticipant(booking, staffId);
+    return staffId;
   }
 
   async assertEdit(

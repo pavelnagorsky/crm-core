@@ -15,7 +15,7 @@ export class PaymentSummaryDto {
     enum: PaymentStatus,
     enumName: 'PaymentStatus',
     description:
-      'Derived from amountDue and the active records: NOT_REQUIRED (no records, nothing due), NOT_SPECIFIED (no records, something due, payment tracked), NOT_TRACKED (no records, something due, but the visit or sale is not in payment tracking: tracking is DISABLED or it started before Location.paymentTrackingSince; show nothing), PAID, UNDERPAID, OVERPAID (records exist; paidAmount compared with amountDue, regardless of tracking).',
+      'Derived from amountDue and the active records: NOT_REQUIRED (no records, nothing due), NOT_SPECIFIED (no records, something due, payment tracked), NOT_TRACKED (no records, something due, but the visit or sale is not in payment tracking: tracking is DISABLED, or the visit (by startAt) or sale (by occurredAt) is before Location.paymentTrackingSince; show nothing), PAID, UNDERPAID, OVERPAID (records exist; paidAmount compared with amountDue, regardless of tracking).',
   })
   status: PaymentStatus;
 

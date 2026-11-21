@@ -189,16 +189,7 @@ export class LocationService {
     rawBody: Record<string, unknown>,
     actor: AuditActor,
   ): Promise<Location> {
-    if (
-      'countryCode' in rawBody ||
-      'currency' in rawBody ||
-      'timezone' in rawBody
-    ) {
-      throw new AppException(
-        ErrorCode.LOCATION_ANCHORS_IMMUTABLE,
-        HttpStatus.BAD_REQUEST,
-      );
-    }
+    this.assertAnchorsUntouched(rawBody);
     const old = await this.findById(locationId);
     const { paymentTrackingMode, ...fields } = dto;
     const updated = await this.db.location.update({
@@ -214,21 +205,43 @@ export class LocationService {
     });
     await this.cache.invalidate(CacheDependency.locationSettings(locationId));
     await this.cache.invalidate(CacheDependency.staffSchedule(locationId));
-    const changes = diffFields(old, updated, LOCATION_AUDIT_FIELDS);
-    if (changes.length > 0) {
-      this.eventEmitter.emit(AUDIT_EVENT, {
-        brandId: updated.brandId,
-        locationId,
-        entityType: AuditEntity.LOCATION,
-        entityId: locationId,
-        eventType: AuditEvent.LOCATION_UPDATED,
-        actionType: AuditActionType.MODIFY,
-        occurredAt: new Date(),
-        actor,
-        payload: { changes },
-      } satisfies AuditLogEvent);
-    }
+    this.auditUpdated(locationId, old, updated, actor);
     return updated;
+  }
+
+  /** 400 LOCATION_ANCHORS_IMMUTABLE when the body names country, currency or timezone. */
+  private assertAnchorsUntouched(rawBody: Record<string, unknown>): void {
+    if (
+      'countryCode' in rawBody ||
+      'currency' in rawBody ||
+      'timezone' in rawBody
+    )
+      throw new AppException(
+        ErrorCode.LOCATION_ANCHORS_IMMUTABLE,
+        HttpStatus.BAD_REQUEST,
+      );
+  }
+
+  /** LOCATION_UPDATED with the changed audited fields; nothing when none changed. */
+  private auditUpdated(
+    locationId: string,
+    old: Location,
+    updated: Location,
+    actor: AuditActor,
+  ): void {
+    const changes = diffFields(old, updated, LOCATION_AUDIT_FIELDS);
+    if (changes.length === 0) return;
+    this.eventEmitter.emit(AUDIT_EVENT, {
+      brandId: updated.brandId,
+      locationId,
+      entityType: AuditEntity.LOCATION,
+      entityId: locationId,
+      eventType: AuditEvent.LOCATION_UPDATED,
+      actionType: AuditActionType.MODIFY,
+      occurredAt: new Date(),
+      actor,
+      payload: { changes },
+    } satisfies AuditLogEvent);
   }
 
   async delete(locationId: string, actor: AuditActor): Promise<void> {

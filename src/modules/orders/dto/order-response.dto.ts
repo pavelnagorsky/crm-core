@@ -2,7 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
 import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { PaymentSummaryDto } from '../../payments/dto/payment-summary.dto.js';
-import { OrderPaymentTotals } from '../../payments/interfaces/order-payment-totals.interface.js';
+import { OrderPaymentView } from '../interfaces/order-payment-view.interface.js';
 import { OrderStatus } from '../enums/order-status.enum.js';
 import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
 import { orderAmountDue } from '../rules/order-payment-due.rules.js';
@@ -81,8 +81,7 @@ export class OrderResponseDto {
 
   static fromEntity(
     entity: OrderWithItems,
-    payment: OrderPaymentTotals | null | undefined,
-    tracked: boolean,
+    payment: OrderPaymentView,
   ): OrderResponseDto {
     const dto = new OrderResponseDto();
     dto.id = entity.id;
@@ -108,8 +107,8 @@ export class OrderResponseDto {
     dto.items = entity.items.map(OrderItemResponseDto.fromEntity);
     dto.payment = PaymentSummaryDto.from(
       orderAmountDue(entity),
-      payment,
-      tracked,
+      payment.totals,
+      payment.tracked,
     );
     return dto;
   }

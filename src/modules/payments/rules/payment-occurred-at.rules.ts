@@ -56,6 +56,18 @@ export function defaultSalePaymentDate(
   return isPastDay(orderOccurredAt, now, timezone) ? orderOccurredAt : now;
 }
 
+/**
+ * Date of a recorded payment: the explicit date, else the date of the payment it replaces
+ * (a correction keeps the day the money changed hands), else the default date.
+ */
+export function recordedPaymentDate(
+  explicit: Date | null,
+  replaced: Date | undefined,
+  fallback: Date,
+): Date {
+  return explicit ?? replaced ?? fallback;
+}
+
 function isPastDay(value: Date, now: Date, timezone: string): boolean {
   return (
     TimeUtils.zonedDateStr(value, timezone) <

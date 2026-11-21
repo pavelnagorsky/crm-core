@@ -1,10 +1,8 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
-import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { TimeUtils } from '../../../shared/time/time.utils.js';
-import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { LocationService } from '../../location/services/location.service.js';
 import { FinanceRange } from '../../orders/aggregates/interfaces/finance-range.interface.js';
 import { NotSpecifiedResult } from '../../orders/aggregates/interfaces/not-specified-result.interface.js';
@@ -12,11 +10,10 @@ import { OrdersAggregatesService } from '../../orders/aggregates/services/orders
 import { PaymentsAggregatesService } from '../../payments/aggregates/services/payments-aggregates.service.js';
 import { FinanceSummaryRequestDto } from '../dto/finance-summary-request.dto.js';
 import { FinanceSummary } from '../interfaces/finance-summary.interface.js';
+import { assertFinanceSummaryPeriod } from '../rules/finance-summary-period.js';
 import { trackedRange } from '../rules/finance-tracked-range.js';
 
-const MAX_DAYS = 62;
 const NOT_SPECIFIED_LIMIT = 20;
-const DAY_MS = 86_400_000;
 
 /**
  * Money of a period for the till and the terminal, and visits and sales whose payment is not
@@ -37,7 +34,7 @@ export class FinanceSummaryService {
     locationId: string,
     dto: FinanceSummaryRequestDto,
   ): Promise<FinanceSummary> {
-    this.assertDays(dto);
+    assertFinanceSummaryPeriod(dto.from, dto.to);
     const [{ timezone, currency }, tracking] = await Promise.all([
       this.locations.getLocale(locationId),
       this.locations.getPaymentTracking(locationId),
@@ -56,25 +53,6 @@ export class FinanceSummaryService {
       money,
       notSpecified,
     };
-  }
-
-  /** 400 for a period that is empty or longer than 62 days. */
-  private assertDays(dto: FinanceSummaryRequestDto): void {
-    const days =
-      (TimeUtils.dateOnly(dto.to).getTime() -
-        TimeUtils.dateOnly(dto.from).getTime()) /
-        DAY_MS +
-      1;
-    if (days < 1)
-      throw new AppException(
-        ErrorCode.DASHBOARD_CUSTOM_RANGE_INVALID,
-        HttpStatus.BAD_REQUEST,
-      );
-    if (days > MAX_DAYS)
-      throw new AppException(
-        ErrorCode.FINANCE_SUMMARY_RANGE_TOO_LONG,
-        HttpStatus.BAD_REQUEST,
-      );
   }
 
   /** One snapshot: money and the "not specified" list agree with each other. */

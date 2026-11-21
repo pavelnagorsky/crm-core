@@ -1,7 +1,6 @@
 import { ForbiddenException, HttpStatus, Injectable } from '@nestjs/common';
 import { Payment, Prisma } from '@prisma/client';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
-import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
 import {
@@ -10,10 +9,10 @@ import {
 } from '../constants/payment.constants.js';
 import { PaymentChangeKind } from '../enums/payment-change-kind.enum.js';
 import { PaymentType } from '../enums/payment-type.enum.js';
+import { NewPaymentOperation } from '../interfaces/new-payment-operation.interface.js';
 import { PaymentChange } from '../interfaces/payment-change.interface.js';
 import { PaymentCommand } from '../interfaces/payment-command.interface.js';
 import { PaymentOperationWithPayments } from '../interfaces/payment-operation-with-payments.interface.js';
-import { PaymentPart } from '../interfaces/payment-part.interface.js';
 import { RefundCommand } from '../interfaces/refund-command.interface.js';
 import { UndoPaymentCommand } from '../interfaces/undo-payment-command.interface.js';
 import { VoidPaymentCommand } from '../interfaces/void-payment-command.interface.js';
@@ -21,16 +20,36 @@ import {
   assertExpectedAmount,
   assertNoPaymentExpected,
 } from '../rules/payment-expectations.rules.js';
-import { resolvePaymentParts } from '../rules/payment-parts.rules.js';
-import { paymentTotals, refundLimit } from '../rules/payment-state.rules.js';
+import { recordedPaymentDate } from '../rules/payment-occurred-at.rules.js';
 import {
-  assertPaymentUndoable,
+  requiredPaymentAmount,
+  resolvePaymentParts,
+} from '../rules/payment-parts.rules.js';
+import {
+  activePaymentOperationId,
+  assertRefundWithinLimit,
+  paymentTotals,
+  refundLimit,
+} from '../rules/payment-state.rules.js';
+import { assertPaymentUndoable } from '../rules/payment-undo.rules.js';
+import {
+  assertPaymentVoidWithoutRefunds,
+  assertVoidNotLinkedToReturn,
   isOperationVoided,
-} from '../rules/payment-undo.rules.js';
+} from '../rules/payment-void.rules.js';
 
 const operationInclude = {
   payments: { orderBy: [{ method: 'asc' }, { id: 'asc' }] },
 } satisfies Prisma.PaymentOperationInclude;
+
+/** 409 PAYMENT_IDEMPOTENCY_CONFLICT with the operation that already holds the key. */
+function idempotencyConflict(operationId: string): AppException {
+  return new AppException(
+    ErrorCode.PAYMENT_IDEMPOTENCY_CONFLICT,
+    HttpStatus.CONFLICT,
+    { operationId },
+  );
+}
 
 /**
  * Writes the money journal. Every write runs in the caller's transaction, and the caller
@@ -66,13 +85,8 @@ export class PaymentLedgerService {
       where: { locationId_idempotencyKey: { locationId, idempotencyKey } },
       include: operationInclude,
     });
-    if (!existing) return null;
-    if (existing.requestHash !== requestHash)
-      throw new AppException(
-        ErrorCode.PAYMENT_IDEMPOTENCY_CONFLICT,
-        HttpStatus.CONFLICT,
-        { operationId: existing.id },
-      );
+    if (existing && existing.requestHash !== requestHash)
+      throw idempotencyConflict(existing.id);
     return existing;
   }
 
@@ -89,12 +103,7 @@ export class PaymentLedgerService {
       where: { locationId_idempotencyKey: { locationId, idempotencyKey } },
       select: { id: true },
     });
-    if (existing)
-      throw new AppException(
-        ErrorCode.PAYMENT_IDEMPOTENCY_CONFLICT,
-        HttpStatus.CONFLICT,
-        { operationId: existing.id },
-      );
+    if (existing) throw idempotencyConflict(existing.id);
   }
 
   /**
@@ -107,15 +116,16 @@ export class PaymentLedgerService {
     command: PaymentCommand,
   ): Promise<PaymentChange> {
     const active = await this.activeRecords(tx, command.orderId);
-    const previousId =
-      active.find((record) => record.type === PaymentType.PAYMENT)
-        ?.operationId ?? null;
+    const previousId = activePaymentOperationId(active);
     assertNoPaymentExpected(command.request, previousId);
     if (previousId && !command.canReplace)
       throw new ForbiddenException(
         'Changing a recorded payment requires order:write',
       );
-    const requiredAmount = this.requiredAmount(command.amountDue, active);
+    const requiredAmount = requiredPaymentAmount(
+      command.amountDue,
+      paymentTotals(active),
+    );
     assertExpectedAmount(command.request, requiredAmount, command.amountDue);
     const parts = resolvePaymentParts(
       command.request,
@@ -125,27 +135,25 @@ export class PaymentLedgerService {
     const previous = previousId
       ? await this.voidReplaced(tx, previousId, command.actor)
       : null;
-    const occurredAt =
-      command.request.occurredAt ??
-      previous?.payments[0]?.occurredAt ??
-      command.defaultOccurredAt;
-    const operation = await this.createPayment(
-      tx,
-      command,
+    const operation = await this.createOperation(tx, {
+      ...command,
+      type: PaymentType.PAYMENT,
       parts,
-      occurredAt,
-      previous?.id ?? null,
-    );
-    return {
-      kind: previous ? PaymentChangeKind.REPLACED : PaymentChangeKind.RECORDED,
-      locationId: command.locationId,
-      orderId: command.orderId,
-      currency: command.currency,
-      operation,
-      previous,
-      amountDue: command.amountDue,
+      occurredAt: recordedPaymentDate(
+        command.request.occurredAt,
+        previous?.payments[0]?.occurredAt,
+        command.defaultOccurredAt,
+      ),
+      replacesOperationId: previous?.id ?? null,
+      orderReturnId: null,
       reason: null,
-    };
+    });
+    return this.change(
+      previous ? PaymentChangeKind.REPLACED : PaymentChangeKind.RECORDED,
+      command,
+      operation,
+      { previous, amountDue: command.amountDue, reason: null },
+    );
   }
 
   /** Gives money back: a new movement, the days of earlier payments stay as they were. */
@@ -153,56 +161,23 @@ export class PaymentLedgerService {
     tx: Prisma.TransactionClient,
     command: RefundCommand,
   ): Promise<PaymentChange> {
-    const limit = refundLimit(
-      paymentTotals(await this.activeRecords(tx, command.orderId)),
+    const totals = paymentTotals(await this.activeRecords(tx, command.orderId));
+    assertRefundWithinLimit(
+      command.amount,
+      refundLimit(totals, command.method),
       command.method,
     );
-    if (command.amount.lte(0) || command.amount.gt(limit))
-      throw new AppException(
-        ErrorCode.PAYMENT_REFUND_EXCEEDS_PAID,
-        HttpStatus.CONFLICT,
-        {
-          paidAmount: MoneyUtils.format(limit),
-          method: command.method,
-        },
-      );
-    const operation = await tx.paymentOperation.create({
-      data: {
-        locationId: command.locationId,
-        orderId: command.orderId,
-        type: PaymentType.REFUND,
-        idempotencyKey: command.idempotencyKey,
-        requestHash: command.requestHash,
-        orderReturnId: command.orderReturnId,
-        reason: command.reason,
-        createdById: command.actor.id ?? null,
-        createdByName: command.actor.name,
-        payments: {
-          create: {
-            locationId: command.locationId,
-            orderId: command.orderId,
-            type: PaymentType.REFUND,
-            method: command.method,
-            amount: command.amount,
-            currency: command.currency,
-            occurredAt: command.occurredAt,
-            createdById: command.actor.id ?? null,
-            createdByName: command.actor.name,
-          },
-        },
-      },
-      include: operationInclude,
+    const operation = await this.createOperation(tx, {
+      ...command,
+      type: PaymentType.REFUND,
+      parts: [{ method: command.method, amount: command.amount }],
+      replacesOperationId: null,
     });
-    return {
-      kind: PaymentChangeKind.REFUNDED,
-      locationId: command.locationId,
-      orderId: command.orderId,
-      currency: command.currency,
-      operation,
+    return this.change(PaymentChangeKind.REFUNDED, command, operation, {
       previous: null,
       amountDue: null,
       reason: command.reason,
-    };
+    });
   }
 
   /**
@@ -215,41 +190,13 @@ export class PaymentLedgerService {
     currency: string,
   ): Promise<PaymentChange | null> {
     const operation = await this.findOperationOrThrow(tx, command);
-    if (operation.orderReturnId)
-      throw new AppException(
-        ErrorCode.PAYMENT_OPERATION_LINKED_TO_RETURN,
-        HttpStatus.CONFLICT,
-      );
+    assertVoidNotLinkedToReturn(operation);
     if (isOperationVoided(operation)) return null;
-    // Without its payment a refund would leave a negative paid amount.
-    if (
-      operation.type === PaymentType.PAYMENT &&
-      (await this.hasActiveRefunds(tx, command.orderId))
-    )
-      throw new AppException(
-        ErrorCode.PAYMENT_VOID_HAS_REFUNDS,
-        HttpStatus.CONFLICT,
+    if (operation.type === PaymentType.PAYMENT)
+      assertPaymentVoidWithoutRefunds(
+        await this.hasActiveRefunds(tx, command.orderId),
       );
     return this.voidOperation(tx, operation, command, currency);
-  }
-
-  /** The operation of the order with all its records. 404 PAYMENT_OPERATION_NOT_FOUND. */
-  private async findOperationOrThrow(
-    tx: Prisma.TransactionClient,
-    scope: Pick<VoidPaymentCommand, 'locationId' | 'orderId' | 'operationId'>,
-  ): Promise<PaymentOperationWithPayments> {
-    const operation = await this.findOperation(
-      tx,
-      scope.locationId,
-      scope.orderId,
-      scope.operationId,
-    );
-    if (!operation)
-      throw new AppException(
-        ErrorCode.PAYMENT_OPERATION_NOT_FOUND,
-        HttpStatus.NOT_FOUND,
-      );
-    return operation;
   }
 
   /**
@@ -306,21 +253,23 @@ export class PaymentLedgerService {
     return (await tx.paymentOperation.count({ where: { orderId } })) > 0;
   }
 
-  /** What a payment must cover so that the order ends up paid: the amount due plus refunds. */
-  private requiredAmount(
-    amountDue: Prisma.Decimal,
-    active: readonly Payment[],
-  ): Prisma.Decimal {
-    const refunded = paymentTotals(
-      active.filter((record) => record.type === PaymentType.REFUND),
-    ).refundedAmount;
-    const requiredAmount = amountDue.plus(refunded);
-    if (requiredAmount.lte(0))
+  /** The operation of the order with all its records. 404 PAYMENT_OPERATION_NOT_FOUND. */
+  private async findOperationOrThrow(
+    tx: Prisma.TransactionClient,
+    scope: Pick<VoidPaymentCommand, 'locationId' | 'orderId' | 'operationId'>,
+  ): Promise<PaymentOperationWithPayments> {
+    const operation = await this.findOperation(
+      tx,
+      scope.locationId,
+      scope.orderId,
+      scope.operationId,
+    );
+    if (!operation)
       throw new AppException(
-        ErrorCode.PAYMENT_NOTHING_DUE,
-        HttpStatus.CONFLICT,
+        ErrorCode.PAYMENT_OPERATION_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
       );
-    return requiredAmount;
+    return operation;
   }
 
   /** Voids the payment a new one replaces; returns it with the records it had before. */
@@ -342,34 +291,36 @@ export class PaymentLedgerService {
     return previous;
   }
 
-  private createPayment(
+  /** Creates an operation with one record per part, all by its author. */
+  private createOperation(
     tx: Prisma.TransactionClient,
-    command: PaymentCommand,
-    parts: readonly PaymentPart[],
-    occurredAt: Date,
-    replacesOperationId: string | null,
+    operation: NewPaymentOperation,
   ): Promise<PaymentOperationWithPayments> {
+    const author = {
+      createdById: operation.actor.id ?? null,
+      createdByName: operation.actor.name,
+    };
     return tx.paymentOperation.create({
       data: {
-        locationId: command.locationId,
-        orderId: command.orderId,
-        type: PaymentType.PAYMENT,
-        idempotencyKey: command.idempotencyKey,
-        requestHash: command.requestHash,
-        replacesOperationId,
-        createdById: command.actor.id ?? null,
-        createdByName: command.actor.name,
+        locationId: operation.locationId,
+        orderId: operation.orderId,
+        type: operation.type,
+        idempotencyKey: operation.idempotencyKey,
+        requestHash: operation.requestHash,
+        replacesOperationId: operation.replacesOperationId,
+        orderReturnId: operation.orderReturnId,
+        reason: operation.reason,
+        ...author,
         payments: {
-          create: parts.map((part) => ({
-            locationId: command.locationId,
-            orderId: command.orderId,
-            type: PaymentType.PAYMENT,
+          create: operation.parts.map((part) => ({
+            locationId: operation.locationId,
+            orderId: operation.orderId,
+            type: operation.type,
             method: part.method,
             amount: part.amount,
-            currency: command.currency,
-            occurredAt,
-            createdById: command.actor.id ?? null,
-            createdByName: command.actor.name,
+            currency: operation.currency,
+            occurredAt: operation.occurredAt,
+            ...author,
           })),
         },
       },
@@ -391,18 +342,31 @@ export class PaymentLedgerService {
     currency: string,
   ): Promise<PaymentChange> {
     await this.voidRecords(tx, operation.id, command.reason, command.actor);
+    const voided = {
+      ...operation,
+      payments: operation.payments.filter((payment) => !payment.voidedAt),
+    };
+    return this.change(
+      PaymentChangeKind.VOIDED,
+      { ...command, currency },
+      voided,
+      { previous: null, amountDue: null, reason: command.reason },
+    );
+  }
+
+  private change(
+    kind: PaymentChangeKind,
+    scope: Pick<PaymentChange, 'locationId' | 'orderId' | 'currency'>,
+    operation: PaymentOperationWithPayments,
+    details: Pick<PaymentChange, 'previous' | 'amountDue' | 'reason'>,
+  ): PaymentChange {
     return {
-      kind: PaymentChangeKind.VOIDED,
-      locationId: command.locationId,
-      orderId: command.orderId,
-      currency,
-      operation: {
-        ...operation,
-        payments: operation.payments.filter((payment) => !payment.voidedAt),
-      },
-      previous: null,
-      amountDue: null,
-      reason: command.reason,
+      kind,
+      locationId: scope.locationId,
+      orderId: scope.orderId,
+      currency: scope.currency,
+      operation,
+      ...details,
     };
   }
 

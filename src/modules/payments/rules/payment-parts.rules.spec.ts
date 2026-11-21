@@ -1,7 +1,11 @@
+import { HttpStatus } from '@nestjs/common';
 import { PaymentMethod, Prisma } from '@prisma/client';
+import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { PaymentInputMethod } from '../enums/payment-input-method.enum.js';
+import { thrownAppException } from '../testing/thrown-app-exception.js';
 import {
   assertPaymentSplit,
+  requiredPaymentAmount,
   resolvePaymentParts,
 } from './payment-parts.rules.js';
 
@@ -106,5 +110,21 @@ describe('resolvePaymentParts', () => {
         d('3000'),
       ),
     ).toThrow(expect.objectContaining({ errorCode: 'PAYMENT_SPLIT_INVALID' }));
+  });
+});
+
+describe('requiredPaymentAmount', () => {
+  it('adds active refunds to the amount due', () => {
+    expect(
+      requiredPaymentAmount(d('1500'), { refundedAmount: d('500') }).toFixed(2),
+    ).toBe('2000.00');
+  });
+
+  it('answers 409 PAYMENT_NOTHING_DUE when nothing is due', () => {
+    const error = thrownAppException(() =>
+      requiredPaymentAmount(d('0'), { refundedAmount: d('0') }),
+    );
+    expect(error.errorCode).toBe(ErrorCode.PAYMENT_NOTHING_DUE.code);
+    expect(error.getStatus()).toBe(HttpStatus.CONFLICT);
   });
 });

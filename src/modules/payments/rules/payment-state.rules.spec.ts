@@ -1,6 +1,11 @@
+import { HttpStatus } from '@nestjs/common';
 import { PaymentMethod, PaymentType, Prisma } from '@prisma/client';
+import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { PaymentStatus } from '../enums/payment-status.enum.js';
+import { thrownAppException } from '../testing/thrown-app-exception.js';
 import {
+  activePaymentOperationId,
+  assertRefundWithinLimit,
   paymentStatus,
   paymentStatusOf,
   paymentTotals,
@@ -168,5 +173,47 @@ describe('refundLimit', () => {
     ]);
     expect(refundLimit(totals, PaymentMethod.CASH).toFixed(2)).toBe('60.00');
     expect(refundLimit(totals, PaymentMethod.CARD).toFixed(2)).toBe('0.00');
+  });
+});
+
+describe('assertRefundWithinLimit', () => {
+  it('allows a refund up to the limit', () => {
+    expect(() =>
+      assertRefundWithinLimit(d('100'), d('100'), PaymentMethod.CASH),
+    ).not.toThrow();
+  });
+
+  it.each([
+    ['over the limit', '100.01'],
+    ['zero', '0'],
+  ])('refuses a refund %s: 409 with the limit and method', (_, amount) => {
+    const error = thrownAppException(() =>
+      assertRefundWithinLimit(d(amount), d('100'), PaymentMethod.CARD),
+    );
+    expect(error.errorCode).toBe(ErrorCode.PAYMENT_REFUND_EXCEEDS_PAID.code);
+    expect(error.getStatus()).toBe(HttpStatus.CONFLICT);
+    expect(error.payload).toEqual({
+      paidAmount: '100.00',
+      method: PaymentMethod.CARD,
+    });
+  });
+});
+
+describe('activePaymentOperationId', () => {
+  it('finds the operation of the active payment among refunds', () => {
+    expect(
+      activePaymentOperationId([
+        { type: PaymentType.REFUND, operationId: 'op-refund' },
+        { type: PaymentType.PAYMENT, operationId: 'op-paid' },
+      ]),
+    ).toBe('op-paid');
+  });
+
+  it('is null without a payment', () => {
+    expect(
+      activePaymentOperationId([
+        { type: PaymentType.REFUND, operationId: 'op-refund' },
+      ]),
+    ).toBeNull();
   });
 });

@@ -172,10 +172,10 @@ export function paymentTrackingPatch(
 
 Публичные DTO (`LocationPublicResponseDto`, `GET /locations/:locationId/public`) не меняются.
 
-Кэш: `LOCATION_SETTINGS_SELECT` (`location/cache/location-settings.cache.ts`) получает оба поля; `LocationService.update` уже инвалидирует `CacheDependency.locationSettings`. Новый метод:
+Чтение режима: не из кэша настроек, а одним select из БД (раздел 11): режим решает запись денег, устаревший кэш другой реплики не должен на это влиять. `LOCATION_SETTINGS_SELECT` полей учёта не получает. Новый метод:
 
 ```ts
-/** Payment tracking of an active location, from the settings cache. */
+/** Payment tracking of an active location, read from the database. */
 LocationService.getPaymentTracking(locationId: string): Promise<PaymentTracking>
 ```
 
@@ -233,7 +233,7 @@ LocationService.getPaymentTracking(locationId: string): Promise<PaymentTracking>
 
 | Поле | Правило |
 | --- | --- |
-| `expectedAmount?: string \| null` | `IsOptionalPrice`, > 0. Только с `CASH` или `CARD`; с `MIXED` - 400 `PAYMENT_SPLIT_INVALID`. Если не равно сумме, которую должна покрыть оплата (`requiredAmount` = `due` + активные возвраты), - 409 `PAYMENT_AMOUNT_MISMATCH` с `responseValue { amountDue, requiredAmount }`, ничего не пишется (и визит не завершается: откат транзакции) |
+| `expectedAmount?: string \| null` | `IsOptionalPositivePrice`, > 0. Только с `CASH` или `CARD`; с `MIXED` - 400 `PAYMENT_SPLIT_INVALID`. Если не равно сумме, которую должна покрыть оплата (`requiredAmount` = `due` + активные возвраты), - 409 `PAYMENT_AMOUNT_MISMATCH` с `responseValue { amountDue, requiredAmount }`, ничего не пишется (и визит не завершается: откат транзакции) |
 | `expectNoPayment?: boolean` | `IsOptional`, `IsBoolean`. `true` и у заказа уже есть активная оплата - 409 `PAYMENT_ALREADY_RECORDED` с `responseValue { operationId }` (активная оплата), ничего не пишется |
 
 Оба поля входят в hash намерения (`paymentIntent` в `payments/rules/payment-request-hash.ts`: `expectedAmount` форматируется `MoneyUtils.format` или `null`, `expectNoPayment` - `true` или `null`). Повтор с тем же ключом возвращает первый результат до этих проверок (порядок `findReplay` не меняется), поэтому двойной клик получает 200, а не 409. Hash старых операций меняется: прода нет, совместимость не нужна.
@@ -248,7 +248,7 @@ LocationService.getPaymentTracking(locationId: string): Promise<PaymentTracking>
 - Тело `UndoBookingPaymentDto`: `{ "operationId": "uuid" }` (`IsUUID`).
 - Ответ: `BaseResponseDto<IdResponseDto>` с `id` записи. HTTP 200 (`@HttpCode(HttpStatus.OK)`).
 - Права: `@Permissions([Write(Claim.BOOKING), Write(Claim.BOOKING_OWN)])` + `access.assertManage(token, booking)` (мастер - только свой визит). `order:write` не нужен.
-- Правила (чистая функция `assertPaymentUndoable(operation, actorId, now)` в `payments/rules/payment-undo.rules.ts`, константа `PAYMENT_UNDO_WINDOW_MS = 10 * 60_000` в `payments/constants/payment.constants.ts`):
+- Правила (чистая функция `assertPaymentUndoable(operation, { actorId, hasActiveRefunds, now })` в `payments/rules/payment-undo.rules.ts`, константа `PAYMENT_UNDO_WINDOW_MS = 10 * 60_000` в `payments/constants/payment.constants.ts`):
 
 | Условие | Ответ |
 | --- | --- |
@@ -266,7 +266,7 @@ LocationService.getPaymentTracking(locationId: string): Promise<PaymentTracking>
 
 Почему отдельный эндпоинт, а не ослабление `POST .../orders/:orderId/payment-operations/:operationId/void`: тот эндпоинт защищён `order:write` на уровне декоратора и служит исправлению любой операции. Отмена - узкое право автора на свежую первую оплату своего визита, по тем же правам, что и первая оплата. Для продаж отдельный эндпоинт не нужен: оплату продажи записывает только `order:write`, а он может аннулировать.
 
-Реализация: `BookingsController.undoPayment` -> `BookingsFacade.undoPayment` -> `BookingPaymentService.undo(booking, operationId, actor, now)` -> `OrdersFacade.undoVisitPayment({ locationId, bookingId, operationId, actor, now })` -> `OrderPaymentCorrectionService.undoVisitPayment` (новый сервис исправлений, туда же переехал `voidOperation`; блокирует запись `FOR SHARE`, находит заказ визита, блокирует его) -> `PaymentsFacade.undo` -> `PaymentLedgerService.undo` (поиск операции, `isOperationVoided`, `assertPaymentUndoable(operation, { actorId, hasActiveRefunds, now })`, аннулирование). Если заказа нет - 404 `PAYMENT_OPERATION_NOT_FOUND`.
+Реализация: `BookingsController.undoPayment` (`BookingAccessService.assertManageParticipant`) -> `BookingsFacade.undoPayment` -> `BookingPaymentService.undo(booking, operationId, actor, now, participantStaffId)` -> `OrderPaymentsFacade.undoVisitPayment({ locationId, bookingId, operationId, actor, now, participantStaffId })` -> `OrderPaymentCorrectionService.undoVisitPayment` (сервис исправлений, там же `voidOperation`; `OrderLockService.lockVisitOrder` блокирует запись `FOR SHARE`, находит заказ визита и блокирует его; `assertVisitParticipant` повторно проверяет мастера) -> `PaymentsFacade.undo` -> `PaymentLedgerService.undo` (поиск операции, `isOperationVoided` из `payments/rules/payment-void.rules.ts`, `assertPaymentUndoable(operation, { actorId, hasActiveRefunds, now })`, аннулирование). Если заказа нет - 404 `PAYMENT_OPERATION_NOT_FOUND`.
 
 ### 3.5 Запись оплаты при выключенном учёте
 
@@ -354,38 +354,38 @@ ALTER TABLE "Location"
 Location:
 
 - `enums/payment-tracking-mode.enum.ts`, `interfaces/payment-tracking.interface.ts`, `rules/payment-tracking-switch.ts` + spec.
-- `dto/update-location.dto.ts`, `dto/location-response.dto.ts`, `cache/location-settings.cache.ts`.
+- `dto/update-location.dto.ts`, `dto/location-response.dto.ts`, `interfaces/payment-tracking-patch.interface.ts`.
 - `services/location.service.ts`: `update` применяет `paymentTrackingPatch` (DTO без `paymentTrackingMode` + патч), новый `getPaymentTracking`.
 
 Payments:
 
 - `enums/payment-status.enum.ts` (`NOT_TRACKED`).
-- `rules/payment-tracking.rules.ts`, `rules/payment-expectations.rules.ts`, `rules/payment-undo.rules.ts` + spec у каждого.
-- `rules/payment-state.rules.ts` (`tracked`), `rules/payment-request-hash.ts` (новые поля в намерении).
+- `rules/payment-tracking.rules.ts`, `rules/payment-expectations.rules.ts`, `rules/payment-request.rules.ts`, `rules/payment-undo.rules.ts`, `rules/payment-void.rules.ts` (`isOperationVoided` и условия аннулирования), `rules/payment-audit.rules.ts` (запись истории заказа) + spec у каждого.
+- `rules/payment-state.rules.ts` (`tracked`, `paymentStatusOf`, `activePaymentOperationId`, `assertRefundWithinLimit`), `rules/payment-parts.rules.ts` (`requiredPaymentAmount`), `rules/payment-occurred-at.rules.ts` (`recordedPaymentDate`), `rules/payment-request-hash.ts` (новые поля в намерении).
 - `dto/payment-input.dto.ts` (`expectedAmount`, `expectNoPayment`), `dto/payment-summary.dto.ts` (`from(amountDue, totals, tracked)`).
-- `interfaces/payment-command.interface.ts`, `interfaces/payment-intent-input.interface.ts`.
+- `interfaces/payment-command.interface.ts`, `interfaces/payment-intent-input.interface.ts`, `interfaces/payment-expectations.interface.ts`, `interfaces/undo-payment-command.interface.ts`, `interfaces/new-payment-operation.interface.ts`.
 - `constants/payment.constants.ts` (`PAYMENT_UNDO_WINDOW_MS`, `PAYMENT_UNDO_VOID_REASON`).
-- `services/payment-ledger.service.ts` (`record`: ожидания), `payments.facade.ts` (`record`: проверка учёта), `payments.module.ts` (импорт `LocationModule`).
+- `services/payment-ledger.service.ts` (`record`: ожидания; `undo`), `payments.facade.ts` (`record`: проверка учёта; `undo`; `lockKeyForReplay` и `lockUnusedKey` - первый шаг действия с ключом), `payments.module.ts` (импорт `LocationModule`).
 
 Bookings:
 
-- `controllers/bookings.controller.ts`: `POST :id/payment/undo`; передача новых полей в `PayBookingDto` уже идёт через наследование.
+- `controllers/bookings.controller.ts`: `POST :id/payment/undo`; передача новых полей в `PayBookingDto` уже идёт через наследование. `services/booking-access.service.ts`: `assertManageParticipant` (проверка права и мастер для повторной проверки под блокировкой).
 - `dto/undo-booking-payment.dto.ts`, `dto/booking-payment.dto.ts` (`draftProductsCount`).
-- `services/write/booking-payment.service.ts`: `undo`; `applyLocked` передаёт `expectedAmount`/`expectNoPayment` в команду.
+- `services/write/booking-payment.service.ts`: `undo`; ожидания (`expectedAmount`/`expectNoPayment`) идут в команду внутри `PaymentRequest`. Условия шага - чистые правила `rules/visit-payment-step.rules.ts`.
 - `services/read/booking-payment-read.service.ts`: читает `getPaymentTracking` один раз на пачку (все записи пачки из одного филиала; если нет - по `locationId` каждой), `tracked` и `draftProductsCount` в `VisitPaymentSummary`.
 - `interfaces/visit-summary-booking.interface.ts` (+ `startAt`, `locationId`), `interfaces/visit-payment-summary.interface.ts` (+ `tracked`, `draftProductsCount`).
-- `services/read/booking-calendar-read.service.ts`: `select` + `startAt`, `locationId`; статус через `paymentStatus(..., summary.tracked)`.
+- `services/read/booking-calendar-read.service.ts`: `select` + `startAt`, `locationId`; статус через `paymentStatusOf(summary.amountDue, summary.totals, summary.tracked)`.
 
 Orders:
 
 - `interfaces/booking-order-products.interface.ts` (+ `draftProductsCount`), `services/order-persistence.service.ts` (`productTotalsByBookings` читает и черновики).
-- `dto/order-response.dto.ts` (`fromEntity(entity, totals, tracked)`), `controllers/orders.controller.ts` (список и карточка считают `tracked`: одна `getPaymentTracking` + `BookingVisitsService.findByBookingIds` для заказов визитов; вынести в `OrdersFacade.paymentTrackedByOrder(locationId, orders): Promise<Map<string, boolean>>`).
-- `services/order-payment.service.ts` (`undoOperation`), `orders.facade.ts` (`undoVisitPayment`, `paymentTrackedByOrder`).
-- `aggregates/services/orders-aggregates.service.ts`, `aggregates/interfaces/not-specified-row.interface.ts` (черновики).
+- `dto/order-response.dto.ts` (`fromEntity(entity, payment: OrderPaymentView)`), `controllers/orders.controller.ts` (список и карточка берут `OrderPaymentsFacade.paymentViews(locationId, orders)`: журнал и `tracked` каждого заказа; `tracked` считает `OrderPaymentTrackingService` - одна `getPaymentTracking` + `BookingVisitsService.startAtByBookingIds` для заказов визитов).
+- `order-payments.facade.ts` (`OrderPaymentsFacade`), `services/order-payment-correction.service.ts` (`voidOperation`, `undoVisitPayment`), `services/order-lock.service.ts`, `rules/order-payment-correction.rules.ts`, `rules/order-payment-tracking.rules.ts`.
+- `aggregates/services/orders-aggregates.service.ts`, `aggregates/interfaces/not-specified-row.interface.ts` (черновики), `aggregates/rules/not-specified.rules.ts` (строки и итоги списка).
 
 Dashboard:
 
-- `services/finance-summary.service.ts`, новый `rules/finance-tracked-range.ts` + spec, `dto/finance-not-specified-item.dto.ts`.
+- `services/finance-summary.service.ts`, новые `rules/finance-tracked-range.ts` и `rules/finance-summary-period.ts` + spec, `dto/finance-not-specified-item.dto.ts`.
 
 Документация:
 
@@ -687,8 +687,9 @@ Dev на 8083, crm-core с веткой фичи, тестовый филиал.
 - Ожидания (`expectedAmount`, `expectNoPayment`) лежат в `PaymentRequest`, а не отдельными полями `PaymentCommand`: запрос строит одна чистая функция `paymentRequest` для записи и заказа.
 - `LocationService.getPaymentTracking` читает режим из БД (один select), а не из кэша настроек (3.1): режим решает запись денег, устаревший кэш другой реплики не должен на это влиять. Поля учёта в `LOCATION_SETTINGS_SELECT` не добавлены.
 - `PAYMENT_TRACKING_DISABLED` проверяется дважды: рано, до блокировок (`BookingPaymentService.plan`, `OrderPaymentService.prepareRequest`), и в `PaymentsFacade.record` как страховка.
-- Платёжные методы заказов вынесены из `OrdersFacade` в `OrderPaymentsFacade` (`paymentTotals`, `paymentTrackedByOrder`, `recordPayment`, `refund`, `voidPaymentOperation`, `undoVisitPayment`); его использует `OrdersController` и `BookingPaymentService.undo`.
-- Отмена: `OrderPaymentsFacade.undoVisitPayment` -> `OrderPaymentCorrectionService` (туда же переехал `voidOperation`) -> `PaymentsFacade.undo` -> `PaymentLedgerService.undo`. Блокировки входа (`lockOrderWithVisit`, `lockVisitOrder`) - в `OrderLockService`. На заблокированной записи повторно проверяется, что мастер с `booking.own:write` ещё участвует в визите (403), как в оплате. Условия - чистые правила `orders/rules/order-payment-correction.rules.ts`.
+- Платёжные методы заказов вынесены из `OrdersFacade` в `OrderPaymentsFacade` (`paymentViews`, `recordPayment`, `refund`, `voidPaymentOperation`, `undoVisitPayment`); его использует `OrdersController` и `BookingPaymentService.undo`.
+- Первый шаг действия с ключом оплаты - один метод `PaymentsFacade`: `lockKeyForReplay` (блокировка ключа и повтор) или `lockUnusedKey` (оплата только что созданной записи).
+- Отмена: `OrderPaymentsFacade.undoVisitPayment` -> `OrderPaymentCorrectionService` (туда же переехал `voidOperation`) -> `PaymentsFacade.undo` -> `PaymentLedgerService.undo`. Блокировки входа (`lockOrderWithVisit`, `lockVisitOrder`) - в `OrderLockService`. На заблокированной записи повторно проверяется, что мастер с `booking.own:write` ещё участвует в визите (403), как в оплате (`assertVisitParticipant`, им же пользуется `BookingPaymentService.pay`). Условия - чистые правила `orders/rules/order-payment-correction.rules.ts`, условия журнала - `payments/rules/payment-undo.rules.ts` и `payments/rules/payment-void.rules.ts`.
 - `tracked` заказов считает `OrderPaymentTrackingService`: заказ визита - по `startAt` записи, в том числе удалённой (`BookingVisitsService.startAtByBookingIds`), как в сводке; `Order.occurredAt` - только если записи больше нет. Момент - чистая `orderPaymentMoment` (`orders/rules/order-payment-tracking.rules.ts`).
 - Статус в календаре и в `PaymentSummaryDto` - одна функция `paymentStatusOf(amountDue, totals, tracked)` в `payments/rules/payment-state.rules.ts`.
 - `docs/openapi.json` в `crm-core` не хранится (см. раздел 4).

@@ -92,18 +92,11 @@ export class OrdersController {
     @Query() dto: OrderSearchRequestDto,
   ): Promise<BaseResponseDto<OrderSearchResponseDto>> {
     const { items, totalItems } = await this.orders.search(locationId, dto);
-    const [payments, tracked] = await Promise.all([
-      this.orderPayments.paymentTotals(items),
-      this.orderPayments.paymentTrackedByOrder(locationId, items),
-    ]);
+    const payments = await this.orderPayments.paymentViews(locationId, items);
     return BaseResponseDto.success(
       new OrderSearchResponseDto(
         items.map((order) =>
-          OrderResponseDto.fromEntity(
-            order,
-            payments.get(order.id),
-            tracked.get(order.id)!,
-          ),
+          OrderResponseDto.fromEntity(order, payments.get(order.id)!),
         ),
         dto.page,
         dto.pageSize,
@@ -139,16 +132,9 @@ export class OrdersController {
     @Param('orderId', ParseUUIDPipe) orderId: string,
   ): Promise<BaseResponseDto<OrderResponseDto>> {
     const order = await this.orders.findById(locationId, orderId);
-    const [payments, tracked] = await Promise.all([
-      this.orderPayments.paymentTotals([order]),
-      this.orderPayments.paymentTrackedByOrder(locationId, [order]),
-    ]);
+    const payments = await this.orderPayments.paymentViews(locationId, [order]);
     return BaseResponseDto.success(
-      OrderResponseDto.fromEntity(
-        order,
-        payments.get(order.id),
-        tracked.get(order.id)!,
-      ),
+      OrderResponseDto.fromEntity(order, payments.get(order.id)!),
     );
   }
 
@@ -279,7 +265,8 @@ export class OrdersController {
   })
   @ApiOkResponse({ type: ApiResponse(OrderPaymentResponseDto) })
   @ApiBadRequestResponse({
-    description: 'PAYMENT_SPLIT_INVALID, PAYMENT_DATE_INVALID',
+    description:
+      'PAYMENT_SPLIT_INVALID (a bad split, or expectedAmount with MIXED), PAYMENT_DATE_INVALID',
   })
   @ApiNotFoundResponse({ description: 'Order not found' })
   @ApiConflictResponse({

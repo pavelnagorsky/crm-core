@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { PaymentOperation, Prisma } from '@prisma/client';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
@@ -28,6 +28,11 @@ import { OrderStateRules } from '../rules/order-state.rules.js';
 import { OrderLockService } from './order-lock.service.js';
 import { OrderPersistenceService } from './order-persistence.service.js';
 
+/** The result of a retry: the operation of the first request, without effects. */
+function replayed(operation: Pick<PaymentOperation, 'id'>): OrderPaymentResult {
+  return { operationId: operation.id, change: null, bookingId: null };
+}
+
 /** Payments and refunds through the order endpoints; corrections are in OrderPaymentCorrectionService. */
 @Injectable()
 export class OrderPaymentService {
@@ -52,14 +57,10 @@ export class OrderPaymentService {
     assertPaymentTrackingEnabled(
       await this.locations.getPaymentTracking(locationId),
     );
-    const occurredAt = details.occurredAt
-      ? resolvePaymentDate(
-          details.occurredAt,
-          (await this.locations.getLocale(locationId)).timezone,
-          now,
-        )
-      : null;
-    return paymentRequest(details, occurredAt);
+    return paymentRequest(
+      details,
+      await this.explicitPaymentDate(locationId, details.occurredAt, now),
+    );
   }
 
   /** Records or replaces the payment of a sale. A visit order is paid through its booking. */
@@ -73,15 +74,13 @@ export class OrderPaymentService {
     const request = await this.prepareRequest(locationId, dto, now);
     const requestHash = paymentRequestHash({ orderId }, dto);
     return this.persistence.inTransaction(async (tx) => {
-      await this.payments.lockKey(tx, locationId, dto.idempotencyKey);
-      const replay = await this.payments.findReplay(
+      const replay = await this.payments.lockKeyForReplay(
         tx,
         locationId,
         dto.idempotencyKey,
         requestHash,
       );
-      if (replay)
-        return { operationId: replay.id, change: null, bookingId: null };
+      if (replay) return replayed(replay);
       await this.persistence.lockOrder(tx, orderId);
       const order = await this.persistence.findInTransaction(
         tx,
@@ -112,7 +111,7 @@ export class OrderPaymentService {
     idempotencyKey: string,
     requestHash: string,
     actor: AuditActor,
-    now = new Date(),
+    now: Date,
   ): Promise<PaymentChange> {
     this.assertSale(order);
     this.stateAssertions.assertActive(order.status);
@@ -152,24 +151,17 @@ export class OrderPaymentService {
     actor: AuditActor,
   ): Promise<OrderPaymentResult> {
     const now = new Date();
-    const occurredAt = dto.occurredAt
-      ? resolvePaymentDate(
-          dto.occurredAt,
-          (await this.locations.getLocale(locationId)).timezone,
-          now,
-        )!
-      : now;
+    const occurredAt =
+      (await this.explicitPaymentDate(locationId, dto.occurredAt, now)) ?? now;
     const requestHash = refundRequestHash(orderId, dto);
     return this.persistence.inTransaction(async (tx) => {
-      await this.payments.lockKey(tx, locationId, dto.idempotencyKey);
-      const replay = await this.payments.findReplay(
+      const replay = await this.payments.lockKeyForReplay(
         tx,
         locationId,
         dto.idempotencyKey,
         requestHash,
       );
-      if (replay)
-        return { operationId: replay.id, change: null, bookingId: null };
+      if (replay) return replayed(replay);
       const { order } = await this.locks.lockOrderWithVisit(
         tx,
         locationId,
@@ -212,5 +204,16 @@ export class OrderPaymentService {
   ): Promise<void> {
     if ((await this.payments.paidAmount(tx, orderId)).gt(0))
       throw new AppException(ErrorCode.ORDER_HAS_PAYMENTS, HttpStatus.CONFLICT);
+  }
+
+  /** An explicit payment date in UTC from the location wall time; null without one. */
+  private async explicitPaymentDate(
+    locationId: string,
+    local: string | null | undefined,
+    now: Date,
+  ): Promise<Date | null> {
+    if (!local) return null;
+    const { timezone } = await this.locations.getLocale(locationId);
+    return resolvePaymentDate(local, timezone, now);
   }
 }

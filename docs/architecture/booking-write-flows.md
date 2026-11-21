@@ -171,7 +171,9 @@ completed, reminded or paid for by the cron; staff close it by hand.
 Any error rolls everything back. Replacing an active payment needs `order:write`; a
 master records the first payment of their own visit. `PATCH status` takes no payment;
 cron, status changes and creation never record money. Deleting a booking with a paid
-amount answers 409 `BOOKING_HAS_PAYMENTS`.
+amount answers 409 `BOOKING_HAS_PAYMENTS`. The update hooks of
+`BookingRescheduleService` (`BookingWriteHooks`) let the key lock run first and
+the payment run after the completed-visit sync, in the reschedule transaction.
 
 `POST /locations/:locationId/bookings/:id/payment/undo` undoes a first payment of the
 visit that the caller recorded less than 10 minutes ago (no active refunds; design:
@@ -179,9 +181,7 @@ visit that the caller recorded less than 10 minutes ago (no active refunds; desi
 `FOR SHARE`, visit order `FOR UPDATE`, journal (`OrderPaymentCorrectionService`,
 `PaymentLedgerService.undo`). The visit keeps its status: a visit completed by the
 payment stays COMPLETED. A voided operation answers 200 without changes. A master with
-`booking.own:write` must still take part in the locked visit (403), as in the payment. The update hooks of
-`BookingRescheduleService` (`BookingWriteHooks`) let the key lock run first and
-the payment run after the completed-visit sync, in the reschedule transaction.
+`booking.own:write` must still take part in the locked visit (403), as in the payment.
 
 ## Parallel bundle teams
 

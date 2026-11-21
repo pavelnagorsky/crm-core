@@ -7,6 +7,7 @@ import { PaymentInputMethod } from '../enums/payment-input-method.enum.js';
 import { PaymentMethod } from '../enums/payment-method.enum.js';
 import { PaymentPart } from '../interfaces/payment-part.interface.js';
 import { PaymentSplit } from '../interfaces/payment-split.interface.js';
+import { PaymentTotals } from '../interfaces/payment-totals.interface.js';
 
 /** MIXED takes two positive parts; CASH and CARD take none: their amount is the amount due. */
 export function assertPaymentSplit(split: PaymentSplit): void {
@@ -24,6 +25,20 @@ export function assertPaymentSplit(split: PaymentSplit): void {
       ErrorCode.PAYMENT_SPLIT_INVALID,
       HttpStatus.BAD_REQUEST,
     );
+}
+
+/**
+ * What a payment must cover so that the order ends up paid: the amount due plus active
+ * refunds. 409 PAYMENT_NOTHING_DUE when that is not positive.
+ */
+export function requiredPaymentAmount(
+  amountDue: Prisma.Decimal,
+  totals: Pick<PaymentTotals, 'refundedAmount'>,
+): Prisma.Decimal {
+  const requiredAmount = amountDue.plus(totals.refundedAmount);
+  if (requiredAmount.lte(0))
+    throw new AppException(ErrorCode.PAYMENT_NOTHING_DUE, HttpStatus.CONFLICT);
+  return requiredAmount;
 }
 
 /**

@@ -3,8 +3,8 @@ import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
 import { PaymentInputDto } from '../payments/dto/payment-input.dto.js';
 import { RefundInputDto } from '../payments/dto/refund-input.dto.js';
 import { VoidPaymentOperationDto } from '../payments/dto/void-payment-operation.dto.js';
-import { OrderPaymentTotals } from '../payments/interfaces/order-payment-totals.interface.js';
 import { PaymentsFacade } from '../payments/payments.facade.js';
+import { OrderPaymentView } from './interfaces/order-payment-view.interface.js';
 import { OrderWithItems } from './interfaces/order-with-items.interface.js';
 import { VisitPaymentUndo } from './interfaces/visit-payment-undo.interface.js';
 import { OrderPaymentCorrectionService } from './services/order-payment-correction.service.js';
@@ -24,22 +24,24 @@ export class OrderPaymentsFacade {
     private readonly payments: PaymentsFacade,
   ) {}
 
-  /** Active journal of each order, for `OrderResponseDto.payment`. */
-  paymentTotals(
-    orders: readonly Pick<OrderWithItems, 'id'>[],
-  ): Promise<Map<string, OrderPaymentTotals>> {
-    return this.payments.totalsByOrders(orders.map((order) => order.id));
-  }
-
   /**
-   * Whether each order is in payment tracking, for `OrderResponseDto.payment`: a visit order
-   * by the start of its visit, a sale by its date.
+   * Payment of each order for `OrderResponseDto.payment`, keyed by order id: the active
+   * journal and payment tracking (a visit order by the start of its visit, a sale by its date).
    */
-  paymentTrackedByOrder(
+  async paymentViews(
     locationId: string,
     orders: readonly Pick<OrderWithItems, 'id' | 'bookingId' | 'occurredAt'>[],
-  ): Promise<Map<string, boolean>> {
-    return this.tracking.trackedByOrder(locationId, orders);
+  ): Promise<Map<string, OrderPaymentView>> {
+    const [totals, tracked] = await Promise.all([
+      this.payments.totalsByOrders(orders.map((order) => order.id)),
+      this.tracking.trackedByOrder(locationId, orders),
+    ]);
+    return new Map(
+      orders.map((order) => [
+        order.id,
+        { totals: totals.get(order.id) ?? null, tracked: tracked.get(order.id)! },
+      ]),
+    );
   }
 
   /** Records or replaces the payment of a sale. */
@@ -76,6 +78,7 @@ export class OrderPaymentsFacade {
     return operationId;
   }
 
+  /** Voids a mistaken journal operation; voiding it again changes nothing. */
   async voidPaymentOperation(
     locationId: string,
     orderId: string,

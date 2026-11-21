@@ -187,9 +187,8 @@ function setup() {
   );
   const stateAssertions = new OrderStateRules();
   const payments = {
-    lockKey: vi.fn(),
-    findReplay: vi.fn().mockResolvedValue(null),
-    assertKeyUnused: vi.fn(),
+    lockKeyForReplay: vi.fn().mockResolvedValue(null),
+    lockUnusedKey: vi.fn(),
     record: vi.fn(),
     refund: vi.fn(),
     void: vi.fn(),
