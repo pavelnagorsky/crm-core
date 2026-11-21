@@ -29,7 +29,12 @@ describe('BookingPaymentService.pay', () => {
       db as never,
       {
         getLocale: vi.fn().mockResolvedValue({ timezone: 'Europe/Minsk' }),
+        getPaymentTracking: vi.fn().mockResolvedValue({
+          mode: 'MANUAL',
+          since: new Date(0),
+        }),
       } as never,
+      {} as never,
       {} as never,
       payments as never,
       lifecycle as never,

@@ -68,6 +68,7 @@ import { PayBookingDto } from '../dto/pay-booking.dto.js';
 import { PayBookingResponseDto } from '../dto/pay-booking-response.dto.js';
 import { UpdateBookingStatusDto } from '../dto/update-booking-status.dto.js';
 import { UpdateBookingDto } from '../dto/update-booking.dto.js';
+import { UndoBookingPaymentDto } from '../dto/undo-booking-payment.dto.js';
 import { BookingStatus } from '../enums/booking-status.enum.js';
 import { BookingExportRequestDto } from '../export/dto/booking-export-request.dto.js';
 import { BookingsExportService } from '../export/services/bookings-export.service.js';
@@ -167,7 +168,7 @@ export class BookingsController {
   })
   @ApiConflictResponse({
     description:
-      'BOOKING_NO_STAFF_AVAILABLE: no qualified staff member is free for a service (with isCustomTime: nobody performs it, or a parallel bundle has fewer distinct qualified staff than services). BOOKING_SLOT_UNAVAILABLE: the slot was taken while saving (never with isCustomTime)',
+      'BOOKING_NO_STAFF_AVAILABLE: no qualified staff member is free for a service (with isCustomTime: nobody performs it, or a parallel bundle has fewer distinct qualified staff than services). BOOKING_SLOT_UNAVAILABLE: the slot was taken while saving (never with isCustomTime). With payment: the payment errors of PUT bookings/:id/payment, PAYMENT_TRACKING_DISABLED included (nothing is created)',
   })
   @ApiForbiddenResponse({
     description:
@@ -435,7 +436,7 @@ export class BookingsController {
   })
   @ApiConflictResponse({
     description:
-      'PAYMENT_AMOUNT_MISMATCH: responseValue { amountDue, requiredAmount }. PAYMENT_NOTHING_DUE. PAYMENT_IDEMPOTENCY_CONFLICT: responseValue { operationId }. BOOKING_PAYMENT_NOT_ALLOWED: confirmProductItemIds for NO_SHOW or CANCELLED. ORDER_ITEM_NOT_DRAFT, ORDER_PRODUCT_NOT_SELLABLE, ORDER_SELLER_INVALID. Completion errors as in PATCH status',
+      'PAYMENT_TRACKING_DISABLED: the location does not track payments. PAYMENT_ALREADY_RECORDED (expectNoPayment): responseValue { operationId }. PAYMENT_AMOUNT_MISMATCH (parts or expectedAmount): responseValue { amountDue, requiredAmount }. PAYMENT_NOTHING_DUE. PAYMENT_IDEMPOTENCY_CONFLICT: responseValue { operationId }. BOOKING_PAYMENT_NOT_ALLOWED: confirmProductItemIds for NO_SHOW or CANCELLED. ORDER_ITEM_NOT_DRAFT, ORDER_PRODUCT_NOT_SELLABLE, ORDER_SELLER_INVALID. Completion errors as in PATCH status',
   })
   @Permissions([Write(Claim.BOOKING), Write(Claim.BOOKING_OWN)])
   @Put('locations/:locationId/bookings/:id/payment')
@@ -462,6 +463,44 @@ export class BookingsController {
       participantStaffId,
     );
     return BaseResponseDto.success({ id: current.id, orderId, operationId });
+  }
+
+  @ApiOperation({
+    summary: 'Undo a payment just recorded',
+    description:
+      'Voids every record of a first payment of the visit (not a replacement, no active refunds on the order) with the reason «Отменено сразу после записи». Only the author of the payment, not later than 10 minutes after it. The visit keeps its status: a visit completed by the payment stays COMPLETED. Allowed with payment tracking disabled. A retry, or an operation voided already (undone or replaced), changes nothing and answers 200. Order history: PAYMENT_VOIDED.',
+  })
+  @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
+  @ApiNotFoundResponse({
+    description:
+      'Booking not found. PAYMENT_OPERATION_NOT_FOUND: the visit has no order or the operation is not in its order',
+  })
+  @ApiForbiddenResponse({
+    description: 'booking.own:write for a visit of another master',
+  })
+  @ApiConflictResponse({
+    description:
+      'PAYMENT_UNDO_NOT_ALLOWED: another author, not a first payment, or the order has active refunds. PAYMENT_UNDO_EXPIRED: more than 10 minutes passed',
+  })
+  @Permissions([Write(Claim.BOOKING), Write(Claim.BOOKING_OWN)])
+  @HttpCode(HttpStatus.OK)
+  @Post('locations/:locationId/bookings/:id/payment/undo')
+  async undoPayment(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UndoBookingPaymentDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
+  ): Promise<BaseResponseDto<IdResponseDto>> {
+    const booking = await this.bookings.findByIdInLocation(locationId, id);
+    // Undo is part of paying: a master undoes a payment of their own visit.
+    await this.access.assertManage(tokenPayload, booking);
+    await this.bookings.undoPayment(
+      booking,
+      dto.operationId,
+      auditActorFromToken(tokenPayload, locationId),
+      await this.access.manageStaffId(tokenPayload, locationId),
+    );
+    return BaseResponseDto.success({ id: booking.id });
   }
 
   @ApiOperation({ summary: 'Add a draft product sale to a booking order' })

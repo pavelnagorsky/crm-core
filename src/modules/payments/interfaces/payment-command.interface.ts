@@ -2,7 +2,10 @@ import { Prisma } from '@prisma/client';
 import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
 import { PaymentRequest } from './payment-request.interface.js';
 
-/** Record or replace the payment of an order. The caller holds the order lock. */
+/**
+ * Record or replace the payment of an order. The caller holds the order lock. The expectations
+ * of the request are checked against the locked journal.
+ */
 export interface PaymentCommand {
   locationId: string;
   orderId: string;

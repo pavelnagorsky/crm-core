@@ -419,7 +419,7 @@ export class BookingsAggregatesService {
 
   /**
    * Closed visits of one location that started in the range: COMPLETED, NO_SHOW or
-   * CANCELLED, and deleted bookings of any status. Columns: `bookingId`, `startAt`,
+   * CANCELLED, and deleted bookings of any status. Columns: `bookingId`, `status`, `startAt`,
    * `clientName`, `staffNames` (by service order) and `servicesDue` (services to be paid,
    * as in the visit payment rules). Embedded in the finance summary of Orders.
    */
@@ -444,6 +444,7 @@ export class BookingsAggregatesService {
     );
     return Prisma.sql`
       SELECT b."id" AS "bookingId",
+             b."status"::text AS "status",
              b."startAt" AS "startAt",
              TRIM(b."clientFirstName" || ' ' || b."clientLastName") AS "clientName",
              ARRAY(

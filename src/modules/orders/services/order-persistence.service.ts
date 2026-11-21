@@ -176,7 +176,7 @@ export class OrderPersistenceService {
     return order.bookingId;
   }
 
-  /** Visit order id and sold products of each booking that has an order. */
+  /** Visit order id, sold products and draft product count of each booking that has an order. */
   async productTotalsByBookings(
     bookingIds: readonly string[],
     client: Prisma.TransactionClient = this.db,
@@ -191,7 +191,7 @@ export class OrderPersistenceService {
         items: {
           where: {
             type: OrderItemType.PRODUCT,
-            status: OrderItemStatus.CONFIRMED,
+            status: { in: [OrderItemStatus.CONFIRMED, OrderItemStatus.DRAFT] },
           },
           select: {
             type: true,
@@ -210,6 +210,9 @@ export class OrderPersistenceService {
       result.set(order.bookingId, {
         orderId: order.id,
         productsNet: orderProductsNet(order),
+        draftProductsCount: order.items.filter(
+          (item) => item.status === OrderItemStatus.DRAFT,
+        ).length,
       });
     }
     return result;

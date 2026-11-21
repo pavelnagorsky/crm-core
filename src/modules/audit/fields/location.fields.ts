@@ -21,4 +21,5 @@ export const LOCATION_AUDIT_FIELDS: FieldDescriptor<Location>[] = [
   { key: 'bookingVisibility', i18n: 'bookingVisibility' },
   { key: 'isBookingConfirmationRequired', i18n: 'booleanValue' },
   { key: 'notifyClientOnStaffChanges', i18n: 'booleanValue' },
+  { key: 'paymentTrackingMode', i18n: 'paymentTrackingMode' },
 ];

@@ -93,8 +93,8 @@ channel, status or interval. Only `MANUAL` bookings can have `isCustomTime: true
 | `BookingWriteLockService` | Lock active locations and reject booking edits if status or `updatedAt` changed since reading. |
 | `BookingSlotLockService` | Acquire deduplicated staff/day advisory locks in a stable order and recheck availability using the transaction. |
 | `BookingEventsService` | Build booking audit payloads and send creation/status notifications. |
-| `BookingPaymentService` | Pay a visit: complete a started visit, confirm product lines and record the payment through `PaymentsFacade` in the caller's transaction. |
-| `BookingPaymentReadService` | Amount due and active journal of visits for the booking card and the calendar, in batches. |
+| `BookingPaymentService` | Pay a visit: complete a started visit, confirm product lines and record the payment through `PaymentsFacade` in the caller's transaction. Undo a payment just recorded through `OrderPaymentsFacade.undoVisitPayment`. |
+| `BookingPaymentReadService` | Amount due, active journal, payment tracking (`tracked`, by `startAt`) and draft product count of visits for the booking card and the calendar, in batches. |
 
 Changing `startAt`, `staffId` or item `staffAssignments` moves the existing item intervals and checks slot
 availability. Every member of the proposed team must still be active, belong to
@@ -161,14 +161,25 @@ completed, reminded or paid for by the cron; staff close it by hand.
    chosen draft products are confirmed, the amount due is computed under the lock
    (`rules/visit-payment-due.rules.ts`: services by the booking for PENDING,
    CONFIRMED and COMPLETED, plus sold products) and the payment is recorded or replaces
-   the active one.
+   the active one. `PaymentsFacade.record` first refuses a location with payment
+   tracking DISABLED (409 `PAYMENT_TRACKING_DISABLED`); the ledger then checks the
+   one-click expectations (`expectNoPayment`: 409 `PAYMENT_ALREADY_RECORDED`;
+   `expectedAmount`: 409 `PAYMENT_AMOUNT_MISMATCH`).
 5. After commit: `BOOKING_STATUS_CHANGED` for a completion, `ORDER_ITEM_CONFIRMED`,
    `PAYMENT_RECORDED` or `PAYMENT_REPLACED`.
 
 Any error rolls everything back. Replacing an active payment needs `order:write`; a
 master records the first payment of their own visit. `PATCH status` takes no payment;
 cron, status changes and creation never record money. Deleting a booking with a paid
-amount answers 409 `BOOKING_HAS_PAYMENTS`. The update hooks of
+amount answers 409 `BOOKING_HAS_PAYMENTS`.
+
+`POST /locations/:locationId/bookings/:id/payment/undo` undoes a first payment of the
+visit that the caller recorded less than 10 minutes ago (no active refunds; design:
+[payment-tracking-plan.md](../payment-tracking-plan.md), 3.4). Locks: booking
+`FOR SHARE`, visit order `FOR UPDATE`, journal (`OrderPaymentCorrectionService`,
+`PaymentLedgerService.undo`). The visit keeps its status: a visit completed by the
+payment stays COMPLETED. A voided operation answers 200 without changes. A master with
+`booking.own:write` must still take part in the locked visit (403), as in the payment. The update hooks of
 `BookingRescheduleService` (`BookingWriteHooks`) let the key lock run first and
 the payment run after the completed-visit sync, in the reschedule transaction.
 

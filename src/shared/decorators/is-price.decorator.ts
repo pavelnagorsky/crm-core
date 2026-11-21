@@ -28,6 +28,21 @@ export const IsPositivePrice =
     })(target, propertyKey);
   };
 
+/** An optional price greater than zero. */
+export const IsOptionalPositivePrice =
+  (description?: string): PropertyDecorator =>
+  (target, propertyKey) => {
+    ApiPrice({ required: false, nullable: true, description })(
+      target,
+      propertyKey,
+    );
+    IsOptional()(target, propertyKey);
+    CanonicalAmount()(target, propertyKey);
+    Matches(regularExpressions.positiveMoneyAmount, {
+      message: `${String(propertyKey)} must be a positive amount with at most 2 decimal places`,
+    })(target, propertyKey);
+  };
+
 export const IsOptionalPrice =
   (description?: string): PropertyDecorator =>
   (target, propertyKey) => {

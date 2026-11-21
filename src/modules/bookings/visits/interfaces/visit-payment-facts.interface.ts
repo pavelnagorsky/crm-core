@@ -6,4 +6,6 @@ export interface VisitPaymentFacts {
   deleted: boolean;
   /** Services due by the booking (visit payment rules). */
   servicesDue: Prisma.Decimal;
+  /** Masters of the visit services. */
+  staffIds: string[];
 }

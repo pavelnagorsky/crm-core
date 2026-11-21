@@ -6,11 +6,6 @@ import { AuditEvent } from '../audit/enums/audit-event.enum.js';
 import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
 import { BookingWithItems } from '../bookings/interfaces/booking-with-items.interface.js';
 import { LocationService } from '../location/services/location.service.js';
-import { PaymentInputDto } from '../payments/dto/payment-input.dto.js';
-import { RefundInputDto } from '../payments/dto/refund-input.dto.js';
-import { VoidPaymentOperationDto } from '../payments/dto/void-payment-operation.dto.js';
-import { OrderPaymentTotals } from '../payments/interfaces/order-payment-totals.interface.js';
-import { PaymentsFacade } from '../payments/payments.facade.js';
 import { AddOrderItemsDto } from './dto/add-order-items.dto.js';
 import { ConfirmOrderItemsDto } from './dto/confirm-order-items.dto.js';
 import { CreateOrderReturnDto } from './dto/create-order-return.dto.js';
@@ -48,7 +43,6 @@ export class OrdersFacade {
     private readonly mutations: OrderDraftMutationService,
     private readonly audits: OrderAuditService,
     private readonly orderPayments: OrderPaymentService,
-    private readonly payments: PaymentsFacade,
   ) {}
   create(
     locationId: string,
@@ -77,13 +71,6 @@ export class OrdersFacade {
 
   findById(locationId: string, orderId: string): Promise<OrderWithItems> {
     return this.persistence.findById(locationId, orderId);
-  }
-
-  /** Active journal of each order, for `OrderResponseDto.payment`. */
-  paymentTotals(
-    orders: readonly Pick<OrderWithItems, 'id'>[],
-  ): Promise<Map<string, OrderPaymentTotals>> {
-    return this.payments.totalsByOrders(orders.map((order) => order.id));
   }
 
   syncBookingClient(
@@ -230,7 +217,10 @@ export class OrdersFacade {
     return orderProductsNet(order);
   }
 
-  /** Visit order id and sold products (`productsNet`) of each booking that has an order. */
+  /**
+   * Visit order id, sold products (`productsNet`) and draft product count of each booking
+   * that has an order.
+   */
   productTotalsByBookings(
     bookingIds: readonly string[],
     client?: Prisma.TransactionClient,
@@ -384,57 +374,6 @@ export class OrdersFacade {
     );
     this.orderPayments.publish(refund, actor, order.bookingId);
     return order;
-  }
-
-  /** Records or replaces the payment of a sale. */
-  async recordPayment(
-    locationId: string,
-    orderId: string,
-    dto: PaymentInputDto,
-    actor: AuditActor,
-  ): Promise<string> {
-    const { operationId, change } = await this.orderPayments.recordSalePayment(
-      locationId,
-      orderId,
-      dto,
-      actor,
-    );
-    this.orderPayments.publish(change, actor);
-    return operationId;
-  }
-
-  /** Gives money back; works for visit orders too. */
-  async refund(
-    locationId: string,
-    orderId: string,
-    dto: RefundInputDto,
-    actor: AuditActor,
-  ): Promise<string> {
-    const { operationId, change, bookingId } = await this.orderPayments.refund(
-      locationId,
-      orderId,
-      dto,
-      actor,
-    );
-    this.orderPayments.publish(change, actor, bookingId);
-    return operationId;
-  }
-
-  async voidPaymentOperation(
-    locationId: string,
-    orderId: string,
-    operationId: string,
-    dto: VoidPaymentOperationDto,
-    actor: AuditActor,
-  ): Promise<void> {
-    const { change, bookingId } = await this.orderPayments.voidOperation(
-      locationId,
-      orderId,
-      operationId,
-      dto,
-      actor,
-    );
-    this.orderPayments.publish(change, actor, bookingId);
   }
 
   private async dayFilterTimezone(

@@ -645,6 +645,10 @@
     "PUBLIC": "Публичная",
     "PRIVATE": "Закрытая"
   },
+  "paymentTrackingMode": {
+    "MANUAL": "Отмечать вручную",
+    "DISABLED": "Не вести"
+  },
   "booleanValue": {
     "true": "Да",
     "false": "Нет"
@@ -763,7 +767,8 @@
       "minimumBookingNoticeMinutes": "Мин. время до записи (мин)",
       "bookingVisibility": "Видимость записи",
       "isBookingConfirmationRequired": "Требуется подтверждение",
-      "notifyClientOnStaffChanges": "Сообщать клиенту о записях, созданных или перенесённых администратором"
+      "notifyClientOnStaffChanges": "Сообщать клиенту о записях, созданных или перенесённых администратором",
+      "paymentTrackingMode": "Учёт оплат"
     },
     "BOOKING": {
       "isCustomTime": "Произвольное время",

@@ -30,13 +30,32 @@ export class BookingVisitsService {
       select: {
         status: true,
         deletedAt: true,
-        items: { select: { chargedPrice: true, customPrice: true } },
+        items: {
+          select: { chargedPrice: true, customPrice: true, staffId: true },
+        },
       },
     });
     return {
       deleted: booking.deletedAt !== null,
       servicesDue: visitServicesDue(booking),
+      staffIds: [...new Set(booking.items.map((item) => item.staffId))],
     };
+  }
+
+  /**
+   * Start of each booking of the location by id, deleted bookings included: payment tracking
+   * judges a visit order by its visit start, as the finance summary does. Absent: no booking.
+   */
+  async startAtByBookingIds(
+    locationId: string,
+    bookingIds: readonly string[],
+  ): Promise<Map<string, Date>> {
+    if (bookingIds.length === 0) return new Map();
+    const bookings = await this.db.booking.findMany({
+      where: { id: { in: [...new Set(bookingIds)] }, locationId },
+      select: { id: true, startAt: true },
+    });
+    return new Map(bookings.map((booking) => [booking.id, booking.startAt]));
   }
 
   /** Visits of the location's bookings by id; deleted bookings are absent. */

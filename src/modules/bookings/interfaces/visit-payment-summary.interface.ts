@@ -9,4 +9,8 @@ export interface VisitPaymentSummary {
   productsAmount: Prisma.Decimal;
   amountDue: Prisma.Decimal;
   totals: OrderPaymentTotals | null;
+  /** The visit is in payment tracking of its location (by its start). */
+  tracked: boolean;
+  /** Draft product lines of the visit order; 0 without an order. */
+  draftProductsCount: number;
 }

@@ -5,4 +5,6 @@ export interface BookingOrderProducts {
   orderId: string;
   /** Confirmed product lines minus their posted returns. */
   productsNet: Prisma.Decimal;
+  /** Draft (not yet sold) product lines. */
+  draftProductsCount: number;
 }

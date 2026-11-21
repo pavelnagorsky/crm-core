@@ -2,6 +2,7 @@ import { PaymentMethod, PaymentType, Prisma } from '@prisma/client';
 import { PaymentStatus } from '../enums/payment-status.enum.js';
 import {
   paymentStatus,
+  paymentStatusOf,
   paymentTotals,
   refundLimit,
 } from './payment-state.rules.js';
@@ -61,36 +62,82 @@ describe('paymentTotals', () => {
 describe('paymentStatus', () => {
   const none = { paidAmount: d(0), hasRecords: false };
 
-  it('is NOT_REQUIRED without records and nothing due', () => {
-    expect(paymentStatus(d(0), none)).toBe(PaymentStatus.NOT_REQUIRED);
-  });
+  it.each([true, false])(
+    'is NOT_REQUIRED without records and nothing due (tracked: %s)',
+    (tracked) => {
+      expect(paymentStatus(d(0), none, tracked)).toBe(
+        PaymentStatus.NOT_REQUIRED,
+      );
+    },
+  );
 
-  it('is NOT_SPECIFIED without records and something due', () => {
-    expect(paymentStatus(d('0.01'), none)).toBe(PaymentStatus.NOT_SPECIFIED);
-  });
-
-  it('is PAID when the paid amount equals the amount due', () => {
-    expect(
-      paymentStatus(d('3000'), { paidAmount: d('3000.00'), hasRecords: true }),
-    ).toBe(PaymentStatus.PAID);
-  });
-
-  it('is PAID for a settled visit: paid and fully refunded, nothing due', () => {
-    expect(paymentStatus(d(0), { paidAmount: d(0), hasRecords: true })).toBe(
-      PaymentStatus.PAID,
+  it('is NOT_SPECIFIED without records, something due and tracked', () => {
+    expect(paymentStatus(d('0.01'), none, true)).toBe(
+      PaymentStatus.NOT_SPECIFIED,
     );
   });
 
-  it('is UNDERPAID when less is paid', () => {
-    expect(
-      paymentStatus(d('3000'), { paidAmount: d('2999.99'), hasRecords: true }),
-    ).toBe(PaymentStatus.UNDERPAID);
+  it('is NOT_TRACKED without records, something due and not tracked', () => {
+    expect(paymentStatus(d('0.01'), none, false)).toBe(
+      PaymentStatus.NOT_TRACKED,
+    );
   });
 
-  it('is OVERPAID when more is paid, for example a cancelled paid visit', () => {
+  it.each([true, false])(
+    'is PAID when the paid amount equals the amount due (tracked: %s)',
+    (tracked) => {
+      expect(
+        paymentStatus(
+          d('3000'),
+          { paidAmount: d('3000.00'), hasRecords: true },
+          tracked,
+        ),
+      ).toBe(PaymentStatus.PAID);
+    },
+  );
+
+  it('is PAID for a settled visit: paid and fully refunded, nothing due', () => {
     expect(
-      paymentStatus(d(0), { paidAmount: d('3000'), hasRecords: true }),
-    ).toBe(PaymentStatus.OVERPAID);
+      paymentStatus(d(0), { paidAmount: d(0), hasRecords: true }, true),
+    ).toBe(PaymentStatus.PAID);
+  });
+
+  it.each([true, false])(
+    'is UNDERPAID when less is paid (tracked: %s)',
+    (tracked) => {
+      expect(
+        paymentStatus(
+          d('3000'),
+          { paidAmount: d('2999.99'), hasRecords: true },
+          tracked,
+        ),
+      ).toBe(PaymentStatus.UNDERPAID);
+    },
+  );
+
+  it.each([true, false])(
+    'is OVERPAID when more is paid, for example a cancelled paid visit (tracked: %s)',
+    (tracked) => {
+      expect(
+        paymentStatus(d(0), { paidAmount: d('3000'), hasRecords: true }, tracked),
+      ).toBe(PaymentStatus.OVERPAID);
+    },
+  );
+});
+
+describe('paymentStatusOf', () => {
+  it('treats missing totals as nothing recorded', () => {
+    expect(paymentStatusOf(d('1500'), null, true)).toBe(
+      PaymentStatus.NOT_SPECIFIED,
+    );
+    expect(paymentStatusOf(d('1500'), undefined, false)).toBe(
+      PaymentStatus.NOT_TRACKED,
+    );
+  });
+
+  it('shows records whether tracked or not', () => {
+    const totals = { paidAmount: d('1500'), hasRecords: true };
+    expect(paymentStatusOf(d('1500'), totals, false)).toBe(PaymentStatus.PAID);
   });
 });
 

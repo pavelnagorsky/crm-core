@@ -652,6 +652,22 @@ export const ErrorCode = {
     message:
       'The order has active refunds; change the payment or void the refunds first',
   },
+  PAYMENT_TRACKING_DISABLED: {
+    code: 'PAYMENT_TRACKING_DISABLED',
+    message: 'Payment tracking is disabled in this location',
+  },
+  PAYMENT_ALREADY_RECORDED: {
+    code: 'PAYMENT_ALREADY_RECORDED',
+    message: 'The order already has a payment',
+  },
+  PAYMENT_UNDO_NOT_ALLOWED: {
+    code: 'PAYMENT_UNDO_NOT_ALLOWED',
+    message: 'Only the author can undo a first payment without refunds',
+  },
+  PAYMENT_UNDO_EXPIRED: {
+    code: 'PAYMENT_UNDO_EXPIRED',
+    message: 'The payment can no longer be undone',
+  },
 
   // dashboard
   DASHBOARD_CUSTOM_RANGE_REQUIRED: {

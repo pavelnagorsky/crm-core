@@ -88,6 +88,22 @@ export class BookingsFacade {
     );
   }
 
+  /** Undoes a first payment of the visit by its author within 10 minutes. */
+  undoPayment(
+    booking: BookingWithItems,
+    operationId: string,
+    actor: AuditActor,
+    participantStaffId?: string,
+  ): Promise<void> {
+    return this.payment.undo(
+      booking,
+      operationId,
+      actor,
+      new Date(),
+      participantStaffId,
+    );
+  }
+
   getPaymentSummary(booking: BookingWithItems): Promise<VisitPaymentSummary> {
     return this.paymentReads.summary(booking);
   }

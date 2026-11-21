@@ -31,8 +31,11 @@ import { PaymentsFacade } from '../../payments/payments.facade.js';
 import { assertPaymentDate } from '../../payments/rules/payment-occurred-at.rules.js';
 import { LockedOrder } from '../interfaces/locked-order.interface.js';
 import { OrderReturnResult } from '../interfaces/order-return-result.interface.js';
-import { returnRefundAmount } from '../rules/order-payment-due.rules.js';
-import { OrderPaymentService } from './order-payment.service.js';
+import {
+  lockedOrderAmountDue,
+  returnRefundAmount,
+} from '../rules/order-payment-due.rules.js';
+import { OrderLockService } from './order-lock.service.js';
 import { OrderPersistenceService } from './order-persistence.service.js';
 import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 
@@ -47,7 +50,7 @@ export class OrderReturnService {
     private readonly locations: LocationService,
     private readonly eventEmitter: EventEmitter2,
     private readonly payments: PaymentsFacade,
-    private readonly orderPayments: OrderPaymentService,
+    private readonly locks: OrderLockService,
   ) {}
 
   async create(
@@ -70,7 +73,7 @@ export class OrderReturnService {
     try {
       return await this.persistence.inTransaction(async (tx) => {
         // Booking first, then the order: the refund depends on the visit's services.
-        const { order, visit } = await this.orderPayments.lockOrderWithVisit(
+        const { order, visit } = await this.locks.lockOrderWithVisit(
           tx,
           locationId,
           orderId,
@@ -190,7 +193,7 @@ export class OrderReturnService {
     );
     const amount = returnRefundAmount(
       await this.payments.paidAmount(tx, order.id),
-      this.orderPayments.amountDue(locked),
+      lockedOrderAmountDue(locked),
       returnTotal,
     );
     if (amount.lte(0)) return null;

@@ -7,6 +7,7 @@ import {
 import { OptionalGoogleReviewUrl } from '../decorators/optional-google-review-url.decorator.js';
 import { OptionalYandexReviewUrl } from '../decorators/optional-yandex-review-url.decorator.js';
 import { BookingVisibility, BusinessType } from '@prisma/client';
+import { PaymentTrackingMode } from '../enums/payment-tracking-mode.enum.js';
 import {
   IsBoolean,
   IsEnum,
@@ -107,4 +108,15 @@ export class UpdateLocationDto {
   @IsOptional()
   @IsBoolean()
   notifyClientOnStaffChanges?: boolean;
+
+  @ApiProperty({
+    enum: PaymentTrackingMode,
+    enumName: 'PaymentTrackingMode',
+    required: false,
+    description:
+      'MANUAL: payments are marked by hand; visits and sales from paymentTrackingSince count. DISABLED: no payment tracking, new payments are refused (409 PAYMENT_TRACKING_DISABLED). Switching DISABLED -> MANUAL sets paymentTrackingSince to now; MANUAL -> DISABLED keeps it.',
+  })
+  @IsOptional()
+  @IsEnum(PaymentTrackingMode)
+  paymentTrackingMode?: PaymentTrackingMode;
 }

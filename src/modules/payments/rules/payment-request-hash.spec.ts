@@ -25,6 +25,27 @@ describe('paymentRequestHash', () => {
     );
   });
 
+  it('treats a missing expectation as no expectation', () => {
+    expect(
+      paymentRequestHash(
+        { bookingId: 'booking-1' },
+        { ...details, expectedAmount: null, expectNoPayment: false },
+        ['item-1'],
+      ),
+    ).toBe(base);
+  });
+
+  it('normalizes the expected amount', () => {
+    const shown = { ...details, expectedAmount: '3000.00' };
+    expect(
+      paymentRequestHash(
+        { bookingId: 'booking-1' },
+        { ...shown, expectedAmount: '3000' },
+        ['item-1'],
+      ),
+    ).toBe(paymentRequestHash({ bookingId: 'booking-1' }, shown, ['item-1']));
+  });
+
   it('normalizes amounts', () => {
     expect(
       paymentRequestHash(
@@ -63,6 +84,18 @@ describe('paymentRequestHash', () => {
       ['item-1'],
     ],
     ['confirmed items', { bookingId: 'booking-1' }, details, []],
+    [
+      'expected amount',
+      { bookingId: 'booking-1' },
+      { ...details, expectedAmount: '3000.00' },
+      ['item-1'],
+    ],
+    [
+      'expectation of no payment',
+      { bookingId: 'booking-1' },
+      { ...details, expectNoPayment: true },
+      ['item-1'],
+    ],
   ])('changes with the %s', (_, target, changed, items) => {
     expect(
       paymentRequestHash(

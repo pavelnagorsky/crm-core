@@ -28,6 +28,8 @@ import {
 import { CreateLocationDto } from '../dto/create-location.dto.js';
 import { UpdateLocationDto } from '../dto/update-location.dto.js';
 import { LocationPublicProfile } from '../interfaces/location-public-profile.interface.js';
+import { PaymentTracking } from '../interfaces/payment-tracking.interface.js';
+import { paymentTrackingPatch } from '../rules/payment-tracking-switch.js';
 
 type LocationOrigin = Pick<Location, 'countryCode' | 'timezone'>;
 
@@ -156,6 +158,22 @@ export class LocationService {
     );
   }
 
+  /**
+   * Payment tracking of an active location, read from the database: it gates payment writes,
+   * so a stale cache of another replica must not decide. 404 for an unknown location.
+   */
+  async getPaymentTracking(locationId: string): Promise<PaymentTracking> {
+    const location = await this.db.location.findUnique({
+      where: { id: locationId, ...ACTIVE_LOCATION_WHERE },
+      select: { paymentTrackingMode: true, paymentTrackingSince: true },
+    });
+    if (!location) throw new NotFoundException('Location not found');
+    return {
+      mode: location.paymentTrackingMode,
+      since: location.paymentTrackingSince,
+    };
+  }
+
   private async loadBookingSettings(locationId: string) {
     const location = await this.db.location.findUnique({
       where: { id: locationId, ...ACTIVE_LOCATION_WHERE },
@@ -182,9 +200,17 @@ export class LocationService {
       );
     }
     const old = await this.findById(locationId);
+    const { paymentTrackingMode, ...fields } = dto;
     const updated = await this.db.location.update({
       where: { id: locationId, ...ACTIVE_LOCATION_WHERE },
-      data: dto,
+      data: {
+        ...fields,
+        ...paymentTrackingPatch(
+          old.paymentTrackingMode,
+          paymentTrackingMode,
+          new Date(),
+        ),
+      },
     });
     await this.cache.invalidate(CacheDependency.locationSettings(locationId));
     await this.cache.invalidate(CacheDependency.staffSchedule(locationId));

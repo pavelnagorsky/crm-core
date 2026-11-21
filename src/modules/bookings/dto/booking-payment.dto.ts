@@ -26,12 +26,25 @@ export class BookingPaymentDto extends PaymentSummaryDto {
   })
   productsAmount: string;
 
+  @ApiProperty({
+    type: Number,
+    minimum: 0,
+    description:
+      'Draft (not yet sold) PRODUCT lines of the visit order; 0 without an order.',
+  })
+  draftProductsCount: number;
+
   static fromSummary(summary: VisitPaymentSummary): BookingPaymentDto {
     return Object.assign(new BookingPaymentDto(), {
-      ...PaymentSummaryDto.from(summary.amountDue, summary.totals),
+      ...PaymentSummaryDto.from(
+        summary.amountDue,
+        summary.totals,
+        summary.tracked,
+      ),
       orderId: summary.orderId,
       servicesAmount: MoneyUtils.format(summary.servicesAmount),
       productsAmount: MoneyUtils.format(summary.productsAmount),
+      draftProductsCount: summary.draftProductsCount,
     });
   }
 }

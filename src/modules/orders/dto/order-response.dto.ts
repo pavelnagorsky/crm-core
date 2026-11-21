@@ -75,13 +75,14 @@ export class OrderResponseDto {
   @ApiProperty({
     type: () => PaymentSummaryDto,
     description:
-      'Payment of the order. amountDue counts the confirmed lines of the order minus returns (0 for a voided order). For a visit order before completion the booking services are not in the order yet: the booking card (GET bookings/:id, payment) holds the authoritative amount of a visit.',
+      'Payment of the order. amountDue counts the confirmed lines of the order minus returns (0 for a voided order). For a visit order before completion the booking services are not in the order yet: the booking card (GET bookings/:id, payment) holds the authoritative amount of a visit. NOT_TRACKED: a sale (by occurredAt) or a visit order (by the visit startAt) out of payment tracking of the location.',
   })
   payment: PaymentSummaryDto;
 
   static fromEntity(
     entity: OrderWithItems,
-    payment?: OrderPaymentTotals | null,
+    payment: OrderPaymentTotals | null | undefined,
+    tracked: boolean,
   ): OrderResponseDto {
     const dto = new OrderResponseDto();
     dto.id = entity.id;
@@ -105,7 +106,11 @@ export class OrderResponseDto {
     dto.createdAt = entity.createdAt;
     dto.updatedAt = entity.updatedAt;
     dto.items = entity.items.map(OrderItemResponseDto.fromEntity);
-    dto.payment = PaymentSummaryDto.from(orderAmountDue(entity), payment);
+    dto.payment = PaymentSummaryDto.from(
+      orderAmountDue(entity),
+      payment,
+      tracked,
+    );
     return dto;
   }
 }

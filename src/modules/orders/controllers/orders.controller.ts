@@ -48,12 +48,16 @@ import { UpdateOrderDto } from '../dto/update-order.dto.js';
 import { PaymentInputDto } from '../../payments/dto/payment-input.dto.js';
 import { RefundInputDto } from '../../payments/dto/refund-input.dto.js';
 import { VoidPaymentOperationDto } from '../../payments/dto/void-payment-operation.dto.js';
+import { OrderPaymentsFacade } from '../order-payments.facade.js';
 import { OrdersFacade } from '../orders.facade.js';
 
 @ApiTags('Orders')
 @Controller('locations/:locationId/orders')
 export class OrdersController {
-  constructor(private readonly orders: OrdersFacade) {}
+  constructor(
+    private readonly orders: OrdersFacade,
+    private readonly orderPayments: OrderPaymentsFacade,
+  ) {}
 
   @ApiOperation({
     summary: 'Create an active product order, optionally confirmed immediately',
@@ -61,7 +65,7 @@ export class OrdersController {
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
   @ApiConflictResponse({
     description:
-      'ORDER_IDEMPOTENCY_CONFLICT: the sale key has a different or unknown original request. responseValue.orderId identifies the existing order.',
+      'ORDER_IDEMPOTENCY_CONFLICT: the sale key has a different or unknown original request. responseValue.orderId identifies the existing order. With payment: PAYMENT_TRACKING_DISABLED (nothing is created) and the errors of PUT orders/:orderId/payment.',
   })
   @Permissions(Write(Claim.ORDER))
   @Post()
@@ -88,11 +92,18 @@ export class OrdersController {
     @Query() dto: OrderSearchRequestDto,
   ): Promise<BaseResponseDto<OrderSearchResponseDto>> {
     const { items, totalItems } = await this.orders.search(locationId, dto);
-    const payments = await this.orders.paymentTotals(items);
+    const [payments, tracked] = await Promise.all([
+      this.orderPayments.paymentTotals(items),
+      this.orderPayments.paymentTrackedByOrder(locationId, items),
+    ]);
     return BaseResponseDto.success(
       new OrderSearchResponseDto(
         items.map((order) =>
-          OrderResponseDto.fromEntity(order, payments.get(order.id)),
+          OrderResponseDto.fromEntity(
+            order,
+            payments.get(order.id),
+            tracked.get(order.id)!,
+          ),
         ),
         dto.page,
         dto.pageSize,
@@ -128,9 +139,16 @@ export class OrdersController {
     @Param('orderId', ParseUUIDPipe) orderId: string,
   ): Promise<BaseResponseDto<OrderResponseDto>> {
     const order = await this.orders.findById(locationId, orderId);
-    const payments = await this.orders.paymentTotals([order]);
+    const [payments, tracked] = await Promise.all([
+      this.orderPayments.paymentTotals([order]),
+      this.orderPayments.paymentTrackedByOrder(locationId, [order]),
+    ]);
     return BaseResponseDto.success(
-      OrderResponseDto.fromEntity(order, payments.get(order.id)),
+      OrderResponseDto.fromEntity(
+        order,
+        payments.get(order.id),
+        tracked.get(order.id)!,
+      ),
     );
   }
 
@@ -202,7 +220,10 @@ export class OrdersController {
 
   @ApiOperation({ summary: 'Confirm multiple draft product order items' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
-  @ApiConflictResponse({ description: 'Order items cannot be confirmed' })
+  @ApiConflictResponse({
+    description:
+      'Order items cannot be confirmed. With payment: PAYMENT_TRACKING_DISABLED (nothing is confirmed) and the errors of PUT orders/:orderId/payment',
+  })
   @Permissions(Write(Claim.ORDER))
   @Post(':orderId/items/confirm')
   async confirmItems(
@@ -263,7 +284,7 @@ export class OrdersController {
   @ApiNotFoundResponse({ description: 'Order not found' })
   @ApiConflictResponse({
     description:
-      'ORDER_PAYMENT_VIA_BOOKING: a visit order is paid through PUT bookings/:id/payment. PAYMENT_AMOUNT_MISMATCH: responseValue { amountDue, requiredAmount }. PAYMENT_NOTHING_DUE. PAYMENT_IDEMPOTENCY_CONFLICT: responseValue { operationId }. ORDER_NOT_ACTIVE',
+      'ORDER_PAYMENT_VIA_BOOKING: a visit order is paid through PUT bookings/:id/payment. PAYMENT_TRACKING_DISABLED: the location does not track payments. PAYMENT_ALREADY_RECORDED (expectNoPayment): responseValue { operationId }. PAYMENT_AMOUNT_MISMATCH (parts or expectedAmount): responseValue { amountDue, requiredAmount }. PAYMENT_NOTHING_DUE. PAYMENT_IDEMPOTENCY_CONFLICT: responseValue { operationId }. ORDER_NOT_ACTIVE',
   })
   @Permissions(Write(Claim.ORDER))
   @Put(':orderId/payment')
@@ -273,7 +294,7 @@ export class OrdersController {
     @Body() dto: PaymentInputDto,
     @TokenPayload() token: TokenPayloadDto,
   ): Promise<BaseResponseDto<OrderPaymentResponseDto>> {
-    const operationId = await this.orders.recordPayment(
+    const operationId = await this.orderPayments.recordPayment(
       locationId,
       orderId,
       dto,
@@ -302,7 +323,7 @@ export class OrdersController {
     @Body() dto: RefundInputDto,
     @TokenPayload() token: TokenPayloadDto,
   ): Promise<BaseResponseDto<OrderPaymentResponseDto>> {
-    const operationId = await this.orders.refund(
+    const operationId = await this.orderPayments.refund(
       locationId,
       orderId,
       dto,
@@ -334,7 +355,7 @@ export class OrdersController {
     @Body() dto: VoidPaymentOperationDto,
     @TokenPayload() token: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
-    await this.orders.voidPaymentOperation(
+    await this.orderPayments.voidPaymentOperation(
       locationId,
       orderId,
       operationId,

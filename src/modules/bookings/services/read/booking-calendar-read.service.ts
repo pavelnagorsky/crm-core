@@ -8,7 +8,7 @@ import { CalendarBookingView } from '../../../calendar/interfaces/calendar-booki
 import { BookingStatus } from '../../enums/booking-status.enum.js';
 import { BookingWithItems } from '../../interfaces/booking-with-items.interface.js';
 import { PaymentStatus } from '../../../payments/enums/payment-status.enum.js';
-import { paymentStatus } from '../../../payments/rules/payment-state.rules.js';
+import { paymentStatusOf } from '../../../payments/rules/payment-state.rules.js';
 import { BookingPaymentReadService } from './booking-payment-read.service.js';
 
 const CALENDAR_VISIBLE_STATUSES: ReadonlySet<string> = new Set([
@@ -116,20 +116,18 @@ export class BookingCalendarReadService {
       where: { id: { in: bookingIds } },
       select: {
         id: true,
+        locationId: true,
+        startAt: true,
         status: true,
         deletedAt: true,
         items: { select: { chargedPrice: true, customPrice: true } },
       },
     });
     const summaries = await this.payments.summaries(bookings);
-    const zero = MoneyUtils.decimal(0);
     return new Map(
       [...summaries.values()].map((summary) => [
         summary.bookingId,
-        paymentStatus(summary.amountDue, {
-          paidAmount: summary.totals?.paidAmount ?? zero,
-          hasRecords: summary.totals?.hasRecords ?? false,
-        }),
+        paymentStatusOf(summary.amountDue, summary.totals, summary.tracked),
       ]),
     );
   }

@@ -5,7 +5,8 @@ import { RefundIntentInput } from '../interfaces/refund-intent-input.interface.j
 
 /**
  * The payment intent as it enters a request hash. The amount due is not part of it: the same
- * request against a changed price is still a retry of the same action.
+ * request against a changed price is still a retry of the same action. The expectations of a
+ * one-click payment are: another shown amount is another action.
  */
 export function paymentIntent(details: PaymentIntentInput | null | undefined) {
   if (!details) return null;
@@ -14,6 +15,8 @@ export function paymentIntent(details: PaymentIntentInput | null | undefined) {
     cashAmount: amountOrNull(details.cashAmount),
     cardAmount: amountOrNull(details.cardAmount),
     occurredAt: details.occurredAt ?? null,
+    expectedAmount: amountOrNull(details.expectedAmount),
+    expectNoPayment: details.expectNoPayment === true ? true : null,
   };
 }
 

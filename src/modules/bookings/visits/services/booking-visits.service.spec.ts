@@ -59,3 +59,30 @@ describe('BookingVisitsService.findByBookingIds', () => {
     );
   });
 });
+
+describe('BookingVisitsService.startAtByBookingIds', () => {
+  it('reads starts of the location bookings, deleted ones included', async () => {
+    const startAt = new Date('2026-03-05T11:00:00Z');
+    const db = {
+      booking: {
+        findMany: vi.fn().mockResolvedValue([{ id: 'b1', startAt }]),
+      },
+    };
+    const service = new BookingVisitsService(db as unknown as DatabaseService);
+    const result = await service.startAtByBookingIds('loc', ['b1', 'b1', 'b2']);
+    expect(db.booking.findMany).toHaveBeenCalledWith({
+      where: { id: { in: ['b1', 'b2'] }, locationId: 'loc' },
+      select: { id: true, startAt: true },
+    });
+    expect(result).toEqual(new Map([['b1', startAt]]));
+  });
+
+  it('skips the query without ids', async () => {
+    const db = { booking: { findMany: vi.fn() } };
+    const service = new BookingVisitsService(db as unknown as DatabaseService);
+    await expect(service.startAtByBookingIds('loc', [])).resolves.toEqual(
+      new Map(),
+    );
+    expect(db.booking.findMany).not.toHaveBeenCalled();
+  });
+});

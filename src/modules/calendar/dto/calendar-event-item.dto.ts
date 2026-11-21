@@ -33,7 +33,7 @@ export class CalendarEventItemDto {
     enumName: 'PaymentStatus',
     nullable: true,
     description:
-      'Payment status of the visit, the same on every card of a booking. Null for blocks and integration events. NOT_SPECIFIED is worth a mark only on past or completed visits.',
+      'Payment status of the visit, the same on every card of a booking. Null for blocks and integration events. NOT_SPECIFIED is worth a mark only on past or completed visits. NOT_TRACKED: the visit is out of payment tracking (tracking disabled or the visit started before Location.paymentTrackingSince), show nothing.',
   })
   paymentStatus: PaymentStatus | null;
 

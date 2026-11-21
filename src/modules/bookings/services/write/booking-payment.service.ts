@@ -15,6 +15,7 @@ import { AuditActor } from '../../../audit/interfaces/audit-actor.interface.js';
 import { LocationService } from '../../../location/services/location.service.js';
 import { OrderItemStatus } from '../../../orders/enums/order-item-status.enum.js';
 import { OrderItemType } from '../../../orders/enums/order-item-type.enum.js';
+import { OrderPaymentsFacade } from '../../../orders/order-payments.facade.js';
 import { OrdersFacade } from '../../../orders/orders.facade.js';
 import { PaymentOperationWithPayments } from '../../../payments/interfaces/payment-operation-with-payments.interface.js';
 import { PaymentsFacade } from '../../../payments/payments.facade.js';
@@ -22,8 +23,9 @@ import {
   defaultVisitPaymentDate,
   resolvePaymentDate,
 } from '../../../payments/rules/payment-occurred-at.rules.js';
-import { assertPaymentSplit } from '../../../payments/rules/payment-parts.rules.js';
 import { paymentRequestHash } from '../../../payments/rules/payment-request-hash.js';
+import { paymentRequest } from '../../../payments/rules/payment-request.rules.js';
+import { assertPaymentTrackingEnabled } from '../../../payments/rules/payment-tracking.rules.js';
 import { bookingWithItemsInclude } from '../../constants/booking-with-items.include.js';
 import { PayBookingDto } from '../../dto/pay-booking.dto.js';
 import { BookingStatus } from '../../enums/booking-status.enum.js';
@@ -53,14 +55,16 @@ export class BookingPaymentService {
     private readonly db: DatabaseService,
     private readonly locations: LocationService,
     private readonly orders: OrdersFacade,
+    private readonly orderPayments: OrderPaymentsFacade,
     private readonly payments: PaymentsFacade,
     private readonly lifecycle: BookingLifecycleService,
     private readonly events: BookingEventsService,
   ) {}
 
   /**
-   * Validates the payment step of a booking write before any lock: split shape and explicit
-   * date. Null when the write neither pays nor confirms products.
+   * Validates the payment step of a booking write before any lock: payment tracking
+   * (409 PAYMENT_TRACKING_DISABLED), split shape, expectations and explicit date. Null when
+   * the write neither pays nor confirms products.
    */
   async plan(
     locationId: string,
@@ -76,24 +80,21 @@ export class BookingPaymentService {
     )
       return null;
     const now = new Date();
+    // Fails fast before any lock; PaymentsFacade.record checks again under the locks.
+    if (input.payment)
+      assertPaymentTrackingEnabled(
+        await this.locations.getPaymentTracking(locationId),
+      );
     const { timezone } = await this.locations.getLocale(locationId);
-    let payment: VisitPaymentPlan['payment'] = null;
-    if (input.payment) {
-      assertPaymentSplit(input.payment);
-      payment = {
-        input: input.payment,
-        request: {
-          method: input.payment.method,
-          cashAmount: input.payment.cashAmount ?? null,
-          cardAmount: input.payment.cardAmount ?? null,
-          occurredAt: resolvePaymentDate(
-            input.payment.occurredAt,
-            timezone,
-            now,
+    const payment = input.payment
+      ? {
+          input: input.payment,
+          request: paymentRequest(
+            input.payment,
+            resolvePaymentDate(input.payment.occurredAt, timezone, now),
           ),
-        },
-      };
-    }
+        }
+      : null;
     return {
       payment,
       confirmProductItemIds,
@@ -260,6 +261,28 @@ export class BookingPaymentService {
       change,
       operationId: change?.operation.id ?? null,
     };
+  }
+
+  /**
+   * Undoes a first payment of the visit that the actor has just recorded. The visit keeps its
+   * status: it has started, and the cron would complete it anyway. `participantStaffId` is
+   * checked again on the locked booking, as in `pay`.
+   */
+  undo(
+    booking: Pick<BookingWithItems, 'id' | 'locationId'>,
+    operationId: string,
+    actor: AuditActor,
+    now: Date,
+    participantStaffId?: string,
+  ): Promise<void> {
+    return this.orderPayments.undoVisitPayment({
+      locationId: booking.locationId,
+      bookingId: booking.id,
+      operationId,
+      actor,
+      now,
+      participantStaffId,
+    });
   }
 
   /** Audit of the step. Call after commit. */

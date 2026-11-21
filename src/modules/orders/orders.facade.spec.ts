@@ -25,6 +25,7 @@ import { OrderDraftService } from './services/order-draft.service.js';
 import { OrderPersistenceService } from './services/order-persistence.service.js';
 import { OrderProductTransitionService } from './services/order-product-transition.service.js';
 import { OrderReturnService } from './services/order-return.service.js';
+import { OrderLockService } from './services/order-lock.service.js';
 import { OrderPaymentService } from './services/order-payment.service.js';
 
 const owner = { id: 'owner-1', name: 'Owner', role: AuditActorRole.OWNER };
@@ -198,12 +199,13 @@ function setup() {
     publish: vi.fn(),
   };
   const visits = { lockForOrder: vi.fn().mockResolvedValue(null) };
+  const locks = new OrderLockService(persistence, visits as never);
   const orderPayments = new OrderPaymentService(
     locations as never,
     persistence,
     payments as never,
     stateAssertions,
-    visits as never,
+    locks,
   );
   const transitions = new OrderProductTransitionService(
     db as never,
@@ -223,7 +225,7 @@ function setup() {
     locations as never,
     events as never,
     payments as never,
-    orderPayments,
+    locks,
   );
   const audits = new OrderAuditService(events as never);
   const creation = new OrderCreationService(
@@ -253,7 +255,6 @@ function setup() {
     mutations,
     audits,
     orderPayments,
-    payments as never,
   );
   return {
     service,

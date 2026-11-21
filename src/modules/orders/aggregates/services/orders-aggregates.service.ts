@@ -10,6 +10,7 @@ import { DatabaseService } from '../../../../database/database.service.js';
 import { activeLocationSql } from '../../../../shared/database/active-business.sql.js';
 import { MoneyUtils } from '../../../../shared/money/money.utils.js';
 import { BookingsAggregatesService } from '../../../bookings/aggregates/services/bookings-aggregates.service.js';
+import { BookingStatus } from '../../../bookings/enums/booking-status.enum.js';
 import { PaymentsAggregatesService } from '../../../payments/aggregates/services/payments-aggregates.service.js';
 import { AggregateRange } from '../../../bookings/interfaces/aggregate-range.interface.js';
 import { SeriesGranularity } from '../../../dashboard/enums/series-granularity.enum.js';
@@ -17,6 +18,7 @@ import { ClientSalesRange } from '../interfaces/client-sales-range.interface.js'
 import { FinanceRange } from '../interfaces/finance-range.interface.js';
 import { NotSpecifiedResult } from '../interfaces/not-specified-result.interface.js';
 import { NotSpecifiedRow } from '../interfaces/not-specified-row.interface.js';
+import { NotSpecifiedSqlRow } from '../interfaces/not-specified-sql-row.interface.js';
 import { ClientSalesSeriesRange } from '../interfaces/client-sales-series-range.interface.js';
 import { OrderClientRevenueBucket } from '../interfaces/order-client-revenue-bucket.interface.js';
 import { OrderClientRevenueTotals } from '../interfaces/order-client-revenue-totals.interface.js';
@@ -39,7 +41,8 @@ export class OrdersAggregatesService {
   /**
    * Visits and sales of the range with something due and no active payment record:
    * closed visits by their start (services as by the booking plus sold products) and active
-   * sales by their date. `items` are the first `limit` by time; `count` and `amount` cover all.
+   * sales by their date, with the count of draft product lines of their order. `items` are the
+   * first `limit` by time; `count` and `amount` cover all.
    */
   async notSpecified(
     range: FinanceRange,
@@ -50,36 +53,28 @@ export class OrdersAggregatesService {
     const noRecords = this.paymentsAggregates.noActiveRecordsSql(
       Prisma.sql`o."id"`,
     );
-    const rows = await client.$queryRaw<
-      Array<{
-        kind: string;
-        orderId: string | null;
-        bookingId: string | null;
-        at: Date;
-        clientName: string | null;
-        staffNames: string[];
-        amountDue: string;
-        totalCount: bigint;
-        totalAmount: string;
-      }>
-    >(Prisma.sql`
+    const rows = await client.$queryRaw<NotSpecifiedSqlRow[]>(Prisma.sql`
       WITH due_rows AS (
         SELECT 'VISIT' AS kind,
                o."id" AS "orderId",
                v."bookingId" AS "bookingId",
+               v."status" AS "bookingStatus",
                v."startAt" AS at_utc,
                v."clientName" AS "clientName",
                v."staffNames" AS "staffNames",
-               v."servicesDue" + COALESCE(products.net, 0) AS "amountDue"
+               v."servicesDue" + COALESCE(products.net, 0) AS "amountDue",
+               COALESCE(drafts.n, 0) AS "draftProductsCount"
         FROM (${visits}) v
         LEFT JOIN "Order" o
           ON o."bookingId" = v."bookingId" AND o."locationId" = ${range.locationId}
         LEFT JOIN LATERAL (${this.productsNetSql()}) products ON TRUE
+        LEFT JOIN LATERAL (${this.draftProductsSql()}) drafts ON TRUE
         WHERE o."id" IS NULL OR ${noRecords}
         UNION ALL
         SELECT 'SALE' AS kind,
                o."id" AS "orderId",
                NULL AS "bookingId",
+               NULL AS "bookingStatus",
                o."occurredAt" AS at_utc,
                o."clientName" AS "clientName",
                ARRAY(
@@ -91,9 +86,11 @@ export class OrdersAggregatesService {
                    AND seller."sellerName" IS NOT NULL
                  ORDER BY seller."sellerName"
                ) AS "staffNames",
-               COALESCE(products.net, 0) AS "amountDue"
+               COALESCE(products.net, 0) AS "amountDue",
+               COALESCE(drafts.n, 0) AS "draftProductsCount"
         FROM "Order" o
         LEFT JOIN LATERAL (${this.productsNetSql()}) products ON TRUE
+        LEFT JOIN LATERAL (${this.draftProductsSql()}) drafts ON TRUE
         WHERE o."locationId" = ${range.locationId}
           AND ${activeLocationSql(Prisma.sql`o."locationId"`)}
           AND o."bookingId" IS NULL
@@ -105,10 +102,12 @@ export class OrdersAggregatesService {
       SELECT kind,
              "orderId",
              "bookingId",
+             "bookingStatus",
              at_utc AT TIME ZONE 'UTC' AS at,
              NULLIF("clientName", '') AS "clientName",
              "staffNames",
              "amountDue"::text AS "amountDue",
+             "draftProductsCount",
              COUNT(*) OVER () AS "totalCount",
              (SUM("amountDue") OVER ())::text AS "totalAmount"
       FROM due_rows
@@ -116,14 +115,24 @@ export class OrdersAggregatesService {
       ORDER BY at_utc ASC, COALESCE("bookingId", "orderId") ASC
       LIMIT ${limit}
     `);
+    return this.toNotSpecifiedResult(rows, limit);
+  }
+
+  /** Totals come from the window columns only when the page is full. */
+  private toNotSpecifiedResult(
+    rows: readonly NotSpecifiedSqlRow[],
+    limit: number,
+  ): NotSpecifiedResult {
     const items: NotSpecifiedRow[] = rows.map((row) => ({
       kind: row.kind as NotSpecifiedRow['kind'],
       orderId: row.orderId,
       bookingId: row.bookingId,
+      bookingStatus: row.bookingStatus as BookingStatus | null,
       at: new Date(row.at),
       clientName: row.clientName,
       staffNames: row.staffNames.filter((name) => name.trim()),
       amountDue: MoneyUtils.decimal(row.amountDue),
+      draftProductsCount: Number(row.draftProductsCount),
     }));
     if (rows.length === 0 || rows.length < limit)
       return {
@@ -139,6 +148,17 @@ export class OrdersAggregatesService {
       count: Number(rows[0].totalCount),
       amount: MoneyUtils.decimal(rows[0].totalAmount),
     };
+  }
+
+  /** Draft product lines of order `o` (none without an order). Column `n`. */
+  private draftProductsSql(): Prisma.Sql {
+    return Prisma.sql`
+      SELECT COUNT(*)::int AS n
+      FROM "OrderItem" d
+      WHERE d."orderId" = o."id"
+        AND d."type"::text = ${OrderItemType.PRODUCT}
+        AND d."status"::text = ${OrderItemStatus.DRAFT}
+    `;
   }
 
   /** Sold products of order `o`: confirmed product lines minus their posted returns. Column `net`. */

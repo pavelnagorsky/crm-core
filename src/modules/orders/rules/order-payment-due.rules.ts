@@ -8,6 +8,7 @@ import {
 import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { OrderDueLine } from '../interfaces/order-due-line.interface.js';
 import { OrderDueSource } from '../interfaces/order-due-source.interface.js';
+import { LockedOrder } from '../interfaces/locked-order.interface.js';
 
 /** Confirmed lines minus their posted returns. Drafts are not sold, reversed lines are gone. */
 function confirmedNet(
@@ -43,6 +44,16 @@ export function orderProductsNet(
 export function orderAmountDue(order: OrderDueSource): Prisma.Decimal {
   if (order.status !== OrderStatus.ACTIVE) return MoneyUtils.decimal(0);
   return confirmedNet(order.items, false);
+}
+
+/**
+ * Amount due of a locked order: services of the visit by its booking plus sold products for a
+ * visit order, the order lines for a sale.
+ */
+export function lockedOrderAmountDue({ order, visit }: LockedOrder): Prisma.Decimal {
+  return visit
+    ? visit.servicesDue.plus(orderProductsNet(order))
+    : orderAmountDue(order);
 }
 
 /**

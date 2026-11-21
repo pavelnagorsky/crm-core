@@ -6,6 +6,7 @@ import {
 import { BusinessType } from '@prisma/client';
 import { CreateLocationDto } from '../dto/create-location.dto.js';
 import { UpdateLocationDto } from '../dto/update-location.dto.js';
+import { PaymentTrackingMode } from '../enums/payment-tracking-mode.enum.js';
 import { LocationService } from './location.service.js';
 import { AuditActorRole } from '../../audit/enums/audit-actor-role.enum.js';
 import { AuditEvent } from '../../audit/enums/audit-event.enum.js';
@@ -135,6 +136,90 @@ describe('LocationService locale and business type', () => {
       );
     },
   );
+
+  describe('payment tracking', () => {
+    const since = new Date('2026-11-01T00:00:00.000Z');
+    const tracked = (mode: PaymentTrackingMode) => ({
+      ...location,
+      paymentTrackingMode: mode,
+      paymentTrackingSince: since,
+    });
+
+    it('starts tracking now when it is turned on, merged with other fields', async () => {
+      db.location.findUnique.mockResolvedValueOnce(
+        tracked(PaymentTrackingMode.DISABLED),
+      );
+      await service.update(
+        'location-1',
+        { name: 'Renamed', paymentTrackingMode: PaymentTrackingMode.MANUAL },
+        {},
+        actor,
+      );
+      const data = db.location.update.mock.calls[0][0].data;
+      expect(data.name).toBe('Renamed');
+      expect(data.paymentTrackingMode).toBe(PaymentTrackingMode.MANUAL);
+      expect(data.paymentTrackingSince).toBeInstanceOf(Date);
+      expect(events.emit).toHaveBeenCalledWith(
+        'audit',
+        expect.objectContaining({
+          payload: {
+            changes: expect.arrayContaining([
+              expect.objectContaining({ field: 'paymentTrackingMode' }),
+            ]),
+          },
+        }),
+      );
+    });
+
+    it('keeps the start when tracking is turned off', async () => {
+      db.location.findUnique.mockResolvedValueOnce(
+        tracked(PaymentTrackingMode.MANUAL),
+      );
+      await service.update(
+        'location-1',
+        { paymentTrackingMode: PaymentTrackingMode.DISABLED },
+        {},
+        actor,
+      );
+      const data = db.location.update.mock.calls[0][0].data;
+      expect(data).toEqual({ paymentTrackingMode: PaymentTrackingMode.DISABLED });
+    });
+
+    it('writes no tracking fields when the mode is the same', async () => {
+      db.location.findUnique.mockResolvedValueOnce(
+        tracked(PaymentTrackingMode.MANUAL),
+      );
+      await service.update(
+        'location-1',
+        { paymentTrackingMode: PaymentTrackingMode.MANUAL },
+        {},
+        actor,
+      );
+      expect(db.location.update.mock.calls[0][0].data).toEqual({});
+    });
+
+    it('reads tracking from the database, not the settings cache', async () => {
+      db.location.findUnique.mockResolvedValueOnce({
+        paymentTrackingMode: PaymentTrackingMode.MANUAL,
+        paymentTrackingSince: since,
+      });
+      await expect(service.getPaymentTracking('location-1')).resolves.toEqual(
+        { mode: PaymentTrackingMode.MANUAL, since },
+      );
+      expect(db.location.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({
+          select: { paymentTrackingMode: true, paymentTrackingSince: true },
+        }),
+      );
+    });
+
+    it('answers 404 for an unknown location', async () => {
+      db.location.findUnique.mockResolvedValueOnce(null);
+      await expect(
+        service.getPaymentTracking('location-1'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+  });
 
   it('persists normalized contacts during creation', async () => {
     const dto = await new ValidationPipe({

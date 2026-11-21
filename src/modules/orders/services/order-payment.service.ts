@@ -4,37 +4,31 @@ import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
-import { BookingVisitsService } from '../../bookings/visits/services/booking-visits.service.js';
 import { LocationService } from '../../location/services/location.service.js';
-import { PaymentDetailsDto } from '../../payments/dto/payment-details.dto.js';
 import { PaymentInputDto } from '../../payments/dto/payment-input.dto.js';
 import { RefundInputDto } from '../../payments/dto/refund-input.dto.js';
-import { VoidPaymentOperationDto } from '../../payments/dto/void-payment-operation.dto.js';
-import { PaymentType } from '../../payments/enums/payment-type.enum.js';
 import { PaymentChange } from '../../payments/interfaces/payment-change.interface.js';
+import { PaymentIntentInput } from '../../payments/interfaces/payment-intent-input.interface.js';
 import { PaymentRequest } from '../../payments/interfaces/payment-request.interface.js';
 import { PaymentsFacade } from '../../payments/payments.facade.js';
 import {
   defaultSalePaymentDate,
   resolvePaymentDate,
 } from '../../payments/rules/payment-occurred-at.rules.js';
-import { assertPaymentSplit } from '../../payments/rules/payment-parts.rules.js';
 import {
   paymentRequestHash,
   refundRequestHash,
 } from '../../payments/rules/payment-request-hash.js';
-import { LockedOrder } from '../interfaces/locked-order.interface.js';
+import { paymentRequest } from '../../payments/rules/payment-request.rules.js';
+import { assertPaymentTrackingEnabled } from '../../payments/rules/payment-tracking.rules.js';
 import { OrderPaymentResult } from '../interfaces/order-payment-result.interface.js';
-import { OrderPaymentVoidResult } from '../interfaces/order-payment-void-result.interface.js';
 import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
-import {
-  orderAmountDue,
-  orderProductsNet,
-} from '../rules/order-payment-due.rules.js';
+import { orderAmountDue } from '../rules/order-payment-due.rules.js';
 import { OrderStateRules } from '../rules/order-state.rules.js';
+import { OrderLockService } from './order-lock.service.js';
 import { OrderPersistenceService } from './order-persistence.service.js';
 
-/** Payments, refunds and voids through the order endpoints. */
+/** Payments and refunds through the order endpoints; corrections are in OrderPaymentCorrectionService. */
 @Injectable()
 export class OrderPaymentService {
   constructor(
@@ -42,19 +36,22 @@ export class OrderPaymentService {
     private readonly persistence: OrderPersistenceService,
     private readonly payments: PaymentsFacade,
     private readonly stateAssertions: OrderStateRules,
-    private readonly visits: BookingVisitsService,
+    private readonly locks: OrderLockService,
   ) {}
 
   /**
-   * Validates a payment before any lock: split shape and explicit date. Returns the request
-   * with the date in UTC.
+   * Validates a payment before any lock: payment tracking (409 PAYMENT_TRACKING_DISABLED),
+   * split shape, expectations and explicit date. Returns the request with the date in UTC.
    */
   async prepareRequest(
     locationId: string,
-    details: PaymentDetailsDto,
+    details: PaymentIntentInput,
     now: Date,
   ): Promise<PaymentRequest> {
-    assertPaymentSplit(details);
+    // Fails fast before any lock; PaymentsFacade.record checks again under the locks.
+    assertPaymentTrackingEnabled(
+      await this.locations.getPaymentTracking(locationId),
+    );
     const occurredAt = details.occurredAt
       ? resolvePaymentDate(
           details.occurredAt,
@@ -62,49 +59,7 @@ export class OrderPaymentService {
           now,
         )
       : null;
-    return {
-      method: details.method,
-      cashAmount: details.cashAmount ?? null,
-      cardAmount: details.cardAmount ?? null,
-      occurredAt,
-    };
-  }
-
-  /**
-   * Locks an order in the global lock order: the booking of a visit order first (FOR SHARE,
-   * which keeps its status, prices and deletion stable), then the order (FOR UPDATE).
-   */
-  async lockOrderWithVisit(
-    tx: Prisma.TransactionClient,
-    locationId: string,
-    orderId: string,
-  ): Promise<LockedOrder> {
-    // The booking of an order never changes, so it can be read before the locks.
-    const bookingId = await this.persistence.findBookingIdInTransaction(
-      tx,
-      locationId,
-      orderId,
-    );
-    const visit = bookingId
-      ? await this.visits.lockForOrder(tx, locationId, bookingId)
-      : null;
-    await this.persistence.lockOrder(tx, orderId);
-    const order = await this.persistence.findInTransaction(
-      tx,
-      locationId,
-      orderId,
-    );
-    return { order, visit };
-  }
-
-  /**
-   * Amount due of a locked order: services of the visit by its booking plus sold products
-   * for a visit order, the order lines for a sale.
-   */
-  amountDue({ order, visit }: LockedOrder): Prisma.Decimal {
-    return visit
-      ? visit.servicesDue.plus(orderProductsNet(order))
-      : orderAmountDue(order);
+    return paymentRequest(details, occurredAt);
   }
 
   /** Records or replaces the payment of a sale. A visit order is paid through its booking. */
@@ -215,7 +170,11 @@ export class OrderPaymentService {
       );
       if (replay)
         return { operationId: replay.id, change: null, bookingId: null };
-      const { order } = await this.lockOrderWithVisit(tx, locationId, orderId);
+      const { order } = await this.locks.lockOrderWithVisit(
+        tx,
+        locationId,
+        orderId,
+      );
       const change = await this.payments.refund(tx, {
         locationId,
         orderId,
@@ -234,55 +193,6 @@ export class OrderPaymentService {
         change,
         bookingId: order.bookingId,
       };
-    });
-  }
-
-  /**
-   * Voids one operation; voiding it again changes nothing. Voiding a refund brings money back
-   * on record, which a deleted visit may not have (as deleting a paid visit is refused):
-   * 409 BOOKING_PAYMENT_NOT_ALLOWED. The booking lock keeps this consistent with a delete.
-   */
-  voidOperation(
-    locationId: string,
-    orderId: string,
-    operationId: string,
-    dto: VoidPaymentOperationDto,
-    actor: AuditActor,
-  ): Promise<OrderPaymentVoidResult> {
-    return this.persistence.inTransaction(async (tx) => {
-      const { order, visit } = await this.lockOrderWithVisit(
-        tx,
-        locationId,
-        orderId,
-      );
-      if (visit?.deleted) {
-        const operation = await this.payments.findOperation(
-          tx,
-          locationId,
-          orderId,
-          operationId,
-        );
-        if (
-          operation?.type === PaymentType.REFUND &&
-          operation.payments.some((payment) => !payment.voidedAt)
-        )
-          throw new AppException(
-            ErrorCode.BOOKING_PAYMENT_NOT_ALLOWED,
-            HttpStatus.CONFLICT,
-          );
-      }
-      const change = await this.payments.void(
-        tx,
-        {
-          locationId,
-          orderId,
-          operationId,
-          reason: dto.reason || null,
-          actor,
-        },
-        order.currency,
-      );
-      return { change, bookingId: order.bookingId };
     });
   }
 

@@ -12,6 +12,7 @@ import { StaffModule } from '../staff/staff.module.js';
 import { OrdersAggregatesService } from './aggregates/services/orders-aggregates.service.js';
 import { OrderPricingCalculator } from './calculators/order-pricing.calculator.js';
 import { OrdersController } from './controllers/orders.controller.js';
+import { OrderPaymentsFacade } from './order-payments.facade.js';
 import { OrdersFacade } from './orders.facade.js';
 import { OrderStateRules } from './rules/order-state.rules.js';
 import { OrderAuditService } from './services/order-audit.service.js';
@@ -19,6 +20,9 @@ import { OrderBookingSyncService } from './services/order-booking-sync.service.j
 import { OrderCreationService } from './services/order-creation.service.js';
 import { OrderDraftMutationService } from './services/order-draft-mutation.service.js';
 import { OrderDraftService } from './services/order-draft.service.js';
+import { OrderLockService } from './services/order-lock.service.js';
+import { OrderPaymentCorrectionService } from './services/order-payment-correction.service.js';
+import { OrderPaymentTrackingService } from './services/order-payment-tracking.service.js';
 import { OrderPaymentService } from './services/order-payment.service.js';
 import { OrderPersistenceService } from './services/order-persistence.service.js';
 import { OrderProductTransitionService } from './services/order-product-transition.service.js';
@@ -40,6 +44,8 @@ import { OrderReturnService } from './services/order-return.service.js';
   controllers: [OrdersController],
   providers: [
     OrdersFacade,
+    OrderPaymentsFacade,
+    OrderLockService,
     OrderAuditService,
     OrderDraftMutationService,
     OrderCreationService,
@@ -50,9 +56,11 @@ import { OrderReturnService } from './services/order-return.service.js';
     OrderProductTransitionService,
     OrderReturnService,
     OrderPaymentService,
+    OrderPaymentCorrectionService,
+    OrderPaymentTrackingService,
     OrderStateRules,
     OrdersAggregatesService,
   ],
-  exports: [OrdersFacade, OrdersAggregatesService],
+  exports: [OrdersFacade, OrderPaymentsFacade, OrdersAggregatesService],
 })
 export class OrdersModule {}
