@@ -1,7 +1,7 @@
 # Реплики приложения, Redis и единые логи (план)
 
-Статус: шаги 1–5 раздела 3 выполнены (плюс `refactor/pluggable-state-stores` и
-`fix/replication-review-findings`), далее шаги 6–8 и проверка раздела 4.
+Статус: шаги 1–7 раздела 3 выполнены (плюс `refactor/pluggable-state-stores` и
+`fix/replication-review-findings`), далее шаг 8 и проверка раздела 4.
 Отклонение от решений раздела 1 — сначала правка этого документа.
 
 Ветка: `feature/replication`. Каждый шаг раздела 3 — отдельный коммит, после каждого
@@ -383,6 +383,12 @@ Lua-скрипты проверить интеграционным тестом 
     (multi), текстовое поле `Поиск` (requestId или любой текст). Панели: график количества
     ошибок (`ERROR|FATAL`) по времени, список логов
     `{service=~"$service", level=~"$level"} |= "$search"`, отдельный список «Только ошибки».
+  - Версии образов: `grafana/loki:3.6.22` (4.x пока только rc), `grafana/alloy:v1.22.0`,
+    `grafana/grafana:13.2.6`. Сверх схемы: том `alloy-data` (позиции чтения, без дублей после
+    рестарта Alloy); `stage.multiline` склеивает stack trace с записью приложения; строки без
+    уровня (lb, postgres, redis) получают `level=UNKNOWN`, чтобы фильтр по уровню их не терял;
+    `GRAFANA_ADMIN_PASSWORD` по умолчанию `admin` (обязательная переменная ломала бы любой
+    `docker compose` без неё, в том числе `logs`).
   - Время в Grafana показывается в часовом поясе браузера — проблема «в файлах UTC»
     из `docs/logging.md` уходит.
 - Резервный способ без Grafana: `docker compose logs -f --timestamps api-1 api-2 worker | grep <requestId>` —

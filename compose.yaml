@@ -118,5 +118,62 @@ services:
         max-file: '3'
     restart: unless-stopped
 
+  # Logs: alloy reads container stdout via the docker socket, loki keeps it for 30 days,
+  # grafana is the UI (dashboard "CRM — логи" is provisioned). Never expose grafana publicly.
+  loki:
+    image: grafana/loki:3.6.22
+    command: [-config.file=/etc/loki/loki.yaml]
+    volumes:
+      - ./docker/loki/loki.yaml:/etc/loki/loki.yaml:ro
+      - loki-data:/loki
+    mem_limit: 384m
+    logging: &log-rotation
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: '3'
+    restart: unless-stopped
+
+  alloy:
+    image: grafana/alloy:v1.22.0
+    command:
+      - run
+      - --storage.path=/var/lib/alloy/data
+      - --server.http.listen-addr=0.0.0.0:12345
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./docker/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy-data:/var/lib/alloy/data
+    depends_on:
+      - loki
+    mem_limit: 128m
+    logging: *log-rotation
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:13.2.6
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      # Local default only; set a real password in .env on the server.
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_AUTH_ANONYMOUS_ENABLED: 'false'
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_ANALYTICS_REPORTING_ENABLED: 'false'
+      GF_ANALYTICS_CHECK_FOR_UPDATES: 'false'
+    ports:
+      - 127.0.0.1:3200:3000
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - loki
+    mem_limit: 256m
+    logging: *log-rotation
+    restart: unless-stopped
+
 volumes:
   postgres-data:
+  loki-data:
+  alloy-data:
+  grafana-data:
