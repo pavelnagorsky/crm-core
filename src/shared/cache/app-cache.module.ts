@@ -1,11 +1,15 @@
 import { Module } from '@nestjs/common';
-import { CacheModule } from '@nestjs/cache-manager';
 import { ConfigModule } from '@nestjs/config';
 import { AppCacheService } from './app-cache.service.js';
+import { CACHE_STORE } from './cache-store.token.js';
+import { RedisCacheStore } from './redis-cache.store.js';
 
 @Module({
-  imports: [ConfigModule, CacheModule.register()],
-  providers: [AppCacheService],
+  imports: [ConfigModule],
+  providers: [
+    AppCacheService,
+    { provide: CACHE_STORE, useClass: RedisCacheStore },
+  ],
   exports: [AppCacheService],
 })
 export class AppCacheModule {}

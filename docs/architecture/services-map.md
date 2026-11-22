@@ -82,7 +82,7 @@
 | NotificationsService / EmailChannel / EmailRenderer | Обработка событий уведомлений, доставка email и рендеринг шаблонов. |
 | FilesService | Метаданные файлов и интеграция с хранилищем. |
 | [BillingFacade](../../src/modules/billing/billing.facade.ts) | Публичный API биллинга для доменов CRM: старт подписки бренда, проверка лимита мест и филиалов, доступность онлайн-записи, отмена заявок при удалении бренда. |
-| BillingPlanService / BillingSettingsService | Тарифы, версии цен по странам и настройки биллинга с процессным кэшем. |
+| BillingPlanService / BillingSettingsService | Тарифы, версии цен по странам и настройки биллинга с кэшем в Redis. |
 | SubscriptionService / SubscriptionEventService / SubscriptionNoticeService | Чтение подписки и блокировка `withLock` (транзакция, `FOR UPDATE`, сброс кэша), журнал событий, отметки отправленных напоминаний. |
 | SubscriptionStartService / SubscriptionPeriodService / SubscriptionPlanService / SubscriptionTermsService | Операции над подпиской: старт и бэкфилл, продление периода, смена тарифа, триал, страна, приостановка. |
 | SubscriptionPaymentService / PaymentRequestService / PaymentConfirmationService / ManualPaymentService | Чтение платежей; создание и отмена заявок; подтверждение и применение оплаты; ручные оплаты и бесплатные продления админа. |
