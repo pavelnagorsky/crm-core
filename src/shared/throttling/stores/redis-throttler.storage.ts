@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ThrottlerStorage } from '@nestjs/throttler';
+import { randomBytes } from 'node:crypto';
 import { THROTTLER_INCREMENT_SCRIPT } from './redis-throttler.script.js';
 import { RedisService } from '../../redis/redis.service.js';
 
@@ -20,8 +21,8 @@ const PASS: ThrottlerStorageRecord = {
 };
 
 /**
- * `@nestjs/throttler` counters in Redis, shared by all replicas: `crm:throttle:<name>:<key>` (hits in the
- * current window) and `crm:throttle:<name>:<key>:block` (present while the key is blocked).
+ * `@nestjs/throttler` counters in Redis, shared by all replicas: `crm:throttle:<name>:<key>` (sorted set of the
+ * hits still counted, each scored by when it expires) and `crm:throttle:<name>:<key>:block` (present while the key is blocked).
  * `ttl` and `blockDuration` come in milliseconds; `timeToExpire` and `timeToBlockExpire` are returned in
  * seconds rounded up, exactly like the built-in ThrottlerStorageService (they go into `Retry-After`).
  */
@@ -47,7 +48,7 @@ export class RedisThrottlerStorage implements ThrottlerStorage {
       >(
         THROTTLER_INCREMENT_SCRIPT,
         [hitsKey, `${hitsKey}:block`],
-        [ttl, limit, Math.max(0, blockDuration)],
+        [Date.now(), ttl, limit, Math.max(0, blockDuration), hitId()],
       );
       return {
         totalHits,
@@ -69,6 +70,11 @@ export class RedisThrottlerStorage implements ThrottlerStorage {
       `Rate limit check failed, letting requests through: ${String(error)}`,
     );
   }
+}
+
+/** Unique per hit, so two hits in the same millisecond (also from different replicas) stay two members. */
+function hitId(): string {
+  return randomBytes(9).toString('base64url');
 }
 
 function toSeconds(ms: number): number {

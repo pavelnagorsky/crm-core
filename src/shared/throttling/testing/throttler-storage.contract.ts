@@ -91,6 +91,22 @@ export function throttlerStorageContract(
       });
     });
 
+    it('counts every hit for its own ttl, so a window boundary does not let 2x the limit through', async () => {
+      // t=0: one hit; t=300: a second one (both live). t=500: the first has expired, the second lives until 700, so
+      // one more hit fits and the next is rejected. A fixed window started at t=0 would reset at 400 and allow both.
+      const hit = () => storage().increment('ip', 400, 2, 0, 'n');
+      await hit();
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      expect((await hit()).isBlocked).toBe(false);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+
+      expect(await hit()).toMatchObject({ totalHits: 2, isBlocked: false });
+      const rejected = await hit();
+      expect(rejected).toMatchObject({ totalHits: 3, isBlocked: true });
+      // Retry-After: until the hit from t=300 expires (~200 ms), not a whole ttl.
+      expect(rejected.timeToBlockExpire).toBe(1);
+    });
+
     it('keeps keys of different throttlers apart', async () => {
       await storage().increment('ip', 60_000, 5, 0, 'a');
       await storage().increment('ip', 60_000, 5, 0, 'a');

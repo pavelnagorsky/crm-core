@@ -6,11 +6,13 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Redis, RedisOptions } from 'ioredis';
+import { AsyncResource } from 'node:async_hooks';
 import { createHash } from 'node:crypto';
 import { IRedisConfig } from '../../config/interfaces/redis-config.interface.js';
+import { RedisConnectionState } from './enums/redis-connection-state.enum.js';
 
 /** Set by hand, not with the ioredis `keyPrefix` option: that option does not reach keys built inside Lua. */
-export const REDIS_KEY_PREFIX = 'crm:';
+const REDIS_KEY_PREFIX = 'crm:';
 
 /** Commands fail fast instead of waiting for a connection: every caller falls back to working without Redis. */
 const CLIENT_OPTIONS: RedisOptions = {
@@ -23,20 +25,33 @@ const CLIENT_OPTIONS: RedisOptions = {
 /** How long startup waits for the first connection, so the first requests already use Redis. */
 const STARTUP_WAIT_MS = 2500;
 
-type ConnectionState = 'connecting' | 'up' | 'down';
+/**
+ * After a command times out while the connection is still open (Redis paused, overloaded, or a network partition
+ * without a reset), how often a PING checks whether Redis answers again. Until it does, `available` is false, so
+ * callers skip Redis at once instead of each waiting `commandTimeout`.
+ */
+const PROBE_INTERVAL_MS = 1000;
+
+/** The error ioredis rejects a command with when `commandTimeout` passes. */
+const COMMAND_TIMEOUT_MESSAGE = 'Command timed out';
 
 /**
  * The shared Redis connection, used only by the Redis adapters of the state stores (see `stateStoreProviders`).
  * Without `REDIS_URL` there is no client and the memory adapters are used instead. When Redis is down,
  * `available` is false and the Redis adapters work without it (fail-open). ioredis reconnects on its own; only changes of
- * the connection state are logged, not every failed attempt.
+ * the connection state are logged, not every failed attempt. A Redis that hangs instead of refusing connections keeps
+ * the connection open, so the first command timeout also makes `available` false until a PING succeeds: requests pay
+ * `commandTimeout` once, not on every Redis call.
  */
 @Injectable()
 export class RedisService implements OnModuleInit, OnApplicationShutdown {
   private readonly logger = new Logger(RedisService.name);
   private readonly client: Redis | null;
   private readonly scriptHashes = new Map<string, string>();
-  private state: ConnectionState = 'connecting';
+  private state = RedisConnectionState.CONNECTING;
+  private unresponsive = false;
+  private probeTimer: NodeJS.Timeout | undefined;
+  private stopped = false;
 
   constructor(config: ConfigService) {
     const url = config.get<IRedisConfig>('redis')?.url;
@@ -58,7 +73,7 @@ export class RedisService implements OnModuleInit, OnApplicationShutdown {
   }
 
   get available(): boolean {
-    return this.client?.status === 'ready';
+    return this.client?.status === 'ready' && !this.unresponsive;
   }
 
   /** `crm:` + parts joined with `:`. */
@@ -92,19 +107,20 @@ export class RedisService implements OnModuleInit, OnApplicationShutdown {
     keys: string[],
     args: (string | number)[] = [],
   ): Promise<T> {
-    const client = this.requireClient();
     const params = [...keys, ...args];
-    try {
-      return (await client.evalsha(
-        this.scriptHash(script),
-        keys.length,
-        ...params,
-      )) as T;
-    } catch (error) {
-      if (!(error instanceof Error) || !error.message.startsWith('NOSCRIPT'))
-        throw error;
-      return (await client.eval(script, keys.length, ...params)) as T;
-    }
+    return this.command(async (client) => {
+      try {
+        return (await client.evalsha(
+          this.scriptHash(script),
+          keys.length,
+          ...params,
+        )) as T;
+      } catch (error) {
+        if (!(error instanceof Error) || !error.message.startsWith('NOSCRIPT'))
+          throw error;
+        return (await client.eval(script, keys.length, ...params)) as T;
+      }
+    });
   }
 
   /** `SET key value NX EX ttl`: true when the key was set, false when it already existed. Rejects when Redis is unavailable. */
@@ -113,12 +129,8 @@ export class RedisService implements OnModuleInit, OnApplicationShutdown {
     value: string,
     ttlSeconds: number,
   ): Promise<boolean> {
-    const result = await this.requireClient().set(
-      key,
-      value,
-      'EX',
-      ttlSeconds,
-      'NX',
+    const result = await this.command((client) =>
+      client.set(key, value, 'EX', ttlSeconds, 'NX'),
     );
     return result === 'OK';
   }
@@ -126,7 +138,9 @@ export class RedisService implements OnModuleInit, OnApplicationShutdown {
   async onApplicationShutdown(): Promise<void> {
     const client = this.client;
     if (!client) return;
-    this.state = 'down';
+    this.state = RedisConnectionState.DOWN;
+    this.stopped = true;
+    clearTimeout(this.probeTimer);
     if (client.status !== 'ready') {
       client.disconnect();
       return;
@@ -143,9 +157,45 @@ export class RedisService implements OnModuleInit, OnApplicationShutdown {
     return new Redis(url, CLIENT_OPTIONS);
   }
 
-  private requireClient(): Redis {
+  /** Runs a command; a timeout marks Redis unresponsive until a PING succeeds. */
+  private async command<T>(run: (client: Redis) => Promise<T>): Promise<T> {
     if (!this.client) throw new Error('Redis is not configured');
-    return this.client;
+    try {
+      return await run(this.client);
+    } catch (error) {
+      if (error instanceof Error && error.message === COMMAND_TIMEOUT_MESSAGE)
+        this.onTimeout();
+      throw error;
+    }
+  }
+
+  private onTimeout(): void {
+    if (this.unresponsive || this.stopped) return;
+    this.unresponsive = true;
+    this.logger.warn(
+      'Redis is not responding, working without Redis until it answers again',
+    );
+    this.scheduleProbe();
+  }
+
+  /** Bound when the service is built, so probe logs do not carry the requestId of the request that tripped it. */
+  private readonly scheduleProbe = AsyncResource.bind((): void => {
+    this.probeTimer = setTimeout(() => void this.probe(), PROBE_INTERVAL_MS);
+    this.probeTimer.unref();
+  });
+
+  private async probe(): Promise<void> {
+    this.probeTimer = undefined;
+    if (!this.client || !this.unresponsive || this.stopped) return;
+    try {
+      await this.client.ping();
+    } catch {
+      if (this.unresponsive && !this.stopped) this.scheduleProbe();
+      return;
+    }
+    if (!this.unresponsive) return;
+    this.unresponsive = false;
+    this.logger.log('Redis is responding again');
   }
 
   private scriptHash(script: string): string {
@@ -158,20 +208,24 @@ export class RedisService implements OnModuleInit, OnApplicationShutdown {
   }
 
   private onReady(): void {
-    if (this.state === 'up') return;
+    // A new connection answers: whatever hung the old one is gone, and the probe stops on its own.
+    this.unresponsive = false;
+    if (this.state === RedisConnectionState.UP) return;
     this.logger.log(
-      this.state === 'down' ? 'Redis connection restored' : 'Redis connected',
+      this.state === RedisConnectionState.DOWN
+        ? 'Redis connection restored'
+        : 'Redis connected',
     );
-    this.state = 'up';
+    this.state = RedisConnectionState.UP;
   }
 
   private onDown(reason: string): void {
-    if (this.state === 'down') return;
+    if (this.state === RedisConnectionState.DOWN) return;
     this.logger.warn(
-      this.state === 'up'
+      this.state === RedisConnectionState.UP
         ? `Redis connection lost, working without Redis until it reconnects: ${reason}`
         : `Redis unavailable, working without Redis until it connects: ${reason}`,
     );
-    this.state = 'down';
+    this.state = RedisConnectionState.DOWN;
   }
 }

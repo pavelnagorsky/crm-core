@@ -4,28 +4,39 @@ import { IStateConfig } from '../../config/interfaces/state-config.interface.js'
 import { StateBackend } from '../enums/state-backend.enum.js';
 
 /**
- * Binds the port `token` to the adapter of the configured `state.backend` (memory when unset).
+ * Binds the port `token` to the adapter of the configured `state.backend` (memory when the config has no `state`
+ * section, as in tests that do not load `configuration.ts`).
  *
- * Both adapters are plain providers of the module, so Nest builds and shuts them down as usual; their constructors
+ * `adapters` names one adapter for every `StateBackend` value, so a new value does not compile until each feature
+ * picks an adapter for it, and a value without one fails startup instead of quietly landing in process memory.
+ * `state.backend` is one global switch for all shared state: a cache-only variant (e.g. a tiered L1/L2 cache, see
+ * docs/replication-plan.md, section 5) gets its own cache setting rather than a new `StateBackend` value.
+ *
+ * All adapters are plain providers of the module, so Nest builds and shuts them down as usual; their constructors
  * must not start work (timers start lazily, Redis adapters only hold `RedisService`). The token is a factory that
  * returns one of them. Nest calls lifecycle hooks on factory results too, so adapter hooks must be idempotent.
- * A further backend (e.g. a tiered L1/L2 cache) is one more adapter and one more branch here.
  */
 export function stateStoreProviders<T>(
   token: InjectionToken,
-  memory: Type<T>,
-  redis: Type<T>,
+  adapters: Record<StateBackend, Type<T>>,
 ): Provider[] {
+  const backends = Object.values(StateBackend);
+  const classes = backends.map((backend) => adapters[backend]);
   return [
-    memory,
-    redis,
+    ...new Set(classes),
     {
       provide: token,
-      inject: [ConfigService, memory, redis],
-      useFactory: (config: ConfigService, memoryStore: T, redisStore: T): T =>
-        config.get<IStateConfig>('state')?.backend === StateBackend.REDIS
-          ? redisStore
-          : memoryStore,
+      inject: [ConfigService, ...classes],
+      useFactory: (config: ConfigService, ...instances: T[]): T => {
+        const backend =
+          config.get<IStateConfig>('state')?.backend ?? StateBackend.MEMORY;
+        const index = backends.indexOf(backend);
+        if (index < 0 || !instances[index])
+          throw new Error(
+            `No ${String(token)} adapter for state backend "${String(backend)}"`,
+          );
+        return instances[index];
+      },
     },
   ];
 }

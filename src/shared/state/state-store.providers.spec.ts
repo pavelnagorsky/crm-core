@@ -18,12 +18,15 @@ class MemoryStore implements OnApplicationShutdown {
 class RedisStore {}
 
 @Module({
-  providers: stateStoreProviders(STORE, MemoryStore, RedisStore),
+  providers: stateStoreProviders(STORE, {
+    [StateBackend.MEMORY]: MemoryStore,
+    [StateBackend.REDIS]: RedisStore,
+  }),
   exports: [STORE],
 })
 class StoreModule {}
 
-async function compile(state?: { backend: StateBackend }) {
+async function compile(state?: { backend: string }) {
   return Test.createTestingModule({
     imports: [
       ConfigModule.forRoot({
@@ -54,6 +57,12 @@ describe('stateStoreProviders', () => {
     const app = await compile();
     expect(app.get(STORE)).toBeInstanceOf(MemoryStore);
     await app.close();
+  });
+
+  it('fails startup for a backend without an adapter instead of falling back to memory', async () => {
+    await expect(compile({ backend: 'tiered' })).rejects.toThrow(
+      'adapter for state backend "tiered"',
+    );
   });
 
   it('shuts the chosen adapter down (the hook may run once per provider)', async () => {

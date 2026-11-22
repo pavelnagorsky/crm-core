@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { StateBackend } from '../enums/state-backend.enum.js';
 import { stateStoreProviders } from '../state/state-store.providers.js';
 import { CRON_LOCK_STORE } from './cron-lock-store.token.js';
 import { CronLockService } from './cron-lock.service.js';
@@ -10,11 +11,10 @@ import { RedisCronLockStore } from './stores/redis-cron-lock.store.js';
 @Module({
   providers: [
     CronLockService,
-    ...stateStoreProviders<CronLockStore>(
-      CRON_LOCK_STORE,
-      MemoryCronLockStore,
-      RedisCronLockStore,
-    ),
+    ...stateStoreProviders<CronLockStore>(CRON_LOCK_STORE, {
+      [StateBackend.MEMORY]: MemoryCronLockStore,
+      [StateBackend.REDIS]: RedisCronLockStore,
+    }),
   ],
 })
 export class CronModule {}

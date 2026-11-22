@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { EventEmitter } from 'node:events';
 import { createHash } from 'node:crypto';
 import { Redis } from 'ioredis';
-import { REDIS_KEY_PREFIX, RedisService } from './redis.service.js';
+import { RedisService } from './redis.service.js';
 
 type FakeClient = EventEmitter & {
   status: string;
@@ -11,6 +11,7 @@ type FakeClient = EventEmitter & {
   evalsha: ReturnType<typeof vi.fn>;
   eval: ReturnType<typeof vi.fn>;
   set: ReturnType<typeof vi.fn>;
+  ping: ReturnType<typeof vi.fn>;
   quit: ReturnType<typeof vi.fn>;
   disconnect: ReturnType<typeof vi.fn>;
 };
@@ -22,6 +23,7 @@ function fakeClient(url: string): FakeClient {
     evalsha: vi.fn(),
     eval: vi.fn(),
     set: vi.fn(),
+    ping: vi.fn(async () => 'PONG'),
     quit: vi.fn(async () => 'OK'),
     disconnect: vi.fn(),
   });
@@ -210,6 +212,91 @@ describe('RedisService', () => {
     });
   });
 
+  describe('when Redis hangs with the connection open', () => {
+    const timeout = () => new Error('Command timed out');
+
+    it('is unavailable after a command timeout until a PING answers', async () => {
+      vi.useFakeTimers();
+      const { service, client } = createService('redis://localhost:6379');
+      connect(client!);
+      client!.evalsha.mockRejectedValue(timeout());
+      client!.ping.mockRejectedValueOnce(timeout());
+
+      await expect(service.eval('return 1', [])).rejects.toThrow(
+        'Command timed out',
+      );
+      expect(service.available).toBe(false);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toContain('Redis is not responding');
+
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(client!.ping).toHaveBeenCalledTimes(1);
+      expect(service.available).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(client!.ping).toHaveBeenCalledTimes(2);
+      expect(service.available).toBe(true);
+      expect(log).toHaveBeenLastCalledWith('Redis is responding again');
+
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(client!.ping).toHaveBeenCalledTimes(2);
+    });
+
+    it('warns once for timeouts that were already in flight', async () => {
+      vi.useFakeTimers();
+      const { service, client } = createService('redis://localhost:6379');
+      connect(client!);
+      client!.set.mockRejectedValue(timeout());
+
+      await Promise.allSettled([
+        service.setIfAbsent('crm:a', 'x', 60),
+        service.setIfAbsent('crm:b', 'x', 60),
+      ]);
+
+      expect(service.available).toBe(false);
+      expect(warn).toHaveBeenCalledTimes(1);
+    });
+
+    it('is available again after a reconnect', async () => {
+      vi.useFakeTimers();
+      const { service, client } = createService('redis://localhost:6379');
+      connect(client!);
+      client!.evalsha.mockRejectedValue(timeout());
+      client!.ping.mockRejectedValue(timeout());
+      await expect(service.eval('return 1', [])).rejects.toThrow();
+
+      drop(client!);
+      connect(client!);
+
+      expect(service.available).toBe(true);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(client!.ping).not.toHaveBeenCalled();
+    });
+
+    it('does not trip on other errors', async () => {
+      const { service, client } = createService('redis://localhost:6379');
+      connect(client!);
+      client!.evalsha.mockRejectedValue(new Error('ERR wrong number of keys'));
+
+      await expect(service.eval('return 1', [])).rejects.toThrow();
+
+      expect(service.available).toBe(true);
+    });
+
+    it('stops probing on shutdown', async () => {
+      vi.useFakeTimers();
+      const { service, client } = createService('redis://localhost:6379');
+      connect(client!);
+      client!.evalsha.mockRejectedValue(timeout());
+      await expect(service.eval('return 1', [])).rejects.toThrow();
+
+      await service.onApplicationShutdown();
+      await vi.advanceTimersByTimeAsync(5000);
+
+      expect(client!.ping).not.toHaveBeenCalled();
+    });
+  });
+
   describe('setIfAbsent', () => {
     it('sets the key only when it is absent', async () => {
       const { service, client } = createService('redis://localhost:6379');
@@ -233,7 +320,6 @@ describe('RedisService', () => {
   it('prefixes keys', () => {
     const { service } = createService(undefined);
 
-    expect(REDIS_KEY_PREFIX).toBe('crm:');
     expect(service.key('cache', 'tag', 'staff')).toBe('crm:cache:tag:staff');
   });
 

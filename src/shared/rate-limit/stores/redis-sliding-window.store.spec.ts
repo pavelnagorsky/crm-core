@@ -1,12 +1,12 @@
 import { Logger } from '@nestjs/common';
-import { REDIS_KEY_PREFIX, RedisService } from '../../redis/redis.service.js';
+import { RedisService } from '../../redis/redis.service.js';
 import { SLIDING_WINDOW_SCRIPT } from './redis-sliding-window.script.js';
 import { RedisSlidingWindowStore } from './redis-sliding-window.store.js';
 
 function createStore(available = true) {
   const redis = {
     available,
-    key: (...parts: string[]) => REDIS_KEY_PREFIX + parts.join(':'),
+    key: (...parts: string[]) => 'crm:' + parts.join(':'),
     eval: vi.fn(),
   };
   const store = new RedisSlidingWindowStore(redis as unknown as RedisService);

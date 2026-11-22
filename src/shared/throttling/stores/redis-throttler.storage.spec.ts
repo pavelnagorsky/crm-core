@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { RedisThrottlerStorage } from './redis-throttler.storage.js';
 import { THROTTLER_INCREMENT_SCRIPT } from './redis-throttler.script.js';
-import { REDIS_KEY_PREFIX, RedisService } from '../../redis/redis.service.js';
+import { RedisService } from '../../redis/redis.service.js';
 
 const PASS = {
   totalHits: 0,
@@ -13,7 +13,7 @@ const PASS = {
 function createStorage(available = true) {
   const redis = {
     available,
-    key: (...parts: string[]) => REDIS_KEY_PREFIX + parts.join(':'),
+    key: (...parts: string[]) => 'crm:' + parts.join(':'),
     eval: vi.fn(),
   };
   const storage = new RedisThrottlerStorage(redis as unknown as RedisService);
@@ -32,16 +32,22 @@ describe('RedisThrottlerStorage', () => {
     vi.restoreAllMocks();
   });
 
-  it('runs the script with the hit and block keys, the window, the limit and the block duration', async () => {
+  it('runs the script with the hit and block keys, the time, the ttl, the limit, the block duration and a hit id', async () => {
+    vi.useFakeTimers({ now: 1_700_000_000_000 });
     const { storage, redis } = createStorage();
     redis.eval.mockResolvedValue([1, 60_000, 0, 0]);
 
+    await storage.increment('ip-1', 60_000, 300, 10_000, 'sustained');
     await storage.increment('ip-1', 60_000, 300, 10_000, 'sustained');
 
     expect(redis.eval).toHaveBeenCalledWith(
       THROTTLER_INCREMENT_SCRIPT,
       ['crm:throttle:sustained:ip-1', 'crm:throttle:sustained:ip-1:block'],
-      [60_000, 300, 10_000],
+      [1_700_000_000_000, 60_000, 300, 10_000, expect.any(String)],
+    );
+    // Two hits in the same millisecond stay two members of the sorted set.
+    expect(redis.eval.mock.calls[0][2][4]).not.toBe(
+      redis.eval.mock.calls[1][2][4],
     );
   });
 
@@ -75,7 +81,7 @@ describe('RedisThrottlerStorage', () => {
 
     await storage.increment('k', 1_000, 5, -1, 'n');
 
-    expect(redis.eval.mock.calls[0][2]).toEqual([1_000, 5, 0]);
+    expect(redis.eval.mock.calls[0][2][3]).toBe(0);
   });
 
   it('lets the request through without calling Redis when it is unavailable', async () => {
