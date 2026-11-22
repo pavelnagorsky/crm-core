@@ -1,4 +1,5 @@
 import { appRole } from './app-role.config.js';
+import { databasePoolSize } from './database.config.js';
 import { redisUrl } from './redis.config.js';
 
 export default () => {
@@ -30,6 +31,7 @@ export default () => {
     },
     database: {
       url: process.env['DATABASE_URL'],
+      poolSize: databasePoolSize(),
     },
     redis: {
       url: redisUrl(),
