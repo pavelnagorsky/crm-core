@@ -362,7 +362,8 @@ Lua-скрипты проверить интеграционным тестом 
 
 Решение: **Grafana + Loki + Alloy** в том же compose.
 
-- Приложение в Docker пишет только в stdout: в compose **не** задавать `LOG_DIRECTORY` —
+- Приложение в Docker пишет только в stdout: в compose `LOG_DIRECTORY: ''` (пустое значение;
+  без переменной `configuration.ts` подставляет `logs` и контейнер падает на `mkdir logs`) —
   `readable-log.transport.ts` уже поддерживает работу без файлов. Код транспорта не менять.
   Локальный `npm run start:dev` пишет файлы в `logs/`, как раньше.
 - Формат строки прежний и однострочный (`singleLine: true`):
@@ -430,6 +431,9 @@ Postgres через OOM-killer.
   `resolver 127.0.0.11 valid=5s;`. Без `resolve` nginx запомнит IP при старте, и после
   пересоздания контейнера при деплое будет слать запросы в никуда (параметр `resolve` в
   open-source nginx — с 1.27.3; если не взлетит — фиксированные `ipv4_address` в сети compose).
+- `proxy_connect_timeout 2s`: у остановленного контейнера IP «чёрная дыра» (нет RST) до обновления
+  DNS (~5 с); с дефолтными 60 с первый запрос после `stop` висел минуту. Проверено: `resolve` в
+  nginx 1.28 работает, фолбэк с `ipv4_address` не нужен.
 - `max_fails=1 fail_timeout=5s`, `proxy_next_upstream error timeout http_502 http_503`,
   `proxy_next_upstream_tries 2`. POST повторно не отправляется, если запрос уже дошёл до
   упавшего экземпляра (поведение nginx по умолчанию), — запись не создастся дважды.
