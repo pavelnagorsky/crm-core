@@ -13,6 +13,26 @@
 - Чтение и изменение заказов проходят через `OrdersFacade`. Складские движения и комиссии выполняются через публичные API Inventory и Payroll в транзакции операции.
 - Исполнитель, продавец и автор документа служат для операционных данных и аудита, а не для определения доступа. Permission действует на весь документ в доступном филиале.
 
+## Цена строки
+
+Цену позиции записи считает `PricingFacade` и фиксирует при создании по слоям ([план](./pricing-plan.md), 2.1): `basePrice` → `staffPrice` → `listPrice` → `chargedPrice = listPrice - discountTotal`; своя цена администратора `customPrice` заменяет итог. Слои, которые сдвинули цену, лежат в `BookingItemPriceAdjustment`.
+
+Сервисная строка заказа повторяет слои записи:
+
+| Поле строки | Значение |
+| --- | --- |
+| `baseUnitPrice` | `basePrice` |
+| `listUnitPrice` | `listPrice`, цена по прайсу до скидки |
+| `customUnitPrice` | `customPrice` |
+| `unitPrice`, `lineSubtotal` | `customPrice ?? listPrice` |
+| `discountTotal` | `discountTotal` записи; 0 при своей цене |
+| `lineTotal` | `lineSubtotal - discountTotal` = `customPrice ?? chargedPrice` |
+
+- `lineTotal` строки услуги всегда равен `customPrice ?? chargedPrice` позиции записи: это читают оплаты, долг визита и зарплата.
+- Слои копируются в `OrderItemPriceAdjustment`. При своей цене скидочные слои (`PROMOTION`, `CLIENT_DISCOUNT`) не копируются: скидка не применялась.
+- Синхронизация сравнивает с действующей строкой все денежные поля и слои. Любое отличие сторнирует строку (REVERSED) и создаёт новую.
+- У товарной строки `baseUnitPrice` = розничная цена; правила цен для товаров появятся на этапе 7, до тех пор скидка товара 0.
+
 ## Редактирование и добавление товаров
 
 Заказ редактируется в ACTIVE. Внутри него изменяются только PRODUCT/DRAFT; SERVICE, CONFIRMED и REVERSED сохраняются как история. Проведённая услуга или товар не мешает добавлению новых черновых товаров.

@@ -281,6 +281,7 @@ export class OrderDraftService {
         sku: product.product.sku,
         unit: product.product.unit,
         quantity: item.quantity,
+        baseUnitPrice: product.retailPrice,
         listUnitPrice: price.listUnitPrice,
         customUnitPrice: price.customUnitPrice,
         unitPrice: price.unitPrice,

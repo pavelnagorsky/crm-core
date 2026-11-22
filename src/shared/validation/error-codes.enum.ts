@@ -184,6 +184,10 @@ export const ErrorCode = {
     code: 'BOOKING_BUNDLE_NOT_FOUND',
     message: 'Bundle not found',
   },
+  BOOKING_BUNDLE_CHANGED: {
+    code: 'BOOKING_BUNDLE_CHANGED',
+    message: 'Bundle services changed while booking, select the bundle again',
+  },
   BOOKING_PARALLEL_STAFF_REQUIRED: {
     code: 'BOOKING_PARALLEL_STAFF_REQUIRED',
     message:

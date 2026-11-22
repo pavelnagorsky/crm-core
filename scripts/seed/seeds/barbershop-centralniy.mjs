@@ -464,7 +464,7 @@ export async function seed(prisma) {
     const line = price.mul(qty);
     const item = {
       id: randomUUID(), orderId, type: 'PRODUCT', status: 'CONFIRMED', catalogItemId: product.row.id, categoryId: product.row.categoryId,
-      productLocationId: product.pl.id, title: product.name, sku: product.sku, unit: 'PIECE', quantity: D(qty), listUnitPrice: price,
+      productLocationId: product.pl.id, title: product.name, sku: product.sku, unit: 'PIECE', quantity: D(qty), baseUnitPrice: price, listUnitPrice: price,
       customUnitPrice: null, unitPrice: price, lineSubtotal: line, discountTotal: ZERO, lineTotal: line, sellerStaffId: s.row.id, sellerName: s.name,
       confirmedAt: occurredAt, occurredAt, createdAt: occurredAt,
     };
@@ -540,7 +540,8 @@ export async function seed(prisma) {
       });
       const item = {
         id: randomUUID(), bookingId, locationId, serviceId: p.svc.id, staffId: s.row.id, sortOrder: i, startAt: itStart, endAt: itEnd,
-        serviceTitle: p.svc.title, serviceDuration: p.svc.durationMinutes, listPrice: p.svc.price, chargedPrice: p.svc.price, customPrice,
+        serviceTitle: p.svc.title, serviceDuration: p.svc.durationMinutes, basePrice: p.svc.price, staffPrice: p.svc.price,
+        listPrice: p.svc.price, discountTotal: ZERO, chargedPrice: p.svc.price, customPrice,
         staffName: s.name, calendarEventId,
       };
       out.bookingItems.push(item);
@@ -572,7 +573,7 @@ export async function seed(prisma) {
     const orderId = randomUUID();
     const orderItems = items.map((it) => ({
       id: randomUUID(), orderId, type: 'SERVICE', bookingItemId: it.id, status: 'CONFIRMED', catalogItemId: it.serviceId,
-      categoryId: services.find((x) => x.row.id === it.serviceId).row.categoryId, title: it.serviceTitle, quantity: D(1), listUnitPrice: it.listPrice,
+      categoryId: services.find((x) => x.row.id === it.serviceId).row.categoryId, title: it.serviceTitle, quantity: D(1), baseUnitPrice: it.basePrice, listUnitPrice: it.listPrice,
       customUnitPrice: it.customPrice, unitPrice: priceOf(it), lineSubtotal: priceOf(it), discountTotal: ZERO, lineTotal: priceOf(it),
       sellerStaffId: s.row.id, sellerName: s.name, confirmedAt: endAt, occurredAt: endAt, createdAt: completedAt,
     }));

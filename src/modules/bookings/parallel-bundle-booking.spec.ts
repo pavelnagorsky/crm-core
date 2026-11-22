@@ -18,6 +18,9 @@ import { BookingSetupService } from './services/setup/booking-setup.service.js';
 import { StaffSelectionMode } from './enums/staff-selection-mode.enum.js';
 import { BookingCalendarReadService } from './services/read/booking-calendar-read.service.js';
 import { createBillingFacadeStub } from '../billing/testing/billing-facade.stub.js';
+import { PricingFacade } from '../pricing/pricing.facade.js';
+import { PricingSnapshotService } from '../pricing/services/pricing-snapshot.service.js';
+import { ReadConsistency } from '../../shared/cache/enums/read-consistency.enum.js';
 
 function setup() {
   const services = [
@@ -113,11 +116,30 @@ function setup() {
     getBookingSettings: vi.fn(async () => location),
     acquireActiveOperationLock: vi.fn(async () => true),
   };
+  // Bundles the price engine sees; a test may add one to price it.
+  const bundles = [bundle];
   const catalog = {
     resolveBundleForBooking: vi.fn(async () => bundle),
     resolveBundleForAvailability: vi.fn(async () => bundle),
     loadForBooking: vi.fn(async () => ({ services, bundles: [bundle] })),
+    loadCatalogSnapshot: vi.fn(
+      async (_locationId: string, _consistency: ReadConsistency) => ({
+        categories: [],
+        services: [
+          ...new Map(
+            bundles
+              .flatMap((item) => item.items)
+              .map(({ service }) => [service.id, service]),
+          ).values(),
+        ],
+        bundles,
+      }),
+    ),
   };
+  const pricing = new PricingFacade(
+    new PricingSnapshotService(catalog as never),
+  );
+  const orders = { priceProductItems: vi.fn(async () => []) };
   const db = {
     bookingItem: { groupBy: vi.fn(async () => []) },
     calendarEvent: {
@@ -160,12 +182,14 @@ function setup() {
   const selection = new BookingSelectionService(
     locations as never,
     catalog as never,
-    {} as never,
+    orders as never,
+    pricing,
   );
   const scheduling = new BookingSchedulingService(
     db as never,
     staff as never,
     calendar as never,
+    pricing,
   );
   const slots = new BookingSlotLockService(staff as never, calendar as never);
   const reservation = new BookingReservationService(
@@ -202,7 +226,9 @@ function setup() {
   );
   const request = {
     locationId: 'location',
+    bundleId: 'bundle',
     services,
+    prices: ReadConsistency.FRESH,
     startAt: new Date('2026-11-10T10:00:00Z'),
     executionMode: BookingExecutionMode.PARALLEL,
     timezone: 'UTC',
@@ -212,6 +238,8 @@ function setup() {
   return {
     services,
     bundle,
+    bundles,
+    catalog,
     directory,
     staff,
     calendar,
@@ -314,7 +342,8 @@ describe('Parallel bundle booking', () => {
   });
 
   it('offers a slot and creates a single fixed-price booking with two events and the previewed team', async () => {
-    const { availability, resolve, create, db, calendar, clients } = setup();
+    const { availability, resolve, create, db, calendar, clients, catalog } =
+      setup();
     const days = await availability.getManualAvailableSlots('location', {
       bundleId: 'bundle',
       from: '2026-11-10',
@@ -325,6 +354,14 @@ describe('Parallel bundle booking', () => {
       bundleId: 'bundle',
       startAt: '2026-11-10T10:00:00',
     });
+    // The preview is only shown: prices come through the cache.
+    expect(catalog.loadCatalogSnapshot.mock.calls).toEqual([
+      ['location', ReadConsistency.CACHED],
+    ]);
+    expect(
+      preview.resolvedItems.map((item) => item.chargedPrice.toFixed(2)),
+    ).toEqual(['48.00', '72.00']);
+    catalog.loadCatalogSnapshot.mockClear();
     expect(preview.staffSelection).toBe(StaffSelectionMode.PER_SERVICE);
     expect(preview.canAssignStaff).toBe(true);
     expect(
@@ -353,6 +390,41 @@ describe('Parallel bundle booking', () => {
       '48',
       '72',
     ]);
+    // The booking stores its prices: they are read fresh, every layer is the bundle share.
+    expect(catalog.loadCatalogSnapshot.mock.calls).toEqual([
+      ['location', ReadConsistency.FRESH],
+    ]);
+    const createdItems = db.booking.create.mock.calls[0][0].data.items
+      .create as {
+      basePrice: Prisma.Decimal;
+      staffPrice: Prisma.Decimal;
+      listPrice: Prisma.Decimal;
+      discountTotal: Prisma.Decimal;
+      chargedPrice: Prisma.Decimal;
+      customPrice: Prisma.Decimal | null;
+      priceAdjustments: { create: unknown[] };
+    }[];
+    expect(
+      createdItems.map((item) => ({
+        basePrice: item.basePrice.toFixed(2),
+        staffPrice: item.staffPrice.toFixed(2),
+        listPrice: item.listPrice.toFixed(2),
+        discountTotal: item.discountTotal.toFixed(2),
+        chargedPrice: item.chargedPrice.toFixed(2),
+        customPrice: item.customPrice,
+        priceAdjustments: item.priceAdjustments,
+      })),
+    ).toEqual(
+      ['48.00', '72.00'].map((share) => ({
+        basePrice: share,
+        staffPrice: share,
+        listPrice: share,
+        discountTotal: '0.00',
+        chargedPrice: share,
+        customPrice: null,
+        priceAdjustments: { create: [] },
+      })),
+    );
     expect(result.items.map((item) => item.staffId)).toEqual(['y', 'x']);
     expect(result.endAt.toISOString()).toBe('2026-11-10T11:30:00.000Z');
     expect(
@@ -604,6 +676,8 @@ describe('Parallel bundle booking', () => {
     const { scheduling, request } = setup();
     const items = await scheduling.resolveForBooking({
       ...request,
+      // Manual items are never a bundle: selection rejects a bundle with items.
+      bundleId: null,
       services: [request.services[0], request.services[0]],
       manualItems: [
         { serviceId: 'a', staffId: 'x' },
@@ -624,4 +698,70 @@ describe('Parallel bundle booking', () => {
       (await scheduling.resolveForBooking(request)).map((item) => item.staffId),
     ).toEqual(['x', 'z']);
   });
+
+  // Largest remainder: each share is the floor of its exact part, the leftover cents go to
+  // the largest remainders, earlier lines first. Rounding every share up and giving the last
+  // line the rest made it negative (0.03 over six: 0.01 x 5 and -0.02).
+  it.each([
+    {
+      fixedPrice: '0.03',
+      prices: ['10.00', '10.00', '10.00', '10.00', '10.00', '10.00'],
+      shares: ['0.01', '0.01', '0.01', '0.00', '0.00', '0.00'],
+    },
+    {
+      fixedPrice: '100.00',
+      prices: ['10.00', '10.00', '10.00'],
+      shares: ['33.34', '33.33', '33.33'],
+    },
+    {
+      fixedPrice: '10.00',
+      prices: ['0.01', '0.02', '29.97'],
+      shares: ['0.00', '0.01', '9.99'],
+    },
+    {
+      fixedPrice: '0.10',
+      prices: ['0.00', '0.00', '0.00'],
+      shares: ['0.04', '0.03', '0.03'],
+    },
+    {
+      fixedPrice: '120.00',
+      prices: ['60.00', '90.00'],
+      shares: ['48.00', '72.00'],
+    },
+  ])(
+    'splits a fixed bundle price into non-negative shares that add up to it: $fixedPrice over $prices',
+    async ({ fixedPrice, prices, shares }) => {
+      const { selection, catalog, bundles, bundle } = setup();
+      const tiny = {
+        ...bundle,
+        id: 'tiny',
+        fixedPrice: new Prisma.Decimal(fixedPrice),
+        items: prices.map((price, index) => ({
+          serviceId: `tiny-${index}`,
+          service: {
+            id: `tiny-${index}`,
+            title: `Tiny ${index}`,
+            durationMinutes: 30,
+            bufferMinutes: 0,
+            price: new Prisma.Decimal(price),
+          },
+        })),
+      };
+      bundles.push(tiny);
+      catalog.resolveBundleForBooking.mockResolvedValueOnce(tiny);
+
+      const result = await selection.price('location', { bundleId: 'tiny' });
+
+      expect(result.items.map((item) => item.lineTotal.toFixed(2))).toEqual(
+        shares,
+      );
+      expect(result.items.every((item) => item.lineTotal.gte(0))).toBe(true);
+      expect(result.serviceTotal.toFixed(2)).toBe(
+        new Prisma.Decimal(fixedPrice).toFixed(2),
+      );
+      expect(catalog.loadCatalogSnapshot.mock.calls).toEqual([
+        ['location', ReadConsistency.CACHED],
+      ]);
+    },
+  );
 });

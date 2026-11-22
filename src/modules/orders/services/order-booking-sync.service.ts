@@ -15,12 +15,18 @@ import { AuditEvent } from '../../audit/enums/audit-event.enum.js';
 import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
 import { AuditLogEvent } from '../../audit/interfaces/audit-log-event.interface.js';
 import { BookingWithItems } from '../../bookings/interfaces/booking-with-items.interface.js';
+import { BookingVisitsService } from '../../bookings/visits/services/booking-visits.service.js';
 import { LocationService } from '../../location/services/location.service.js';
 import { OrderPricingCalculator } from '../calculators/order-pricing.calculator.js';
 import { orderInclude } from '../constants/order-include.constant.js';
 import { OrderProductItemDto } from '../dto/order-product-item.dto.js';
 import { DraftProductsAdded } from '../interfaces/draft-products-added.interface.js';
+import { OrderPriceAdjustmentData } from '../interfaces/order-price-adjustment-data.interface.js';
 import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
+import {
+  orderLineAdjustments,
+  sameAdjustments,
+} from '../rules/order-price-adjustment.rules.js';
 import { orderItemSnapshot } from '../utils/order-item-snapshot.js';
 import { OrderDraftService } from './order-draft.service.js';
 import { OrderPersistenceService } from './order-persistence.service.js';
@@ -34,6 +40,7 @@ export class OrderBookingSyncService {
     private readonly drafts: OrderDraftService,
     private readonly persistence: OrderPersistenceService,
     private readonly eventEmitter: EventEmitter2,
+    private readonly visits: BookingVisitsService,
   ) {}
 
   async removeDraftProductsForBooking(
@@ -112,12 +119,27 @@ export class OrderBookingSyncService {
       ]);
     }
 
+    const bookingLayers = await this.visits.priceAdjustmentsByItem(
+      tx,
+      booking.items.map((item) => item.id),
+    );
+    const storedLayers = await this.orderLineAdjustments(
+      tx,
+      [...confirmedByBookingItem.values()].flat().map((row) => row.id),
+    );
+
     for (const item of booking.items) {
       const confirmedAt = new Date();
       const data = this.completedBookingServiceItemData(item, confirmedAt);
+      const layers = orderLineAdjustments(
+        bookingLayers.get(item.id) ?? [],
+        item.customPrice,
+      );
       const existing = confirmedByBookingItem.get(item.id) ?? [];
-      const current = existing.find((row) =>
-        this.matchesCompletedBookingServiceItem(row, data),
+      const current = existing.find(
+        (row) =>
+          this.matchesCompletedBookingServiceItem(row, data) &&
+          sameAdjustments(storedLayers.get(row.id) ?? [], layers),
       );
       const stale = current
         ? existing.filter((row) => row.id !== current.id)
@@ -134,12 +156,29 @@ export class OrderBookingSyncService {
           data: {
             ...data,
             orderId: order.id,
+            priceAdjustments: { create: layers },
           },
         });
       }
     }
 
     return this.persistence.refreshTotals(tx, booking.locationId, order.id);
+  }
+
+  /** Stored price layers of order lines by line id, in layer order. */
+  private async orderLineAdjustments(
+    tx: Prisma.TransactionClient,
+    orderItemIds: readonly string[],
+  ): Promise<Map<string, OrderPriceAdjustmentData[]>> {
+    const byLine = new Map<string, OrderPriceAdjustmentData[]>();
+    if (orderItemIds.length === 0) return byLine;
+    const rows = await tx.orderItemPriceAdjustment.findMany({
+      where: { orderItemId: { in: [...orderItemIds] } },
+      orderBy: [{ orderItemId: 'asc' }, { sortOrder: 'asc' }],
+    });
+    for (const { orderItemId, id: _id, ...layer } of rows)
+      byLine.set(orderItemId, [...(byLine.get(orderItemId) ?? []), layer]);
+    return byLine;
   }
 
   async reverseCompletedBookingServices(
@@ -358,10 +397,13 @@ export class OrderBookingSyncService {
     item: BookingWithItems['items'][number],
     confirmedAt: Date,
   ): Prisma.OrderItemUncheckedCreateWithoutOrderInput {
+    // The line keeps the booking's price layers: list price, then its discount, so that
+    // lineTotal = customPrice ?? chargedPrice, what payments and payroll read.
     const price = this.compute.priceLine(
       new Prisma.Decimal(1),
-      item.chargedPrice,
+      item.listPrice,
       item.customPrice,
+      item.discountTotal,
     );
     return {
       type: OrderItemType.SERVICE,
@@ -370,6 +412,7 @@ export class OrderBookingSyncService {
       catalogItemId: item.serviceId,
       title: item.serviceTitle,
       quantity: new Prisma.Decimal(1),
+      baseUnitPrice: item.basePrice,
       listUnitPrice: price.listUnitPrice,
       customUnitPrice: price.customUnitPrice,
       unitPrice: price.unitPrice,
@@ -392,6 +435,7 @@ export class OrderBookingSyncService {
       existing.catalogItemId === expected.catalogItemId &&
       existing.title === expected.title &&
       this.decimalEquals(existing.quantity, expected.quantity) &&
+      this.decimalEquals(existing.baseUnitPrice, expected.baseUnitPrice) &&
       this.decimalEquals(existing.listUnitPrice, expected.listUnitPrice) &&
       this.decimalEqualsNullable(
         existing.customUnitPrice,

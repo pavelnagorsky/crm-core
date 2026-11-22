@@ -7,11 +7,14 @@ import {
   OrderItemType,
   Prisma,
 } from '@prisma/client';
+import { ReadConsistency } from '../../shared/cache/enums/read-consistency.enum.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { AUDIT_EVENT } from '../audit/constants/audit.constants.js';
 import { AuditActorRole } from '../audit/enums/audit-actor-role.enum.js';
 import { NOTIFICATION_EVENT } from '../notifications/services/notifications.service.js';
 import { OrderPricingCalculator } from '../orders/calculators/order-pricing.calculator.js';
+import { PricingFacade } from '../pricing/pricing.facade.js';
+import { PricingSnapshotService } from '../pricing/services/pricing-snapshot.service.js';
 import { BookingCreateFacade } from './booking-create.facade.js';
 import { CLIENT_NOTICE_DELAY_MS } from './rules/booking-client-notice.rules.js';
 import { CreateBookingDto } from './dto/create-booking.dto.js';
@@ -69,20 +72,40 @@ type CatalogServiceRow = {
   price: Prisma.Decimal | number;
 };
 
-function catalogDeps(db: {
+type CatalogDb = {
   service: { findMany: () => Promise<CatalogServiceRow[]> };
   location: { findUnique: () => Promise<unknown> };
-}): [never, never] {
+};
+
+function catalogMock(db: CatalogDb) {
+  return {
+    resolveServicesForBooking: vi.fn(
+      async (_locationId: string, serviceIds: string[]) => {
+        const rows = await db.service.findMany();
+        const byId = new Map(rows.map((row) => [row.id, row]));
+        return serviceIds.map((serviceId) => byId.get(serviceId)!);
+      },
+    ),
+    // The real PricingFacade prices from this snapshot, so the specs run the price engine.
+    loadCatalogSnapshot: vi.fn(
+      async (_locationId: string, _consistency: ReadConsistency) => ({
+        categories: [],
+        services: (await db.service.findMany()).map((row) => ({
+          ...row,
+          price: new Prisma.Decimal(row.price),
+        })),
+        bundles: [],
+      }),
+    ),
+  };
+}
+
+function catalogDeps(
+  db: CatalogDb,
+  catalog: ReturnType<typeof catalogMock> = catalogMock(db),
+): [never, never] {
   return [
-    {
-      resolveServicesForBooking: vi.fn(
-        async (_locationId: string, serviceIds: string[]) => {
-          const rows = await db.service.findMany();
-          const byId = new Map(rows.map((row) => [row.id, row]));
-          return serviceIds.map((serviceId) => byId.get(serviceId)!);
-        },
-      ),
-    } as never,
+    catalog as never,
     {
       findById: vi.fn(() => db.location.findUnique()),
       acquireActiveOperationLock: vi.fn().mockResolvedValue(true),
@@ -152,6 +175,7 @@ function pricingSetup() {
     },
     $transaction: vi.fn(),
   };
+  const catalog = catalogMock(db);
   const orders = {
     syncCompletedBooking: vi.fn(),
     priceProductItems: vi.fn().mockResolvedValue([
@@ -186,9 +210,9 @@ function pricingSetup() {
       recordForCompletedBooking: vi.fn(),
       syncForCompletedBooking: vi.fn(),
     } as never,
-    ...catalogDeps(db),
+    ...catalogDeps(db, catalog),
   );
-  return { service, db, orders };
+  return { service, db, orders, catalog };
 }
 
 describe('BookingCreateFacade client ban', () => {
@@ -357,6 +381,39 @@ describe('BookingCreateFacade pricing', () => {
     ]);
     expect(db.$transaction).not.toHaveBeenCalled();
   });
+
+  it.each([
+    { customPrice: undefined, unitPrice: '50.00', lineTotal: '50.00' },
+    { customPrice: '40.00', unitPrice: '40.00', lineTotal: '40.00' },
+  ])(
+    'prices the service line from the engine through the cache: %j',
+    async ({ customPrice, unitPrice, lineTotal }) => {
+      const { service, catalog } = pricingSetup();
+
+      const result = await service.price('business-1', {
+        items: [{ serviceId: 'service-1', customPrice }],
+      });
+
+      const [line] = result.items;
+      expect({
+        listUnitPrice: line.listUnitPrice.toFixed(2),
+        customUnitPrice: line.customUnitPrice?.toFixed(2) ?? null,
+        unitPrice: line.unitPrice.toFixed(2),
+        discountTotal: line.discountTotal.toFixed(2),
+        lineTotal: line.lineTotal.toFixed(2),
+      }).toEqual({
+        listUnitPrice: '50.00',
+        customUnitPrice: customPrice ?? null,
+        unitPrice,
+        discountTotal: '0.00',
+        lineTotal,
+      });
+      // A preview is only shown, so it reads prices through the cache.
+      expect(catalog.loadCatalogSnapshot.mock.calls).toEqual([
+        ['business-1', ReadConsistency.CACHED],
+      ]);
+    },
+  );
 });
 
 describe('BookingCreateFacade calendar link', () => {
@@ -649,6 +706,7 @@ describe('BookingCreateFacade manual item prices', () => {
         fn(tx),
       ),
     };
+    const catalog = catalogMock(db);
     const service = createBookingService(
       db as never,
       calendar as never,
@@ -658,7 +716,7 @@ describe('BookingCreateFacade manual item prices', () => {
       { generateClientToken: vi.fn(), managementUrl: vi.fn() } as never,
       ...channelDeps(),
       ...commercialDeps(),
-      ...catalogDeps(db),
+      ...catalogDeps(db, catalog),
     );
 
     await service.createManualBooking(
@@ -675,11 +733,54 @@ describe('BookingCreateFacade manual item prices', () => {
     );
 
     const created = tx.booking.create.mock.calls[0][0] as {
-      data: { items: { create: { customPrice: string | null }[] } };
+      data: {
+        items: {
+          create: {
+            basePrice: Prisma.Decimal;
+            staffPrice: Prisma.Decimal;
+            listPrice: Prisma.Decimal;
+            discountTotal: Prisma.Decimal;
+            chargedPrice: Prisma.Decimal;
+            customPrice: Prisma.Decimal | null;
+            priceAdjustments: { create: unknown[] };
+          }[];
+        };
+      };
     };
-    expect(created.data.items.create.map((item) => item.customPrice)).toEqual([
-      null,
-      '70.00',
+    const money = (value: Prisma.Decimal | null) => value?.toFixed(2) ?? null;
+    expect(
+      created.data.items.create.map((item) => ({
+        basePrice: money(item.basePrice),
+        staffPrice: money(item.staffPrice),
+        listPrice: money(item.listPrice),
+        discountTotal: money(item.discountTotal),
+        chargedPrice: money(item.chargedPrice),
+        customPrice: money(item.customPrice),
+        priceAdjustments: item.priceAdjustments,
+      })),
+    ).toEqual([
+      {
+        basePrice: '50.00',
+        staffPrice: '50.00',
+        listPrice: '50.00',
+        discountTotal: '0.00',
+        chargedPrice: '50.00',
+        customPrice: null,
+        priceAdjustments: { create: [] },
+      },
+      {
+        basePrice: '80.00',
+        staffPrice: '80.00',
+        listPrice: '80.00',
+        discountTotal: '0.00',
+        chargedPrice: '80.00',
+        customPrice: '70.00',
+        priceAdjustments: { create: [] },
+      },
+    ]);
+    // The booking stores its prices, so they are read past the cache.
+    expect(catalog.loadCatalogSnapshot.mock.calls).toEqual([
+      ['business-1', ReadConsistency.FRESH],
     ]);
   });
 });
@@ -1658,6 +1759,7 @@ function createBookingService(
   },
 ): BookingCreateFacade {
   const slots = new BookingSlotLockService(staff, calendar);
+  const pricing = new PricingFacade(new PricingSnapshotService(services));
   // Online booking is open unless a test says otherwise (plan section 6.2).
   const bookingLocation = Object.assign(Object.create(location), {
     getBookingSettings:
@@ -1674,8 +1776,8 @@ function createBookingService(
     bookingClients,
     limiter,
     bookingLocation,
-    new BookingSelectionService(location, services, orders),
-    new BookingSchedulingService(db, staff, calendar),
+    new BookingSelectionService(location, services, orders, pricing),
+    new BookingSchedulingService(db, staff, calendar, pricing),
     new BookingEventsService(emitter, clientTokens, location, {
       notify: vi.fn(),
     } as never),

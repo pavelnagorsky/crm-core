@@ -1,6 +1,7 @@
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test } from '@nestjs/testing';
 import { BookingStatus, Prisma } from '@prisma/client';
+import { bookingItemPrices } from '../../../bookings/testing/factories/booking-item-prices.factory.js';
 import { booking as bookingFixture } from '../../../bookings/testing/factories/booking.factory.js';
 import { BookingFixtureOptions } from '../../../bookings/testing/interfaces/booking-fixture-options.interface.js';
 import { DatabaseService } from '../../../../database/database.service.js';
@@ -125,13 +126,13 @@ describe('StaffEarningsService', () => {
     );
     const first = {
       ...booking().items[0],
-      chargedPrice: new Prisma.Decimal(48),
+      ...bookingItemPrices('48'),
     };
     const second = {
       ...first,
       id: 'booking-item-2',
       staffId: 'boris',
-      chargedPrice: new Prisma.Decimal(72),
+      ...bookingItemPrices('72'),
     };
     const visit = booking({
       executionMode: 'PARALLEL',

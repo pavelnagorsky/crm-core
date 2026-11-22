@@ -11,14 +11,18 @@ import { ServiceBundleView } from '../interfaces/service-bundle-view.interface.j
 const serviceBundleInclude = {
   imageFile: true,
   category: { select: { name: true } },
-  items: { orderBy: { sortOrder: 'asc' as const }, include: { service: true } },
+  items: {
+    // Item sortOrder may repeat; the id keeps the order the same in every read.
+    orderBy: [{ sortOrder: 'asc' as const }, { id: 'asc' as const }],
+    include: { service: true },
+  },
 };
 
 const serviceBundleCatalogInclude = {
   imageFile: true,
   category: { select: { name: true } },
   items: {
-    orderBy: { sortOrder: 'asc' as const },
+    orderBy: [{ sortOrder: 'asc' as const }, { id: 'asc' as const }],
     include: {
       service: {
         select: {

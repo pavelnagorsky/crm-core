@@ -12,6 +12,7 @@ import { PayrollModule } from '../payroll/payroll.module.js';
 import { ProductsModule } from '../products/products.module.js';
 import { NotificationsModule } from '../notifications/notifications.module.js';
 import { ReviewsModule } from '../reviews/reviews.module.js';
+import { PricingModule } from '../pricing/pricing.module.js';
 import { ServiceCatalogModule } from '../services/catalog/service-catalog.module.js';
 import { StaffModule } from '../staff/staff.module.js';
 import { BookingCreateFacade } from './booking-create.facade.js';
@@ -53,6 +54,7 @@ import { JwtBookingClientStrategy } from './strategies/jwt-booking-client.strate
     ClientsModule,
     StaffModule,
     PayrollModule,
+    PricingModule,
     ServiceCatalogModule,
     ProductsModule,
     OrdersModule,

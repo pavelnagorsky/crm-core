@@ -192,6 +192,20 @@ enum BundlePricingMode {
   FIXED
 }
 
+/// Price layer that moved a sale line away from its base price (docs/pricing-plan.md 2.1).
+enum PriceAdjustmentKind {
+  LEVEL
+  STAFF
+  SURCHARGE
+  PROMOTION
+  CLIENT_DISCOUNT
+}
+
+enum PriceValueType {
+  PERCENT
+  AMOUNT
+}
+
 enum BookingChannelStatus {
   DRAFT
   PUBLISHED
@@ -935,6 +949,9 @@ model OrderItem {
   sku               String?         @db.VarChar(80)
   unit              ProductUnit?
   quantity          Decimal         @db.Decimal(14, 3)
+  /// Catalog price before staff level, surcharges and discounts.
+  baseUnitPrice     Decimal         @db.Decimal(10, 2)
+  /// Price-list price: base with staff level and surcharges, the "old price" of a discount.
   listUnitPrice     Decimal         @db.Decimal(10, 2)
   customUnitPrice   Decimal?        @db.Decimal(10, 2)
   unitPrice         Decimal         @db.Decimal(10, 2)
@@ -949,13 +966,14 @@ model OrderItem {
   occurredAt        DateTime?
   createdAt         DateTime        @default(now())
 
-  order           Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  bookingItem     BookingItem?        @relation(fields: [bookingItemId], references: [id], onDelete: SetNull)
-  productLocation ProductLocation?    @relation(fields: [productLocationId], references: [id], onDelete: Restrict)
-  seller          Staff?              @relation(fields: [sellerStaffId], references: [id], onDelete: SetNull)
-  movements       InventoryMovement[]
-  earnings        StaffEarning[]
-  returnItems     OrderReturnItem[]
+  order            Order                      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  bookingItem      BookingItem?               @relation(fields: [bookingItemId], references: [id], onDelete: SetNull)
+  productLocation  ProductLocation?           @relation(fields: [productLocationId], references: [id], onDelete: Restrict)
+  seller           Staff?                     @relation(fields: [sellerStaffId], references: [id], onDelete: SetNull)
+  movements        InventoryMovement[]
+  earnings         StaffEarning[]
+  returnItems      OrderReturnItem[]
+  priceAdjustments OrderItemPriceAdjustment[]
 
   @@index([orderId])
   @@index([bookingItemId])
@@ -964,6 +982,27 @@ model OrderItem {
   @@index([type, catalogItemId])
   @@index([type, categoryId])
   @@index([status, occurredAt])
+}
+
+/// Price layers of an order line, copied from its booking item.
+model OrderItemPriceAdjustment {
+  id          String              @id @default(uuid())
+  orderItemId String
+  sortOrder   Int
+  kind        PriceAdjustmentKind
+  /// Price rule that produced the layer; the foreign key arrives with price rules.
+  ruleId      String?
+  title       String              @db.VarChar(150)
+  publicTitle String?             @db.VarChar(150)
+  valueType   PriceValueType?
+  value       Decimal?            @db.Decimal(10, 2)
+  /// Signed change of the unit price.
+  amount      Decimal             @db.Decimal(10, 2)
+
+  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+
+  @@index([orderItemId])
+  @@index([ruleId])
 }
 
 model OrderReturn {
@@ -1495,24 +1534,52 @@ model BookingItem {
   endAt           DateTime
   serviceTitle    String   @db.VarChar(150)
   serviceDuration Int
+  /// Price layers (docs/pricing-plan.md 2.1), fixed at creation:
+  /// base -> staff (level) -> list (surcharges) -> charged (discount) -> customPrice.
+  /// CHECK "chargedPrice" = "listPrice" - "discountTotal" lives in raw SQL (migration pricing_core).
+  basePrice       Decimal  @db.Decimal(10, 2)
+  staffPrice      Decimal  @db.Decimal(10, 2)
   listPrice       Decimal  @db.Decimal(10, 2)
+  discountTotal   Decimal  @db.Decimal(10, 2)
   chargedPrice    Decimal  @db.Decimal(10, 2)
   customPrice     Decimal? @db.Decimal(10, 2)
   staffName       String   @db.VarChar(250)
   calendarEventId String?  @unique
 
-  booking       Booking        @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  location      Location       @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  service       Service        @relation(fields: [serviceId], references: [id], onDelete: Restrict)
-  staff         Staff          @relation(fields: [staffId], references: [id], onDelete: Restrict)
-  calendarEvent CalendarEvent? @relation(fields: [calendarEventId], references: [id], onDelete: SetNull)
-  earnings      StaffEarning[]
-  orderItems    OrderItem[]
+  booking          Booking                      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  location         Location                     @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  service          Service                      @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  staff            Staff                        @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  calendarEvent    CalendarEvent?               @relation(fields: [calendarEventId], references: [id], onDelete: SetNull)
+  earnings         StaffEarning[]
+  orderItems       OrderItem[]
+  priceAdjustments BookingItemPriceAdjustment[]
 
   @@index([bookingId])
   @@index([locationId])
   @@index([staffId, startAt])
   @@index([serviceId])
+}
+
+/// Price layers of a booking item: each one moved the price from basePrice to chargedPrice.
+model BookingItemPriceAdjustment {
+  id            String              @id @default(uuid())
+  bookingItemId String
+  sortOrder     Int
+  kind          PriceAdjustmentKind
+  /// Price rule that produced the layer; the foreign key arrives with price rules.
+  ruleId        String?
+  title         String              @db.VarChar(150)
+  publicTitle   String?             @db.VarChar(150)
+  valueType     PriceValueType?
+  value         Decimal?            @db.Decimal(10, 2)
+  /// Signed change of the item price.
+  amount        Decimal             @db.Decimal(10, 2)
+
+  bookingItem BookingItem @relation(fields: [bookingItemId], references: [id], onDelete: Cascade)
+
+  @@index([bookingItemId])
+  @@index([ruleId])
 }
 
 enum ReviewStatus {

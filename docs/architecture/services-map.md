@@ -8,8 +8,8 @@
 | --- | --- |
 | [BookingsFacade](../../src/modules/bookings/bookings.facade.ts) | Публичные операции чтения, настройки и изменения бронирований. |
 | [BookingCreateFacade](../../src/modules/bookings/booking-create.facade.ts) | Публичное и ручное создание: права, выбор услуг, расписание, резервирование и уведомления. |
-| BookingSelectionService | Выбор услуг/bundle и расчёт цен через публичный API каталога. |
-| BookingSchedulingService | Интервалы услуг и подбор сотрудников. |
+| BookingSelectionService | Выбор услуг/bundle через публичный API каталога; превью цены через `PricingFacade`. |
+| BookingSchedulingService | Интервалы услуг, подбор сотрудников и цена позиций через `PricingFacade` (слои цены в `ResolvedBookingItem`). |
 | BookingReservationService | Транзакция создания, блокировки слотов, календарь, заказ и начисления. |
 | BookingMutationService | Редактирование клиента, заметок, цен и добавление товаров; перенос и жизненный цикл делегируются отдельным исполнителям. |
 | BookingRescheduleService | Перенос интервалов и восстановление календарных событий при повторном открытии брони. |

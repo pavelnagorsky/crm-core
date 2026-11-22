@@ -82,7 +82,7 @@ channel, status or interval. Only `MANUAL` bookings can have `isCustomTime: true
 
 | Service | Responsibility |
 | --- | --- |
-| `BookingSelectionService` | Resolve active services or a bundle and quote service/product prices. Fixed bundle prices are allocated across services with the remainder on the final item. |
+| `BookingSelectionService` | Resolve active services or a bundle and quote service/product prices for the preview. Service prices come from `PricingFacade`: a fixed bundle price is split across its services in proportion to their catalog prices by the largest remainder method (shares never negative, sum exact), and each share is the line's base price. |
 | `BookingSchedulingService` | Build sequential or parallel item intervals and choose available staff, preferring the least booked when no staff is requested. |
 | `BookingReservationService` | Lock the location and staff days, recheck availability, create calendar events, booking items and the traffic touch, record the client acquisition, and sync orders/payroll in one transaction. |
 | `BookingMutationService` | Update client details, notes, item prices and the source of a manual booking, add products, and delegate scheduling or lifecycle changes. |

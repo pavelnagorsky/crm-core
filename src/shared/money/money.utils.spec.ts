@@ -61,4 +61,56 @@ describe('MoneyUtils', () => {
       '833.33',
     );
   });
+
+  describe('minor units', () => {
+    it.each([
+      ['0', 0],
+      ['0.01', 1],
+      ['12.34', 1234],
+      ['12.3', 1230],
+      ['1.100', 110],
+      ['-5.5', -550],
+      ['60', 6000],
+      ['99999999.99', 9999999999],
+      ['90071992547409.91', Number.MAX_SAFE_INTEGER],
+    ])('toMinor(%s) is exactly %i', (value, minor) => {
+      expect(MoneyUtils.toMinor(value)).toBe(minor);
+      expect(MoneyUtils.toMinor(new Prisma.Decimal(value))).toBe(minor);
+    });
+
+    it.each(['1.005', '0.001', '-12.345', '8.995'])(
+      'toMinor rejects %s with more than 2 fractional digits instead of rounding',
+      (value) => {
+        expect(() => MoneyUtils.toMinor(value)).toThrow(RangeError);
+      },
+    );
+
+    it.each(['90071992547409.92', '-90071992547409.92', '1e20'])(
+      'toMinor rejects %s outside the safe integer range',
+      (value) => {
+        expect(() => MoneyUtils.toMinor(value)).toThrow(RangeError);
+      },
+    );
+
+    it.each([
+      [0, '0.00'],
+      [1, '0.01'],
+      [1234, '12.34'],
+      [-550, '-5.50'],
+      [9999999999, '99999999.99'],
+      [Number.MAX_SAFE_INTEGER, '90071992547409.91'],
+    ])('fromMinor(%i) is %s and converts back exactly', (minor, value) => {
+      expect(MoneyUtils.fromMinor(minor).toFixed(2)).toBe(value);
+      expect(MoneyUtils.toMinor(MoneyUtils.fromMinor(minor))).toBe(minor);
+    });
+
+    it.each([
+      1.5,
+      Number.NaN,
+      Number.POSITIVE_INFINITY,
+      Number.MAX_SAFE_INTEGER + 1,
+    ])('fromMinor rejects %s', (minor) => {
+      expect(() => MoneyUtils.fromMinor(minor)).toThrow(RangeError);
+    });
+  });
 });

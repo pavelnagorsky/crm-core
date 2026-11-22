@@ -51,7 +51,10 @@ export class OrderItemResponseDto {
   @ApiProperty({ type: String, format: 'decimal' })
   returnableQuantity: string;
 
-  @ApiPrice()
+  @ApiPrice({ description: 'Catalog price before staff level, surcharges and discounts' })
+  baseUnitPrice: string;
+
+  @ApiPrice({ description: 'Price list price, before the discount' })
   listUnitPrice: string;
 
   @ApiPrice({ nullable: true })
@@ -113,6 +116,7 @@ export class OrderItemResponseDto {
     dto.quantity = QuantityUtils.format(entity.quantity);
     dto.returnedQuantity = QuantityUtils.format(returnedQuantity);
     dto.returnableQuantity = QuantityUtils.format(returnableQuantity);
+    dto.baseUnitPrice = MoneyUtils.format(entity.baseUnitPrice);
     dto.listUnitPrice = MoneyUtils.format(entity.listUnitPrice);
     dto.customUnitPrice =
       entity.customUnitPrice == null

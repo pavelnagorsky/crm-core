@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { ServiceStatus } from '@prisma/client';
 import { AppCacheService } from '../../../shared/cache/app-cache.service.js';
+import { ReadConsistency } from '../../../shared/cache/enums/read-consistency.enum.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { PaginatedResult } from '../../../shared/interfaces/paginated-result.interface.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
@@ -33,11 +34,9 @@ export class ServiceCatalogFacade {
   ) {}
 
   async loadForBooking(locationId: string): Promise<BookingServiceCatalog> {
-    const { brandId } = await this.locations.getBookingSettings(locationId);
-    const snapshot = await this.cache.getOrLoad(
-      SERVICE_CATALOG_CACHE,
-      { brandId, locationId },
-      () => this.loadSnapshot(locationId),
+    const snapshot = await this.loadCatalogSnapshot(
+      locationId,
+      ReadConsistency.CACHED,
     );
     const services = snapshot.services.filter(
       (service) => service.status === ServiceStatus.ACTIVE,
@@ -63,6 +62,24 @@ export class ServiceCatalogFacade {
       services,
       bundles,
     };
+  }
+
+  /**
+   * Bookable catalog of the location: active services and bundles, plus the services of
+   * those bundles whatever their status. The same loader serves both consistencies.
+   */
+  async loadCatalogSnapshot(
+    locationId: string,
+    consistency: ReadConsistency,
+  ): Promise<BookingCatalogSnapshot> {
+    if (consistency === ReadConsistency.FRESH)
+      return this.loadSnapshot(locationId);
+    const { brandId } = await this.locations.getBookingSettings(locationId);
+    return this.cache.getOrLoad(
+      SERVICE_CATALOG_CACHE,
+      { brandId, locationId },
+      () => this.loadSnapshot(locationId),
+    );
   }
 
   private async loadSnapshot(

@@ -1,9 +1,7 @@
-import { Prisma } from '@prisma/client';
-
+/** Service of a booking selection; its price comes from PricingFacade. */
 export interface BookingServiceSnapshot {
   id: string;
   title: string;
   durationMinutes: number;
   bufferMinutes: number;
-  price: Prisma.Decimal;
 }

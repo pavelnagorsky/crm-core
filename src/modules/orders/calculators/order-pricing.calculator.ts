@@ -10,8 +10,9 @@ export class OrderPricingCalculator {
     quantity: Prisma.Decimal,
     listUnitPrice: Prisma.Decimal,
     customUnitPrice: Prisma.Decimal | null,
+    lineDiscount?: Prisma.Decimal,
   ): LinePrice {
-    return priceLine(quantity, listUnitPrice, customUnitPrice);
+    return priceLine(quantity, listUnitPrice, customUnitPrice, lineDiscount);
   }
 
   totals(lines: LinePrice[]): PriceTotals {

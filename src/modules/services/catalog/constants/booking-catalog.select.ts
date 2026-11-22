@@ -19,12 +19,14 @@ export const BOOKING_BUNDLE_SELECT = {
   categoryId: true,
   title: true,
   description: true,
+  pricingMode: true,
   fixedPrice: true,
   executionMode: true,
   sortOrder: true,
   imageFile: { select: PUBLIC_FILE_SELECT },
   items: {
-    orderBy: { sortOrder: 'asc' as const },
+    // Item sortOrder may repeat; the id keeps the order the same in every read.
+    orderBy: [{ sortOrder: 'asc' as const }, { id: 'asc' as const }],
     select: {
       serviceId: true,
       sortOrder: true,

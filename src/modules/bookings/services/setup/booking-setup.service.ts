@@ -3,6 +3,7 @@ import { Prisma } from '@prisma/client';
 import { AppException } from '../../../../shared/exceptions/app.exception.js';
 import { assignStaff } from '../../../../shared/scheduling/assign-staff.js';
 import { normalizeStaffAssignments } from '../../../../shared/scheduling/normalize-staff-assignments.js';
+import { ReadConsistency } from '../../../../shared/cache/enums/read-consistency.enum.js';
 import { TimeUtils } from '../../../../shared/time/time.utils.js';
 import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
 import { BillingFacade } from '../../../billing/billing.facade.js';
@@ -225,6 +226,8 @@ export class BookingSetupService {
     ]);
     return this.scheduling.resolveForBooking({
       locationId,
+      bundleId: selection.bundleId,
+      prices: ReadConsistency.CACHED,
       services: selection.services,
       executionMode: selection.executionMode,
       startAt: TimeUtils.localToUtc(dto.startAt!, location.timezone),

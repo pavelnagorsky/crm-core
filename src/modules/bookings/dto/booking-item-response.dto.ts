@@ -16,10 +16,21 @@ export class BookingItemResponseDto {
   @ApiProperty({ type: Number })
   serviceDuration: number;
 
-  @ApiPrice()
+  @ApiPrice({
+    description: 'Catalog price; for a fixed-price bundle, its share of the bundle price',
+  })
+  basePrice: string;
+
+  @ApiPrice({ description: 'Price for the assigned staff member' })
+  staffPrice: string;
+
+  @ApiPrice({ description: 'Price list price: staff price with surcharges' })
   listPrice: string;
 
-  @ApiPrice()
+  @ApiPrice({ description: 'Discount from the price list price' })
+  discountTotal: string;
+
+  @ApiPrice({ description: 'listPrice - discountTotal' })
   chargedPrice: string;
 
   @ApiPrice({ nullable: true })
@@ -46,7 +57,10 @@ export class BookingItemResponseDto {
     dto.serviceId = item.serviceId;
     dto.serviceTitle = item.serviceTitle;
     dto.serviceDuration = item.serviceDuration;
+    dto.basePrice = MoneyUtils.format(item.basePrice);
+    dto.staffPrice = MoneyUtils.format(item.staffPrice);
     dto.listPrice = MoneyUtils.format(item.listPrice);
+    dto.discountTotal = MoneyUtils.format(item.discountTotal);
     dto.chargedPrice = MoneyUtils.format(item.chargedPrice);
     dto.customPrice =
       item.customPrice == null ? null : MoneyUtils.format(item.customPrice);

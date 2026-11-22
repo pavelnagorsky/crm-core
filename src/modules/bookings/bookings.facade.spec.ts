@@ -47,6 +47,7 @@ import { BookingClientLinkService } from './services/write/booking-client-link.s
 import { ClientsService } from '../clients/services/clients.service.js';
 import { BookingRescheduleService } from './services/write/booking-reschedule.service.js';
 import { booking } from './testing/factories/booking.factory.js';
+import { bookingItemPrices } from './testing/factories/booking-item-prices.factory.js';
 import { NO_CLIENT_NOTICE } from './rules/booking-client-notice.rules.js';
 import { NotificationsService } from '../notifications/services/notifications.service.js';
 
@@ -701,10 +702,10 @@ describe('BookingsFacade.search', () => {
 
   it('orders price by numeric coalesce of custom and service price', async () => {
     findMany.mockResolvedValue([
-      booking({ id: 'low', item: { chargedPrice: new Prisma.Decimal('10') } }),
+      booking({ id: 'low', item: bookingItemPrices('10') }),
       booking({
         id: 'high',
-        item: { chargedPrice: new Prisma.Decimal('100') },
+        item: bookingItemPrices('100'),
       }),
     ]);
     count.mockResolvedValue(2);
@@ -1303,8 +1304,7 @@ describe('BookingsFacade.update details and item prices', () => {
           endAt: new Date('2026-09-24T11:00:00.000Z'),
           serviceTitle: 'Стрижка',
           serviceDuration: 60,
-          listPrice: new Prisma.Decimal('50.00'),
-          chargedPrice: new Prisma.Decimal('50.00'),
+          ...bookingItemPrices('50.00'),
           customPrice: null,
           staffName: 'Anna',
           calendarEventId: null,
@@ -1320,8 +1320,7 @@ describe('BookingsFacade.update details and item prices', () => {
           endAt: new Date('2026-09-24T12:00:00.000Z'),
           serviceTitle: 'Окрашивание',
           serviceDuration: 60,
-          listPrice: new Prisma.Decimal('80.00'),
-          chargedPrice: new Prisma.Decimal('80.00'),
+          ...bookingItemPrices('80.00'),
           customPrice: new Prisma.Decimal('70.00'),
           staffName: 'Anna',
           calendarEventId: null,
@@ -1828,8 +1827,7 @@ describe('BookingsFacade.update manual interval', () => {
           endAt: new Date('2026-09-24T11:00:00.000Z'),
           serviceTitle: 'Cut',
           serviceDuration: 60,
-          listPrice: new Prisma.Decimal('50.00'),
-          chargedPrice: new Prisma.Decimal('50.00'),
+          ...bookingItemPrices('50.00'),
           customPrice: null,
           staffName: 'Anna',
           calendarEventId: 'event-1',
@@ -1845,8 +1843,7 @@ describe('BookingsFacade.update manual interval', () => {
           endAt: new Date('2026-09-24T12:00:00.000Z'),
           serviceTitle: 'Color',
           serviceDuration: 60,
-          listPrice: new Prisma.Decimal('80.00'),
-          chargedPrice: new Prisma.Decimal('80.00'),
+          ...bookingItemPrices('80.00'),
           customPrice: null,
           staffName: 'Anna',
           calendarEventId: 'event-2',

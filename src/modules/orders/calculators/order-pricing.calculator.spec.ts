@@ -46,4 +46,53 @@ describe('OrderPricingCalculator', () => {
     expect(totals.discountTotal.toFixed(2)).toBe('0.00');
     expect(totals.totalAmount.toFixed(2)).toBe('21.00');
   });
+
+  it('subtracts a line discount from the list-price line', () => {
+    const line = service.priceLine(
+      new Prisma.Decimal(1),
+      new Prisma.Decimal('60.00'),
+      null,
+      new Prisma.Decimal('10.00'),
+    );
+
+    expect(line.unitPrice.toFixed(2)).toBe('60.00');
+    expect(line.lineSubtotal.toFixed(2)).toBe('60.00');
+    expect(line.discountTotal.toFixed(2)).toBe('10.00');
+    expect(line.lineTotal.toFixed(2)).toBe('50.00');
+  });
+
+  it('ignores a line discount when the line has a custom price', () => {
+    const line = service.priceLine(
+      new Prisma.Decimal(1),
+      new Prisma.Decimal('60.00'),
+      new Prisma.Decimal('45.00'),
+      new Prisma.Decimal('10.00'),
+    );
+
+    expect(line.unitPrice.toFixed(2)).toBe('45.00');
+    expect(line.discountTotal.toFixed(2)).toBe('0.00');
+    expect(line.lineTotal.toFixed(2)).toBe('45.00');
+  });
+
+  it('aggregates discounted lines', () => {
+    const totals = service.totals([
+      service.priceLine(
+        new Prisma.Decimal(1),
+        new Prisma.Decimal('60.00'),
+        null,
+        new Prisma.Decimal('10.00'),
+      ),
+      service.priceLine(
+        new Prisma.Decimal(1),
+        new Prisma.Decimal('30.00'),
+        new Prisma.Decimal('25.00'),
+        new Prisma.Decimal('5.00'),
+      ),
+    ]);
+
+    expect(totals.listTotalAmount.toFixed(2)).toBe('90.00');
+    expect(totals.subtotalAmount.toFixed(2)).toBe('85.00');
+    expect(totals.discountTotal.toFixed(2)).toBe('10.00');
+    expect(totals.totalAmount.toFixed(2)).toBe('75.00');
+  });
 });

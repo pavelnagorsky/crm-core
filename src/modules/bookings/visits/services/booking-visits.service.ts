@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { BookingItemPriceAdjustment, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
 import { visitServicesDue } from '../../rules/visit-payment-due.rules.js';
 import { BookingVisit } from '../interfaces/booking-visit.interface.js';
@@ -8,6 +8,28 @@ import { VisitPaymentFacts } from '../interfaces/visit-payment-facts.interface.j
 @Injectable()
 export class BookingVisitsService {
   constructor(private readonly db: DatabaseService) {}
+
+  /**
+   * Price layers of booking items by item id, in layer order. Read in the caller's
+   * transaction: a booking created as completed syncs its order before it commits.
+   */
+  async priceAdjustmentsByItem(
+    tx: Prisma.TransactionClient,
+    bookingItemIds: readonly string[],
+  ): Promise<Map<string, BookingItemPriceAdjustment[]>> {
+    const byItem = new Map<string, BookingItemPriceAdjustment[]>();
+    if (bookingItemIds.length === 0) return byItem;
+    const rows = await tx.bookingItemPriceAdjustment.findMany({
+      where: { bookingItemId: { in: [...bookingItemIds] } },
+      orderBy: [{ bookingItemId: 'asc' }, { sortOrder: 'asc' }],
+    });
+    for (const row of rows)
+      byItem.set(row.bookingItemId, [
+        ...(byItem.get(row.bookingItemId) ?? []),
+        row,
+      ]);
+    return byItem;
+  }
 
   /**
    * Payment facts of the visit behind a visit order, read under a FOR SHARE lock of the

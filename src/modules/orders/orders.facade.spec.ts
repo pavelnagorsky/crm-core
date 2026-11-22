@@ -1,8 +1,12 @@
 import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import {
+  BookingItemPriceAdjustment,
+  OrderItemPriceAdjustment,
   OrderItemStatus,
   OrderItemType,
   OrderStatus,
+  PriceAdjustmentKind,
+  PriceValueType,
   Prisma,
   ProductStatus,
   ProductUnit,
@@ -11,8 +15,11 @@ import { createHash } from 'crypto';
 import { PrismaErrorCode } from '../../shared/database/prisma-error-codes.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { AuditActorRole } from '../audit/enums/audit-actor-role.enum.js';
+import { BookingWithItems } from '../bookings/interfaces/booking-with-items.interface.js';
+import { BookingVisitsService } from '../bookings/visits/services/booking-visits.service.js';
 import { OrderPricingCalculator } from './calculators/order-pricing.calculator.js';
 import { OrderTargetStatus } from './enums/order-target-status.enum.js';
+import { OrderPriceAdjustmentData } from './interfaces/order-price-adjustment-data.interface.js';
 import { OrderWithItems } from './interfaces/order-with-items.interface.js';
 import { OrdersFacade } from './orders.facade.js';
 import { OrderStateRules } from './rules/order-state.rules.js';
@@ -75,6 +82,7 @@ function order(
         sku: 'SKU-1',
         unit: ProductUnit.PIECE,
         quantity: new Prisma.Decimal(1),
+        baseUnitPrice: new Prisma.Decimal(20),
         listUnitPrice: new Prisma.Decimal(20),
         customUnitPrice: new Prisma.Decimal(15),
         unitPrice: new Prisma.Decimal(15),
@@ -120,6 +128,12 @@ function setup() {
     orderReturn: {
       create: vi.fn(),
       findUnique: vi.fn(),
+    },
+    orderItemPriceAdjustment: {
+      findMany: vi.fn().mockResolvedValue([]),
+    },
+    bookingItemPriceAdjustment: {
+      findMany: vi.fn().mockResolvedValue([]),
     },
     auditLog: {
       create: vi.fn(),
@@ -184,6 +198,7 @@ function setup() {
     drafts,
     persistence,
     events as never,
+    new BookingVisitsService(db as never),
   );
   const stateAssertions = new OrderStateRules();
   const payments = {
@@ -330,11 +345,8 @@ function confirmItemsHash(
     .digest('hex');
 }
 
-function bookingWithService(
-  price: string,
-  staffId = 'staff-1',
-  staffName = 'Anna',
-) {
+/** Completed booking with one service item; its price layers default to a plain 1500.00. */
+function bookingWithItem(item: Partial<BookingWithItems['items'][number]> = {}) {
   return {
     id: 'booking-1',
     locationId: 'location-1',
@@ -348,14 +360,70 @@ function bookingWithService(
         id: 'booking-item-1',
         serviceId: 'service-1',
         serviceTitle: 'Haircut',
+        basePrice: new Prisma.Decimal('1500.00'),
+        staffPrice: new Prisma.Decimal('1500.00'),
+        listPrice: new Prisma.Decimal('1500.00'),
+        discountTotal: new Prisma.Decimal('0.00'),
         chargedPrice: new Prisma.Decimal('1500.00'),
-        customPrice: price === '1500.00' ? null : new Prisma.Decimal(price),
-        staffId,
-        staffName,
+        customPrice: null,
+        staffId: 'staff-1',
+        staffName: 'Anna',
         endAt: new Date('2026-10-01T11:00:00.000Z'),
+        ...item,
       },
     ],
   } as never;
+}
+
+function bookingWithService(
+  price: string,
+  staffId = 'staff-1',
+  staffName = 'Anna',
+) {
+  return bookingWithItem({
+    customPrice: price === '1500.00' ? null : new Prisma.Decimal(price),
+    staffId,
+    staffName,
+  });
+}
+
+/** Price layer of booking-item-1 as BookingVisitsService reads it. */
+function bookingLayer(
+  sortOrder: number,
+  kind: PriceAdjustmentKind,
+  amount: string,
+  title: string,
+): BookingItemPriceAdjustment {
+  return {
+    id: `booking-layer-${sortOrder}`,
+    bookingItemId: 'booking-item-1',
+    sortOrder,
+    kind,
+    ruleId: kind === PriceAdjustmentKind.STAFF ? null : `rule-${sortOrder}`,
+    title,
+    publicTitle: kind === PriceAdjustmentKind.PROMOTION ? title : null,
+    valueType:
+      kind === PriceAdjustmentKind.STAFF ? null : PriceValueType.AMOUNT,
+    value:
+      kind === PriceAdjustmentKind.STAFF
+        ? null
+        : new Prisma.Decimal(amount).abs(),
+    amount: new Prisma.Decimal(amount),
+  };
+}
+
+/** The same layer as the order line stores it. */
+function lineLayer(layer: BookingItemPriceAdjustment, sortOrder: number) {
+  return {
+    sortOrder,
+    kind: layer.kind,
+    ruleId: layer.ruleId,
+    title: layer.title,
+    publicTitle: layer.publicTitle,
+    valueType: layer.valueType,
+    value: layer.value,
+    amount: layer.amount,
+  };
 }
 
 function attachStatefulBookingOrder(tx: ReturnType<typeof setup>['tx']) {
@@ -371,8 +439,40 @@ function attachStatefulBookingOrder(tx: ReturnType<typeof setup>['tx']) {
       items: [] as ReturnType<typeof order>['items'],
     },
     sequence: 0,
+    /** Layers of the booking items, as stored on BookingItemPriceAdjustment. */
+    bookingLayers: [] as BookingItemPriceAdjustment[],
+    /** Layers written with the order lines, as stored on OrderItemPriceAdjustment. */
+    lineLayers: [] as OrderItemPriceAdjustment[],
   };
   const decimal = (value: unknown) => new Prisma.Decimal(String(value));
+  const inLayerOrder = <T extends { sortOrder: number }>(
+    rows: T[],
+    owner: (row: T) => string,
+  ) =>
+    [...rows].sort(
+      (a, b) =>
+        owner(a).localeCompare(owner(b)) || a.sortOrder - b.sortOrder,
+    );
+  tx.bookingItemPriceAdjustment.findMany.mockImplementation(({ where }) =>
+    Promise.resolve(
+      inLayerOrder(
+        state.bookingLayers.filter((row) =>
+          where.bookingItemId.in.includes(row.bookingItemId),
+        ),
+        (row) => row.bookingItemId,
+      ),
+    ),
+  );
+  tx.orderItemPriceAdjustment.findMany.mockImplementation(({ where }) =>
+    Promise.resolve(
+      inLayerOrder(
+        state.lineLayers.filter((row) =>
+          where.orderItemId.in.includes(row.orderItemId),
+        ),
+        (row) => row.orderItemId,
+      ),
+    ),
+  );
   tx.order.upsert.mockResolvedValue(undefined);
   tx.order.findUnique.mockImplementation(() => Promise.resolve(state.order));
   tx.order.findFirst.mockImplementation(() => Promise.resolve(state.order));
@@ -396,6 +496,7 @@ function attachStatefulBookingOrder(tx: ReturnType<typeof setup>['tx']) {
       sku: null,
       unit: null,
       quantity: decimal(data.quantity),
+      baseUnitPrice: decimal(data.baseUnitPrice),
       listUnitPrice: decimal(data.listUnitPrice),
       customUnitPrice:
         data.customUnitPrice == null ? null : decimal(data.customUnitPrice),
@@ -413,6 +514,21 @@ function attachStatefulBookingOrder(tx: ReturnType<typeof setup>['tx']) {
       createdAt: new Date(`2026-10-01T10:00:0${state.sequence}.000Z`),
     };
     state.order.items.push(row);
+    const layers: OrderPriceAdjustmentData[] =
+      data.priceAdjustments?.create ?? [];
+    for (const layer of layers)
+      state.lineLayers.push({
+        id: `line-layer-${state.lineLayers.length + 1}`,
+        orderItemId: row.id,
+        sortOrder: layer.sortOrder,
+        kind: layer.kind,
+        ruleId: layer.ruleId,
+        title: layer.title,
+        publicTitle: layer.publicTitle,
+        valueType: layer.valueType,
+        value: layer.value === null ? null : decimal(layer.value),
+        amount: decimal(layer.amount),
+      });
     return Promise.resolve(row);
   });
   tx.orderItem.updateMany.mockImplementation(({ where, data }) => {
@@ -1736,6 +1852,10 @@ describe('OrdersFacade', () => {
             id: 'booking-item-1',
             serviceId: 'service-1',
             serviceTitle: 'Haircut',
+            basePrice: new Prisma.Decimal(50),
+            staffPrice: new Prisma.Decimal(50),
+            listPrice: new Prisma.Decimal(50),
+            discountTotal: new Prisma.Decimal(0),
             chargedPrice: new Prisma.Decimal(50),
             customPrice: null,
             staffId: 'staff-1',
@@ -1858,6 +1978,10 @@ describe('OrdersFacade', () => {
             id: 'booking-item-1',
             serviceId: 'service-1',
             serviceTitle: 'Haircut',
+            basePrice: new Prisma.Decimal(50),
+            staffPrice: new Prisma.Decimal(50),
+            listPrice: new Prisma.Decimal(50),
+            discountTotal: new Prisma.Decimal(0),
             chargedPrice: new Prisma.Decimal(50),
             customPrice: null,
             staffId: 'staff-1',
@@ -2131,6 +2255,7 @@ describe('OrdersFacade', () => {
           catalogItemId: 'service-1',
           productLocationId: null,
           title: 'Haircut',
+          baseUnitPrice: new Prisma.Decimal(50),
           listUnitPrice: new Prisma.Decimal(50),
           customUnitPrice: null,
           unitPrice: new Prisma.Decimal(50),
@@ -2180,6 +2305,10 @@ describe('OrdersFacade', () => {
             id: 'booking-item-1',
             serviceId: 'service-1',
             serviceTitle: 'Haircut',
+            basePrice: new Prisma.Decimal(50),
+            staffPrice: new Prisma.Decimal(50),
+            listPrice: new Prisma.Decimal(50),
+            discountTotal: new Prisma.Decimal(0),
             chargedPrice: new Prisma.Decimal(50),
             customPrice: new Prisma.Decimal(40),
             staffId: 'staff-2',
@@ -2214,38 +2343,47 @@ describe('OrdersFacade', () => {
   it('keeps one confirmed service sale across repeated completion cycles', async () => {
     const { service, tx } = setup();
     const state = attachStatefulBookingOrder(tx);
+    // 1400 base, +100 staff, +100 surcharge = 1600 list, -100 promotion = 1500 charged.
+    state.bookingLayers = [
+      bookingLayer(0, PriceAdjustmentKind.STAFF, '100.00', 'Цена мастера'),
+      bookingLayer(1, PriceAdjustmentKind.SURCHARGE, '100.00', 'Вечер'),
+      bookingLayer(2, PriceAdjustmentKind.PROMOTION, '-100.00', 'Скидка'),
+    ];
+    const booking = () =>
+      bookingWithItem({
+        basePrice: new Prisma.Decimal('1400.00'),
+        staffPrice: new Prisma.Decimal('1500.00'),
+        listPrice: new Prisma.Decimal('1600.00'),
+        discountTotal: new Prisma.Decimal('100.00'),
+        chargedPrice: new Prisma.Decimal('1500.00'),
+      });
 
-    await service.syncCompletedBooking(
-      bookingWithService('1500.00'),
-      owner,
-      tx as never,
-    );
-    await service.reverseCompletedBookingServices(
-      bookingWithService('1500.00'),
-      tx as never,
-    );
-    await service.syncCompletedBooking(
-      bookingWithService('1500.00'),
-      owner,
-      tx as never,
-    );
-    await service.reverseCompletedBookingServices(
-      bookingWithService('1500.00'),
-      tx as never,
-    );
-    await service.syncCompletedBooking(
-      bookingWithService('1500.00'),
-      owner,
-      tx as never,
-    );
+    await service.syncCompletedBooking(booking(), owner, tx as never);
+    await service.reverseCompletedBookingServices(booking(), tx as never);
+    await service.syncCompletedBooking(booking(), owner, tx as never);
+    await service.reverseCompletedBookingServices(booking(), tx as never);
+    await service.syncCompletedBooking(booking(), owner, tx as never);
+    // A repeated sync after the cycles finds the line with its stored layers.
+    await service.syncCompletedBooking(booking(), owner, tx as never);
 
     const confirmed = state.order.items.filter(
       (item) => item.status === OrderItemStatus.CONFIRMED,
     );
     expect(confirmed).toHaveLength(1);
+    expect(confirmed[0].baseUnitPrice.toFixed(2)).toBe('1400.00');
+    expect(confirmed[0].listUnitPrice.toFixed(2)).toBe('1600.00');
+    expect(confirmed[0].discountTotal.toFixed(2)).toBe('100.00');
     expect(confirmed[0].lineTotal.toFixed(2)).toBe('1500.00');
+    expect(state.order.discountTotal.toFixed(2)).toBe('100.00');
     expect(state.order.totalAmount.toFixed(2)).toBe('1500.00');
     expect(tx.orderItem.create).toHaveBeenCalledTimes(3);
+    // Every version carries its own copy of the layers.
+    expect(state.lineLayers).toHaveLength(9);
+    expect(
+      state.lineLayers
+        .filter((row) => row.orderItemId === confirmed[0].id)
+        .map(({ id: _id, orderItemId: _line, ...layer }) => layer),
+    ).toEqual(state.bookingLayers.map(lineLayer));
   });
 
   it('keeps only the latest confirmed service sale after price changes', async () => {
@@ -2324,6 +2462,172 @@ describe('OrdersFacade', () => {
     expect(confirmed).toHaveLength(1);
     expect(tx.orderItem.create).toHaveBeenCalledTimes(1);
     expect(tx.orderItem.updateMany).not.toHaveBeenCalled();
+  });
+
+  describe('booking service price layers', () => {
+    const surcharge = bookingLayer(
+      0,
+      PriceAdjustmentKind.SURCHARGE,
+      '10.00',
+      'Вечер',
+    );
+    const promotion = bookingLayer(
+      1,
+      PriceAdjustmentKind.PROMOTION,
+      '-10.00',
+      'Скидка 10',
+    );
+    // 50 base, +10 surcharge = 60 list, -10 promotion = 50 charged.
+    const discounted = {
+      basePrice: new Prisma.Decimal('50.00'),
+      staffPrice: new Prisma.Decimal('50.00'),
+      listPrice: new Prisma.Decimal('60.00'),
+      discountTotal: new Prisma.Decimal('10.00'),
+      chargedPrice: new Prisma.Decimal('50.00'),
+    };
+
+    it('copies the list price, the discount and all layers to the order line', async () => {
+      const { service, tx } = setup();
+      const state = attachStatefulBookingOrder(tx);
+      state.bookingLayers = [surcharge, promotion];
+
+      await service.syncCompletedBooking(
+        bookingWithItem(discounted),
+        owner,
+        tx as never,
+      );
+
+      const created = tx.orderItem.create.mock.calls[0][0].data;
+      expect(created.baseUnitPrice.toFixed(2)).toBe('50.00');
+      expect(created.listUnitPrice.toFixed(2)).toBe('60.00');
+      expect(created.customUnitPrice).toBeNull();
+      expect(created.unitPrice.toFixed(2)).toBe('60.00');
+      expect(created.lineSubtotal.toFixed(2)).toBe('60.00');
+      expect(created.discountTotal.toFixed(2)).toBe('10.00');
+      expect(created.lineTotal.toFixed(2)).toBe('50.00');
+      expect(created.priceAdjustments).toEqual({
+        create: [lineLayer(surcharge, 0), lineLayer(promotion, 1)],
+      });
+      expect(state.order.listTotalAmount.toFixed(2)).toBe('60.00');
+      expect(state.order.subtotalAmount.toFixed(2)).toBe('60.00');
+      expect(state.order.discountTotal.toFixed(2)).toBe('10.00');
+      expect(state.order.totalAmount.toFixed(2)).toBe('50.00');
+    });
+
+    it('drops the discount and its layer when the booking item has a custom price', async () => {
+      const { service, tx } = setup();
+      const state = attachStatefulBookingOrder(tx);
+      state.bookingLayers = [surcharge, promotion];
+
+      await service.syncCompletedBooking(
+        bookingWithItem({
+          ...discounted,
+          customPrice: new Prisma.Decimal('45.00'),
+        }),
+        owner,
+        tx as never,
+      );
+
+      const created = tx.orderItem.create.mock.calls[0][0].data;
+      expect(created.baseUnitPrice.toFixed(2)).toBe('50.00');
+      expect(created.listUnitPrice.toFixed(2)).toBe('60.00');
+      expect(created.customUnitPrice.toFixed(2)).toBe('45.00');
+      expect(created.unitPrice.toFixed(2)).toBe('45.00');
+      expect(created.lineSubtotal.toFixed(2)).toBe('45.00');
+      expect(created.discountTotal.toFixed(2)).toBe('0.00');
+      expect(created.lineTotal.toFixed(2)).toBe('45.00');
+      expect(created.priceAdjustments).toEqual({
+        create: [lineLayer(surcharge, 0)],
+      });
+      expect(state.order.totalAmount.toFixed(2)).toBe('45.00');
+    });
+
+    it('keeps a legacy service line without layers when the booking item has none', async () => {
+      const { service, tx } = setup();
+      const state = attachStatefulBookingOrder(tx);
+      const legacy = {
+        ...order(OrderStatus.ACTIVE).items[0],
+        id: 'service-item-legacy',
+        type: OrderItemType.SERVICE,
+        bookingItemId: 'booking-item-1',
+        status: OrderItemStatus.CONFIRMED,
+        catalogItemId: 'service-1',
+        productLocationId: null,
+        title: 'Haircut',
+        sku: null,
+        unit: null,
+        // The migration sets the base price of an old line to its list price.
+        baseUnitPrice: new Prisma.Decimal('1500.00'),
+        listUnitPrice: new Prisma.Decimal('1500.00'),
+        customUnitPrice: null,
+        unitPrice: new Prisma.Decimal('1500.00'),
+        lineSubtotal: new Prisma.Decimal('1500.00'),
+        discountTotal: new Prisma.Decimal('0.00'),
+        lineTotal: new Prisma.Decimal('1500.00'),
+        sellerStaffId: 'staff-1',
+        sellerName: 'Anna',
+        occurredAt: new Date('2026-10-01T11:00:00.000Z'),
+      };
+      state.order.items.push(legacy);
+
+      await service.syncCompletedBooking(
+        bookingWithItem(),
+        owner,
+        tx as never,
+      );
+
+      expect(tx.orderItem.create).not.toHaveBeenCalled();
+      expect(tx.orderItem.updateMany).not.toHaveBeenCalled();
+      expect(state.order.items).toEqual([legacy]);
+      expect(tx.orderItemPriceAdjustment.findMany).toHaveBeenCalledWith({
+        where: { orderItemId: { in: ['service-item-legacy'] } },
+        orderBy: [{ orderItemId: 'asc' }, { sortOrder: 'asc' }],
+      });
+    });
+
+    it('versions the service line when only its layers change', async () => {
+      const { service, tx } = setup();
+      const state = attachStatefulBookingOrder(tx);
+      const level = bookingLayer(
+        0,
+        PriceAdjustmentKind.LEVEL,
+        '200.00',
+        'Топ-мастер',
+      );
+      const personal = bookingLayer(
+        0,
+        PriceAdjustmentKind.STAFF,
+        '200.00',
+        'Цена мастера',
+      );
+      // Same prices both times: 1300 base, +200 staff = 1500.
+      const booking = () =>
+        bookingWithItem({
+          basePrice: new Prisma.Decimal('1300.00'),
+          staffPrice: new Prisma.Decimal('1500.00'),
+        });
+      state.bookingLayers = [level];
+      await service.syncCompletedBooking(booking(), owner, tx as never);
+
+      state.bookingLayers = [personal];
+      await service.syncCompletedBooking(booking(), owner, tx as never);
+
+      expect(tx.orderItem.updateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['service-item-1'] } },
+        data: { status: OrderItemStatus.REVERSED },
+      });
+      expect(tx.orderItem.create).toHaveBeenCalledTimes(2);
+      expect(tx.orderItem.create.mock.calls[1][0].data.priceAdjustments).toEqual(
+        { create: [lineLayer(personal, 0)] },
+      );
+      expect(
+        state.order.items.map((item) => [item.id, item.status]),
+      ).toEqual([
+        ['service-item-1', OrderItemStatus.REVERSED],
+        ['service-item-2', OrderItemStatus.CONFIRMED],
+      ]);
+      expect(state.order.totalAmount.toFixed(2)).toBe('1500.00');
+    });
   });
 
   it('restores the remaining cost snapshot on the final partial return', async () => {

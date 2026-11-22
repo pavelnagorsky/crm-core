@@ -47,6 +47,27 @@ export class MoneyUtils {
     return MoneyUtils.decimal(value).toFixed(SCALE);
   }
 
+  /**
+   * Exact integer minor units (1/100) of an amount at currency scale, for integer price
+   * calculations. Throws when the amount has more fractional digits or is not a safe integer.
+   */
+  static toMinor(value: Prisma.Decimal | string): number {
+    const amount = new Prisma.Decimal(value);
+    if (amount.decimalPlaces() > SCALE)
+      throw new RangeError(`Amount ${amount.toString()} exceeds currency scale`);
+    const minor = amount.mul(10 ** SCALE).toNumber();
+    if (!Number.isSafeInteger(minor))
+      throw new RangeError(`Amount ${amount.toString()} is out of range`);
+    return minor;
+  }
+
+  /** Amount at currency scale from integer minor units. */
+  static fromMinor(minor: number): Prisma.Decimal {
+    if (!Number.isSafeInteger(minor))
+      throw new RangeError(`Minor units ${minor} are not a safe integer`);
+    return new Prisma.Decimal(minor).div(10 ** SCALE);
+  }
+
   static allocateCumulative(
     total: Prisma.Decimal,
     totalQuantity: Prisma.Decimal,

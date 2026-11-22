@@ -7,6 +7,7 @@ import {
 import { BookingVisibility, Client, Prisma } from '@prisma/client';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { TimeUtils } from '../../shared/time/time.utils.js';
+import { ReadConsistency } from '../../shared/cache/enums/read-consistency.enum.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { AuditActorRole } from '../audit/enums/audit-actor-role.enum.js';
 import { AuditActor } from '../audit/interfaces/audit-actor.interface.js';
@@ -234,7 +235,10 @@ export class BookingCreateFacade {
         : null;
     const items = await this.scheduling.resolveForBooking({
       locationId,
+      bundleId: selection.bundleId,
       services: selection.services,
+      // The booking fixes its prices, so they are read fresh, never from a stale cache.
+      prices: ReadConsistency.FRESH,
       startAt,
       executionMode: selection.executionMode,
       requestedStaffId: dto.staffId,

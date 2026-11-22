@@ -4,19 +4,19 @@ import {
   Prisma,
   BookingExecutionMode as PrismaBookingExecutionMode,
 } from '@prisma/client';
+import { ReadConsistency } from '../../../shared/cache/enums/read-consistency.enum.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { priceLine, sumPrices } from '../../../shared/money/line-pricing.js';
-import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { LocationService } from '../../location/services/location.service.js';
 import { OrderPricingLine } from '../../orders/interfaces/order-pricing-line.interface.js';
 import { OrdersFacade } from '../../orders/orders.facade.js';
+import { PricingFacade } from '../../pricing/pricing.facade.js';
 import { ServiceCatalogFacade } from '../../services/catalog/service-catalog.facade.js';
 import { BookingPricingRequestDto } from '../dto/booking-pricing-request.dto.js';
 import { ManualBookingItemDto } from '../dto/manual-booking-item.dto.js';
 import { BookingPricingResult } from '../interfaces/booking-pricing-result.interface.js';
 import { BookingSelectionRequest } from '../interfaces/booking-selection-request.interface.js';
-import { BookingServiceSnapshot } from '../interfaces/booking-service-snapshot.interface.js';
 import { ResolvedBookingSelection } from '../interfaces/resolved-booking-selection.interface.js';
 
 @Injectable()
@@ -25,6 +25,7 @@ export class BookingSelectionService {
     private readonly locationService: LocationService,
     private readonly serviceCatalog: ServiceCatalogFacade,
     private readonly orders: OrdersFacade,
+    private readonly pricing: PricingFacade,
   ) {}
 
   async price(
@@ -43,7 +44,11 @@ export class BookingSelectionService {
       ? await this.resolveForBooking(locationId, dto)
       : null;
     const serviceLines = selection
-      ? this.priceServiceLines(selection.services, this.manualItems(dto))
+      ? await this.priceServiceLines(
+          locationId,
+          selection,
+          this.manualItems(dto),
+        )
       : [];
     const productLines = await this.orders.priceProductItems(
       locationId,
@@ -88,22 +93,15 @@ export class BookingSelectionService {
           ErrorCode.BOOKING_SERVICE_NOT_FOUND,
           HttpStatus.NOT_FOUND,
         );
-      const services = bundle.items.map((item) => item.service);
-      const prices = this.bundleItemPrices(
-        services.map((service) => service.price),
-        bundle.pricingMode,
-        bundle.fixedPrice,
-      );
       return {
         bundleId: bundle.id,
         bundleTitle: bundle.title,
         executionMode: bundle.executionMode,
-        services: services.map((service, index) => ({
+        services: bundle.items.map(({ service }) => ({
           id: service.id,
           title: service.title,
           durationMinutes: service.durationMinutes,
           bufferMinutes: service.bufferMinutes,
-          price: prices[index],
         })),
       };
     }
@@ -137,19 +135,31 @@ export class BookingSelectionService {
     };
   }
 
-  private priceServiceLines(
-    services: BookingServiceSnapshot[],
+  /** Preview without time or staff: prices come through the cache, nothing is stored. */
+  private async priceServiceLines(
+    locationId: string,
+    selection: ResolvedBookingSelection,
     manualItems: ManualBookingItemDto[],
-  ): OrderPricingLine[] {
-    return services.map((service, index) => {
+  ): Promise<OrderPricingLine[]> {
+    const { lines } = await this.pricing.quoteServices(
+      locationId,
+      {
+        bundleId: selection.bundleId,
+        lines: selection.services.map((service, index) => {
+          const customPrice = manualItems[index]?.customPrice;
+          return {
+            serviceId: service.id,
+            staffId: null,
+            customPrice:
+              customPrice == null ? null : new Prisma.Decimal(customPrice),
+          };
+        }),
+      },
+      ReadConsistency.CACHED,
+    );
+    return selection.services.map((service, index) => {
       const quantity = new Prisma.Decimal(1);
-      const price = priceLine(
-        quantity,
-        service.price,
-        manualItems[index]?.customPrice == null
-          ? null
-          : new Prisma.Decimal(manualItems[index].customPrice),
-      );
+      const price = lines[index];
       return {
         type: OrderItemType.SERVICE,
         catalogItemId: service.id,
@@ -157,7 +167,12 @@ export class BookingSelectionService {
         sku: null,
         unit: null,
         quantity,
-        ...price,
+        ...priceLine(
+          quantity,
+          price.listPrice,
+          price.customPrice,
+          price.discountTotal,
+        ),
       };
     });
   }
@@ -173,38 +188,5 @@ export class BookingSelectionService {
       dto.serviceIds?.length ||
       dto.items?.length,
     );
-  }
-
-  private bundleItemPrices(
-    servicePrices: Prisma.Decimal[],
-    pricingMode: string,
-    fixedPrice: Prisma.Decimal | null,
-  ): Prisma.Decimal[] {
-    if (pricingMode !== 'FIXED') return servicePrices;
-    if (!fixedPrice)
-      throw new AppException(
-        ErrorCode.BUNDLE_FIXED_PRICE_REQUIRED,
-        HttpStatus.BAD_REQUEST,
-      );
-    const total = servicePrices.reduce(
-      (sum, price) => sum.plus(price),
-      new Prisma.Decimal(0),
-    );
-    if (total.equals(0)) {
-      const share = MoneyUtils.quantize(fixedPrice.div(servicePrices.length));
-      return servicePrices.map((_, index) =>
-        index === servicePrices.length - 1
-          ? fixedPrice.minus(share.mul(servicePrices.length - 1))
-          : share,
-      );
-    }
-    let allocated = new Prisma.Decimal(0);
-    return servicePrices.map((price, index) => {
-      if (index === servicePrices.length - 1)
-        return fixedPrice.minus(allocated);
-      const share = MoneyUtils.quantize(fixedPrice.mul(price).div(total));
-      allocated = allocated.plus(share);
-      return share;
-    });
   }
 }

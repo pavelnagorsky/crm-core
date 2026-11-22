@@ -1,5 +1,8 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { BookingExecutionMode as PrismaBookingExecutionMode } from '@prisma/client';
+import {
+  BookingExecutionMode as PrismaBookingExecutionMode,
+  Prisma,
+} from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
@@ -8,6 +11,7 @@ import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { assignStaff } from '../../../shared/scheduling/assign-staff.js';
 import { normalizeStaffAssignments } from '../../../shared/scheduling/normalize-staff-assignments.js';
 import { CalendarFacade } from '../../calendar/calendar.facade.js';
+import { PricingFacade } from '../../pricing/pricing.facade.js';
 import { StaffService } from '../../staff/services/staff.service.js';
 import { BookingScheduleRequest } from '../interfaces/booking-schedule-request.interface.js';
 import { BookingServiceSnapshot } from '../interfaces/booking-service-snapshot.interface.js';
@@ -19,6 +23,7 @@ export class BookingSchedulingService {
     private readonly db: DatabaseService,
     private readonly staffService: StaffService,
     private readonly calendar: CalendarFacade,
+    private readonly pricing: PricingFacade,
   ) {}
 
   async resolveForBooking(
@@ -142,9 +147,27 @@ export class BookingSchedulingService {
         }),
       ),
     );
+    const staffIdAt = (index: number) => team.get(String(index))!;
+    const { lines } = await this.pricing.quoteServices(
+      locationId,
+      {
+        bundleId: request.bundleId,
+        lines: services.map((service, index) => {
+          const customPrice = manualItems[index]?.customPrice;
+          return {
+            serviceId: service.id,
+            staffId: staffIdAt(index),
+            customPrice:
+              customPrice == null ? null : new Prisma.Decimal(customPrice),
+          };
+        }),
+      },
+      request.prices,
+    );
 
     return services.map((service, index) => {
-      const staffId = team.get(String(index))!;
+      const staffId = staffIdAt(index);
+      const price = lines[index];
       return {
         serviceId: service.id,
         staffId,
@@ -153,9 +176,13 @@ export class BookingSchedulingService {
         endAt: intervals[index].endAt,
         serviceTitle: service.title,
         serviceDuration: service.durationMinutes,
-        listPrice: service.price,
-        chargedPrice: service.price,
-        customPrice: manualItems[index]?.customPrice ?? null,
+        basePrice: price.basePrice,
+        staffPrice: price.staffPrice,
+        listPrice: price.listPrice,
+        discountTotal: price.discountTotal,
+        chargedPrice: price.chargedPrice,
+        customPrice: price.customPrice,
+        priceAdjustments: price.adjustments,
         staffName: staffNames.get(staffId)!,
       };
     });
