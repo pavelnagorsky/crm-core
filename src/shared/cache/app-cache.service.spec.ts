@@ -7,7 +7,7 @@ import { CacheValueCodec } from './cache-value.codec.js';
 import { defineCache } from './define-cache.js';
 import { CacheNamespace } from './enums/cache-namespace.enum.js';
 import { createTestCache } from './testing/create-test-cache.js';
-import { MemoryCacheStore } from './testing/memory-cache.store.js';
+import { MemoryCacheStore } from './stores/memory-cache.store.js';
 
 const definition = defineCache<{ id: string }, { name: string }>({
   namespace: CacheNamespace.BRAND_PROFILE,
@@ -403,7 +403,7 @@ describe('AppCacheService', () => {
 
   describe('when the store fails (fail-open)', () => {
     it('loads without the store while it is unavailable', async () => {
-      store.available = false;
+      vi.spyOn(store, 'available', 'get').mockReturnValue(false);
       const read = vi.spyOn(store, 'read');
       const invalidate = vi.spyOn(store, 'invalidate');
       const loader = vi.fn().mockResolvedValue({ name: 'current' });

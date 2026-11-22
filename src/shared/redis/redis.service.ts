@@ -26,8 +26,9 @@ const STARTUP_WAIT_MS = 2500;
 type ConnectionState = 'connecting' | 'up' | 'down';
 
 /**
- * The shared Redis connection. Redis is optional at runtime (fail-open): when it is missing or down,
- * `available` is false and callers work without it. ioredis reconnects on its own; only changes of
+ * The shared Redis connection, used only by the Redis adapters of the state stores (see `stateStoreProviders`).
+ * Without `REDIS_URL` there is no client and the memory adapters are used instead. When Redis is down,
+ * `available` is false and the Redis adapters work without it (fail-open). ioredis reconnects on its own; only changes of
  * the connection state are logged, not every failed attempt.
  */
 @Injectable()
@@ -42,7 +43,7 @@ export class RedisService implements OnModuleInit, OnApplicationShutdown {
     if (!url) {
       this.client = null;
       this.logger.warn(
-        'REDIS_URL is not set: running without Redis (no shared cache, rate limits or cron locks)',
+        'REDIS_URL is not set: cache, rate limits and cron locks are kept in process memory (single process only)',
       );
       return;
     }

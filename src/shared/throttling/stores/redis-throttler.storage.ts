@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ThrottlerStorage } from '@nestjs/throttler';
 import { THROTTLER_INCREMENT_SCRIPT } from './redis-throttler.script.js';
-import { RedisService } from './redis.service.js';
+import { RedisService } from '../../redis/redis.service.js';
 
 /** Not exported from the package root. */
 type ThrottlerStorageRecord = Awaited<

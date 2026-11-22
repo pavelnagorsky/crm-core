@@ -1,6 +1,7 @@
 import { ConfigService } from '@nestjs/config';
 import { Redis } from 'ioredis';
-import { RedisService } from '../redis/redis.service.js';
+import { RedisService } from '../../redis/redis.service.js';
+import { cacheStoreContract } from '../testing/cache-store.contract.js';
 import { RedisCacheStore } from './redis-cache.store.js';
 
 /** Runs the Lua scripts against a real Redis: `REDIS_URL=redis://localhost:6379 npm run test:e2e`. */
@@ -32,44 +33,17 @@ describe.skipIf(!process.env.REDIS_URL)('RedisCacheStore (e2e)', () => {
     await redis.onApplicationShutdown();
   });
 
-  it('is available once connected', () => {
-    expect(store.available).toBe(true);
-  });
+  cacheStoreContract(() => store);
 
-  it('misses an absent entry and reports the current revision', async () => {
-    expect(await store.read('a')).toEqual({ revision: 0 });
-    await store.invalidate('dep:x');
-    await store.invalidate('dep:y');
-    expect(await store.read('a')).toEqual({ revision: 2 });
-  });
-
-  it('writes and reads an entry with its remaining TTL', async () => {
+  it('stores an entry as a hash of revision, dependencies and payload', async () => {
     const payload = '{"name":"Анна\\nline","n":1}';
-    expect(await store.write('a', 0, ['dep:a', 'dep:b'], payload, 60_000)).toBe(
-      true,
-    );
+    await store.write('a', 0, ['dep:a', 'dep:b'], payload, 60_000);
 
-    const read = await store.read('a');
-    expect(read).toMatchObject({ revision: 0, payload });
-    expect(read.ttlMs).toBeGreaterThan(59_000);
-    expect(read.ttlMs).toBeLessThanOrEqual(60_000);
     expect(await raw.hgetall(entryKey('a'))).toEqual({
       r: '0',
       d: 'dep:a\ndep:b',
       v: payload,
     });
-  });
-
-  it('writes an entry without dependencies', async () => {
-    expect(await store.write('a', 0, [], 'v', 60_000)).toBe(true);
-    await store.invalidate('dep:a');
-    expect(await store.read('a')).toMatchObject({ revision: 1, payload: 'v' });
-  });
-
-  it('expires entries by TTL', async () => {
-    await store.write('a', 0, ['dep:a'], 'v', 50);
-    await new Promise((resolve) => setTimeout(resolve, 120));
-    expect(await store.read('a')).toEqual({ revision: 0 });
   });
 
   it('keeps no TTL on the revision counter and tags', async () => {
@@ -81,7 +55,7 @@ describe.skipIf(!process.env.REDIS_URL)('RedisCacheStore (e2e)', () => {
     expect(await raw.pttl(entryKey('a'))).toBeGreaterThan(0);
   });
 
-  it('drops an entry whose dependency was invalidated', async () => {
+  it('deletes an entry whose dependency was invalidated', async () => {
     await store.write('a', 0, ['dep:a', 'dep:b'], 'v', 60_000);
     await store.invalidate('dep:b');
 
@@ -89,14 +63,7 @@ describe.skipIf(!process.env.REDIS_URL)('RedisCacheStore (e2e)', () => {
     expect(await raw.exists(entryKey('a'))).toBe(0);
   });
 
-  it('keeps an entry when an unrelated dependency is invalidated', async () => {
-    await store.write('a', 0, ['dep:a'], 'v', 60_000);
-    await store.invalidate('dep:other');
-
-    expect(await store.read('a')).toMatchObject({ revision: 1, payload: 'v' });
-  });
-
-  it('rejects a write whose load started before an invalidation', async () => {
+  it('does not create an entry for a rejected write', async () => {
     const { revision } = await store.read('a');
     await store.invalidate('dep:a');
 
@@ -104,27 +71,6 @@ describe.skipIf(!process.env.REDIS_URL)('RedisCacheStore (e2e)', () => {
       false,
     );
     expect(await raw.exists(entryKey('a'))).toBe(0);
-
-    const { revision: current } = await store.read('a');
-    expect(await store.write('a', current, ['dep:a'], 'new', 60_000)).toBe(
-      true,
-    );
-    expect(await store.read('a')).toMatchObject({ payload: 'new' });
-  });
-
-  it('accepts a write when only an unrelated dependency changed during the load', async () => {
-    const { revision } = await store.read('a');
-    await store.invalidate('dep:other');
-
-    expect(await store.write('a', revision, ['dep:a'], 'v', 60_000)).toBe(true);
-  });
-
-  it('replaces an entry with fewer dependencies', async () => {
-    await store.write('a', 0, ['dep:a', 'dep:b'], 'first', 60_000);
-    await store.write('a', 0, ['dep:a'], 'second', 60_000);
-    await store.invalidate('dep:b');
-
-    expect(await store.read('a')).toMatchObject({ payload: 'second' });
   });
 
   it('distrusts entries newer than the counter after the counter is lost', async () => {

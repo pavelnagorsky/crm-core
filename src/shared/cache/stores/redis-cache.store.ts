@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { RedisService } from '../redis/redis.service.js';
-import { CacheReadResult } from './interfaces/cache-read-result.interface.js';
-import { CacheStore } from './interfaces/cache-store.interface.js';
+import { RedisService } from '../../redis/redis.service.js';
+import { CacheReadResult } from '../interfaces/cache-read-result.interface.js';
+import { CacheStore } from '../interfaces/cache-store.interface.js';
 import {
   CACHE_INVALIDATE_SCRIPT,
   CACHE_READ_SCRIPT,

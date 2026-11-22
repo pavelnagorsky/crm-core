@@ -1,63 +1,35 @@
-import { HttpStatus, Injectable, Logger } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
+import { HttpStatus, Inject, Injectable } from '@nestjs/common';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
-import { RedisService } from '../../../shared/redis/redis.service.js';
+import type { SlidingWindowStore } from '../../../shared/rate-limit/interfaces/sliding-window-store.interface.js';
+import { SLIDING_WINDOW_STORE } from '../../../shared/rate-limit/sliding-window-store.token.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
-import { PUBLIC_BOOKING_RATE_LIMIT_SCRIPT } from './public-booking-rate-limit.script.js';
 
 const PHONE_LIMIT = 10;
 const IP_LIMIT = 30;
 const WINDOW_MS = 10 * 60 * 1000;
-/** While Redis fails every booking fails the same way: warn at most once per interval. */
-const WARNING_INTERVAL_MS = 60_000;
 
 /**
- * Online booking attempts per phone and per IP in a sliding window, counted in Redis and shared by all
- * replicas (`crm:booking-rate:phone:<phone>`, `crm:booking-rate:ip:<ip>`). Fail-open: when Redis is
- * unavailable or fails, the attempt is allowed.
+ * Online booking attempts per phone and per IP in a sliding window (`booking-rate:phone:<phone>`,
+ * `booking-rate:ip:<ip>`). The phone is checked first; a rejected attempt is not counted. Where the counts live and
+ * what happens when that storage fails is up to the `SlidingWindowStore` adapter.
  */
 @Injectable()
 export class PublicBookingRateLimiter {
-  private readonly logger = new Logger(PublicBookingRateLimiter.name);
-  private lastWarningAt = Number.NEGATIVE_INFINITY;
-
-  constructor(private readonly redis: RedisService) {}
+  constructor(
+    @Inject(SLIDING_WINDOW_STORE) private readonly store: SlidingWindowStore,
+  ) {}
 
   async assertAllowed(phone: string, ip: string): Promise<void> {
-    await this.consume(`phone:${phone}`, PHONE_LIMIT);
-    await this.consume(`ip:${ip}`, IP_LIMIT);
+    await this.consume(`booking-rate:phone:${phone}`, PHONE_LIMIT);
+    await this.consume(`booking-rate:ip:${ip}`, IP_LIMIT);
   }
 
   private async consume(key: string, limit: number): Promise<void> {
-    if (!(await this.tryConsume(key, limit))) {
+    if (!(await this.store.tryAcquire(key, limit, WINDOW_MS))) {
       throw new AppException(
         ErrorCode.BOOKING_RATE_LIMITED,
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
-  }
-
-  private async tryConsume(key: string, limit: number): Promise<boolean> {
-    if (!this.redis.available) return true;
-    try {
-      const allowed = await this.redis.eval<number>(
-        PUBLIC_BOOKING_RATE_LIMIT_SCRIPT,
-        [this.redis.key('booking-rate', key)],
-        [Date.now(), WINDOW_MS, limit, randomUUID()],
-      );
-      return allowed === 1;
-    } catch (error) {
-      this.warn(error);
-      return true;
-    }
-  }
-
-  private warn(error: unknown): void {
-    const now = Date.now();
-    if (now - this.lastWarningAt < WARNING_INTERVAL_MS) return;
-    this.lastWarningAt = now;
-    this.logger.warn(
-      `Booking rate limit check failed, letting attempts through: ${String(error)}`,
-    );
   }
 }

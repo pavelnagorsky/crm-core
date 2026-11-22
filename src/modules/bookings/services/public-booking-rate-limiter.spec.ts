@@ -1,48 +1,32 @@
-import { HttpStatus, Logger } from '@nestjs/common';
-import { PublicBookingRateLimiter } from './public-booking-rate-limiter.js';
-import { PUBLIC_BOOKING_RATE_LIMIT_SCRIPT } from './public-booking-rate-limit.script.js';
+import { HttpStatus } from '@nestjs/common';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
-import {
-  REDIS_KEY_PREFIX,
-  RedisService,
-} from '../../../shared/redis/redis.service.js';
+import { MemorySlidingWindowStore } from '../../../shared/rate-limit/stores/memory-sliding-window.store.js';
+import { PublicBookingRateLimiter } from './public-booking-rate-limiter.js';
 
-/** A RedisService whose `eval` mirrors the sliding-window script on sorted sets kept in memory. */
 function createLimiter() {
-  const sets = new Map<string, Map<string, number>>();
-  const redis = {
-    available: true,
-    key: (...parts: string[]) => REDIS_KEY_PREFIX + parts.join(':'),
-    eval: vi.fn(
-      async (
-        _script: string,
-        [key]: string[],
-        [now, window, limit, member]: [number, number, number, string],
-      ) => {
-        const set = sets.get(key) ?? new Map<string, number>();
-        sets.set(key, set);
-        for (const [stored, score] of set)
-          if (score <= now - window) set.delete(stored);
-        if (set.size >= limit) return 0;
-        set.set(member, now);
-        return 1;
-      },
-    ),
-  };
-  const limiter = new PublicBookingRateLimiter(
-    redis as unknown as RedisService,
-  );
-  return { limiter, redis, sets };
+  const store = new MemorySlidingWindowStore();
+  const tryAcquire = vi.spyOn(store, 'tryAcquire');
+  const limiter = new PublicBookingRateLimiter(store);
+  return { limiter, store, tryAcquire };
 }
 
 describe('PublicBookingRateLimiter', () => {
+  let store: MemorySlidingWindowStore | undefined;
+
   afterEach(() => {
+    store?.onApplicationShutdown();
     vi.useRealTimers();
     vi.restoreAllMocks();
   });
 
+  function setup() {
+    const created = createLimiter();
+    store = created.store;
+    return created;
+  }
+
   it('blocks the 11th attempt for the same phone', async () => {
-    const { limiter } = createLimiter();
+    const { limiter } = setup();
     for (let i = 0; i < 10; i++)
       await limiter.assertAllowed('+375291112233', `10.0.0.${i}`);
     let error: unknown;
@@ -58,7 +42,7 @@ describe('PublicBookingRateLimiter', () => {
   });
 
   it('blocks the 31st attempt from the same ip', async () => {
-    const { limiter } = createLimiter();
+    const { limiter } = setup();
     for (let i = 0; i < 30; i++)
       await limiter.assertAllowed(
         `+3752900000${i.toString().padStart(2, '0')}`,
@@ -70,7 +54,7 @@ describe('PublicBookingRateLimiter', () => {
   });
 
   it('counts phones separately', async () => {
-    const { limiter } = createLimiter();
+    const { limiter } = setup();
     for (let i = 0; i < 10; i++)
       await limiter.assertAllowed('+375291111111', `10.1.0.${i}`);
     await expect(
@@ -80,7 +64,7 @@ describe('PublicBookingRateLimiter', () => {
 
   it('allows attempts again once the oldest leaves the 10-minute window', async () => {
     vi.useFakeTimers();
-    const { limiter } = createLimiter();
+    const { limiter } = setup();
     for (let i = 0; i < 10; i++)
       await limiter.assertAllowed('+375291112233', `10.0.0.${i}`);
     vi.advanceTimersByTime(10 * 60 * 1000 - 1);
@@ -93,63 +77,33 @@ describe('PublicBookingRateLimiter', () => {
     ).resolves.toBeUndefined();
   });
 
-  it('runs the script per phone and per ip with the window, the limit and a unique member', async () => {
-    vi.useFakeTimers({ now: 1_000_000 });
-    const { limiter, redis } = createLimiter();
+  it('checks the phone, then the ip, each with its limit and the 10-minute window', async () => {
+    const { limiter, tryAcquire } = setup();
 
     await limiter.assertAllowed('+375291112233', '203.0.113.5');
 
-    expect(redis.eval).toHaveBeenNthCalledWith(
-      1,
-      PUBLIC_BOOKING_RATE_LIMIT_SCRIPT,
-      ['crm:booking-rate:phone:+375291112233'],
-      [1_000_000, 600_000, 10, expect.any(String)],
-    );
-    expect(redis.eval).toHaveBeenNthCalledWith(
-      2,
-      PUBLIC_BOOKING_RATE_LIMIT_SCRIPT,
-      ['crm:booking-rate:ip:203.0.113.5'],
-      [1_000_000, 600_000, 30, expect.any(String)],
-    );
-    expect(redis.eval.mock.calls[0][2][3]).not.toBe(
-      redis.eval.mock.calls[1][2][3],
-    );
+    expect(tryAcquire.mock.calls).toEqual([
+      ['booking-rate:phone:+375291112233', 10, 600_000],
+      ['booking-rate:ip:203.0.113.5', 30, 600_000],
+    ]);
   });
 
   it('does not count the ip when the phone is already over the limit', async () => {
-    const { limiter, sets } = createLimiter();
+    const { limiter, tryAcquire } = setup();
     for (let i = 0; i < 10; i++)
       await limiter.assertAllowed('+375291112233', '203.0.113.5');
+    tryAcquire.mockClear();
+
     await expect(
       limiter.assertAllowed('+375291112233', '203.0.113.5'),
     ).rejects.toThrow(AppException);
-    expect(sets.get('crm:booking-rate:ip:203.0.113.5')?.size).toBe(10);
-  });
 
-  it('allows the attempt without calling Redis when it is unavailable', async () => {
-    const { limiter, redis } = createLimiter();
-    redis.available = false;
-
+    expect(tryAcquire).toHaveBeenCalledTimes(1);
+    // 10 attempts recorded for the ip: 20 more fit before its limit of 30.
+    for (let i = 0; i < 20; i++)
+      await limiter.assertAllowed(`+37529000${i}`, '203.0.113.5');
     await expect(
-      limiter.assertAllowed('+375291112233', '203.0.113.5'),
-    ).resolves.toBeUndefined();
-    expect(redis.eval).not.toHaveBeenCalled();
-  });
-
-  it('allows the attempt when Redis fails and warns at most once a minute', async () => {
-    const warn = vi
-      .spyOn(Logger.prototype, 'warn')
-      .mockImplementation(() => {});
-    const { limiter, redis } = createLimiter();
-    redis.eval.mockRejectedValue(new Error('Command timed out'));
-
-    await expect(
-      limiter.assertAllowed('+375291112233', '203.0.113.5'),
-    ).resolves.toBeUndefined();
-    await limiter.assertAllowed('+375291112233', '203.0.113.5');
-
-    expect(redis.eval).toHaveBeenCalledTimes(4);
-    expect(warn).toHaveBeenCalledTimes(1);
-    expect(warn.mock.calls[0][0]).toContain('Command timed out');
+      limiter.assertAllowed('+375299999999', '203.0.113.5'),
+    ).rejects.toThrow(AppException);
   });
 });

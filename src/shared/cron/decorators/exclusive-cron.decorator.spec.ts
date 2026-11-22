@@ -7,6 +7,8 @@ import {
 import { Test } from '@nestjs/testing';
 import { RedisService } from '../../redis/redis.service.js';
 import { CronLockService } from '../cron-lock.service.js';
+import { MemoryCronLockStore } from '../stores/memory-cron-lock.store.js';
+import { RedisCronLockStore } from '../stores/redis-cron-lock.store.js';
 import { ExclusiveCron } from './exclusive-cron.decorator.js';
 
 class Jobs {
@@ -29,7 +31,7 @@ class Jobs {
 }
 
 function registerLock(acquire: (name: string) => Promise<boolean>) {
-  const lock = new CronLockService({} as RedisService);
+  const lock = new CronLockService(new MemoryCronLockStore());
   const spy = vi.spyOn(lock, 'acquire').mockImplementation(acquire);
   lock.onModuleInit();
   return { lock, spy };
@@ -114,7 +116,7 @@ describe('ExclusiveCron', () => {
       key: (...parts: string[]) => `crm:${parts.join(':')}`,
       setIfAbsent: vi.fn().mockRejectedValue(new Error('Command timed out')),
     } as unknown as RedisService;
-    const lock = new CronLockService(redis);
+    const lock = new CronLockService(new RedisCronLockStore(redis));
     lock.onModuleInit();
     registered = lock;
     const jobs = new Jobs();

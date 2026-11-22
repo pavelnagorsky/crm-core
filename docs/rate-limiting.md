@@ -35,14 +35,23 @@
 Превышение — `429` с кодом `TOO_MANY_REQUESTS` и заголовками
 `Retry-After-<name>`, `X-RateLimit-*-<name>`.
 
-### Хранилище счётчиков: Redis
+### Хранилище счётчиков: Redis или память процесса
 
-Счётчики общие для всех реплик и живут в Redis: `RedisThrottlerStorage`
-(`src/shared/redis/redis-throttler.storage.ts`) подключается через `storage` в
-`ThrottlerModule.forRootAsync` (`AppModule`). Лимит считается суммарно по всем
-процессам, а не отдельно в каждом.
+Хранилище выбирает `ThrottlerStorageModule` (`src/shared/throttling/`) по единому
+переключателю `state.backend` (см. `docs/replication-plan.md`, раздел 2.0): задан
+`REDIS_URL` — Redis, иначе память процесса. `AppModule` подключает его через
+`ThrottlerModule.forRootAsync({ imports: [ThrottlerStorageModule], inject: [THROTTLER_STORAGE] })`.
 
-- Один Lua-скрипт (`redis-throttler.script.ts`) атомарно: если ключ блокировки есть —
+- **`redis`** — `RedisThrottlerStorage` (`src/shared/throttling/stores/redis-throttler.storage.ts`).
+  Счётчики общие для всех реплик: лимит считается суммарно по всем процессам, а не отдельно в
+  каждом.
+- **`memory`** — встроенный `ThrottlerStorageService` из `@nestjs/throttler`: полностью
+  рабочий, но только в пределах одного процесса (локальный `start:dev` без `REDIS_URL`,
+  тесты). Таймер очистки у него `unref` и останавливается на shutdown.
+
+Redis-хранилище:
+
+- Один Lua-скрипт (`stores/redis-throttler.script.ts`) атомарно: если ключ блокировки есть —
   «заблокировано»; иначе `INCR` хитов (`PEXPIRE` окна на первом хите); хит сверх лимита
   ставит блокировку на `blockDuration` и обнуляет счёт. Без `blockDuration` хит сверх
   лимита отклоняется и не считается до конца окна.
@@ -53,10 +62,14 @@
 - `Retry-After-*` и `X-RateLimit-Reset-*` — в секундах с округлением вверх, как у
   встроенного `ThrottlerStorageService`.
 
-**Fail-open.** Если Redis недоступен или команда упала, запрос пропускается без лимита
-(`{ totalHits: 0, isBlocked: false }`). Смену состояния соединения логирует `RedisService`,
-ошибки команд — предупреждение не чаще раза в минуту. Лимиты на хостовом nginx в это время
-продолжают работать.
+Общее поведение обоих хранилищ (счёт, блокировка, отказ без `blockDuration`, единицы времени)
+описано одним контрактом `src/shared/throttling/testing/throttler-storage.contract.ts`: он
+гоняется юнит-тестом против `ThrottlerStorageService` и e2e-тестом против Redis.
+
+**Fail-open** (только `redis`). Если Redis недоступен или команда упала, запрос пропускается
+без лимита (`{ totalHits: 0, isBlocked: false }`). На память при этом не переключаемся. Смену
+состояния соединения логирует `RedisService`, ошибки команд — предупреждение не чаще раза в
+минуту. Лимиты на хостовом nginx в это время продолжают работать.
 
 Декораторы при смене хранилища не менялись. В юнит-тестах (`ThrottlerModule.forRoot`)
 используется встроенное хранилище в памяти.
@@ -69,10 +82,21 @@
 `BOOKING_RATE_LIMITED`. Сначала проверяется телефон, потом IP; отклонённая попытка не
 считается.
 
-Хранение — sorted set в Redis (`crm:booking-rate:phone:<телефон>`,
-`crm:booking-rate:ip:<ip>`), один Lua-скрипт: `ZREMRANGEBYSCORE` старше окна → `ZCARD` →
-при достижении лимита отказ → иначе `ZADD now <uuid>` и `PEXPIRE` на окно. Ошибка или
-недоступность Redis — попытка пропускается (fail-open), предупреждение не чаще раза в минуту.
+Лимитер знает только доменное: ключи (`booking-rate:phone:<телефон>`,
+`booking-rate:ip:<ip>`), лимиты и окно. Счёт ведёт порт `SlidingWindowStore`
+(`tryAcquire(key, limit, windowMs)`, токен `SLIDING_WINDOW_STORE`) из `RateLimitModule`
+(`src/shared/rate-limit/`), адаптер выбирается тем же `state.backend`:
+
+- **`redis`** — `RedisSlidingWindowStore`: sorted set (`crm:booking-rate:phone:<телефон>`,
+  `crm:booking-rate:ip:<ip>`), один Lua-скрипт: `ZREMRANGEBYSCORE` старше окна → `ZCARD` →
+  при достижении лимита отказ → иначе `ZADD now <uuid>` и `PEXPIRE` на окно. Ошибка или
+  недоступность Redis — попытка пропускается (fail-open), предупреждение не чаще раза в минуту.
+- **`memory`** — `MemorySlidingWindowStore`: те же правила в `Map` процесса; старые отметки
+  отрезаются на каждой попытке, пустые ключи удаляются, раз в минуту `unref`-таймер чистит
+  ключи с истёкшим окном, не больше 100 000 ключей.
+
+Одинаковость адаптеров проверяет общий контракт
+`src/shared/rate-limit/testing/sliding-window-store.contract.ts`.
 
 Скрипты обоих лимитов проверяются против настоящего Redis:
 `REDIS_URL=redis://localhost:6379 npm run test:e2e` (`*.e2e-spec.ts` рядом с кодом,

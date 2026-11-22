@@ -4,7 +4,7 @@ import { APP_GUARD } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule, ThrottlerStorage } from '@nestjs/throttler';
 import { appRole, runsCrons } from './config/app-role.config.js';
 import configuration from './config/configuration.js';
 import { loggerConfig } from './config/logger.config.js';
@@ -42,8 +42,9 @@ import { StaffModule } from './modules/staff/staff.module.js';
 import { SuppliersModule } from './modules/suppliers/suppliers.module.js';
 import { CronModule } from './shared/cron/cron.module.js';
 import { AppThrottlerGuard } from './shared/guards/app-throttler.guard.js';
-import { RedisThrottlerStorage } from './shared/redis/redis-throttler.storage.js';
 import { RedisModule } from './shared/redis/redis.module.js';
+import { ThrottlerStorageModule } from './shared/throttling/throttler-storage.module.js';
+import { THROTTLER_STORAGE } from './shared/throttling/throttler-storage.token.js';
 
 @Module({
   imports: [
@@ -56,8 +57,9 @@ import { RedisModule } from './shared/redis/redis.module.js';
     // Read at import time (main.ts loads `dotenv/config` before AppModule). Without ScheduleModule, `@Cron` stays inert metadata.
     ...(runsCrons(appRole()) ? [ScheduleModule.forRoot()] : []),
     ThrottlerModule.forRootAsync({
-      inject: [RedisThrottlerStorage],
-      useFactory: (storage: RedisThrottlerStorage) => ({
+      imports: [ThrottlerStorageModule],
+      inject: [THROTTLER_STORAGE],
+      useFactory: (storage: ThrottlerStorage) => ({
         ...throttlerConfig,
         storage,
       }),

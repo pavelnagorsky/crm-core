@@ -1,6 +1,6 @@
 /**
  * `REDIS_URL`, required in production: without Redis every replica would keep its own cache and rate limits.
- * Elsewhere it may be missing, and the application runs without Redis (see `RedisService`).
+ * Elsewhere it may be missing: cache, rate limits and cron locks then use in-memory stores (see `stateBackend`).
  */
 export function redisUrl(
   env: NodeJS.ProcessEnv = process.env,

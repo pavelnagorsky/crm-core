@@ -25,9 +25,10 @@
 | Балансировщик | Контейнер `lb` (nginx) внутри compose, слушает `127.0.0.1:3000`. Внешний nginx/ispmanager на хосте (TLS, `limit_req`) как и раньше проксирует на `127.0.0.1:3000` — его конфиг не меняется |
 | Кроны | Переменная `APP_ROLE`: `api` — без кронов, `worker` — с кронами, `all` (по умолчанию, локальный `start:dev`) — всё. Плюс страховочная блокировка запуска в Redis |
 | Очередь писем pg-boss | Без изменений, обработчики работают во всех ролях (pg-boss безопасен при нескольких процессах) |
-| Кэш | Redis вместо памяти процесса. Модель тегов (`dependencies`, `invalidate`) и все `defineCache`/вызовы в модулях не меняются — меняется только `AppCacheService` и хранилище |
-| Rate limiting | `ThrottlerModule` и `PublicBookingRateLimiter` хранят счётчики в Redis |
-| Redis недоступен | Ничего не падает (fail-open): кэш читает из БД, лимиты пропускают, кроны запускаются. `/health` от Redis **не** зависит — иначе упадут все реплики разом |
+| Хранилища состояния | Кэш, счётчики лимитов и блокировки кронов — за портами (интерфейс + DI-токен) с двумя полноценными адаптерами: `memory` (в процессе) и `redis` (общий для реплик). Один переключатель `state.backend` (enum `StateBackend`) в `configuration.ts`: задан `REDIS_URL` → `redis`, иначе `memory`. Каждый модуль выбирает адаптер фабрикой по этому значению. Доменные модули (`src/modules/**`) о Redis не знают, `RedisService` внедряют только адаптеры. Раздел 2.0 |
+| Кэш | Порт `CacheStore`: в проде Redis (общий для реплик), без `REDIS_URL` — память процесса (кэш работает, не выключается). Модель тегов (`dependencies`, `invalidate`) и все `defineCache`/вызовы в модулях не меняются — меняется только `AppCacheService` и хранилище |
+| Rate limiting | `ThrottlerModule` и `PublicBookingRateLimiter` хранят счётчики через порты; в проде — Redis, без `REDIS_URL` — память процесса |
+| Redis недоступен | Касается `state.backend=redis`. Ничего не падает (fail-open): кэш читает из БД, лимиты пропускают, кроны запускаются. На память при падении Redis не переключаемся (у реплик разошлось бы состояние). `/health` от Redis **не** зависит — иначе упадут все реплики разом |
 | Redis библиотека | `ioredis`. `cache-manager`, `@nestjs/cache-manager` удалить |
 | Логи | Все контейнеры пишут в stdout. **Grafana + Loki + Alloy** собирают их в одно место: веб-интерфейс, поиск по `requestId`, фильтр по уровню и контейнеру, хранение 30 дней. Подробно — раздел 2.6 |
 | Пулы соединений с БД | Размер пула Prisma из `DATABASE_POOL_SIZE` (по умолчанию 10). pg-boss — 3, как сейчас |
@@ -51,10 +52,52 @@
    stdout всех контейнеров ──► alloy ──► loki ◄── grafana (127.0.0.1:3200)
 ```
 
+### 2.0. Порты, адаптеры и выбор бэкенда
+
+Всё общее состояние (кэш, счётчики лимитов, блокировки кронов) спрятано за портами. Каждый
+порт — интерфейс + DI-токен + два адаптера одинаковой семантики (единственное допустимое
+отличие: у throttler окно в Redis фиксированное, во встроенном хранилище — скользящее по хитам,
+см. `docs/rate-limiting.md`):
+
+| Порт (токен) | Модуль | `memory` | `redis` |
+| --- | --- | --- | --- |
+| `CacheStore` (`CACHE_STORE`) | `AppCacheModule` (`src/shared/cache/`) | `MemoryCacheStore` | `RedisCacheStore` |
+| `ThrottlerStorage` из `@nestjs/throttler` (`THROTTLER_STORAGE`) | `ThrottlerStorageModule` (`src/shared/throttling/`) | встроенный `ThrottlerStorageService` | `RedisThrottlerStorage` |
+| `SlidingWindowStore` (`SLIDING_WINDOW_STORE`) | `RateLimitModule` (`src/shared/rate-limit/`) | `MemorySlidingWindowStore` | `RedisSlidingWindowStore` |
+| `CronLockStore` (`CRON_LOCK_STORE`) | `CronModule` (`src/shared/cron/`) | `MemoryCronLockStore` | `RedisCronLockStore` |
+
+- **Один переключатель.** Enum `StateBackend` (`src/shared/enums/state-backend.enum.ts`:
+  `memory` | `redis`). Значение `state.backend` считается в `configuration.ts`
+  (`src/config/state.config.ts`, интерфейс `src/config/interfaces/state-config.interface.ts`):
+  задан `REDIS_URL` → `redis`, иначе `memory`. Отдельной переменной окружения нет. В production
+  `REDIS_URL` обязателен (2.1), поэтому там всегда `redis`.
+- **Выбор адаптера** — `stateStoreProviders(token, MemoryAdapter, RedisAdapter)`
+  (`src/shared/state/state-store.providers.ts`): оба адаптера — обычные провайдеры модуля
+  (конструкторы ничего не запускают, таймеры стартуют лениво), а токен — `useFactory`, который по
+  `state.backend` отдаёт один из них. Хуки жизненного цикла Nest вызывает и для экземпляра,
+  возвращённого фабрикой, поэтому `onApplicationShutdown` адаптеров идемпотентны.
+- **Адаптеры `memory`** — полноценные, не тестовые заглушки: ограниченная память (ленивое
+  удаление устаревшего на чтении + периодическая очистка `unref`-таймером, который
+  останавливается на shutdown; лимит числа ключей с вытеснением). Работают только в рамках
+  одного процесса — для `start:dev` без Docker и тестов. Несколько процессов с `memory` не
+  делят ни кэш, ни лимиты, ни блокировки кронов.
+- **Адаптеры `redis`** — единственные места, где внедряется `RedisService`. Fail-open (раздел 1)
+  реализован в адаптерах (для кэша — в `AppCacheService` по `available`/ошибке хранилища). При
+  `state.backend=redis` и упавшем Redis на память **не** переключаемся.
+- **Одинаковость доказана тестами.** Поведенческая спецификация каждого порта —
+  переиспользуемая функция в `testing/*.contract.ts` соответствующей папки. Она запускается в
+  юнит-тестах против `memory`-адаптера и в `*.e2e-spec.ts` против `redis`-адаптера на настоящем
+  Redis. Специфичное для Redis (формат ключей, TTL, `NOSCRIPT`, fail-open) — в отдельных тестах
+  адаптера. Выбор адаптера фабрикой покрыт тестами модулей.
+- L1/L2 (раздел 5) встраивается без изменений вызывающих: ещё один класс `CacheStore` и одна
+  ветка фабрики.
+
 ### 2.1. Redis
 
-- `src/shared/redis/redis.module.ts` — `@Global()` (как `DatabaseModule`), импортируется один раз
-  в `AppModule`, экспортирует `RedisService`.
+- `src/shared/redis/` — только соединение: `redis.module.ts` (`@Global()`, как
+  `DatabaseModule`, импортируется один раз в `AppModule`, экспортирует `RedisService`) и
+  `redis.service.ts`. Хранилищ, скриптов и лимитеров здесь нет. Ничего в `src/modules/**` не
+  импортирует `src/shared/redis/`.
 - `src/shared/redis/redis.service.ts`:
   - `ioredis` из `REDIS_URL`. Опции для fail-open: `enableOfflineQueue: false`,
     `maxRetriesPerRequest: 1`, `connectTimeout: 2000`, `commandTimeout: 500`. Переподключение —
@@ -66,7 +109,9 @@
   - `eval`-хелпер для Lua-скриптов: `EVALSHA`, при `NOSCRIPT` — `EVAL`.
   - `onApplicationShutdown` — `quit()`.
 - `REDIS_URL` обязателен при `NODE_ENV=production` (ошибка конфигурации на старте),
-  в остальных окружениях без него — предупреждение и работа без Redis (всё в fail-open).
+  в остальных окружениях без него — предупреждение, и состояние живёт в памяти процесса
+  (`state.backend=memory`, раздел 2.0): кэш, лимиты и блокировки кронов работают полностью, но
+  только для одного процесса.
 - Префикс ключей задаётся вручную (`crm:`), **не** опцией `keyPrefix` ioredis: внутри Lua ключи
   тегов собираются из строк, и `keyPrefix` их не префиксует.
 - Конфиг Redis (в compose): `maxmemory 256mb`, `maxmemory-policy volatile-lru`, без
@@ -113,10 +158,22 @@
 - `src/shared/cache/interfaces/cache-read-result.interface.ts` — `{ revision: number;
   payload?: string; ttlMs?: number }` (hit, если есть `payload`).
 - `src/shared/cache/cache-store.token.ts` — DI-токен `CACHE_STORE`.
-- `src/shared/cache/redis-cache.store.ts` — реализация на `RedisService` и скриптах.
-- `src/shared/cache/redis-cache.scripts.ts` — тексты трёх Lua-скриптов.
-- `src/shared/cache/testing/memory-cache.store.ts` — та же семантика в памяти, только для
-  тестов. Время — через `Date.now()`, чтобы работали `vi.useFakeTimers()`.
+- `src/shared/cache/stores/redis-cache.store.ts` — адаптер `redis` на `RedisService` и скриптах.
+- `src/shared/cache/stores/redis-cache.scripts.ts` — тексты трёх Lua-скриптов.
+- `src/shared/cache/stores/memory-cache.store.ts` — адаптер `memory` для продакшн-кода (не только
+  тестов) с той же семантикой ревизий и тегов. Время — через `Date.now()`, чтобы работали
+  `vi.useFakeTimers()`. Память ограничена: просроченные и устаревшие записи удаляются на чтении и
+  периодической очисткой (`unref`-таймер раз в минуту, запускается на первой записи,
+  останавливается, когда записей нет, и на `onApplicationShutdown`); не больше 10 000 записей,
+  сверх лимита вытесняется давно не читанная (LRU). Теги тоже ограничены (10 000): при
+  переполнении старейшие теги отбрасываются, а их максимальная ревизия становится «полом» —
+  неизвестный тег считается сброшенным на этой ревизии (лишний промах вместо устаревшего
+  значения). Пока пол 0, поведение идентично Redis (там отсутствующий тег = 0). Прежний
+  `CacheModule.register()` (`cache-manager` 7 + Keyv `Map`) лимитов не имел вовсе и удалял
+  просроченное только на чтении.
+- `src/shared/cache/testing/cache-store.contract.ts` — общая спецификация порта: юнит-тест
+  `stores/memory-cache.store.spec.ts` и `stores/redis-cache.store.e2e-spec.ts`.
+- `src/shared/cache/testing/create-test-cache.ts` — `createTestCache(enabled)` на `MemoryCacheStore`.
 - `src/shared/cache/cache-value.codec.ts` — `encode`/`decode` в JSON с сохранением типов:
   `Date`, `Prisma.Decimal`, `BigInt` (теговые объекты, например `{ "__cache:date": iso }`).
   После `decode` объекты новые, отдельный `cloneCacheValue` на чтении из Redis не нужен.
@@ -163,8 +220,9 @@
 `invalidate`» — TTL теперь единственная страховка. `BILLING_CACHE_POLICY` — без изменений,
 комментарий про реплики обновить.
 
-`AppCacheModule`: `providers: [AppCacheService, { provide: CACHE_STORE, useClass: RedisCacheStore }]`,
-`CacheModule.register()` убрать. `createTestCache(enabled)` → `new AppCacheService(new MemoryCacheStore(), config)`;
+`AppCacheModule`: `providers: [AppCacheService, ...stateStoreProviders(CACHE_STORE, MemoryCacheStore, RedisCacheStore)]`
+(выбор по `state.backend`, раздел 2.0), `CacheModule.register()` убрать. `AppCacheService` знает только
+`CacheStore` и от выбора адаптера не зависит. `createTestCache(enabled)` → `new AppCacheService(new MemoryCacheStore(), config)`;
 сигнатура не меняется, доменные тесты (`booking-cache-invalidation.spec.ts`,
 `staff-schedule-cache.spec.ts`, `products.service.spec.ts` и др.) должны пройти без правок.
 
@@ -175,12 +233,14 @@
 `MemoryCacheStore`. Добавить: fail-open при ошибке хранилища, кодек (Date/Decimal/BigInt).
 
 Lua-скрипты проверить интеграционным тестом против настоящего Redis:
-`src/shared/cache/redis-cache.store.e2e-spec.ts` (запускается `npm run test:e2e`, пропускается
-через `describe.skipIf(!process.env.REDIS_URL)`).
+`src/shared/cache/stores/redis-cache.store.e2e-spec.ts` (запускается `npm run test:e2e`, пропускается
+через `describe.skipIf(!process.env.REDIS_URL)`). Он гоняет общий контракт
+`testing/cache-store.contract.ts` — тот же, что юнит-тест `MemoryCacheStore`.
 
 ### 2.3. Rate limiting на Redis
 
-**ThrottlerModule.** Своё хранилище `src/shared/redis/redis-throttler.storage.ts`, реализует
+**ThrottlerModule.** Своё хранилище `src/shared/throttling/stores/redis-throttler.storage.ts`
+(Lua — `redis-throttler.script.ts` рядом), реализует
 `ThrottlerStorage` из `@nestjs/throttler` (`increment(key, ttl, limit, blockDuration, throttlerName)`).
 Готовый `@nest-lab/throttler-storage-redis` не берём: нужен fail-open и нет лишней зависимости.
 
@@ -188,22 +248,40 @@ Lua-скрипты проверить интеграционным тестом 
   хите; если `hits > limit` и `blockDuration > 0` → поставить ключ блокировки (и сбросить
   счётчик — как встроенное хранилище обнуляет хиты после блокировки); при `blockDuration = 0`
   хит сверх лимита отклоняется и не считается (`DECR`), как во встроенном.
-- `RedisThrottlerStorage` — провайдер глобального `RedisModule` (и в его `exports`), чтобы
-  `forRootAsync` мог его внедрить.
+- `ThrottlerStorageModule` (`src/shared/throttling/throttler-storage.module.ts`) выбирает адаптер
+  по `state.backend` и экспортирует токен `THROTTLER_STORAGE`: `redis` — `RedisThrottlerStorage`,
+  `memory` — встроенный `ThrottlerStorageService` (его `onApplicationShutdown` чистит таймер
+  очистки; Nest вызывает хук и для экземпляра из фабрики). `RedisModule` про лимиты не знает.
 - Единицы `timeToExpire`/`timeToBlockExpire` взять **точно** как во встроенном
   `ThrottlerStorageService` (`node_modules/@nestjs/throttler/dist/throttler.service.js`) — от
   них зависят заголовки `Retry-After`.
 - Ошибка Redis → `{ totalHits: 0, timeToExpire: 0, isBlocked: false, timeToBlockExpire: 0 }`.
-- `ThrottlerModule.forRoot(throttlerConfig)` → `forRootAsync` с `inject: [RedisThrottlerStorage]`
-  и `storage` в опциях. Декораторы `@StrictRateLimit` и т.п. не меняются.
+- `ThrottlerModule.forRoot(throttlerConfig)` → `forRootAsync` с `imports: [ThrottlerStorageModule]`,
+  `inject: [THROTTLER_STORAGE]` и `storage` в опциях. Декораторы `@StrictRateLimit` и т.п. не меняются.
+- Общий контракт `src/shared/throttling/testing/throttler-storage.contract.ts`: юнит-тест против
+  `ThrottlerStorageService`, e2e — против `RedisThrottlerStorage`.
 - `docs/rate-limiting.md`: убрать «Счётчики хранятся в памяти процесса…», описать Redis.
 
-**PublicBookingRateLimiter** (`src/modules/bookings/services/public-booking-rate-limiter.ts`).
-Скользящее окно на sorted set, поведение как сейчас (при превышении хит не добавляется,
-лимиты и окно те же):
-`ZREMRANGEBYSCORE key 0 now-window` → `ZCARD` → если `>= limit` вернуть 0 → иначе
-`ZADD now <uuid>` + `PEXPIRE window` → 1. Ошибка Redis → пропустить (fail-open).
-Метод становится `async` — обновить вызывающих. Тесты — на мок `RedisService`.
+**PublicBookingRateLimiter** (`src/modules/bookings/services/public-booking-rate-limiter.ts`)
+содержит только доменную часть: ключи (`booking-rate:phone:<телефон>`, `booking-rate:ip:<ip>`),
+лимиты (10 и 30), окно (10 минут), порядок проверок и `429 BOOKING_RATE_LIMITED`. Счёт — через
+порт `SlidingWindowStore.tryAcquire(key, limit, windowMs): Promise<boolean>` (токен
+`SLIDING_WINDOW_STORE`) из `RateLimitModule` (`src/shared/rate-limit/`), который `BookingsModule`
+импортирует. О Redis модуль бронирований не знает. Метод `async` — вызывающие обновлены.
+
+Адаптеры скользящего окна (поведение одинаковое: при превышении попытка не записывается,
+отметка ровно на границе окна уже не считается):
+
+- `RedisSlidingWindowStore` — sorted set, Lua (`redis-sliding-window.script.ts`):
+  `ZREMRANGEBYSCORE key 0 now-window` → `ZCARD` → если `>= limit` вернуть 0 → иначе
+  `ZADD now <uuid>` + `PEXPIRE window` → 1. Ключ `crm:<key>`. Ошибка/недоступность Redis →
+  пропустить (fail-open), предупреждение не чаще раза в минуту.
+- `MemorySlidingWindowStore` — `Map<key, отметки времени>`: старые отметки отрезаются на каждой
+  попытке, пустые ключи удаляются, периодическая очистка `unref`-таймером (запускается на первой
+  записи, останавливается, когда ключей нет, и на shutdown), не больше 100 000 ключей (сверх —
+  вытесняется самый старый).
+- Общий контракт `src/shared/rate-limit/testing/sliding-window-store.contract.ts`. Тесты
+  `PublicBookingRateLimiter` — на `MemorySlidingWindowStore` и шпион порта.
 
 ### 2.4. Роли и кроны
 
@@ -228,11 +306,18 @@ Lua-скрипты проверить интеграционным тестом 
   `SET crm:cron:<name>:<floor(now / 60000)> <instance> NX EX 3600`. Не получили → пропустить
   запуск с `debug`-логом.
 - Ошибка Redis → **запустить** (роли уже гарантируют один worker; пропущенное напоминание хуже).
-- Сервис `src/shared/cron/cron-lock.service.ts` (зависит от `RedisService`). Декоратор не имеет
+- Порт `CronLockStore.tryAcquire(name, slot): Promise<boolean>` (токен `CRON_LOCK_STORE`,
+  `src/shared/cron/interfaces/cron-lock-store.interface.ts`), адаптеры в `src/shared/cron/stores/`:
+  `RedisCronLockStore` (`SET crm:cron:<name>:<slot> <instance> NX EX 3600`; Redis недоступен или
+  ошибка → `true`, то есть запуск) и `MemoryCronLockStore` (`Map` занятых слотов с истечением через
+  час, просроченные удаляются на каждой попытке — дубли в пределах процесса). Общий контракт —
+  `src/shared/cron/testing/cron-lock-store.contract.ts`.
+- Сервис `src/shared/cron/cron-lock.service.ts` (зависит от порта, считает слот минуты и пишет
+  `debug` о пропуске). Декоратор не имеет
   DI, поэтому сервис в `onModuleInit` регистрирует себя в статическом поле; если не
   зарегистрирован (юнит-тесты) — метод выполняется без блокировки. Провайдер — `CronModule`
-  (`src/shared/cron/cron.module.ts`, импортируется в `AppModule`, ничего не экспортирует);
-  `SET NX EX` — через `RedisService.setIfAbsent`. Пропущенный запуск возвращает `undefined`.
+  (`src/shared/cron/cron.module.ts`, импортируется в `AppModule`, ничего не экспортирует, адаптер
+  выбирает по `state.backend`); `SET NX EX` — через `RedisService.setIfAbsent`. Пропущенный запуск возвращает `undefined`.
 - В коде самих кронов ничего не менять.
 
 Кроны:
@@ -366,7 +451,8 @@ Postgres через OOM-killer.
 Добавить в `.env.example` с комментариями:
 
 ```
-# Redis: cache, rate limits, cron locks. Required in production.
+# Redis: cache, rate limits, cron locks shared by all processes. Required in production.
+# Unset: the same features use in-memory stores (fully working, single process only).
 REDIS_URL=redis://localhost:6379
 # api | worker | all. Crons run only in worker/all.
 APP_ROLE=all
@@ -377,7 +463,7 @@ DATABASE_POOL_SIZE=10
 # APP_PORT=3000
 ```
 
-`CACHE_ENABLED` оставить (комментарий: кэш в Redis, не в памяти).
+`CACHE_ENABLED` оставить (комментарий: кэш в Redis, без `REDIS_URL` — в памяти процесса).
 
 ## 3. Порядок работы (коммиты)
 
@@ -404,11 +490,15 @@ DATABASE_POOL_SIZE=10
 - [ ] Grafana `127.0.0.1:3200` → дашборд «CRM — логи» → поиск по `requestId` из заголовка `X-Request-Id` находит строки из нужного контейнера; фильтр по уровню работает; время в местном поясе.
 - [ ] Поочерёдный перезапуск (`up -d --no-deps --wait api-1`, потом `api-2`) под нагрузкой (`npx autocannon -d 30 http://127.0.0.1:3000/health`) — без 5xx.
 - [ ] `req.ip` в логах — реальный адрес клиента, а не `lb`.
-- [ ] `npm run start:dev` без Docker-стека продолжает работать (только с предупреждением про Redis).
+- [ ] `npm run start:dev` без Docker-стека и без `REDIS_URL` работает полностью на `memory`-адаптерах (один процесс): кэш кэширует, лимиты считают, кроны идут; в логе одно предупреждение про `REDIS_URL`.
 
 ## 5. Вне задачи
 
 - Отдельный L1-кэш в памяти поверх Redis (добавить, если профилирование покажет необходимость).
+  Встраивается как декоратор `CacheStore` (`TieredCacheStore`: L1 = `MemoryCacheStore`,
+  L2 = `RedisCacheStore`) и ещё одна ветка фабрики выбора; вызывающий код не меняется.
+  Обязательное условие — межрепличная инвалидация L1 (Redis pub/sub: `invalidate` публикует тег,
+  каждая реплика сбрасывает его в своём L1), иначе реплика отдаёт устаревшее до конца TTL L1.
 - Redis Sentinel/кластер, реплики Postgres, второй VPS.
 - Метрики (Prometheus) и алерты — Grafana уже будет, это следующий естественный шаг.
 - Нагрузочное тестирование бизнес-эндпоинтов (k6) — отдельной задачей после запуска стека.

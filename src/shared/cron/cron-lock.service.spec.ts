@@ -1,14 +1,10 @@
 import { Logger } from '@nestjs/common';
-import { hostname } from 'node:os';
-import { RedisService } from '../redis/redis.service.js';
 import { CronLockService } from './cron-lock.service.js';
+import { CronLockStore } from './interfaces/cron-lock-store.interface.js';
+import { MemoryCronLockStore } from './stores/memory-cron-lock.store.js';
 
-function createRedis(available = true) {
-  return {
-    available,
-    key: (...parts: string[]) => `crm:${parts.join(':')}`,
-    setIfAbsent: vi.fn(),
-  };
+function createStore(acquired = true) {
+  return { tryAcquire: vi.fn().mockResolvedValue(acquired) };
 }
 
 describe('CronLockService', () => {
@@ -17,34 +13,28 @@ describe('CronLockService', () => {
 
   afterEach(() => vi.restoreAllMocks());
 
-  it('locks the minute slot of the run for this process', async () => {
-    const redis = createRedis();
-    redis.setIfAbsent.mockResolvedValue(true);
-    const service = new CronLockService(redis as unknown as RedisService);
+  it('locks the minute slot of the run', async () => {
+    const store = createStore();
+    const service = new CronLockService(store);
 
     await expect(service.acquire('Jobs.run', now)).resolves.toBe(true);
 
-    expect(redis.setIfAbsent).toHaveBeenCalledWith(
-      `crm:cron:Jobs.run:${slot}`,
-      `${hostname()}:${process.pid}`,
-      3600,
-    );
+    expect(store.tryAcquire).toHaveBeenCalledWith('Jobs.run', slot);
   });
 
   it('uses one slot for the whole minute', async () => {
-    const redis = createRedis();
-    redis.setIfAbsent.mockResolvedValue(true);
-    const service = new CronLockService(redis as unknown as RedisService);
+    const store = createStore();
+    const service = new CronLockService(store);
     const minuteStart = slot * 60_000;
 
     await service.acquire('Jobs.run', minuteStart);
     await service.acquire('Jobs.run', minuteStart + 59_999);
     await service.acquire('Jobs.run', minuteStart + 60_000);
 
-    expect(redis.setIfAbsent.mock.calls.map(([key]) => key)).toEqual([
-      `crm:cron:Jobs.run:${slot}`,
-      `crm:cron:Jobs.run:${slot}`,
-      `crm:cron:Jobs.run:${slot + 1}`,
+    expect(store.tryAcquire.mock.calls.map(([, called]) => called)).toEqual([
+      slot,
+      slot,
+      slot + 1,
     ]);
   });
 
@@ -52,9 +42,7 @@ describe('CronLockService', () => {
     const debug = vi
       .spyOn(Logger.prototype, 'debug')
       .mockImplementation(() => {});
-    const redis = createRedis();
-    redis.setIfAbsent.mockResolvedValue(false);
-    const service = new CronLockService(redis as unknown as RedisService);
+    const service = new CronLockService(createStore(false));
 
     await expect(service.acquire('Jobs.run', now)).resolves.toBe(false);
     expect(debug).toHaveBeenCalledWith(
@@ -62,31 +50,18 @@ describe('CronLockService', () => {
     );
   });
 
-  it('allows the run when Redis is unavailable', async () => {
-    const redis = createRedis(false);
-    const service = new CronLockService(redis as unknown as RedisService);
+  it('runs a cron once per minute with the memory store', async () => {
+    const service = new CronLockService(new MemoryCronLockStore());
 
     await expect(service.acquire('Jobs.run', now)).resolves.toBe(true);
-    expect(redis.setIfAbsent).not.toHaveBeenCalled();
-  });
-
-  it('allows the run when Redis fails', async () => {
-    const warn = vi
-      .spyOn(Logger.prototype, 'warn')
-      .mockImplementation(() => {});
-    const redis = createRedis();
-    redis.setIfAbsent.mockRejectedValue(new Error('Command timed out'));
-    const service = new CronLockService(redis as unknown as RedisService);
-
-    await expect(service.acquire('Jobs.run', now)).resolves.toBe(true);
-    expect(warn.mock.calls[0][0]).toContain('Command timed out');
+    await expect(service.acquire('Jobs.run', now + 1_000)).resolves.toBe(false);
+    await expect(service.acquire('Jobs.run', now + 60_000)).resolves.toBe(true);
   });
 
   it('registers itself on init and unregisters on destroy', () => {
-    const first = new CronLockService(createRedis() as unknown as RedisService);
-    const second = new CronLockService(
-      createRedis() as unknown as RedisService,
-    );
+    const store: CronLockStore = createStore();
+    const first = new CronLockService(store);
+    const second = new CronLockService(store);
 
     expect(CronLockService.registered).toBeNull();
     first.onModuleInit();

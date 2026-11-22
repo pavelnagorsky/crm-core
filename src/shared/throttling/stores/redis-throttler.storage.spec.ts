@@ -1,7 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { RedisThrottlerStorage } from './redis-throttler.storage.js';
 import { THROTTLER_INCREMENT_SCRIPT } from './redis-throttler.script.js';
-import { REDIS_KEY_PREFIX, RedisService } from './redis.service.js';
+import { REDIS_KEY_PREFIX, RedisService } from '../../redis/redis.service.js';
 
 const PASS = {
   totalHits: 0,

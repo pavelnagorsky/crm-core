@@ -1,11 +1,10 @@
 import { Global, Module } from '@nestjs/common';
-import { RedisThrottlerStorage } from './redis-throttler.storage.js';
 import { RedisService } from './redis.service.js';
 
+/** The Redis connection only. Stores built on it live with their features and are the only users of RedisService. */
 @Global()
 @Module({
-  providers: [RedisService, RedisThrottlerStorage],
-  // RedisThrottlerStorage is injected into ThrottlerModule.forRootAsync in AppModule.
-  exports: [RedisService, RedisThrottlerStorage],
+  providers: [RedisService],
+  exports: [RedisService],
 })
 export class RedisModule {}
