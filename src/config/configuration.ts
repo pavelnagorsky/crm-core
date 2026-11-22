@@ -1,3 +1,5 @@
+import { redisUrl } from './redis.config.js';
+
 export default () => {
   return {
     port: parseInt(process.env.PORT ?? '', 10) || 3000,
@@ -27,6 +29,9 @@ export default () => {
     },
     database: {
       url: process.env['DATABASE_URL'],
+    },
+    redis: {
+      url: redisUrl(),
     },
     jwt: {
       accessTokenSecret: process.env['ACCESS_TOKEN_SECRET'],

@@ -40,6 +40,7 @@ import { ServicesModule } from './modules/services/services.module.js';
 import { StaffModule } from './modules/staff/staff.module.js';
 import { SuppliersModule } from './modules/suppliers/suppliers.module.js';
 import { AppThrottlerGuard } from './shared/guards/app-throttler.guard.js';
+import { RedisModule } from './shared/redis/redis.module.js';
 
 @Module({
   imports: [
@@ -57,6 +58,7 @@ import { AppThrottlerGuard } from './shared/guards/app-throttler.guard.js';
     }),
     EventEmitterModule.forRoot({ wildcard: true }),
     DatabaseModule,
+    RedisModule,
     NotificationsModule,
     AuthModule,
     BrandApiModule,

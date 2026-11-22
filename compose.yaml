@@ -1,0 +1,48 @@
+name: crm-core
+
+services:
+  # Local only: on the server the database lives outside compose.
+  postgres:
+    image: postgres:17-alpine
+    profiles: [local]
+    environment:
+      POSTGRES_USER: crm
+      POSTGRES_PASSWORD: crm
+      POSTGRES_DB: crm
+    # 5433: 5432 is often taken by a Postgres installed on the host.
+    ports:
+      - 127.0.0.1:5433:5432
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U crm -d crm]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # Cache, rate limits and cron locks; nothing here needs to survive a restart.
+  # volatile-lru evicts only keys with a TTL (cache entries), never cache tags.
+  redis:
+    image: redis:7.4-alpine
+    command:
+      - redis-server
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - volatile-lru
+      - --save
+      - ''
+      - --appendonly
+      - 'no'
+    ports:
+      - 127.0.0.1:6379:6379
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
