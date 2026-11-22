@@ -25,6 +25,8 @@ export class PricingSnapshotService {
       services: catalog.services.map((service) => ({
         id: service.id,
         price: MoneyUtils.toMinor(service.price),
+        // TODO(stage 2, loader task): level prices, levels and staff from the database.
+        levelPrices: {},
       })),
       bundles: catalog.bundles.map((bundle) => ({
         id: bundle.id,
@@ -35,6 +37,8 @@ export class PricingSnapshotService {
             : MoneyUtils.toMinor(bundle.fixedPrice),
         serviceIds: bundle.items.map((item) => item.serviceId),
       })),
+      levels: [],
+      staff: [],
     };
   }
 }

@@ -11,6 +11,7 @@ import { ServicePriceCalculator } from './engine/calculators/service-price.calcu
 import { BundlePricingMode } from './engine/enums/bundle-pricing-mode.enum.js';
 import { LineQuote } from './engine/interfaces/line-quote.interface.js';
 import { PricingSnapshot } from './engine/interfaces/pricing-snapshot.interface.js';
+import { PriceBook } from './engine/price-book.js';
 import { ServiceLinePrice } from './interfaces/service-line-price.interface.js';
 import { ServicePriceQuote } from './interfaces/service-price-quote.interface.js';
 import { ServicePriceRequest } from './interfaces/service-price-request.interface.js';
@@ -44,6 +45,17 @@ export class PricingFacade {
       })),
     });
     return { lines: quote.lines.map((line) => this.toLinePrice(line)) };
+  }
+
+  /**
+   * Prices of the location indexed for many lookups in one request: ranking "any staff"
+   * candidates, slot prices, staff prices in the booking catalog. Money in minor units.
+   */
+  async priceBook(
+    locationId: string,
+    consistency: ReadConsistency,
+  ): Promise<PriceBook> {
+    return new PriceBook(await this.snapshots.load(locationId, consistency));
   }
 
   private assertPriceable(

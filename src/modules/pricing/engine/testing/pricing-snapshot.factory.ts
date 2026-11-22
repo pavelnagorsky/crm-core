@@ -16,11 +16,17 @@ export function pricingSnapshot(
 ): PricingSnapshot {
   const services = options.services ?? DEFAULT_SERVICE_PRICES;
   return {
-    services: Object.entries(services).map(([id, price]) => ({ id, price })),
+    services: Object.entries(services).map(([id, price]) => ({
+      id,
+      price,
+      levelPrices: {},
+    })),
     bundles: options.bundles ?? [
       sumBundle('sum-bundle'),
       fixedBundle('fixed-bundle', 12000),
     ],
+    levels: [],
+    staff: [],
   };
 }
 
