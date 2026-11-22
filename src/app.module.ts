@@ -40,6 +40,7 @@ import { ServicesModule } from './modules/services/services.module.js';
 import { StaffModule } from './modules/staff/staff.module.js';
 import { SuppliersModule } from './modules/suppliers/suppliers.module.js';
 import { AppThrottlerGuard } from './shared/guards/app-throttler.guard.js';
+import { RedisThrottlerStorage } from './shared/redis/redis-throttler.storage.js';
 import { RedisModule } from './shared/redis/redis.module.js';
 
 @Module({
@@ -51,7 +52,13 @@ import { RedisModule } from './shared/redis/redis.module.js';
       cache: true,
     }),
     ScheduleModule.forRoot(),
-    ThrottlerModule.forRoot(throttlerConfig),
+    ThrottlerModule.forRootAsync({
+      inject: [RedisThrottlerStorage],
+      useFactory: (storage: RedisThrottlerStorage) => ({
+        ...throttlerConfig,
+        storage,
+      }),
+    }),
     LoggerModule.forRootAsync({
       inject: [ConfigService],
       useFactory: loggerConfig,

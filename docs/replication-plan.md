@@ -185,7 +185,11 @@ Lua-скрипты проверить интеграционным тестом 
 Готовый `@nest-lab/throttler-storage-redis` не берём: нужен fail-open и нет лишней зависимости.
 
 - Lua: если есть ключ блокировки → вернуть заблокировано; иначе `INCR` + `PEXPIRE` на первом
-  хите; если `hits > limit` и `blockDuration > 0` → поставить ключ блокировки.
+  хите; если `hits > limit` и `blockDuration > 0` → поставить ключ блокировки (и сбросить
+  счётчик — как встроенное хранилище обнуляет хиты после блокировки); при `blockDuration = 0`
+  хит сверх лимита отклоняется и не считается (`DECR`), как во встроенном.
+- `RedisThrottlerStorage` — провайдер глобального `RedisModule` (и в его `exports`), чтобы
+  `forRootAsync` мог его внедрить.
 - Единицы `timeToExpire`/`timeToBlockExpire` взять **точно** как во встроенном
   `ThrottlerStorageService` (`node_modules/@nestjs/throttler/dist/throttler.service.js`) — от
   них зависят заголовки `Retry-After`.
