@@ -153,10 +153,18 @@ services:
 
   grafana:
     image: grafana/grafana:13.2.6
+    # .env is the single source of the admin password: Grafana itself reads GF_SECURITY_ADMIN_PASSWORD only
+    # when it creates its database, so the password is reset to it on every start. Without it only grafana fails.
+    entrypoint:
+      - sh
+      - -c
+      - |
+        if [ -z "$$GF_SECURITY_ADMIN_PASSWORD" ]; then echo 'GRAFANA_ADMIN_PASSWORD is not set in .env' >&2; exit 1; fi
+        printf '%s' "$$GF_SECURITY_ADMIN_PASSWORD" | grafana cli --homepath "$$GF_PATHS_HOME" --config "$$GF_PATHS_CONFIG" admin reset-admin-password --password-from-stdin cfg:default.paths.data="$$GF_PATHS_DATA" >/dev/null 2>&1 || true
+        exec /run.sh
     environment:
       GF_SECURITY_ADMIN_USER: admin
-      # Local default only; set a real password in .env on the server.
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-}
       GF_AUTH_ANONYMOUS_ENABLED: 'false'
       GF_USERS_ALLOW_SIGN_UP: 'false'
       GF_ANALYTICS_REPORTING_ENABLED: 'false'

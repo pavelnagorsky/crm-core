@@ -24,7 +24,7 @@ cp .env.example .env
 docker compose --profile local up -d --build
 ```
 
-API доступен на `http://127.0.0.1:3000` (через nginx `lb`), Grafana с логами — `http://127.0.0.1:3200` (`admin` / `GRAFANA_ADMIN_PASSWORD`, по умолчанию `admin`), Postgres — `127.0.0.1:5433`. Миграции применяет сервис `migrate`. Остановка: `docker compose --profile local down`. Подробности — [деплой](docs/deployment.md).
+API доступен на `http://127.0.0.1:3000` (через nginx `lb`), Grafana с логами — `http://127.0.0.1:3200` (`admin` / `GRAFANA_ADMIN_PASSWORD` из `.env`), Postgres — `127.0.0.1:5433`. Миграции применяет сервис `migrate`. Остановка: `docker compose --profile local down`. Подробности — [деплой](docs/deployment.md).
 
 ### Разработка без контейнеров приложения
 

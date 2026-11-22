@@ -387,8 +387,10 @@ Lua-скрипты проверить интеграционным тестом 
     `grafana/grafana:13.2.6`. Сверх схемы: том `alloy-data` (позиции чтения, без дублей после
     рестарта Alloy); `stage.multiline` склеивает stack trace с записью приложения; строки без
     уровня (lb, postgres, redis) получают `level=UNKNOWN`, чтобы фильтр по уровню их не терял;
-    `GRAFANA_ADMIN_PASSWORD` по умолчанию `admin` (обязательная переменная ломала бы любой
-    `docker compose` без неё, в том числе `logs`).
+    `GRAFANA_ADMIN_PASSWORD` обязателен только для контейнера `grafana` (проверка в его entrypoint;
+    `${VAR:?}` в compose ломал бы любой `docker compose` без неё). Grafana сама читает пароль
+    только при создании своей базы, поэтому entrypoint на каждом старте сбрасывает пароль
+    `admin` на значение из `.env` (`grafana cli admin reset-admin-password`).
   - Время в Grafana показывается в часовом поясе браузера — проблема «в файлах UTC»
     из `docs/logging.md` уходит.
 - Резервный способ без Grafana: `docker compose logs -f --timestamps api-1 api-2 worker | grep <requestId>` —
