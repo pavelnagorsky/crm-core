@@ -15,6 +15,21 @@ npm run db:generate
 npm run start:dev
 ```
 
+### Весь стек в Docker Compose
+
+Два api, worker, балансировщик, Redis, Postgres и логи (Loki + Grafana) одной командой:
+
+```sh
+cp .env.example .env
+docker compose --profile local up -d --build
+```
+
+API доступен на `http://127.0.0.1:3000` (через nginx `lb`), Grafana с логами — `http://127.0.0.1:3200` (`admin` / `GRAFANA_ADMIN_PASSWORD`, по умолчанию `admin`), Postgres — `127.0.0.1:5433`. Миграции применяет сервис `migrate`. Остановка: `docker compose --profile local down`. Подробности — [деплой](docs/deployment.md).
+
+### Разработка без контейнеров приложения
+
+`npm run start:dev` работает с `APP_ROLE=all` (HTTP и кроны в одном процессе). С Redis: `docker compose up -d redis` и `REDIS_URL=redis://localhost:6379` в `.env`. Без Redis: убрать `REDIS_URL` — кэш, rate limit и блокировки кронов работают в памяти процесса (достаточно для одного процесса).
+
 Миграции применяются к `DATABASE_URL` из конфигурации окружения. Для полноценного развёртывания нужны SQL-миграции: `db:push` не создаёт используемые приложением view и collation. Подробности — в [документе каталога](docs/architecture/services-catalog.md#пустая-база-и-восстановление-view).
 
 Swagger UI: `/api`, OpenAPI JSON: `/api-json`. Бизнес-маршруты не имеют общего префикса `/api`.
