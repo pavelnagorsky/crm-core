@@ -106,6 +106,22 @@ export class RedisService implements OnModuleInit, OnApplicationShutdown {
     }
   }
 
+  /** `SET key value NX EX ttl`: true when the key was set, false when it already existed. Rejects when Redis is unavailable. */
+  async setIfAbsent(
+    key: string,
+    value: string,
+    ttlSeconds: number,
+  ): Promise<boolean> {
+    const result = await this.requireClient().set(
+      key,
+      value,
+      'EX',
+      ttlSeconds,
+      'NX',
+    );
+    return result === 'OK';
+  }
+
   async onApplicationShutdown(): Promise<void> {
     const client = this.client;
     if (!client) return;

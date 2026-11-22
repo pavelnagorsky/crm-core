@@ -1,3 +1,4 @@
+import { appRole } from './app-role.config.js';
 import { redisUrl } from './redis.config.js';
 
 export default () => {
@@ -57,6 +58,7 @@ export default () => {
     },
     app: {
       locale: process.env['APP_LOCALE'] ?? 'ru',
+      role: appRole(),
     },
   };
 };

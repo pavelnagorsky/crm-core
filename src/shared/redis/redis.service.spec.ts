@@ -10,6 +10,7 @@ type FakeClient = EventEmitter & {
   url: string;
   evalsha: ReturnType<typeof vi.fn>;
   eval: ReturnType<typeof vi.fn>;
+  set: ReturnType<typeof vi.fn>;
   quit: ReturnType<typeof vi.fn>;
   disconnect: ReturnType<typeof vi.fn>;
 };
@@ -20,6 +21,7 @@ function fakeClient(url: string): FakeClient {
     status: 'connecting',
     evalsha: vi.fn(),
     eval: vi.fn(),
+    set: vi.fn(),
     quit: vi.fn(async () => 'OK'),
     disconnect: vi.fn(),
   });
@@ -205,6 +207,26 @@ describe('RedisService', () => {
         'Command timed out',
       );
       expect(client!.eval).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('setIfAbsent', () => {
+    it('sets the key only when it is absent', async () => {
+      const { service, client } = createService('redis://localhost:6379');
+      client!.set.mockResolvedValueOnce('OK').mockResolvedValueOnce(null);
+
+      await expect(service.setIfAbsent('crm:a', 'x', 60)).resolves.toBe(true);
+      await expect(service.setIfAbsent('crm:a', 'y', 60)).resolves.toBe(false);
+
+      expect(client!.set).toHaveBeenCalledWith('crm:a', 'x', 'EX', 60, 'NX');
+    });
+
+    it('rejects without Redis', async () => {
+      const { service } = createService(undefined);
+
+      await expect(service.setIfAbsent('crm:a', 'x', 60)).rejects.toThrow(
+        'Redis is not configured',
+      );
     });
   });
 

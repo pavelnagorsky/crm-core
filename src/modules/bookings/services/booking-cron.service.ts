@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { CronExpression } from '@nestjs/schedule';
+import { ExclusiveCron } from '../../../shared/cron/decorators/exclusive-cron.decorator.js';
 import { CLICK_ID_RETENTION_DAYS } from '../../../shared/traffic/constants/traffic-limits.constants.js';
 import { BookingStatus, ClientNoticeType, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
@@ -38,7 +39,7 @@ export class BookingCronService {
     private readonly events: BookingEventsService,
   ) {}
 
-  @Cron('0 */15 * * * *')
+  @ExclusiveCron('0 */15 * * * *')
   async sendReminders(): Promise<void> {
     const now = new Date();
 
@@ -96,7 +97,7 @@ export class BookingCronService {
   }
 
   /** Asks clients of recently completed visits for a review, once per booking. */
-  @Cron(CronExpression.EVERY_HOUR)
+  @ExclusiveCron(CronExpression.EVERY_HOUR)
   async sendReviewRequests(): Promise<void> {
     const now = new Date();
     const { from, to } = reviewRequestWindow(now);
@@ -162,7 +163,7 @@ export class BookingCronService {
   }
 
   /** Sends the emails queued by staff creating or moving a booking once the undo window passes. */
-  @Cron(CronExpression.EVERY_MINUTE)
+  @ExclusiveCron(CronExpression.EVERY_MINUTE)
   async sendClientNotices(): Promise<void> {
     const now = new Date();
     const bookings = await this.db.booking.findMany({
@@ -236,7 +237,7 @@ export class BookingCronService {
    * Daily: erases ad click ids older than the retention period. They identify a visitor at the
    * ad platform; the click id type stays as evidence of the source.
    */
-  @Cron(CronExpression.EVERY_DAY_AT_4AM)
+  @ExclusiveCron(CronExpression.EVERY_DAY_AT_4AM)
   async purgeClickIds(now = new Date()): Promise<number> {
     const { count } = await this.db.bookingTrafficTouch.updateMany({
       where: {
@@ -251,7 +252,7 @@ export class BookingCronService {
     return count;
   }
 
-  @Cron(CronExpression.EVERY_10_MINUTES)
+  @ExclusiveCron(CronExpression.EVERY_10_MINUTES)
   async completeElapsed(): Promise<void> {
     const count = await this.bookings.completeElapsed();
     if (count > 0)
