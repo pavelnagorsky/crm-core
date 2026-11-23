@@ -16,6 +16,12 @@ x-app: &app
     GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/google-credentials.json
     # Empty: log to stdout only (collected by docker), no files.
     LOG_DIRECTORY: ''
+    # /metrics on its own port, reachable by prometheus over the compose network; never published or proxied by lb.
+    METRICS_HOST: 0.0.0.0
+    METRICS_PORT: 9464
+  labels:
+    prometheus.scrape: 'true'
+    prometheus.port: '9464'
   depends_on:
     migrate:
       condition: service_completed_successfully
@@ -180,7 +186,53 @@ services:
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
     depends_on:
       - loki
+      - prometheus
     mem_limit: 256m
+    logging: *log-rotation
+    restart: unless-stopped
+
+  # Metrics (docs/metrics.md): prometheus scrapes api/worker (found via the docker socket) and the exporters,
+  # keeps 30 days and at most 5 GB; grafana shows them. 127.0.0.1:9090 is for debugging queries only.
+  prometheus:
+    image: prom/prometheus:v3.16.0
+    # The docker socket is readable by root only; the image runs as nobody by default.
+    user: root
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+      - --storage.tsdb.retention.size=5GB
+    ports:
+      - 127.0.0.1:9090:9090
+    volumes:
+      # The directory, not the file: see lb.
+      - ./docker/prometheus:/etc/prometheus:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - prometheus-data:/prometheus
+    mem_limit: 512m
+    logging: *log-rotation
+    restart: unless-stopped
+
+  # Connections, locks, database size. Server: POSTGRES_EXPORTER_DSN in .env (a role with pg_monitor, docs/metrics.md).
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.21.1
+    environment:
+      DATA_SOURCE_NAME: ${POSTGRES_EXPORTER_DSN:-postgresql://crm:crm@postgres:5432/crm?sslmode=disable}
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+    mem_limit: 64m
+    logging: *log-rotation
+    restart: unless-stopped
+
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.98.0
+    environment:
+      REDIS_ADDR: redis://redis:6379
+    depends_on:
+      - redis
+    mem_limit: 64m
     logging: *log-rotation
     restart: unless-stopped
 
@@ -210,3 +262,4 @@ volumes:
   loki-data:
   alloy-data:
   grafana-data:
+  prometheus-data:
