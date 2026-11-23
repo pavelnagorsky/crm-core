@@ -86,14 +86,15 @@ services:
         required: false
     restart: 'no'
 
-  api-1:
+  # HTTP API replicas. Count per server: API_REPLICAS in .env. lb reaches all of them via the `api` DNS name.
+  # Deploys replace them without downtime with scripts/deploy/rollout.sh (compose itself restarts all at once).
+  api:
     <<: *app
     build:
       context: .
       target: runtime
-
-  api-2:
-    <<: *app
+    deploy:
+      replicas: ${API_REPLICAS:-2}
 
   worker:
     <<: *app
@@ -108,8 +109,7 @@ services:
     volumes:
       - ./docker/nginx/lb.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
-      - api-1
-      - api-2
+      - api
     mem_limit: 64m
     logging:
       driver: json-file

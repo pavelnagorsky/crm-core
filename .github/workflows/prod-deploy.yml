@@ -67,10 +67,11 @@ jobs:
 
             docker compose up -d --no-deps redis loki alloy grafana lb
 
-            # One service at a time: while one api restarts, lb serves the other.
-            for service in api-1 api-2 worker; do
-              if ! docker compose up -d --no-deps --wait --wait-timeout 180 "$service"; then
-                docker compose logs --tail 100 "$service"
-                exit 1
-              fi
-            done
+            # API: new replicas start next to the old ones and take over once healthy (no downtime).
+            bash scripts/deploy/rollout.sh api 180
+
+            # Crons run in a single worker: a short gap on restart is fine.
+            if ! docker compose up -d --no-deps --wait --wait-timeout 180 worker; then
+              docker compose logs --tail 100 worker
+              exit 1
+            fi
