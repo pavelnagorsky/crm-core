@@ -25,7 +25,7 @@ import {
  * (nails). Senior level: cut 80.00. 2026-11-23 is a Monday, 2026-12-31 a Thursday.
  */
 const { SERVICE, SERVICE_CATEGORY, BUNDLE } = PriceRuleTargetType;
-const { PERCENT, AMOUNT } = PriceValueType;
+const { AMOUNT } = PriceValueType;
 const MONDAY = '2026-11-23';
 const NEW_YEAR_EVE = '2026-12-31';
 const noon = visitAt(MONDAY, '12:00');
@@ -35,7 +35,10 @@ function book(rules: PricingRuleEntry[], roundingStep = 100): PriceBook {
     pricingSnapshot({
       services: { cut: 6000, color: 9000, wash: 1500, polish: 4990 },
       categories: { cut: 'hair', color: 'hair', wash: 'care', polish: 'nails' },
-      levels: [priceLevel('base', 'Базовый', true), priceLevel('senior', 'Старший')],
+      levels: [
+        priceLevel('base', 'Базовый', true),
+        priceLevel('senior', 'Старший'),
+      ],
       levelPrices: { cut: { senior: 8000 } },
       staff: [pricingStaff('anna'), pricingStaff('boris', 'senior')],
       bundles: [
@@ -53,11 +56,21 @@ function line(
   rules: PricingRuleEntry[],
   serviceId: string,
   visit: VisitTime | null = noon,
-  options: { staffId?: string | null; roundingStep?: number; customPrice?: number | null } = {},
+  options: {
+    staffId?: string | null;
+    roundingStep?: number;
+    customPrice?: number | null;
+  } = {},
 ): LineQuote {
   return book(rules, options.roundingStep).quote({
     bundleId: null,
-    lines: [quoteLine(serviceId, options.customPrice ?? null, options.staffId ?? 'anna')],
+    lines: [
+      quoteLine(
+        serviceId,
+        options.customPrice ?? null,
+        options.staffId ?? 'anna',
+      ),
+    ],
     visit,
   }).lines[0];
 }
@@ -144,7 +157,14 @@ describe('PriceBook: surcharges (docs/pricing-stage3-api.md)', () => {
         5700,
         [surcharge(plus15, 749), rounding(-39)],
       ],
-      ['step 0.01: no rounding', [plus15], 'polish', 1, 5739, [surcharge(plus15, 749)]],
+      [
+        'step 0.01: no rounding',
+        [plus15],
+        'polish',
+        1,
+        5739,
+        [surcharge(plus15, 749)],
+      ],
       [
         'step 0.50',
         [plus15],
@@ -186,12 +206,17 @@ describe('PriceBook: surcharges (docs/pricing-stage3-api.md)', () => {
         6000,
         [],
       ],
-    ] as const)('%s', (_name, rules, serviceId, step, listPrice, adjustments) => {
-      const quoted = line([...rules], serviceId, noon, { roundingStep: step });
-      expect(quoted.listPrice).toBe(listPrice);
-      expect(quoted.total).toBe(listPrice);
-      expect(quoted.adjustments).toEqual(adjustments);
-    });
+    ] as const)(
+      '%s',
+      (_name, rules, serviceId, step, listPrice, adjustments) => {
+        const quoted = line([...rules], serviceId, noon, {
+          roundingStep: step,
+        });
+        expect(quoted.listPrice).toBe(listPrice);
+        expect(quoted.total).toBe(listPrice);
+        expect(quoted.adjustments).toEqual(adjustments);
+      },
+    );
 
     it('surcharge counts from the level price and follows the level layer', () => {
       const quoted = line([plus10], 'cut', noon, { staffId: 'boris' });
@@ -236,7 +261,11 @@ describe('PriceBook: surcharges (docs/pricing-stage3-api.md)', () => {
     ] as const)('targets: %s', (_name, targets, appliesToAll, listPrice) => {
       const rule = surchargeRule('r', {
         appliesToAll,
-        targets: targets.map(([type, id, excluded]) => ({ type, id, excluded })),
+        targets: targets.map(([type, id, excluded]) => ({
+          type,
+          id,
+          excluded,
+        })),
       });
       expect(line([rule], 'cut').listPrice).toBe(listPrice);
     });
@@ -244,12 +273,34 @@ describe('PriceBook: surcharges (docs/pricing-stage3-api.md)', () => {
 
   describe('holiday exclusive', () => {
     it.each([
-      ['on the holiday only exclusive ones apply', [plus10, holidayExtra, holiday], NEW_YEAR_EVE, 7800],
-      ['another day: the others add up', [plus10, holidayExtra, holiday], MONDAY, 6600],
-      ['not exclusive holiday adds to the others', [plus10, holidayExtra], NEW_YEAR_EVE, 7100],
+      [
+        'on the holiday only exclusive ones apply',
+        [plus10, holidayExtra, holiday],
+        NEW_YEAR_EVE,
+        7800,
+      ],
+      [
+        'another day: the others add up',
+        [plus10, holidayExtra, holiday],
+        MONDAY,
+        6600,
+      ],
+      [
+        'not exclusive holiday adds to the others',
+        [plus10, holidayExtra],
+        NEW_YEAR_EVE,
+        7100,
+      ],
       [
         'exclusive holiday for another service does not cancel',
-        [plus10, { ...holiday, appliesToAll: false, targets: [{ type: SERVICE, id: 'color', excluded: false }] }],
+        [
+          plus10,
+          {
+            ...holiday,
+            appliesToAll: false,
+            targets: [{ type: SERVICE, id: 'color', excluded: false }],
+          },
+        ],
         NEW_YEAR_EVE,
         6600,
       ],
@@ -260,7 +311,9 @@ describe('PriceBook: surcharges (docs/pricing-stage3-api.md)', () => {
         6600,
       ],
     ])('%s', (_name, rules, date, listPrice) => {
-      expect(line(rules, 'cut', visitAt(date, '12:00')).listPrice).toBe(listPrice);
+      expect(line(rules, 'cut', visitAt(date, '12:00')).listPrice).toBe(
+        listPrice,
+      );
     });
   });
 
@@ -268,7 +321,10 @@ describe('PriceBook: surcharges (docs/pricing-stage3-api.md)', () => {
     it('SUM bundle: every line its own staff price, surcharge and rounding', () => {
       const quote = book([plus15]).quote({
         bundleId: 'sum-bundle',
-        lines: [quoteLine('cut', null, 'boris'), quoteLine('color', null, 'anna')],
+        lines: [
+          quoteLine('cut', null, 'boris'),
+          quoteLine('color', null, 'anna'),
+        ],
         visit: noon,
       });
       expect(quote.lines.map((item) => item.listPrice)).toEqual([9200, 10400]);
@@ -364,13 +420,16 @@ describe('PriceBook: surcharges (docs/pricing-stage3-api.md)', () => {
           all
             .filter((item) => item.kind === kind)
             .reduce((sum, item) => sum + item.amount, 0);
-        expect(quote.lines.reduce((sum, item) => sum + item.basePrice, 0)).toBe(4990);
+        expect(quote.lines.reduce((sum, item) => sum + item.basePrice, 0)).toBe(
+          4990,
+        );
         expect(sumOf(PriceAdjustmentKind.SURCHARGE)).toBe(749);
         expect(sumOf(PriceAdjustmentKind.ROUNDING)).toBe(expectedRounding);
         expect(quote.listTotal).toBe(expectedList);
         expect(quote.total).toBe(expectedList);
         expectLayersAddUp(quote.lines);
-        for (const item of quote.lines) expect(item.listPrice).toBeGreaterThanOrEqual(0);
+        for (const item of quote.lines)
+          expect(item.listPrice).toBeGreaterThanOrEqual(0);
       },
     );
   });
@@ -403,13 +462,41 @@ describe('PriceBook: surcharges (docs/pricing-stage3-api.md)', () => {
       });
       expect(quote.total).toBe(6600);
       expect(notApplied).toEqual([
-        { ruleId: 'disabled', name: 'disabled', reason: PriceRuleSkipReason.DISABLED },
-        { ruleId: 'excluded', name: 'excluded', reason: PriceRuleSkipReason.EXCLUDED },
-        { ruleId: 'holiday-date', name: 'holiday-date', reason: PriceRuleSkipReason.NOT_HOLIDAY_DATE },
-        { ruleId: 'interval', name: 'interval', reason: PriceRuleSkipReason.OUT_OF_INTERVAL },
-        { ruleId: 'not-targeted', name: 'not-targeted', reason: PriceRuleSkipReason.NOT_TARGETED },
-        { ruleId: 'period', name: 'period', reason: PriceRuleSkipReason.OUT_OF_PERIOD },
-        { ruleId: 'weekday', name: 'weekday', reason: PriceRuleSkipReason.WRONG_WEEKDAY },
+        {
+          ruleId: 'disabled',
+          name: 'disabled',
+          reason: PriceRuleSkipReason.DISABLED,
+        },
+        {
+          ruleId: 'excluded',
+          name: 'excluded',
+          reason: PriceRuleSkipReason.EXCLUDED,
+        },
+        {
+          ruleId: 'holiday-date',
+          name: 'holiday-date',
+          reason: PriceRuleSkipReason.NOT_HOLIDAY_DATE,
+        },
+        {
+          ruleId: 'interval',
+          name: 'interval',
+          reason: PriceRuleSkipReason.OUT_OF_INTERVAL,
+        },
+        {
+          ruleId: 'not-targeted',
+          name: 'not-targeted',
+          reason: PriceRuleSkipReason.NOT_TARGETED,
+        },
+        {
+          ruleId: 'period',
+          name: 'period',
+          reason: PriceRuleSkipReason.OUT_OF_PERIOD,
+        },
+        {
+          ruleId: 'weekday',
+          name: 'weekday',
+          reason: PriceRuleSkipReason.WRONG_WEEKDAY,
+        },
       ]);
     });
 
@@ -421,7 +508,11 @@ describe('PriceBook: surcharges (docs/pricing-stage3-api.md)', () => {
       });
       expect(quote.total).toBe(7800);
       expect(notApplied).toEqual([
-        { ruleId: 'plus10', name: 'Выходные', reason: PriceRuleSkipReason.OVERRIDDEN_BY_HOLIDAY },
+        {
+          ruleId: 'plus10',
+          name: 'Выходные',
+          reason: PriceRuleSkipReason.OVERRIDDEN_BY_HOLIDAY,
+        },
       ]);
     });
 
@@ -442,8 +533,11 @@ describe('PriceBook: surcharges (docs/pricing-stage3-api.md)', () => {
 
     it('no visit time: nothing to explain', () => {
       expect(
-        book(rules).explain({ bundleId: null, lines: [quoteLine('cut')], visit: null })
-          .notApplied,
+        book(rules).explain({
+          bundleId: null,
+          lines: [quoteLine('cut')],
+          visit: null,
+        }).notApplied,
       ).toEqual([]);
     });
   });
@@ -464,15 +558,46 @@ describe('PriceBook: surcharges (docs/pricing-stage3-api.md)', () => {
 
     it.each([
       ['no rules: base price', [], cutWith(null), week, 6000, 6000],
-      ['weekday evenings, base price', [evening], cutWith(null), week, 6000, 7200],
-      ['weekday evenings, level staff', [evening], cutWith('boris'), week, 8000, 9600],
-      ['only weekend dates: no evening surcharge', [evening], cutWith(null), week.slice(5), 6000, 6000],
-      ['whole-day rule: min is raised too', [plus10], cutWith(null), week, 6600, 6600],
+      [
+        'weekday evenings, base price',
+        [evening],
+        cutWith(null),
+        week,
+        6000,
+        7200,
+      ],
+      [
+        'weekday evenings, level staff',
+        [evening],
+        cutWith('boris'),
+        week,
+        8000,
+        9600,
+      ],
+      [
+        'only weekend dates: no evening surcharge',
+        [evening],
+        cutWith(null),
+        week.slice(5),
+        6000,
+        6000,
+      ],
+      [
+        'whole-day rule: min is raised too',
+        [plus10],
+        cutWith(null),
+        week,
+        6600,
+        6600,
+      ],
       ['evening and night', [evening, night], cutWith(null), week, 6000, 7200],
       ['no dates: base price', [evening], cutWith(null), [], 6000, 6000],
       [
         'exclusive holiday lowers the evening price on its date',
-        [surchargeRule('all-day-30', { value: 3000 }), { ...holiday, value: 1000 }],
+        [
+          surchargeRule('all-day-30', { value: 3000 }),
+          { ...holiday, value: 1000 },
+        ],
         cutWith(null),
         [NEW_YEAR_EVE],
         6600,
@@ -489,7 +614,10 @@ describe('PriceBook: surcharges (docs/pricing-stage3-api.md)', () => {
       const range = book([evening]).priceRange(
         {
           bundleId: 'fixed-bundle',
-          lines: [quoteLine('cut', null, 'boris'), quoteLine('color', null, null)],
+          lines: [
+            quoteLine('cut', null, 'boris'),
+            quoteLine('color', null, null),
+          ],
         },
         week,
       );
@@ -500,7 +628,10 @@ describe('PriceBook: surcharges (docs/pricing-stage3-api.md)', () => {
       const range = book([evening]).priceRange(
         {
           bundleId: 'sum-bundle',
-          lines: [quoteLine('cut', null, 'boris'), quoteLine('color', null, null)],
+          lines: [
+            quoteLine('cut', null, 'boris'),
+            quoteLine('color', null, null),
+          ],
         },
         week,
       );
@@ -520,7 +651,10 @@ describe('PriceBook: surcharges (docs/pricing-stage3-api.md)', () => {
       );
       const priced = book(rules);
       const started = performance.now();
-      const range = priced.priceRange({ bundleId: null, lines: cutWith('boris') }, dates);
+      const range = priced.priceRange(
+        { bundleId: null, lines: cutWith('boris') },
+        dates,
+      );
       const elapsed = performance.now() - started;
       expect(range.min).toBe(8000);
       expect(range.max).toBeGreaterThan(8000);
@@ -533,7 +667,11 @@ describe('PriceBook: surcharges (docs/pricing-stage3-api.md)', () => {
     const shape = (rules: PricingRuleEntry[], date: string) =>
       book(rules)
         .daySegments(cut, date)
-        .map(({ startMinute, endMinute, quote }) => [startMinute, endMinute, quote.total]);
+        .map(({ startMinute, endMinute, quote }) => [
+          startMinute,
+          endMinute,
+          quote.total,
+        ]);
 
     it.each([
       ['no rules: one segment', [], MONDAY, [[0, 1440, 6000]]],
@@ -548,7 +686,12 @@ describe('PriceBook: surcharges (docs/pricing-stage3-api.md)', () => {
           [1320, 1440, 6600],
         ],
       ],
-      ['weekend: the evening rule is off', [evening], '2026-11-29', [[0, 1440, 6000]]],
+      [
+        'weekend: the evening rule is off',
+        [evening],
+        '2026-11-29',
+        [[0, 1440, 6000]],
+      ],
       [
         'adjacent intervals of one rule merge',
         [
@@ -589,7 +732,10 @@ describe('PriceBook: surcharges (docs/pricing-stage3-api.md)', () => {
       const segments = book([evening]).daySegments(cut, MONDAY);
       for (const { startMinute, quote } of segments)
         expect(quote).toEqual(
-          book([evening]).quote({ ...cut, visit: { date: MONDAY, minute: startMinute } }),
+          book([evening]).quote({
+            ...cut,
+            visit: { date: MONDAY, minute: startMinute },
+          }),
         );
     });
   });

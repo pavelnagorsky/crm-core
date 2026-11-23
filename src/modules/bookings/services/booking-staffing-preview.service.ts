@@ -34,7 +34,7 @@ export class BookingStaffingPreviewService {
     locationId: string,
     request: StaffingPreviewRequest,
   ): Promise<StaffingPreview> {
-    const { serviceIds, bundleId, date, time, book } = request;
+    const { serviceIds, bundleId, date, time } = request;
     const [location, visit] = await Promise.all([
       this.locations.getBookingSettings(locationId),
       this.visitShape(locationId, serviceIds, bundleId),
