@@ -49,7 +49,10 @@ import { UpdateStaffDto } from '../dto/update-staff.dto.js';
 import { StaffSearchOrderBy } from '../enums/staff-search-order-by.enum.js';
 import { normalizeStaffName } from '../rules/staff-name.rules.js';
 import { BookingStaff } from '../interfaces/booking-staff.interface.js';
+import { StaffPricingProfile } from '../interfaces/staff-pricing-profile.interface.js';
 import { StaffNameMatch } from '../interfaces/staff-name-match.interface.js';
+import { StaffServicePriceRow } from '../interfaces/staff-service-price-row.interface.js';
+import { StaffServicePrices } from '../interfaces/staff-service-prices.interface.js';
 import { StaffScheduleSnapshot } from '../interfaces/staff-schedule-snapshot.interface.js';
 import { StaffWithAvatar } from '../interfaces/staff-with-avatar.interface.js';
 import { StaffWithServiceCount } from '../interfaces/staff-with-service-count.interface.js';
@@ -429,6 +432,42 @@ export class StaffService {
     );
   }
 
+  /**
+   * Active staff with their price level and personal prices, for the price snapshot. Always
+   * read from the database: the staff directory cache does not hold prices, and the
+   * snapshot is cached as a whole.
+   */
+  async listPricingProfiles(
+    locationId: string,
+  ): Promise<StaffPricingProfile[]> {
+    const rows = await this.db.staff.findMany({
+      where: {
+        location: ACTIVE_LOCATION_WHERE,
+        locationId,
+        status: StaffStatus.ACTIVE,
+      },
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+      select: {
+        id: true,
+        name: true,
+        priceLevelId: true,
+        staffServices: {
+          where: { price: { not: null } },
+          orderBy: { serviceId: 'asc' },
+          select: { serviceId: true, price: true },
+        },
+      },
+    });
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      priceLevelId: row.priceLevelId,
+      servicePrices: row.staffServices.flatMap(({ serviceId, price }) =>
+        price === null ? [] : [{ serviceId, price }],
+      ),
+    }));
+  }
+
   private loadBookingDirectory(locationId: string): Promise<BookingStaff[]> {
     return this.db.staff.findMany({
       where: {
@@ -449,6 +488,11 @@ export class StaffService {
     const location = await this.locationService.findById(locationId);
     const staff = await this.db.$transaction(async (tx) => {
       await this.assertSeatAvailable(location.brandId, tx);
+      const priceLevelId = await this.resolvePriceLevelId(
+        locationId,
+        dto.priceLevelId,
+        tx,
+      );
       return tx.staff.create({
         data: {
           locationId,
@@ -463,6 +507,7 @@ export class StaffService {
           employeeNumber: dto.employeeNumber ?? null,
           payoutMethod: dto.payoutMethod ?? null,
           payoutNote: dto.payoutNote ?? null,
+          priceLevelId,
           staffServices: dto.serviceIds?.length
             ? { create: dto.serviceIds.map((serviceId) => ({ serviceId })) }
             : undefined,
@@ -471,6 +516,8 @@ export class StaffService {
       });
     });
     await this.cache.invalidate(CacheDependency.staffDirectory(locationId));
+    if (staff.priceLevelId || dto.serviceIds?.length)
+      await this.cache.invalidate(CacheDependency.pricing(locationId));
     const event: AuditLogEvent = {
       locationId,
       entityType: AuditEntity.STAFF,
@@ -500,28 +547,32 @@ export class StaffService {
         actor,
       );
     }
-    const staff = await this.db.staff.update({
-      where: { id: staffId },
-      data: {
-        name: dto.name,
-        roleTitle: dto.roleTitle,
-        description: this.normalizeDescription(dto.description),
-        phone: dto.phone,
-        email: dto.email,
-        avatarFileId: dto.avatarFileId,
-        employmentType: dto.employmentType,
-        taxId: dto.taxId,
-        employeeNumber: dto.employeeNumber,
-        payoutMethod: dto.payoutMethod,
-        payoutNote: dto.payoutNote,
-        ...(dto.serviceIds !== undefined && {
-          staffServices: {
-            deleteMany: {},
-            create: dto.serviceIds.map((serviceId) => ({ serviceId })),
-          },
-        }),
-      },
-      include: { avatarFile: true },
+    const staff = await this.db.$transaction(async (tx) => {
+      const priceLevelId = await this.resolvePriceLevelId(
+        locationId,
+        dto.priceLevelId,
+        tx,
+      );
+      if (dto.serviceIds !== undefined)
+        await this.syncServices(tx, staffId, dto.serviceIds);
+      return tx.staff.update({
+        where: { id: staffId },
+        data: {
+          name: dto.name,
+          roleTitle: dto.roleTitle,
+          description: this.normalizeDescription(dto.description),
+          phone: dto.phone,
+          email: dto.email,
+          avatarFileId: dto.avatarFileId,
+          employmentType: dto.employmentType,
+          taxId: dto.taxId,
+          employeeNumber: dto.employeeNumber,
+          payoutMethod: dto.payoutMethod,
+          payoutNote: dto.payoutNote,
+          priceLevelId,
+        },
+        include: { avatarFile: true },
+      });
     });
     await this.cache.invalidate(CacheDependency.staffDirectory(locationId));
     const changes = diffFields(old, staff, STAFF_AUDIT_FIELDS).filter(
@@ -535,6 +586,11 @@ export class StaffService {
       if (before !== after)
         changes.push({ field: 'services', from: before, to: after });
     }
+    const servicesChanged = changes.some(
+      (change) => change.field === 'services',
+    );
+    if (servicesChanged || old.priceLevelId !== staff.priceLevelId)
+      await this.cache.invalidate(CacheDependency.pricing(locationId));
     if (changes.length > 0) {
       const event: AuditLogEvent = {
         locationId,
@@ -549,6 +605,174 @@ export class StaffService {
       this.eventEmitter.emit(AUDIT_EVENT, event);
     }
     return staff;
+  }
+
+  /**
+   * Level id to store: undefined keeps the current one, null and the default level store null.
+   * Reads PriceLevel directly: pricing imports staff, so a facade call would create a cycle.
+   */
+  private async resolvePriceLevelId(
+    locationId: string,
+    priceLevelId: string | null | undefined,
+    tx: Prisma.TransactionClient,
+  ): Promise<string | null | undefined> {
+    if (priceLevelId == null) return priceLevelId;
+    const level = await tx.priceLevel.findFirst({
+      where: { id: priceLevelId, locationId },
+      select: { id: true, isDefault: true },
+    });
+    if (!level)
+      throw new AppException(
+        ErrorCode.PRICE_LEVEL_NOT_FOUND,
+        HttpStatus.NOT_FOUND,
+      );
+    return level.isDefault ? null : level.id;
+  }
+
+  /** Applies the new service set as a diff so untouched rows keep their personal price. */
+  private async syncServices(
+    tx: Prisma.TransactionClient,
+    staffId: string,
+    serviceIds: string[],
+  ): Promise<void> {
+    const wanted = [...new Set(serviceIds)];
+    await tx.staffService.deleteMany({
+      where: { staffId, serviceId: { notIn: wanted } },
+    });
+    if (wanted.length)
+      await tx.staffService.createMany({
+        data: wanted.map((serviceId) => ({ staffId, serviceId })),
+        skipDuplicates: true,
+      });
+  }
+
+  /** Staff who perform the service, by name, with their personal price for it. */
+  async listServicePriceRows(
+    locationId: string,
+    serviceId: string,
+  ): Promise<StaffServicePriceRow[]> {
+    const rows = await this.db.staffService.findMany({
+      where: {
+        serviceId,
+        staff: { location: ACTIVE_LOCATION_WHERE, locationId },
+      },
+      select: { price: true, staff: { include: { avatarFile: true } } },
+      orderBy: [{ staff: { name: 'asc' } }, { staffId: 'asc' }],
+    });
+    return rows.map(({ price, staff }) => ({ staff, personalPrice: price }));
+  }
+
+  /** Personal prices of one staff member for every service they perform. */
+  async readServicePrices(
+    locationId: string,
+    staffId: string,
+  ): Promise<StaffServicePrices> {
+    const staff = await this.db.staff.findFirst({
+      where: { location: ACTIVE_LOCATION_WHERE, id: staffId, locationId },
+      select: {
+        id: true,
+        priceLevelId: true,
+        staffServices: {
+          select: { serviceId: true, price: true },
+          orderBy: { serviceId: 'asc' },
+        },
+      },
+    });
+    if (!staff) throw new NotFoundException('Staff member not found');
+    return {
+      staffId: staff.id,
+      priceLevelId: staff.priceLevelId,
+      items: staff.staffServices.map(({ serviceId, price }) => ({
+        serviceId,
+        personalPrice: price,
+      })),
+    };
+  }
+
+  /**
+   * Sets (or, with null, resets) the personal prices of one staff member by service id.
+   * Every service must be assigned to the staff member. Returns the previous prices.
+   */
+  async setServicePrices(
+    locationId: string,
+    staffId: string,
+    prices: ReadonlyMap<string, string | null>,
+    tx: Prisma.TransactionClient,
+  ): Promise<Map<string, Prisma.Decimal | null>> {
+    const staff = await tx.staff.findFirst({
+      where: { location: ACTIVE_LOCATION_WHERE, id: staffId, locationId },
+      select: { id: true },
+    });
+    if (!staff) throw new NotFoundException('Staff member not found');
+    const rows = await tx.staffService.findMany({
+      where: { staffId, serviceId: { in: [...prices.keys()] } },
+      select: { serviceId: true, price: true },
+    });
+    if (rows.length !== prices.size)
+      throw new AppException(
+        ErrorCode.STAFF_SERVICE_NOT_ASSIGNED,
+        HttpStatus.BAD_REQUEST,
+      );
+    for (const [serviceId, price] of prices)
+      await tx.staffService.update({
+        where: { staffId_serviceId: { staffId, serviceId } },
+        data: { price },
+      });
+    return new Map(rows.map((row) => [row.serviceId, row.price]));
+  }
+
+  /**
+   * Sets (or, with null, resets) the personal prices of one service by staff id. Every staff
+   * member must perform the service. Returns the previous prices.
+   */
+  async setPricesForService(
+    locationId: string,
+    serviceId: string,
+    prices: ReadonlyMap<string, string | null>,
+    tx: Prisma.TransactionClient,
+  ): Promise<Map<string, Prisma.Decimal | null>> {
+    const rows = await tx.staffService.findMany({
+      where: {
+        serviceId,
+        staffId: { in: [...prices.keys()] },
+        staff: { location: ACTIVE_LOCATION_WHERE, locationId },
+      },
+      select: { staffId: true, price: true },
+    });
+    if (rows.length !== prices.size)
+      throw new AppException(
+        ErrorCode.STAFF_SERVICE_NOT_ASSIGNED,
+        HttpStatus.BAD_REQUEST,
+      );
+    for (const [staffId, price] of prices)
+      await tx.staffService.update({
+        where: { staffId_serviceId: { staffId, serviceId } },
+        data: { price },
+      });
+    return new Map(rows.map((row) => [row.staffId, row.price]));
+  }
+
+  /** Staff per price level; the key null is the staff on the default level. */
+  async countByPriceLevel(
+    locationId: string,
+  ): Promise<Map<string | null, number>> {
+    const rows = await this.db.staff.groupBy({
+      by: ['priceLevelId'],
+      where: { location: ACTIVE_LOCATION_WHERE, locationId },
+      _count: { _all: true },
+    });
+    return new Map(rows.map((row) => [row.priceLevelId, row._count._all]));
+  }
+
+  /** Moves the staff of a level to the default level (null), as a level becomes the default one. */
+  async resetPriceLevel(
+    levelId: string,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    await tx.staff.updateMany({
+      where: { priceLevelId: levelId },
+      data: { priceLevelId: null },
+    });
   }
 
   /** Accounts linked to these staff members of the location; staff without an account are skipped. */

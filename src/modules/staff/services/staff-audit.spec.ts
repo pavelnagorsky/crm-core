@@ -12,11 +12,14 @@ describe('Staff assignments and shifts audit', () => {
     staffServices: [{ serviceId: 'cut' }],
   };
   const events = { emit: vi.fn() };
+  const staff = { findFirst: vi.fn(), update: vi.fn() };
   const tx = {
+    staff,
+    staffService: { deleteMany: vi.fn(), createMany: vi.fn() },
     staffShift: { findMany: vi.fn(), deleteMany: vi.fn(), createMany: vi.fn() },
   };
   const db = {
-    staff: { findFirst: vi.fn(), update: vi.fn() },
+    staff,
     $transaction: vi.fn(),
   };
   const service = new StaffService(

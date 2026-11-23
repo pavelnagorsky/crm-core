@@ -15,6 +15,9 @@ import { ClientDeletedPayload } from './client-deleted-payload.interface.js';
 import { ClientUpdatedPayload } from './client-updated-payload.interface.js';
 import { PaymentAuditPayload } from './payment-audit-payload.interface.js';
 import { PayrollPeriodAuditPayload } from './payroll-period-audit-payload.interface.js';
+import { PriceLevelCreatedPayload } from './price-level-created-payload.interface.js';
+import { PriceLevelDeletedPayload } from './price-level-deleted-payload.interface.js';
+import { PriceLevelUpdatedPayload } from './price-level-updated-payload.interface.js';
 import { ProductPackagingAuditPayload } from './product-packaging-audit-payload.interface.js';
 import { ReviewImportCompletedPayload } from './review-import-completed-payload.interface.js';
 import { ServiceBundleCreatedPayload } from './service-bundle-created-payload.interface.js';
@@ -26,11 +29,13 @@ import { ServiceCategoryUpdatedPayload } from './service-category-updated-payloa
 import { ServiceCreatedPayload } from './service-created-payload.interface.js';
 import { ServiceDeletedPayload } from './service-deleted-payload.interface.js';
 import { ServiceUpdatedPayload } from './service-updated-payload.interface.js';
+import { ServicePricesUpdatedPayload } from './service-prices-updated-payload.interface.js';
 import { StaffBlockCreatedPayload } from './staff-block-created-payload.interface.js';
 import { StaffCompensationUpdatedPayload } from './staff-compensation-updated-payload.interface.js';
 import { StaffCreatedPayload } from './staff-created-payload.interface.js';
 import { StaffDeletedPayload } from './staff-deleted-payload.interface.js';
 import { StaffEarningAuditPayload } from './staff-earning-audit-payload.interface.js';
+import { StaffPricesUpdatedPayload } from './staff-prices-updated-payload.interface.js';
 import { StaffShiftsUpdatedPayload } from './staff-shifts-updated-payload.interface.js';
 import { StaffUpdatedPayload } from './staff-updated-payload.interface.js';
 
@@ -63,6 +68,11 @@ export type AuditPayload =
   | ServiceBundleCreatedPayload
   | ServiceBundleUpdatedPayload
   | ServiceBundleDeletedPayload
+  | ServicePricesUpdatedPayload
+  | StaffPricesUpdatedPayload
+  | PriceLevelCreatedPayload
+  | PriceLevelUpdatedPayload
+  | PriceLevelDeletedPayload
   | BrandUpdatedPayload
   | BrandCreatedPayload
   | BrandDeletedPayload

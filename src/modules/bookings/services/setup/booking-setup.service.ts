@@ -4,12 +4,14 @@ import { AppException } from '../../../../shared/exceptions/app.exception.js';
 import { assignStaff } from '../../../../shared/scheduling/assign-staff.js';
 import { normalizeStaffAssignments } from '../../../../shared/scheduling/normalize-staff-assignments.js';
 import { ReadConsistency } from '../../../../shared/cache/enums/read-consistency.enum.js';
+import { MoneyUtils } from '../../../../shared/money/money.utils.js';
 import { TimeUtils } from '../../../../shared/time/time.utils.js';
 import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
 import { BillingFacade } from '../../../billing/billing.facade.js';
 import { ProductsService } from '../../../products/services/products.service.js';
 import { ServiceCatalogFacade } from '../../../services/catalog/service-catalog.facade.js';
 import { BundleMetrics } from '../../../services/utils/bundle-metrics.js';
+import { PricingFacade } from '../../../pricing/pricing.facade.js';
 import { StaffService } from '../../../staff/services/staff.service.js';
 import { BookingResolveRequestDto } from '../../dto/booking-resolve-request.dto.js';
 import { BookingSelectionResolution } from '../../interfaces/booking-selection-resolution.interface.js';
@@ -19,6 +21,11 @@ import { BookingSchedulingService } from '../booking-scheduling.service.js';
 import { BookingExecutionMode } from '../../enums/booking-execution-mode.enum.js';
 import { StaffSelectionMode } from '../../enums/staff-selection-mode.enum.js';
 import { BookingSetup } from '../../interfaces/booking-setup.interface.js';
+import { buildBookingSetupPrices } from '../../rules/booking-setup-prices.rules.js';
+import {
+  staffLinePrice,
+  staffVisitPrice,
+} from '../../rules/booking-staff-price.rules.js';
 
 @Injectable()
 export class BookingSetupService {
@@ -30,19 +37,30 @@ export class BookingSetupService {
     private readonly selection: BookingSelectionService,
     private readonly scheduling: BookingSchedulingService,
     private readonly billing: BillingFacade,
+    private readonly pricing: PricingFacade,
   ) {}
 
   async getBookingSetup(locationId: string): Promise<BookingSetup> {
-    const [catalog, staff, products, isOnlineBookingAvailable] =
+    const settings = this.locationService.getBookingSettings(locationId);
+    const [catalog, staff, products, location, isOnlineBookingAvailable, book] =
       await Promise.all([
         this.serviceCatalog.loadForBooking(locationId),
         this.staffService.listActiveWithServices(locationId),
         this.productsService.listForPublicCatalog(locationId),
-        this.locationService
-          .getBookingSettings(locationId)
-          .then(({ brandId }) => this.billing.isOnlineBookingOpen(brandId)),
+        settings,
+        settings.then(({ brandId }) =>
+          this.billing.isOnlineBookingOpen(brandId),
+        ),
+        this.pricing.priceBook(locationId, ReadConsistency.CACHED),
       ]);
-    return { catalog, staff, products, isOnlineBookingAvailable };
+    return {
+      catalog,
+      staff,
+      products,
+      isOnlineBookingAvailable,
+      anyStaffEnabled: location.anyStaffEnabled,
+      prices: buildBookingSetupPrices(book, catalog, staff),
+    };
   }
 
   async resolveBookingSelection(
@@ -56,8 +74,10 @@ export class BookingSetupService {
       );
     }
 
-    const { services, bundles } =
-      await this.serviceCatalog.loadForBooking(locationId);
+    const [{ services, bundles }, book] = await Promise.all([
+      this.serviceCatalog.loadForBooking(locationId),
+      this.pricing.priceBook(locationId, ReadConsistency.CACHED),
+    ]);
     const serviceById = new Map(
       services.map((service) => [service.id, service]),
     );
@@ -139,7 +159,7 @@ export class BookingSetupService {
     if (!selected?.length) {
       const availableStaff = directory
         .filter((member) => !dto.staffId || member.id === dto.staffId)
-        .map(({ id, name }) => ({ id, name }));
+        .map(({ id, name }) => ({ id, name, price: MoneyUtils.decimal(0) }));
       return {
         availableServiceIds,
         availableStaff,
@@ -150,8 +170,13 @@ export class BookingSetupService {
         staffByService: [],
         canAssignStaff: availableStaff.length > 0,
         resolvedItems: [],
+        totalPrice: null,
       };
     }
+
+    const selectedIds = selected.map((service) => service.id);
+    const priceBundleId = bundle?.id ?? null;
+    this.pricing.assertPriceable(book, priceBundleId, selectedIds);
 
     const coverableBySingle = directory
       .filter((member) => {
@@ -160,7 +185,13 @@ export class BookingSetupService {
         );
         return selected.every((service) => performed.has(service.id));
       })
-      .map(({ id, name }) => ({ id, name }));
+      .map(({ id, name }) => ({
+        id,
+        name,
+        price: MoneyUtils.fromMinor(
+          staffVisitPrice(book, priceBundleId, selectedIds, id),
+        ),
+      }));
     const totalListPrice = bundle
       ? BundleMetrics.price(bundle)
       : selected.reduce(
@@ -174,13 +205,19 @@ export class BookingSetupService {
 
     const parallel =
       executionMode === BookingExecutionMode.PARALLEL && selected.length > 1;
-    const staffByService = selected.map((service) => ({
+    const staffByService = selected.map((service, index) => ({
       serviceId: service.id,
       availableStaff: directory
         .filter((member) =>
           member.staffServices.some((entry) => entry.serviceId === service.id),
         )
-        .map(({ id, name }) => ({ id, name })),
+        .map(({ id, name }) => ({
+          id,
+          name,
+          price: MoneyUtils.fromMinor(
+            staffLinePrice(book, priceBundleId, selectedIds, index, id),
+          ),
+        })),
     }));
     const candidates = staffByService.map((entry, index) => {
       const staffId = requested.get(entry.serviceId);
@@ -216,13 +253,20 @@ export class BookingSetupService {
       executionMode,
       totalDuration,
       totalListPrice,
+      totalPrice: dto.startAt
+        ? resolvedItems.reduce(
+            (sum, item) => sum.plus(item.chargedPrice),
+            MoneyUtils.decimal(0),
+          )
+        : null,
     };
   }
 
   private async preview(locationId: string, dto: BookingResolveRequestDto) {
     const [selection, location] = await Promise.all([
       this.selection.resolveForBooking(locationId, dto),
-      this.locationService.getLocale(locationId),
+      // Cached like the preview prices; the rule is read with the timezone.
+      this.locationService.getBookingSettings(locationId),
     ]);
     return this.scheduling.resolveForBooking({
       locationId,
@@ -235,6 +279,7 @@ export class BookingSetupService {
       staffAssignments: dto.staffAssignments,
       timezone: location.timezone,
       manualItems: [],
+      staffRule: location.anyStaffRule,
       customEndAt: dto.endAt
         ? TimeUtils.localToUtc(dto.endAt, location.timezone)
         : null,

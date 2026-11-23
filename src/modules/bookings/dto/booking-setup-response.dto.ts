@@ -21,8 +21,21 @@ export class BookingSetupResponseDto {
   })
   isOnlineBookingAvailable: boolean;
 
+  @ApiProperty({
+    description:
+      'False when the location does not assign "any staff": the client must choose a staff member before a time',
+  })
+  anyStaffEnabled: boolean;
+
   static fromEntity(
-    { catalog, staff, products, isOnlineBookingAvailable }: BookingSetup,
+    {
+      catalog,
+      staff,
+      products,
+      isOnlineBookingAvailable,
+      anyStaffEnabled,
+      prices,
+    }: BookingSetup,
     staffReviewSummaries: ReadonlyMap<string, ReviewStaffSummary> = new Map(),
   ): BookingSetupResponseDto {
     const uncategorizedServices = catalog.services.filter(
@@ -32,12 +45,15 @@ export class BookingSetupResponseDto {
       (bundle) => bundle.categoryId === null,
     );
     const dto = new BookingSetupResponseDto();
-    dto.categories = catalog.categories.map(BookingSetupCategoryDto.fromEntity);
+    dto.categories = catalog.categories.map((category) =>
+      BookingSetupCategoryDto.fromEntity(category, prices),
+    );
     if (uncategorizedServices.length || uncategorizedBundles.length) {
       dto.categories.push(
         BookingSetupCategoryDto.uncategorized(
           uncategorizedServices,
           uncategorizedBundles,
+          prices,
         ),
       );
     }
@@ -45,10 +61,12 @@ export class BookingSetupResponseDto {
       BookingSetupStaffDto.fromEntity(
         member,
         staffReviewSummaries.get(member.id) ?? null,
+        prices.staffServicePrices.get(member.id) ?? [],
       ),
     );
     dto.products = PublicProductCatalogDto.fromEntities(products);
     dto.isOnlineBookingAvailable = isOnlineBookingAvailable;
+    dto.anyStaffEnabled = anyStaffEnabled;
     return dto;
   }
 }

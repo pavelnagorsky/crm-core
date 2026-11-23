@@ -4,6 +4,8 @@ import { sanitizeRichHtml } from '../../../shared/html/sanitize-rich-html.js';
 import { ReviewStaffSummaryDto } from '../../reviews/dto/review-staff-summary.dto.js';
 import { ReviewStaffSummary } from '../../reviews/interfaces/review-staff-summary.interface.js';
 import { BookingStaff } from '../../staff/interfaces/booking-staff.interface.js';
+import { BookingStaffServicePrice } from '../interfaces/booking-staff-service-price.interface.js';
+import { BookingStaffServicePriceDto } from './booking-staff-service-price.dto.js';
 
 export class BookingSetupStaffDto {
   @ApiProperty({ type: String })
@@ -36,9 +38,18 @@ export class BookingSetupStaffDto {
   })
   reviewSummary: ReviewStaffSummaryDto | null;
 
+  @ApiProperty({
+    type: () => BookingStaffServicePriceDto,
+    isArray: true,
+    description:
+      'Price of each service this staff member performs: personal price, else the price of their level, else the base price',
+  })
+  servicePrices: BookingStaffServicePriceDto[];
+
   static fromEntity(
     staff: BookingStaff,
     reviewSummary: ReviewStaffSummary | null = null,
+    servicePrices: readonly BookingStaffServicePrice[] = [],
   ): BookingSetupStaffDto {
     const dto = new BookingSetupStaffDto();
     dto.id = staff.id;
@@ -54,6 +65,9 @@ export class BookingSetupStaffDto {
     dto.reviewSummary = reviewSummary
       ? ReviewStaffSummaryDto.fromSummary(reviewSummary)
       : null;
+    dto.servicePrices = servicePrices.map(
+      BookingStaffServicePriceDto.fromResult,
+    );
     return dto;
   }
 }

@@ -1,5 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import {
+  AnyStaffRule,
   BookingExecutionMode as PrismaBookingExecutionMode,
   Prisma,
 } from '@prisma/client';
@@ -16,6 +17,8 @@ import { StaffService } from '../../staff/services/staff.service.js';
 import { BookingScheduleRequest } from '../interfaces/booking-schedule-request.interface.js';
 import { BookingServiceSnapshot } from '../interfaces/booking-service-snapshot.interface.js';
 import { ResolvedBookingItem } from '../interfaces/resolved-booking-item.interface.js';
+import { rankStaff } from '../rules/staff-ranking.rules.js';
+import { BookingStaffLoadService } from './booking-staff-load.service.js';
 
 @Injectable()
 export class BookingSchedulingService {
@@ -24,6 +27,7 @@ export class BookingSchedulingService {
     private readonly staffService: StaffService,
     private readonly calendar: CalendarFacade,
     private readonly pricing: PricingFacade,
+    private readonly staffLoad: BookingStaffLoadService,
   ) {}
 
   async resolveForBooking(
@@ -60,39 +64,43 @@ export class BookingSchedulingService {
         cursor.setTime(interval.endAt.getTime());
       return interval;
     });
-    const candidates = await Promise.all(
-      services.map(async (service, index) => {
-        const requestedId =
-          manualItems[index]?.staffId ?? requested.get(service.id);
-        const qualified = await this.staffService.resolveStaffForService(
-          locationId,
-          service.id,
-          requestedId,
-        );
-        if (requestedId && qualified.length === 0) {
-          throw new AppException(
-            ErrorCode.BOOKING_STAFF_NOT_FOUND,
-            HttpStatus.NOT_FOUND,
+    // One snapshot prices the ranking and the quote, so they cannot disagree.
+    const [candidates, book] = await Promise.all([
+      Promise.all(
+        services.map(async (service, index) => {
+          const requestedId =
+            manualItems[index]?.staffId ?? requested.get(service.id);
+          const qualified = await this.staffService.resolveStaffForService(
+            locationId,
+            service.id,
+            requestedId,
           );
-        }
-        const interval = intervals[index];
-        const free = await this.calendar.filterAvailableStaff(
-          locationId,
-          qualified,
-          TimeUtils.zonedDateStr(interval.startAt, timezone),
-          interval.startAt,
-          interval.endAt,
-          timezone,
-        );
-        if (!request.allowConflicts)
-          return free.map((staff) => ({ id: staff.id, busy: false }));
-        const freeIds = new Set(free.map((staff) => staff.id));
-        return qualified.map((staff) => ({
-          id: staff.id,
-          busy: !freeIds.has(staff.id),
-        }));
-      }),
-    );
+          if (requestedId && qualified.length === 0) {
+            throw new AppException(
+              ErrorCode.BOOKING_STAFF_NOT_FOUND,
+              HttpStatus.NOT_FOUND,
+            );
+          }
+          const interval = intervals[index];
+          const free = await this.calendar.filterAvailableStaff(
+            locationId,
+            qualified,
+            TimeUtils.zonedDateStr(interval.startAt, timezone),
+            interval.startAt,
+            interval.endAt,
+            timezone,
+          );
+          if (!request.allowConflicts)
+            return free.map((staff) => ({ id: staff.id, busy: false }));
+          const freeIds = new Set(free.map((staff) => staff.id));
+          return qualified.map((staff) => ({
+            id: staff.id,
+            busy: !freeIds.has(staff.id),
+          }));
+        }),
+      ),
+      this.pricing.priceBook(locationId, request.prices),
+    ]);
     const staffIds = [
       ...new Set(candidates.flatMap((group) => group.map((staff) => staff.id))),
     ];
@@ -118,19 +126,33 @@ export class BookingSchedulingService {
     const countByStaff = new Map(
       counts.map((row) => [row.staffId, row._count.id]),
     );
-    const preferred = (id: string) => (id === request.preferredStaffId ? 0 : 1);
+    this.pricing.assertPriceable(
+      book,
+      request.bundleId,
+      services.map((service) => service.id),
+    );
+    const lastAssigned =
+      request.staffRule === AnyStaffRule.ROUND_ROBIN
+        ? await this.staffLoad.lastAssignedAt(locationId, staffIds)
+        : new Map<string, number>();
     const team = assignStaff(
       candidates.map((group, index) => ({
         itemId: String(index),
-        staffIds: [...group]
-          .sort(
-            (a, b) =>
-              Number(a.busy) - Number(b.busy) ||
-              preferred(a.id) - preferred(b.id) ||
-              (countByStaff.get(a.id) ?? 0) - (countByStaff.get(b.id) ?? 0) ||
-              a.id.localeCompare(b.id),
-          )
-          .map((staff) => staff.id),
+        staffIds: rankStaff(
+          group.map((staff) => ({
+            id: staff.id,
+            busy: staff.busy,
+            price: book.candidatePrice(
+              services[index].id,
+              staff.id,
+              request.bundleId,
+            ),
+            dayLoad: countByStaff.get(staff.id) ?? 0,
+            lastAssignedAt: lastAssigned.get(staff.id) ?? null,
+          })),
+          request.staffRule,
+          request.preferredStaffIds?.[index] ?? request.preferredStaffId,
+        ),
       })),
       executionMode === PrismaBookingExecutionMode.PARALLEL,
     );
@@ -148,22 +170,18 @@ export class BookingSchedulingService {
       ),
     );
     const staffIdAt = (index: number) => team.get(String(index))!;
-    const { lines } = await this.pricing.quoteServices(
-      locationId,
-      {
-        bundleId: request.bundleId,
-        lines: services.map((service, index) => {
-          const customPrice = manualItems[index]?.customPrice;
-          return {
-            serviceId: service.id,
-            staffId: staffIdAt(index),
-            customPrice:
-              customPrice == null ? null : new Prisma.Decimal(customPrice),
-          };
-        }),
-      },
-      request.prices,
-    );
+    const { lines } = this.pricing.quoteWithBook(book, {
+      bundleId: request.bundleId,
+      lines: services.map((service, index) => {
+        const customPrice = manualItems[index]?.customPrice;
+        return {
+          serviceId: service.id,
+          staffId: staffIdAt(index),
+          customPrice:
+            customPrice == null ? null : new Prisma.Decimal(customPrice),
+        };
+      }),
+    });
 
     return services.map((service, index) => {
       const staffId = staffIdAt(index);

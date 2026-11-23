@@ -49,7 +49,7 @@ export class PublicBookingCreateController {
   })
   @ApiConflictResponse({
     description:
-      'Slot is no longer available, or idempotency key was reused for a different request',
+      'Slot is no longer available, idempotency key was reused for a different request, or the price changed (PRICE_CHANGED, payload { expectedTotal, total, items: [{ serviceId, serviceTitle, staffId, staffName, price }] }): confirm the new total and send the request again with expectedTotal = total and a new idempotency key',
   })
   @Post('public/locations/:locationId/bookings')
   @Header('Cache-Control', 'no-store')

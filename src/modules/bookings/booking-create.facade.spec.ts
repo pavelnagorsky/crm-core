@@ -1,5 +1,6 @@
 import { HttpStatus } from '@nestjs/common';
 import {
+  AnyStaffRule,
   BookingVisibility,
   CalendarEventRepeatType,
   CalendarEventType,
@@ -18,6 +19,7 @@ import { PricingSnapshotService } from '../pricing/services/pricing-snapshot.ser
 import { BookingCreateFacade } from './booking-create.facade.js';
 import { CLIENT_NOTICE_DELAY_MS } from './rules/booking-client-notice.rules.js';
 import { CreateBookingDto } from './dto/create-booking.dto.js';
+import { PublicCreateBookingDto } from './dto/public-create-booking.dto.js';
 import { ManualCreateBookingDto } from './dto/manual-create-booking.dto.js';
 import { BookingChannel } from './enums/booking-channel.enum.js';
 import { BookingStatus } from './enums/booking-status.enum.js';
@@ -25,6 +27,7 @@ import { TrafficSource } from '../../shared/traffic/enums/traffic-source.enum.js
 import { BookingEventsService } from './services/booking-events.service.js';
 import { BookingReservationService } from './services/booking-reservation.service.js';
 import { BookingSchedulingService } from './services/booking-scheduling.service.js';
+import { BookingStaffLoadService } from './services/booking-staff-load.service.js';
 import { BookingSelectionService } from './services/booking-selection.service.js';
 import { BookingSlotLockService } from './services/booking-slot-lock.service.js';
 
@@ -36,6 +39,9 @@ const dto: CreateBookingDto = {
   lastName: 'Иванова',
   phone: '+375291112233',
 };
+
+/** An online request at the total the guest saw: one 50.00 service. */
+const publicDto: PublicCreateBookingDto = { ...dto, expectedTotal: '50.00' };
 
 const publicAttribution = {
   channel: BookingChannel.PUBLIC_PAGE,
@@ -107,7 +113,11 @@ function catalogDeps(
   return [
     catalog as never,
     {
-      findById: vi.fn(() => db.location.findUnique()),
+      // The database default of Location.anyStaffRule.
+      findById: vi.fn(async () => ({
+        anyStaffRule: AnyStaffRule.CHEAPER_AND_FREER,
+        ...((await db.location.findUnique()) as object),
+      })),
       acquireActiveOperationLock: vi.fn().mockResolvedValue(true),
     } as never,
   ];
@@ -223,7 +233,12 @@ describe('BookingCreateFacade client ban', () => {
     });
 
     const error = await service
-      .createPublicBooking('business-1', dto, publicAttribution, directTraffic)
+      .createPublicBooking(
+        'business-1',
+        publicDto,
+        publicAttribution,
+        directTraffic,
+      )
       .then(
         () => null,
         (caught: unknown) => caught,
@@ -261,7 +276,12 @@ describe('BookingCreateFacade client ban', () => {
     clients.resolveForBooking.mockResolvedValue({ bannedAt: null });
 
     const error = await service
-      .createPublicBooking('business-1', dto, publicAttribution, directTraffic)
+      .createPublicBooking(
+        'business-1',
+        publicDto,
+        publicAttribution,
+        directTraffic,
+      )
       .then(
         () => null,
         (caught: unknown) => caught,
@@ -280,7 +300,7 @@ describe('BookingCreateFacade client ban', () => {
     await service
       .createPublicBooking(
         'business-1',
-        { ...dto, lastName: undefined },
+        { ...publicDto, lastName: undefined },
         publicAttribution,
         directTraffic,
       )
@@ -334,7 +354,12 @@ describe('BookingCreateFacade online booking availability', () => {
     Object.assign(db, { $transaction: transaction });
 
     const error = await service
-      .createPublicBooking('business-1', dto, publicAttribution, directTraffic)
+      .createPublicBooking(
+        'business-1',
+        publicDto,
+        publicAttribution,
+        directTraffic,
+      )
       .then(
         () => null,
         (caught: unknown) => caught,
@@ -408,9 +433,9 @@ describe('BookingCreateFacade pricing', () => {
         discountTotal: '0.00',
         lineTotal,
       });
-      // A preview is only shown, so it reads prices through the cache.
+      // A preview is only shown: it reads the cached snapshot, which fills itself from fresh sources.
       expect(catalog.loadCatalogSnapshot.mock.calls).toEqual([
-        ['business-1', ReadConsistency.CACHED],
+        ['business-1', ReadConsistency.FRESH],
       ]);
     },
   );
@@ -562,11 +587,16 @@ describe('BookingCreateFacade calendar link', () => {
       clickId: null,
       touchedAt: new Date('2026-09-19T10:00:00.000Z'),
     };
-    await service.createPublicBooking('business-1', dto, publicAttribution, {
-      source: TrafficSource.INSTAGRAM,
-      detail: null,
-      touch,
-    });
+    await service.createPublicBooking(
+      'business-1',
+      publicDto,
+      publicAttribution,
+      {
+        source: TrafficSource.INSTAGRAM,
+        detail: null,
+        touch,
+      },
+    );
 
     expect(tx.booking.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -829,6 +859,7 @@ function customTimeSetup(
     resolveStaffForService: vi.fn().mockResolvedValue([{ id: 'staff-1' }]),
     findShiftForDate: vi.fn((_staffId, _date, tx) => tx.staffShift.findFirst()),
     findById: vi.fn().mockResolvedValue({ id: 'staff-1', name: 'Maria' }),
+    listPricingProfiles: vi.fn().mockResolvedValue([]),
   };
   const tx = {
     $executeRaw: vi.fn(),
@@ -1072,7 +1103,7 @@ describe('BookingCreateFacade custom time', () => {
     async (notifyClient, setting, queued) => {
       const { service, tx, db, clients, emitter } = customTimeSetup();
       db.location.findUnique.mockResolvedValue({
-        ...(await db.location.findUnique()),
+        ...((await db.location.findUnique()) as object),
         notifyClientOnStaffChanges: setting,
       });
       clients.resolveForBooking.mockResolvedValue({
@@ -1741,6 +1772,230 @@ describe('BookingCreateFacade own bookings', () => {
   });
 });
 
+describe('BookingCreateFacade online price', () => {
+  const online = { ...publicDto, startAt: '2099-09-20T10:00:00' };
+
+  /** Anna asks 70, Maria asks 50 for the 50.00 service; both are free. */
+  function twoStaff(rule: AnyStaffRule = AnyStaffRule.CHEAPER_AND_FREER) {
+    const context = customTimeSetup();
+    const { staff, calendar, db } = context;
+    const both = [{ id: 'staff-1' }, { id: 'staff-2' }];
+    staff.resolveStaffForService.mockImplementation(
+      async (_locationId: string, _serviceId: string, staffId?: string) =>
+        both.filter((member) => !staffId || member.id === staffId),
+    );
+    calendar.filterAvailableStaff.mockImplementation(
+      async (_locationId: string, free: { id: string }[]) => free,
+    );
+    staff.findById.mockImplementation(async (id: string) => ({
+      id,
+      name: id === 'staff-1' ? 'Anna' : 'Maria',
+    }));
+    staff.listPricingProfiles.mockResolvedValue([
+      {
+        id: 'staff-1',
+        name: 'Anna',
+        priceLevelId: null,
+        servicePrices: [
+          { serviceId: 'service-1', price: new Prisma.Decimal('70.00') },
+        ],
+      },
+      {
+        id: 'staff-2',
+        name: 'Maria',
+        priceLevelId: null,
+        servicePrices: [
+          { serviceId: 'service-1', price: new Prisma.Decimal('50.00') },
+        ],
+      },
+    ]);
+    db.location.findUnique.mockResolvedValue({
+      brandId: 'brand-1',
+      isBookingConfirmationRequired: false,
+      timezone: 'Europe/Minsk',
+      bookingVisibility: BookingVisibility.PUBLIC,
+      currency: 'BYN',
+      anyStaffRule: rule,
+    });
+    return context;
+  }
+
+  const anyStaff = { ...online, staffId: undefined };
+  const itemOf = (tx: ReturnType<typeof customTimeSetup>['tx']) =>
+    tx.booking.create.mock.calls[0][0].data.items.create[0] as unknown as {
+      staffId: string;
+      chargedPrice: Prisma.Decimal;
+    };
+
+  it('books when the total matches the recalculation', async () => {
+    const { service, tx } = customTimeSetup();
+    await service.createPublicBooking(
+      'business-1',
+      online,
+      publicAttribution,
+      directTraffic,
+    );
+    expect(tx.booking.create).toHaveBeenCalledOnce();
+  });
+
+  it('answers 409 PRICE_CHANGED with the new total and the lines', async () => {
+    const { service, tx } = customTimeSetup();
+    const error = await service
+      .createPublicBooking(
+        'business-1',
+        { ...online, expectedTotal: '40.00' },
+        publicAttribution,
+        directTraffic,
+      )
+      .then(
+        () => null,
+        (caught: unknown) => caught as AppException,
+      );
+    expect(error).toBeInstanceOf(AppException);
+    expect(error!.errorCode).toBe('PRICE_CHANGED');
+    expect(error!.getStatus()).toBe(HttpStatus.CONFLICT);
+    expect(error!.payload).toEqual({
+      expectedTotal: '40.00',
+      total: '50.00',
+      items: [
+        {
+          serviceId: 'service-1',
+          serviceTitle: 'Haircut',
+          staffId: 'staff-1',
+          staffName: 'Maria',
+          price: '50.00',
+        },
+      ],
+    });
+    expect(tx.booking.create).not.toHaveBeenCalled();
+  });
+
+  it('rejects a request without the total it expects', async () => {
+    const { service, tx } = customTimeSetup();
+    await expect(
+      service.createPublicBooking(
+        'business-1',
+        { ...online, expectedTotal: undefined } as never,
+        publicAttribution,
+        directTraffic,
+      ),
+    ).rejects.toMatchObject({ errorCode: 'PRICE_CHANGED' });
+    expect(tx.booking.create).not.toHaveBeenCalled();
+  });
+
+  it('does not ask a manual booking for a total', async () => {
+    const { service, tx } = customTimeSetup();
+    await service.createManualBooking(
+      'business-1',
+      { ...dto, startAt: '2099-09-20T10:00:00' },
+      { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER },
+    );
+    expect(tx.booking.create).toHaveBeenCalledOnce();
+  });
+
+  it('takes the cheaper free staff member under CHEAPER_AND_FREER', async () => {
+    const { service, tx } = twoStaff();
+    await service.createPublicBooking(
+      'business-1',
+      { ...anyStaff, expectedTotal: '50.00' },
+      publicAttribution,
+      directTraffic,
+    );
+    expect(itemOf(tx).staffId).toBe('staff-2');
+  });
+
+  it('takes the pricier free staff member under PRICIER', async () => {
+    const { service, tx } = twoStaff(AnyStaffRule.PRICIER);
+    await service.createPublicBooking(
+      'business-1',
+      { ...anyStaff, expectedTotal: '70.00' },
+      publicAttribution,
+      directTraffic,
+    );
+    expect(itemOf(tx).staffId).toBe('staff-1');
+  });
+
+  it('reads the rule fresh: the total of the old rule is a price change', async () => {
+    const { service, tx } = twoStaff(AnyStaffRule.PRICIER);
+    await expect(
+      service.createPublicBooking(
+        'business-1',
+        { ...anyStaff, expectedTotal: '50.00' },
+        publicAttribution,
+        directTraffic,
+      ),
+    ).rejects.toMatchObject({
+      errorCode: 'PRICE_CHANGED',
+      payload: expect.objectContaining({ total: '70.00' }),
+    });
+    expect(tx.booking.create).not.toHaveBeenCalled();
+  });
+
+  it('takes the staff member the guest saw when free, even if another is cheaper', async () => {
+    const { service, tx } = twoStaff();
+    await service.createPublicBooking(
+      'business-1',
+      { ...anyStaff, preferredStaffIds: ['staff-1'], expectedTotal: '70.00' },
+      publicAttribution,
+      directTraffic,
+    );
+    expect(itemOf(tx).staffId).toBe('staff-1');
+  });
+
+  it('falls back to the rule when the preferred staff member is busy and names the new one', async () => {
+    const { service, tx, calendar } = twoStaff();
+    calendar.filterAvailableStaff.mockImplementation(
+      async (_locationId: string, free: { id: string }[]) =>
+        free.filter((member) => member.id !== 'staff-1'),
+    );
+    await expect(
+      service.createPublicBooking(
+        'business-1',
+        { ...anyStaff, preferredStaffIds: ['staff-1'], expectedTotal: '70.00' },
+        publicAttribution,
+        directTraffic,
+      ),
+    ).rejects.toMatchObject({
+      errorCode: 'PRICE_CHANGED',
+      payload: {
+        expectedTotal: '70.00',
+        total: '50.00',
+        items: [
+          expect.objectContaining({ staffId: 'staff-2', staffName: 'Maria' }),
+        ],
+      },
+    });
+    expect(tx.booking.create).not.toHaveBeenCalled();
+  });
+
+  it('ignores the preferred staff member of an item with a chosen staff member', async () => {
+    const { service, tx } = twoStaff();
+    await service.createPublicBooking(
+      'business-1',
+      {
+        ...online,
+        staffId: 'staff-2',
+        preferredStaffIds: ['staff-1'],
+        expectedTotal: '50.00',
+      },
+      publicAttribution,
+      directTraffic,
+    );
+    expect(itemOf(tx).staffId).toBe('staff-2');
+  });
+
+  it('prices a chosen staff member by their own price whatever the rule', async () => {
+    const { service, tx } = twoStaff();
+    await service.createPublicBooking(
+      'business-1',
+      { ...online, staffId: 'staff-1', expectedTotal: '70.00' },
+      publicAttribution,
+      directTraffic,
+    );
+    expect(itemOf(tx).staffId).toBe('staff-1');
+  });
+});
+
 function createBookingService(
   db: ConstructorParameters<typeof BookingReservationService>[0],
   calendar: ConstructorParameters<typeof BookingReservationService>[2],
@@ -1759,13 +2014,33 @@ function createBookingService(
   },
 ): BookingCreateFacade {
   const slots = new BookingSlotLockService(staff, calendar);
-  const pricing = new PricingFacade(new PricingSnapshotService(services));
   // Online booking is open unless a test says otherwise (plan section 6.2).
   const bookingLocation = Object.assign(Object.create(location), {
     getBookingSettings:
       (location as { getBookingSettings?: unknown }).getBookingSettings ??
       vi.fn().mockResolvedValue({ brandId: 'brand-1' }),
   }) as typeof location;
+  // Personal prices come from the staff mock when it has them; none otherwise.
+  const pricingStaff = Object.assign(Object.create(staff), {
+    listPricingProfiles:
+      (staff as { listPricingProfiles?: unknown }).listPricingProfiles ??
+      vi.fn().mockResolvedValue([]),
+  }) as never;
+  const pricing = new PricingFacade(
+    new PricingSnapshotService(
+      services,
+      {
+        listLevels: vi.fn().mockResolvedValue([]),
+        listLevelPrices: vi.fn().mockResolvedValue([]),
+      } as never,
+      pricingStaff,
+      bookingLocation,
+      {
+        getOrLoad: (_cache: unknown, _key: unknown, load: () => unknown) =>
+          load(),
+      } as never,
+    ),
+  );
   // Acquisition is recorded in the reservation transaction; tests that care pass their own mock.
   const bookingClients = Object.assign(Object.create(clients), {
     recordAcquisition:
@@ -1777,7 +2052,13 @@ function createBookingService(
     limiter,
     bookingLocation,
     new BookingSelectionService(location, services, orders, pricing),
-    new BookingSchedulingService(db, staff, calendar, pricing),
+    new BookingSchedulingService(
+      db,
+      staff,
+      calendar,
+      pricing,
+      new BookingStaffLoadService(db),
+    ),
     new BookingEventsService(emitter, clientTokens, location, {
       notify: vi.fn(),
     } as never),

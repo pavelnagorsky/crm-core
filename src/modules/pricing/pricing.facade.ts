@@ -7,10 +7,8 @@ import { ReadConsistency } from '../../shared/cache/enums/read-consistency.enum.
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { MoneyUtils } from '../../shared/money/money.utils.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
-import { ServicePriceCalculator } from './engine/calculators/service-price.calculator.js';
 import { BundlePricingMode } from './engine/enums/bundle-pricing-mode.enum.js';
 import { LineQuote } from './engine/interfaces/line-quote.interface.js';
-import { PricingSnapshot } from './engine/interfaces/pricing-snapshot.interface.js';
 import { PriceBook } from './engine/price-book.js';
 import { ServiceLinePrice } from './interfaces/service-line-price.interface.js';
 import { ServicePriceQuote } from './interfaces/service-price-quote.interface.js';
@@ -31,9 +29,26 @@ export class PricingFacade {
     request: ServicePriceRequest,
     consistency: ReadConsistency,
   ): Promise<ServicePriceQuote> {
-    const snapshot = await this.snapshots.load(locationId, consistency);
-    this.assertPriceable(snapshot, request);
-    const quote = ServicePriceCalculator.quote(snapshot, {
+    return this.quoteWithBook(
+      await this.priceBook(locationId, consistency),
+      request,
+    );
+  }
+
+  /**
+   * Same as quoteServices over a price book the caller already loaded, so one request
+   * ranks staff and quotes the visit from a single snapshot.
+   */
+  quoteWithBook(
+    book: PriceBook,
+    request: ServicePriceRequest,
+  ): ServicePriceQuote {
+    this.assertPriceable(
+      book,
+      request.bundleId,
+      request.lines.map((line) => line.serviceId),
+    );
+    const quote = book.quote({
       bundleId: request.bundleId,
       lines: request.lines.map((line) => ({
         serviceId: line.serviceId,
@@ -58,18 +73,19 @@ export class PricingFacade {
     return new PriceBook(await this.snapshots.load(locationId, consistency));
   }
 
-  private assertPriceable(
-    snapshot: PricingSnapshot,
-    request: ServicePriceRequest,
+  /** Lines must be priced services; bundle lines are exactly the bundle items. */
+  assertPriceable(
+    book: PriceBook,
+    bundleId: string | null,
+    serviceIds: readonly string[],
   ): void {
-    const serviceIds = new Set(snapshot.services.map(({ id }) => id));
-    if (request.lines.some((line) => !serviceIds.has(line.serviceId)))
+    if (serviceIds.some((serviceId) => !book.hasService(serviceId)))
       throw new AppException(
         ErrorCode.BOOKING_SERVICE_NOT_FOUND,
         HttpStatus.NOT_FOUND,
       );
-    if (request.bundleId === null) return;
-    const bundle = snapshot.bundles.find(({ id }) => id === request.bundleId);
+    if (bundleId === null) return;
+    const bundle = book.bundle(bundleId);
     if (!bundle)
       throw new AppException(
         ErrorCode.BOOKING_BUNDLE_NOT_FOUND,
@@ -79,10 +95,9 @@ export class PricingFacade {
     // separately: if its services differ, the bundle was edited in between.
     const bundleServiceIds = new Set(bundle.serviceIds);
     if (
-      request.lines.length !== bundleServiceIds.size ||
-      new Set(request.lines.map((line) => line.serviceId)).size !==
-        bundleServiceIds.size ||
-      request.lines.some((line) => !bundleServiceIds.has(line.serviceId))
+      serviceIds.length !== bundleServiceIds.size ||
+      new Set(serviceIds).size !== bundleServiceIds.size ||
+      serviceIds.some((serviceId) => !bundleServiceIds.has(serviceId))
     )
       throw new AppException(
         ErrorCode.BOOKING_BUNDLE_CHANGED,

@@ -235,6 +235,16 @@ export const PERMISSION_REGISTRY: Readonly<
       ),
     },
   },
+  [Claim.PRICING]: {
+    scope: PermissionScope.LOCATION,
+    actions: {
+      [PermissionAccess.READ]: action(),
+      [PermissionAccess.WRITE]: action(
+        [BusinessRole.MANAGER],
+        [Read(Claim.PRICING)],
+      ),
+    },
+  },
   [Claim.SUPPLIER]: {
     scope: PermissionScope.SHARED,
     actions: {

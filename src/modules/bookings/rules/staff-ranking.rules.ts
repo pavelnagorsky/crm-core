@@ -5,8 +5,13 @@ type Compare = (a: StaffRankCandidate, b: StaffRankCandidate) => number;
 
 const byPrice: Compare = (a, b) => a.price - b.price;
 const byLoad: Compare = (a, b) => a.dayLoad - b.dayLoad;
-const byLastAssigned: Compare = (a, b) =>
-  (a.lastAssignedAt ?? -Infinity) - (b.lastAssignedAt ?? -Infinity);
+/** Never assigned first, then the longest ago. Two nulls tie (-Infinity - -Infinity is NaN). */
+const byLastAssigned: Compare = (a, b) => {
+  if (a.lastAssignedAt === b.lastAssignedAt) return 0;
+  if (a.lastAssignedAt === null) return -1;
+  if (b.lastAssignedAt === null) return 1;
+  return a.lastAssignedAt - b.lastAssignedAt;
+};
 
 /** Order of each "any staff" rule (docs/pricing-stage2-api.md). */
 const RULE_ORDER: Record<AnyStaffRule, Compare[]> = {

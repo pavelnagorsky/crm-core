@@ -188,6 +188,10 @@ export const ErrorCode = {
     code: 'BOOKING_BUNDLE_CHANGED',
     message: 'Bundle services changed while booking, select the bundle again',
   },
+  PRICE_CHANGED: {
+    code: 'PRICE_CHANGED',
+    message: 'The price changed, confirm the new total',
+  },
   BOOKING_PARALLEL_STAFF_REQUIRED: {
     code: 'BOOKING_PARALLEL_STAFF_REQUIRED',
     message:
@@ -894,6 +898,26 @@ export const ErrorCode = {
   SUBSCRIPTION_ALREADY_EXISTS: {
     code: 'SUBSCRIPTION_ALREADY_EXISTS',
     message: 'The brand already has a subscription',
+  },
+  PRICE_LEVEL_NOT_FOUND: {
+    code: 'PRICE_LEVEL_NOT_FOUND',
+    message: 'Price level not found',
+  },
+  PRICE_LEVEL_NAME_EXISTS: {
+    code: 'PRICE_LEVEL_NAME_EXISTS',
+    message: 'A price level with this name already exists',
+  },
+  PRICE_LEVEL_DEFAULT_IN_USE: {
+    code: 'PRICE_LEVEL_DEFAULT_IN_USE',
+    message: 'The default price level cannot be deleted while other levels exist',
+  },
+  PRICE_LEVEL_DEFAULT_PRICE: {
+    code: 'PRICE_LEVEL_DEFAULT_PRICE',
+    message: 'The default level price is the base price of the service',
+  },
+  STAFF_SERVICE_NOT_ASSIGNED: {
+    code: 'STAFF_SERVICE_NOT_ASSIGNED',
+    message: 'The staff member does not perform this service',
   },
   ONLINE_BOOKING_UNAVAILABLE: {
     code: 'ONLINE_BOOKING_UNAVAILABLE',

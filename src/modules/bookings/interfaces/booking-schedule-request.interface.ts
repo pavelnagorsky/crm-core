@@ -1,4 +1,4 @@
-import { BookingExecutionMode } from '@prisma/client';
+import { AnyStaffRule, BookingExecutionMode } from '@prisma/client';
 import { ReadConsistency } from '../../../shared/cache/enums/read-consistency.enum.js';
 import { StaffAssignment } from '../../../shared/scheduling/interfaces/staff-assignment.interface.js';
 import { ManualBookingItemDto } from '../dto/manual-booking-item.dto.js';
@@ -22,4 +22,8 @@ export interface BookingScheduleRequest {
   allowConflicts?: boolean;
   /** Staff member ranked first for every service they can take, after free over busy. */
   preferredStaffId?: string;
+  /** Per item (services order): the staff member the guest saw with the slot, ranked first for that item. */
+  preferredStaffIds?: string[];
+  /** Location rule that orders the candidates of "any staff" (Location.anyStaffRule). */
+  staffRule: AnyStaffRule;
 }

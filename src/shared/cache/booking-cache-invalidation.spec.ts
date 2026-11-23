@@ -39,11 +39,16 @@ describe('Cache invalidation through domain writes', () => {
             staffServices: serviceIds.map((serviceId) => ({ serviceId })),
           },
         ]),
-        update: vi.fn(async () => {
+        update: vi.fn(async () => row),
+      },
+      staffService: {
+        deleteMany: vi.fn(async () => ({ count: 1 })),
+        createMany: vi.fn(async () => {
           serviceIds = ['new'];
-          return row;
+          return { count: 1 };
         }),
       },
+      $transaction: vi.fn(async (work: (tx: unknown) => unknown) => work(db)),
     };
     const events = { emit: vi.fn() };
     const locations = {

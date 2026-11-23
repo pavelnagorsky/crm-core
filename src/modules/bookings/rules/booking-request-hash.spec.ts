@@ -1,4 +1,3 @@
-import { CreateBookingDto } from '../dto/create-booking.dto.js';
 import { PublicCreateBookingDto } from '../dto/public-create-booking.dto.js';
 import { BookingChannel } from '../enums/booking-channel.enum.js';
 import { bookingRequestHash } from './booking-request-hash.js';
@@ -8,7 +7,7 @@ const attribution = {
   bookingPageId: 'page',
   bookingWidgetId: null,
 };
-const request: CreateBookingDto = {
+const request: PublicCreateBookingDto = {
   serviceIds: ['cut', 'color'],
   startAt: '2026-11-10T10:00:00',
   firstName: 'Anna',
@@ -16,6 +15,7 @@ const request: CreateBookingDto = {
   phone: '+375291112233',
   email: 'anna@example.test',
   notes: 'Note',
+  expectedTotal: '110.00',
   staffAssignments: [
     { serviceId: 'cut', staffId: 'alice' },
     { serviceId: 'color', staffId: 'bob' },
@@ -77,7 +77,7 @@ describe('bookingRequestHash', () => {
     );
   });
 
-  it.each<Partial<CreateBookingDto>>([
+  it.each<Partial<PublicCreateBookingDto>>([
     { serviceIds: ['color', 'cut'] },
     { serviceIds: ['cut'] },
     { bundleId: 'bundle' },
@@ -89,10 +89,25 @@ describe('bookingRequestHash', () => {
     { phone: '+375291112234' },
     { email: 'other@example.test' },
     { notes: 'Other note' },
+    { expectedTotal: '120.00' },
+    { preferredStaffIds: ['alice', 'bob'] },
   ])('detects changed guest intent: %j', (patch) => {
     expect(
       bookingRequestHash('location', { ...request, ...patch }, attribution),
     ).not.toBe(bookingRequestHash('location', request, attribution));
+  });
+
+  it('keeps the order of preferred staff and treats an absent list as null', () => {
+    const preferred = (preferredStaffIds?: string[]) =>
+      bookingRequestHash(
+        'location',
+        { ...request, preferredStaffIds },
+        attribution,
+      );
+    expect(preferred(['alice', 'bob'])).not.toBe(preferred(['bob', 'alice']));
+    expect(preferred(undefined)).toBe(
+      bookingRequestHash('location', request, attribution),
+    );
   });
 
   it('scopes intent to the location and originating booking channel', () => {

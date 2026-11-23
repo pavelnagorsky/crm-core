@@ -47,6 +47,10 @@ PriceLevelResponseDto { id, name, sortOrder: number, isDefault: boolean, staffCo
 
 `DELETE /locations/:locationId/price-levels/:levelId` -> 204.
 
+Создание, смена базового и удаление уровней одного филиала идут под одной блокировкой, поэтому первый уровень
+базовый ровно один, а удаление базового видит уже созданные уровни. `PRICE_LEVEL_NAME_EXISTS` отвечает только на
+повтор названия в филиале.
+
 Ошибки: `PRICE_LEVEL_NOT_FOUND` 404, `PRICE_LEVEL_NAME_EXISTS` 409, `PRICE_LEVEL_DEFAULT_IN_USE` 409
 (удаление базового при наличии других уровней).
 
@@ -95,6 +99,9 @@ StaffServicePriceDto { serviceId, serviceTitle, basePrice, levelPrice, personalP
 
 `StaffResponseDto` + `priceLevelId: string | null`. `CreateStaffDto` / `UpdateStaffDto` + `priceLevelId?: string | null`
 (чужой уровень - 404 `PRICE_LEVEL_NOT_FOUND`; базовый уровень сохраняется как `null`).
+Уровень меняет только тот, у кого есть `pricing:write`, помимо `staff:write`: при создании - любой не-`null`
+`priceLevelId`, при `PUT` - значение, отличное от текущего `priceLevelId` мастера. Иначе 403. Без `priceLevelId`
+и с прежним значением правка мастера работает как раньше.
 Изменение `serviceIds` больше не пересоздаёт привязки: личные цены сохраняются у оставшихся услуг.
 
 ### Филиал
@@ -129,6 +136,12 @@ StaffServicePriceDto { serviceId, serviceTitle, basePrice, levelPrice, personalP
 - элемент слота `PublicAvailableSlotItemDto { time, price: string, staffIds: string[] }`:
   `price` - итог визита в это время по мастерам, которых назначит правило; `staffIds` - назначенные
   мастера по позициям в порядке позиций.
+- Если клиент выбрал мастера (`staffId` / `staffAssignments`), слоты и цена считаются по нему.
+- Если `anyStaffEnabled = false` и мастер не выбран, доступность слотов не меняется (страница не ломается),
+  цена считается по правилу филиала. Страница обязана сначала попросить выбор мастера (флаг
+  `anyStaffEnabled` приходит в `booking-setup`); создание записи без мастера в этом случае не поддерживается клиентом.
+- Ответ не кэшируется (`Cache-Control: no-store`). Цена слота считается по кэшу цен; создание записи считает
+  по свежим данным, расхождение ловит `PRICE_CHANGED`.
 
 `POST public/locations/:locationId/bookings`: `PublicCreateBookingDto` + `expectedTotal: string` (обязательно,
 итог, который видел клиент). Входит в хэш идемпотентности. Если пересчёт дал другую сумму:
@@ -142,6 +155,14 @@ StaffServicePriceDto { serviceId, serviceTitle, basePrice, levelPrice, personalP
 
 Клиент видит «Цена изменилась», подтверждает и отправляет запрос заново с `expectedTotal = total`
 (новый ключ идемпотентности).
+
+`preferredStaffIds?: string[]` (uuid, не больше услуг в записи): мастер, которого гость увидел у слота, по позициям
+в том же порядке, что выбранные услуги (то есть `staffIds` слота). Нужен только для позиций «любой мастер». Для каждой
+позиции кандидаты ранжируются с этим мастером первым среди свободных; если он уже занят или не делает услугу,
+выбирает правило филиала, и проверка `expectedTotal` отвечает `409 PRICE_CHANGED`, в `items` которого стоит новый
+мастер. Позиции с выбранным мастером (`staffId` / `staffAssignments`) его игнорируют. Входит в хэш идемпотентности
+(нет поля - `null`, порядок важен). Клиент отправляет `staffIds` слота как `preferredStaffIds` и `price` слота как
+`expectedTotal`.
 
 ## Тексты ошибок (кабинет)
 

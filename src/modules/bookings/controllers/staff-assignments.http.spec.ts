@@ -23,6 +23,8 @@ import { BookingsExportService } from '../export/services/bookings-export.servic
 import { BookingAccessService } from '../services/booking-access.service.js';
 import { BookingClientTokenService } from '../services/booking-client-token.service.js';
 import { BookingsController } from './bookings.controller.js';
+import { PublicSlotsController } from './public-slots.controller.js';
+import { PublicSlotPricingService } from '../services/public-slot-pricing.service.js';
 import { ManualCreateBookingDto } from '../dto/manual-create-booking.dto.js';
 import { UpdateBookingDto } from '../dto/update-booking.dto.js';
 
@@ -34,7 +36,8 @@ describe('Staff assignment HTTP contract', () => {
   const slotsPath = `/locations/${location}/calendar/public/available-slots`;
   const manualSlotsPath = `/locations/${location}/calendar/available-slots`;
   const resolvePath = `/public/locations/${location}/booking-resolve`;
-  const calendar = { getAvailableSlots: vi.fn(async () => []) };
+  const calendar = {};
+  const slots = { getSlots: vi.fn(async () => []) };
   const calendarView = { getManualAvailableSlots: vi.fn(async () => []) };
   const bookings = {
     resolveBookingSelection: vi.fn(async () => ({
@@ -54,9 +57,14 @@ describe('Staff assignment HTTP contract', () => {
   beforeAll(async () => {
     const module = await Test.createTestingModule({
       imports: [PassportModule.register({})],
-      controllers: [CalendarController, BookingsController],
+      controllers: [
+        CalendarController,
+        BookingsController,
+        PublicSlotsController,
+      ],
       providers: [
         { provide: CalendarFacade, useValue: calendar },
+        { provide: PublicSlotPricingService, useValue: slots },
         { provide: CalendarViewFacade, useValue: calendarView },
         {
           provide: BookingAccessService,
@@ -100,7 +108,7 @@ describe('Staff assignment HTTP contract', () => {
         staffAssignments: JSON.stringify([{ serviceId, staffId }]),
       })
       .expect(200);
-    expect(calendar.getAvailableSlots).toHaveBeenCalledWith(
+    expect(slots.getSlots).toHaveBeenCalledWith(
       location,
       expect.objectContaining({ staffAssignments: [{ serviceId, staffId }] }),
     );
@@ -121,7 +129,7 @@ describe('Staff assignment HTTP contract', () => {
       .get(slotsPath)
       .query({ serviceId, staffAssignments })
       .expect(400);
-    expect(calendar.getAvailableSlots).not.toHaveBeenCalled();
+    expect(slots.getSlots).not.toHaveBeenCalled();
   });
 
   it('rejects repeated query keys instead of relying on the Express array parser', async () => {

@@ -606,6 +606,37 @@
         }
       }
     },
+    "pricing": {
+      "scope": "L",
+      "group": "Товары и услуги",
+      "actions": {
+        "read": {
+          "label": "Просмотр цен и уровней мастеров",
+          "defaultRoles": [
+            "OWNER",
+            "MANAGER"
+          ],
+          "configurableRoles": [],
+          "dependencies": []
+        },
+        "write": {
+          "label": "Изменение цен и уровней мастеров",
+          "defaultRoles": [
+            "OWNER",
+            "MANAGER"
+          ],
+          "configurableRoles": [
+            "MANAGER"
+          ],
+          "dependencies": [
+            {
+              "claim": "pricing",
+              "access": "read"
+            }
+          ]
+        }
+      }
+    },
     "supplier": {
       "scope": "G",
       "group": "Склад и поставщики",

@@ -6,6 +6,7 @@ import { SERVICE_AUDIT_FIELDS } from './service.fields.js';
 import { SERVICE_BUNDLE_AUDIT_FIELDS } from './service-bundle.fields.js';
 import { SERVICE_CATEGORY_AUDIT_FIELDS } from './service-category.fields.js';
 import { BUSINESS_AUDIT_FIELDS } from './business.fields.js';
+import { PRICE_LEVEL_AUDIT_FIELDS } from './price-level.fields.js';
 import { PRODUCT_AUDIT_FIELDS } from './product.fields.js';
 import { LOCATION_AUDIT_FIELDS } from './location.fields.js';
 import { CALENDAR_AUDIT_FIELDS } from './calendar.fields.js';
@@ -18,6 +19,7 @@ const allFields = [
   ...SERVICE_AUDIT_FIELDS,
   ...SERVICE_BUNDLE_AUDIT_FIELDS,
   ...SERVICE_CATEGORY_AUDIT_FIELDS,
+  ...PRICE_LEVEL_AUDIT_FIELDS,
   ...BUSINESS_AUDIT_FIELDS,
   ...PRODUCT_AUDIT_FIELDS,
   ...LOCATION_AUDIT_FIELDS,

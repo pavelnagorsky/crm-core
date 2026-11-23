@@ -8,6 +8,8 @@ import {
   IsUUID,
   ValidateNested,
 } from 'class-validator';
+import { StaffAssignments } from '../../../shared/scheduling/decorators/staff-assignments.decorator.js';
+import { StaffAssignmentDto } from '../../../shared/scheduling/dto/staff-assignment.dto.js';
 import { MULTI_SERVICE_MAX_ITEMS } from '../../services/constants/multi-service.constants.js';
 import { ManualBookingItemDto } from './manual-booking-item.dto.js';
 import { ManualBookingProductDto } from './manual-booking-product.dto.js';
@@ -40,6 +42,20 @@ export class BookingPricingRequestDto {
   @IsOptional()
   @IsUUID()
   bundleId?: string | null;
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    required: false,
+    nullable: true,
+    description: 'Staff member the services are priced with',
+  })
+  @IsOptional()
+  @IsUUID()
+  staffId?: string;
+
+  @StaffAssignments()
+  staffAssignments?: StaffAssignmentDto[];
 
   @ApiProperty({
     type: () => ManualBookingItemDto,

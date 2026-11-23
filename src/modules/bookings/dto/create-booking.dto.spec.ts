@@ -36,6 +36,7 @@ function publicBooking(
     startAt: '2026-09-20T10:00:00',
     firstName: 'Ann',
     phone: '+375291112233',
+    expectedTotal: '50.00',
     ...overrides,
   });
 }
@@ -75,6 +76,7 @@ describe('PublicCreateBookingDto traffic', () => {
     startAt: '2026-09-20T10:00:00',
     firstName: 'Ann',
     phone: '+375291112233',
+    expectedTotal: '50.00',
   };
 
   it.each([
@@ -299,5 +301,33 @@ describe('CreateBookingDto client contacts', () => {
     expect((await validate(dto)).map((error) => error.property).sort()).toEqual(
       ['firstName', 'phone'],
     );
+  });
+});
+
+describe('PublicCreateBookingDto expectedTotal', () => {
+  const plain = {
+    serviceId: '22222222-2222-4222-8222-222222222222',
+    startAt: '2026-09-20T10:00:00',
+    firstName: 'Ann',
+    phone: '+375291112233',
+  };
+  const errorsOf = (expectedTotal?: unknown) =>
+    validate(
+      plainToInstance(PublicCreateBookingDto, { ...plain, expectedTotal }),
+      {
+        whitelist: true,
+      },
+    ).then((errors) => errors.map((error) => error.property));
+
+  it('is required', async () => {
+    expect(await errorsOf(undefined)).toContain('expectedTotal');
+  });
+
+  it.each(['50.00', '0.00', 50, '50'])('accepts %j', async (value) => {
+    expect(await errorsOf(value)).not.toContain('expectedTotal');
+  });
+
+  it.each(['-1.00', '50.001', 'abc', ''])('rejects %j', async (value) => {
+    expect(await errorsOf(value)).toContain('expectedTotal');
   });
 });

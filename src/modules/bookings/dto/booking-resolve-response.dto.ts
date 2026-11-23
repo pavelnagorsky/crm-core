@@ -50,12 +50,29 @@ export class BookingResolveResponseDto {
   @ApiPrice()
   totalListPrice: string;
 
+  @ApiPrice({
+    nullable: true,
+    description:
+      'Exact total for startAt: the sum of the charged prices of resolvedItems. Null when no startAt was supplied.',
+  })
+  totalPrice: string | null;
+
   static fromResult(
     result: BookingSelectionResolution,
   ): BookingResolveResponseDto {
     return {
       ...result,
+      staffByService: result.staffByService.map(
+        BookingServiceStaffDto.fromResult,
+      ),
+      availableStaff: result.availableStaff.map(
+        BookingResolveStaffDto.fromResult,
+      ),
       totalListPrice: MoneyUtils.format(result.totalListPrice),
+      totalPrice:
+        result.totalPrice === null
+          ? null
+          : MoneyUtils.format(result.totalPrice),
       resolvedItems: result.resolvedItems.map(
         BookingResolvedItemDto.fromResult,
       ),

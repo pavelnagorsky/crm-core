@@ -26,6 +26,7 @@ export enum Claim {
   PRODUCT_CATALOG = 'product.catalog',
   PRODUCT_LOCATION = 'product.location',
   SERVICE = 'service',
+  PRICING = 'pricing',
   SUPPLIER = 'supplier',
   INVENTORY = 'inventory',
   INVENTORY_EXPORT = 'inventory.export',

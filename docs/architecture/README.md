@@ -66,6 +66,8 @@ flowchart LR
   BookingsModule --> OrdersModule
 
   PricingModule --> ServiceCatalogModule
+  PricingModule --> StaffModule
+  PricingModule --> LocationModule
 
   BookingChannelsModule --> LocationModule
   BookingChannelsModule --> ServiceCatalogModule

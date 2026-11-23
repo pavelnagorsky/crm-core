@@ -20,6 +20,8 @@ import { SlotCheckResult } from '../../interfaces/slot-check-result.interface.js
 import { CalendarRescheduleItem } from '../../interfaces/calendar-reschedule-item.interface.js';
 import { CalendarSlotCandidate } from '../../interfaces/calendar-slot-candidate.interface.js';
 import { CalendarSlotItem } from '../../interfaces/calendar-slot-item.interface.js';
+import { CalendarSlotOffers } from '../../interfaces/calendar-slot-offers.interface.js';
+import { CalendarSlotOffersDay } from '../../interfaces/calendar-slot-offers-day.interface.js';
 import { CalendarSlotSelection } from '../../interfaces/calendar-slot-selection.interface.js';
 import { CalendarEventWithCancellations } from '../../interfaces/calendar-types.interface.js';
 import { blockingEventsWhere } from '../../rules/blocking-events-where.js';
@@ -38,13 +40,17 @@ export class CalendarAvailabilityService {
     private readonly compute: CalendarCalculator,
   ) {}
 
-  async getAvailableSlots(
+  /**
+   * Public slots of a selection with the free candidate staff of every item, inside the
+   * advance-booking window and after the minimum notice. Prices are not known here: the
+   * caller ranks the candidates and prices the visit.
+   */
+  async getPublicSlotOffers(
     locationId: string,
     dto: AvailableSlotsRequestDto,
-  ): Promise<AvailableSlotsDayDto[]> {
+  ): Promise<CalendarSlotOffers> {
     const {
       business,
-      service,
       candidateStaff,
       slotItems,
       executionMode,
@@ -56,24 +62,60 @@ export class CalendarAvailabilityService {
         HttpStatus.FORBIDDEN,
       );
     }
-    if (candidateStaff.length === 0) return [];
+    const offers = {
+      items: slotItems,
+      executionMode,
+      days: [] as CalendarSlotOffersDay[],
+    };
+    if (candidateStaff.length === 0) return offers;
 
     const { todayStr, nowMinutes, rangeStart, rangeEnd } =
       this.resolveBookingWindow(business);
-    return this.collectSlotDays({
+    const window = await this.loadSlotWindow({
       locationId,
       timezone: business.timezone,
-      slotIntervalMinutes: business.slotIntervalMinutes,
-      service,
       candidateStaff,
-      slotItems,
-      executionMode,
-      candidatesByService,
-      todayStr,
-      earliestMinuteToday: nowMinutes + business.minimumBookingNoticeMinutes,
       rangeStart,
       rangeEnd,
     });
+    const slotInterval = business.slotIntervalMinutes;
+    const earliestToday = nowMinutes + business.minimumBookingNoticeMinutes;
+    offers.days = window.dates.flatMap((date) => {
+      const earliestMinute = date === todayStr ? earliestToday : 0;
+      const starts =
+        slotItems.length === 1
+          ? this.compute.collectSlotStartsForDate(
+              date,
+              candidateStaff,
+              window.shiftsByStaffDate,
+              window.blockedByStaffDate,
+              earliestMinute,
+              slotItems[0].durationMinutes,
+              slotInterval,
+            )
+          : this.compute.collectMultiServiceSlotStartsForDate(
+              date,
+              slotItems,
+              executionMode,
+              candidatesByService,
+              window.shiftsByStaffDate,
+              window.blockedByStaffDate,
+              earliestMinute,
+              slotInterval,
+            );
+      return starts.length
+        ? [
+            {
+              date,
+              slots: starts.map((start) => ({
+                time: TimeUtils.minutesToHHmm(start.minute),
+                freeStaffIds: start.freeStaffIds,
+              })),
+            },
+          ]
+        : [];
+    });
+    return offers;
   }
 
   async getManualAvailableSlots(
@@ -651,30 +693,11 @@ export class CalendarAvailabilityService {
     rangeEnd: Date;
     excludedCalendarEventIds?: string[];
   }): Promise<AvailableSlotsDayDto[]> {
-    const staffIds = input.candidateStaff.map((staff) => staff.id);
-    const [shifts, blockEvents] = await this.fetchSlotData(
-      input.locationId,
-      staffIds,
-      input.rangeStart,
-      input.rangeEnd,
-      input.excludedCalendarEventIds ?? [],
-      input.timezone,
-    );
-
-    const dates = [
-      ...new Set(shifts.map((shift) => TimeUtils.dateOnlyStr(shift.date))),
-    ].sort();
-    const shiftsByStaffDate = this.compute.groupShiftsByStaffDate(shifts);
-    const blockedByStaffDate = this.compute.expandBlockEvents(
-      blockEvents,
-      dates,
-      staffIds,
-      input.timezone,
-    );
+    const window = await this.loadSlotWindow(input);
     const slotDuration =
       input.service.durationMinutes + input.service.bufferMinutes;
 
-    return dates.flatMap((date) => {
+    return window.dates.flatMap((date) => {
       const earliestMinute =
         date === input.todayStr ? input.earliestMinuteToday : 0;
       const slots =
@@ -682,8 +705,8 @@ export class CalendarAvailabilityService {
           ? this.compute.collectSlotsForDate(
               date,
               input.candidateStaff,
-              shiftsByStaffDate,
-              blockedByStaffDate,
+              window.shiftsByStaffDate,
+              window.blockedByStaffDate,
               earliestMinute,
               slotDuration,
               input.slotIntervalMinutes,
@@ -693,8 +716,8 @@ export class CalendarAvailabilityService {
               input.slotItems,
               input.executionMode,
               input.candidatesByService,
-              shiftsByStaffDate,
-              blockedByStaffDate,
+              window.shiftsByStaffDate,
+              window.blockedByStaffDate,
               earliestMinute,
               input.slotIntervalMinutes,
             );
@@ -709,6 +732,39 @@ export class CalendarAvailabilityService {
           ]
         : [];
     });
+  }
+
+  /** Shifts and blocks of the candidates over the range, indexed for slot generation. */
+  private async loadSlotWindow(input: {
+    locationId: string;
+    timezone: string;
+    candidateStaff: { id: string }[];
+    rangeStart: Date;
+    rangeEnd: Date;
+    excludedCalendarEventIds?: string[];
+  }) {
+    const staffIds = input.candidateStaff.map((staff) => staff.id);
+    const [shifts, blockEvents] = await this.fetchSlotData(
+      input.locationId,
+      staffIds,
+      input.rangeStart,
+      input.rangeEnd,
+      input.excludedCalendarEventIds ?? [],
+      input.timezone,
+    );
+    const dates = [
+      ...new Set(shifts.map((shift) => TimeUtils.dateOnlyStr(shift.date))),
+    ].sort();
+    return {
+      dates,
+      shiftsByStaffDate: this.compute.groupShiftsByStaffDate(shifts),
+      blockedByStaffDate: this.compute.expandBlockEvents(
+        blockEvents,
+        dates,
+        staffIds,
+        input.timezone,
+      ),
+    };
   }
 
   private resolveBookingWindow(business: {

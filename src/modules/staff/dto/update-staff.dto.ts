@@ -69,6 +69,17 @@ export class UpdateStaffDto {
   @IsUUID('all', { each: true })
   serviceIds?: string[];
 
+  @ApiProperty({
+    type: String,
+    required: false,
+    nullable: true,
+    description:
+      'Price level of the staff member. null or the default level means base prices.',
+  })
+  @IsOptional()
+  @IsUUID()
+  priceLevelId?: string | null;
+
   @ApiProperty({ enum: StaffStatus, enumName: 'StaffStatus', required: false })
   @IsOptional()
   @IsEnum(StaffStatus)

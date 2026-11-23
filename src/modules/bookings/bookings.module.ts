@@ -19,6 +19,7 @@ import { BookingCreateFacade } from './booking-create.facade.js';
 import { BookingsFacade } from './bookings.facade.js';
 import { BookingsController } from './controllers/bookings.controller.js';
 import { BookingClientController } from './controllers/booking-client.controller.js';
+import { PublicSlotsController } from './controllers/public-slots.controller.js';
 import { BookingsExportService } from './export/services/bookings-export.service.js';
 import { BookingClientTokenService } from './services/booking-client-token.service.js';
 import { BookingClientService } from './services/booking-client.service.js';
@@ -29,6 +30,8 @@ import { BookingReservationService } from './services/booking-reservation.servic
 import { BookingSchedulingService } from './services/booking-scheduling.service.js';
 import { BookingSelectionService } from './services/booking-selection.service.js';
 import { BookingSlotLockService } from './services/booking-slot-lock.service.js';
+import { BookingStaffLoadService } from './services/booking-staff-load.service.js';
+import { PublicSlotPricingService } from './services/public-slot-pricing.service.js';
 import { BookingWriteLockService } from './services/booking-write-lock.service.js';
 import { BookingClientLinkService } from './services/write/booking-client-link.service.js';
 import { BookingLifecycleService } from './services/write/booking-lifecycle.service.js';
@@ -63,7 +66,11 @@ import { JwtBookingClientStrategy } from './strategies/jwt-booking-client.strate
     NotificationsModule,
     I18nModule,
   ],
-  controllers: [BookingsController, BookingClientController],
+  controllers: [
+    BookingsController,
+    BookingClientController,
+    PublicSlotsController,
+  ],
   providers: [
     BookingClientService,
     BookingAccessService,
@@ -71,6 +78,8 @@ import { JwtBookingClientStrategy } from './strategies/jwt-booking-client.strate
     BookingSelectionService,
     BookingSchedulingService,
     BookingSlotLockService,
+    BookingStaffLoadService,
+    PublicSlotPricingService,
     BookingEventsService,
     BookingStaffNotificationService,
     BookingWriteLockService,
