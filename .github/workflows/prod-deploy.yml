@@ -67,6 +67,11 @@ jobs:
 
             docker compose up -d --no-deps redis loki alloy grafana lb
 
+            # lb is not recreated when only docker/nginx/lb.conf changed: reload it. A broken config fails the
+            # deploy here, and nginx keeps serving with the previous one.
+            docker compose exec -T lb nginx -t
+            docker compose exec -T lb nginx -s reload
+
             # API: new replicas start next to the old ones and take over once healthy (no downtime).
             bash scripts/deploy/rollout.sh api 180
 

@@ -6,7 +6,7 @@
 | Слой                         | Что отсекает                                        |
 | ---------------------------- | --------------------------------------------------- |
 | Cloudflare / DDoS-Guard      | L3/L4 флуд, ботнеты, большая часть L7               |
-| nginx                        | лимиты по IP, slowloris, большие тела запросов      |
+| nginx (хостовый + `lb`)      | лимиты по IP, slowloris, большие тела запросов      |
 | NestJS (`@nestjs/throttler`) | лимиты по IP на endpoint, brute force логина и т.п. |
 
 ## Приложение
@@ -14,10 +14,11 @@
 Глобальный `AppThrottlerGuard` (`src/shared/guards/app-throttler.guard.ts`)
 применяется ко всем маршрутам. Конфиг — `src/config/throttler.config.ts`.
 
-| Лимитер     | Ключ                  | По умолчанию            |
-| ----------- | --------------------- | ----------------------- |
-| `burst`     | IP, общий на весь API | 50 req / 1 с, блок 10 с |
-| `sustained` | IP + endpoint         | 300 req / мин           |
+| Лимитер     | Ключ          | По умолчанию  |
+| ----------- | ------------- | ------------- |
+| `sustained` | IP + endpoint | 300 req / мин |
+
+Общего лимита по IP на весь API в приложении нет: его держит `lb` (см. [nginx](#lb-лимиты-по-ip)).
 
 Переопределение — декораторами на методе или контроллере:
 
@@ -115,38 +116,54 @@ Redis-хранилище:
 
 ## nginx
 
-```nginx
-# http {}
-limit_req_zone  $binary_remote_addr zone=api:20m   rate=30r/s;
-limit_req_zone  $binary_remote_addr zone=auth:10m  rate=10r/m;
-limit_conn_zone $binary_remote_addr zone=conn:10m;
-limit_req_status  429;
-limit_conn_status 429;
+Запрос проходит два nginx: хостовый (TLS, таймауты клиента) и `lb` в compose (лимиты, балансировка).
 
+### `lb`: лимиты по IP
+
+Лимиты задаются в `docker/nginx/lb.conf`. Файл лежит в репозитории и раскатывается деплоем:
+после `up` workflow выполняет `nginx -t` и `nginx -s reload`. Если конфиг битый, деплой
+падает, а `lb` продолжает работать со старым. Каталог `docker/nginx` монтируется целиком:
+если монтировать один файл, после `git checkout` контейнер продолжит видеть старую версию.
+
+| Зона       | Ключ | Лимит                       | Что покрывает                                     |
+| ---------- | ---- | --------------------------- | ------------------------------------------------- |
+| `req_api`  | IP   | 30 r/s, burst 60            | все запросы                                       |
+| `req_auth` | IP   | 10 r/min, burst 10          | `/auth/*`, кроме `/auth/refresh` и `/auth/logout` |
+| `conn_ip`  | IP   | 50 одновременных соединений | все запросы                                       |
+
+`refresh` и `logout` исключены, потому что вызываются в каждой сессии: офис за одним NAT
+упёрся бы в 10/мин. При превышении nginx отвечает `429` без тела `BaseResponseDto` и без
+`Retry-After`. Это единственный общий лимит по IP на весь API: в приложении его нет. Точные
+лимиты по endpoint и по телефону есть только в приложении.
+
+IP клиента `lb` восстанавливает сам (`real_ip_header X-Forwarded-For`, `real_ip_recursive`).
+Доверенные адреса — loopback и частные сети: хостовый nginx приходит через docker-прокси с
+адреса шлюза, k6 и другие контейнеры — из сети compose. Клиентом считается самый правый
+недоверенный адрес в `X-Forwarded-For`; подделанные адреса левее игнорируются. `lb` дописывает
+этот адрес в `X-Forwarded-For`, и `trust proxy` в приложении получает тот же IP.
+
+### Хостовый nginx
+
+Лимитов в нём нет. Он отвечает только за TLS и защиту от медленных клиентов:
+
+```nginx
 # server {}
 client_max_body_size   30m;
 client_body_timeout    10s;
 client_header_timeout  10s;
 send_timeout           15s;
 keepalive_timeout      15s;
-limit_conn conn 50;
-
-location /auth/ {
-    limit_req zone=auth burst=10 nodelay;
-    proxy_pass http://127.0.0.1:3000;
-    include proxy_params;
-}
 
 location / {
-    limit_req zone=api burst=60 nodelay;
     proxy_pass http://127.0.0.1:3000;
     include proxy_params;
 }
 ```
 
 `proxy_params` должен передавать `X-Forwarded-For $proxy_add_x_forwarded_for`
-и `X-Forwarded-Proto $scheme`. `client_max_body_size` — не меньше лимита (импорт отзывов — 25 МБ)
-загрузки файлов импорта.
+и `X-Forwarded-Proto $scheme`. Без XFF `lb` видит всех клиентов как один адрес шлюза
+docker, и лимит становится общим. `client_max_body_size` должен быть не меньше лимита
+на загрузку файлов импорта (импорт отзывов — 25 МБ).
 
 ## Cloudflare
 
@@ -159,6 +176,8 @@ location / {
    # set_real_ip_from для каждого диапазона Cloudflare
    real_ip_header CF-Connecting-IP;
    ```
-   Тогда `$binary_remote_addr` и `X-Forwarded-For` содержат IP клиента.
+   Тогда `$binary_remote_addr` и `X-Forwarded-For` содержат IP клиента. Без этого `lb` и
+   приложение считают клиентом адрес узла Cloudflare, и все пользователи одного региона
+   делят один лимит.
 5. Security → WAF: rate limiting rule на `/auth/*`; при атаке — режим
    «Under Attack».
