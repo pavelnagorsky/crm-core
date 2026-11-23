@@ -23,6 +23,13 @@ import { StaffSelectionMode } from '../../enums/staff-selection-mode.enum.js';
 import { BookingSetup } from '../../interfaces/booking-setup.interface.js';
 import { buildBookingSetupPrices } from '../../rules/booking-setup-prices.rules.js';
 import {
+  onlineBookingDates,
+  visitTimeAt,
+} from '../../rules/booking-visit-time.rules.js';
+import { BookingPriceWindow } from '../../interfaces/booking-price-window.interface.js';
+import { BookingStaffOption } from '../../interfaces/booking-staff-option.interface.js';
+import { PriceRange } from '../../../pricing/engine/interfaces/price-range.interface.js';
+import {
   staffLinePrice,
   staffVisitPrice,
 } from '../../rules/booking-staff-price.rules.js';
@@ -59,7 +66,12 @@ export class BookingSetupService {
       products,
       isOnlineBookingAvailable,
       anyStaffEnabled: location.anyStaffEnabled,
-      prices: buildBookingSetupPrices(book, catalog, staff),
+      prices: buildBookingSetupPrices(
+        book,
+        catalog,
+        staff,
+        onlineBookingDates(location),
+      ),
     };
   }
 
@@ -74,9 +86,10 @@ export class BookingSetupService {
       );
     }
 
-    const [{ services, bundles }, book] = await Promise.all([
+    const [{ services, bundles }, book, location] = await Promise.all([
       this.serviceCatalog.loadForBooking(locationId),
       this.pricing.priceBook(locationId, ReadConsistency.CACHED),
+      this.locationService.getBookingSettings(locationId),
     ]);
     const serviceById = new Map(
       services.map((service) => [service.id, service]),
@@ -159,7 +172,12 @@ export class BookingSetupService {
     if (!selected?.length) {
       const availableStaff = directory
         .filter((member) => !dto.staffId || member.id === dto.staffId)
-        .map(({ id, name }) => ({ id, name, price: MoneyUtils.decimal(0) }));
+        .map(({ id, name }) => ({
+          id,
+          name,
+          price: MoneyUtils.decimal(0),
+          priceTo: MoneyUtils.decimal(0),
+        }));
       return {
         availableServiceIds,
         availableStaff,
@@ -177,6 +195,25 @@ export class BookingSetupService {
     const selectedIds = selected.map((service) => service.id);
     const priceBundleId = bundle?.id ?? null;
     this.pricing.assertPriceable(book, priceBundleId, selectedIds);
+    // Exact prices at the requested start, else ranges over the online booking window.
+    const priceWindow: BookingPriceWindow = dto.startAt
+      ? {
+          visit: visitTimeAt(
+            TimeUtils.localToUtc(dto.startAt, location.timezone),
+            location.timezone,
+          ),
+          dates: [],
+        }
+      : { visit: null, dates: onlineBookingDates(location) };
+    const toOption = (
+      { id, name }: { id: string; name: string },
+      { min, max }: PriceRange,
+    ): BookingStaffOption => ({
+      id,
+      name,
+      price: MoneyUtils.fromMinor(min),
+      priceTo: MoneyUtils.fromMinor(max),
+    });
 
     const coverableBySingle = directory
       .filter((member) => {
@@ -185,13 +222,18 @@ export class BookingSetupService {
         );
         return selected.every((service) => performed.has(service.id));
       })
-      .map(({ id, name }) => ({
-        id,
-        name,
-        price: MoneyUtils.fromMinor(
-          staffVisitPrice(book, priceBundleId, selectedIds, id),
+      .map((member) =>
+        toOption(
+          member,
+          staffVisitPrice(
+            book,
+            priceBundleId,
+            selectedIds,
+            member.id,
+            priceWindow,
+          ),
         ),
-      }));
+      );
     const totalListPrice = bundle
       ? BundleMetrics.price(bundle)
       : selected.reduce(
@@ -211,13 +253,19 @@ export class BookingSetupService {
         .filter((member) =>
           member.staffServices.some((entry) => entry.serviceId === service.id),
         )
-        .map(({ id, name }) => ({
-          id,
-          name,
-          price: MoneyUtils.fromMinor(
-            staffLinePrice(book, priceBundleId, selectedIds, index, id),
+        .map((member) =>
+          toOption(
+            member,
+            staffLinePrice(
+              book,
+              priceBundleId,
+              selectedIds,
+              index,
+              member.id,
+              priceWindow,
+            ),
           ),
-        })),
+        ),
     }));
     const candidates = staffByService.map((entry, index) => {
       const staffId = requested.get(entry.serviceId);

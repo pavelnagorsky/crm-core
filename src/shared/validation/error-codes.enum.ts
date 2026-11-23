@@ -915,6 +915,26 @@ export const ErrorCode = {
     code: 'PRICE_LEVEL_DEFAULT_PRICE',
     message: 'The default level price is the base price of the service',
   },
+  PRICE_RULE_NOT_FOUND: {
+    code: 'PRICE_RULE_NOT_FOUND',
+    message: 'Price rule not found',
+  },
+  PRICE_RULE_INVALID: {
+    code: 'PRICE_RULE_INVALID',
+    message: 'The price rule fields are invalid',
+  },
+  PRICE_RULE_ARCHIVED: {
+    code: 'PRICE_RULE_ARCHIVED',
+    message: 'The price rule is archived; restore it to change it',
+  },
+  PRICE_RULE_HOLIDAY_CONFLICT: {
+    code: 'PRICE_RULE_HOLIDAY_CONFLICT',
+    message: 'An exclusive holiday price rule already exists for this date',
+  },
+  PRICE_LEVEL_FILL_INVALID: {
+    code: 'PRICE_LEVEL_FILL_INVALID',
+    message: 'The level price must be greater than zero',
+  },
   STAFF_SERVICE_NOT_ASSIGNED: {
     code: 'STAFF_SERVICE_NOT_ASSIGNED',
     message: 'The staff member does not perform this service',

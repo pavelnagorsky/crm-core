@@ -17,7 +17,8 @@ export class BookingItemResponseDto {
   serviceDuration: number;
 
   @ApiPrice({
-    description: 'Catalog price; for a fixed-price bundle, its share of the bundle price',
+    description:
+      'Catalog price; for a fixed-price bundle, its share of the bundle price',
   })
   basePrice: string;
 

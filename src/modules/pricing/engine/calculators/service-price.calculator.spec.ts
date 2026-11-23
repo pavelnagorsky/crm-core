@@ -59,6 +59,7 @@ describe('ServicePriceCalculator (plan 2.1, 5.2)', () => {
   ])('%s', (_name, bundleId, serviceIds, basePrices) => {
     const request: QuoteRequest = {
       bundleId,
+      visit: null,
       lines: serviceIds.map((serviceId) => quoteLine(serviceId)),
     };
     const quote = ServicePriceCalculator.quote(snapshot, request);
@@ -90,6 +91,7 @@ describe('ServicePriceCalculator (plan 2.1, 5.2)', () => {
       pricingSnapshot({ bundles: [fixedBundle('fixed-bundle', 10001)] }),
       {
         bundleId: 'fixed-bundle',
+        visit: null,
         lines: [quoteLine('cut'), quoteLine('cut'), quoteLine('cut')],
       },
     );
@@ -105,6 +107,7 @@ describe('ServicePriceCalculator (plan 2.1, 5.2)', () => {
   ])('customPrice on %s', (_name, bundleId, basePrices) => {
     const quote = ServicePriceCalculator.quote(snapshot, {
       bundleId,
+      visit: null,
       lines: [quoteLine('cut', 5000), quoteLine('color')],
     });
 
@@ -129,6 +132,7 @@ describe('ServicePriceCalculator (plan 2.1, 5.2)', () => {
   ])('%s becomes the total', (_name, customPrice, total) => {
     const quote = ServicePriceCalculator.quote(snapshot, {
       bundleId: null,
+      visit: null,
       lines: [quoteLine('cut', customPrice)],
     });
     expect(quote.lines[0].total).toBe(total);
@@ -139,6 +143,7 @@ describe('ServicePriceCalculator (plan 2.1, 5.2)', () => {
   it('prices a line without staff the same way (preview)', () => {
     const quote = ServicePriceCalculator.quote(snapshot, {
       bundleId: null,
+      visit: null,
       lines: [quoteLine('cut', null, null)],
     });
     expectFlatLayers(quote.lines[0], 6000);
@@ -146,7 +151,7 @@ describe('ServicePriceCalculator (plan 2.1, 5.2)', () => {
 
   it('returns an empty visit for no lines', () => {
     expect(
-      ServicePriceCalculator.quote(snapshot, { bundleId: null, lines: [] }),
+      ServicePriceCalculator.quote(snapshot, { bundleId: null, lines: [], visit: null }),
     ).toEqual({ lines: [], listTotal: 0, discountTotal: 0, total: 0 });
   });
 
@@ -157,6 +162,7 @@ describe('ServicePriceCalculator (plan 2.1, 5.2)', () => {
   ])('is deterministic for %s', (_name, bundleId) => {
     const request = (): QuoteRequest => ({
       bundleId,
+      visit: null,
       lines: [quoteLine('cut', 5000), quoteLine('color'), quoteLine('wash')],
     });
     expect(ServicePriceCalculator.quote(pricingSnapshot(), request())).toEqual(
@@ -168,6 +174,7 @@ describe('ServicePriceCalculator (plan 2.1, 5.2)', () => {
     const input = pricingSnapshot();
     const request: QuoteRequest = {
       bundleId: 'fixed-bundle',
+      visit: null,
       lines: [quoteLine('cut'), quoteLine('color')],
     };
     const before = structuredClone({ input, request });
@@ -191,6 +198,7 @@ describe('ServicePriceCalculator (plan 2.1, 5.2)', () => {
     expect(() =>
       ServicePriceCalculator.quote(input, {
         bundleId,
+        visit: null,
         lines: [quoteLine(serviceId)],
       }),
     ).toThrow(message);

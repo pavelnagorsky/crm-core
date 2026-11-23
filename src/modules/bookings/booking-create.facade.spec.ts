@@ -16,6 +16,8 @@ import { NOTIFICATION_EVENT } from '../notifications/services/notifications.serv
 import { OrderPricingCalculator } from '../orders/calculators/order-pricing.calculator.js';
 import { PricingFacade } from '../pricing/pricing.facade.js';
 import { PricingSnapshotService } from '../pricing/services/pricing-snapshot.service.js';
+import { PriceRuleRecord } from '../pricing/interfaces/price-rule-record.interface.js';
+import { priceRuleRecord } from '../pricing/testing/price-rule-record.factory.js';
 import { BookingCreateFacade } from './booking-create.facade.js';
 import { CLIENT_NOTICE_DELAY_MS } from './rules/booking-client-notice.rules.js';
 import { CreateBookingDto } from './dto/create-booking.dto.js';
@@ -167,10 +169,12 @@ function setup(billing?: { isOnlineBookingOpen: ReturnType<typeof vi.fn> }) {
   return { service, clients, staff, db };
 }
 
-function pricingSetup() {
+function pricingSetup(priceRules: PriceRuleRecord[] = []) {
   const db = {
     location: {
-      findUnique: vi.fn().mockResolvedValue({ currency: 'BYN' }),
+      findUnique: vi
+        .fn()
+        .mockResolvedValue({ currency: 'BYN', timezone: 'Europe/Minsk' }),
     },
     service: {
       findMany: vi.fn().mockResolvedValue([
@@ -221,6 +225,8 @@ function pricingSetup() {
       syncForCompletedBooking: vi.fn(),
     } as never,
     ...catalogDeps(db, catalog),
+    undefined,
+    priceRules,
   );
   return { service, db, orders, catalog };
 }
@@ -820,6 +826,7 @@ function customTimeSetup(
     isSlotFree?: boolean;
     serviceDurationMinutes?: number;
     serviceBufferMinutes?: number;
+    priceRules?: PriceRuleRecord[];
   } = {},
 ) {
   const clients = {
@@ -980,6 +987,8 @@ function customTimeSetup(
     new OrderPricingCalculator(),
     earnings as never,
     ...catalogDeps(db),
+    undefined,
+    options.priceRules,
   );
   return {
     service,
@@ -1772,6 +1781,122 @@ describe('BookingCreateFacade own bookings', () => {
   });
 });
 
+describe('BookingCreateFacade surcharges', () => {
+  // 2099-09-18 is a Friday; the location is in Europe/Minsk.
+  const FRIDAY = 1 << 4;
+  const at = (time: string) => `2099-09-18T${time}:00`;
+  const chargedOf = (tx: ReturnType<typeof customTimeSetup>['tx']) =>
+    (
+      tx.booking.create.mock.calls[0][0].data.items.create as unknown as {
+        chargedPrice: Prisma.Decimal;
+      }[]
+    ).map((item) => item.chargedPrice.toFixed(2));
+
+  it.each([
+    ['17:00', '60.00'],
+    ['16:00', '50.00'],
+  ])(
+    'books a Friday %s visit at %s with a +20%% evening surcharge',
+    async (time, total) => {
+      const { service, tx } = customTimeSetup({
+        priceRules: [
+          priceRuleRecord({
+            weekdaysMask: FRIDAY,
+            intervals: [[17 * 60, 24 * 60]],
+          }),
+        ],
+      });
+      await service.createPublicBooking(
+        'business-1',
+        { ...publicDto, startAt: at(time), expectedTotal: total },
+        publicAttribution,
+        directTraffic,
+      );
+      expect(chargedOf(tx)).toEqual([total]);
+    },
+  );
+
+  it('answers PRICE_CHANGED when the guest expected the price without the surcharge', async () => {
+    const { service, tx } = customTimeSetup({
+      priceRules: [
+        priceRuleRecord({
+          weekdaysMask: FRIDAY,
+          intervals: [[17 * 60, 24 * 60]],
+        }),
+      ],
+    });
+    await expect(
+      service.createPublicBooking(
+        'business-1',
+        { ...publicDto, startAt: at('17:00'), expectedTotal: '50.00' },
+        publicAttribution,
+        directTraffic,
+      ),
+    ).rejects.toMatchObject({
+      errorCode: 'PRICE_CHANGED',
+      payload: expect.objectContaining({ total: '60.00' }),
+    });
+    expect(tx.booking.create).not.toHaveBeenCalled();
+  });
+
+  it('applies the surcharge of the visit start to every item', async () => {
+    const context = customTimeSetup({
+      priceRules: [
+        priceRuleRecord({
+          weekdaysMask: FRIDAY,
+          intervals: [[16 * 60, 17 * 60]],
+        }),
+      ],
+    });
+    context.db.service.findMany.mockResolvedValue([
+      {
+        id: 'service-1',
+        title: 'Haircut',
+        durationMinutes: 60,
+        bufferMinutes: 0,
+        price: 50,
+      },
+      {
+        id: 'service-2',
+        title: 'Styling',
+        durationMinutes: 30,
+        bufferMinutes: 0,
+        price: 30,
+      },
+    ]);
+    await context.service.createManualBooking(
+      'business-1',
+      {
+        ...dto,
+        serviceId: undefined,
+        serviceIds: ['service-1', 'service-2'],
+        startAt: at('16:00'),
+      } as never,
+      { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER },
+    );
+    // Styling starts at 17:00, outside the interval, but the visit started at 16:00.
+    expect(chargedOf(context.tx)).toEqual(['60.00', '36.00']);
+  });
+
+  it.each([
+    ['at the Friday evening start', { startAt: at('17:00') }, '60.00'],
+    ['before the evening', { startAt: at('16:00') }, '50.00'],
+    ['without a start time', {}, '50.00'],
+  ])('previews the price %s', async (_name, time, total) => {
+    const { service } = pricingSetup([
+      priceRuleRecord({
+        weekdaysMask: FRIDAY,
+        intervals: [[17 * 60, 24 * 60]],
+      }),
+    ]);
+    const result = await service.price('business-1', {
+      items: [{ serviceId: 'service-1' }],
+      ...time,
+    });
+    expect(result.serviceTotal.toFixed(2)).toBe(total);
+  });
+});
+
 describe('BookingCreateFacade online price', () => {
   const online = { ...publicDto, startAt: '2099-09-20T10:00:00' };
 
@@ -2012,6 +2137,7 @@ function createBookingService(
   billing: { isOnlineBookingOpen: ReturnType<typeof vi.fn> } = {
     isOnlineBookingOpen: vi.fn().mockResolvedValue(true),
   },
+  priceRules: PriceRuleRecord[] = [],
 ): BookingCreateFacade {
   const slots = new BookingSlotLockService(staff, calendar);
   // Online booking is open unless a test says otherwise (plan section 6.2).
@@ -2019,6 +2145,9 @@ function createBookingService(
     getBookingSettings:
       (location as { getBookingSettings?: unknown }).getBookingSettings ??
       vi.fn().mockResolvedValue({ brandId: 'brand-1' }),
+    findPriceRoundingStep:
+      (location as { findPriceRoundingStep?: unknown }).findPriceRoundingStep ??
+      vi.fn().mockResolvedValue('1.00'),
   }) as typeof location;
   // Personal prices come from the staff mock when it has them; none otherwise.
   const pricingStaff = Object.assign(Object.create(staff), {
@@ -2033,6 +2162,7 @@ function createBookingService(
         listLevels: vi.fn().mockResolvedValue([]),
         listLevelPrices: vi.fn().mockResolvedValue([]),
       } as never,
+      { listForSnapshot: vi.fn().mockResolvedValue(priceRules) } as never,
       pricingStaff,
       bookingLocation,
       {

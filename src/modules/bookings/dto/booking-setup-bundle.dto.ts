@@ -35,13 +35,13 @@ export class BookingSetupBundleDto {
 
   @ApiPrice({
     description:
-      'FIXED bundle: the package price. SUM bundle: the sum of the lowest prices of its services',
+      'Lowest price over the online booking window, surcharges included. FIXED bundle: the package price range. SUM bundle: the sum of the lowest prices of its lines',
   })
   priceFrom: string;
 
   @ApiPrice({
     description:
-      'FIXED bundle: the package price. SUM bundle: the sum of the highest prices of its services',
+      'Highest price over the online booking window, surcharges included. FIXED bundle: the package price range. SUM bundle: the sum of the highest prices of its lines',
   })
   priceTo: string;
 

@@ -1,11 +1,15 @@
 import {
   BundlePricingMode as PrismaBundlePricingMode,
+  PriceRuleTargetType,
+  PriceScheduleType,
+  PriceValueType,
   Prisma,
 } from '@prisma/client';
 import { CacheDependency } from '../../../shared/cache/cache-dependency.js';
 import { ReadConsistency } from '../../../shared/cache/enums/read-consistency.enum.js';
 import { BundlePricingMode } from '../engine/enums/bundle-pricing-mode.enum.js';
 import { PricingSnapshot } from '../engine/interfaces/pricing-snapshot.interface.js';
+import { priceRuleRecord } from '../testing/price-rule-record.factory.js';
 import { bookingCatalogSnapshot } from '../testing/booking-catalog-snapshot.factory.js';
 import {
   priceLevelRow,
@@ -31,10 +35,14 @@ describe('PricingSnapshotService', () => {
         }),
       });
       expect(await service.load('location', ReadConsistency.FRESH)).toEqual({
-        services: [{ id: 'cut', price: minor, levelPrices: {} }],
+        services: [
+          { id: 'cut', categoryId: null, price: minor, levelPrices: {} },
+        ],
         bundles: [],
         levels: [],
         staff: [],
+        rules: [],
+        roundingStep: 100,
       });
     });
 
@@ -131,8 +139,18 @@ describe('PricingSnapshotService', () => {
         ReadConsistency.FRESH,
       );
       expect(services).toEqual([
-        { id: 'cut', price: 6000, levelPrices: { senior: 8000, top: 9990 } },
-        { id: 'color', price: 9000, levelPrices: { senior: 0 } },
+        {
+          id: 'cut',
+          categoryId: null,
+          price: 6000,
+          levelPrices: { senior: 8000, top: 9990 },
+        },
+        {
+          id: 'color',
+          categoryId: null,
+          price: 9000,
+          levelPrices: { senior: 0 },
+        },
       ]);
     });
 
@@ -275,6 +293,144 @@ describe('PricingSnapshotService', () => {
       await service.load('location', ReadConsistency.CACHED);
       await service.load('location', ReadConsistency.CACHED);
       expect(listLevels).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('categories, rules and rounding', () => {
+    it('carries the category of each service', async () => {
+      const catalog = bookingCatalogSnapshot();
+      catalog.services[0].categoryId = 'hair';
+      const { service } = pricingSnapshotService({ catalog });
+      const { services } = await service.load(
+        'location',
+        ReadConsistency.FRESH,
+      );
+      expect(services.map(({ id, categoryId }) => [id, categoryId])).toEqual([
+        ['cut', 'hair'],
+        ['color', null],
+      ]);
+    });
+
+    it.each([
+      ['1.00', 100],
+      ['0.01', 1],
+      ['0.50', 50],
+      ['10.00', 1000],
+    ])('maps the rounding step %s to %i minor units', async (step, minor) => {
+      const { service } = pricingSnapshotService({ roundingStep: step });
+      const snapshot = await service.load('location', ReadConsistency.FRESH);
+      expect(snapshot.roundingStep).toBe(minor);
+    });
+
+    it('maps a percent rule to basis points with its schedule in engine form', async () => {
+      const { service } = pricingSnapshotService({
+        rules: [
+          priceRuleRecord({
+            id: 'evening',
+            name: 'Evening',
+            value: '20.00',
+            weekdaysMask: 0b0010100,
+            visitFrom: '2026-12-01',
+            visitTo: '2026-12-31',
+            intervals: [
+              [1020, 1260],
+              [60, 120],
+            ],
+            appliesToAll: false,
+            targets: [
+              [PriceRuleTargetType.SERVICE, 'cut'],
+              [PriceRuleTargetType.SERVICE_CATEGORY, 'hair'],
+            ],
+            createdAt: new Date('2026-11-02T08:30:00.000Z'),
+          }),
+        ],
+      });
+      const { rules } = await service.load('location', ReadConsistency.FRESH);
+      expect(rules).toEqual([
+        {
+          id: 'evening',
+          name: 'Evening',
+          scheduleType: 'WEEKLY',
+          enabled: true,
+          valueType: 'PERCENT',
+          value: 2000,
+          visitFrom: '2026-12-01',
+          visitTo: '2026-12-31',
+          yearly: false,
+          holidayExclusive: false,
+          weekdaysMask: 20,
+          intervals: [
+            { start: 1020, end: 1260 },
+            { start: 60, end: 120 },
+          ],
+          dates: [],
+          appliesToAll: false,
+          targets: [
+            { type: 'SERVICE', id: 'cut', excluded: false },
+            { type: 'SERVICE_CATEGORY', id: 'hair', excluded: false },
+          ],
+          createdAt: '2026-11-02T08:30:00.000Z',
+        },
+      ]);
+    });
+
+    it('maps an amount rule to minor units and keeps disabled rules', async () => {
+      const { service } = pricingSnapshotService({
+        rules: [
+          priceRuleRecord({
+            valueType: PriceValueType.AMOUNT,
+            value: '15.50',
+            enabled: false,
+          }),
+        ],
+      });
+      const { rules } = await service.load('location', ReadConsistency.FRESH);
+      expect(rules[0]).toMatchObject({
+        valueType: 'AMOUNT',
+        value: 1550,
+        enabled: false,
+      });
+    });
+
+    it('maps holiday dates to YYYY-MM-DD strings and the exclusive flag', async () => {
+      const { service } = pricingSnapshotService({
+        rules: [
+          priceRuleRecord({
+            scheduleType: PriceScheduleType.HOLIDAYS,
+            yearly: true,
+            holidayExclusive: true,
+            dates: ['2028-02-29', '2026-12-31'],
+            appliesToAll: false,
+            targets: [[PriceRuleTargetType.BUNDLE, 'fixed-bundle']],
+          }),
+        ],
+      });
+      const { rules } = await service.load('location', ReadConsistency.FRESH);
+      expect(rules[0]).toMatchObject({
+        scheduleType: 'HOLIDAYS',
+        yearly: true,
+        holidayExclusive: true,
+        dates: ['2028-02-29', '2026-12-31'],
+        targets: [{ type: 'BUNDLE', id: 'fixed-bundle', excluded: false }],
+      });
+    });
+
+    it('reads the rules and the step of the requested location only', async () => {
+      const { service, listForSnapshot, findPriceRoundingStep } =
+        pricingSnapshotService();
+      await service.load('location', ReadConsistency.FRESH);
+      expect(listForSnapshot).toHaveBeenCalledWith('location');
+      expect(findPriceRoundingStep).toHaveBeenCalledWith('location');
+    });
+
+    it('serves rules from the cache until the pricing dependency is invalidated', async () => {
+      const { service, cache, listForSnapshot } = pricingSnapshotService();
+      await service.load('location', ReadConsistency.CACHED);
+      await service.load('location', ReadConsistency.CACHED);
+      expect(listForSnapshot).toHaveBeenCalledTimes(1);
+      await cache.invalidate(CacheDependency.pricing('location'));
+      await service.load('location', ReadConsistency.CACHED);
+      expect(listForSnapshot).toHaveBeenCalledTimes(2);
     });
   });
 });

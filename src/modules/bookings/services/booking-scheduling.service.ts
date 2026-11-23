@@ -17,6 +17,7 @@ import { StaffService } from '../../staff/services/staff.service.js';
 import { BookingScheduleRequest } from '../interfaces/booking-schedule-request.interface.js';
 import { BookingServiceSnapshot } from '../interfaces/booking-service-snapshot.interface.js';
 import { ResolvedBookingItem } from '../interfaces/resolved-booking-item.interface.js';
+import { visitTimeAt } from '../rules/booking-visit-time.rules.js';
 import { rankStaff } from '../rules/staff-ranking.rules.js';
 import { BookingStaffLoadService } from './booking-staff-load.service.js';
 
@@ -181,6 +182,13 @@ export class BookingSchedulingService {
             customPrice == null ? null : new Prisma.Decimal(customPrice),
         };
       }),
+      // Surcharges look at the start of the visit, its earliest item, and reach every item.
+      visit: visitTimeAt(
+        new Date(
+          Math.min(...intervals.map((interval) => interval.startAt.getTime())),
+        ),
+        timezone,
+      ),
     });
 
     return services.map((service, index) => {

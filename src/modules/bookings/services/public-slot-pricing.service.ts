@@ -6,18 +6,21 @@ import { assignStaff } from '../../../shared/scheduling/assign-staff.js';
 import { CalendarFacade } from '../../calendar/calendar.facade.js';
 import { AvailableSlotsRequestDto } from '../../calendar/dto/available-slots-request.dto.js';
 import { LocationService } from '../../location/services/location.service.js';
+import { VisitTime } from '../../pricing/engine/interfaces/visit-time.interface.js';
 import { PriceBook } from '../../pricing/engine/price-book.js';
 import { PricingFacade } from '../../pricing/pricing.facade.js';
 import { PricedSlotsDay } from '../interfaces/priced-slots-day.interface.js';
 import { StaffRankCandidate } from '../interfaces/staff-rank-candidate.interface.js';
+import { visitTimeOfSlot } from '../rules/booking-visit-time.rules.js';
 import { rankStaff } from '../rules/staff-ranking.rules.js';
 import { BookingStaffLoadService } from './booking-staff-load.service.js';
 
 /**
  * Public slots with prices. The calendar lists who is free for each item at each start; this
  * service ranks them with the location's "any staff" rule (the same ranking booking creation
- * uses), assigns the team, and prices the visit with the staff it assigns, so a slot shows
- * the price of the staff member the booking will get.
+ * uses), assigns the team, and prices the visit with the staff it assigns at the slot start
+ * (surcharges included), so a slot shows the price of the staff member the booking will get.
+ * Ranking stays by staff price: surcharges depend only on the start, equal for every candidate.
  *
  * A client who chose a staff member (staffId or staffAssignments) is served by the calendar
  * itself: only that member is free for the item, so the ranking has one candidate.
@@ -112,7 +115,13 @@ export class PublicSlotPricingService {
         return [
           {
             time: slot.time,
-            price: this.visitPrice(book, bundleId, serviceIds, assigned),
+            price: this.visitPrice(
+              book,
+              bundleId,
+              serviceIds,
+              assigned,
+              visitTimeOfSlot(day.date, slot.time),
+            ),
             staffIds: assigned,
           },
         ];
@@ -125,6 +134,7 @@ export class PublicSlotPricingService {
     bundleId: string | null,
     serviceIds: readonly string[],
     staffIds: readonly string[],
+    visit: VisitTime,
   ) {
     const { total } = book.quote({
       bundleId,
@@ -133,6 +143,7 @@ export class PublicSlotPricingService {
         staffId: staffIds[index],
         customPrice: null,
       })),
+      visit,
     });
     return MoneyUtils.fromMinor(total);
   }

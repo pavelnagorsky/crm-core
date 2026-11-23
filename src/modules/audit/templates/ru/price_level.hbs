@@ -13,3 +13,7 @@
 {{#if (eq eventType "PRICE_LEVEL_DELETED")}}
 <p>{{payload.name}}</p>
 {{/if}}
+
+{{#if (eq eventType "LEVEL_PRICES_FILLED")}}
+<p>{{payload.name}}: обновлено цен {{payload.updated}}</p>
+{{/if}}

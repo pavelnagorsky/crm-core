@@ -98,6 +98,23 @@ export class ServiceBundleReadService {
     });
   }
 
+  /** Titles of the location's bundles in any status by id; unknown ids are absent. */
+  async findTitlesInLocation(
+    locationId: string,
+    ids: readonly string[],
+  ): Promise<Map<string, string>> {
+    if (ids.length === 0) return new Map();
+    const bundles = await this.db.serviceBundle.findMany({
+      where: {
+        location: ACTIVE_LOCATION_WHERE,
+        locationId,
+        id: { in: [...ids] },
+      },
+      select: { id: true, title: true },
+    });
+    return new Map(bundles.map((bundle) => [bundle.id, bundle.title]));
+  }
+
   /** Current titles of bundles in any status, for naming past visits. */
   async findTitles(ids: readonly string[]): Promise<Map<string, string>> {
     if (ids.length === 0) return new Map();

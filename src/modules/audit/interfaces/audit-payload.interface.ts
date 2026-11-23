@@ -18,6 +18,10 @@ import { PayrollPeriodAuditPayload } from './payroll-period-audit-payload.interf
 import { PriceLevelCreatedPayload } from './price-level-created-payload.interface.js';
 import { PriceLevelDeletedPayload } from './price-level-deleted-payload.interface.js';
 import { PriceLevelUpdatedPayload } from './price-level-updated-payload.interface.js';
+import { PriceLevelPricesFilledPayload } from './price-level-prices-filled-payload.interface.js';
+import { PriceRuleCreatedPayload } from './price-rule-created-payload.interface.js';
+import { PriceRuleStatePayload } from './price-rule-state-payload.interface.js';
+import { PriceRuleUpdatedPayload } from './price-rule-updated-payload.interface.js';
 import { ProductPackagingAuditPayload } from './product-packaging-audit-payload.interface.js';
 import { ReviewImportCompletedPayload } from './review-import-completed-payload.interface.js';
 import { ServiceBundleCreatedPayload } from './service-bundle-created-payload.interface.js';
@@ -73,6 +77,10 @@ export type AuditPayload =
   | PriceLevelCreatedPayload
   | PriceLevelUpdatedPayload
   | PriceLevelDeletedPayload
+  | PriceLevelPricesFilledPayload
+  | PriceRuleCreatedPayload
+  | PriceRuleUpdatedPayload
+  | PriceRuleStatePayload
   | BrandUpdatedPayload
   | BrandCreatedPayload
   | BrandDeletedPayload

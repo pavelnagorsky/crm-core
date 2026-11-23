@@ -21,8 +21,8 @@ export class PricingFacade {
   constructor(private readonly snapshots: PricingSnapshotService) {}
 
   /**
-   * Price layers of the service lines of one visit. FRESH when the result is stored
-   * (booking creation), CACHED when it is only shown.
+   * Price layers of the service lines of one visit, surcharges by `request.visit`. FRESH
+   * when the result is stored (booking creation), CACHED when it is only shown.
    */
   async quoteServices(
     locationId: string,
@@ -58,6 +58,7 @@ export class PricingFacade {
             ? null
             : MoneyUtils.toMinor(line.customPrice),
       })),
+      visit: request.visit,
     });
     return { lines: quote.lines.map((line) => this.toLinePrice(line)) };
   }

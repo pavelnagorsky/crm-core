@@ -5,6 +5,8 @@ import {
   BusinessType,
   Location,
 } from '@prisma/client';
+import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { PaymentTrackingMode } from '../enums/payment-tracking-mode.enum.js';
 
 export class LocationResponseDto {
@@ -86,6 +88,12 @@ export class LocationResponseDto {
   @ApiProperty({ enum: AnyStaffRule, enumName: 'AnyStaffRule' })
   anyStaffRule: AnyStaffRule;
 
+  @ApiPrice({
+    description:
+      'Step a surcharged price rounds to: 0.01, 0.10, 0.50, 1.00, 5.00 or 10.00. 0.01 means no rounding.',
+  })
+  priceRoundingStep: string;
+
   @ApiProperty({
     enum: PaymentTrackingMode,
     enumName: 'PaymentTrackingMode',
@@ -135,6 +143,7 @@ export class LocationResponseDto {
     dto.notifyClientOnStaffChanges = location.notifyClientOnStaffChanges;
     dto.anyStaffEnabled = location.anyStaffEnabled;
     dto.anyStaffRule = location.anyStaffRule;
+    dto.priceRoundingStep = MoneyUtils.format(location.priceRoundingStep);
     dto.paymentTrackingMode = location.paymentTrackingMode;
     dto.paymentTrackingSince = location.paymentTrackingSince;
     dto.createdAt = location.createdAt;

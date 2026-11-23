@@ -128,6 +128,7 @@ function setup() {
     findById: vi.fn(async () => location),
     getLocale: vi.fn(async () => location),
     getBookingSettings: vi.fn(async () => location),
+    findPriceRoundingStep: vi.fn(async () => '1.00'),
     acquireActiveOperationLock: vi.fn(async () => true),
   };
   // Bundles the price engine sees; a test may add one to price it.
@@ -160,6 +161,7 @@ function setup() {
         listLevels: vi.fn(async () => []),
         listLevelPrices: vi.fn(async () => []),
       } as never,
+      { listForSnapshot: vi.fn(async () => []) } as never,
       staff as never,
       locations as never,
       {

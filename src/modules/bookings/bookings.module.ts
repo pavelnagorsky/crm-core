@@ -32,6 +32,7 @@ import { BookingSchedulingService } from './services/booking-scheduling.service.
 import { BookingSelectionService } from './services/booking-selection.service.js';
 import { BookingSlotLockService } from './services/booking-slot-lock.service.js';
 import { BookingStaffLoadService } from './services/booking-staff-load.service.js';
+import { BookingStaffingPreviewService } from './services/booking-staffing-preview.service.js';
 import { PublicSlotPricingService } from './services/public-slot-pricing.service.js';
 import { BookingWriteLockService } from './services/booking-write-lock.service.js';
 import { BookingClientLinkService } from './services/write/booking-client-link.service.js';
@@ -43,6 +44,7 @@ import { PublicBookingRateLimiter } from './services/public-booking-rate-limiter
 import { BookingCalendarReadService } from './services/read/booking-calendar-read.service.js';
 import { BookingHistoryReadService } from './services/read/booking-history-read.service.js';
 import { BookingPaymentReadService } from './services/read/booking-payment-read.service.js';
+import { BookingPriceRuleStatsService } from './services/read/booking-price-rule-stats.service.js';
 import { BookingReadService } from './services/read/booking-read.service.js';
 import { BookingSetupService } from './services/setup/booking-setup.service.js';
 import { BookingStaffNotificationService } from './services/booking-staff-notification.service.js';
@@ -82,6 +84,7 @@ import { JwtBookingClientStrategy } from './strategies/jwt-booking-client.strate
     BookingSlotLockService,
     BookingStaffLoadService,
     PublicSlotPricingService,
+    BookingStaffingPreviewService,
     BookingEventsService,
     BookingStaffNotificationService,
     BookingWriteLockService,
@@ -98,6 +101,7 @@ import { JwtBookingClientStrategy } from './strategies/jwt-booking-client.strate
     BookingMutationService,
     BookingCalendarReadService,
     BookingReadService,
+    BookingPriceRuleStatsService,
     BookingHistoryReadService,
     BookingSetupService,
     BookingsExportService,

@@ -16,6 +16,7 @@ import { AuthModule } from './modules/auth/auth.module.js';
 import { BookingChannelsModule } from './modules/booking-channels/booking-channels.module.js';
 import { BookingsAnalyticsModule } from './modules/bookings/analytics/bookings-analytics.module.js';
 import { BookingsModule } from './modules/bookings/bookings.module.js';
+import { PricingCabinetModule } from './modules/pricing/pricing-cabinet.module.js';
 import { BrandApiModule } from './modules/brand/api/brand-api.module.js';
 import { CalendarApiModule } from './modules/calendar/api/calendar-api.module.js';
 import { ClientsAnalyticsModule } from './modules/clients/analytics/clients-analytics.module.js';
@@ -84,6 +85,7 @@ import { THROTTLER_STORAGE } from './shared/throttling/throttler-storage.token.j
     ClientsModule,
     ClientsAnalyticsModule,
     BookingsModule,
+    PricingCabinetModule,
     BookingChannelsModule,
     BookingsAnalyticsModule,
     AuditModule,

@@ -7,12 +7,25 @@ export class BookingStaffServicePriceDto {
   @ApiProperty({ type: String, format: 'uuid' })
   serviceId: string;
 
-  @ApiPrice()
-  price: string;
+  @ApiPrice({
+    description:
+      'Lowest price of the service with this staff member over the online booking window, surcharges included',
+  })
+  priceFrom: string;
+
+  @ApiPrice({
+    description:
+      'Highest price of the service with this staff member over the online booking window, surcharges included',
+  })
+  priceTo: string;
 
   static fromResult(
     item: BookingStaffServicePrice,
   ): BookingStaffServicePriceDto {
-    return { serviceId: item.serviceId, price: MoneyUtils.format(item.price) };
+    return {
+      serviceId: item.serviceId,
+      priceFrom: MoneyUtils.format(item.priceFrom),
+      priceTo: MoneyUtils.format(item.priceTo),
+    };
   }
 }

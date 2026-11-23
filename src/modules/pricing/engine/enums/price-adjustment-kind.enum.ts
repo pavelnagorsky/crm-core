@@ -5,4 +5,6 @@ export enum PriceAdjustmentKind {
   SURCHARGE = 'SURCHARGE',
   PROMOTION = 'PROMOTION',
   CLIENT_DISCOUNT = 'CLIENT_DISCOUNT',
+  /** Rounding of a price a rule computed (location step). */
+  ROUNDING = 'ROUNDING',
 }

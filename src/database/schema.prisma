@@ -199,11 +199,31 @@ enum PriceAdjustmentKind {
   SURCHARGE
   PROMOTION
   CLIENT_DISCOUNT
+  /// Rounding of a price a rule computed (location step).
+  ROUNDING
 }
 
 enum PriceValueType {
   PERCENT
   AMOUNT
+}
+
+/// Kind of a price rule; promotions join the same table in stage 4.
+enum PriceRuleKind {
+  SURCHARGE
+}
+
+/// How a price rule picks its days (docs/pricing-stage3-api.md).
+enum PriceScheduleType {
+  WEEKLY
+  SEASON
+  HOLIDAYS
+}
+
+enum PriceRuleTargetType {
+  SERVICE
+  SERVICE_CATEGORY
+  BUNDLE
 }
 
 /// Who gets an online booking for "any staff" (docs/pricing-plan.md 2.3).
@@ -283,6 +303,7 @@ enum AuditEntity {
   ORDER
   REVIEW
   PRICE_LEVEL
+  PRICE_RULE
 }
 
 enum AuditEvent {
@@ -333,6 +354,14 @@ enum AuditEvent {
   PRICE_LEVEL_DELETED
   SERVICE_PRICES_UPDATED
   STAFF_PRICES_UPDATED
+  LEVEL_PRICES_FILLED
+  PRICE_RULE_CREATED
+  PRICE_RULE_UPDATED
+  PRICE_RULE_ENABLED
+  PRICE_RULE_DISABLED
+  PRICE_RULE_ARCHIVED
+  PRICE_RULE_RESTORED
+  PRICE_ROUNDING_UPDATED
   BRAND_CREATED
   BRAND_UPDATED
   BRAND_DELETED
@@ -621,6 +650,8 @@ model Location {
   /// Online booking offers "any staff"; the rule picks the staff member and the slot price.
   anyStaffEnabled               Boolean                      @default(true)
   anyStaffRule                  AnyStaffRule                 @default(CHEAPER_AND_FREER)
+  /// Step the surcharged price rounds to (docs/pricing-stage3-api.md); 0.01 means no rounding.
+  priceRoundingStep             Decimal                      @default(1.00) @db.Decimal(10, 2)
   reviewsEnabled                Boolean                      @default(true)
   notifyClientOnStaffChanges    Boolean                      @default(true)
   googleReviewUrl               String?                      @db.VarChar(2048)
@@ -659,6 +690,7 @@ model Location {
   reviews                    Review[]
   trafficStats               BookingTrafficStat[]
   priceLevels                PriceLevel[]
+  priceRules                 PriceRule[]
 
   @@index([brandId, deletedAt])
 }
@@ -1008,7 +1040,7 @@ model OrderItemPriceAdjustment {
   orderItemId String
   sortOrder   Int
   kind        PriceAdjustmentKind
-  /// Price rule that produced the layer; the foreign key arrives with price rules.
+  /// Price rule that produced the layer; rules are only archived, the link is cleared if one is ever removed.
   ruleId      String?
   title       String              @db.VarChar(150)
   publicTitle String?             @db.VarChar(150)
@@ -1017,7 +1049,8 @@ model OrderItemPriceAdjustment {
   /// Signed change of the unit price.
   amount      Decimal             @db.Decimal(10, 2)
 
-  orderItem OrderItem @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  orderItem OrderItem  @relation(fields: [orderItemId], references: [id], onDelete: Cascade)
+  rule      PriceRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
 
   @@index([orderItemId])
   @@index([ruleId])
@@ -1275,6 +1308,76 @@ model PriceLevel {
 
   @@unique([locationId, name])
   @@index([locationId])
+}
+
+/// Surcharge rule of a location (docs/pricing-stage3-api.md). Checks (value > 0, intervals) live in raw SQL.
+model PriceRule {
+  id               String            @id @default(uuid())
+  locationId       String
+  kind             PriceRuleKind
+  scheduleType     PriceScheduleType
+  name             String            @db.VarChar(100)
+  note             String?           @db.VarChar(500)
+  enabled          Boolean           @default(true)
+  archivedAt       DateTime?
+  valueType        PriceValueType
+  /// Percent or amount, by valueType.
+  value            Decimal           @db.Decimal(10, 2)
+  visitFrom        DateTime?         @db.Date
+  visitTo          DateTime?         @db.Date
+  yearly           Boolean           @default(false)
+  holidayExclusive Boolean           @default(false)
+  /// Bit (isoWeekday - 1); 0 = every day.
+  weekdaysMask     Int               @default(0)
+  appliesToAll     Boolean
+  createdById      String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  location           Location                     @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  targets            PriceRuleTarget[]
+  intervals          PriceRuleInterval[]
+  dates              PriceRuleDate[]
+  bookingAdjustments BookingItemPriceAdjustment[]
+  orderAdjustments   OrderItemPriceAdjustment[]
+
+  @@index([locationId, archivedAt])
+}
+
+/// Target of a rule. targetId is polymorphic (service, category or bundle): no foreign key,
+/// the pricing module deletes the rows when the target is deleted.
+model PriceRuleTarget {
+  ruleId     String
+  targetType PriceRuleTargetType
+  targetId   String
+  /// Excluded from a rule that applies to all.
+  excluded   Boolean             @default(false)
+
+  rule PriceRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@id([ruleId, targetType, targetId])
+  @@index([targetType, targetId])
+}
+
+/// Visit start interval, minutes of the local day: startMinute <= minute < endMinute.
+model PriceRuleInterval {
+  ruleId      String
+  startMinute Int
+  endMinute   Int
+
+  rule PriceRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@id([ruleId, startMinute])
+}
+
+/// Date of a HOLIDAYS rule.
+model PriceRuleDate {
+  ruleId String
+  date   DateTime @db.Date
+
+  rule PriceRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@id([ruleId, date])
 }
 
 /// Price of a service for a non-default level; no row means the base price.
@@ -1625,7 +1728,7 @@ model BookingItemPriceAdjustment {
   bookingItemId String
   sortOrder     Int
   kind          PriceAdjustmentKind
-  /// Price rule that produced the layer; the foreign key arrives with price rules.
+  /// Price rule that produced the layer; rules are only archived, the link is cleared if one is ever removed.
   ruleId        String?
   title         String              @db.VarChar(150)
   publicTitle   String?             @db.VarChar(150)
@@ -1635,6 +1738,7 @@ model BookingItemPriceAdjustment {
   amount        Decimal             @db.Decimal(10, 2)
 
   bookingItem BookingItem @relation(fields: [bookingItemId], references: [id], onDelete: Cascade)
+  rule        PriceRule?  @relation(fields: [ruleId], references: [id], onDelete: SetNull)
 
   @@index([bookingItemId])
   @@index([ruleId])
