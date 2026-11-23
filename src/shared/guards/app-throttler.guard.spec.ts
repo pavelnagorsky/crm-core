@@ -67,7 +67,8 @@ describe('AppThrottlerGuard (HTTP)', () => {
     expect(statuses.filter((s) => s === 200)).toHaveLength(300);
     expect(statuses.slice(300)).toEqual([429, 429]);
     await request(server).get('/open-too').expect(200);
-  });
+    // 300+ sequential HTTP requests: well under a second alone, over 5s on a machine busy with the full suite.
+  }, 30_000);
 
   it('never throttles routes marked with SkipRateLimit', async () => {
     for (let i = 0; i < 80; i++) {
