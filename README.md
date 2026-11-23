@@ -17,14 +17,14 @@ npm run start:dev
 
 ### Весь стек в Docker Compose
 
-Два api, worker, балансировщик, Redis, Postgres и логи (Loki + Grafana) одной командой:
+Два api, worker, балансировщик, Redis, Postgres, логи (Loki) и метрики (Prometheus) с Grafana одной командой:
 
 ```sh
 cp .env.example .env
 docker compose --profile local up -d --build
 ```
 
-API доступен на `http://127.0.0.1:3000` (через nginx `lb`), Grafana с логами — `http://127.0.0.1:3200` (`admin` / `GRAFANA_ADMIN_PASSWORD` из `.env`), Postgres — `127.0.0.1:5433`. Миграции применяет сервис `migrate`. Остановка: `docker compose --profile local down`. Подробности — [деплой](docs/deployment.md).
+API доступен на `http://127.0.0.1:3000` (через nginx `lb`), Grafana с логами и метриками — `http://127.0.0.1:3200` (`admin` / `GRAFANA_ADMIN_PASSWORD` из `.env`, см. [логи](docs/logging.md) и [метрики](docs/metrics.md)), Postgres — `127.0.0.1:5433`. Миграции применяет сервис `migrate`. Остановка: `docker compose --profile local down`. Подробности — [деплой](docs/deployment.md).
 
 ### Разработка без контейнеров приложения
 

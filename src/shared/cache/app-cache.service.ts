@@ -1,9 +1,11 @@
 import { Inject, Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { AppCacheMetrics } from './app-cache.metrics.js';
 import { cacheKey } from './cache-key.js';
 import { CACHE_STORE } from './cache-store.token.js';
 import { CacheValueCodec } from './cache-value.codec.js';
 import { cloneCacheValue } from './clone-cache-value.js';
+import { CacheReadResult } from './enums/cache-read-result.enum.js';
 import { CacheDefinition } from './interfaces/cache-definition.interface.js';
 import type { CacheStore } from './interfaces/cache-store.interface.js';
 import { PendingCacheLoad } from './interfaces/pending-cache-load.interface.js';
@@ -26,6 +28,7 @@ export class AppCacheService implements OnModuleDestroy {
   constructor(
     @Inject(CACHE_STORE) private readonly store: CacheStore,
     config: ConfigService,
+    private readonly metrics: AppCacheMetrics,
   ) {
     this.enabled = config.get<boolean>('cache.enabled', true);
   }
@@ -35,8 +38,13 @@ export class AppCacheService implements OnModuleDestroy {
     context: C,
     loader: () => Promise<V>,
   ): Promise<V> {
-    if (!this.enabled || !this.store.available) return loader();
-    const key = cacheKey(definition.namespace, definition.identity(context));
+    if (!this.enabled) return loader();
+    const { namespace } = definition;
+    if (!this.store.available) {
+      this.metrics.read(namespace, CacheReadResult.BYPASS);
+      return loader();
+    }
+    const key = cacheKey(namespace, definition.identity(context));
     let revision: number;
     try {
       const read = await this.store.read(key);
@@ -49,14 +57,17 @@ export class AppCacheService implements OnModuleDestroy {
             read.ttlMs <= definition.policy.refreshAheadMs
           )
             this.refresh(key, definition, context, loader, revision);
+          this.metrics.read(namespace, CacheReadResult.HIT);
           // Decoded objects are new on every read: no clone needed.
           return value;
         }
       }
     } catch (error) {
+      this.metrics.read(namespace, CacheReadResult.ERROR);
       this.warn(`Cache read failed, loading without cache: ${key}`, error);
       return loader();
     }
+    this.metrics.read(namespace, CacheReadResult.MISS);
     return cloneCacheValue(
       await this.load(key, definition, context, loader, revision),
     );

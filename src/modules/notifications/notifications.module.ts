@@ -9,6 +9,7 @@ import { AdminEmailsController } from './controllers/admin-emails.controller.js'
 import { EmailAdminService } from './services/email-admin.service.js';
 import { EmailDeliveryService } from './services/email-delivery.service.js';
 import { EmailLogService } from './services/email-log.service.js';
+import { EmailMetrics } from './services/email.metrics.js';
 import { EmailOutboxService } from './services/email-outbox.service.js';
 import { EmailQueueService } from './services/email-queue.service.js';
 import { EmailStatsService } from './services/email-stats.service.js';
@@ -22,6 +23,7 @@ import { NotificationsService } from './services/notifications.service.js';
     EmailLogService,
     EmailQueueService,
     EmailDeliveryService,
+    EmailMetrics,
     EmailOutboxService,
     EmailStatsService,
     EmailAdminService,

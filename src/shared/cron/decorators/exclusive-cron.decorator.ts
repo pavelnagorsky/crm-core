@@ -1,11 +1,12 @@
 import { Cron, CronOptions } from '@nestjs/schedule';
-import { CronLockService } from '../cron-lock.service.js';
+import { CronRunService } from '../cron-run.service.js';
 
 type CronMethod = (...args: any[]) => Promise<unknown>;
 
 /**
- * `@Cron` that runs at most once per minute across processes (see `CronLockService`); a skipped run resolves
- * to `undefined`. Arguments and the result are passed through, so tests may call the method directly.
+ * `@Cron` that runs at most once per minute across processes and is accounted in metrics (see `CronRunService`);
+ * a skipped run resolves to `undefined`. Arguments and the result are passed through, so tests may call the method
+ * directly.
  */
 export function ExclusiveCron(
   cronTime: string,
@@ -17,11 +18,11 @@ export function ExclusiveCron(
 ) => TypedPropertyDescriptor<T> {
   return (target, propertyKey, descriptor) => {
     const original = descriptor.value!;
-    const lockName = `${target.constructor.name}.${String(propertyKey)}`;
+    const job = `${target.constructor.name}.${String(propertyKey)}`;
     const wrapper = async function (this: unknown, ...args: unknown[]) {
-      const lock = CronLockService.registered;
-      if (lock && !(await lock.acquire(lockName))) return undefined;
-      return original.apply(this, args);
+      const task = () => original.apply(this, args);
+      const runner = CronRunService.registered;
+      return runner ? runner.run(job, task) : task();
     };
     Object.defineProperty(wrapper, 'name', { value: original.name });
     descriptor.value = wrapper as typeof original;
