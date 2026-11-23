@@ -5,7 +5,8 @@ export class UndoBookingPaymentDto {
   @ApiProperty({
     type: String,
     format: 'uuid',
-    description: 'The payment operation to undo (operationId of PUT bookings/:id/payment).',
+    description:
+      'The payment operation to undo (operationId of PUT bookings/:id/payment).',
   })
   @IsUUID()
   operationId: string;

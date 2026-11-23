@@ -1,4 +1,5 @@
-import type { Location } from '@prisma/client';
+import type { Location, Prisma } from '@prisma/client';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import type { FieldDescriptor } from '../interfaces/field-descriptor.interface.js';
 
 export const LOCATION_AUDIT_FIELDS: FieldDescriptor<Location>[] = [
@@ -23,5 +24,6 @@ export const LOCATION_AUDIT_FIELDS: FieldDescriptor<Location>[] = [
   { key: 'notifyClientOnStaffChanges', i18n: 'booleanValue' },
   { key: 'anyStaffEnabled', i18n: 'booleanValue' },
   { key: 'anyStaffRule' },
+  { key: 'priceRoundingStep', format: (value) => MoneyUtils.format(value as Prisma.Decimal) },
   { key: 'paymentTrackingMode', i18n: 'paymentTrackingMode' },
 ];

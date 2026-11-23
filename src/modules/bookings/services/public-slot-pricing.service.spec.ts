@@ -7,15 +7,21 @@ import {
   pricingSnapshot,
   pricingStaff,
   sumBundle,
+  surchargeRule,
+  weekdays,
 } from '../../pricing/engine/testing/pricing-snapshot.factory.js';
 import { createPricingFacadeStub } from '../../pricing/testing/pricing-facade.stub.js';
+import { PriceScheduleType } from '../../pricing/engine/enums/price-schedule-type.enum.js';
+import { PricingRuleEntry } from '../../pricing/engine/interfaces/pricing-rule-entry.interface.js';
 import { PublicSlotPricingService } from './public-slot-pricing.service.js';
 
 const DATE = '2026-11-10';
 
 /** Cut 60 / color 90; anna base, boris top level (cut 80, color 120), carl personal cut 50. */
-const snapshot = () =>
+const snapshot = (rules: PricingRuleEntry[] = [], roundingStep?: number) =>
   pricingSnapshot({
+    rules,
+    roundingStep,
     services: { cut: 6000, color: 9000 },
     bundles: [sumBundle('sum'), fixedBundle('fixed', 12000)],
     levels: [priceLevel('base', 'Base', true), priceLevel('top', 'Top')],
@@ -34,6 +40,8 @@ type Options = {
   days?: CalendarSlotOffers['days'];
   loads?: Record<string, Record<string, number>>;
   lastAssigned?: Record<string, number>;
+  rules?: PricingRuleEntry[];
+  roundingStep?: number;
 };
 
 const cutItems = [{ serviceId: 'cut', durationMinutes: 60 }];
@@ -50,7 +58,9 @@ function setup(options: Options = {}) {
     ],
   };
   const calendar = { getPublicSlotOffers: vi.fn(async () => offers) };
-  const pricing = createPricingFacadeStub(snapshot());
+  const pricing = createPricingFacadeStub(
+    snapshot(options.rules, options.roundingStep),
+  );
   const priceBook = vi.spyOn(pricing, 'priceBook');
   const locations = {
     getBookingSettings: vi.fn(async () => ({
@@ -350,5 +360,85 @@ describe('PublicSlotPricingService', () => {
     await expect(
       service.getSlots('location-1', { serviceId: 'unknown' } as never),
     ).rejects.toMatchObject({ errorCode: 'BOOKING_SERVICE_NOT_FOUND' });
+  });
+
+  describe('surcharges by the slot start', () => {
+    const FRIDAY = '2026-11-27';
+    /** +20% on Friday from 17:00. */
+    const fridayEvening = surchargeRule('friday', {
+      value: 2000,
+      weekdaysMask: weekdays(5),
+      intervals: [{ start: 17 * 60, end: 24 * 60 }],
+    });
+    const fridaySlots = (times: string[]) => [
+      {
+        date: FRIDAY,
+        slots: times.map((time) => ({
+          time,
+          freeStaffIds: [['anna', 'boris', 'carl']],
+        })),
+      },
+    ];
+
+    it('prices a Friday 17:00 slot at 60 and a 16:00 slot at 50', async () => {
+      const { service } = setup({
+        rules: [fridayEvening],
+        days: fridaySlots(['16:00', '17:00']),
+      });
+      const [day] = await service.getSlots('location-1', {
+        serviceId: 'cut',
+      } as never);
+      expect(
+        day.slots.map((slot) => [slot.time, slot.price.toFixed(2)]),
+      ).toEqual([
+        ['16:00', '50.00'],
+        ['17:00', '60.00'],
+      ]);
+      // Surcharges reach every candidate alike: ranking stays by staff price.
+      expect(day.slots.map((slot) => slot.staffIds)).toEqual([
+        ['carl'],
+        ['carl'],
+      ]);
+    });
+
+    it('leaves other days without the surcharge', async () => {
+      const { slot } = await slotOf({
+        rules: [fridayEvening],
+        days: [
+          {
+            date: '2026-11-26',
+            slots: [
+              { time: '18:00', freeStaffIds: [['anna', 'boris', 'carl']] },
+            ],
+          },
+        ],
+      });
+      expect(slot.price.toFixed(2)).toBe('50.00');
+    });
+
+    it('applies only the exclusive holiday rule on its date', async () => {
+      const holiday = surchargeRule('holiday', {
+        scheduleType: PriceScheduleType.HOLIDAYS,
+        value: 1000,
+        dates: [FRIDAY],
+        holidayExclusive: true,
+      });
+      const { slot } = await slotOf({
+        rules: [fridayEvening, holiday],
+        days: fridaySlots(['18:00']),
+      });
+      // Carl 50 + 10% holiday only, the Friday evening rule is overridden.
+      expect(slot.price.toFixed(2)).toBe('55.00');
+    });
+
+    it('rounds a surcharged slot price to the location step', async () => {
+      const { slot } = await slotOf({
+        rules: [surchargeRule('evening', { value: 1500 })],
+        roundingStep: 500,
+        days: fridaySlots(['10:00']),
+      });
+      // Carl 50 + 15% = 57.50, rounded to 60.00.
+      expect(slot.price.toFixed(2)).toBe('60.00');
+    });
   });
 });

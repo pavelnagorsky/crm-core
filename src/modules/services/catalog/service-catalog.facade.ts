@@ -201,6 +201,22 @@ export class ServiceCatalogFacade {
     return this.bundles.findTitles(bundleIds);
   }
 
+  /** Names of the location's categories by id; unknown ids are absent. */
+  findCategoryNames(
+    locationId: string,
+    categoryIds: readonly string[],
+  ): Promise<Map<string, string>> {
+    return this.categories.findNames(locationId, categoryIds);
+  }
+
+  /** Titles of the location's bundles in any status by id; unknown ids are absent. */
+  findBundleTitlesInLocation(
+    locationId: string,
+    bundleIds: readonly string[],
+  ): Promise<Map<string, string>> {
+    return this.bundles.findTitlesInLocation(locationId, bundleIds);
+  }
+
   countBookableServices(locationId: string): Promise<number> {
     return this.services.countBookable(locationId);
   }

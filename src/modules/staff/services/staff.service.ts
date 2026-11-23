@@ -51,6 +51,7 @@ import { normalizeStaffName } from '../rules/staff-name.rules.js';
 import { BookingStaff } from '../interfaces/booking-staff.interface.js';
 import { StaffPricingProfile } from '../interfaces/staff-pricing-profile.interface.js';
 import { StaffNameMatch } from '../interfaces/staff-name-match.interface.js';
+import { StaffPersonalPriceRow } from '../interfaces/staff-personal-price-row.interface.js';
 import { StaffServicePriceRow } from '../interfaces/staff-service-price-row.interface.js';
 import { StaffServicePrices } from '../interfaces/staff-service-prices.interface.js';
 import { StaffScheduleSnapshot } from '../interfaces/staff-schedule-snapshot.interface.js';
@@ -660,6 +661,31 @@ export class StaffService {
       orderBy: [{ staff: { name: 'asc' } }, { staffId: 'asc' }],
     });
     return rows.map(({ price, staff }) => ({ staff, personalPrice: price }));
+  }
+
+  /** Personal prices of the active staff of the location, by staff name and service. */
+  async listPersonalPriceRows(
+    locationId: string,
+  ): Promise<StaffPersonalPriceRow[]> {
+    const rows = await this.db.staffService.findMany({
+      where: {
+        price: { not: null },
+        staff: {
+          location: ACTIVE_LOCATION_WHERE,
+          locationId,
+          status: StaffStatus.ACTIVE,
+        },
+      },
+      select: {
+        serviceId: true,
+        price: true,
+        staff: { include: { avatarFile: true } },
+      },
+      orderBy: [{ staff: { name: 'asc' } }, { staffId: 'asc' }],
+    });
+    return rows.flatMap(({ staff, serviceId, price }) =>
+      price === null ? [] : [{ staff, serviceId, price }],
+    );
   }
 
   /** Personal prices of one staff member for every service they perform. */

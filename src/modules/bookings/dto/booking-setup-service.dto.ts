@@ -30,13 +30,13 @@ export class BookingSetupServiceDto {
 
   @ApiPrice({
     description:
-      'Lowest price among the staff who perform the service; the base price when nobody does',
+      'Lowest price over the online booking window (location today and the advance window days), surcharges included, among the staff who perform the service; the base price over the window when nobody does',
   })
   priceFrom: string;
 
   @ApiPrice({
     description:
-      'Highest price among the staff who perform the service; the base price when nobody does',
+      'Highest price over the online booking window, surcharges included, among the staff who perform the service; the base price over the window when nobody does',
   })
   priceTo: string;
 

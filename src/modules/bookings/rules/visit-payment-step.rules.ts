@@ -10,7 +10,10 @@ import { CLOSED_WITHOUT_VISIT_STATUSES } from './visit-payment-due.rules.js';
 
 /** Whether the step sells product lines of the visit order. */
 export function confirmsProducts(
-  plan: Pick<VisitPaymentPlan, 'confirmProductItemIds' | 'confirmAllDraftProducts'>,
+  plan: Pick<
+    VisitPaymentPlan,
+    'confirmProductItemIds' | 'confirmAllDraftProducts'
+  >,
 ): boolean {
   return plan.confirmProductItemIds.length > 0 || plan.confirmAllDraftProducts;
 }
@@ -21,7 +24,10 @@ export function confirmsProducts(
  */
 export function assertProductsConfirmable(
   booking: Pick<Booking, 'status'>,
-  plan: Pick<VisitPaymentPlan, 'confirmProductItemIds' | 'confirmAllDraftProducts'>,
+  plan: Pick<
+    VisitPaymentPlan,
+    'confirmProductItemIds' | 'confirmAllDraftProducts'
+  >,
 ): void {
   if (
     CLOSED_WITHOUT_VISIT_STATUSES.includes(booking.status as BookingStatus) &&
@@ -35,7 +41,10 @@ export function assertProductsConfirmable(
 
 /** Product lines the step confirms: every draft product line, or the listed ones. */
 export function productItemIdsToConfirm(
-  plan: Pick<VisitPaymentPlan, 'confirmProductItemIds' | 'confirmAllDraftProducts'>,
+  plan: Pick<
+    VisitPaymentPlan,
+    'confirmProductItemIds' | 'confirmAllDraftProducts'
+  >,
   items: readonly Pick<OrderItem, 'id' | 'type' | 'status'>[],
 ): string[] {
   if (!plan.confirmAllDraftProducts) return plan.confirmProductItemIds;

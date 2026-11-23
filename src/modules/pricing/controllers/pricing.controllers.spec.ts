@@ -1,9 +1,19 @@
 import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { BusinessRole, Prisma } from '@prisma/client';
+import {
+  BusinessRole,
+  PriceRuleTargetType,
+  PriceScheduleType,
+  PriceValueType,
+  Prisma,
+} from '@prisma/client';
 import { PermissionGuard } from '../../auth/guards/permission.guard.js';
 import { tokenPayload } from '../../auth/testing/factories/token-payload.factory.js';
+import { PriceRuleStatus } from '../enums/price-rule-status.enum.js';
+import { priceRuleRecord } from '../testing/price-rule-record.factory.js';
 import { PriceLevelsController } from './price-levels.controller.js';
+import { PriceRulesController } from './price-rules.controller.js';
+import { PricingSettingsController } from './pricing-settings.controller.js';
 import { ServicePricesController } from './service-prices.controller.js';
 
 const d = (value: string) => new Prisma.Decimal(value);
@@ -200,11 +210,210 @@ describe('Pricing controllers', () => {
     });
   });
 
+  describe('price rules', () => {
+    const rules = {
+      list: vi.fn(),
+      get: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      setEnabled: vi.fn(),
+      archive: vi.fn(),
+      restore: vi.fn(),
+      duplicate: vi.fn(),
+    };
+    const bookings = { getPriceRuleSurchargeStats: vi.fn() };
+    const rulesController = new PriceRulesController(
+      rules as never,
+      bookings as never,
+    );
+    const view = {
+      rule: priceRuleRecord({
+        id: 'rule-1',
+        scheduleType: PriceScheduleType.WEEKLY,
+        value: '20',
+        weekdaysMask: 0b0110000,
+        intervals: [[1020, 1260]],
+        visitFrom: '2026-12-01',
+        appliesToAll: false,
+        targets: [[PriceRuleTargetType.SERVICE, 'cut']],
+      }),
+      targets: [
+        {
+          type: PriceRuleTargetType.SERVICE,
+          id: 'cut',
+          name: 'Cut',
+          excluded: false,
+        },
+      ],
+      serviceCount: 3,
+      status: PriceRuleStatus.SCHEDULED,
+      nextDate: '2026-12-04',
+    };
+    const input = {
+      scheduleType: PriceScheduleType.WEEKLY,
+      name: 'Evening',
+      valueType: PriceValueType.PERCENT,
+      value: '20.00',
+      weekdays: [5, 6],
+      appliesToAll: true,
+    };
+
+    beforeEach(() =>
+      bookings.getPriceRuleSurchargeStats.mockResolvedValue(new Map()),
+    );
+
+    it('maps a rule to the contract shape', async () => {
+      rules.get.mockResolvedValue(view);
+      bookings.getPriceRuleSurchargeStats.mockResolvedValue(
+        new Map([
+          ['rule-1', { ruleId: 'rule-1', amount: d('21'), bookingsCount: 2 }],
+        ]),
+      );
+      const result = await rulesController.get('location-1', 'rule-1');
+      expect(result.responseValue).toEqual({
+        id: 'rule-1',
+        kind: 'SURCHARGE',
+        scheduleType: 'WEEKLY',
+        name: 'Evening',
+        note: null,
+        enabled: true,
+        archived: false,
+        valueType: 'PERCENT',
+        value: '20.00',
+        visitFrom: '2026-12-01',
+        visitTo: null,
+        yearly: false,
+        holidayExclusive: false,
+        weekdays: [5, 6],
+        intervals: [{ start: '17:00', end: '21:00' }],
+        dates: [],
+        appliesToAll: false,
+        targets: [{ type: 'SERVICE', id: 'cut', name: 'Cut', excluded: false }],
+        serviceCount: 3,
+        status: 'SCHEDULED',
+        nextDate: '2026-12-04',
+        stats30d: { amount: '21.00', bookingsCount: 2 },
+        createdAt: new Date('2026-11-01T10:00:00.000Z'),
+        updatedAt: new Date('2026-11-01T10:00:00.000Z'),
+      });
+      expect(rules.get).toHaveBeenCalledWith('location-1', 'rule-1');
+      expect(bookings.getPriceRuleSurchargeStats).toHaveBeenCalledWith(
+        'location-1',
+        ['rule-1'],
+      );
+    });
+
+    it('shows zero stats for a rule no booking used', async () => {
+      rules.get.mockResolvedValue(view);
+      const result = await rulesController.get('location-1', 'rule-1');
+      expect(result.responseValue?.stats30d).toEqual({
+        amount: '0.00',
+        bookingsCount: 0,
+      });
+    });
+
+    it('lists with one stats read for all rules, live rules by default', async () => {
+      rules.list.mockResolvedValue([
+        view,
+        { ...view, rule: { ...view.rule, id: 'rule-2' } },
+      ]);
+      const result = await rulesController.list('location-1', {});
+      expect(rules.list).toHaveBeenCalledWith('location-1', false);
+      expect(result.responseValue?.map((rule) => rule.id)).toEqual([
+        'rule-1',
+        'rule-2',
+      ]);
+      expect(bookings.getPriceRuleSurchargeStats).toHaveBeenCalledTimes(1);
+      expect(bookings.getPriceRuleSurchargeStats).toHaveBeenCalledWith(
+        'location-1',
+        ['rule-1', 'rule-2'],
+      );
+    });
+
+    it('lists the archived rules on request', async () => {
+      rules.list.mockResolvedValue([]);
+      await rulesController.list('location-1', { archived: true });
+      expect(rules.list).toHaveBeenCalledWith('location-1', true);
+    });
+
+    it('passes the audit actor to every write', async () => {
+      rules.create.mockResolvedValue(view);
+      rules.update.mockResolvedValue(view);
+      rules.setEnabled.mockResolvedValue(view);
+      rules.archive.mockResolvedValue(view);
+      rules.restore.mockResolvedValue(view);
+      rules.duplicate.mockResolvedValue(view);
+      const actor = expect.objectContaining({ id: 'user-1' });
+      await rulesController.create('location-1', input, token);
+      expect(rules.create).toHaveBeenCalledWith('location-1', input, actor);
+      await rulesController.update('location-1', 'rule-1', input, token);
+      expect(rules.update).toHaveBeenCalledWith(
+        'location-1',
+        'rule-1',
+        input,
+        actor,
+      );
+      await rulesController.setEnabled(
+        'location-1',
+        'rule-1',
+        { enabled: false },
+        token,
+      );
+      expect(rules.setEnabled).toHaveBeenCalledWith(
+        'location-1',
+        'rule-1',
+        false,
+        actor,
+      );
+      await rulesController.archive('location-1', 'rule-1', token);
+      expect(rules.archive).toHaveBeenCalledWith('location-1', 'rule-1', actor);
+      await rulesController.restore('location-1', 'rule-1', token);
+      expect(rules.restore).toHaveBeenCalledWith('location-1', 'rule-1', actor);
+      const copy = await rulesController.duplicate(
+        'location-1',
+        'rule-1',
+        token,
+      );
+      expect(rules.duplicate).toHaveBeenCalledWith(
+        'location-1',
+        'rule-1',
+        actor,
+      );
+      expect(copy.responseValue?.id).toBe('rule-1');
+    });
+  });
+
+  describe('pricing settings', () => {
+    const locations = { updatePriceRoundingStep: vi.fn() };
+    const settingsController = new PricingSettingsController(
+      locations as never,
+    );
+
+    it('sets the rounding step with an audit actor and answers it as a string', async () => {
+      locations.updatePriceRoundingStep.mockResolvedValue({
+        priceRoundingStep: d('0.5'),
+      });
+      const result = await settingsController.update(
+        'location-1',
+        { priceRoundingStep: '0.50' },
+        token,
+      );
+      expect(locations.updatePriceRoundingStep).toHaveBeenCalledWith(
+        'location-1',
+        '0.50',
+        expect.objectContaining({ id: 'user-1' }),
+      );
+      expect(result.responseValue).toEqual({ priceRoundingStep: '0.50' });
+    });
+  });
+
   describe('permissions', () => {
     const reads: [new (...args: never[]) => object, string][] = [
       [PriceLevelsController, 'list'],
       [ServicePricesController, 'getServicePrices'],
       [ServicePricesController, 'getStaffServicePrices'],
+      [PriceRulesController, 'list'],
+      [PriceRulesController, 'get'],
     ];
     const writes: [new (...args: never[]) => object, string][] = [
       [PriceLevelsController, 'create'],
@@ -213,6 +422,13 @@ describe('Pricing controllers', () => {
       [ServicePricesController, 'setLevelPrices'],
       [ServicePricesController, 'setStaffPrices'],
       [ServicePricesController, 'setStaffServicePrices'],
+      [PriceRulesController, 'create'],
+      [PriceRulesController, 'update'],
+      [PriceRulesController, 'setEnabled'],
+      [PriceRulesController, 'archive'],
+      [PriceRulesController, 'restore'],
+      [PriceRulesController, 'duplicate'],
+      [PricingSettingsController, 'update'],
     ];
 
     it.each([...reads, ...writes])(

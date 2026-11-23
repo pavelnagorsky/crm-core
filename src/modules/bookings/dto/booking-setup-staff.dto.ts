@@ -42,7 +42,7 @@ export class BookingSetupStaffDto {
     type: () => BookingStaffServicePriceDto,
     isArray: true,
     description:
-      'Price of each service this staff member performs: personal price, else the price of their level, else the base price',
+      'Price range of each service this staff member performs over the online booking window: personal price, else the price of their level, else the base price, plus surcharges',
   })
   servicePrices: BookingStaffServicePriceDto[];
 

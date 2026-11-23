@@ -209,6 +209,47 @@ export class LocationService {
     return updated;
   }
 
+  /**
+   * Step the surcharged prices of the location round to, read from the database: the price
+   * snapshot is built from it, so a stale cache of another replica must not decide.
+   */
+  async findPriceRoundingStep(locationId: string): Promise<Prisma.Decimal> {
+    const location = await this.db.location.findUnique({
+      where: { id: locationId, ...ACTIVE_LOCATION_WHERE },
+      select: { priceRoundingStep: true },
+    });
+    if (!location) throw new NotFoundException('Location not found');
+    return location.priceRoundingStep;
+  }
+
+  /** Sets the rounding step and drops the cached prices; PRICE_ROUNDING_UPDATED when it changed. */
+  async updatePriceRoundingStep(
+    locationId: string,
+    priceRoundingStep: string,
+    actor: AuditActor,
+  ): Promise<Location> {
+    const old = await this.findById(locationId);
+    const updated = await this.db.location.update({
+      where: { id: locationId, ...ACTIVE_LOCATION_WHERE },
+      data: { priceRoundingStep },
+    });
+    await this.cache.invalidate(CacheDependency.pricing(locationId));
+    const changes = diffFields(old, updated, LOCATION_AUDIT_FIELDS);
+    if (changes.length > 0)
+      this.eventEmitter.emit(AUDIT_EVENT, {
+        brandId: updated.brandId,
+        locationId,
+        entityType: AuditEntity.LOCATION,
+        entityId: locationId,
+        eventType: AuditEvent.PRICE_ROUNDING_UPDATED,
+        actionType: AuditActionType.MODIFY,
+        occurredAt: new Date(),
+        actor,
+        payload: { changes },
+      } satisfies AuditLogEvent);
+    return updated;
+  }
+
   /** 400 LOCATION_ANCHORS_IMMUTABLE when the body names country, currency or timezone. */
   private assertAnchorsUntouched(rawBody: Record<string, unknown>): void {
     if (

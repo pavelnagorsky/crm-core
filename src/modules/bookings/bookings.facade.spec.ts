@@ -43,6 +43,8 @@ import { PaymentStatus } from '../payments/enums/payment-status.enum.js';
 import { PaymentsFacade } from '../payments/payments.facade.js';
 import { BookingHistoryReadService } from './services/read/booking-history-read.service.js';
 import { BookingPaymentReadService } from './services/read/booking-payment-read.service.js';
+import { BookingPriceRuleStatsService } from './services/read/booking-price-rule-stats.service.js';
+import { BookingStaffingPreviewService } from './services/booking-staffing-preview.service.js';
 import { BookingPaymentService } from './services/write/booking-payment.service.js';
 import { BookingLifecycleService } from './services/write/booking-lifecycle.service.js';
 import { BookingMutationService } from './services/write/booking-mutation.service.js';
@@ -198,6 +200,8 @@ describe('BookingsFacade.completeElapsed', () => {
           provide: BookingPaymentService,
           useValue: { plan: vi.fn().mockResolvedValue(null), publish: vi.fn() },
         },
+        { provide: BookingPriceRuleStatsService, useValue: {} },
+        { provide: BookingStaffingPreviewService, useValue: {} },
         {
           provide: BookingPaymentReadService,
           useValue: { summaries: vi.fn(async () => new Map()) },
@@ -372,6 +376,8 @@ describe('BookingsFacade.updateStatus transactionality', () => {
           provide: BookingPaymentService,
           useValue: { plan: vi.fn().mockResolvedValue(null), publish: vi.fn() },
         },
+        { provide: BookingPriceRuleStatsService, useValue: {} },
+        { provide: BookingStaffingPreviewService, useValue: {} },
         {
           provide: BookingPaymentReadService,
           useValue: { summaries: vi.fn(async () => new Map()) },
@@ -458,6 +464,8 @@ describe('BookingsFacade.search', () => {
           provide: BookingPaymentService,
           useValue: { plan: vi.fn().mockResolvedValue(null), publish: vi.fn() },
         },
+        { provide: BookingPriceRuleStatsService, useValue: {} },
+        { provide: BookingStaffingPreviewService, useValue: {} },
         {
           provide: BookingPaymentReadService,
           useValue: { summaries: vi.fn(async () => new Map()) },
@@ -747,6 +755,8 @@ describe('BookingCalendarReadService.listForCalendar', () => {
       providers: [
         BookingCalendarReadService,
         { provide: DatabaseService, useValue: db },
+        { provide: BookingPriceRuleStatsService, useValue: {} },
+        { provide: BookingStaffingPreviewService, useValue: {} },
         {
           provide: BookingPaymentReadService,
           useValue: { summaries: vi.fn(async () => new Map()) },
@@ -998,6 +1008,8 @@ describe('BookingsFacade catalog selection', () => {
           provide: BookingPaymentService,
           useValue: { plan: vi.fn().mockResolvedValue(null), publish: vi.fn() },
         },
+        { provide: BookingPriceRuleStatsService, useValue: {} },
+        { provide: BookingStaffingPreviewService, useValue: {} },
         {
           provide: BookingPaymentReadService,
           useValue: { summaries: vi.fn(async () => new Map()) },
@@ -1273,6 +1285,8 @@ describe('BookingsFacade.update details and item prices', () => {
           provide: BookingPaymentService,
           useValue: { plan: vi.fn().mockResolvedValue(null), publish: vi.fn() },
         },
+        { provide: BookingPriceRuleStatsService, useValue: {} },
+        { provide: BookingStaffingPreviewService, useValue: {} },
         {
           provide: BookingPaymentReadService,
           useValue: { summaries: vi.fn(async () => new Map()) },
@@ -1794,6 +1808,8 @@ describe('BookingsFacade.update manual interval', () => {
           provide: BookingPaymentService,
           useValue: { plan: vi.fn().mockResolvedValue(null), publish: vi.fn() },
         },
+        { provide: BookingPriceRuleStatsService, useValue: {} },
+        { provide: BookingStaffingPreviewService, useValue: {} },
         {
           provide: BookingPaymentReadService,
           useValue: { summaries: vi.fn(async () => new Map()) },
@@ -2096,6 +2112,8 @@ describe('BookingsFacade.addProduct', () => {
           provide: BookingPaymentService,
           useValue: { plan: vi.fn().mockResolvedValue(null), publish: vi.fn() },
         },
+        { provide: BookingPriceRuleStatsService, useValue: {} },
+        { provide: BookingStaffingPreviewService, useValue: {} },
         {
           provide: BookingPaymentReadService,
           useValue: { summaries: vi.fn(async () => new Map()) },
@@ -2216,6 +2234,8 @@ describe('BookingsFacade.cancel draft product cleanup', () => {
           provide: BookingPaymentService,
           useValue: { plan: vi.fn().mockResolvedValue(null), publish: vi.fn() },
         },
+        { provide: BookingPriceRuleStatsService, useValue: {} },
+        { provide: BookingStaffingPreviewService, useValue: {} },
         {
           provide: BookingPaymentReadService,
           useValue: { summaries: vi.fn(async () => new Map()) },

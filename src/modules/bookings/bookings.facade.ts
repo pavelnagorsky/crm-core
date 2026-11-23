@@ -27,7 +27,12 @@ import { VisitPaymentResult } from './interfaces/visit-payment-result.interface.
 import { VisitPaymentSummary } from './interfaces/visit-payment-summary.interface.js';
 import { BookingPaymentReadService } from './services/read/booking-payment-read.service.js';
 import { BookingPaymentService } from './services/write/booking-payment.service.js';
+import { BookingPriceRuleStatsService } from './services/read/booking-price-rule-stats.service.js';
+import { PriceRuleSurchargeStats } from '../pricing/interfaces/price-rule-surcharge-stats.interface.js';
 
+import { BookingStaffingPreviewService } from './services/booking-staffing-preview.service.js';
+import { StaffingPreview } from './interfaces/staffing-preview.interface.js';
+import { StaffingPreviewRequest } from './interfaces/staffing-preview-request.interface.js';
 @Injectable()
 export class BookingsFacade {
   constructor(
@@ -38,6 +43,8 @@ export class BookingsFacade {
     private readonly history: BookingHistoryReadService,
     private readonly payment: BookingPaymentService,
     private readonly paymentReads: BookingPaymentReadService,
+    private readonly priceRuleStats: BookingPriceRuleStatsService,
+    private readonly staffingPreview: BookingStaffingPreviewService,
   ) {}
 
   async getBookingSetup(locationId: string): Promise<BookingSetup> {
@@ -53,6 +60,18 @@ export class BookingsFacade {
 
   getPopularServices(locationId: string): Promise<StaffPopularServices[]> {
     return this.history.popularServices(locationId);
+  }
+
+  /**
+   * Surcharge each rule added to visits of the last 30 days (sum and distinct bookings,
+   * cancelled bookings left out). Rules with nothing to show are absent from the map.
+   */
+  getPriceRuleSurchargeStats(
+    locationId: string,
+    ruleIds: readonly string[],
+    now = new Date(),
+  ): Promise<Map<string, PriceRuleSurchargeStats>> {
+    return this.priceRuleStats.surchargeStats(locationId, ruleIds, now);
   }
 
   async resolveBookingSelection(
@@ -204,6 +223,17 @@ export class BookingsFacade {
     participantStaffId?: string,
   ): Promise<{ status: BookingStatus; count: number }[]> {
     return this.read.getStatusCounts(locationId, participantStaffId);
+  }
+
+  /**
+   * Who can take a visit at a local start and who the "any staff" rule gives (cabinet price
+   * check): the same read and ranking booking creation uses.
+   */
+  previewStaffing(
+    locationId: string,
+    request: StaffingPreviewRequest,
+  ): Promise<StaffingPreview> {
+    return this.staffingPreview.preview(locationId, request);
   }
 
   private async dayFilterTimezone(

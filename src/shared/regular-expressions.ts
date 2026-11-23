@@ -18,6 +18,8 @@ const regularExpressions = {
   contactScheme: /^(?:https?:[\s\S]*|(?![a-z][a-z\d+.-]*:)[\s\S]*)$/i,
   iframeStart: /^<iframe\b/i,
   time: /^([01]\d|2[0-3]):[0-5]\d$/,
+  // Time of day, or 24:00 as the end of an interval
+  timeOrDayEnd: /^(?:([01]\d|2[0-3]):[0-5]\d|24:00)$/,
   // Local datetime without any timezone offset or Z — e.g. 2026-09-20T10:00:00
   localDateTime: /^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d:[0-5]\d$/,
   // Calendar day before a real-date check — e.g. 2026-10-01

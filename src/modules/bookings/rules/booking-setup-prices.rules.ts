@@ -1,4 +1,5 @@
 import { BundlePricingMode as PrismaBundlePricingMode } from '@prisma/client';
+import { PriceRange } from '../../pricing/engine/interfaces/price-range.interface.js';
 import { PriceBook } from '../../pricing/engine/price-book.js';
 import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { BookingPriceRange } from '../interfaces/booking-price-range.interface.js';
@@ -7,19 +8,20 @@ import { BookingSetupPrices } from '../interfaces/booking-setup-prices.interface
 import { BookingStaffServicePrice } from '../interfaces/booking-staff-service-price.interface.js';
 import { BookingStaff } from '../../staff/interfaces/booking-staff.interface.js';
 
-type Range = { from: number; to: number };
-
 /**
- * Prices the booking page shows (docs/pricing-stage2-api.md): a service costs from the lowest
- * to the highest price among the staff who perform it, a staff member has a price per service.
- * A service nobody performs costs its base price. A FIXED bundle is one package with one
- * price; a SUM bundle adds the lowest and the highest prices of its services.
- * `staff` are the staff the page offers, so the range covers only them.
+ * Prices the booking page shows (docs/pricing-stage3-api.md): "from - to" over the online
+ * booking dates, surcharges included. A service costs from the lowest to the highest price
+ * among the staff who perform it, each over the dates; a staff member has a range per
+ * service. A service nobody performs costs its base price over the dates. A FIXED bundle is
+ * one package with its own range; a SUM bundle adds the lowest and the highest prices of its
+ * lines, each line priced as part of the bundle. `staff` are the staff the page offers, so
+ * the ranges cover only them. No dates: prices without surcharges.
  */
 export function buildBookingSetupPrices(
   book: PriceBook,
   catalog: Pick<BookingServiceCatalog, 'services' | 'bundles'>,
   staff: readonly BookingStaff[],
+  dates: readonly string[],
 ): BookingSetupPrices {
   const performers = new Map<string, string[]>();
   for (const member of staff)
@@ -35,56 +37,89 @@ export function buildBookingSetupPrices(
       MoneyUtils.toMinor(service.price),
     ]),
   );
-  const staffPrice = (serviceId: string, staffId: string | null): number =>
-    book.hasService(serviceId)
-      ? book.staffPrice(serviceId, staffId)
-      : (catalogPrice.get(serviceId) ?? 0);
 
-  const rangeCache = new Map<string, Range>();
-  const rangeOf = (serviceId: string): Range => {
-    let range = rangeCache.get(serviceId);
+  // Surcharges of a line depend on the service, the bundle and the staff price only, so
+  // staff members with the same price share one range.
+  const lineRanges = new Map<string, PriceRange>();
+  const lineRange = (
+    bundleId: string | null,
+    serviceId: string,
+    staffId: string | null,
+  ): PriceRange => {
+    if (!book.hasService(serviceId)) {
+      const price = catalogPrice.get(serviceId) ?? 0;
+      return { min: price, max: price };
+    }
+    const key = `${bundleId ?? ''}:${serviceId}:${book.staffPrice(serviceId, staffId)}`;
+    let range = lineRanges.get(key);
     if (!range) {
-      const prices = (performers.get(serviceId) ?? []).map((staffId) =>
-        staffPrice(serviceId, staffId),
+      range = book.priceRange(
+        { bundleId, lines: [{ serviceId, staffId, customPrice: null }] },
+        dates,
       );
-      const base = staffPrice(serviceId, null);
-      range = prices.length
-        ? { from: Math.min(...prices), to: Math.max(...prices) }
-        : { from: base, to: base };
-      rangeCache.set(serviceId, range);
+      lineRanges.set(key, range);
     }
     return range;
   };
-  const toDecimalRange = ({ from, to }: Range): BookingPriceRange => ({
-    priceFrom: MoneyUtils.fromMinor(from),
-    priceTo: MoneyUtils.fromMinor(to),
+  const performedRange = (
+    bundleId: string | null,
+    serviceId: string,
+  ): PriceRange => {
+    const ranges = (performers.get(serviceId) ?? []).map((staffId) =>
+      lineRange(bundleId, serviceId, staffId),
+    );
+    if (!ranges.length) return lineRange(bundleId, serviceId, null);
+    return {
+      min: Math.min(...ranges.map((range) => range.min)),
+      max: Math.max(...ranges.map((range) => range.max)),
+    };
+  };
+  const toDecimalRange = ({ min, max }: PriceRange): BookingPriceRange => ({
+    priceFrom: MoneyUtils.fromMinor(min),
+    priceTo: MoneyUtils.fromMinor(max),
   });
 
   const services = new Map(
     catalog.services.map((service) => [
       service.id,
-      toDecimalRange(rangeOf(service.id)),
+      toDecimalRange(performedRange(null, service.id)),
     ]),
   );
   const bundles = new Map(
     catalog.bundles.map((bundle) => {
-      const range: Range =
+      const priced = book.bundle(bundle.id) !== undefined;
+      const serviceIds = bundle.items.map((item) => item.serviceId);
+      const fixed =
         bundle.pricingMode === PrismaBundlePricingMode.FIXED &&
-        bundle.fixedPrice !== null
-          ? {
-              from: MoneyUtils.toMinor(bundle.fixedPrice),
-              to: MoneyUtils.toMinor(bundle.fixedPrice),
-            }
-          : bundle.items.reduce(
-              (sum, item) => {
-                const itemRange = rangeOf(item.serviceId);
-                return {
-                  from: sum.from + itemRange.from,
-                  to: sum.to + itemRange.to,
-                };
-              },
-              { from: 0, to: 0 },
-            );
+        bundle.fixedPrice !== null;
+      let range: PriceRange;
+      if (
+        fixed &&
+        priced &&
+        serviceIds.every((serviceId) => book.hasService(serviceId))
+      )
+        range = book.priceRange(
+          {
+            bundleId: bundle.id,
+            lines: serviceIds.map((serviceId) => ({
+              serviceId,
+              staffId: null,
+              customPrice: null,
+            })),
+          },
+          dates,
+        );
+      else if (fixed) {
+        const price = MoneyUtils.toMinor(bundle.fixedPrice!);
+        range = { min: price, max: price };
+      } else
+        range = serviceIds.reduce(
+          (sum, serviceId) => {
+            const item = performedRange(priced ? bundle.id : null, serviceId);
+            return { min: sum.min + item.min, max: sum.max + item.max };
+          },
+          { min: 0, max: 0 },
+        );
       return [bundle.id, toDecimalRange(range)] as const;
     }),
   );
@@ -95,7 +130,7 @@ export function buildBookingSetupPrices(
         .filter(({ serviceId }) => book.hasService(serviceId))
         .map(({ serviceId }) => ({
           serviceId,
-          price: MoneyUtils.fromMinor(staffPrice(serviceId, member.id)),
+          ...toDecimalRange(lineRange(null, serviceId, member.id)),
         })),
     ]),
   );

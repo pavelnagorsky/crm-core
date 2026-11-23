@@ -45,6 +45,7 @@ const book = new PriceBook(snapshot);
 function adjustmentsOf(serviceId: string, staffId: string | null) {
   const { lines } = book.quote({
     bundleId: null,
+    visit: null,
     lines: [quoteLine(serviceId, null, staffId)],
   });
   return lines[0].adjustments;
@@ -113,6 +114,7 @@ describe('PriceBook', () => {
     it('fills every layer of a line from the staff price', () => {
       const { lines } = book.quote({
         bundleId: null,
+        visit: null,
         lines: [quoteLine('cut', null, 'boris')],
       });
       expect(lines[0]).toMatchObject({
@@ -129,6 +131,7 @@ describe('PriceBook', () => {
     it('a custom price sets the total and keeps the staff layer as history', () => {
       const quote = book.quote({
         bundleId: null,
+        visit: null,
         lines: [
           quoteLine('cut', 5000, 'boris'),
           quoteLine('color', null, 'boris'),
@@ -149,6 +152,7 @@ describe('PriceBook', () => {
     it('a SUM bundle sums the prices of the staff members of its lines', () => {
       const quote = book.quote({
         bundleId: 'sum-bundle',
+        visit: null,
         lines: [
           quoteLine('cut', null, 'boris'),
           quoteLine('color', null, 'dmitri'),
@@ -167,6 +171,7 @@ describe('PriceBook', () => {
       (staffId) => {
         const quote = book.quote({
           bundleId: 'fixed-bundle',
+          visit: null,
           lines: [
             quoteLine('cut', null, staffId),
             quoteLine('color', null, staffId),
@@ -185,6 +190,7 @@ describe('PriceBook', () => {
       expect(() =>
         book.quote({
           bundleId: 'fixed-without-price',
+          visit: null,
           lines: [quoteLine('cut')],
         }),
       ).toThrow('Fixed bundle fixed-without-price has no price');
@@ -192,7 +198,7 @@ describe('PriceBook', () => {
 
     it('throws for a bundle outside the snapshot', () => {
       expect(() =>
-        book.quote({ bundleId: 'missing', lines: [quoteLine('cut')] }),
+        book.quote({ bundleId: 'missing', lines: [quoteLine('cut')], visit: null }),
       ).toThrow('Bundle missing is not priced');
     });
   });

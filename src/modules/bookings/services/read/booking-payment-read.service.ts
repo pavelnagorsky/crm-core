@@ -46,7 +46,10 @@ export class BookingPaymentReadService {
             booking,
             order,
             order ? totals.get(order.orderId) : undefined,
-            isPaymentTracked(tracking.get(booking.locationId)!, booking.startAt),
+            isPaymentTracked(
+              tracking.get(booking.locationId)!,
+              booking.startAt,
+            ),
           ),
         ];
       }),

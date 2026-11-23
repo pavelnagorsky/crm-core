@@ -1,5 +1,5 @@
 import { HttpStatus } from '@nestjs/common';
-import { BundlePricingMode, Prisma } from '@prisma/client';
+import { BundlePricingMode, PriceScheduleType, Prisma } from '@prisma/client';
 import { ReadConsistency } from '../../shared/cache/enums/read-consistency.enum.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { ServiceLinePrice } from './interfaces/service-line-price.interface.js';
@@ -13,6 +13,7 @@ import {
 } from './testing/pricing-snapshot-service.factory.js';
 import { bookingCatalogSnapshot } from './testing/booking-catalog-snapshot.factory.js';
 import { rejectedAppException } from './testing/rejected-app-exception.js';
+import { priceRuleRecord } from './testing/price-rule-record.factory.js';
 
 const dec = (value: string) => new Prisma.Decimal(value);
 
@@ -119,7 +120,7 @@ describe('PricingFacade', () => {
       const { facade } = pricingFacade();
       const quote = await facade.quoteServices(
         'location',
-        { bundleId, lines },
+        { bundleId, lines, visit: null },
         ReadConsistency.CACHED,
       );
       expect(quote.lines.map(layers)).toEqual(
@@ -156,7 +157,11 @@ describe('PricingFacade', () => {
     );
     const separate = await facade.quoteServices(
       'location',
-      { bundleId: null, lines: [line('cut', '12.34'), line('color')] },
+      {
+        bundleId: null,
+        lines: [line('cut', '12.34'), line('color')],
+        visit: null,
+      },
       ReadConsistency.FRESH,
     );
     expect(separate.lines.map(layers)).toMatchObject([
@@ -165,7 +170,7 @@ describe('PricingFacade', () => {
     ]);
     const bundle = await facade.quoteServices(
       'location',
-      { bundleId: 'fixed', lines: [line('cut'), line('color')] },
+      { bundleId: 'fixed', lines: [line('cut'), line('color')], visit: null },
       ReadConsistency.FRESH,
     );
     const shares = bundle.lines.map((price) => price.basePrice);
@@ -213,7 +218,7 @@ describe('PricingFacade', () => {
       const error = await rejectedAppException(
         facade.quoteServices(
           'location',
-          { bundleId, lines: [line(serviceId)] },
+          { bundleId, lines: [line(serviceId)], visit: null },
           ReadConsistency.CACHED,
         ),
       );
@@ -238,7 +243,11 @@ describe('PricingFacade', () => {
       const error = await rejectedAppException(
         facade.quoteServices(
           'location',
-          { bundleId: 'fixed-bundle', lines: serviceIds.map((id) => line(id)) },
+          {
+            bundleId: 'fixed-bundle',
+            lines: serviceIds.map((id) => line(id)),
+            visit: null,
+          },
           ReadConsistency.FRESH,
         ),
       );
@@ -251,7 +260,11 @@ describe('PricingFacade', () => {
     const { facade } = pricingFacade();
     const { lines } = await facade.quoteServices(
       'location',
-      { bundleId: 'fixed-bundle', lines: [line('color'), line('cut')] },
+      {
+        bundleId: 'fixed-bundle',
+        lines: [line('color'), line('cut')],
+        visit: null,
+      },
       ReadConsistency.FRESH,
     );
     expect(lines.map(layers)).toEqual([
@@ -266,7 +279,7 @@ describe('PricingFacade', () => {
       const { facade, load } = pricingFacade();
       await facade.quoteServices(
         'location',
-        { bundleId: null, lines: [line('cut')] },
+        { bundleId: null, lines: [line('cut')], visit: null },
         consistency,
       );
       expect(load).toHaveBeenCalledExactlyOnceWith('location', consistency);
@@ -278,7 +291,7 @@ describe('PricingFacade', () => {
     const quote = (consistency: ReadConsistency) =>
       facade.quoteServices(
         'location',
-        { bundleId: null, lines: [line('cut')] },
+        { bundleId: null, lines: [line('cut')], visit: null },
         consistency,
       );
     await quote(ReadConsistency.CACHED);
@@ -296,7 +309,7 @@ describe('PricingFacade', () => {
       const { facade } = pricingFacade(undefined, leveledSources);
       return facade.quoteServices(
         'location',
-        { bundleId, lines },
+        { bundleId, lines, visit: null },
         ReadConsistency.FRESH,
       );
     };
@@ -407,6 +420,99 @@ describe('PricingFacade', () => {
       expect(book.staffPrice('cut', 'anna')).toBe(6000);
       expect(book.candidatePrice('cut', 'boris', 'fixed-bundle')).toBe(0);
       expect(book.candidatePrice('cut', 'boris', 'sum-bundle')).toBe(8000);
+    });
+  });
+
+  describe('surcharges by the visit start', () => {
+    // 2026-11-27 is a Friday; 2026-12-31 a Thursday.
+    const FRIDAY_EVENING = priceRuleRecord({
+      id: 'friday',
+      name: 'Пятница вечер',
+      weekdaysMask: 1 << 4,
+      intervals: [[17 * 60, 24 * 60]],
+    });
+    const quoteAt = async (
+      sources: PricingSnapshotServiceOptions,
+      visit: { date: string; minute: number } | null,
+    ) => {
+      const { facade } = pricingFacade(undefined, sources);
+      const { lines } = await facade.quoteServices(
+        'location',
+        { bundleId: null, lines: [line('cut')], visit },
+        ReadConsistency.FRESH,
+      );
+      return lines[0];
+    };
+
+    it.each([
+      ['Friday 17:00', { date: '2026-11-27', minute: 17 * 60 }, '72.00'],
+      ['Friday 16:00', { date: '2026-11-27', minute: 16 * 60 }, '60.00'],
+      ['Thursday 17:00', { date: '2026-11-26', minute: 17 * 60 }, '60.00'],
+      ['no visit time', null, '60.00'],
+    ])('prices %s', async (_name, visit, expected) => {
+      const price = await quoteAt({ rules: [FRIDAY_EVENING] }, visit);
+      expect(price.listPrice.toFixed(2)).toBe(expected);
+      expect(price.chargedPrice.toFixed(2)).toBe(expected);
+    });
+
+    it('records the surcharge as an adjustment of the line', async () => {
+      const price = await quoteAt(
+        { rules: [FRIDAY_EVENING] },
+        { date: '2026-11-27', minute: 18 * 60 },
+      );
+      expect(price.adjustments).toEqual([
+        expect.objectContaining({
+          kind: 'SURCHARGE',
+          ruleId: 'friday',
+          amount: dec('12.00'),
+        }),
+      ]);
+    });
+
+    it('applies only the exclusive holiday rule on its date', async () => {
+      const evening = priceRuleRecord({
+        id: 'evening',
+        intervals: [[17 * 60, 24 * 60]],
+      });
+      const newYearEve = priceRuleRecord({
+        id: 'holiday',
+        scheduleType: PriceScheduleType.HOLIDAYS,
+        value: '10.00',
+        dates: ['2026-12-31'],
+        holidayExclusive: true,
+      });
+      const sources = { rules: [evening, newYearEve] };
+      const holiday = await quoteAt(sources, {
+        date: '2026-12-31',
+        minute: 18 * 60,
+      });
+      expect(holiday.listPrice.toFixed(2)).toBe('66.00');
+      expect(holiday.adjustments.map((item) => item.ruleId)).toEqual([
+        'holiday',
+      ]);
+      const ordinary = await quoteAt(sources, {
+        date: '2026-12-30',
+        minute: 18 * 60,
+      });
+      expect(ordinary.listPrice.toFixed(2)).toBe('72.00');
+    });
+
+    it('rounds a surcharged price to the location step', async () => {
+      const price = await quoteAt(
+        {
+          rules: [priceRuleRecord({ value: '15.00' })],
+          roundingStep: '5.00',
+        },
+        { date: '2026-11-27', minute: 10 * 60 },
+      );
+      // 60.00 + 15% = 69.00, rounded to 70.00.
+      expect(price.listPrice.toFixed(2)).toBe('70.00');
+      expect(
+        price.adjustments.map((item) => [item.kind, item.amount.toFixed(2)]),
+      ).toEqual([
+        ['SURCHARGE', '9.00'],
+        ['ROUNDING', '1.00'],
+      ]);
     });
   });
 });

@@ -13,6 +13,9 @@ import { ACTIVE_LOCATION_WHERE } from '../../../../shared/database/active-busine
 import { PrismaErrorCode } from '../../../../shared/database/prisma-error-codes.js';
 import { AppException } from '../../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
+import { CATALOG_ITEM_REMOVED_EVENT } from '../../constants/catalog-events.constants.js';
+import { CatalogItemKind } from '../../enums/catalog-item-kind.enum.js';
+import { CatalogItemRemovedEvent } from '../../interfaces/catalog-item-removed-event.interface.js';
 import { AUDIT_EVENT } from '../../../audit/constants/audit.constants.js';
 import { AuditActionType } from '../../../audit/enums/audit-action-type.enum.js';
 import { AuditEntity } from '../../../audit/enums/audit-entity.enum.js';
@@ -156,6 +159,23 @@ export class ServiceCategoriesService {
     });
   }
 
+  /** Names of the categories of the location by id; unknown ids are absent. */
+  async findNames(
+    locationId: string,
+    ids: readonly string[],
+  ): Promise<Map<string, string>> {
+    if (ids.length === 0) return new Map();
+    const categories = await this.db.serviceCategory.findMany({
+      where: {
+        location: ACTIVE_LOCATION_WHERE,
+        locationId,
+        id: { in: [...ids] },
+      },
+      select: { id: true, name: true },
+    });
+    return new Map(categories.map((category) => [category.id, category.name]));
+  }
+
   async deleteCategory(
     locationId: string,
     categoryId: string,
@@ -170,6 +190,11 @@ export class ServiceCategoriesService {
     this.logger.log(
       `service category deleted: id=${categoryId} locationId=${locationId}`,
     );
+    await this.eventEmitter.emitAsync(CATALOG_ITEM_REMOVED_EVENT, {
+      locationId,
+      kind: CatalogItemKind.CATEGORY,
+      id: categoryId,
+    } satisfies CatalogItemRemovedEvent);
     const event: AuditLogEvent = {
       locationId,
       entityType: AuditEntity.SERVICE,

@@ -28,8 +28,11 @@ import { diffFields } from '../../../audit/utils/diff-fields.js';
 import { LocationService } from '../../../location/services/location.service.js';
 import { ServiceBundleView } from '../../catalog/interfaces/service-bundle-view.interface.js';
 import { ServiceCatalogFacade } from '../../catalog/service-catalog.facade.js';
+import { CATALOG_ITEM_REMOVED_EVENT } from '../../constants/catalog-events.constants.js';
 import { MULTI_SERVICE_MAX_ITEMS } from '../../constants/multi-service.constants.js';
 import { BundlePricingMode } from '../../enums/bundle-pricing-mode.enum.js';
+import { CatalogItemKind } from '../../enums/catalog-item-kind.enum.js';
+import { CatalogItemRemovedEvent } from '../../interfaces/catalog-item-removed-event.interface.js';
 import { CreateServiceBundleDto } from '../dto/create-service-bundle.dto.js';
 import { UpdateServiceBundleDto } from '../dto/update-service-bundle.dto.js';
 
@@ -235,6 +238,11 @@ export class ServiceBundleWriteService {
     this.logger.log(
       `service bundle deleted: id=${bundleId} locationId=${locationId}`,
     );
+    await this.eventEmitter.emitAsync(CATALOG_ITEM_REMOVED_EVENT, {
+      locationId,
+      kind: CatalogItemKind.BUNDLE,
+      id: bundleId,
+    } satisfies CatalogItemRemovedEvent);
     const event: AuditLogEvent = {
       locationId,
       entityType: AuditEntity.SERVICE,

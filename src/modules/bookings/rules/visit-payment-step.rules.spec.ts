@@ -9,7 +9,10 @@ import {
 } from './visit-payment-step.rules.js';
 
 const none = { confirmProductItemIds: [], confirmAllDraftProducts: false };
-const listed = { confirmProductItemIds: ['item-1'], confirmAllDraftProducts: false };
+const listed = {
+  confirmProductItemIds: ['item-1'],
+  confirmAllDraftProducts: false,
+};
 const all = { confirmProductItemIds: [], confirmAllDraftProducts: true };
 
 describe('confirmsProducts', () => {
@@ -47,9 +50,21 @@ describe('assertProductsConfirmable', () => {
 
 describe('productItemIdsToConfirm', () => {
   const items = [
-    { id: 'draft-product', type: OrderItemType.PRODUCT, status: OrderItemStatus.DRAFT },
-    { id: 'sold-product', type: OrderItemType.PRODUCT, status: OrderItemStatus.CONFIRMED },
-    { id: 'draft-service', type: OrderItemType.SERVICE, status: OrderItemStatus.DRAFT },
+    {
+      id: 'draft-product',
+      type: OrderItemType.PRODUCT,
+      status: OrderItemStatus.DRAFT,
+    },
+    {
+      id: 'sold-product',
+      type: OrderItemType.PRODUCT,
+      status: OrderItemStatus.CONFIRMED,
+    },
+    {
+      id: 'draft-service',
+      type: OrderItemType.SERVICE,
+      status: OrderItemStatus.DRAFT,
+    },
   ];
 
   it('takes every draft product line for all drafts', () => {

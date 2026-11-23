@@ -6,8 +6,11 @@ import {
   pricingSnapshot,
   pricingStaff,
   sumBundle,
+  surchargeRule,
+  weekdays,
 } from '../../../pricing/engine/testing/pricing-snapshot.factory.js';
 import { createPricingFacadeStub } from '../../../pricing/testing/pricing-facade.stub.js';
+import { PricingRuleEntry } from '../../../pricing/engine/interfaces/pricing-rule-entry.interface.js';
 import { BookingSetupService } from './booking-setup.service.js';
 
 const money = (value: string) => new Prisma.Decimal(value);
@@ -76,6 +79,7 @@ function setup(
     pricing?: ReturnType<typeof createPricingFacadeStub>;
     scheduling?: unknown;
     selection?: Selection;
+    advanceBookingWindowDays?: number;
   } = {},
 ) {
   const catalog = options.catalog ?? { services: [], bundles: [] };
@@ -85,6 +89,7 @@ function setup(
       anyStaffEnabled: options.anyStaffEnabled ?? true,
       anyStaffRule: 'CHEAPER_AND_FREER',
       timezone: 'UTC',
+      advanceBookingWindowDays: options.advanceBookingWindowDays ?? 7,
     }),
   };
   const billing = {
@@ -112,7 +117,7 @@ function setup(
 }
 
 /** Cut 60 (anna 60, boris on level 80, carl personal 70), color 90 nobody performs. */
-function pricedSalon() {
+function pricedSalon(rules: PricingRuleEntry[] = []) {
   const pricing = createPricingFacadeStub(
     pricingSnapshot({
       services: { cut: 6000, color: 9000 },
@@ -124,6 +129,7 @@ function pricedSalon() {
         pricingStaff('boris', 'top'),
         pricingStaff('carl', null, { cut: 7000 }),
       ],
+      rules,
     }),
   );
   const catalog = {
@@ -142,6 +148,22 @@ function pricedSalon() {
 }
 
 const format = (value: Prisma.Decimal) => MoneyUtils.format(value);
+
+/** +20% on Friday from 17:00. */
+const FRIDAY_EVENING = surchargeRule('friday', {
+  value: 2000,
+  weekdaysMask: weekdays(5),
+  intervals: [{ start: 17 * 60, end: 24 * 60 }],
+});
+
+// Location today: Monday 2026-11-23 (UTC); a 7-day window reaches Friday 2026-11-27.
+beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-11-23T08:00:00Z'));
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 describe('BookingSetupService.getBookingSetup', () => {
   it('reports online booking as unavailable when billing closes it', async () => {
@@ -218,10 +240,59 @@ describe('BookingSetupService.getBookingSetup', () => {
     const byStaff = (id: string) =>
       prices.staffServicePrices
         .get(id)!
-        .map((item) => [item.serviceId, format(item.price)]);
-    expect(byStaff('anna')).toEqual([['cut', '60.00']]);
-    expect(byStaff('boris')).toEqual([['cut', '80.00']]);
-    expect(byStaff('carl')).toEqual([['cut', '70.00']]);
+        .map((item) => [
+          item.serviceId,
+          format(item.priceFrom),
+          format(item.priceTo),
+        ]);
+    expect(byStaff('anna')).toEqual([['cut', '60.00', '60.00']]);
+    expect(byStaff('boris')).toEqual([['cut', '80.00', '80.00']]);
+    expect(byStaff('carl')).toEqual([['cut', '70.00', '70.00']]);
+  });
+
+  describe('with a surcharge inside the online booking window', () => {
+    const setupPrices = async (advanceBookingWindowDays?: number) => {
+      const { pricing, catalog, directory } = pricedSalon([FRIDAY_EVENING]);
+      const { service } = setup({
+        pricing,
+        catalog,
+        directory,
+        advanceBookingWindowDays,
+      });
+      return (await service.getBookingSetup('location-1')).prices;
+    };
+    const range = (entry: {
+      priceFrom: Prisma.Decimal;
+      priceTo: Prisma.Decimal;
+    }) => [format(entry.priceFrom), format(entry.priceTo)];
+
+    it('widens service ranges by the surcharge', async () => {
+      const prices = await setupPrices();
+      // anna 60..72, boris 80..96, carl 70..84.
+      expect(range(prices.services.get('cut')!)).toEqual(['60.00', '96.00']);
+      // Nobody performs color: the base price over the window.
+      expect(range(prices.services.get('color')!)).toEqual(['90.00', '108.00']);
+    });
+
+    it('gives each staff member a range per service', async () => {
+      const prices = await setupPrices();
+      expect(
+        prices.staffServicePrices.get('boris')!.map((item) => range(item)),
+      ).toEqual([['80.00', '96.00']]);
+    });
+
+    it('prices bundles over the window', async () => {
+      const prices = await setupPrices();
+      expect(range(prices.bundles.get('sum')!)).toEqual(['150.00', '204.00']);
+      expect(range(prices.bundles.get('fixed')!)).toEqual(['120.00', '144.00']);
+    });
+
+    it('ignores a surcharge on a day outside the window', async () => {
+      // Monday to Wednesday: Friday is not bookable yet.
+      const prices = await setupPrices(3);
+      expect(range(prices.services.get('cut')!)).toEqual(['60.00', '80.00']);
+      expect(range(prices.bundles.get('fixed')!)).toEqual(['120.00', '120.00']);
+    });
   });
 
   it('falls back to the catalog price for a service the price book lacks', async () => {
@@ -241,6 +312,81 @@ describe('BookingSetupService.resolveBookingSelection prices', () => {
     Object.fromEntries(
       staff.map((member) => [member.id, format(member.price)]),
     );
+  const ranges = (
+    staff: { id: string; price: Prisma.Decimal; priceTo: Prisma.Decimal }[],
+  ) =>
+    Object.fromEntries(
+      staff.map((member) => [
+        member.id,
+        [format(member.price), format(member.priceTo)],
+      ]),
+    );
+
+  it('gives staff the range over the window without a start, the exact price with one', async () => {
+    const { pricing, catalog, directory } = pricedSalon([FRIDAY_EVENING]);
+    const scheduling = { resolveForBooking: vi.fn(async () => []) };
+    const { service } = setup({
+      pricing,
+      catalog,
+      directory,
+      scheduling,
+      selection: {
+        bundleId: null,
+        services: [catalogService('cut', '60')],
+        executionMode: BookingExecutionMode.SEQUENTIAL,
+      },
+    });
+
+    const browsing = await service.resolveBookingSelection('location-1', {
+      serviceIds: ['cut'],
+    });
+    const window = {
+      anna: ['60.00', '72.00'],
+      boris: ['80.00', '96.00'],
+      carl: ['70.00', '84.00'],
+    };
+    expect(ranges(browsing.availableStaff)).toEqual(window);
+    expect(ranges(browsing.staffByService[0].availableStaff)).toEqual(window);
+
+    const friday = await service.resolveBookingSelection('location-1', {
+      serviceIds: ['cut'],
+      startAt: '2026-11-27T17:00:00',
+    });
+    expect(ranges(friday.availableStaff)).toEqual({
+      anna: ['72.00', '72.00'],
+      boris: ['96.00', '96.00'],
+      carl: ['84.00', '84.00'],
+    });
+    const afternoon = await service.resolveBookingSelection('location-1', {
+      serviceIds: ['cut'],
+      startAt: '2026-11-27T16:00:00',
+    });
+    expect(ranges(afternoon.staffByService[0].availableStaff).anna).toEqual([
+      '60.00',
+      '60.00',
+    ]);
+  });
+
+  it('ranges a FIXED bundle line as its share of the package', async () => {
+    const { pricing, catalog } = pricedSalon([FRIDAY_EVENING]);
+    const directory = [directoryStaff('anna', ['cut', 'color'])];
+    const { service } = setup({ pricing, catalog, directory });
+
+    const result = await service.resolveBookingSelection('location-1', {
+      bundleId: 'fixed',
+    });
+
+    expect(ranges(result.availableStaff)).toEqual({
+      anna: ['120.00', '144.00'],
+    });
+    // 120 split 60:90 is 48 and 72; +20% gives 57.60 and 86.40.
+    expect(
+      result.staffByService.map((entry) => ranges(entry.availableStaff).anna),
+    ).toEqual([
+      ['48.00', '57.60'],
+      ['72.00', '86.40'],
+    ]);
+  });
 
   it('gives each staff member their price for the selection and for each service', async () => {
     const { pricing, catalog, directory } = pricedSalon();

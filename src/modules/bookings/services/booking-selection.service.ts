@@ -8,10 +8,12 @@ import { ReadConsistency } from '../../../shared/cache/enums/read-consistency.en
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { normalizeStaffAssignments } from '../../../shared/scheduling/normalize-staff-assignments.js';
 import { priceLine, sumPrices } from '../../../shared/money/line-pricing.js';
+import { TimeUtils } from '../../../shared/time/time.utils.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { LocationService } from '../../location/services/location.service.js';
 import { OrderPricingLine } from '../../orders/interfaces/order-pricing-line.interface.js';
 import { OrdersFacade } from '../../orders/orders.facade.js';
+import { VisitTime } from '../../pricing/engine/interfaces/visit-time.interface.js';
 import { PricingFacade } from '../../pricing/pricing.facade.js';
 import { ServiceCatalogFacade } from '../../services/catalog/service-catalog.facade.js';
 import { BookingPricingRequestDto } from '../dto/booking-pricing-request.dto.js';
@@ -19,6 +21,7 @@ import { ManualBookingItemDto } from '../dto/manual-booking-item.dto.js';
 import { BookingPricingResult } from '../interfaces/booking-pricing-result.interface.js';
 import { BookingSelectionRequest } from '../interfaces/booking-selection-request.interface.js';
 import { ResolvedBookingSelection } from '../interfaces/resolved-booking-selection.interface.js';
+import { visitTimeAt } from '../rules/booking-visit-time.rules.js';
 
 @Injectable()
 export class BookingSelectionService {
@@ -50,6 +53,13 @@ export class BookingSelectionService {
           selection,
           this.manualItems(dto),
           dto,
+          // Surcharges look at the visit start; without one the preview has none.
+          dto.startAt
+            ? visitTimeAt(
+                TimeUtils.localToUtc(dto.startAt, location.timezone),
+                location.timezone,
+              )
+            : null,
         )
       : [];
     const productLines = await this.orders.priceProductItems(
@@ -138,14 +148,16 @@ export class BookingSelectionService {
   }
 
   /**
-   * Preview without time: prices come through the cache, nothing is stored. Each line is
-   * priced with the staff member the request names for it; with none chosen, at the base price.
+   * Preview: prices come through the cache, nothing is stored. Each line is priced with the
+   * staff member the request names for it (with none chosen, at the base price) and the
+   * surcharges of the visit start.
    */
   private async priceServiceLines(
     locationId: string,
     selection: ResolvedBookingSelection,
     manualItems: ManualBookingItemDto[],
     dto: BookingPricingRequestDto,
+    visit: VisitTime | null,
   ): Promise<OrderPricingLine[]> {
     const requested = normalizeStaffAssignments(
       selection.services.map((service) => service.id),
@@ -168,6 +180,7 @@ export class BookingSelectionService {
               customPrice == null ? null : new Prisma.Decimal(customPrice),
           };
         }),
+        visit,
       },
       ReadConsistency.CACHED,
     );

@@ -8,7 +8,7 @@ const actor = {
 } as const;
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { HttpStatus } from '@nestjs/common';
-import { BookingWidget, PaymentTrackingMode } from '@prisma/client';
+import { BookingWidget, PaymentTrackingMode, Prisma } from '@prisma/client';
 import { plainToInstance } from 'class-transformer';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
@@ -125,6 +125,7 @@ describe('Location contacts response contract', () => {
           notifyClientOnStaffChanges: true,
           googleReviewUrl: null,
           yandexReviewUrl: null,
+          priceRoundingStep: new Prisma.Decimal('1.00'),
           paymentTrackingMode: PaymentTrackingMode.MANUAL,
           paymentTrackingSince: new Date(),
         }),

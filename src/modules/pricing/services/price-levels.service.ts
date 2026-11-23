@@ -214,6 +214,34 @@ export class PriceLevelsService {
     };
   }
 
+  /**
+   * Writes the prices of one non-default level for several services in the caller's
+   * transaction: a price sets or replaces the row, null deletes it.
+   */
+  async writeLevelPrices(
+    levelId: string,
+    items: readonly { serviceId: string; price: Prisma.Decimal | null }[],
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    const cleared = items
+      .filter((item) => item.price === null)
+      .map((item) => item.serviceId);
+    if (cleared.length > 0)
+      await tx.serviceLevelPrice.deleteMany({
+        where: { priceLevelId: levelId, serviceId: { in: cleared } },
+      });
+    for (const { serviceId, price } of items) {
+      if (price === null) continue;
+      await tx.serviceLevelPrice.upsert({
+        where: {
+          serviceId_priceLevelId: { serviceId, priceLevelId: levelId },
+        },
+        create: { serviceId, priceLevelId: levelId, price },
+        update: { price },
+      });
+    }
+  }
+
   private emit(
     locationId: string,
     levelId: string,

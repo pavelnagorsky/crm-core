@@ -10,6 +10,7 @@ import {
 } from 'class-validator';
 import { StaffAssignments } from '../../../shared/scheduling/decorators/staff-assignments.decorator.js';
 import { StaffAssignmentDto } from '../../../shared/scheduling/dto/staff-assignment.dto.js';
+import { IsLocalDateTime } from '../../../shared/time/decorators/is-local-date-time.validator.js';
 import { MULTI_SERVICE_MAX_ITEMS } from '../../services/constants/multi-service.constants.js';
 import { ManualBookingItemDto } from './manual-booking-item.dto.js';
 import { ManualBookingProductDto } from './manual-booking-product.dto.js';
@@ -56,6 +57,17 @@ export class BookingPricingRequestDto {
 
   @StaffAssignments()
   staffAssignments?: StaffAssignmentDto[];
+
+  @ApiProperty({
+    type: String,
+    required: false,
+    example: '2026-09-20T17:00:00',
+    description:
+      'Visit start: local datetime in the location timezone, no offset, like startAt of booking creation. Surcharges apply by it; without it the preview has no surcharges.',
+  })
+  @IsOptional()
+  @IsLocalDateTime()
+  startAt?: string;
 
   @ApiProperty({
     type: () => ManualBookingItemDto,
