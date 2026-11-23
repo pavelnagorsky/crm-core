@@ -30,7 +30,7 @@
 | Метрики приложения | `prom-client`. Отдельный HTTP-сервер метрик на порту `9464` внутри контейнера, **не** через `lb` и не на основном порту — так `/metrics` никогда не попадёт в интернет и не требует авторизации |
 | Как Prometheus находит реплики | `docker_sd_configs` через `/var/run/docker.sock` (как Alloy), фильтр по лейблам compose. Реплики `api` (любое `API_REPLICAS`) и `worker` подхватываются сами, в том числе после `rollout.sh` |
 | Инфраструктура | `postgres_exporter`, `redis_exporter` — всегда. `node_exporter` (сервер: CPU, память, диск) и `cAdvisor` (контейнеры) — профиль `host-metrics`, включается на сервере через `COMPOSE_PROFILES` (на Docker Desktop для Windows они работают плохо) |
-| Дашборды | Provisioning в Grafana, как «CRM — логи»: «CRM — API», «CRM — инфраструктура», «CRM — фоновые задачи» |
+| Дашборды | Provisioning в Grafana, как «Klendo — логи»: «Klendo — API», «Klendo — инфраструктура», «Klendo — фоновые задачи» |
 | Алерты | Встроенные алерты Grafana (unified alerting), без Alertmanager. Правила — provisioning в репозитории |
 | Куда алерты | Email. Адрес — `ALERT_EMAIL` в `.env` (в репозиторий не попадает). SMTP — тот же, что у приложения (`SMTP_HOST`, `SMTP_PORT`, `EMAIL`, `EMAIL_PW`) |
 | Алерты локально | Выключены, если `ALERT_EMAIL` пуст: entrypoint Grafana не подкладывает точку отправки (как с паролем). Правила видны и вычисляются, письма не уходят |
@@ -66,24 +66,24 @@
 
 ### 2.2. Какие метрики
 
-Имена — по соглашениям Prometheus (`_seconds`, `_total`, `_bytes`), префикс `crm_` для своих.
+Имена — по соглашениям Prometheus (`_seconds`, `_total`, `_bytes`), префикс `klendo_` для своих.
 
 | Метрика | Тип и метки | Откуда |
 | --- | --- | --- |
 | `http_server_request_duration_seconds` | histogram; `method`, `route` (шаблон), `status_class` (`2xx`…`5xx`) | express-middleware: `res.on('finish')`, маршрут из `req.baseUrl + req.route.path`; не сопоставленный маршрут → `route="unmatched"`. Ловит и ответы гардов (429, 401) |
 | `http_server_requests_in_flight` | gauge | тот же middleware |
-| `crm_db_pool_connections` | gauge; `state` (`total`/`idle`/`waiting`) | свой `pg.Pool` в `PrismaPg(pool)` (`DatabaseService`), значения читаются при опросе. `waiting > 0` — пул исчерпан |
-| `crm_db_query_duration_seconds` | histogram; `operation` (`findMany`, `create`, …), `model` | Prisma `$extends` query-хук. Без текста запроса |
-| `crm_job_queue_jobs` | gauge; `queue`, `state` (`created`/`active`/`retry`/`failed`) | `JobQueueService` → `getQueueStats` при опросе, только в роли `worker`/`all` (чтобы реплики не дублировали запросы к БД) |
-| `crm_job_queue_oldest_waiting_seconds` | gauge; `queue` | возраст самой старой задачи в `created` |
-| `crm_email_sent_total` | counter; `result` (`sent`/`failed`), `audience` | обработчик отправки писем |
-| `crm_cron_runs_total` | counter; `job`, `result` (`success`/`error`/`skipped`) | `@ExclusiveCron` (обёртка уже есть) |
-| `crm_cron_duration_seconds` | histogram; `job` | там же |
-| `crm_cron_last_success_timestamp_seconds` | gauge; `job` | там же; основа алерта «крон не отработал» |
-| `crm_cache_requests_total` | counter; `namespace`, `result` (`hit`/`miss`/`bypass`/`error`) | `AppCacheService` |
-| `crm_cache_load_duration_seconds` | histogram; `namespace` | загрузка при промахе |
-| `crm_state_store_available` | gauge 0/1 | `RedisService.available` (fail-open виден на графике) |
-| `crm_bookings_created_total` | counter; `channel` (`public`/`cabinet`) | создание записи (одна бизнес-метрика для общего фона) |
+| `klendo_db_pool_connections` | gauge; `state` (`total`/`idle`/`waiting`) | свой `pg.Pool` в `PrismaPg(pool)` (`DatabaseService`), значения читаются при опросе. `waiting > 0` — пул исчерпан |
+| `klendo_db_query_duration_seconds` | histogram; `operation` (`findMany`, `create`, …), `model` | Prisma `$extends` query-хук. Без текста запроса |
+| `klendo_job_queue_jobs` | gauge; `queue`, `state` (`created`/`active`/`retry`/`failed`) | `JobQueueService` → `getQueueStats` при опросе, только в роли `worker`/`all` (чтобы реплики не дублировали запросы к БД) |
+| `klendo_job_queue_oldest_waiting_seconds` | gauge; `queue` | возраст самой старой задачи в `created` |
+| `klendo_email_sent_total` | counter; `result` (`sent`/`failed`), `audience` | обработчик отправки писем |
+| `klendo_cron_runs_total` | counter; `job`, `result` (`success`/`error`/`skipped`) | `@ExclusiveCron` (обёртка уже есть) |
+| `klendo_cron_duration_seconds` | histogram; `job` | там же |
+| `klendo_cron_last_success_timestamp_seconds` | gauge; `job` | там же; основа алерта «крон не отработал» |
+| `klendo_cache_requests_total` | counter; `namespace`, `result` (`hit`/`miss`/`bypass`/`error`) | `AppCacheService` |
+| `klendo_cache_load_duration_seconds` | histogram; `namespace` | загрузка при промахе |
+| `klendo_state_store_available` | gauge 0/1 | `RedisService.available` (fail-open виден на графике) |
+| `klendo_bookings_created_total` | counter; `channel` (`public`/`cabinet`) | создание записи (одна бизнес-метрика для общего фона) |
 
 Экспортеры дают: Postgres — соединения по состояниям, размер БД, блокировки, медленные запросы
 (`pg_stat_statements` — включается в compose так же, как в плане нагрузочного теста); Redis —
@@ -93,7 +93,7 @@ cAdvisor — CPU/память/рестарты каждого контейнер
 ### 2.3. Prometheus
 
 - `docker/prometheus/prometheus.yml`: `scrape_interval: 15s`; задания:
-  - `app` — `docker_sd_configs` с фильтром `com.docker.compose.project=crm-core` и лейблом
+  - `app` — `docker_sd_configs` с фильтром `com.docker.compose.project=klendo-core` и лейблом
     `prometheus.scrape=true`; порт из лейбла `prometheus.port`; метки `service`, `container`
     из лейблов compose (как в Alloy);
   - `postgres`, `redis`, `node`, `cadvisor` — статические адреса внутри сети.
@@ -112,13 +112,13 @@ cAdvisor — CPU/память/рестарты каждого контейнер
 Provisioning в `docker/grafana/provisioning/dashboards/`, источник `Prometheus` добавляется
 рядом с Loki. Все панели с переменной `container` (все реплики или одна).
 
-1. **«CRM — API»**: RPS, доля 5xx и 4xx, p50/p95/p99 по маршрутам (топ-10 медленных), 429 от
+1. **«Klendo — API»**: RPS, доля 5xx и 4xx, p50/p95/p99 по маршрутам (топ-10 медленных), 429 от
    лимитеров, запросы в обработке, event loop lag, память и CPU по репликам, пул БД.
-   Ссылка из панели ошибок в «CRM — логи» с тем же интервалом времени.
-2. **«CRM — инфраструктура»**: Postgres (соединения из 100, топ запросов, размер), Redis
+   Ссылка из панели ошибок в «Klendo — логи» с тем же интервалом времени.
+2. **«Klendo — инфраструктура»**: Postgres (соединения из 100, топ запросов, размер), Redis
    (память из 256 МБ, доступность), сервер (CPU, память, **диск**), контейнеры (память
    относительно `mem_limit`, рестарты).
-3. **«CRM — фоновые задачи»**: очередь писем (ожидают, возраст старейшей, ошибки), письма
+3. **«Klendo — фоновые задачи»**: очередь писем (ожидают, возраст старейшей, ошибки), письма
    отправлено/ошибок, кроны (последний успешный запуск, длительность, ошибки), кэш (hit rate,
    промахи по namespace, ошибки хранилища).
 
@@ -143,13 +143,13 @@ Grafana unified alerting, provisioning в `docker/grafana/provisioning/alerting/
 | Много 5xx | доля 5xx > 2% за 5 мин при RPS > 0.2 | critical |
 | Медленная онлайн-запись | p95 публичных маршрутов записи > 1 с 10 мин | warning |
 | Event loop завис | p99 event loop lag > 0.5 с 5 мин | warning |
-| Пул БД исчерпан | `crm_db_pool_connections{state="waiting"} > 0` 5 мин | warning |
+| Пул БД исчерпан | `klendo_db_pool_connections{state="waiting"} > 0` 5 мин | warning |
 | Postgres: соединения | > 80 из 100 10 мин | warning |
 | Очередь писем копится | старейшее письмо ждёт > 10 мин | warning |
 | Письма не уходят | доля `failed` > 20% за 15 мин | critical |
-| Крон не отработал | `time() - crm_cron_last_success_timestamp_seconds` > 3× интервала (на каждый крон своё значение) | warning |
+| Крон не отработал | `time() - klendo_cron_last_success_timestamp_seconds` > 3× интервала (на каждый крон своё значение) | warning |
 | Worker недоступен | `up == 0` у `worker` 5 мин | critical |
-| Redis недоступен | `crm_state_store_available == 0` 5 мин (приложение работает без кэша и лимитов) | warning |
+| Redis недоступен | `klendo_state_store_available == 0` 5 мин (приложение работает без кэша и лимитов) | warning |
 | Память контейнера | > 90% `mem_limit` 10 мин | warning |
 | Диск сервера | свободно < 15% | warning; < 5% — critical |
 | Логи не поступают | Loki: нет строк от `service="api"` 15 мин при живых репликах (защита от зависания Alloy, наблюдалось при проверке репликации) | warning |
@@ -209,13 +209,13 @@ ALERT_EMAIL=
   от запросов с разными id.
 - [ ] `rollout.sh api` и смена `API_REPLICAS`: старые цели исчезают, новые появляются сами.
 - [ ] Дашборды показывают данные; панель ошибок ведёт в логи с тем же временем.
-- [ ] `docker compose stop redis` → `crm_state_store_available` = 0, через 5 мин алерт
+- [ ] `docker compose stop redis` → `klendo_state_store_available` = 0, через 5 мин алерт
   «Redis недоступен» в состоянии `Firing`.
 - [ ] С `ALERT_EMAIL` в `.env`: тестовое письмо дошло; остановка всех реплик `api` → письмо
   `critical` через ~1–2 мин и письмо о восстановлении после старта.
 - [ ] С пустым `ALERT_EMAIL`: алерты вычисляются, писем нет, Grafana стартует без ошибок.
 - [ ] Пул БД: при нагрузке (`autocannon` на тяжёлый эндпоинт) видно `idle`/`waiting`.
-- [ ] Крон: `crm_cron_last_success_timestamp_seconds` обновляется у ежеминутных кронов; в
+- [ ] Крон: `klendo_cron_last_success_timestamp_seconds` обновляется у ежеминутных кронов; в
   `api` (роль `api`) серий кронов нет.
 - [ ] `npm run start:dev` работает, метрики на `127.0.0.1:9464/metrics`; второй экземпляр с
   `METRICS_PORT=0` стартует без конфликта порта.

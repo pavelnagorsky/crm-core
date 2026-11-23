@@ -8,7 +8,7 @@ import { SLIDING_WINDOW_SCRIPT } from './redis-sliding-window.script.js';
 const WARNING_INTERVAL_MS = 60_000;
 
 /**
- * Sliding windows in Redis, shared by all replicas: a sorted set of attempt times per key (`crm:<key>`, TTL = window).
+ * Sliding windows in Redis, shared by all replicas: a sorted set of attempt times per key (`klendo:<key>`, TTL = window).
  * Fail-open: when Redis is unavailable or fails, the attempt is allowed.
  */
 @Injectable()

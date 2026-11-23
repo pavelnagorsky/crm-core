@@ -39,7 +39,7 @@ jobs:
         uses: appleboy/ssh-action@v1
         env:
           DEPLOY_SHA: ${{ github.sha }}
-          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/crm-core' }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/klendo-core' }}
           APP_PORT: ${{ vars.APP_PORT || '3000' }}
         with:
           host: ${{ secrets.DEPLOY_HOST }}

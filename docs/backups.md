@@ -5,7 +5,7 @@
 30 дней удаляет правило самого бакета.
 
 ```text
-backup (cron 03:30) ──pg_dump──► /tmp/crm-<время>.dump ──pg_restore --list──► gs://<бакет>/postgres/
+backup (cron 03:30) ──pg_dump──► /tmp/klendo-core-<время>.dump ──pg_restore --list──► gs://<бакет>/postgres/
 ```
 
 ## Устройство
@@ -15,13 +15,14 @@ backup (cron 03:30) ──pg_dump──► /tmp/crm-<время>.dump ──pg_r
 | Контейнер | сервис `backup` в `compose.yaml`, образ из `docker/backup/` (Postgres 17 + rclone), профиль `backup` |
 | Скрипт | `docker/backup/backup.sh`; расписание — busybox `crond` (`docker/backup/entrypoint.sh`) |
 | Какая база | `DOCKER_DATABASE_URL` (та же, что у приложения); локально — `postgres` из compose |
-| Куда | `gs://$BACKUP_BUCKET/postgres/crm-<UTC-время>.dump`, формат `pg_dump --format=custom` |
-| Доступ | ключ `secrets/backup-gcs.json` сервисного аккаунта `crm-db-backup` с ролью **только создание объектов** (`roles/storage.objectCreator`) |
+| Куда | `gs://$BACKUP_BUCKET/postgres/klendo-core-<UTC-время>.dump`, формат `pg_dump --format=custom` |
+| Доступ | ключ `secrets/backup-gcs.json` сервисного аккаунта `klendo-db-backup` с ролью **только создание объектов** (`roles/storage.objectCreator`) |
 | Хранение | правило бакета: удалить через 30 дней; плюс стандартное «мягкое удаление» GCS (7 дней) |
 
 Почему ключ «только на запись»: если сервер или приложение взломают, этим ключом нельзя ни
 скачать дампы (в них все клиенты), ни удалить или перезаписать их. Ключ приложения
-(`cloud-storage.json`) к бакету бэкапов доступа не имеет.
+(`secrets/google-credentials.json`) не должен иметь доступа к бакету бэкапов: права аккаунтов
+приложения выдаются на конкретные бакеты, а не на весь проект.
 
 Дамп проверяется до загрузки: если `pg_dump` упал или файл не читается, в бакет ничего не
 уходит, а в лог пишется `ERROR: [Backup] failed: ...`.
@@ -55,7 +56,7 @@ backup (cron 03:30) ──pg_dump──► /tmp/crm-<время>.dump ──pg_r
 
 ## Как понять, что бэкапы делаются
 
-- Grafana → «CRM — логи», «Контейнер» = `backup`: каждую ночь пара строк `started` / `completed`
+- Grafana → «Klendo — логи», «Контейнер» = `backup`: каждую ночь пара строк `started` / `completed`
   с размером и длительностью; при сбое — `ERROR`.
 - Алерт «Бэкап не сделан» (нет строки `completed` больше 26 часов) — в плане метрик
   (`docs/metrics-plan.md`, раздел 2.5).
@@ -73,7 +74,7 @@ backup (cron 03:30) ──pg_dump──► /tmp/crm-<время>.dump ──pg_r
 gcloud storage ls gs://<бакет>/postgres/
 
 # 2. Скачать нужный
-gcloud storage cp gs://<бакет>/postgres/crm-2026-11-24T003000Z.dump ./restore.dump
+gcloud storage cp gs://<бакет>/postgres/klendo-core-2026-11-24T003000Z.dump ./restore.dump
 
 # 3. Развернуть в ПУСТУЮ базу (сначала всегда в отдельную, чтобы посмотреть, что там)
 createdb -h <host> -U <user> restore_check

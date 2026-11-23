@@ -8,7 +8,8 @@
  *   npm run template:reviews-import                 build and upload
  *   npm run template:reviews-import -- --out <path> only write the file locally
  *
- * Upload needs GOOGLE_APPLICATION_CREDENTIALS and GOOGLE_BUCKET_NAME from `.env`.
+ * Upload needs GOOGLE_BUCKET_NAME from `.env` and the key in secrets/google-credentials.json
+ * (or GOOGLE_APPLICATION_CREDENTIALS pointing elsewhere).
  */
 import { Storage } from '@google-cloud/storage';
 import { writeFile } from 'node:fs/promises';
@@ -35,7 +36,12 @@ async function main(): Promise<void> {
 
   const bucketName = process.env['GOOGLE_BUCKET_NAME'];
   if (!bucketName) throw new Error('GOOGLE_BUCKET_NAME is not set');
-  const storage = new Storage({ projectId: process.env['GOOGLE_PROJECT_ID'] });
+  const storage = new Storage({
+    projectId: process.env['GOOGLE_PROJECT_ID'],
+    keyFilename:
+      process.env['GOOGLE_APPLICATION_CREDENTIALS'] ??
+      'secrets/google-credentials.json',
+  });
   await storage
     .bucket(bucketName)
     .file(OBJECT_PATH)

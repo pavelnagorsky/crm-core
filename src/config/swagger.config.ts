@@ -1,8 +1,8 @@
 import { DocumentBuilder } from '@nestjs/swagger';
 
 export const swaggerConfig = new DocumentBuilder()
-  .setTitle('CRM-core API')
-  .setDescription('CRM-core API')
+  .setTitle('Klendo Core API')
+  .setDescription('Klendo Core API')
   .setVersion('1.0')
   .addBearerAuth(
     {

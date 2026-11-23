@@ -16,6 +16,9 @@ export default () => {
     },
     googleCloud: {
       projectId: process.env['GOOGLE_PROJECT_ID'],
+      credentialsFile:
+        process.env['GOOGLE_APPLICATION_CREDENTIALS'] ??
+        'secrets/google-credentials.json',
       apiKey: process.env['GOOGLE_API_KEY'],
       bucketName: process.env['GOOGLE_BUCKET_NAME'],
       privateBucketName: process.env['GOOGLE_PRIVATE_BUCKET_NAME'],

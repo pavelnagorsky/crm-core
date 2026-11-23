@@ -1,7 +1,7 @@
-name: crm-core
+name: klendo-core
 
 x-app: &app
-  image: crm-core:${IMAGE_TAG:-local}
+  image: klendo-core:${IMAGE_TAG:-local}
   init: true
   restart: unless-stopped
   stop_grace_period: 30s
@@ -12,6 +12,8 @@ x-app: &app
     REDIS_URL: redis://redis:6379
     DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-10}
     APP_ROLE: api
+    # Key files from ./secrets are mounted at /run/secrets (same path in every environment).
+    GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/google-credentials.json
     # Empty: log to stdout only (collected by docker), no files.
     LOG_DIRECTORY: ''
   depends_on:
@@ -76,7 +78,7 @@ services:
     build:
       context: .
       target: migrate
-    image: crm-core:${IMAGE_TAG:-local}-migrate
+    image: klendo-core:${IMAGE_TAG:-local}-migrate
     env_file: .env
     environment:
       DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://crm:crm@postgres:5432/crm}
@@ -119,7 +121,7 @@ services:
     restart: unless-stopped
 
   # Logs: alloy reads container stdout via the docker socket, loki keeps it for 30 days,
-  # grafana is the UI (dashboard "CRM — логи" is provisioned). Never expose grafana publicly.
+  # grafana is the UI (dashboard "Klendo — логи" is provisioned). Never expose grafana publicly.
   loki:
     image: grafana/loki:3.6.22
     command: [-config.file=/etc/loki/loki.yaml]
@@ -185,7 +187,7 @@ services:
   # One-off backup: docker compose run --rm backup now
   backup:
     build: ./docker/backup
-    image: crm-core-backup:${IMAGE_TAG:-local}
+    image: klendo-core-backup:${IMAGE_TAG:-local}
     profiles: [backup]
     environment:
       BACKUP_DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://crm:crm@postgres:5432/crm}

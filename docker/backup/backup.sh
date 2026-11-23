@@ -11,7 +11,7 @@ log() { echo "[$(date -u '+%Y-%m-%d %H:%M:%S') UTC] $1: [Backup] $2"; }
 : "${BACKUP_DATABASE_URL:?BACKUP_DATABASE_URL is not set}"
 : "${BACKUP_BUCKET:?BACKUP_BUCKET is not set}"
 prefix="${BACKUP_PREFIX:-postgres}"
-name="crm-$(date -u '+%Y-%m-%dT%H%M%SZ').dump"
+name="klendo-core-$(date -u '+%Y-%m-%dT%H%M%SZ').dump"
 file="/tmp/$name"
 trap 'rm -f "$file"' EXIT
 

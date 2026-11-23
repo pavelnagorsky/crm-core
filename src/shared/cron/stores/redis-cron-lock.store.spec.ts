@@ -6,7 +6,7 @@ import { RedisCronLockStore } from './redis-cron-lock.store.js';
 function createRedis(available = true) {
   return {
     available,
-    key: (...parts: string[]) => `crm:${parts.join(':')}`,
+    key: (...parts: string[]) => `klendo:${parts.join(':')}`,
     setIfAbsent: vi.fn(),
   };
 }
@@ -22,7 +22,7 @@ describe('RedisCronLockStore', () => {
     await expect(store.tryAcquire('Jobs.run', 29_740_000)).resolves.toBe(true);
 
     expect(redis.setIfAbsent).toHaveBeenCalledWith(
-      'crm:cron:Jobs.run:29740000',
+      'klendo:cron:Jobs.run:29740000',
       `${hostname()}:${process.pid}`,
       3600,
     );

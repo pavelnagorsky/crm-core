@@ -14,7 +14,7 @@ describe.skipIf(!process.env.REDIS_URL)('RedisCacheStore (e2e)', () => {
   let raw: Redis;
   let store: RedisCacheStore;
 
-  const entryKey = (key: string) => `crm:cache:entry:${key}`;
+  const entryKey = (key: string) => `klendo:cache:entry:${key}`;
 
   beforeAll(async () => {
     redis = new RedisService(new ConfigService({ redis: { url: url.href } }));
@@ -49,9 +49,9 @@ describe.skipIf(!process.env.REDIS_URL)('RedisCacheStore (e2e)', () => {
   it('keeps no TTL on the revision counter and tags', async () => {
     await store.write('a', 0, ['dep:a'], 'v', 60_000);
     await store.invalidate('dep:b');
-    expect(await raw.pttl('crm:cache:rev')).toBe(-1);
-    expect(await raw.pttl('crm:cache:tag:dep:b')).toBe(-1);
-    expect(await raw.get('crm:cache:tag:dep:b')).toBe('1');
+    expect(await raw.pttl('klendo:cache:rev')).toBe(-1);
+    expect(await raw.pttl('klendo:cache:tag:dep:b')).toBe(-1);
+    expect(await raw.get('klendo:cache:tag:dep:b')).toBe('1');
     expect(await raw.pttl(entryKey('a'))).toBeGreaterThan(0);
   });
 
@@ -78,7 +78,7 @@ describe.skipIf(!process.env.REDIS_URL)('RedisCacheStore (e2e)', () => {
     await store.invalidate('dep:y');
     await store.write('a', 2, ['dep:a'], 'v', 60_000);
     // Simulates a Redis restart that lost the counter but not the entry.
-    await raw.del('crm:cache:rev');
+    await raw.del('klendo:cache:rev');
 
     expect(await store.read('a')).toEqual({ revision: 0 });
     expect(await raw.exists(entryKey('a'))).toBe(0);

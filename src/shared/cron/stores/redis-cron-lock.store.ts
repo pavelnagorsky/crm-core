@@ -7,7 +7,7 @@ import { CronLockStore } from '../interfaces/cron-lock-store.interface.js';
 const LOCK_TTL_SECONDS = 3600;
 
 /**
- * Cron locks in Redis, shared by all processes: `SET crm:cron:<name>:<slot> <host:pid> NX EX 3600`.
+ * Cron locks in Redis, shared by all processes: `SET klendo:cron:<name>:<slot> <host:pid> NX EX 3600`.
  * Fail-open: when Redis is unavailable or fails, the run proceeds.
  */
 @Injectable()

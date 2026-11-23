@@ -32,7 +32,7 @@ export class JobQueueService implements OnModuleInit, OnApplicationShutdown {
   constructor(config: ConfigService) {
     this.boss = new PgBoss({
       connectionString: config.get<string>('database.url'),
-      application_name: 'crm-core-jobs',
+      application_name: 'klendo-core-jobs',
       max: POOL_SIZE,
       // Recurring work stays on @nestjs/schedule.
       schedule: false,
