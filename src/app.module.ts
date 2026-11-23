@@ -4,7 +4,8 @@ import { APP_GUARD } from '@nestjs/core';
 import { LoggerModule } from 'nestjs-pino';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ThrottlerModule, ThrottlerStorage } from '@nestjs/throttler';
+import { appRole, runsCrons } from './config/app-role.config.js';
 import configuration from './config/configuration.js';
 import { loggerConfig } from './config/logger.config.js';
 import { throttlerConfig } from './config/throttler.config.js';
@@ -39,7 +40,11 @@ import { ReviewImportModule } from './modules/reviews/import/review-import.modul
 import { ServicesModule } from './modules/services/services.module.js';
 import { StaffModule } from './modules/staff/staff.module.js';
 import { SuppliersModule } from './modules/suppliers/suppliers.module.js';
+import { CronModule } from './shared/cron/cron.module.js';
 import { AppThrottlerGuard } from './shared/guards/app-throttler.guard.js';
+import { RedisModule } from './shared/redis/redis.module.js';
+import { ThrottlerStorageModule } from './shared/throttling/throttler-storage.module.js';
+import { THROTTLER_STORAGE } from './shared/throttling/throttler-storage.token.js';
 
 @Module({
   imports: [
@@ -49,14 +54,24 @@ import { AppThrottlerGuard } from './shared/guards/app-throttler.guard.js';
       isGlobal: true,
       cache: true,
     }),
-    ScheduleModule.forRoot(),
-    ThrottlerModule.forRoot(throttlerConfig),
+    // Read at import time (main.ts loads `dotenv/config` before AppModule). Without ScheduleModule, `@Cron` stays inert metadata.
+    ...(runsCrons(appRole()) ? [ScheduleModule.forRoot()] : []),
+    ThrottlerModule.forRootAsync({
+      imports: [ThrottlerStorageModule],
+      inject: [THROTTLER_STORAGE],
+      useFactory: (storage: ThrottlerStorage) => ({
+        ...throttlerConfig,
+        storage,
+      }),
+    }),
     LoggerModule.forRootAsync({
       inject: [ConfigService],
       useFactory: loggerConfig,
     }),
     EventEmitterModule.forRoot({ wildcard: true }),
     DatabaseModule,
+    RedisModule,
+    CronModule,
     NotificationsModule,
     AuthModule,
     BrandApiModule,

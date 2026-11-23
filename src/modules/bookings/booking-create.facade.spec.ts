@@ -50,7 +50,7 @@ const directTraffic = {
 };
 
 function channelDeps(): [never] {
-  return [{ assertAllowed: vi.fn() } as never];
+  return [{ assertAllowed: vi.fn().mockResolvedValue(undefined) } as never];
 }
 
 function commercialDeps(): [never, OrderPricingCalculator, never] {

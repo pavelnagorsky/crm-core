@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Cron } from '@nestjs/schedule';
+import { ExclusiveCron } from '../../../shared/cron/decorators/exclusive-cron.decorator.js';
 import { subMonths } from 'date-fns';
 import { IFrontendConfig } from '../../../config/interfaces/frontend-config.interface.js';
 import { DatabaseService } from '../../../database/database.service.js';
@@ -84,7 +84,7 @@ export class BookingTrafficService {
   }
 
   /** Monthly: drops hourly counters older than the retention period. */
-  @Cron('0 40 4 1 * *')
+  @ExclusiveCron('0 40 4 1 * *')
   async purgeExpiredStats(now = new Date()): Promise<number> {
     const { count } = await this.db.bookingTrafficStat.deleteMany({
       where: {

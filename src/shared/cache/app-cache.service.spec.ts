@@ -1,11 +1,13 @@
 import { Prisma } from '@prisma/client';
+import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createCache } from 'cache-manager';
 import { AppCacheService } from './app-cache.service.js';
 import { cacheKey } from './cache-key.js';
+import { CacheValueCodec } from './cache-value.codec.js';
 import { defineCache } from './define-cache.js';
 import { CacheNamespace } from './enums/cache-namespace.enum.js';
 import { createTestCache } from './testing/create-test-cache.js';
+import { MemoryCacheStore } from './stores/memory-cache.store.js';
 
 const definition = defineCache<{ id: string }, { name: string }>({
   namespace: CacheNamespace.BRAND_PROFILE,
@@ -27,15 +29,25 @@ function deferred<T>() {
 
 describe('AppCacheService', () => {
   let cache: AppCacheService;
-  let manager: ReturnType<typeof createCache>;
+  let store: MemoryCacheStore;
+  let warn: ReturnType<typeof vi.spyOn>;
+  let error: ReturnType<typeof vi.spyOn>;
   beforeEach(() => {
-    manager = createCache();
-    cache = new AppCacheService(manager, new ConfigService());
+    warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
+    error = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
+    store = new MemoryCacheStore();
+    cache = new AppCacheService(store, new ConfigService());
   });
-  afterEach(async () => {
-    await cache.onModuleDestroy();
+  afterEach(() => {
+    cache.onModuleDestroy();
     vi.useRealTimers();
+    vi.restoreAllMocks();
   });
+
+  const storedValue = async (id: string) => {
+    const { payload } = await store.read(cacheKey(definition.namespace, [id]));
+    return payload === undefined ? undefined : CacheValueCodec.decode(payload);
+  };
 
   it('isolates tenants and caller mutations and combines concurrent loads', async () => {
     const loader = vi.fn().mockResolvedValue({ name: 'original' });
@@ -64,7 +76,8 @@ describe('AppCacheService', () => {
     await vi.waitFor(() => expect(loader).toHaveBeenCalledTimes(1));
     await cache.invalidate('brand:a');
     const second = cache.getOrLoad(definition, { id: 'a' }, loader);
-    await Promise.resolve();
+    // The second request must not join the load that started before the invalidation.
+    await vi.waitFor(() => expect(loader).toHaveBeenCalledTimes(2));
     old.resolve({ name: 'old' });
     fresh.resolve({ name: 'new' });
     expect(await first).toEqual({ name: 'new' });
@@ -129,25 +142,21 @@ describe('AppCacheService', () => {
     expect(loader).toHaveBeenCalledTimes(2);
   });
 
-  it('rejects an old load even when invalidation happens between loading and the memory write', async () => {
-    await cache.onModuleDestroy();
-    const manager = createCache();
-    const store = manager.stores[0];
-    cache = new AppCacheService(manager, new ConfigService());
+  it('rejects an old load even when invalidation happens between loading and the store write', async () => {
     const gate = deferred<void>();
-    const serialize = store.serializeData.bind(store);
-    const serializing = vi
-      .spyOn(store, 'serializeData')
-      .mockImplementationOnce(async (data) => {
+    const write = store.write.bind(store);
+    const writing = vi
+      .spyOn(store, 'write')
+      .mockImplementationOnce(async (...args) => {
         await gate.promise;
-        return serialize(data);
+        return write(...args);
       });
     const loader = vi
       .fn()
       .mockResolvedValueOnce({ name: 'old' })
       .mockResolvedValue({ name: 'new' });
     const read = cache.getOrLoad(definition, { id: 'a' }, loader);
-    await vi.waitFor(() => expect(serializing).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() => expect(writing).toHaveBeenCalledTimes(1));
     await cache.invalidate('brand:a');
     gate.resolve();
     expect(await read).toEqual({ name: 'new' });
@@ -165,23 +174,19 @@ describe('AppCacheService', () => {
       .mockResolvedValueOnce({ name: 'original' })
       .mockReturnValueOnce(old.promise)
       .mockResolvedValue({ name: 'changed' });
-    try {
-      await cache.getOrLoad(definition, { id: 'a' }, loader);
-      now.mockReturnValue(10_850);
-      await cache.getOrLoad(definition, { id: 'a' }, loader);
-      await vi.waitFor(() => expect(loader).toHaveBeenCalledTimes(2));
-      await cache.invalidate('brand:a');
-      expect(await cache.getOrLoad(definition, { id: 'a' }, loader)).toEqual({
-        name: 'changed',
-      });
-      old.resolve({ name: 'stale refresh' });
-      await new Promise<void>((resolve) => setImmediate(resolve));
-      expect(await cache.getOrLoad(definition, { id: 'a' }, loader)).toEqual({
-        name: 'changed',
-      });
-    } finally {
-      now.mockRestore();
-    }
+    await cache.getOrLoad(definition, { id: 'a' }, loader);
+    now.mockReturnValue(10_850);
+    await cache.getOrLoad(definition, { id: 'a' }, loader);
+    await vi.waitFor(() => expect(loader).toHaveBeenCalledTimes(2));
+    await cache.invalidate('brand:a');
+    expect(await cache.getOrLoad(definition, { id: 'a' }, loader)).toEqual({
+      name: 'changed',
+    });
+    old.resolve({ name: 'stale refresh' });
+    await new Promise<void>((resolve) => setImmediate(resolve));
+    expect(await cache.getOrLoad(definition, { id: 'a' }, loader)).toEqual({
+      name: 'changed',
+    });
   });
 
   it('keeps unrelated cached entities after invalidation', async () => {
@@ -213,8 +218,7 @@ describe('AppCacheService', () => {
   it('returns a valid value while a request refreshes it before TTL', async () => {
     vi.useFakeTimers();
     const pending = deferred<{ name: string }>();
-    const refreshed = deferred<void>();
-    manager.on('refresh', () => refreshed.resolve());
+    const write = vi.spyOn(store, 'write');
     const loader = vi
       .fn()
       .mockResolvedValueOnce({ name: 'old' })
@@ -229,7 +233,8 @@ describe('AppCacheService', () => {
     expect(loader).toHaveBeenCalledTimes(2);
 
     pending.resolve({ name: 'new' });
-    await refreshed.promise;
+    await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(2));
+    expect(await write.mock.results[1].value).toBe(true);
     expect(await cache.getOrLoad(definition, { id: 'a' }, loader)).toEqual({
       name: 'new',
     });
@@ -238,25 +243,22 @@ describe('AppCacheService', () => {
 
   it('keeps a valid value after refresh failure and reloads it after TTL', async () => {
     vi.useFakeTimers();
-    const failed = deferred<unknown>();
-    manager.on('refresh', ({ error }) => failed.resolve(error));
-    const error = new Error('offline');
     const loader = vi
       .fn()
       .mockResolvedValueOnce({ name: 'old' })
-      .mockRejectedValueOnce(error)
+      .mockRejectedValueOnce(new Error('offline'))
       .mockResolvedValue({ name: 'new' });
     await cache.getOrLoad(definition, { id: 'a' }, loader);
     vi.advanceTimersByTime(850);
     expect(await cache.getOrLoad(definition, { id: 'a' }, loader)).toEqual({
       name: 'old',
     });
-    expect(await failed.promise).toBe(error);
-    expect(
-      await manager.get(cacheKey(definition.namespace, ['a'])),
-    ).toMatchObject({
-      value: { name: 'old' },
-    });
+    await vi.waitFor(() =>
+      expect(warn).toHaveBeenCalledWith(
+        `Cache refresh failed: ${cacheKey(definition.namespace, ['a'])}: Error: offline`,
+      ),
+    );
+    expect(await storedValue('a')).toEqual({ name: 'old' });
     expect(loader).toHaveBeenCalledTimes(2);
     vi.advanceTimersByTime(151);
     expect(await cache.getOrLoad(definition, { id: 'a' }, loader)).toEqual({
@@ -308,10 +310,9 @@ describe('AppCacheService', () => {
     const second = cache.getOrLoad(definition, { id: 'a' }, loader);
     await vi.waitFor(() => expect(loader).toHaveBeenCalledTimes(2));
     pending.resolve({ name: 'new' });
-    expect(await Promise.all([first, second])).toEqual([
-      { name: 'new' },
-      { name: 'new' },
-    ]);
+    const [a, b] = await Promise.all([first, second]);
+    expect([a, b]).toEqual([{ name: 'new' }, { name: 'new' }]);
+    expect(a).not.toBe(b);
     expect(await cache.getOrLoad(definition, { id: 'a' }, loader)).toEqual({
       name: 'new',
     });
@@ -320,7 +321,7 @@ describe('AppCacheService', () => {
 
   it('bypasses caching when disabled', async () => {
     vi.useFakeTimers();
-    await cache.onModuleDestroy();
+    cache.onModuleDestroy();
     cache = createTestCache(false);
     const loader = vi.fn().mockResolvedValue({ name: 'current' });
     await cache.getOrLoad(definition, { id: 'a' }, loader);
@@ -361,6 +362,115 @@ describe('AppCacheService', () => {
       name: 'unchanged',
     });
     expect(loader).toHaveBeenCalledTimes(1);
+  });
+
+  it('reloads a cached value that the definition no longer accepts', async () => {
+    let accepted = 'v1';
+    const versioned = defineCache<{ id: string }, { name: string }>({
+      ...definition,
+      isUsable: (value) => value.name === accepted,
+    });
+    const loader = vi
+      .fn()
+      .mockResolvedValueOnce({ name: 'v1' })
+      .mockResolvedValue({ name: 'v2' });
+    await cache.getOrLoad(versioned, { id: 'a' }, loader);
+    expect(await cache.getOrLoad(versioned, { id: 'a' }, loader)).toEqual({
+      name: 'v1',
+    });
+    accepted = 'v2';
+    expect(await cache.getOrLoad(versioned, { id: 'a' }, loader)).toEqual({
+      name: 'v2',
+    });
+    expect(await cache.getOrLoad(versioned, { id: 'a' }, loader)).toEqual({
+      name: 'v2',
+    });
+    expect(loader).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops background refreshes on shutdown but keeps the shared entries', async () => {
+    vi.useFakeTimers();
+    const loader = vi.fn().mockResolvedValue({ name: 'current' });
+    await cache.getOrLoad(definition, { id: 'a' }, loader);
+    cache.onModuleDestroy();
+    vi.advanceTimersByTime(850);
+    expect(await cache.getOrLoad(definition, { id: 'a' }, loader)).toEqual({
+      name: 'current',
+    });
+    expect(loader).toHaveBeenCalledTimes(1);
+    expect(await storedValue('a')).toEqual({ name: 'current' });
+  });
+
+  describe('when the store fails (fail-open)', () => {
+    it('loads without the store while it is unavailable', async () => {
+      vi.spyOn(store, 'available', 'get').mockReturnValue(false);
+      const read = vi.spyOn(store, 'read');
+      const invalidate = vi.spyOn(store, 'invalidate');
+      const loader = vi.fn().mockResolvedValue({ name: 'current' });
+
+      await cache.getOrLoad(definition, { id: 'a' }, loader);
+      await cache.getOrLoad(definition, { id: 'a' }, loader);
+      await expect(cache.invalidate('brand:a')).resolves.toBeUndefined();
+
+      expect(loader).toHaveBeenCalledTimes(2);
+      expect(read).not.toHaveBeenCalled();
+      expect(invalidate).not.toHaveBeenCalled();
+    });
+
+    it('loads from the database when a read fails and warns at most once a minute', async () => {
+      vi.useFakeTimers();
+      vi.spyOn(store, 'read').mockRejectedValue(new Error('Command timed out'));
+      const loader = vi.fn().mockResolvedValue({ name: 'current' });
+
+      expect(await cache.getOrLoad(definition, { id: 'a' }, loader)).toEqual({
+        name: 'current',
+      });
+      await cache.getOrLoad(definition, { id: 'a' }, loader);
+      expect(loader).toHaveBeenCalledTimes(2);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0][0]).toContain('Command timed out');
+
+      vi.advanceTimersByTime(60_000);
+      await cache.getOrLoad(definition, { id: 'a' }, loader);
+      expect(warn).toHaveBeenCalledTimes(2);
+    });
+
+    it('returns the loaded value when the write fails', async () => {
+      vi.spyOn(store, 'write').mockRejectedValue(new Error('OOM'));
+      const loader = vi.fn().mockResolvedValue({ name: 'current' });
+
+      expect(await cache.getOrLoad(definition, { id: 'a' }, loader)).toEqual({
+        name: 'current',
+      });
+      expect(loader).toHaveBeenCalledTimes(1);
+      expect(warn).toHaveBeenCalledTimes(1);
+    });
+
+    it('logs a failed invalidation without failing the committed write', async () => {
+      vi.spyOn(store, 'invalidate').mockRejectedValue(
+        new Error('Connection is closed.'),
+      );
+
+      await expect(cache.invalidate('brand:a')).resolves.toBeUndefined();
+      expect(error).toHaveBeenCalledTimes(1);
+      expect(error.mock.calls[0][0]).toContain('brand:a');
+    });
+
+    it('loads uncached when the store fails while reloading an invalidated load', async () => {
+      const pending = deferred<{ name: string }>();
+      const loader = vi
+        .fn()
+        .mockReturnValueOnce(pending.promise)
+        .mockResolvedValue({ name: 'new' });
+      const result = cache.getOrLoad(definition, { id: 'a' }, loader);
+      await vi.waitFor(() => expect(loader).toHaveBeenCalledTimes(1));
+      await cache.invalidate('brand:a');
+      vi.spyOn(store, 'read').mockRejectedValue(new Error('Command timed out'));
+      pending.resolve({ name: 'old' });
+
+      expect(await result).toEqual({ name: 'new' });
+      expect(loader).toHaveBeenCalledTimes(2);
+    });
   });
 
   it('escapes identity separators without key collisions', () => {

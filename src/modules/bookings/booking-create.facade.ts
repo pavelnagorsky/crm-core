@@ -77,7 +77,7 @@ export class BookingCreateFacade {
   ): Promise<BookingWithItems> {
     this.assertPublicClientFields(dto);
     await this.assertOnlineBookingOpen(locationId);
-    this.rateLimiter.assertAllowed(dto.phone, context.ip);
+    await this.rateLimiter.assertAllowed(dto.phone, context.ip);
     const request: BookingCreationRequest | undefined = dto.idempotencyKey
       ? {
           idempotencyKey: dto.idempotencyKey.toLowerCase(),

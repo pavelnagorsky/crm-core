@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { CronExpression } from '@nestjs/schedule';
+import { ExclusiveCron } from '../../../shared/cron/decorators/exclusive-cron.decorator.js';
 import {
   EmailDeliveryMode,
   EmailMessage,
@@ -116,7 +117,7 @@ export class EmailOutboxService {
   }
 
   /** Hands over emails logged while the queue was down, or retried then. */
-  @Cron(CronExpression.EVERY_MINUTE)
+  @ExclusiveCron(CronExpression.EVERY_MINUTE)
   async dispatchOrphans(): Promise<void> {
     if (!this.queue.ready) return;
     const orphans = await this.log.findOrphans(
@@ -144,7 +145,7 @@ export class EmailOutboxService {
       this.logger.log(`waiting emails queued: count=${dispatched}`);
   }
 
-  @Cron(CronExpression.EVERY_DAY_AT_4AM)
+  @ExclusiveCron(CronExpression.EVERY_DAY_AT_4AM)
   async purgeOld(): Promise<void> {
     const count = await this.log.deleteQueuedBefore(
       new Date(Date.now() - EMAIL_LOG_RETENTION_DAYS * DAY_MS),

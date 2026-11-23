@@ -1,0 +1,187 @@
+name: crm-core
+
+x-app: &app
+  image: crm-core:${IMAGE_TAG:-local}
+  init: true
+  restart: unless-stopped
+  stop_grace_period: 30s
+  mem_limit: 512m
+  env_file: .env
+  environment: &app-env
+    DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://crm:crm@postgres:5432/crm}
+    REDIS_URL: redis://redis:6379
+    DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-10}
+    APP_ROLE: api
+    # Empty: log to stdout only (collected by docker), no files.
+    LOG_DIRECTORY: ''
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+    redis:
+      condition: service_healthy
+  volumes:
+    - ./secrets:/run/secrets:ro
+  logging:
+    driver: json-file
+    options:
+      max-size: 20m
+      max-file: '3'
+
+services:
+  # Local only: on the server the database lives outside compose.
+  postgres:
+    image: postgres:17-alpine
+    profiles: [local]
+    environment:
+      POSTGRES_USER: crm
+      POSTGRES_PASSWORD: crm
+      POSTGRES_DB: crm
+    # 5433: 5432 is often taken by a Postgres installed on the host.
+    ports:
+      - 127.0.0.1:5433:5432
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U crm -d crm]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # Cache, rate limits and cron locks; nothing here needs to survive a restart.
+  # volatile-lru evicts only keys with a TTL (cache entries), never cache tags.
+  redis:
+    image: redis:7.4-alpine
+    command:
+      - redis-server
+      - --maxmemory
+      - 256mb
+      - --maxmemory-policy
+      - volatile-lru
+      - --save
+      - ''
+      - --appendonly
+      - 'no'
+    ports:
+      - 127.0.0.1:6379:6379
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # One-shot: applies migrations. On the server Postgres lives outside compose.
+  migrate:
+    build:
+      context: .
+      target: migrate
+    image: crm-core:${IMAGE_TAG:-local}-migrate
+    env_file: .env
+    environment:
+      DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://crm:crm@postgres:5432/crm}
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
+    restart: 'no'
+
+  api-1:
+    <<: *app
+    build:
+      context: .
+      target: runtime
+
+  api-2:
+    <<: *app
+
+  worker:
+    <<: *app
+    environment:
+      <<: *app-env
+      APP_ROLE: worker
+
+  lb:
+    image: nginx:1.28-alpine
+    ports:
+      - 127.0.0.1:${APP_PORT:-3000}:80
+    volumes:
+      - ./docker/nginx/lb.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api-1
+      - api-2
+    mem_limit: 64m
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: '3'
+    restart: unless-stopped
+
+  # Logs: alloy reads container stdout via the docker socket, loki keeps it for 30 days,
+  # grafana is the UI (dashboard "CRM — логи" is provisioned). Never expose grafana publicly.
+  loki:
+    image: grafana/loki:3.6.22
+    command: [-config.file=/etc/loki/loki.yaml]
+    volumes:
+      - ./docker/loki/loki.yaml:/etc/loki/loki.yaml:ro
+      - loki-data:/loki
+    mem_limit: 384m
+    logging: &log-rotation
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: '3'
+    restart: unless-stopped
+
+  alloy:
+    image: grafana/alloy:v1.22.0
+    command:
+      - run
+      - --storage.path=/var/lib/alloy/data
+      - --server.http.listen-addr=0.0.0.0:12345
+      - /etc/alloy/config.alloy
+    volumes:
+      - ./docker/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - alloy-data:/var/lib/alloy/data
+    depends_on:
+      - loki
+    mem_limit: 128m
+    logging: *log-rotation
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:13.2.6
+    # .env is the single source of the admin password: Grafana itself reads GF_SECURITY_ADMIN_PASSWORD only
+    # when it creates its database, so the password is reset to it on every start. Without it only grafana fails.
+    entrypoint:
+      - sh
+      - -c
+      - |
+        if [ -z "$$GF_SECURITY_ADMIN_PASSWORD" ]; then echo 'GRAFANA_ADMIN_PASSWORD is not set in .env' >&2; exit 1; fi
+        printf '%s' "$$GF_SECURITY_ADMIN_PASSWORD" | grafana cli --homepath "$$GF_PATHS_HOME" --config "$$GF_PATHS_CONFIG" admin reset-admin-password --password-from-stdin cfg:default.paths.data="$$GF_PATHS_DATA" >/dev/null 2>&1 || true
+        exec /run.sh
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-}
+      GF_AUTH_ANONYMOUS_ENABLED: 'false'
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_ANALYTICS_REPORTING_ENABLED: 'false'
+      GF_ANALYTICS_CHECK_FOR_UPDATES: 'false'
+    ports:
+      - 127.0.0.1:3200:3000
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - loki
+    mem_limit: 256m
+    logging: *log-rotation
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  loki-data:
+  alloy-data:
+  grafana-data:

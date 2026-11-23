@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron, CronExpression } from '@nestjs/schedule';
+import { CronExpression } from '@nestjs/schedule';
+import { ExclusiveCron } from '../../../shared/cron/decorators/exclusive-cron.decorator.js';
 import { DatabaseService } from '../../../database/database.service.js';
 
 @Injectable()
@@ -8,7 +9,7 @@ export class AuthCleanupService {
 
   constructor(private readonly db: DatabaseService) {}
 
-  @Cron(CronExpression.EVERY_DAY_AT_3AM)
+  @ExclusiveCron(CronExpression.EVERY_DAY_AT_3AM)
   async cleanExpiredRefreshTokens(): Promise<void> {
     const { count } = await this.db.refreshToken.deleteMany({
       where: { expiryDate: { lt: new Date() } },
