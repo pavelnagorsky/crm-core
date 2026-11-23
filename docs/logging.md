@@ -16,12 +16,12 @@ stdout контейнеров ──► alloy ──► loki ◄── grafana (
    пароля: при каждом старте контейнер сбрасывает пароль `admin` на значение из `.env`.
    Сменить пароль: поправить `.env` и `docker compose up -d grafana`; смена через интерфейс
    Grafana откатится при следующем перезапуске. Анонимный доступ выключен.
-2. Дашборд **«CRM — логи»** (готов сразу, настраивается provisioning-ом из
+2. Дашборд **«Klendo — логи»** (готов сразу, настраивается provisioning-ом из
    `docker/grafana/provisioning/`).
 3. Вставить `requestId` в поле **«Поиск»** — будут видны строки всех контейнеров, где он
    встречается: `lb` (access-лог), реплики `api` (сообщения сервисов и итог HTTP-запроса).
 4. Фильтры: **«Контейнер»** (`service`: `api`, `worker`, `lb`, ...; все реплики API — это
-   `service=api`, конкретную реплику показывает метка `container`, например `crm-core-api-3`, —
+   `service=api`, конкретную реплику показывает метка `container`, например `klendo-core-api-3`, —
    она видна в деталях строки и на графике ошибок) и
    **«Уровень»** (`level`: `ERROR`, `WARN`, `INFO`, ...), оба с выбором нескольких значений.
    Строки без уровня (nginx, postgres, redis) получают `level=UNKNOWN`.
@@ -95,11 +95,40 @@ server {
 
 На сервере `GRAFANA_ADMIN_PASSWORD` — длинный случайный пароль.
 
+## Логи через ИИ-агента (Grafana MCP)
+
+Claude Code читает Loki через Grafana официальным MCP-сервером
+[`mcp-grafana`](https://github.com/grafana/mcp-grafana) (образ `mcp/grafana`): LogQL-запросы,
+метки, дашборды. Доступ — service account `ai-agent` с ролью **Viewer** плюс `--disable-write`:
+агент ничего не меняет. Строки логов попадают в контекст модели — это ещё одна причина не писать
+в логи секреты и персональные данные.
+
+Подключение (один раз на машину, токен хранится только в `~/.claude.json`, не в репозитории):
+
+```bash
+token="$(bash scripts/grafana-mcp-token.sh)"   # создаёт ai-agent (если нет) и новый токен; пароль из .env
+claude mcp add grafana -s local \
+  -e GRAFANA_URL=http://host.docker.internal:3200 \
+  -e GRAFANA_SERVICE_ACCOUNT_TOKEN="$token" \
+  -- docker run --rm -i -e GRAFANA_URL -e GRAFANA_SERVICE_ACCOUNT_TOKEN mcp/grafana \
+  -t stdio --enabled-tools loki,datasource,dashboard,search --disable-write --max-loki-log-limit 500
+```
+
+После этого новая сессия Claude Code видит инструменты `query_loki_logs`, `list_loki_label_values`
+и др.; достаточно спросить, например, «ошибки api за последний час» или «всё по requestId=…».
+Отозвать доступ: Grafana → Administration → Service accounts → `ai-agent`, и
+`claude mcp remove grafana -s local`.
+
+Прод: тот же скрипт и та же команда через SSH-туннель на другом порту, чтобы не конфликтовать с
+локальной Grafana (`ssh -L 3201:127.0.0.1:3200 user@vps`), с
+`GRAFANA_URL=http://127.0.0.1:3201 GRAFANA_ADMIN_PASSWORD=<с сервера>` для скрипта,
+`GRAFANA_URL=http://host.docker.internal:3201` и именем сервера `grafana-prod`.
+
 ## Хранение
 
 - Loki: 30 дней (`limits_config.retention_period: 720h`, компактор с
   `retention_enabled`), том `loki-data`. Конфиг — `docker/loki/loki.yaml`.
-- Сбор — `docker/alloy/config.alloy` (только контейнеры проекта `crm-core`).
+- Сбор — `docker/alloy/config.alloy` (только контейнеры проекта `klendo-core`).
   Том `alloy-data` хранит позиции чтения, поэтому после перезапуска Alloy строки не
   дублируются.
 - Для всех сервисов в compose задан `mem_limit`.

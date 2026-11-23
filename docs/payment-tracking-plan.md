@@ -2,7 +2,7 @@
 
 Статус: бэкенд реализован (миграция `20261121120000_payment_tracking`), отличия - в разделе 11. Продолжение `docs/payments-plan.md` (журнал оплат реализован на master, миграция `20261120120000_payments`).
 
-Бэкенд (`crm-core`) и фронтенд (`crm-frontend`) делаются параллельно строго по этому документу. Контракт в разделе 3 точный: имена полей, enum, коды ошибок, права. Любое отклонение - сначала правка этого документа.
+Бэкенд (`klendo-core`) и фронтенд (`crm-frontend`) делаются параллельно строго по этому документу. Контракт в разделе 3 точный: имена полей, enum, коды ошибок, права. Любое отклонение - сначала правка этого документа.
 
 ## 0. Проблема и цель
 
@@ -342,7 +342,7 @@ ALTER TABLE "Location"
 
 ## 4. Бэкенд: файлы и ответственность
 
-Сервисы тонкие, логика в чистых правилах, по одному классу/enum/интерфейсу на файл (CLAUDE.md crm-core).
+Сервисы тонкие, логика в чистых правилах, по одному классу/enum/интерфейсу на файл (CLAUDE.md klendo-core).
 
 Схема и общие:
 
@@ -390,7 +390,7 @@ Dashboard:
 Документация:
 
 - `docs/payments-plan.md` - ссылка на этот документ в шапке, `NOT_TRACKED` в 1.5.
-- `docs/orders.md`, `docs/architecture/booking-write-flows.md` (отмена оплаты), OpenAPI: в `crm-core` файла `docs/openapi.json` нет, схему отдаёт запущенный сервер (`/api-json`); копию в `crm-frontend/docs/openapi.json` обновляет фронтенд.
+- `docs/orders.md`, `docs/architecture/booking-write-flows.md` (отмена оплаты), OpenAPI: в `klendo-core` файла `docs/openapi.json` нет, схему отдаёт запущенный сервер (`/api-json`); копию в `crm-frontend/docs/openapi.json` обновляет фронтенд.
 
 ## 5. Фронтенд: UX
 
@@ -603,7 +603,7 @@ FSD: `shared -> entities -> features -> widgets -> views -> app`. Компоне
 
 ### 7.3 Фронтенд, браузер
 
-Dev на 8083, crm-core с веткой фичи, тестовый филиал. Ширины 390, 768, 1280 (с открытым меню), 1440.
+Dev на 8083, klendo-core с веткой фичи, тестовый филиал. Ширины 390, 768, 1280 (с открытым меню), 1440.
 
 1. Филиал после миграции: в календаре нет кошельков на прошлых визитах, сводка без «Оплата не указана», карточки старых визитов без строки оплаты.
 2. Визит сегодня, начался, CONFIRMED: поповер -> «Карта» -> тост «Визит завершён. Карта, 1 500 ₽», строка «Карта», статус «Завершена». «Отменить» -> «Оплата отменена», строка «Оплата не указана», статус остаётся «Завершена», снова видны кнопки.
@@ -692,4 +692,4 @@ Dev на 8083, crm-core с веткой фичи, тестовый филиал.
 - Отмена: `OrderPaymentsFacade.undoVisitPayment` -> `OrderPaymentCorrectionService` (туда же переехал `voidOperation`) -> `PaymentsFacade.undo` -> `PaymentLedgerService.undo`. Блокировки входа (`lockOrderWithVisit`, `lockVisitOrder`) - в `OrderLockService`. На заблокированной записи повторно проверяется, что мастер с `booking.own:write` ещё участвует в визите (403), как в оплате (`assertVisitParticipant`, им же пользуется `BookingPaymentService.pay`). Условия - чистые правила `orders/rules/order-payment-correction.rules.ts`, условия журнала - `payments/rules/payment-undo.rules.ts` и `payments/rules/payment-void.rules.ts`.
 - `tracked` заказов считает `OrderPaymentTrackingService`: заказ визита - по `startAt` записи, в том числе удалённой (`BookingVisitsService.startAtByBookingIds`), как в сводке; `Order.occurredAt` - только если записи больше нет. Момент - чистая `orderPaymentMoment` (`orders/rules/order-payment-tracking.rules.ts`).
 - Статус в календаре и в `PaymentSummaryDto` - одна функция `paymentStatusOf(amountDue, totals, tracked)` в `payments/rules/payment-state.rules.ts`.
-- `docs/openapi.json` в `crm-core` не хранится (см. раздел 4).
+- `docs/openapi.json` в `klendo-core` не хранится (см. раздел 4).

@@ -3,8 +3,8 @@
  * by an invalidation from another replica.
  *
  * Keys: the entry and the global revision come in KEYS. Tag keys depend on the entry contents and cannot be
- * passed in advance, so they are built inside the scripts as ARGV[1] (the tag prefix, `crm:cache:tag:`)
- * plus the dependency. All keys share the `crm:` prefix; ioredis `keyPrefix` is not used for that reason.
+ * passed in advance, so they are built inside the scripts as ARGV[1] (the tag prefix, `klendo:cache:tag:`)
+ * plus the dependency. All keys share the `klendo:` prefix; ioredis `keyPrefix` is not used for that reason.
  * This needs a single Redis node (or a primary with replicas): Redis Cluster is not supported, because tag keys are
  * not declared in KEYS and the keys of one script are in different hash slots (CROSSSLOT).
  *

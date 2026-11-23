@@ -16,7 +16,7 @@ project="${1:?project id}"
 bucket="${2:?bucket name}"
 location="${3:-europe-central2}"
 retention="${4:-30}"
-account="crm-db-backup"
+account="klendo-db-backup"
 email="$account@$project.iam.gserviceaccount.com"
 key_file="secrets/backup-gcs.json"
 

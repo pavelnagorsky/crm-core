@@ -181,11 +181,11 @@ describe('RedisService', () => {
       const { service, client } = createService('redis://localhost:6379');
       client!.evalsha.mockResolvedValue('value');
 
-      await expect(service.eval(script, ['crm:a'], [1, 'x'])).resolves.toBe(
+      await expect(service.eval(script, ['klendo:a'], [1, 'x'])).resolves.toBe(
         'value',
       );
 
-      expect(client!.evalsha).toHaveBeenCalledWith(sha, 1, 'crm:a', 1, 'x');
+      expect(client!.evalsha).toHaveBeenCalledWith(sha, 1, 'klendo:a', 1, 'x');
       expect(client!.eval).not.toHaveBeenCalled();
     });
 
@@ -196,9 +196,9 @@ describe('RedisService', () => {
       );
       client!.eval.mockResolvedValue(42);
 
-      await expect(service.eval(script, ['crm:a', 'crm:b'])).resolves.toBe(42);
+      await expect(service.eval(script, ['klendo:a', 'klendo:b'])).resolves.toBe(42);
 
-      expect(client!.eval).toHaveBeenCalledWith(script, 2, 'crm:a', 'crm:b');
+      expect(client!.eval).toHaveBeenCalledWith(script, 2, 'klendo:a', 'klendo:b');
     });
 
     it('passes other errors through', async () => {
@@ -249,8 +249,8 @@ describe('RedisService', () => {
       client!.set.mockRejectedValue(timeout());
 
       await Promise.allSettled([
-        service.setIfAbsent('crm:a', 'x', 60),
-        service.setIfAbsent('crm:b', 'x', 60),
+        service.setIfAbsent('klendo:a', 'x', 60),
+        service.setIfAbsent('klendo:b', 'x', 60),
       ]);
 
       expect(service.available).toBe(false);
@@ -302,16 +302,16 @@ describe('RedisService', () => {
       const { service, client } = createService('redis://localhost:6379');
       client!.set.mockResolvedValueOnce('OK').mockResolvedValueOnce(null);
 
-      await expect(service.setIfAbsent('crm:a', 'x', 60)).resolves.toBe(true);
-      await expect(service.setIfAbsent('crm:a', 'y', 60)).resolves.toBe(false);
+      await expect(service.setIfAbsent('klendo:a', 'x', 60)).resolves.toBe(true);
+      await expect(service.setIfAbsent('klendo:a', 'y', 60)).resolves.toBe(false);
 
-      expect(client!.set).toHaveBeenCalledWith('crm:a', 'x', 'EX', 60, 'NX');
+      expect(client!.set).toHaveBeenCalledWith('klendo:a', 'x', 'EX', 60, 'NX');
     });
 
     it('rejects without Redis', async () => {
       const { service } = createService(undefined);
 
-      await expect(service.setIfAbsent('crm:a', 'x', 60)).rejects.toThrow(
+      await expect(service.setIfAbsent('klendo:a', 'x', 60)).rejects.toThrow(
         'Redis is not configured',
       );
     });
@@ -320,7 +320,7 @@ describe('RedisService', () => {
   it('prefixes keys', () => {
     const { service } = createService(undefined);
 
-    expect(service.key('cache', 'tag', 'staff')).toBe('crm:cache:tag:staff');
+    expect(service.key('cache', 'tag', 'staff')).toBe('klendo:cache:tag:staff');
   });
 
   describe('onApplicationShutdown', () => {

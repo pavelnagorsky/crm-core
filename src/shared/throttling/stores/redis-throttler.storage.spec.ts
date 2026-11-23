@@ -13,7 +13,7 @@ const PASS = {
 function createStorage(available = true) {
   const redis = {
     available,
-    key: (...parts: string[]) => 'crm:' + parts.join(':'),
+    key: (...parts: string[]) => 'klendo:' + parts.join(':'),
     eval: vi.fn(),
   };
   const storage = new RedisThrottlerStorage(redis as unknown as RedisService);
@@ -42,7 +42,7 @@ describe('RedisThrottlerStorage', () => {
 
     expect(redis.eval).toHaveBeenCalledWith(
       THROTTLER_INCREMENT_SCRIPT,
-      ['crm:throttle:sustained:ip-1', 'crm:throttle:sustained:ip-1:block'],
+      ['klendo:throttle:sustained:ip-1', 'klendo:throttle:sustained:ip-1:block'],
       [1_700_000_000_000, 60_000, 300, 10_000, expect.any(String)],
     );
     // Two hits in the same millisecond stay two members of the sorted set.

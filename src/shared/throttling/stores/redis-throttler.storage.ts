@@ -21,8 +21,8 @@ const PASS: ThrottlerStorageRecord = {
 };
 
 /**
- * `@nestjs/throttler` counters in Redis, shared by all replicas: `crm:throttle:<name>:<key>` (sorted set of the
- * hits still counted, each scored by when it expires) and `crm:throttle:<name>:<key>:block` (present while the key is blocked).
+ * `@nestjs/throttler` counters in Redis, shared by all replicas: `klendo:throttle:<name>:<key>` (sorted set of the
+ * hits still counted, each scored by when it expires) and `klendo:throttle:<name>:<key>:block` (present while the key is blocked).
  * `ttl` and `blockDuration` come in milliseconds; `timeToExpire` and `timeToBlockExpire` are returned in
  * seconds rounded up, exactly like the built-in ThrottlerStorageService (they go into `Retry-After`).
  */

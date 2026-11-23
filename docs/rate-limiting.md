@@ -56,8 +56,8 @@ Redis-хранилище:
   удаляются на каждом хите); хит сверх лимита ставит блокировку на `blockDuration` и обнуляет
   счёт. Без `blockDuration` хит сверх лимита отклоняется и не считается, пока не истечёт самый
   старый хит.
-- Ключи: `crm:throttle:<лимитер>:<ключ>` (sorted set хитов, TTL = `ttl` последнего хита) и
-  `crm:throttle:<лимитер>:<ключ>:block`.
+- Ключи: `klendo:throttle:<лимитер>:<ключ>` (sorted set хитов, TTL = `ttl` последнего хита) и
+  `klendo:throttle:<лимитер>:<ключ>:block`.
 - Окно скользящее по каждому хиту, как у встроенного хранилища: фиксированных окон нет, и на их
   границе 2× лимита не проходит (это проверяет общий контракт).
 - Нужен один узел Redis (или primary с репликами): два ключа счётчика лежат в разных hash slot,
@@ -90,8 +90,8 @@ Redis-хранилище:
 (`tryAcquire(key, limit, windowMs)`, токен `SLIDING_WINDOW_STORE`) из `RateLimitModule`
 (`src/shared/rate-limit/`), адаптер выбирается тем же `state.backend`:
 
-- **`redis`** — `RedisSlidingWindowStore`: sorted set (`crm:booking-rate:phone:<телефон>`,
-  `crm:booking-rate:ip:<ip>`), один Lua-скрипт: `ZREMRANGEBYSCORE` старше окна → `ZCARD` →
+- **`redis`** — `RedisSlidingWindowStore`: sorted set (`klendo:booking-rate:phone:<телефон>`,
+  `klendo:booking-rate:ip:<ip>`), один Lua-скрипт: `ZREMRANGEBYSCORE` старше окна → `ZCARD` →
   при достижении лимита отказ → иначе `ZADD now <uuid>` и `PEXPIRE` на окно. Ошибка или
   недоступность Redis — попытка пропускается (fail-open), предупреждение не чаще раза в минуту.
 - **`memory`** — `MemorySlidingWindowStore`: те же правила в `Map` процесса; старые отметки

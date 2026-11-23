@@ -31,8 +31,10 @@ export class FileStorageService implements OnModuleInit {
       [FileBucket.PUBLIC]: gcsConfig.bucketName,
       [FileBucket.PRIVATE]: gcsConfig.privateBucketName,
     };
-    // GOOGLE_APPLICATION_CREDENTIALS env var points to cloud-storage.json — Storage picks it up automatically.
-    this.storage = new Storage({ projectId: gcsConfig.projectId });
+    this.storage = new Storage({
+      projectId: gcsConfig.projectId,
+      keyFilename: gcsConfig.credentialsFile,
+    });
   }
 
   /** Enforces the size limit and the extension blocklist before writing. */

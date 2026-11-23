@@ -113,7 +113,7 @@ describe('ExclusiveCron', () => {
     vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
     const redis = {
       available: true,
-      key: (...parts: string[]) => `crm:${parts.join(':')}`,
+      key: (...parts: string[]) => `klendo:${parts.join(':')}`,
       setIfAbsent: vi.fn().mockRejectedValue(new Error('Command timed out')),
     } as unknown as RedisService;
     const lock = new CronLockService(new RedisCronLockStore(redis));
