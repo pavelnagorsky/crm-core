@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
+import { ExclusiveCron } from '../../../../shared/cron/decorators/exclusive-cron.decorator.js';
 import { SubscriptionNoticeCalculator } from '../../compute/subscription-notice.calculator.js';
 import { SubscriptionNoticeMailService } from '../../mail/services/subscription-notice-mail.service.js';
 import { BillingSettingsService } from '../../settings/services/billing-settings.service.js';
@@ -21,7 +21,7 @@ export class SubscriptionNoticesCron {
     private readonly mail: SubscriptionNoticeMailService,
   ) {}
 
-  @Cron('0 */15 * * * *')
+  @ExclusiveCron('0 */15 * * * *')
   async sendNotices(now = new Date()): Promise<number> {
     const settings = await this.settings.get();
     const maxBefore = Math.max(0, ...settings.reminderDaysBefore);

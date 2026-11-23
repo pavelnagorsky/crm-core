@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Cron } from '@nestjs/schedule';
+import { ExclusiveCron } from '../../../../shared/cron/decorators/exclusive-cron.decorator.js';
 import { PaymentRequestService } from '../../payments/services/payment-request.service.js';
 
 /** PENDING requests past `expiresAt` become EXPIRED (plan section 4.2). */
@@ -9,7 +9,7 @@ export class SubscriptionPaymentsCron {
 
   constructor(private readonly requests: PaymentRequestService) {}
 
-  @Cron('0 5 * * * *')
+  @ExclusiveCron('0 5 * * * *')
   async expireDue(now = new Date()): Promise<number> {
     const expired = await this.requests.expireDue(now);
     if (expired.length)

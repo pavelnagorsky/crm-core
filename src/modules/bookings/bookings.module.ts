@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { PassportModule } from '@nestjs/passport';
 import { I18nModule } from '../../shared/i18n/i18n.module.js';
+import { RateLimitModule } from '../../shared/rate-limit/rate-limit.module.js';
 import { AccessModule } from '../access/access.module.js';
 import { BillingCoreModule } from '../billing/billing-core.module.js';
 import { CalendarModule } from '../calendar/calendar.module.js';
@@ -65,6 +66,7 @@ import { JwtBookingClientStrategy } from './strategies/jwt-booking-client.strate
     ReviewsModule,
     NotificationsModule,
     I18nModule,
+    RateLimitModule,
   ],
   controllers: [
     BookingsController,

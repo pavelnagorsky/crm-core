@@ -1,4 +1,10 @@
+import { appRole } from './app-role.config.js';
+import { databasePoolSize } from './database.config.js';
+import { redisUrl } from './redis.config.js';
+import { stateBackend } from './state.config.js';
+
 export default () => {
+  const redis = redisUrl();
   return {
     port: parseInt(process.env.PORT ?? '', 10) || 3000,
     logging: {
@@ -27,6 +33,14 @@ export default () => {
     },
     database: {
       url: process.env['DATABASE_URL'],
+      poolSize: databasePoolSize(),
+    },
+    redis: {
+      url: redis,
+    },
+    // Cache, rate limits and cron locks: one switch for all of them, see StateBackend.
+    state: {
+      backend: stateBackend(redis),
     },
     jwt: {
       accessTokenSecret: process.env['ACCESS_TOKEN_SECRET'],
@@ -52,6 +66,7 @@ export default () => {
     },
     app: {
       locale: process.env['APP_LOCALE'] ?? 'ru',
+      role: appRole(),
     },
   };
 };
