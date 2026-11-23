@@ -153,6 +153,7 @@ Grafana unified alerting, provisioning в `docker/grafana/provisioning/alerting/
 | Память контейнера | > 90% `mem_limit` 10 мин | warning |
 | Диск сервера | свободно < 15% | warning; < 5% — critical |
 | Логи не поступают | Loki: нет строк от `service="api"` 15 мин при живых репликах (защита от зависания Alloy, наблюдалось при проверке репликации) | warning |
+| Бэкап не сделан | Loki: нет строки `[Backup] completed` от `service="backup"` больше 26 ч, или есть `ERROR` от `backup` (`docs/backups.md`) | critical |
 | Prometheus не собирает | `up` любого задания == 0 15 мин | warning |
 
 Проверка доставки: кнопка «Test» у точки отправки и один искусственный алерт (остановить
