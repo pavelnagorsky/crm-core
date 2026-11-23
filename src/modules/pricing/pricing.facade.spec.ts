@@ -5,7 +5,12 @@ import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { ServiceLinePrice } from './interfaces/service-line-price.interface.js';
 import { ServicePriceLineRequest } from './interfaces/service-price-line-request.interface.js';
 import { PricingFacade } from './pricing.facade.js';
-import { PricingSnapshotService } from './services/pricing-snapshot.service.js';
+import { PricingSnapshotServiceOptions } from './testing/interfaces/pricing-snapshot-service-options.interface.js';
+import {
+  priceLevelRow,
+  pricingSnapshotService,
+  staffPricingProfile,
+} from './testing/pricing-snapshot-service.factory.js';
 import { bookingCatalogSnapshot } from './testing/booking-catalog-snapshot.factory.js';
 import { rejectedAppException } from './testing/rejected-app-exception.js';
 
@@ -35,13 +40,40 @@ function layers(price: ServiceLinePrice) {
   };
 }
 
-function pricingFacade(catalog = bookingCatalogSnapshot()) {
-  const loadCatalogSnapshot = vi.fn(async () => catalog);
-  const snapshots = new PricingSnapshotService({
-    loadCatalogSnapshot,
-  } as never);
+function pricingFacade(
+  catalog = bookingCatalogSnapshot(),
+  sources: PricingSnapshotServiceOptions = {},
+) {
+  const { service: snapshots, ...spies } = pricingSnapshotService({
+    ...sources,
+    catalog,
+  });
   const load = vi.spyOn(snapshots, 'load');
-  return { facade: new PricingFacade(snapshots), load, loadCatalogSnapshot };
+  return { facade: new PricingFacade(snapshots), load, ...spies };
+}
+
+/** Senior level: cut 80.00, color 70.00. Boris is Senior, Dmitri is Senior with a personal cut 75.00. */
+const leveledSources: PricingSnapshotServiceOptions = {
+  levels: [
+    priceLevelRow('base', 'Базовый', true),
+    priceLevelRow('senior', 'Старший', false, 1),
+  ],
+  levelPrices: [
+    { serviceId: 'cut', priceLevelId: 'senior', price: dec('80.00') },
+    { serviceId: 'color', priceLevelId: 'senior', price: dec('70.00') },
+  ],
+  staff: [
+    staffPricingProfile('anna'),
+    staffPricingProfile('boris', 'senior'),
+    staffPricingProfile('dmitri', 'senior', { cut: '75.00' }),
+  ],
+};
+
+function lineWith(
+  serviceId: string,
+  staffId: string | null,
+): ServicePriceLineRequest {
+  return { serviceId, staffId, customPrice: null };
 }
 
 describe('PricingFacade', () => {
@@ -231,17 +263,150 @@ describe('PricingFacade', () => {
   it.each([ReadConsistency.CACHED, ReadConsistency.FRESH])(
     'forwards %s to the snapshot loader',
     async (consistency) => {
-      const { facade, load, loadCatalogSnapshot } = pricingFacade();
+      const { facade, load } = pricingFacade();
       await facade.quoteServices(
         'location',
         { bundleId: null, lines: [line('cut')] },
         consistency,
       );
       expect(load).toHaveBeenCalledExactlyOnceWith('location', consistency);
-      expect(loadCatalogSnapshot).toHaveBeenCalledExactlyOnceWith(
-        'location',
-        consistency,
-      );
     },
   );
+
+  it('reads through the snapshot cache when CACHED and not when FRESH', async () => {
+    const { facade, listPricingProfiles } = pricingFacade();
+    const quote = (consistency: ReadConsistency) =>
+      facade.quoteServices(
+        'location',
+        { bundleId: null, lines: [line('cut')] },
+        consistency,
+      );
+    await quote(ReadConsistency.CACHED);
+    await quote(ReadConsistency.CACHED);
+    expect(listPricingProfiles).toHaveBeenCalledTimes(1);
+    await quote(ReadConsistency.FRESH);
+    expect(listPricingProfiles).toHaveBeenCalledTimes(2);
+  });
+
+  describe('staff prices', () => {
+    const quote = (
+      bundleId: string | null,
+      lines: ServicePriceLineRequest[],
+    ) => {
+      const { facade } = pricingFacade(undefined, leveledSources);
+      return facade.quoteServices(
+        'location',
+        { bundleId, lines },
+        ReadConsistency.FRESH,
+      );
+    };
+
+    it.each([
+      ['no staff', null, 'cut', '60.00', []],
+      ['unknown staff', 'nobody', 'cut', '60.00', []],
+      ['default level staff', 'anna', 'cut', '60.00', []],
+      [
+        'level price above base',
+        'boris',
+        'cut',
+        '80.00',
+        [['LEVEL', 'Старший', '20.00']],
+      ],
+      [
+        'level price below base',
+        'boris',
+        'color',
+        '70.00',
+        [['LEVEL', 'Старший', '-20.00']],
+      ],
+      [
+        'personal price wins over the level',
+        'dmitri',
+        'cut',
+        '75.00',
+        [['STAFF', 'dmitri', '15.00']],
+      ],
+      [
+        'level price when there is no personal price',
+        'dmitri',
+        'color',
+        '70.00',
+        [['LEVEL', 'Старший', '-20.00']],
+      ],
+    ])('%s', async (_name, staffId, serviceId, staffPrice, adjustments) => {
+      const { lines } = await quote(null, [lineWith(serviceId, staffId)]);
+      expect(lines[0].staffPrice.toFixed(2)).toBe(staffPrice);
+      expect(lines[0].listPrice.toFixed(2)).toBe(staffPrice);
+      expect(lines[0].chargedPrice.toFixed(2)).toBe(staffPrice);
+      expect(lines[0].basePrice.toFixed(2)).toBe(
+        serviceId === 'cut' ? '60.00' : '90.00',
+      );
+      expect(
+        lines[0].adjustments.map(({ kind, title, amount }) => [
+          kind,
+          title,
+          amount.toFixed(2),
+        ]),
+      ).toEqual(adjustments);
+      expect(lines[0].adjustments.map(({ sortOrder }) => sortOrder)).toEqual(
+        adjustments.map((_item, index) => index),
+      );
+    });
+
+    it('a SUM bundle uses the prices of the staff member of each line', async () => {
+      const { lines } = await quote('sum-bundle', [
+        lineWith('cut', 'boris'),
+        lineWith('color', 'dmitri'),
+      ]);
+      expect(lines.map((price) => price.staffPrice.toFixed(2))).toEqual([
+        '80.00',
+        '70.00',
+      ]);
+    });
+
+    it('a FIXED bundle ignores the staff', async () => {
+      const { lines } = await quote('fixed-bundle', [
+        lineWith('cut', 'boris'),
+        lineWith('color', 'dmitri'),
+      ]);
+      expect(lines.map((price) => price.staffPrice.toFixed(2))).toEqual([
+        '48.00',
+        '72.00',
+      ]);
+      expect(lines.flatMap((price) => price.adjustments)).toEqual([]);
+    });
+
+    it('a custom price keeps the staff layer as history', async () => {
+      const { lines } = await quote(null, [
+        { serviceId: 'cut', staffId: 'boris', customPrice: dec('55.5') },
+      ]);
+      expect(layers(lines[0])).toMatchObject({
+        basePrice: '60.00',
+        staffPrice: '80.00',
+        chargedPrice: '80.00',
+        customPrice: '55.50',
+      });
+    });
+  });
+
+  describe('priceBook', () => {
+    it.each([ReadConsistency.CACHED, ReadConsistency.FRESH])(
+      'forwards %s to the snapshot loader',
+      async (consistency) => {
+        const { facade, load } = pricingFacade();
+        await facade.priceBook('location', consistency);
+        expect(load).toHaveBeenCalledExactlyOnceWith('location', consistency);
+      },
+    );
+
+    it('prices staff in minor units and a FIXED bundle as 0', async () => {
+      const { facade } = pricingFacade(undefined, leveledSources);
+      const book = await facade.priceBook('location', ReadConsistency.CACHED);
+      expect(book.staffPrice('cut', 'boris')).toBe(8000);
+      expect(book.staffPrice('cut', 'dmitri')).toBe(7500);
+      expect(book.staffPrice('cut', 'anna')).toBe(6000);
+      expect(book.candidatePrice('cut', 'boris', 'fixed-bundle')).toBe(0);
+      expect(book.candidatePrice('cut', 'boris', 'sum-bundle')).toBe(8000);
+    });
+  });
 });

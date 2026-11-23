@@ -219,11 +219,11 @@
 
 ## calendar
 
-[Исходник](../../src/modules/calendar/api/controllers/calendar.controller.ts)
+[Исходник](../../src/modules/calendar/api/controllers/calendar.controller.ts), публичные слоты - [PublicSlotsController](../../src/modules/bookings/controllers/public-slots.controller.ts) (слот несёт цену, календарь цен не знает).
 
 | API | Метод | Проверка | Уточнение |
 | --- | --- | --- | --- |
-| `GET /locations/:locationId/calendar/public/available-slots` | `getAvailableSlots` | P: `public` | — |
+| `GET /locations/:locationId/calendar/public/available-slots` | `getAvailableSlots` | P: `public` | Слот: время, цена визита и мастера, которых назначит правило «Любой мастер». |
 | `GET /locations/:locationId/calendar/available-slots` | `getManualAvailableSlots` | L: `booking:read` или `booking.own:read` | При own-чтении свой календарь и общие блокировки; чужой блок по ID закрыт. Исключение событий при переносе требует участия в редактируемой записи. |
 | `GET /locations/:locationId/calendar/slot-check` | `checkManualSlot` | L: `booking:read` или `booking.own:read` | Показывает только интервал препятствия, без данных чужой записи. |
 | `GET /locations/:locationId/calendar` | `getCalendar` | L: `booking:read` или `booking.own:read` | При own-чтении свой календарь и общие блокировки; чужой блок по ID закрыт. Исключение событий при переносе требует участия в редактируемой записи. |
@@ -459,6 +459,22 @@
 | `GET /locations/:locationId/services/:id` | `findById` | L: `service:read` | — |
 | `PATCH /locations/:locationId/services/:id/status` | `updateStatus` | L: `service:write` | — |
 | `DELETE /locations/:locationId/services/:id` | `delete` | L: `service:write` | — |
+
+## pricing
+
+[Уровни](../../src/modules/pricing/controllers/price-levels.controller.ts), [цены услуг и мастеров](../../src/modules/pricing/controllers/service-prices.controller.ts)
+
+| API | Метод | Проверка | Уточнение |
+| --- | --- | --- | --- |
+| `GET /locations/:locationId/price-levels` | `list` | L: `pricing:read` | — |
+| `POST /locations/:locationId/price-levels` | `create` | L: `pricing:write` | — |
+| `PATCH /locations/:locationId/price-levels/:levelId` | `update` | L: `pricing:write` | — |
+| `DELETE /locations/:locationId/price-levels/:levelId` | `delete` | L: `pricing:write` | — |
+| `GET /locations/:locationId/services/:serviceId/prices` | `getServicePrices` | L: `pricing:read` | — |
+| `PUT /locations/:locationId/services/:serviceId/level-prices` | `setLevelPrices` | L: `pricing:write` | — |
+| `PUT /locations/:locationId/services/:serviceId/staff-prices` | `setStaffPrices` | L: `pricing:write` | — |
+| `GET /locations/:locationId/staff/:staffId/service-prices` | `getStaffServicePrices` | L: `pricing:read` | — |
+| `PUT /locations/:locationId/staff/:staffId/service-prices` | `setStaffServicePrices` | L: `pricing:write` | — |
 
 ## staff-analytics
 

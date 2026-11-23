@@ -6,6 +6,7 @@ import { BookingServiceCatalog } from '../../services/catalog/interfaces/booking
 import { ServiceCatalogKind } from '../../services/enums/service-catalog-kind.enum.js';
 import { BundleMetrics } from '../../services/utils/bundle-metrics.js';
 import { BookingExecutionMode } from '../enums/booking-execution-mode.enum.js';
+import { BookingPriceRange } from '../interfaces/booking-price-range.interface.js';
 
 export class BookingSetupBundleDto {
   @ApiProperty({ type: String })
@@ -26,8 +27,23 @@ export class BookingSetupBundleDto {
   @ApiProperty({ type: () => FileResponseDto, nullable: true })
   image: FileResponseDto | null;
 
-  @ApiPrice()
+  @ApiPrice({
+    description:
+      'Package price of a FIXED bundle, the sum of the base prices of a SUM bundle',
+  })
   price: string;
+
+  @ApiPrice({
+    description:
+      'FIXED bundle: the package price. SUM bundle: the sum of the lowest prices of its services',
+  })
+  priceFrom: string;
+
+  @ApiPrice({
+    description:
+      'FIXED bundle: the package price. SUM bundle: the sum of the highest prices of its services',
+  })
+  priceTo: string;
 
   @ApiProperty({ type: Number })
   durationMinutes: number;
@@ -40,6 +56,7 @@ export class BookingSetupBundleDto {
 
   static fromEntity(
     bundle: BookingServiceCatalog['bundles'][number],
+    range: BookingPriceRange,
   ): BookingSetupBundleDto {
     const dto = new BookingSetupBundleDto();
     dto.id = bundle.id;
@@ -51,6 +68,8 @@ export class BookingSetupBundleDto {
       ? FileResponseDto.fromEntity(bundle.imageFile)
       : null;
     dto.price = MoneyUtils.format(BundleMetrics.price(bundle));
+    dto.priceFrom = MoneyUtils.format(range.priceFrom);
+    dto.priceTo = MoneyUtils.format(range.priceTo);
     dto.durationMinutes = BundleMetrics.durationMinutes(bundle);
     dto.executionMode = bundle.executionMode as BookingExecutionMode;
     dto.serviceIds = bundle.items.map((item) => item.serviceId);

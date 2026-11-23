@@ -34,7 +34,6 @@ import { TokenPayloadDto } from '../../../auth/dto/token-payload.dto.js';
 import { BookingAccessService } from '../../../bookings/services/booking-access.service.js';
 import { CalendarFacade } from '../../calendar.facade.js';
 import { AvailableSlotsDayDto } from '../../dto/available-slots-day.dto.js';
-import { AvailableSlotsRequestDto } from '../../dto/available-slots-request.dto.js';
 import { CalendarEventResponseDto } from '../../dto/calendar-event-response.dto.js';
 import { CreateCalendarEventDto } from '../../dto/create-calendar-event.dto.js';
 import { DeleteCalendarEventDto } from '../../dto/delete-calendar-event.dto.js';
@@ -56,23 +55,7 @@ export class CalendarController {
     private readonly access: BookingAccessService,
   ) {}
 
-  // ─── Public ──────────────────────────────────────────────────────────────────
-
-  @ApiOperation({
-    summary:
-      'Get available booking slots for a service within the business advance-booking window (public).',
-  })
-  @ApiOkResponse({ type: ApiResponseArray(AvailableSlotsDayDto) })
-  @ApiNotFoundResponse({ description: 'Location or service not found' })
-  @Get('public/available-slots')
-  @Header('Cache-Control', 'no-store')
-  async getAvailableSlots(
-    @Param('locationId', ParseUUIDPipe) locationId: string,
-    @Query() dto: AvailableSlotsRequestDto,
-  ): Promise<BaseResponseDto<AvailableSlotsDayDto[]>> {
-    const days = await this.calendar.getAvailableSlots(locationId, dto);
-    return BaseResponseDto.success(days);
-  }
+  // ─── Manual booking ──────────────────────────────────────────────────────────
 
   @ApiOperation({
     summary:

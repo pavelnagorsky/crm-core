@@ -1,5 +1,7 @@
 import { ApiExtraModels, ApiProperty, getSchemaPath } from '@nestjs/swagger';
 import { BookingServiceCatalog } from '../../services/catalog/interfaces/booking-service-catalog.interface.js';
+import { BundleMetrics } from '../../services/utils/bundle-metrics.js';
+import { BookingSetupPrices } from '../interfaces/booking-setup-prices.interface.js';
 import { BookingSetupBundleDto } from './booking-setup-bundle.dto.js';
 import { BookingSetupServiceDto } from './booking-setup-service.dto.js';
 
@@ -34,6 +36,7 @@ export class BookingSetupCategoryDto {
 
   static fromEntity(
     category: BookingServiceCatalog['categories'][number],
+    prices: BookingSetupPrices,
   ): BookingSetupCategoryDto {
     return BookingSetupCategoryDto.build(
       category.id,
@@ -41,14 +44,23 @@ export class BookingSetupCategoryDto {
       category.description,
       category.services,
       category.bundles,
+      prices,
     );
   }
 
   static uncategorized(
     services: BookingServiceCatalog['services'],
     bundles: BookingServiceCatalog['bundles'],
+    prices: BookingSetupPrices,
   ): BookingSetupCategoryDto {
-    return BookingSetupCategoryDto.build(null, null, null, services, bundles);
+    return BookingSetupCategoryDto.build(
+      null,
+      null,
+      null,
+      services,
+      bundles,
+      prices,
+    );
   }
 
   private static build(
@@ -57,31 +69,45 @@ export class BookingSetupCategoryDto {
     description: string | null,
     services: BookingServiceCatalog['services'],
     bundles: BookingServiceCatalog['bundles'],
+    prices: BookingSetupPrices,
   ): BookingSetupCategoryDto {
     const dto = new BookingSetupCategoryDto();
     dto.id = id;
     dto.name = name;
     dto.description = description;
-    dto.services = BookingSetupCategoryDto.ordered(services, bundles);
+    dto.services = BookingSetupCategoryDto.ordered(services, bundles, prices);
     return dto;
   }
 
   private static ordered(
     services: BookingServiceCatalog['services'],
     bundles: BookingServiceCatalog['bundles'],
+    prices: BookingSetupPrices,
   ): Array<BookingSetupServiceDto | BookingSetupBundleDto> {
     return [
       ...services.map((service) => ({
         sortOrder: service.sortOrder,
         title: service.title,
         id: service.id,
-        item: BookingSetupServiceDto.fromEntity(service),
+        item: BookingSetupServiceDto.fromEntity(
+          service,
+          prices.services.get(service.id) ?? {
+            priceFrom: service.price,
+            priceTo: service.price,
+          },
+        ),
       })),
       ...bundles.map((bundle) => ({
         sortOrder: bundle.sortOrder,
         title: bundle.title,
         id: bundle.id,
-        item: BookingSetupBundleDto.fromEntity(bundle),
+        item: BookingSetupBundleDto.fromEntity(
+          bundle,
+          prices.bundles.get(bundle.id) ?? {
+            priceFrom: BundleMetrics.price(bundle),
+            priceTo: BundleMetrics.price(bundle),
+          },
+        ),
       })),
     ]
       .sort(

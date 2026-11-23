@@ -6,7 +6,7 @@ import {
 } from '../decorators/contact-field.decorator.js';
 import { OptionalGoogleReviewUrl } from '../decorators/optional-google-review-url.decorator.js';
 import { OptionalYandexReviewUrl } from '../decorators/optional-yandex-review-url.decorator.js';
-import { BookingVisibility, BusinessType } from '@prisma/client';
+import { AnyStaffRule, BookingVisibility, BusinessType } from '@prisma/client';
 import {
   IsBoolean,
   IsEnum,
@@ -127,4 +127,19 @@ export class CreateLocationDto {
   @IsOptional()
   @IsBoolean()
   notifyClientOnStaffChanges?: boolean;
+
+  @ApiProperty({ type: Boolean, default: true, required: false })
+  @IsOptional()
+  @IsBoolean()
+  anyStaffEnabled?: boolean;
+
+  @ApiProperty({
+    enum: AnyStaffRule,
+    enumName: 'AnyStaffRule',
+    default: AnyStaffRule.CHEAPER_AND_FREER,
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(AnyStaffRule)
+  anyStaffRule?: AnyStaffRule;
 }

@@ -149,3 +149,157 @@ describe('Calendar closed time', () => {
     ]);
   });
 });
+
+describe('Calendar slot starts with free staff', () => {
+  const date = '2026-11-10';
+  const shiftOf = (staffId: string, from: string, to: string) => ({
+    staffId,
+    date: new Date(date),
+    startTime: new Date(`1970-01-01T${from}:00Z`),
+    endTime: new Date(`1970-01-01T${to}:00Z`),
+  });
+  const shiftIndex = (...shifts: ReturnType<typeof shiftOf>[]) =>
+    compute.groupShiftsByStaffDate(shifts);
+  const blocked = (staffId: string, start: number, end: number) =>
+    new Map([[staffId, new Map([[date, [{ start, end }]]])]]);
+  const noBlocks = new Map<
+    string,
+    Map<string, { start: number; end: number }[]>
+  >();
+
+  describe('one service', () => {
+    const staff = [{ id: 'anna' }, { id: 'boris' }];
+    const shifts = shiftIndex(
+      shiftOf('anna', '10:00', '12:00'),
+      shiftOf('boris', '10:30', '12:00'),
+    );
+
+    it('lists who is free for every slot start', () => {
+      const starts = compute.collectSlotStartsForDate(
+        date,
+        staff,
+        shifts,
+        blocked('anna', 11 * 60 + 30, 12 * 60),
+        0,
+        60,
+        30,
+      );
+      expect(starts).toEqual([
+        { minute: 600, freeStaffIds: [['anna']] },
+        { minute: 630, freeStaffIds: [['anna', 'boris']] },
+        { minute: 660, freeStaffIds: [['boris']] },
+      ]);
+    });
+
+    it('returns the same starts as the minutes-only API', () => {
+      const args = [date, staff, shifts, noBlocks, 0, 60, 30] as const;
+      expect(
+        compute.collectSlotStartsForDate(...args).map((slot) => slot.minute),
+      ).toEqual(compute.collectSlotsForDate(...args));
+    });
+
+    it('skips starts before the earliest minute', () => {
+      const starts = compute.collectSlotStartsForDate(
+        date,
+        staff,
+        shifts,
+        noBlocks,
+        11 * 60,
+        60,
+        30,
+      );
+      expect(starts.map((slot) => slot.minute)).toEqual([660]);
+    });
+  });
+
+  describe('several services', () => {
+    const items = [
+      { serviceId: 'cut', durationMinutes: 60 },
+      { serviceId: 'color', durationMinutes: 60 },
+    ];
+    const candidates = new Map([
+      ['cut', [{ id: 'anna' }, { id: 'boris' }]],
+      ['color', [{ id: 'boris' }, { id: 'carl' }]],
+    ]);
+    const shifts = shiftIndex(
+      shiftOf('anna', '10:00', '13:00'),
+      shiftOf('boris', '10:00', '13:00'),
+      shiftOf('carl', '10:00', '13:00'),
+    );
+    const starts = (mode: string, blocks = noBlocks, earliest = 0) =>
+      compute.collectMultiServiceSlotStartsForDate(
+        date,
+        items,
+        mode,
+        candidates,
+        shifts,
+        blocks,
+        earliest,
+        60,
+      );
+
+    it('lists the free staff of each item at its own time', () => {
+      const result = starts('SEQUENTIAL', blocked('anna', 600, 660));
+      expect(result).toEqual([
+        // Anna is busy 10:00-11:00: the cut at 10:00 is Boris's, color 11:00 either of two.
+        {
+          minute: 600,
+          freeStaffIds: [['boris'], ['boris', 'carl']],
+        },
+        {
+          minute: 660,
+          freeStaffIds: [
+            ['anna', 'boris'],
+            ['boris', 'carl'],
+          ],
+        },
+      ]);
+    });
+
+    it('offers a start only when every item has someone free', () => {
+      // Carl is the only color staff left and is blocked for the second hour.
+      const result = starts(
+        'SEQUENTIAL',
+        new Map([...blocked('carl', 660, 780), ...blocked('boris', 660, 780)]),
+      );
+      expect(result).toEqual([]);
+    });
+
+    it('needs distinct staff in a parallel visit, and still lists every free candidate', () => {
+      const parallel = starts('PARALLEL', blocked('anna', 0, 1440));
+      // Cut can only be Boris; color then has to be Carl, but both are listed as free.
+      expect(parallel).toEqual([
+        { minute: 600, freeStaffIds: [['boris'], ['boris', 'carl']] },
+        { minute: 660, freeStaffIds: [['boris'], ['boris', 'carl']] },
+        { minute: 720, freeStaffIds: [['boris'], ['boris', 'carl']] },
+      ]);
+    });
+
+    it('rejects a parallel start where both items could only use one staff member', () => {
+      const parallel = starts(
+        'PARALLEL',
+        new Map([...blocked('anna', 0, 1440), ...blocked('carl', 0, 1440)]),
+      );
+      expect(parallel).toEqual([]);
+    });
+
+    it.each(['SEQUENTIAL', 'PARALLEL'])(
+      'returns the same starts as the minutes-only API: %s',
+      (mode) => {
+        const blocks = blocked('boris', 660, 720);
+        expect(starts(mode, blocks, 30).map((slot) => slot.minute)).toEqual(
+          compute.collectMultiServiceSlotsForDate(
+            date,
+            items,
+            mode,
+            candidates,
+            shifts,
+            blocks,
+            30,
+            60,
+          ),
+        );
+      },
+    );
+  });
+});

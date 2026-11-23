@@ -7,6 +7,7 @@ import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
 import { BOOKING_SERVICE_SELECT } from '../constants/booking-catalog.select.js';
 import { ServiceFilter } from '../interfaces/service-filter.interface.js';
 import { ServiceForCatalog } from '../interfaces/service-for-catalog.interface.js';
+import { ServicePriceEntry } from '../interfaces/service-price-entry.interface.js';
 import { ServiceWithImage } from '../interfaces/service-with-image.interface.js';
 import { ServiceWithStaffCount } from '../interfaces/service-with-staff-count.interface.js';
 
@@ -82,6 +83,23 @@ export class ServiceReadService {
     return tx.service.findMany({
       where: { location: ACTIVE_LOCATION_WHERE, locationId, id: { in: ids } },
       include: serviceCatalogInclude,
+    });
+  }
+
+  /** Services of the location in any status, by title. Unknown ids are skipped. */
+  findPriceEntries(
+    locationId: string,
+    ids: readonly string[],
+  ): Promise<ServicePriceEntry[]> {
+    if (ids.length === 0) return Promise.resolve([]);
+    return this.db.service.findMany({
+      where: {
+        location: ACTIVE_LOCATION_WHERE,
+        locationId,
+        id: { in: [...ids] },
+      },
+      select: { id: true, title: true, price: true },
+      orderBy: [{ title: 'asc' }, { id: 'asc' }],
     });
   }
 

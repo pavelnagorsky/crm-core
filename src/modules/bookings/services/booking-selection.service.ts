@@ -6,6 +6,7 @@ import {
 } from '@prisma/client';
 import { ReadConsistency } from '../../../shared/cache/enums/read-consistency.enum.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
+import { normalizeStaffAssignments } from '../../../shared/scheduling/normalize-staff-assignments.js';
 import { priceLine, sumPrices } from '../../../shared/money/line-pricing.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { LocationService } from '../../location/services/location.service.js';
@@ -48,6 +49,7 @@ export class BookingSelectionService {
           locationId,
           selection,
           this.manualItems(dto),
+          dto,
         )
       : [];
     const productLines = await this.orders.priceProductItems(
@@ -135,12 +137,23 @@ export class BookingSelectionService {
     };
   }
 
-  /** Preview without time or staff: prices come through the cache, nothing is stored. */
+  /**
+   * Preview without time: prices come through the cache, nothing is stored. Each line is
+   * priced with the staff member the request names for it; with none chosen, at the base price.
+   */
   private async priceServiceLines(
     locationId: string,
     selection: ResolvedBookingSelection,
     manualItems: ManualBookingItemDto[],
+    dto: BookingPricingRequestDto,
   ): Promise<OrderPricingLine[]> {
+    const requested = normalizeStaffAssignments(
+      selection.services.map((service) => service.id),
+      selection.executionMode,
+      dto.staffId,
+      dto.staffAssignments,
+      manualItems,
+    );
     const { lines } = await this.pricing.quoteServices(
       locationId,
       {
@@ -149,7 +162,8 @@ export class BookingSelectionService {
           const customPrice = manualItems[index]?.customPrice;
           return {
             serviceId: service.id,
-            staffId: null,
+            staffId:
+              manualItems[index]?.staffId ?? requested.get(service.id) ?? null,
             customPrice:
               customPrice == null ? null : new Prisma.Decimal(customPrice),
           };

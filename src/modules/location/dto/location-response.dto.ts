@@ -1,5 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { BookingVisibility, BusinessType, Location } from '@prisma/client';
+import {
+  AnyStaffRule,
+  BookingVisibility,
+  BusinessType,
+  Location,
+} from '@prisma/client';
 import { PaymentTrackingMode } from '../enums/payment-tracking-mode.enum.js';
 
 export class LocationResponseDto {
@@ -75,6 +80,12 @@ export class LocationResponseDto {
   @ApiProperty({ type: Boolean })
   notifyClientOnStaffChanges: boolean;
 
+  @ApiProperty({ type: Boolean })
+  anyStaffEnabled: boolean;
+
+  @ApiProperty({ enum: AnyStaffRule, enumName: 'AnyStaffRule' })
+  anyStaffRule: AnyStaffRule;
+
   @ApiProperty({
     enum: PaymentTrackingMode,
     enumName: 'PaymentTrackingMode',
@@ -122,6 +133,8 @@ export class LocationResponseDto {
     dto.bookingVisibility = location.bookingVisibility;
     dto.isBookingConfirmationRequired = location.isBookingConfirmationRequired;
     dto.notifyClientOnStaffChanges = location.notifyClientOnStaffChanges;
+    dto.anyStaffEnabled = location.anyStaffEnabled;
+    dto.anyStaffRule = location.anyStaffRule;
     dto.paymentTrackingMode = location.paymentTrackingMode;
     dto.paymentTrackingSince = location.paymentTrackingSince;
     dto.createdAt = location.createdAt;

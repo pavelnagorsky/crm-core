@@ -9,6 +9,7 @@ export const CacheDependency = {
   serviceCatalog: (id: string) => dependency('services.catalog', id),
   staffDirectory: (id: string) => dependency('staff.directory', id),
   staffSchedule: (id: string) => dependency('staff.schedule', id),
+  pricing: (id: string) => dependency('pricing.location', id),
   brandProducts: (id: string) => dependency('products.brand', id),
   locationProducts: (id: string) => dependency('products.location', id),
   locationReviews: (id: string) => dependency('reviews.location', id),

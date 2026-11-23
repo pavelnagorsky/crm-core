@@ -290,6 +290,11 @@
     "SERVICE_BUNDLE_CREATED": "Комплекс создан",
     "SERVICE_BUNDLE_UPDATED": "Комплекс изменён",
     "SERVICE_BUNDLE_DELETED": "Комплекс удалён",
+    "PRICE_LEVEL_CREATED": "Уровень мастеров создан",
+    "PRICE_LEVEL_UPDATED": "Уровень мастеров изменён",
+    "PRICE_LEVEL_DELETED": "Уровень мастеров удалён",
+    "SERVICE_PRICES_UPDATED": "Цены услуги изменены",
+    "STAFF_PRICES_UPDATED": "Личные цены мастера изменены",
     "BUSINESS_UPDATED": "Настройки бизнеса изменены",
     "BRAND_CREATED": "Бренд создан",
     "BRAND_UPDATED": "Настройки бренда изменены",
@@ -819,6 +824,11 @@
       "fixedSalaryAmount": "Оклад",
       "hourlyRate": "Почасовая ставка",
       "salaryMode": "Режим оклада"
+    },
+    "PRICE_LEVEL": {
+      "name": "Название",
+      "sortOrder": "Порядок",
+      "isDefault": "Базовый"
     },
     "PAYROLL": {
       "startDate": "Начало",

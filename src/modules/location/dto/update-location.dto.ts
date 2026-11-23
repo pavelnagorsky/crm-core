@@ -6,7 +6,7 @@ import {
 } from '../decorators/contact-field.decorator.js';
 import { OptionalGoogleReviewUrl } from '../decorators/optional-google-review-url.decorator.js';
 import { OptionalYandexReviewUrl } from '../decorators/optional-yandex-review-url.decorator.js';
-import { BookingVisibility, BusinessType } from '@prisma/client';
+import { AnyStaffRule, BookingVisibility, BusinessType } from '@prisma/client';
 import { PaymentTrackingMode } from '../enums/payment-tracking-mode.enum.js';
 import {
   IsBoolean,
@@ -108,6 +108,20 @@ export class UpdateLocationDto {
   @IsOptional()
   @IsBoolean()
   notifyClientOnStaffChanges?: boolean;
+
+  @ApiProperty({ type: Boolean, required: false })
+  @IsOptional()
+  @IsBoolean()
+  anyStaffEnabled?: boolean;
+
+  @ApiProperty({
+    enum: AnyStaffRule,
+    enumName: 'AnyStaffRule',
+    required: false,
+  })
+  @IsOptional()
+  @IsEnum(AnyStaffRule)
+  anyStaffRule?: AnyStaffRule;
 
   @ApiProperty({
     enum: PaymentTrackingMode,

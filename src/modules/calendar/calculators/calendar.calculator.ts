@@ -17,6 +17,7 @@ import { CalendarRescheduleItem } from '../interfaces/calendar-reschedule-item.i
 import { CalendarShift } from '../interfaces/calendar-shift.interface.js';
 import { CalendarSlotCandidate } from '../interfaces/calendar-slot-candidate.interface.js';
 import { CalendarSlotItem } from '../interfaces/calendar-slot-item.interface.js';
+import { CalendarSlotStart } from '../interfaces/calendar-slot-start.interface.js';
 import {
   CalendarEventWithCancellations,
   EventTimes,
@@ -521,7 +522,31 @@ export class CalendarCalculator {
     slotDuration: number,
     slotInterval: number,
   ): number[] {
-    const slotStartSet = new Set<number>();
+    return this.collectSlotStartsForDate(
+      date,
+      candidateStaff,
+      shiftsByStaffDate,
+      blockedByStaffDate,
+      earliestMinute,
+      slotDuration,
+      slotInterval,
+    ).map((slot) => slot.minute);
+  }
+
+  /**
+   * The same slots as `collectSlotsForDate`, each with the candidate staff who are free for it
+   * (one list: a single-service visit has one item).
+   */
+  collectSlotStartsForDate(
+    date: string,
+    candidateStaff: CalendarSlotCandidate[],
+    shiftsByStaffDate: Map<string, Map<string, CalendarShift>>,
+    blockedByStaffDate: Map<string, Map<string, Interval[]>>,
+    earliestMinute: number,
+    slotDuration: number,
+    slotInterval: number,
+  ): CalendarSlotStart[] {
+    const freeByStart = new Map<number, string[]>();
 
     for (const staff of candidateStaff) {
       const shift = shiftsByStaffDate.get(staff.id)?.get(date);
@@ -540,13 +565,17 @@ export class CalendarCalculator {
           slotInterval,
         );
         while (slotStart + slotDuration <= free.end) {
-          slotStartSet.add(slotStart);
+          const staffIds = freeByStart.get(slotStart);
+          if (!staffIds) freeByStart.set(slotStart, [staff.id]);
+          else if (!staffIds.includes(staff.id)) staffIds.push(staff.id);
           slotStart += slotInterval;
         }
       }
     }
 
-    return [...slotStartSet].sort((a, b) => a - b);
+    return [...freeByStart]
+      .sort(([left], [right]) => left - right)
+      .map(([minute, staffIds]) => ({ minute, freeStaffIds: [staffIds] }));
   }
 
   collectMultiServiceSlotsForDate(
@@ -559,6 +588,32 @@ export class CalendarCalculator {
     earliestMinute: number,
     slotInterval: number,
   ): number[] {
+    return this.collectMultiServiceSlotStartsForDate(
+      date,
+      items,
+      executionMode,
+      candidatesByService,
+      shiftsByStaffDate,
+      blockedByStaffDate,
+      earliestMinute,
+      slotInterval,
+    ).map((slot) => slot.minute);
+  }
+
+  /**
+   * The same slots as `collectMultiServiceSlotsForDate`, each with the candidate staff who
+   * are free for every item at its time.
+   */
+  collectMultiServiceSlotStartsForDate(
+    date: string,
+    items: CalendarSlotItem[],
+    executionMode: string,
+    candidatesByService: Map<string, CalendarSlotCandidate[]>,
+    shiftsByStaffDate: Map<string, Map<string, CalendarShift>>,
+    blockedByStaffDate: Map<string, Map<string, Interval[]>>,
+    earliestMinute: number,
+    slotInterval: number,
+  ): CalendarSlotStart[] {
     const staffIds = this.uniqueCandidates(candidatesByService).map(
       (staff) => staff.id,
     );
@@ -573,78 +628,71 @@ export class CalendarCalculator {
     const maxEnd = Math.max(
       ...shifts.map((shift) => TimeUtils.timeToMinutes(shift.endTime)),
     );
-    const envelopeDuration =
-      executionMode === 'PARALLEL'
-        ? Math.max(...items.map((item) => item.durationMinutes))
-        : items.reduce((sum, item) => sum + item.durationMinutes, 0);
-    const slots: number[] = [];
+    const parallel = executionMode === 'PARALLEL';
+    const envelopeDuration = parallel
+      ? Math.max(...items.map((item) => item.durationMinutes))
+      : items.reduce((sum, item) => sum + item.durationMinutes, 0);
+    const slots: CalendarSlotStart[] = [];
     let slotStart = this.alignSlotStart(
       Math.max(minStart, earliestMinute),
       slotInterval,
     );
 
     while (slotStart + envelopeDuration <= maxEnd) {
-      if (
-        this.canAssignItems(
-          date,
-          slotStart,
-          items,
-          executionMode,
-          candidatesByService,
-          shiftsByStaffDate,
-          blockedByStaffDate,
-        )
-      ) {
-        slots.push(slotStart);
-      }
+      const freeStaffIds = this.freeStaffByItem(
+        date,
+        slotStart,
+        items,
+        parallel,
+        candidatesByService,
+        shiftsByStaffDate,
+        blockedByStaffDate,
+      );
+      const team = assignStaff(
+        freeStaffIds.map((ids, index) => ({
+          itemId: String(index),
+          staffIds: ids,
+        })),
+        parallel,
+      );
+      if (team !== null) slots.push({ minute: slotStart, freeStaffIds });
       slotStart += slotInterval;
     }
 
     return slots;
   }
 
-  private canAssignItems(
+  /** Candidate staff of each item who are free for the item's window of a visit starting at `slotStart`. */
+  private freeStaffByItem(
     date: string,
     slotStart: number,
     items: CalendarSlotItem[],
-    executionMode: string,
+    parallel: boolean,
     candidatesByService: Map<string, CalendarSlotCandidate[]>,
     shiftsByStaffDate: Map<string, Map<string, CalendarShift>>,
     blockedByStaffDate: Map<string, Map<string, Interval[]>>,
-  ): boolean {
-    const windows = items.map((item, index) => {
-      const offset =
-        executionMode === 'PARALLEL'
-          ? 0
-          : items
-              .slice(0, index)
-              .reduce((sum, previous) => sum + previous.durationMinutes, 0);
-      return {
-        serviceId: item.serviceId,
-        start: slotStart + offset,
-        end: slotStart + offset + item.durationMinutes,
-      };
+  ): string[][] {
+    return items.map((item, index) => {
+      const offset = parallel
+        ? 0
+        : items
+            .slice(0, index)
+            .reduce((sum, previous) => sum + previous.durationMinutes, 0);
+      const start = slotStart + offset;
+      const end = start + item.durationMinutes;
+      return (candidatesByService.get(item.serviceId) ?? [])
+        .filter((candidate) =>
+          this.isStaffFreeOnDate(
+            candidate.id,
+            date,
+            start,
+            end,
+            shiftsByStaffDate,
+            blockedByStaffDate,
+          ),
+        )
+        .map((candidate) => candidate.id);
     });
-    return (
-      assignStaff(
-        windows.map((window, index) => ({
-          itemId: String(index),
-          staffIds: (candidatesByService.get(window.serviceId) ?? [])
-            .filter((candidate) =>
-              this.isStaffFreeOnDate(
-                candidate.id,
-                date,
-                window.start,
-                window.end,
-                shiftsByStaffDate,
-                blockedByStaffDate,
-              ),
-            )
-            .map((candidate) => candidate.id),
-        })),
-        executionMode === 'PARALLEL',
-      ) !== null
-    );
   }
 
   /**

@@ -15,4 +15,6 @@ export interface BookingSelectionResolution {
   totalDuration: number;
   totalListPrice: Prisma.Decimal;
   resolvedItems: ResolvedBookingItem[];
+  /** Exact total of the preview (sum of the charged prices); null without a start time. */
+  totalPrice: Prisma.Decimal | null;
 }

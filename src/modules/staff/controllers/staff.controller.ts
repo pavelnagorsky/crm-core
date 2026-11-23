@@ -2,6 +2,7 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   HttpCode,
   HttpStatus,
@@ -17,6 +18,7 @@ import {
 import {
   ApiConflictResponse,
   ApiCreatedResponse,
+  ApiForbiddenResponse,
   ApiNoContentResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
@@ -26,6 +28,10 @@ import {
 } from '@nestjs/swagger';
 import type { Response } from 'express';
 import { Claim } from '../../access/enums/claim.enum.js';
+import {
+  assertPermission,
+  hasPermission,
+} from '../../access/utils/assert-permission.js';
 import { Read, Write } from '../../access/utils/permission.js';
 import { ApiResponseArray } from '../../../shared/dto/api-response-array.dto.js';
 import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
@@ -90,6 +96,10 @@ export class StaffController {
 
   @ApiOperation({ summary: 'Create a staff member' })
   @ApiCreatedResponse({ type: ApiResponse(IdResponseDto) })
+  @ApiForbiddenResponse({
+    description: 'A price level other than base also needs pricing:write',
+    type: ForbiddenException,
+  })
   @Permissions(Write(Claim.STAFF))
   @Post('locations/:locationId/staff')
   async create(
@@ -97,6 +107,8 @@ export class StaffController {
     @Body() dto: CreateStaffDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
+    if (dto.priceLevelId != null)
+      assertPermission(tokenPayload, Write(Claim.PRICING), locationId);
     const staff = await this.staffService.create(
       locationId,
       dto,
@@ -108,6 +120,10 @@ export class StaffController {
   @ApiOperation({ summary: 'Update a staff member' })
   @ApiOkResponse({ type: ApiResponse(IdResponseDto) })
   @ApiNotFoundResponse({ description: 'Staff member not found' })
+  @ApiForbiddenResponse({
+    description: 'Changing priceLevelId also needs pricing:write',
+    type: ForbiddenException,
+  })
   @Permissions(Write(Claim.STAFF))
   @Put('locations/:locationId/staff/:id')
   async update(
@@ -116,6 +132,17 @@ export class StaffController {
     @Body() dto: UpdateStaffDto,
     @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<IdResponseDto>> {
+    if (
+      dto.priceLevelId !== undefined &&
+      !hasPermission(tokenPayload, Write(Claim.PRICING), locationId)
+    ) {
+      const current = await this.staffService.findWithServiceCountInLocation(
+        locationId,
+        id,
+      );
+      if (dto.priceLevelId !== current.priceLevelId)
+        assertPermission(tokenPayload, Write(Claim.PRICING), locationId);
+    }
     const updated = await this.staffService.update(
       locationId,
       id,

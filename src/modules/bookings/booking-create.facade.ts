@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { BookingVisibility, Client, Prisma } from '@prisma/client';
 import { AppException } from '../../shared/exceptions/app.exception.js';
+import { MoneyUtils } from '../../shared/money/money.utils.js';
 import { TimeUtils } from '../../shared/time/time.utils.js';
 import { ReadConsistency } from '../../shared/cache/enums/read-consistency.enum.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
@@ -24,6 +25,7 @@ import { PublicCreateBookingDto } from './dto/public-create-booking.dto.js';
 import { BookingChannel } from './enums/booking-channel.enum.js';
 import { BookingStatus } from './enums/booking-status.enum.js';
 import { ResolvedBookingChannel } from './interfaces/resolved-booking-channel.interface.js';
+import { ResolvedBookingItem } from './interfaces/resolved-booking-item.interface.js';
 import { ClassifiedTraffic } from '../../shared/traffic/interfaces/classified-traffic.interface.js';
 import { editTrafficSource } from '../../shared/traffic/rules/traffic-source-edit.rules.js';
 import { BookingTraffic } from './interfaces/booking-traffic.interface.js';
@@ -250,7 +252,15 @@ export class BookingCreateFacade {
       allowConflicts: isCustomTime,
       // A master booking for themselves takes the services they can do; colleagues the rest.
       preferredStaffId: ownStaffId,
+      // The staff member the guest saw with the slot; online requests only.
+      preferredStaffIds: internal
+        ? undefined
+        : (dto as PublicCreateBookingDto).preferredStaffIds,
+      // Read from the fresh location, so a rule change is applied to the very next booking.
+      staffRule: location.anyStaffRule,
     });
+    // The guest agreed to a total; a price edited meanwhile must be confirmed again.
+    if (!internal) this.assertExpectedTotal(dto, items);
     if (ownStaffId && !items.some((item) => item.staffId === ownStaffId))
       throw new AppException(
         ErrorCode.BOOKING_OWN_STAFF_REQUIRED,
@@ -350,6 +360,36 @@ export class BookingCreateFacade {
       productsAdded,
       payment,
     };
+  }
+
+  /**
+   * An online guest books at the total they saw. If the recalculated total differs, the
+   * transaction rolls back and the client retries with the new total (409 PRICE_CHANGED).
+   */
+  private assertExpectedTotal(
+    dto: CreateBookingDto,
+    items: ResolvedBookingItem[],
+  ): void {
+    const expected =
+      'expectedTotal' in dto && typeof dto.expectedTotal === 'string'
+        ? dto.expectedTotal
+        : null;
+    const total = items.reduce(
+      (sum, item) => sum.plus(item.customPrice ?? item.chargedPrice),
+      new Prisma.Decimal(0),
+    );
+    if (expected !== null && total.equals(expected)) return;
+    throw new AppException(ErrorCode.PRICE_CHANGED, HttpStatus.CONFLICT, {
+      expectedTotal: expected,
+      total: MoneyUtils.format(total),
+      items: items.map((item) => ({
+        serviceId: item.serviceId,
+        serviceTitle: item.serviceTitle,
+        staffId: item.staffId,
+        staffName: item.staffName,
+        price: MoneyUtils.format(item.customPrice ?? item.chargedPrice),
+      })),
+    });
   }
 
   /** The source staff picked for a manual booking; a detail alone is rejected. */

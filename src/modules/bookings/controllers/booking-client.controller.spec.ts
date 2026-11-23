@@ -123,6 +123,7 @@ describe('Client booking API (HTTP)', () => {
       .send({
         serviceId: id,
         startAt: '2026-10-28T13:00:00',
+        expectedTotal: '50.00',
         firstName: 'Anna',
         phone: '+375291112233',
       })
@@ -164,6 +165,7 @@ describe('Client booking API (HTTP)', () => {
       .send({
         serviceId: id,
         startAt: '2026-10-28T13:00:00',
+        expectedTotal: '50.00',
         firstName: 'Anna',
         phone: '+375291112233',
         idempotencyKey: key,
@@ -186,6 +188,7 @@ describe('Client booking API (HTTP)', () => {
       .send({
         serviceId: id,
         startAt: '2026-10-28T13:00:00',
+        expectedTotal: '50.00',
         firstName: 'Anna',
         phone: '+375291112233',
         bookingWidgetId: id,
@@ -236,6 +239,7 @@ describe('Client booking API (HTTP)', () => {
       .send({
         serviceId: id,
         startAt: '2026-10-28T13:00:00',
+        expectedTotal: '50.00',
         firstName: 'Anna',
         phone: '+375291112233',
         traffic,
@@ -255,6 +259,7 @@ describe('Client booking API (HTTP)', () => {
       .send({
         serviceId: id,
         startAt: '2026-10-28T13:00:00',
+        expectedTotal: '50.00',
         firstName: 'Anna',
         phone: '+375291112233',
         idempotencyKey: 'not-a-uuid',

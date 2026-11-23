@@ -14,4 +14,5 @@ export const STAFF_AUDIT_FIELDS: FieldDescriptor<Staff>[] = [
   { key: 'payoutMethod', i18n: 'payoutMethod' },
   { key: 'payoutNote' },
   { key: 'avatarFileId' },
+  { key: 'priceLevelId' },
 ];

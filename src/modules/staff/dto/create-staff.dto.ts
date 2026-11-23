@@ -68,6 +68,17 @@ export class CreateStaffDto {
   serviceIds?: string[];
 
   @ApiProperty({
+    type: String,
+    required: false,
+    nullable: true,
+    description:
+      'Price level of the staff member. null or the default level means base prices.',
+  })
+  @IsOptional()
+  @IsUUID()
+  priceLevelId?: string | null;
+
+  @ApiProperty({
     enum: StaffEmploymentType,
     enumName: 'StaffEmploymentType',
     required: false,

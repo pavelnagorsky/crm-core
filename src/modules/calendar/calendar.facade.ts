@@ -15,6 +15,7 @@ import { UpdateCalendarEventDto } from './dto/update-calendar-event.dto.js';
 import { BookingCalendarEventInput } from './interfaces/booking-calendar-event-input.interface.js';
 import { CalendarBookingFeed } from './interfaces/calendar-booking-feed.interface.js';
 import { CalendarRescheduleItem } from './interfaces/calendar-reschedule-item.interface.js';
+import { CalendarSlotOffers } from './interfaces/calendar-slot-offers.interface.js';
 import { CalendarEventWithCancellations } from './interfaces/calendar-types.interface.js';
 import { CalendarAvailabilityService } from './services/availability/calendar-availability.service.js';
 import { BookingCalendarEventService } from './services/events/booking-calendar-event.service.js';
@@ -116,11 +117,15 @@ export class CalendarFacade {
     return this.viewBuilder.getCalendar(locationId, dto, feed);
   }
 
-  getAvailableSlots(
+  /**
+   * Public slots with the free candidate staff of each item; whoever prices the slots picks
+   * the staff (the calendar knows no prices).
+   */
+  getPublicSlotOffers(
     locationId: string,
     dto: AvailableSlotsRequestDto,
-  ): Promise<AvailableSlotsDayDto[]> {
-    return this.availability.getAvailableSlots(locationId, dto);
+  ): Promise<CalendarSlotOffers> {
+    return this.availability.getPublicSlotOffers(locationId, dto);
   }
 
   getRescheduleSlots(

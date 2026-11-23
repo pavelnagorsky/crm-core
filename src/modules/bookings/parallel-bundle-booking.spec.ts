@@ -1,4 +1,5 @@
 import {
+  AnyStaffRule,
   BookingExecutionMode,
   CalendarEventRepeatType,
   CalendarEventType,
@@ -12,6 +13,7 @@ import { AuditActorRole } from '../audit/enums/audit-actor-role.enum.js';
 import { BookingCreateFacade } from './booking-create.facade.js';
 import { BookingSelectionService } from './services/booking-selection.service.js';
 import { BookingSchedulingService } from './services/booking-scheduling.service.js';
+import { BookingStaffLoadService } from './services/booking-staff-load.service.js';
 import { BookingReservationService } from './services/booking-reservation.service.js';
 import { BookingSlotLockService } from './services/booking-slot-lock.service.js';
 import { BookingSetupService } from './services/setup/booking-setup.service.js';
@@ -81,6 +83,17 @@ function setup() {
     })),
     listShiftsForAvailability: vi.fn(async () => shifts()),
     listShiftsForStaff: vi.fn(async () => shifts()),
+    // Personal prices the price engine sees; a test may set some.
+    listPricingProfiles: vi.fn(
+      async (): Promise<
+        {
+          id: string;
+          name: string;
+          priceLevelId: string | null;
+          servicePrices: { serviceId: string; price: Prisma.Decimal }[];
+        }[]
+      > => [],
+    ),
   };
   const blockingEvents: CalendarEventWithCancellations[] = [
     {
@@ -109,6 +122,7 @@ function setup() {
     advanceBookingWindowDays: 30,
     slotIntervalMinutes: 30,
     minimumBookingNoticeMinutes: 0,
+    anyStaffRule: AnyStaffRule.CHEAPER_AND_FREER,
   };
   const locations = {
     findById: vi.fn(async () => location),
@@ -121,6 +135,9 @@ function setup() {
   const catalog = {
     resolveBundleForBooking: vi.fn(async () => bundle),
     resolveBundleForAvailability: vi.fn(async () => bundle),
+    resolveServicesForBooking: vi.fn(async (_location: string, ids: string[]) =>
+      ids.map((id) => services.find((service) => service.id === id)!),
+    ),
     loadForBooking: vi.fn(async () => ({ services, bundles: [bundle] })),
     loadCatalogSnapshot: vi.fn(
       async (_locationId: string, _consistency: ReadConsistency) => ({
@@ -137,11 +154,26 @@ function setup() {
     ),
   };
   const pricing = new PricingFacade(
-    new PricingSnapshotService(catalog as never),
+    new PricingSnapshotService(
+      catalog as never,
+      {
+        listLevels: vi.fn(async () => []),
+        listLevelPrices: vi.fn(async () => []),
+      } as never,
+      staff as never,
+      locations as never,
+      {
+        getOrLoad: (_cache: unknown, _key: unknown, load: () => unknown) =>
+          load(),
+      } as never,
+    ),
   );
   const orders = { priceProductItems: vi.fn(async () => []) };
   const db = {
     bookingItem: { groupBy: vi.fn(async () => []) },
+    $queryRaw: vi.fn(
+      async (): Promise<{ staffId: string; lastAssignedAt: Date }[]> => [],
+    ),
     calendarEvent: {
       findMany: vi.fn(async () => blockingEvents),
       create: vi.fn(async (args) => ({
@@ -190,6 +222,7 @@ function setup() {
     staff as never,
     calendar as never,
     pricing,
+    new BookingStaffLoadService(db as never),
   );
   const slots = new BookingSlotLockService(staff as never, calendar as never);
   const reservation = new BookingReservationService(
@@ -223,6 +256,7 @@ function setup() {
     selection,
     scheduling,
     createBillingFacadeStub(),
+    pricing,
   );
   const request = {
     locationId: 'location',
@@ -234,6 +268,7 @@ function setup() {
     timezone: 'UTC',
     manualItems: [],
     customEndAt: null,
+    staffRule: AnyStaffRule.CHEAPER_AND_FREER as AnyStaffRule,
   };
   return {
     services,
@@ -354,10 +389,12 @@ describe('Parallel bundle booking', () => {
       bundleId: 'bundle',
       startAt: '2026-11-10T10:00:00',
     });
-    // The preview is only shown: prices come through the cache.
-    expect(catalog.loadCatalogSnapshot.mock.calls).toEqual([
-      ['location', ReadConsistency.CACHED],
-    ]);
+    // The preview is only shown: it reads the cached snapshot, which fills itself from fresh sources.
+    expect(
+      catalog.loadCatalogSnapshot.mock.calls.every(
+        ([, consistency]) => consistency === ReadConsistency.FRESH,
+      ),
+    ).toBe(true);
     expect(
       preview.resolvedItems.map((item) => item.chargedPrice.toFixed(2)),
     ).toEqual(['48.00', '72.00']);
@@ -525,8 +562,15 @@ describe('Parallel bundle booking', () => {
         to: '2026-11-10',
       });
       expect(days.length).toBe(1);
+      const offers = await availability.getPublicSlotOffers(
+        'location',
+        selection,
+      );
       expect(
-        await availability.getAvailableSlots('location', selection),
+        offers.days.map((day) => ({
+          date: day.date,
+          slots: day.slots.map(({ time }) => ({ time })),
+        })),
       ).toEqual(days);
       for (const { time } of days[0].slots) {
         const preview = await resolve.resolveBookingSelection('location', {
@@ -760,8 +804,113 @@ describe('Parallel bundle booking', () => {
         new Prisma.Decimal(fixedPrice).toFixed(2),
       );
       expect(catalog.loadCatalogSnapshot.mock.calls).toEqual([
-        ['location', ReadConsistency.CACHED],
+        ['location', ReadConsistency.FRESH],
       ]);
     },
   );
+});
+
+describe('Price-dependent staff assignment', () => {
+  /** Service "a" is done by both staff; x asks 70, y asks 50. Both are free at the start. */
+  function priced(staffRule: AnyStaffRule) {
+    const context = setup();
+    context.staff.listPricingProfiles.mockResolvedValue([
+      {
+        id: 'x',
+        name: 'X',
+        priceLevelId: null,
+        servicePrices: [{ serviceId: 'a', price: new Prisma.Decimal(70) }],
+      },
+      {
+        id: 'y',
+        name: 'Y',
+        priceLevelId: null,
+        servicePrices: [{ serviceId: 'a', price: new Prisma.Decimal(50) }],
+      },
+    ]);
+    const request = {
+      ...context.request,
+      bundleId: null,
+      services: [context.request.services[0]],
+      executionMode: BookingExecutionMode.SEQUENTIAL,
+      staffRule,
+    };
+    return { ...context, request };
+  }
+
+  it.each([
+    [AnyStaffRule.CHEAPER_AND_FREER, 'y', '50.00'],
+    [AnyStaffRule.PRICIER, 'x', '70.00'],
+  ])(
+    'under %s takes the free staff member %s and prices the item with them',
+    async (staffRule, staffId, price) => {
+      const { scheduling, request } = priced(staffRule);
+      const [item] = await scheduling.resolveForBooking(request);
+      expect(item.staffId).toBe(staffId);
+      expect(item.staffPrice.toFixed(2)).toBe(price);
+      expect(item.chargedPrice.toFixed(2)).toBe(price);
+      expect(item.basePrice.toFixed(2)).toBe('60.00');
+    },
+  );
+
+  it('ranks by day load before price under LESS_LOADED', async () => {
+    const { scheduling, request, db } = priced(AnyStaffRule.LESS_LOADED);
+    db.bookingItem.groupBy.mockResolvedValue([
+      { staffId: 'y', _count: { id: 3 } },
+    ] as never);
+    const [item] = await scheduling.resolveForBooking(request);
+    expect(item.staffId).toBe('x');
+  });
+
+  it('gives the booking to whoever waited longest under ROUND_ROBIN', async () => {
+    const { scheduling, request, db } = priced(AnyStaffRule.ROUND_ROBIN);
+    db.$queryRaw.mockResolvedValue([
+      { staffId: 'x', lastAssignedAt: new Date('2026-11-05T10:00:00Z') },
+      { staffId: 'y', lastAssignedAt: new Date('2026-11-08T10:00:00Z') },
+    ]);
+    const [item] = await scheduling.resolveForBooking(request);
+    expect(item.staffId).toBe('x');
+    expect(db.$queryRaw).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not read booking history for rules that ignore it', async () => {
+    const { scheduling, request, db } = priced(AnyStaffRule.CHEAPER_AND_FREER);
+    await scheduling.resolveForBooking(request);
+    expect(db.$queryRaw).not.toHaveBeenCalled();
+  });
+
+  it('keeps an explicitly chosen staff member whatever the rule prefers', async () => {
+    const { scheduling, request } = priced(AnyStaffRule.CHEAPER_AND_FREER);
+    const [item] = await scheduling.resolveForBooking({
+      ...request,
+      requestedStaffId: 'x',
+    });
+    expect(item.staffId).toBe('x');
+    expect(item.staffPrice.toFixed(2)).toBe('70.00');
+  });
+
+  it('loads one price snapshot for ranking and the quote', async () => {
+    const { scheduling, request, catalog } = priced(
+      AnyStaffRule.CHEAPER_AND_FREER,
+    );
+    await scheduling.resolveForBooking(request);
+    expect(catalog.loadCatalogSnapshot).toHaveBeenCalledTimes(1);
+  });
+
+  it('prices a preview with the chosen staff member', async () => {
+    const { selection, catalog } = priced(AnyStaffRule.CHEAPER_AND_FREER);
+    const price = (dto: object) =>
+      selection
+        .price('location', { serviceIds: ['a'], ...dto })
+        .then((result) => result.serviceTotal.toFixed(2));
+    expect(await price({})).toBe('60.00');
+    expect(await price({ staffId: 'x' })).toBe('70.00');
+    expect(
+      await price({ staffAssignments: [{ serviceId: 'a', staffId: 'y' }] }),
+    ).toBe('50.00');
+    expect(await price({ items: [{ serviceId: 'a', staffId: 'y' }] })).toBe(
+      '50.00',
+    );
+    expect(catalog.loadCatalogSnapshot).toHaveBeenCalled();
+  });
 });

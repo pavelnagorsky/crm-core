@@ -72,6 +72,13 @@ export class StaffResponseDto {
   payoutNote: string | null;
 
   @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'Price level; null is the default level (base prices).',
+  })
+  priceLevelId: string | null;
+
+  @ApiProperty({
     type: () => ReviewStaffSummaryDto,
     nullable: true,
     description: 'Published reviews of this member; null while there are none',
@@ -110,6 +117,7 @@ export class StaffResponseDto {
     dto.employeeNumber = staff.employeeNumber;
     dto.payoutMethod = staff.payoutMethod;
     dto.payoutNote = staff.payoutNote;
+    dto.priceLevelId = staff.priceLevelId;
     dto.reviewSummary = reviewSummary
       ? ReviewStaffSummaryDto.fromSummary(reviewSummary)
       : null;

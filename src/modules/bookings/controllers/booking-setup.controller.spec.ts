@@ -23,6 +23,8 @@ import { BookingReadService } from '../services/read/booking-read.service.js';
 import { BillingFacade } from '../../billing/billing.facade.js';
 import { createBillingFacadeStub } from '../../billing/testing/billing-facade.stub.js';
 import { BookingSetupService } from '../services/setup/booking-setup.service.js';
+import { PricingFacade } from '../../pricing/pricing.facade.js';
+import { createPricingFacadeStub } from '../../pricing/testing/pricing-facade.stub.js';
 import { BookingHistoryReadService } from '../services/read/booking-history-read.service.js';
 import { BookingPaymentReadService } from '../services/read/booking-payment-read.service.js';
 import { BookingPaymentService } from '../services/write/booking-payment.service.js';
@@ -99,6 +101,7 @@ describe('Public booking setup products (HTTP)', () => {
       providers: [
         BookingsFacade,
         BookingSetupService,
+        { provide: PricingFacade, useValue: createPricingFacadeStub() },
         { provide: BookingHistoryReadService, useValue: {} },
         {
           provide: BookingPaymentService,
@@ -153,7 +156,11 @@ describe('Public booking setup products (HTTP)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     products.listForPublicCatalog.mockResolvedValue([product]);
-    settings.mockResolvedValue({ id: locationId, reviewsEnabled: false });
+    settings.mockResolvedValue({
+      id: locationId,
+      reviewsEnabled: false,
+      anyStaffEnabled: true,
+    });
   });
 
   afterAll(async () => app?.close());
@@ -169,6 +176,7 @@ describe('Public booking setup products (HTTP)', () => {
         staff: [],
         products: expectedProducts,
         isOnlineBookingAvailable: true,
+        anyStaffEnabled: true,
       });
       expect(products.listForPublicCatalog).toHaveBeenCalledWith(locationId);
       expect(catalog.loadForBooking).toHaveBeenCalledWith(locationId);
@@ -194,7 +202,11 @@ describe('Public booking setup products (HTTP)', () => {
   );
 
   it('adds staff review summaries to the public setup when reviews are enabled', async () => {
-    settings.mockResolvedValue({ id: locationId, reviewsEnabled: true });
+    settings.mockResolvedValue({
+      id: locationId,
+      reviewsEnabled: true,
+      anyStaffEnabled: true,
+    });
     staff.listActiveWithServices.mockResolvedValueOnce([
       {
         id: 'staff-1',

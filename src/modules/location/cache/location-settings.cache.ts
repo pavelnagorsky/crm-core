@@ -26,6 +26,8 @@ export const LOCATION_SETTINGS_SELECT = {
   bookingVisibility: true,
   isBookingConfirmationRequired: true,
   notifyClientOnStaffChanges: true,
+  anyStaffEnabled: true,
+  anyStaffRule: true,
   reviewsEnabled: true,
   googleReviewUrl: true,
   yandexReviewUrl: true,

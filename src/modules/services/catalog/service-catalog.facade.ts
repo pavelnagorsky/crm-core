@@ -16,6 +16,7 @@ import { ServiceBundleView } from './interfaces/service-bundle-view.interface.js
 import { ServiceCatalogCounts } from './interfaces/service-catalog-counts.interface.js';
 import { ServiceCatalogItem } from './interfaces/service-catalog-item.js';
 import { ServiceFilter } from './interfaces/service-filter.interface.js';
+import { ServicePriceEntry } from './interfaces/service-price-entry.interface.js';
 import { ServiceWithImage } from './interfaces/service-with-image.interface.js';
 import { ServiceWithStaffCount } from './interfaces/service-with-staff-count.interface.js';
 import { ServiceBundleReadService } from './services/service-bundle-read.service.js';
@@ -173,6 +174,13 @@ export class ServiceCatalogFacade {
     bundleId: string,
   ): Promise<ServiceBundleView> {
     return this.bundles.resolveActiveForBooking(locationId, bundleId);
+  }
+
+  findServicePriceEntries(
+    locationId: string,
+    serviceIds: readonly string[],
+  ): Promise<ServicePriceEntry[]> {
+    return this.services.findPriceEntries(locationId, serviceIds);
   }
 
   assertServiceIdsInLocation(

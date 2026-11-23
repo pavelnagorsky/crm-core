@@ -1,11 +1,11 @@
 import { createHash } from 'node:crypto';
-import { CreateBookingDto } from '../dto/create-booking.dto.js';
+import { PublicCreateBookingDto } from '../dto/public-create-booking.dto.js';
 import { ResolvedBookingChannel } from '../interfaces/resolved-booking-channel.interface.js';
 
 /** Hash guest intent before resolving mutable prices, client profiles or available staff. */
 export function bookingRequestHash(
   locationId: string,
-  dto: CreateBookingDto,
+  dto: PublicCreateBookingDto,
   attribution: ResolvedBookingChannel,
 ): string {
   return createHash('sha256')
@@ -38,6 +38,8 @@ export function bookingRequestHash(
         phone: dto.phone.trim(),
         email: dto.email ?? null,
         notes: dto.notes ?? null,
+        expectedTotal: dto.expectedTotal,
+        preferredStaffIds: dto.preferredStaffIds ?? null,
       }),
     )
     .digest('hex');

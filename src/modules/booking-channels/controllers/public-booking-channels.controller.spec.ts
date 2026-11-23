@@ -56,6 +56,12 @@ describe('Widget initialization headers (HTTP)', () => {
       catalog: { services: [], bundles: [], categories: [] },
       staff: [],
       products: [],
+      anyStaffEnabled: true,
+      prices: {
+        services: new Map(),
+        bundles: new Map(),
+        staffServicePrices: new Map(),
+      },
     });
     reviews.getLocationOverview.mockResolvedValue({
       summary: { count: 0, average: null, distribution: {} },
@@ -147,6 +153,12 @@ describe('Widget initialization headers (HTTP)', () => {
         catalog: { services: [], bundles: [], categories: [] },
         staff: [staffMember],
         products: [],
+        anyStaffEnabled: true,
+        prices: {
+          services: new Map(),
+          bundles: new Map(),
+          staffServicePrices: new Map(),
+        },
       });
     });
 

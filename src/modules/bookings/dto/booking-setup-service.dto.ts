@@ -4,6 +4,7 @@ import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
 import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { BookingServiceCatalog } from '../../services/catalog/interfaces/booking-service-catalog.interface.js';
 import { ServiceCatalogKind } from '../../services/enums/service-catalog-kind.enum.js';
+import { BookingPriceRange } from '../interfaces/booking-price-range.interface.js';
 
 export class BookingSetupServiceDto {
   @ApiProperty({ type: String })
@@ -24,14 +25,27 @@ export class BookingSetupServiceDto {
   @ApiProperty({ type: () => FileResponseDto, nullable: true })
   image: FileResponseDto | null;
 
-  @ApiPrice()
+  @ApiPrice({ description: 'Base price of the service' })
   price: string;
+
+  @ApiPrice({
+    description:
+      'Lowest price among the staff who perform the service; the base price when nobody does',
+  })
+  priceFrom: string;
+
+  @ApiPrice({
+    description:
+      'Highest price among the staff who perform the service; the base price when nobody does',
+  })
+  priceTo: string;
 
   @ApiProperty({ type: Number })
   durationMinutes: number;
 
   static fromEntity(
     service: BookingServiceCatalog['services'][number],
+    range: BookingPriceRange,
   ): BookingSetupServiceDto {
     const dto = new BookingSetupServiceDto();
     dto.id = service.id;
@@ -43,6 +57,8 @@ export class BookingSetupServiceDto {
       ? FileResponseDto.fromEntity(service.imageFile)
       : null;
     dto.price = MoneyUtils.format(service.price);
+    dto.priceFrom = MoneyUtils.format(range.priceFrom);
+    dto.priceTo = MoneyUtils.format(range.priceTo);
     dto.durationMinutes = service.durationMinutes;
     return dto;
   }

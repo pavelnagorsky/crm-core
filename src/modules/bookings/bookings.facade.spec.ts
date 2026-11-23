@@ -36,6 +36,9 @@ import { BookingCalendarReadService } from './services/read/booking-calendar-rea
 import { BookingReadService } from './services/read/booking-read.service.js';
 import { BillingFacade } from '../billing/billing.facade.js';
 import { BookingSetupService } from './services/setup/booking-setup.service.js';
+import { PricingFacade } from '../pricing/pricing.facade.js';
+import { pricingSnapshot } from '../pricing/engine/testing/pricing-snapshot.factory.js';
+import { createPricingFacadeStub } from '../pricing/testing/pricing-facade.stub.js';
 import { PaymentStatus } from '../payments/enums/payment-status.enum.js';
 import { PaymentsFacade } from '../payments/payments.facade.js';
 import { BookingHistoryReadService } from './services/read/booking-history-read.service.js';
@@ -189,6 +192,7 @@ describe('BookingsFacade.completeElapsed', () => {
         },
         BookingReadService,
         BookingSetupService,
+        { provide: PricingFacade, useValue: createPricingFacadeStub() },
         { provide: BookingHistoryReadService, useValue: {} },
         {
           provide: BookingPaymentService,
@@ -362,6 +366,7 @@ describe('BookingsFacade.updateStatus transactionality', () => {
         },
         BookingReadService,
         BookingSetupService,
+        { provide: PricingFacade, useValue: createPricingFacadeStub() },
         { provide: BookingHistoryReadService, useValue: {} },
         {
           provide: BookingPaymentService,
@@ -447,6 +452,7 @@ describe('BookingsFacade.search', () => {
         },
         BookingReadService,
         BookingSetupService,
+        { provide: PricingFacade, useValue: createPricingFacadeStub() },
         { provide: BookingHistoryReadService, useValue: {} },
         {
           provide: BookingPaymentService,
@@ -978,6 +984,15 @@ describe('BookingsFacade catalog selection', () => {
         },
         BookingReadService,
         BookingSetupService,
+        {
+          provide: PricingFacade,
+          useValue: createPricingFacadeStub(
+            pricingSnapshot({
+              services: { cut: 1000, color: 2050 },
+              bundles: [],
+            }),
+          ),
+        },
         { provide: BookingHistoryReadService, useValue: {} },
         {
           provide: BookingPaymentService,
@@ -1252,6 +1267,7 @@ describe('BookingsFacade.update details and item prices', () => {
         },
         BookingReadService,
         BookingSetupService,
+        { provide: PricingFacade, useValue: createPricingFacadeStub() },
         { provide: BookingHistoryReadService, useValue: {} },
         {
           provide: BookingPaymentService,
@@ -1772,6 +1788,7 @@ describe('BookingsFacade.update manual interval', () => {
         },
         BookingReadService,
         BookingSetupService,
+        { provide: PricingFacade, useValue: createPricingFacadeStub() },
         { provide: BookingHistoryReadService, useValue: {} },
         {
           provide: BookingPaymentService,
@@ -2073,6 +2090,7 @@ describe('BookingsFacade.addProduct', () => {
         },
         BookingReadService,
         BookingSetupService,
+        { provide: PricingFacade, useValue: createPricingFacadeStub() },
         { provide: BookingHistoryReadService, useValue: {} },
         {
           provide: BookingPaymentService,
@@ -2192,6 +2210,7 @@ describe('BookingsFacade.cancel draft product cleanup', () => {
         },
         BookingReadService,
         BookingSetupService,
+        { provide: PricingFacade, useValue: createPricingFacadeStub() },
         { provide: BookingHistoryReadService, useValue: {} },
         {
           provide: BookingPaymentService,

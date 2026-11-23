@@ -1,6 +1,8 @@
 import { BundlePricingMode } from '../enums/bundle-pricing-mode.enum.js';
 import { PricingBundleEntry } from '../interfaces/pricing-bundle-entry.interface.js';
+import { PricingLevelEntry } from '../interfaces/pricing-level-entry.interface.js';
 import { PricingSnapshot } from '../interfaces/pricing-snapshot.interface.js';
+import { PricingStaffEntry } from '../interfaces/pricing-staff-entry.interface.js';
 import { QuoteLineRequest } from '../interfaces/quote-line-request.interface.js';
 import { PricingSnapshotOptions } from './interfaces/pricing-snapshot-options.interface.js';
 
@@ -16,12 +18,35 @@ export function pricingSnapshot(
 ): PricingSnapshot {
   const services = options.services ?? DEFAULT_SERVICE_PRICES;
   return {
-    services: Object.entries(services).map(([id, price]) => ({ id, price })),
+    services: Object.entries(services).map(([id, price]) => ({
+      id,
+      price,
+      levelPrices: options.levelPrices?.[id] ?? {},
+    })),
     bundles: options.bundles ?? [
       sumBundle('sum-bundle'),
       fixedBundle('fixed-bundle', 12000),
     ],
+    levels: options.levels ?? [],
+    staff: options.staff ?? [],
   };
+}
+
+export function priceLevel(
+  id: string,
+  name: string,
+  isDefault = false,
+): PricingLevelEntry {
+  return { id, name, isDefault };
+}
+
+export function pricingStaff(
+  id: string,
+  levelId: string | null = null,
+  servicePrices: Record<string, number> = {},
+  name = id,
+): PricingStaffEntry {
+  return { id, name, levelId, servicePrices };
 }
 
 export function sumBundle(
