@@ -2,7 +2,7 @@
 # One-time Google Cloud setup of the application file buckets for one environment. Safe to re-run.
 #
 # Creates, with the same settings as the existing stage buckets:
-#   - <public>: uniform access, objects readable by anyone (images, public files);
+#   - <public>: uniform access, any object readable by its URL (images, public files), listing not public;
 #   - <private>: public access blocked, CORS for GET/HEAD of signed links (client documents);
 #   - a service account with roles/storage.objectAdmin on these two buckets ONLY
 #     (not on the project: it must not reach other environments or the backup bucket);
@@ -38,7 +38,7 @@ create_bucket() {
 
 create_bucket "$public_bucket"
 gcloud storage buckets add-iam-policy-binding "gs://$public_bucket" --project "$project" \
-  --member allUsers --role roles/storage.objectViewer >/dev/null
+  --member allUsers --role roles/storage.legacyObjectReader >/dev/null
 
 create_bucket "$private_bucket" --public-access-prevention
 cors="$(mktemp)"
