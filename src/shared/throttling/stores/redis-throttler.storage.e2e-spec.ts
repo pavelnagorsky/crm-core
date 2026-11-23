@@ -33,16 +33,16 @@ describe.skipIf(!process.env.REDIS_URL)('RedisThrottlerStorage (e2e)', () => {
 
   throttlerStorageContract(() => storage);
 
-  it('keeps hits under crm:throttle:<name>:<key>, each scored by its expiry, with the ttl as key TTL', async () => {
+  it('keeps hits under klendo:throttle:<name>:<key>, each scored by its expiry, with the ttl as key TTL', async () => {
     const before = Date.now();
     await storage.increment('ip', 60_000, 3, 60_000, 'n');
     await storage.increment('ip', 60_000, 3, 60_000, 'n');
 
-    const hits = await raw.zrange('crm:throttle:n:ip', '0', '-1', 'WITHSCORES');
+    const hits = await raw.zrange('klendo:throttle:n:ip', '0', '-1', 'WITHSCORES');
     expect(hits).toHaveLength(4);
     expect(Number(hits[1])).toBeGreaterThanOrEqual(before + 60_000);
     expect(Number(hits[3])).toBeLessThanOrEqual(Date.now() + 60_000);
-    const pttl = await raw.pttl('crm:throttle:n:ip');
+    const pttl = await raw.pttl('klendo:throttle:n:ip');
     expect(pttl).toBeGreaterThan(59_000);
     expect(pttl).toBeLessThanOrEqual(60_000);
   });
@@ -51,15 +51,15 @@ describe.skipIf(!process.env.REDIS_URL)('RedisThrottlerStorage (e2e)', () => {
     for (let i = 0; i < 4; i++)
       await storage.increment('ip', 1_000, 3, 10_000, 'burst');
 
-    expect(await raw.exists('crm:throttle:burst:ip')).toBe(0);
-    expect(await raw.get('crm:throttle:burst:ip:block')).toBe('4');
+    expect(await raw.exists('klendo:throttle:burst:ip')).toBe(0);
+    expect(await raw.get('klendo:throttle:burst:ip:block')).toBe('4');
   });
 
   it('without a block duration sets no block key and does not count the rejected hit', async () => {
     for (let i = 0; i < 3; i++)
       await storage.increment('ip', 60_000, 2, 0, 'n');
 
-    expect(await raw.zcard('crm:throttle:n:ip')).toBe(2);
-    expect(await raw.exists('crm:throttle:n:ip:block')).toBe(0);
+    expect(await raw.zcard('klendo:throttle:n:ip')).toBe(2);
+    expect(await raw.exists('klendo:throttle:n:ip:block')).toBe(0);
   });
 });

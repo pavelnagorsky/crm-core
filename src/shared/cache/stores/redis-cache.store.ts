@@ -10,8 +10,8 @@ import {
 
 /**
  * Cache entries and invalidation revisions in Redis, shared by all replicas:
- * `crm:cache:rev` (global counter), `crm:cache:tag:<dependency>` (revision of the last invalidation)
- * and `crm:cache:entry:<key>` (hash with the entry, the only keys with a TTL).
+ * `klendo:cache:rev` (global counter), `klendo:cache:tag:<dependency>` (revision of the last invalidation)
+ * and `klendo:cache:entry:<key>` (hash with the entry, the only keys with a TTL).
  */
 @Injectable()
 export class RedisCacheStore implements CacheStore {

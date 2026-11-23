@@ -1,11 +1,11 @@
-// Collects stdout of every container of the crm-core compose project and ships it to Loki.
+// Collects stdout of every container of the klendo-core compose project and ships it to Loki.
 
 discovery.docker "containers" {
   host = "unix:///var/run/docker.sock"
 
   filter {
     name   = "label"
-    values = ["com.docker.compose.project=crm-core"]
+    values = ["com.docker.compose.project=klendo-core"]
   }
 }
 
@@ -15,6 +15,13 @@ discovery.relabel "containers" {
   rule {
     source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
     target_label  = "service"
+  }
+
+  // Replicas share service="api": the container name ("klendo-core-api-3") tells them apart.
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/?(.*)"
+    target_label  = "container"
   }
 }
 
@@ -27,7 +34,7 @@ loki.source.docker "containers" {
 loki.process "logs" {
   // Stack traces continue on lines that do not start with "[timestamp]": keep them in one entry.
   stage.match {
-    selector = "{service=~\"api-1|api-2|worker\"}"
+    selector = "{service=~\"api|worker\"}"
 
     stage.multiline {
       firstline     = "^\\[\\d{4}-\\d{2}-\\d{2} "

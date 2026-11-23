@@ -58,16 +58,15 @@ describe('AppThrottlerGuard (HTTP)', () => {
     await request(app.getHttpServer()).get('/open').expect(200);
   });
 
-  it('caps bursts per IP across all routes', async () => {
+  it('limits each endpoint separately at 300 per minute', async () => {
     const server = app.getHttpServer();
-    const responses = await Promise.all(
-      Array.from({ length: 60 }, (_, i) =>
-        request(server).get(i % 2 ? '/open' : '/open-too'),
-      ),
-    );
-    const statuses = responses.map((r) => r.status);
-    expect(statuses.filter((s) => s === 200)).toHaveLength(50);
-    expect(statuses.filter((s) => s === 429)).toHaveLength(10);
+    const statuses: number[] = [];
+    for (let i = 0; i < 302; i++) {
+      statuses.push((await request(server).get('/open')).status);
+    }
+    expect(statuses.filter((s) => s === 200)).toHaveLength(300);
+    expect(statuses.slice(300)).toEqual([429, 429]);
+    await request(server).get('/open-too').expect(200);
   });
 
   it('never throttles routes marked with SkipRateLimit', async () => {

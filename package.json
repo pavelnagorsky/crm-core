@@ -1,5 +1,5 @@
 {
-  "name": "crm-core",
+  "name": "klendo-core",
   "version": "0.0.1",
   "description": "",
   "author": "",
@@ -26,7 +26,7 @@
     "db:push": "prisma db push",
     "postinstall": "prisma generate",
     "typecheck": "tsc --noEmit",
-    "template:reviews-import": "tsx --env-file=.env scripts/build-reviews-import-template.ts"
+    "template:reviews-import": "tsx scripts/build-reviews-import-template.ts"
   },
   "dependencies": {
     "@google-cloud/storage": "^8.2.0",

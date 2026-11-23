@@ -12,7 +12,7 @@ import { IRedisConfig } from '../../config/interfaces/redis-config.interface.js'
 import { RedisConnectionState } from './enums/redis-connection-state.enum.js';
 
 /** Set by hand, not with the ioredis `keyPrefix` option: that option does not reach keys built inside Lua. */
-const REDIS_KEY_PREFIX = 'crm:';
+const REDIS_KEY_PREFIX = 'klendo:';
 
 /** Commands fail fast instead of waiting for a connection: every caller falls back to working without Redis. */
 const CLIENT_OPTIONS: RedisOptions = {
@@ -76,7 +76,7 @@ export class RedisService implements OnModuleInit, OnApplicationShutdown {
     return this.client?.status === 'ready' && !this.unresponsive;
   }
 
-  /** `crm:` + parts joined with `:`. */
+  /** `klendo:` + parts joined with `:`. */
   key(...parts: string[]): string {
     return REDIS_KEY_PREFIX + parts.join(':');
   }

@@ -35,20 +35,20 @@ describe.skipIf(!process.env.REDIS_URL)('RedisSlidingWindowStore (e2e)', () => {
 
   slidingWindowStoreContract(() => store);
 
-  it('keeps the allowed attempts in a sorted set under crm:<key> with the window as TTL', async () => {
+  it('keeps the allowed attempts in a sorted set under klendo:<key> with the window as TTL', async () => {
     const key = 'booking-rate:phone:+375291112233';
     for (let i = 0; i < 10; i++)
       expect(await store.tryAcquire(key, 10, WINDOW_MS)).toBe(true);
 
     expect(await store.tryAcquire(key, 10, WINDOW_MS)).toBe(false);
-    expect(await raw.zcard(`crm:${key}`)).toBe(10);
-    const pttl = await raw.pttl(`crm:${key}`);
+    expect(await raw.zcard(`klendo:${key}`)).toBe(10);
+    const pttl = await raw.pttl(`klendo:${key}`);
     expect(pttl).toBeGreaterThan(WINDOW_MS - 5_000);
     expect(pttl).toBeLessThanOrEqual(WINDOW_MS);
   });
 
   it('creates no key for a rejected attempt', async () => {
     expect(await store.tryAcquire('k', 0, WINDOW_MS)).toBe(false);
-    expect(await raw.exists('crm:k')).toBe(0);
+    expect(await raw.exists('klendo:k')).toBe(0);
   });
 });

@@ -34,13 +34,13 @@ describe.skipIf(!process.env.REDIS_URL)('RedisCronLockStore (e2e)', () => {
 
   cronLockStoreContract(() => store);
 
-  it('stores the holder under crm:cron:<name>:<slot> for an hour', async () => {
+  it('stores the holder under klendo:cron:<name>:<slot> for an hour', async () => {
     await store.tryAcquire('Jobs.run', 7);
 
-    expect(await raw.get('crm:cron:Jobs.run:7')).toBe(
+    expect(await raw.get('klendo:cron:Jobs.run:7')).toBe(
       `${hostname()}:${process.pid}`,
     );
-    const ttl = await raw.ttl('crm:cron:Jobs.run:7');
+    const ttl = await raw.ttl('klendo:cron:Jobs.run:7');
     expect(ttl).toBeGreaterThan(3590);
     expect(ttl).toBeLessThanOrEqual(3600);
   });

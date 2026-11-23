@@ -9,7 +9,7 @@ import readableLogTransport from './readable-log.transport.js';
 describe('Readable rotating logs', () => {
   let directory: string;
   beforeEach(async () => {
-    directory = await mkdtemp(join(tmpdir(), 'crm-logs-'));
+    directory = await mkdtemp(join(tmpdir(), 'klendo-logs-'));
   });
   afterEach(async () => {
     await rm(directory, { recursive: true, force: true });

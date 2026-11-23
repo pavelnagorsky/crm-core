@@ -6,7 +6,7 @@ import { RedisSlidingWindowStore } from './redis-sliding-window.store.js';
 function createStore(available = true) {
   const redis = {
     available,
-    key: (...parts: string[]) => 'crm:' + parts.join(':'),
+    key: (...parts: string[]) => 'klendo:' + parts.join(':'),
     eval: vi.fn(),
   };
   const store = new RedisSlidingWindowStore(redis as unknown as RedisService);
@@ -31,7 +31,7 @@ describe('RedisSlidingWindowStore', () => {
 
     expect(redis.eval).toHaveBeenCalledWith(
       SLIDING_WINDOW_SCRIPT,
-      ['crm:booking-rate:ip:203.0.113.5'],
+      ['klendo:booking-rate:ip:203.0.113.5'],
       [1_000_000, 600_000, 30, expect.any(String)],
     );
     expect(redis.eval.mock.calls[0][2][3]).not.toBe(

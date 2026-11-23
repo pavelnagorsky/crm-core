@@ -1,7 +1,7 @@
-name: crm-core
+name: klendo-core
 
 x-app: &app
-  image: crm-core:${IMAGE_TAG:-local}
+  image: klendo-core:${IMAGE_TAG:-local}
   init: true
   restart: unless-stopped
   stop_grace_period: 30s
@@ -12,6 +12,8 @@ x-app: &app
     REDIS_URL: redis://redis:6379
     DATABASE_POOL_SIZE: ${DATABASE_POOL_SIZE:-10}
     APP_ROLE: api
+    # Key files from ./secrets are mounted at /run/secrets (same path in every environment).
+    GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/google-credentials.json
     # Empty: log to stdout only (collected by docker), no files.
     LOG_DIRECTORY: ''
   depends_on:
@@ -76,7 +78,7 @@ services:
     build:
       context: .
       target: migrate
-    image: crm-core:${IMAGE_TAG:-local}-migrate
+    image: klendo-core:${IMAGE_TAG:-local}-migrate
     env_file: .env
     environment:
       DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://crm:crm@postgres:5432/crm}
@@ -86,14 +88,15 @@ services:
         required: false
     restart: 'no'
 
-  api-1:
+  # HTTP API replicas. Count per server: API_REPLICAS in .env. lb reaches all of them via the `api` DNS name.
+  # Deploys replace them without downtime with scripts/deploy/rollout.sh (compose itself restarts all at once).
+  api:
     <<: *app
     build:
       context: .
       target: runtime
-
-  api-2:
-    <<: *app
+    deploy:
+      replicas: ${API_REPLICAS:-2}
 
   worker:
     <<: *app
@@ -106,10 +109,11 @@ services:
     ports:
       - 127.0.0.1:${APP_PORT:-3000}:80
     volumes:
-      - ./docker/nginx/lb.conf:/etc/nginx/conf.d/default.conf:ro
+      # The directory, not the file: git checkout replaces lb.conf with a new inode, which a single-file
+      # bind mount would keep hiding. The deploy reloads nginx to apply a changed config.
+      - ./docker/nginx:/etc/nginx/conf.d:ro
     depends_on:
-      - api-1
-      - api-2
+      - api
     mem_limit: 64m
     logging:
       driver: json-file
@@ -119,7 +123,7 @@ services:
     restart: unless-stopped
 
   # Logs: alloy reads container stdout via the docker socket, loki keeps it for 30 days,
-  # grafana is the UI (dashboard "CRM — логи" is provisioned). Never expose grafana publicly.
+  # grafana is the UI (dashboard "Klendo — логи" is provisioned). Never expose grafana publicly.
   loki:
     image: grafana/loki:3.6.22
     command: [-config.file=/etc/loki/loki.yaml]
@@ -176,6 +180,27 @@ services:
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
     depends_on:
       - loki
+    mem_limit: 256m
+    logging: *log-rotation
+    restart: unless-stopped
+
+  # Daily pg_dump to a private GCS bucket (docs/backups.md). Server only: enable with
+  # COMPOSE_PROFILES=backup in .env; needs secrets/backup-gcs.json (create-only key) and BACKUP_BUCKET.
+  # One-off backup: docker compose run --rm backup now
+  backup:
+    build: ./docker/backup
+    image: klendo-core-backup:${IMAGE_TAG:-local}
+    profiles: [backup]
+    environment:
+      BACKUP_DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://crm:crm@postgres:5432/crm}
+      BACKUP_BUCKET: ${BACKUP_BUCKET:-}
+      BACKUP_PREFIX: ${BACKUP_PREFIX:-postgres}
+      # Cron in TZ below: 03:30 Minsk, after the night crons and before the morning.
+      BACKUP_CRON: ${BACKUP_CRON:-30 3 * * *}
+      TZ: ${BACKUP_TZ:-Europe/Minsk}
+      RCLONE_GCS_SERVICE_ACCOUNT_FILE: /run/secrets/backup-gcs.json
+    volumes:
+      - ./secrets/backup-gcs.json:/run/secrets/backup-gcs.json:ro
     mem_limit: 256m
     logging: *log-rotation
     restart: unless-stopped

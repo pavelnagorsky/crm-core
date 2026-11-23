@@ -39,7 +39,7 @@ jobs:
         uses: appleboy/ssh-action@v1
         env:
           DEPLOY_SHA: ${{ github.sha }}
-          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/crm-core' }}
+          DEPLOY_PATH: ${{ vars.DEPLOY_PATH || '/opt/klendo-core' }}
           APP_PORT: ${{ vars.APP_PORT || '3000' }}
         with:
           host: ${{ secrets.DEPLOY_HOST }}
@@ -67,10 +67,21 @@ jobs:
 
             docker compose up -d --no-deps redis loki alloy grafana lb
 
-            # One service at a time: while one api restarts, lb serves the other.
-            for service in api-1 api-2 worker; do
-              if ! docker compose up -d --no-deps --wait --wait-timeout 180 "$service"; then
-                docker compose logs --tail 100 "$service"
-                exit 1
-              fi
-            done
+            # lb is not recreated when only docker/nginx/lb.conf changed: reload it. A broken config fails the
+            # deploy here, and nginx keeps serving with the previous one.
+            docker compose exec -T lb nginx -t
+            docker compose exec -T lb nginx -s reload
+
+            # API: new replicas start next to the old ones and take over once healthy (no downtime).
+            bash scripts/deploy/rollout.sh api 180
+
+            # Daily database backups: only where enabled (COMPOSE_PROFILES=backup in the server .env).
+            if docker compose config --services | grep -qx backup; then
+              docker compose up -d --no-deps --build backup
+            fi
+
+            # Crons run in a single worker: a short gap on restart is fine.
+            if ! docker compose up -d --no-deps --wait --wait-timeout 180 worker; then
+              docker compose logs --tail 100 worker
+              exit 1
+            fi
