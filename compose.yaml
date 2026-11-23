@@ -180,6 +180,27 @@ services:
     logging: *log-rotation
     restart: unless-stopped
 
+  # Daily pg_dump to a private GCS bucket (docs/backups.md). Server only: enable with
+  # COMPOSE_PROFILES=backup in .env; needs secrets/backup-gcs.json (create-only key) and BACKUP_BUCKET.
+  # One-off backup: docker compose run --rm backup now
+  backup:
+    build: ./docker/backup
+    image: crm-core-backup:${IMAGE_TAG:-local}
+    profiles: [backup]
+    environment:
+      BACKUP_DATABASE_URL: ${DOCKER_DATABASE_URL:-postgresql://crm:crm@postgres:5432/crm}
+      BACKUP_BUCKET: ${BACKUP_BUCKET:-}
+      BACKUP_PREFIX: ${BACKUP_PREFIX:-postgres}
+      # Cron in TZ below: 03:30 Minsk, after the night crons and before the morning.
+      BACKUP_CRON: ${BACKUP_CRON:-30 3 * * *}
+      TZ: ${BACKUP_TZ:-Europe/Minsk}
+      RCLONE_GCS_SERVICE_ACCOUNT_FILE: /run/secrets/backup-gcs.json
+    volumes:
+      - ./secrets/backup-gcs.json:/run/secrets/backup-gcs.json:ro
+    mem_limit: 256m
+    logging: *log-rotation
+    restart: unless-stopped
+
 volumes:
   postgres-data:
   loki-data:

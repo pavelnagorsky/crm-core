@@ -70,6 +70,11 @@ jobs:
             # API: new replicas start next to the old ones and take over once healthy (no downtime).
             bash scripts/deploy/rollout.sh api 180
 
+            # Daily database backups: only where enabled (COMPOSE_PROFILES=backup in the server .env).
+            if docker compose config --services | grep -qx backup; then
+              docker compose up -d --no-deps --build backup
+            fi
+
             # Crons run in a single worker: a short gap on restart is fine.
             if ! docker compose up -d --no-deps --wait --wait-timeout 180 worker; then
               docker compose logs --tail 100 worker
