@@ -6,7 +6,9 @@ import {
   EmailSkipReason,
   EmailStatus,
 } from '@prisma/client';
+import { MetricsService } from '../../../shared/metrics/metrics.service.js';
 import { EmailDeliveryService } from './email-delivery.service.js';
+import { EmailMetrics } from './email.metrics.js';
 
 const log = {
   find: vi.fn(),
@@ -23,6 +25,7 @@ const create = (clientNotificationsEnabled = true) =>
     log as never,
     channel as never,
     new ConfigService({ notificationsConfig: { clientNotificationsEnabled } }),
+    new EmailMetrics(new MetricsService()),
   );
 const message = (overrides: Partial<EmailMessage> = {}): EmailMessage =>
   ({

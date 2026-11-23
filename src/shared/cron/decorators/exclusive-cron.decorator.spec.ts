@@ -6,7 +6,9 @@ import {
 } from '@nestjs/schedule';
 import { Test } from '@nestjs/testing';
 import { RedisService } from '../../redis/redis.service.js';
+import { MetricsService } from '../../metrics/metrics.service.js';
 import { CronLockService } from '../cron-lock.service.js';
+import { CronRunService } from '../cron-run.service.js';
 import { MemoryCronLockStore } from '../stores/memory-cron-lock.store.js';
 import { RedisCronLockStore } from '../stores/redis-cron-lock.store.js';
 import { ExclusiveCron } from './exclusive-cron.decorator.js';
@@ -30,15 +32,20 @@ class Jobs {
   }
 }
 
+function registerRunner(lock: CronLockService): CronRunService {
+  const runner = new CronRunService(lock, new MetricsService());
+  runner.onModuleInit();
+  return runner;
+}
+
 function registerLock(acquire: (name: string) => Promise<boolean>) {
   const lock = new CronLockService(new MemoryCronLockStore());
   const spy = vi.spyOn(lock, 'acquire').mockImplementation(acquire);
-  lock.onModuleInit();
-  return { lock, spy };
+  return { runner: registerRunner(lock), spy };
 }
 
 describe('ExclusiveCron', () => {
-  let registered: CronLockService | null = null;
+  let registered: CronRunService | null = null;
 
   afterEach(() => {
     registered?.onModuleDestroy();
@@ -82,7 +89,7 @@ describe('ExclusiveCron', () => {
     }
   });
 
-  it('runs without a lock when no lock service is registered', async () => {
+  it('runs directly when no runner is registered', async () => {
     const jobs = new Jobs();
 
     await expect(jobs.double()).resolves.toBe(42);
@@ -90,8 +97,8 @@ describe('ExclusiveCron', () => {
   });
 
   it('runs when the lock is acquired, forwarding arguments and this', async () => {
-    const { lock, spy } = registerLock(async () => true);
-    registered = lock;
+    const { runner, spy } = registerLock(async () => true);
+    registered = runner;
     const jobs = new Jobs();
 
     await expect(jobs.double(5)).resolves.toBe(10);
@@ -101,8 +108,7 @@ describe('ExclusiveCron', () => {
   });
 
   it('skips the run when another process holds the lock', async () => {
-    const { lock } = registerLock(async () => false);
-    registered = lock;
+    registered = registerLock(async () => false).runner;
     const jobs = new Jobs();
 
     await expect(jobs.double(5)).resolves.toBeUndefined();
@@ -116,9 +122,9 @@ describe('ExclusiveCron', () => {
       key: (...parts: string[]) => `klendo:${parts.join(':')}`,
       setIfAbsent: vi.fn().mockRejectedValue(new Error('Command timed out')),
     } as unknown as RedisService;
-    const lock = new CronLockService(new RedisCronLockStore(redis));
-    lock.onModuleInit();
-    registered = lock;
+    registered = registerRunner(
+      new CronLockService(new RedisCronLockStore(redis)),
+    );
     const jobs = new Jobs();
 
     await expect(jobs.double()).resolves.toBe(42);

@@ -1,12 +1,14 @@
 import { ConfigService } from '@nestjs/config';
 import { createServer } from 'node:net';
+import { MetricsServer } from './metrics.server.js';
 import { MetricsService } from './metrics.service.js';
 
 const HOST = '127.0.0.1';
 
-function serviceOn(port: number): MetricsService {
-  return new MetricsService(
+function serverOn(port: number): MetricsServer {
+  return new MetricsServer(
     new ConfigService({ metrics: { host: HOST, port } }),
+    new MetricsService(),
   );
 }
 
@@ -19,14 +21,14 @@ async function freePort(): Promise<number> {
   return port;
 }
 
-describe('MetricsService', () => {
-  const started: MetricsService[] = [];
+describe('MetricsServer', () => {
+  const started: MetricsServer[] = [];
 
-  async function start(port: number): Promise<MetricsService> {
-    const service = serviceOn(port);
-    started.push(service);
-    await service.onModuleInit();
-    return service;
+  async function start(port: number): Promise<MetricsServer> {
+    const server = serverOn(port);
+    started.push(server);
+    await server.onModuleInit();
+    return server;
   }
 
   afterEach(async () => {
@@ -62,16 +64,20 @@ describe('MetricsService', () => {
     const port = await freePort();
     await start(port);
 
-    await expect(start(port)).resolves.toBeInstanceOf(MetricsService);
+    await expect(start(port)).resolves.toBeInstanceOf(MetricsServer);
   });
 
   it('starts no server on port 0', async () => {
-    const service = await start(0);
+    const server = await start(0);
 
-    await expect(service.onApplicationShutdown()).resolves.toBeUndefined();
+    await expect(server.onApplicationShutdown()).resolves.toBeUndefined();
   });
+});
 
+describe('MetricsService', () => {
   it('keeps a separate registry per instance', () => {
-    expect(serviceOn(0).registry).not.toBe(serviceOn(0).registry);
+    expect(new MetricsService().registry).not.toBe(
+      new MetricsService().registry,
+    );
   });
 });
