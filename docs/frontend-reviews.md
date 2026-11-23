@@ -197,7 +197,7 @@ reviews: { summary: ReviewSummaryDto; latest: PublicReviewDto[] /* послед�
 
 | API | Что делает |
 | --- | --- |
-| Шаблон (статический файл, не API) | [https://storage.googleapis.com/crm-clients-bucket/internal/reviews-import-template.xlsx](https://storage.googleapis.com/crm-clients-bucket/internal/reviews-import-template.xlsx) — колонки, строка-пример и лист «Подсказки». Скачивается обычной ссылкой без токена, как шаблон импорта клиентов |
+| Шаблон (статический файл, не API) | стейдж: [https://storage.googleapis.com/crm-clients-bucket/internal/reviews-import-template.xlsx](https://storage.googleapis.com/crm-clients-bucket/internal/reviews-import-template.xlsx); прод: [https://storage.googleapis.com/klendo-prod-public/internal/reviews-import-template.xlsx](https://storage.googleapis.com/klendo-prod-public/internal/reviews-import-template.xlsx). Адрес брать из конфигурации окружения фронта — колонки, строка-пример и лист «Подсказки». Скачивается обычной ссылкой без токена, как шаблон импорта клиентов |
 | `POST /locations/:locationId/reviews/import` | `multipart/form-data`, поле `file`. Валидные строки записываются сразу, предпросмотра нет |
 
 **Файл:** `.xlsx`, до 25 МБ и 50 000 строк, читается первый лист. Обязательные колонки — «Оценка», «Дата», «Текст». Необязательные — «Автор» (или «Имя» + «Фамилия»), «Сотрудник» (можно несколько через запятую), «Источник», «Ответ», «ID». Сервер понимает и английские заголовки. Даты считаются по времени филиала. Полные правила — в `docs/reviews.md`, раздел «Импорт из xlsx», и на листе «Подсказки» шаблона.
