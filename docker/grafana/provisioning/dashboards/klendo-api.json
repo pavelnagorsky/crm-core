@@ -1179,6 +1179,128 @@
         "x": 16,
         "y": 39
       }
+    },
+    {
+      "id": 21,
+      "type": "row",
+      "title": "Пул соединений БД",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 47
+      },
+      "panels": []
+    },
+    {
+      "id": 22,
+      "type": "timeseries",
+      "title": "Ждут соединения",
+      "description": "Запросы, которым не хватило соединения из пула (DATABASE_POOL_SIZE). Больше 0 долго — пул мал или запросы медленные.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "custom": {
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "klendo_db_pool_connections{job=\"app\", service=~\"$service\", container=~\"$container\", state=\"waiting\"}",
+          "legendFormat": "{{container}}"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 48
+      }
+    },
+    {
+      "id": 23,
+      "type": "timeseries",
+      "title": "Открыто / свободно",
+      "description": "На процесс; Postgres видит сумму по всем процессам (панель на «Klendo — инфраструктура»).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "prometheus"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "custom": {
+            "fillOpacity": 10,
+            "showPoints": "never",
+            "stacking": {
+              "mode": "none"
+            }
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "klendo_db_pool_connections{job=\"app\", service=~\"$service\", container=~\"$container\", state=\"total\"}",
+          "legendFormat": "{{container}} открыто"
+        },
+        {
+          "refId": "B",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "klendo_db_pool_connections{job=\"app\", service=~\"$service\", container=~\"$container\", state=\"idle\"}",
+          "legendFormat": "{{container}} свободно"
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 48
+      }
     }
   ]
 }
