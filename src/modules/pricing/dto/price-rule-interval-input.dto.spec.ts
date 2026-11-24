@@ -1,6 +1,5 @@
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
-import { describe, expect, it } from 'vitest';
 import { PriceRuleIntervalInputDto } from './price-rule-interval-input.dto.js';
 
 const errorsOf = (start: string, end: string) =>

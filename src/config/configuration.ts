@@ -1,5 +1,6 @@
 import { appRole } from './app-role.config.js';
 import { databasePoolSize } from './database.config.js';
+import { metricsHost, metricsPort } from './metrics.config.js';
 import { redisUrl } from './redis.config.js';
 import { stateBackend } from './state.config.js';
 
@@ -40,6 +41,10 @@ export default () => {
     },
     redis: {
       url: redis,
+    },
+    metrics: {
+      host: metricsHost(),
+      port: metricsPort(),
     },
     // Cache, rate limits and cron locks: one switch for all of them, see StateBackend.
     state: {

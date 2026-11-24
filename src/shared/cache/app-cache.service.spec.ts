@@ -1,6 +1,9 @@
 import { Prisma } from '@prisma/client';
 import { Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { MetricsService } from '../metrics/metrics.service.js';
+import { metricValue } from '../metrics/testing/metric-value.js';
+import { AppCacheMetrics } from './app-cache.metrics.js';
 import { AppCacheService } from './app-cache.service.js';
 import { cacheKey } from './cache-key.js';
 import { CacheValueCodec } from './cache-value.codec.js';
@@ -30,13 +33,19 @@ function deferred<T>() {
 describe('AppCacheService', () => {
   let cache: AppCacheService;
   let store: MemoryCacheStore;
+  let metrics: MetricsService;
   let warn: ReturnType<typeof vi.spyOn>;
   let error: ReturnType<typeof vi.spyOn>;
   beforeEach(() => {
     warn = vi.spyOn(Logger.prototype, 'warn').mockImplementation(() => {});
     error = vi.spyOn(Logger.prototype, 'error').mockImplementation(() => {});
     store = new MemoryCacheStore();
-    cache = new AppCacheService(store, new ConfigService());
+    metrics = new MetricsService();
+    cache = new AppCacheService(
+      store,
+      new ConfigService(),
+      new AppCacheMetrics(metrics),
+    );
   });
   afterEach(() => {
     cache.onModuleDestroy();
@@ -482,5 +491,55 @@ describe('AppCacheService', () => {
   it('uses unique namespace identifiers', () => {
     const namespaces = Object.values(CacheNamespace);
     expect(new Set(namespaces).size).toBe(namespaces.length);
+  });
+
+  describe('metrics', () => {
+    const reads = (result: string) =>
+      metricValue(metrics.registry, 'klendo_cache_reads_total', {
+        namespace: CacheNamespace.BRAND_PROFILE,
+        result,
+      });
+    const load = async () => ({ name: 'Acme' });
+
+    it('counts a miss, then hits', async () => {
+      await cache.getOrLoad(definition, { id: '1' }, load);
+      await cache.getOrLoad(definition, { id: '1' }, load);
+      await cache.getOrLoad(definition, { id: '1' }, load);
+
+      expect(await reads('miss')).toBe(1);
+      expect(await reads('hit')).toBe(2);
+    });
+
+    it('counts reads that skip an unavailable store', async () => {
+      vi.spyOn(store, 'available', 'get').mockReturnValue(false);
+
+      await cache.getOrLoad(definition, { id: '1' }, load);
+
+      expect(await reads('bypass')).toBe(1);
+      expect(await reads('miss')).toBeUndefined();
+    });
+
+    it('counts failed store reads', async () => {
+      vi.spyOn(store, 'read').mockRejectedValue(new Error('Command timed out'));
+
+      await cache.getOrLoad(definition, { id: '1' }, load);
+
+      expect(await reads('error')).toBe(1);
+    });
+
+    it('counts nothing while the cache is disabled', async () => {
+      const own = new MetricsService();
+      const disabled = new AppCacheService(
+        store,
+        new ConfigService({ cache: { enabled: false } }),
+        new AppCacheMetrics(own),
+      );
+
+      await disabled.getOrLoad(definition, { id: '1' }, load);
+
+      expect(
+        await metricValue(own.registry, 'klendo_cache_reads_total'),
+      ).toBeUndefined();
+    });
   });
 });

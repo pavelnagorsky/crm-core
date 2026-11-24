@@ -106,6 +106,8 @@ const regularExpressions = {
   referrerHostPrefix: /^(?:www\d*|m)\./,
   // Country zone after a search engine name - ru, com, com.tr, co.uk
   searchEngineZone: /^[a-z]{2,3}(?:\.[a-z]{2,3})?$/,
+  // Express route template that starts with a wildcard and so matches any path - *path, {*path}, {/*splat}
+  catchAllRoute: /^\/?\{?\/?\*/,
 };
 
 export default regularExpressions;

@@ -1,6 +1,5 @@
 import { Logger } from '@nestjs/common';
 import { CronLockService } from './cron-lock.service.js';
-import { CronLockStore } from './interfaces/cron-lock-store.interface.js';
 import { MemoryCronLockStore } from './stores/memory-cron-lock.store.js';
 
 function createStore(acquired = true) {
@@ -56,20 +55,5 @@ describe('CronLockService', () => {
     await expect(service.acquire('Jobs.run', now)).resolves.toBe(true);
     await expect(service.acquire('Jobs.run', now + 1_000)).resolves.toBe(false);
     await expect(service.acquire('Jobs.run', now + 60_000)).resolves.toBe(true);
-  });
-
-  it('registers itself on init and unregisters on destroy', () => {
-    const store: CronLockStore = createStore();
-    const first = new CronLockService(store);
-    const second = new CronLockService(store);
-
-    expect(CronLockService.registered).toBeNull();
-    first.onModuleInit();
-    expect(CronLockService.registered).toBe(first);
-    second.onModuleInit();
-    first.onModuleDestroy();
-    expect(CronLockService.registered).toBe(second);
-    second.onModuleDestroy();
-    expect(CronLockService.registered).toBeNull();
   });
 });

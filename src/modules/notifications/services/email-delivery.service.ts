@@ -20,6 +20,7 @@ import { EmailMessageMeta } from '../interfaces/email-message-meta.interface.js'
 import { TERMINAL_STATUSES } from '../rules/email-actions.rules.js';
 import { classifyEmailError } from '../utils/classify-email-error.js';
 import { EmailLogService } from './email-log.service.js';
+import { EmailMetrics } from './email.metrics.js';
 
 const INTERRUPTED: EmailErrorDetails = {
   message: 'Delivery attempt was interrupted: the server stopped mid-send',
@@ -37,6 +38,7 @@ export class EmailDeliveryService {
     private readonly log: EmailLogService,
     private readonly channel: EmailChannel,
     config: ConfigService,
+    private readonly metrics: EmailMetrics,
   ) {
     this.clientNotificationsEnabled = config.get<INotificationsConfig>(
       'notificationsConfig',
@@ -77,7 +79,7 @@ export class EmailDeliveryService {
     let email: ComposedEmail | null = null;
     try {
       email = await this.compose(this.content(message));
-      const providerMessageId = await this.channel.transmit(email);
+      const providerMessageId = await this.transmit(email);
       await this.log.markSent(
         message.id,
         attempt,
@@ -149,7 +151,7 @@ export class EmailDeliveryService {
     let email: ComposedEmail | null = null;
     try {
       email = await this.compose(content);
-      const providerMessageId = await this.channel.transmit(email);
+      const providerMessageId = await this.transmit(email);
       const durationMs = Date.now() - started;
       if (message)
         await this.log
@@ -210,5 +212,10 @@ export class EmailDeliveryService {
         { renderError: true },
       );
     }
+  }
+
+  /** The SMTP send: the provider message id. */
+  private transmit(email: ComposedEmail): Promise<string | null> {
+    return this.metrics.track(() => this.channel.transmit(email));
   }
 }

@@ -1,5 +1,4 @@
 import { InventoryDocumentType, Prisma } from '@prisma/client';
-import { describe, expect, it } from 'vitest';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { InventoryValuationCalculator } from './inventory-valuation.calculator.js';
 

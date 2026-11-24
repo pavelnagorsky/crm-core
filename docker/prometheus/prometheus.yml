@@ -1,0 +1,37 @@
+# Metrics of the klendo-core compose project. Grafana is the UI (dashboards "Klendo — API", "Klendo — инфраструктура").
+
+global:
+  scrape_interval: 15s
+  scrape_timeout: 5s
+
+scrape_configs:
+  # api replicas and worker, found through the docker socket (like alloy): API_REPLICAS changes and rollout.sh
+  # need no config change. A container opts in with the labels prometheus.scrape / prometheus.port (x-app in compose).
+  - job_name: app
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 15s
+        filters:
+          - name: label
+            values: [com.docker.compose.project=klendo-core, prometheus.scrape=true]
+    relabel_configs:
+      # One target per container, on the metrics port (docker_sd adds one per exposed port).
+      - source_labels: [__meta_docker_network_ip, __meta_docker_container_label_prometheus_port]
+        separator: ':'
+        target_label: __address__
+      # Same labels as in Loki, so a panel can link to the logs of the same replica.
+      - source_labels: [__meta_docker_container_label_com_docker_compose_service]
+        target_label: service
+      - source_labels: [__meta_docker_container_name]
+        regex: /?(.*)
+        target_label: container
+      - source_labels: [container]
+        target_label: instance
+
+  - job_name: postgres
+    static_configs:
+      - targets: [postgres-exporter:9187]
+
+  - job_name: redis
+    static_configs:
+      - targets: [redis-exporter:9121]

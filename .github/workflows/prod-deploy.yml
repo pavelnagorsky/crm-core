@@ -65,7 +65,7 @@ jobs:
             docker compose build
             docker compose run --rm --no-deps migrate
 
-            docker compose up -d --no-deps redis loki alloy grafana lb
+            docker compose up -d --no-deps redis loki alloy prometheus postgres-exporter redis-exporter grafana lb
 
             # lb is not recreated when only docker/nginx/lb.conf changed: reload it. A broken config fails the
             # deploy here, and nginx keeps serving with the previous one.

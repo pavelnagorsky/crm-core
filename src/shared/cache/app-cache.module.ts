@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { StateBackend } from '../enums/state-backend.enum.js';
 import { stateStoreProviders } from '../state/state-store.providers.js';
+import { AppCacheMetrics } from './app-cache.metrics.js';
 import { AppCacheService } from './app-cache.service.js';
 import type { CacheStore } from './interfaces/cache-store.interface.js';
 import { CACHE_STORE } from './cache-store.token.js';
@@ -12,6 +13,7 @@ import { RedisCacheStore } from './stores/redis-cache.store.js';
   imports: [ConfigModule],
   providers: [
     AppCacheService,
+    AppCacheMetrics,
     ...stateStoreProviders<CacheStore>(CACHE_STORE, {
       [StateBackend.MEMORY]: MemoryCacheStore,
       [StateBackend.REDIS]: RedisCacheStore,

@@ -43,6 +43,7 @@ import { StaffModule } from './modules/staff/staff.module.js';
 import { SuppliersModule } from './modules/suppliers/suppliers.module.js';
 import { CronModule } from './shared/cron/cron.module.js';
 import { AppThrottlerGuard } from './shared/guards/app-throttler.guard.js';
+import { MetricsModule } from './shared/metrics/metrics.module.js';
 import { RedisModule } from './shared/redis/redis.module.js';
 import { ThrottlerStorageModule } from './shared/throttling/throttler-storage.module.js';
 import { THROTTLER_STORAGE } from './shared/throttling/throttler-storage.token.js';
@@ -72,6 +73,7 @@ import { THROTTLER_STORAGE } from './shared/throttling/throttler-storage.token.j
     EventEmitterModule.forRoot({ wildcard: true }),
     DatabaseModule,
     RedisModule,
+    MetricsModule,
     CronModule,
     NotificationsModule,
     AuthModule,
