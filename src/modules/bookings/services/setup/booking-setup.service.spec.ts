@@ -6,12 +6,16 @@ import {
   pricingSnapshot,
   pricingStaff,
   sumBundle,
+  promotionRule,
   surchargeRule,
   weekdays,
 } from '../../../pricing/engine/testing/pricing-snapshot.factory.js';
 import { createPricingFacadeStub } from '../../../pricing/testing/pricing-facade.stub.js';
 import { PricingRuleEntry } from '../../../pricing/engine/interfaces/pricing-rule-entry.interface.js';
 import { BookingSetupService } from './booking-setup.service.js';
+import { PromotionChannel } from '../../../pricing/engine/enums/promotion-channel.enum.js';
+import { PromotionClientFilter } from '../../../pricing/engine/enums/promotion-client-filter.enum.js';
+import { bookingPricingContextStub } from '../../testing/factories/booking-pricing-context.stub.js';
 
 const money = (value: string) => new Prisma.Decimal(value);
 
@@ -80,6 +84,7 @@ function setup(
     scheduling?: unknown;
     selection?: Selection;
     advanceBookingWindowDays?: number;
+    promotions?: unknown[];
   } = {},
 ) {
   const catalog = options.catalog ?? { services: [], bundles: [] };
@@ -109,9 +114,13 @@ function setup(
     {
       resolveForBooking: vi.fn().mockResolvedValue(options.selection),
     } as never,
-    (options.scheduling ?? { resolveForBooking: vi.fn() }) as never,
+    (options.scheduling ?? { schedule: vi.fn() }) as never,
     billing as never,
     options.pricing ?? createPricingFacadeStub(),
+    bookingPricingContextStub(),
+    {
+      listForBookingSetup: vi.fn().mockResolvedValue(options.promotions ?? []),
+    } as never,
   );
   return { service, location, billing, catalog };
 }
@@ -215,6 +224,68 @@ describe('BookingSetupService.getBookingSetup', () => {
     expect(range('cut')).toEqual(['60.00', '80.00']);
     // Nobody performs color: the base price.
     expect(range('color')).toEqual(['90.00', '90.00']);
+  });
+
+  describe('promotions (docs/pricing-stage4-api.md)', () => {
+    const range = (prices: { services: ReadonlyMap<string, { priceFrom: Prisma.Decimal; priceTo: Prisma.Decimal }> }, id: string) => {
+      const entry = prices.services.get(id)!;
+      return [format(entry.priceFrom), format(entry.priceTo)];
+    };
+    const view = {
+      id: 'ten',
+      publicName: 'Минус 10%',
+      publicDescription: null,
+      valueType: 'PERCENT',
+      value: money('10.00'),
+      clientFilter: 'ANY',
+      requiresCode: false,
+      conditions: ['−10% на все услуги'],
+      appliesToAll: true,
+      targets: [],
+    };
+
+    it('"from" includes promotions every online client gets, and the label and list come along', async () => {
+      const { pricing, catalog, directory } = pricedSalon([promotionRule('ten')]);
+      const { service } = setup({ pricing, catalog, directory, promotions: [view] });
+      const setupResult = await service.getBookingSetup('location-1');
+      // Anna 60 - 10% = 54, Boris 80 - 10% = 72.
+      expect(range(setupResult.prices, 'cut')).toEqual(['54.00', '72.00']);
+      expect(setupResult.promotions).toEqual([view]);
+      expect(setupResult.prices.services.get('cut')?.promotion).toEqual({
+        label: 'Минус 10%',
+        promotionIds: ['ten'],
+      });
+    });
+
+    it.each([
+      ['a promo code', { promoCode: 'AUTUMN' }],
+      ['new clients', { clientFilter: PromotionClientFilter.NEW }],
+      ['a minimum total', { minVisitTotal: 100 }],
+      ['a lead time', { maxLeadMinutes: 180 }],
+      ['the admin channel only', { channels: [PromotionChannel.ADMIN] }],
+    ] as const)('"from" leaves out a promotion with %s', async (_name, conditions) => {
+      const { pricing, catalog, directory } = pricedSalon([
+        promotionRule('ten', {}, { ...conditions } as never),
+      ]);
+      const { service } = setup({ pricing, catalog, directory });
+      const { prices } = await service.getBookingSetup('location-1');
+      expect(range(prices, 'cut')).toEqual(['60.00', '80.00']);
+    });
+
+    it('a staff-limited promotion lowers only that staff member', async () => {
+      const { pricing, catalog, directory } = pricedSalon([
+        promotionRule('boris-half', { value: 5000 }, { staffIds: ['boris'] }),
+      ]);
+      const { service } = setup({ pricing, catalog, directory });
+      const { prices } = await service.getBookingSetup('location-1');
+      // Boris 80 - 50% = 40 is now the cheapest; Carl 70 the dearest.
+      expect(range(prices, 'cut')).toEqual(['40.00', '70.00']);
+      expect(
+        prices.staffServicePrices
+          .get('boris')
+          ?.map((item) => [format(item.priceFrom), format(item.priceTo)]),
+      ).toEqual([['40.00', '40.00']]);
+    });
   });
 
   it('prices a SUM bundle by its services and a FIXED bundle as one package', async () => {
@@ -324,7 +395,9 @@ describe('BookingSetupService.resolveBookingSelection prices', () => {
 
   it('gives staff the range over the window without a start, the exact price with one', async () => {
     const { pricing, catalog, directory } = pricedSalon([FRIDAY_EVENING]);
-    const scheduling = { resolveForBooking: vi.fn(async () => []) };
+    const scheduling = {
+      schedule: vi.fn(async () => ({ items: [], prices: [], promoCode: null })),
+    };
     const { service } = setup({
       pricing,
       catalog,
@@ -440,7 +513,11 @@ describe('BookingSetupService.resolveBookingSelection prices', () => {
       staffName: 'boris',
     });
     const scheduling = {
-      resolveForBooking: vi.fn(async () => [charged('80'), charged('15.50')]),
+      schedule: vi.fn(async () => ({
+        items: [charged('80'), charged('15.50')],
+        prices: [],
+        promoCode: null,
+      })),
     };
     const { service } = setup({
       pricing,
@@ -460,7 +537,7 @@ describe('BookingSetupService.resolveBookingSelection prices', () => {
     });
 
     expect(format(result.totalPrice!)).toBe('95.50');
-    expect(scheduling.resolveForBooking).toHaveBeenCalledWith(
+    expect(scheduling.schedule).toHaveBeenCalledWith(
       expect.objectContaining({ staffRule: 'CHEAPER_AND_FREER' }),
     );
   });

@@ -45,6 +45,10 @@ import { BookingHistoryReadService } from './services/read/booking-history-read.
 import { BookingPaymentReadService } from './services/read/booking-payment-read.service.js';
 import { BookingPriceRuleStatsService } from './services/read/booking-price-rule-stats.service.js';
 import { BookingStaffingPreviewService } from './services/booking-staffing-preview.service.js';
+import { BookingPromotionReportService } from './services/read/booking-promotion-report.service.js';
+import { BookingPricingContextService } from './services/booking-pricing-context.service.js';
+import { PromotionPublicService } from '../pricing/services/promotion-public.service.js';
+import { BookingRepricingService } from './services/write/booking-repricing.service.js';
 import { BookingPaymentService } from './services/write/booking-payment.service.js';
 import { BookingLifecycleService } from './services/write/booking-lifecycle.service.js';
 import { BookingMutationService } from './services/write/booking-mutation.service.js';
@@ -55,6 +59,7 @@ import { booking } from './testing/factories/booking.factory.js';
 import { bookingItemPrices } from './testing/factories/booking-item-prices.factory.js';
 import { NO_CLIENT_NOTICE } from './rules/booking-client-notice.rules.js';
 import { NotificationsService } from '../notifications/services/notifications.service.js';
+import { bookingPricingContextStub } from './testing/factories/booking-pricing-context.stub.js';
 
 const serviceCatalog = { loadForBooking: vi.fn() };
 const products = { listForPublicCatalog: vi.fn().mockResolvedValue([]) };
@@ -202,6 +207,16 @@ describe('BookingsFacade.completeElapsed', () => {
         },
         { provide: BookingPriceRuleStatsService, useValue: {} },
         { provide: BookingStaffingPreviewService, useValue: {} },
+        { provide: BookingPromotionReportService, useValue: {} },
+        { provide: BookingPricingContextService, useValue: {} },
+        {
+          provide: PromotionPublicService,
+          useValue: { listForBookingSetup: async () => [] },
+        },
+        {
+          provide: BookingRepricingService,
+          useValue: { plan: async () => null },
+        },
         {
           provide: BookingPaymentReadService,
           useValue: { summaries: vi.fn(async () => new Map()) },
@@ -378,6 +393,16 @@ describe('BookingsFacade.updateStatus transactionality', () => {
         },
         { provide: BookingPriceRuleStatsService, useValue: {} },
         { provide: BookingStaffingPreviewService, useValue: {} },
+        { provide: BookingPromotionReportService, useValue: {} },
+        { provide: BookingPricingContextService, useValue: {} },
+        {
+          provide: PromotionPublicService,
+          useValue: { listForBookingSetup: async () => [] },
+        },
+        {
+          provide: BookingRepricingService,
+          useValue: { plan: async () => null },
+        },
         {
           provide: BookingPaymentReadService,
           useValue: { summaries: vi.fn(async () => new Map()) },
@@ -466,6 +491,16 @@ describe('BookingsFacade.search', () => {
         },
         { provide: BookingPriceRuleStatsService, useValue: {} },
         { provide: BookingStaffingPreviewService, useValue: {} },
+        { provide: BookingPromotionReportService, useValue: {} },
+        { provide: BookingPricingContextService, useValue: {} },
+        {
+          provide: PromotionPublicService,
+          useValue: { listForBookingSetup: async () => [] },
+        },
+        {
+          provide: BookingRepricingService,
+          useValue: { plan: async () => null },
+        },
         {
           provide: BookingPaymentReadService,
           useValue: { summaries: vi.fn(async () => new Map()) },
@@ -757,6 +792,16 @@ describe('BookingCalendarReadService.listForCalendar', () => {
         { provide: DatabaseService, useValue: db },
         { provide: BookingPriceRuleStatsService, useValue: {} },
         { provide: BookingStaffingPreviewService, useValue: {} },
+        { provide: BookingPromotionReportService, useValue: {} },
+        { provide: BookingPricingContextService, useValue: {} },
+        {
+          provide: PromotionPublicService,
+          useValue: { listForBookingSetup: async () => [] },
+        },
+        {
+          provide: BookingRepricingService,
+          useValue: { plan: async () => null },
+        },
         {
           provide: BookingPaymentReadService,
           useValue: { summaries: vi.fn(async () => new Map()) },
@@ -1010,6 +1055,16 @@ describe('BookingsFacade catalog selection', () => {
         },
         { provide: BookingPriceRuleStatsService, useValue: {} },
         { provide: BookingStaffingPreviewService, useValue: {} },
+        { provide: BookingPromotionReportService, useValue: {} },
+        { provide: BookingPricingContextService, useValue: {} },
+        {
+          provide: PromotionPublicService,
+          useValue: { listForBookingSetup: async () => [] },
+        },
+        {
+          provide: BookingRepricingService,
+          useValue: { plan: async () => null },
+        },
         {
           provide: BookingPaymentReadService,
           useValue: { summaries: vi.fn(async () => new Map()) },
@@ -1287,6 +1342,16 @@ describe('BookingsFacade.update details and item prices', () => {
         },
         { provide: BookingPriceRuleStatsService, useValue: {} },
         { provide: BookingStaffingPreviewService, useValue: {} },
+        { provide: BookingPromotionReportService, useValue: {} },
+        { provide: BookingPricingContextService, useValue: {} },
+        {
+          provide: PromotionPublicService,
+          useValue: { listForBookingSetup: async () => [] },
+        },
+        {
+          provide: BookingRepricingService,
+          useValue: { plan: async () => null },
+        },
         {
           provide: BookingPaymentReadService,
           useValue: { summaries: vi.fn(async () => new Map()) },
@@ -1810,6 +1875,16 @@ describe('BookingsFacade.update manual interval', () => {
         },
         { provide: BookingPriceRuleStatsService, useValue: {} },
         { provide: BookingStaffingPreviewService, useValue: {} },
+        { provide: BookingPromotionReportService, useValue: {} },
+        { provide: BookingPricingContextService, useValue: {} },
+        {
+          provide: PromotionPublicService,
+          useValue: { listForBookingSetup: async () => [] },
+        },
+        {
+          provide: BookingRepricingService,
+          useValue: { plan: async () => null },
+        },
         {
           provide: BookingPaymentReadService,
           useValue: { summaries: vi.fn(async () => new Map()) },
@@ -2114,6 +2189,16 @@ describe('BookingsFacade.addProduct', () => {
         },
         { provide: BookingPriceRuleStatsService, useValue: {} },
         { provide: BookingStaffingPreviewService, useValue: {} },
+        { provide: BookingPromotionReportService, useValue: {} },
+        { provide: BookingPricingContextService, useValue: {} },
+        {
+          provide: PromotionPublicService,
+          useValue: { listForBookingSetup: async () => [] },
+        },
+        {
+          provide: BookingRepricingService,
+          useValue: { plan: async () => null },
+        },
         {
           provide: BookingPaymentReadService,
           useValue: { summaries: vi.fn(async () => new Map()) },
@@ -2236,6 +2321,16 @@ describe('BookingsFacade.cancel draft product cleanup', () => {
         },
         { provide: BookingPriceRuleStatsService, useValue: {} },
         { provide: BookingStaffingPreviewService, useValue: {} },
+        { provide: BookingPromotionReportService, useValue: {} },
+        { provide: BookingPricingContextService, useValue: {} },
+        {
+          provide: PromotionPublicService,
+          useValue: { listForBookingSetup: async () => [] },
+        },
+        {
+          provide: BookingRepricingService,
+          useValue: { plan: async () => null },
+        },
         {
           provide: BookingPaymentReadService,
           useValue: { summaries: vi.fn(async () => new Map()) },
@@ -2342,5 +2437,7 @@ function createMutationService(
     reschedule,
     new BookingClientLinkService(bookingClients as never, location),
     { plan: vi.fn().mockResolvedValue(null), publish: vi.fn() } as never,
+    { plan: vi.fn().mockResolvedValue(null) } as never,
+    bookingPricingContextStub(),
   );
 }

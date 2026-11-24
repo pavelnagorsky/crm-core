@@ -96,7 +96,17 @@ export class BookingStaffingPreviewService {
         busy: false,
         price: request.serviceIds.reduce(
           (sum, serviceId) =>
-            sum + request.book.candidatePrice(serviceId, id, request.bundleId),
+            sum +
+            request.book.candidatePrice(
+              serviceId,
+              id,
+              request.bundleId,
+              {
+                date: request.date,
+                minute: TimeUtils.hhmmToMinutes(request.time),
+              },
+              request.context ?? null,
+            ),
           0,
         ),
         dayLoad: loads.get(id)?.get(request.date) ?? 0,

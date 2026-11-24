@@ -1,6 +1,11 @@
 import { BundlePricingMode } from '../enums/bundle-pricing-mode.enum.js';
+import { PriceRuleKind } from '../enums/price-rule-kind.enum.js';
 import { PriceScheduleType } from '../enums/price-schedule-type.enum.js';
 import { PriceValueType } from '../enums/price-value-type.enum.js';
+import { PromotionChannel } from '../enums/promotion-channel.enum.js';
+import { PromotionClientFilter } from '../enums/promotion-client-filter.enum.js';
+import { PricingPromotionEntry } from '../interfaces/pricing-promotion-entry.interface.js';
+import { QuoteContext } from '../interfaces/quote-context.interface.js';
 import { PricingBundleEntry } from '../interfaces/pricing-bundle-entry.interface.js';
 import { PricingLevelEntry } from '../interfaces/pricing-level-entry.interface.js';
 import { PricingRuleEntry } from '../interfaces/pricing-rule-entry.interface.js';
@@ -94,6 +99,7 @@ export function surchargeRule(
 ): PricingRuleEntry {
   return {
     id,
+    kind: PriceRuleKind.SURCHARGE,
     name: id,
     scheduleType: PriceScheduleType.WEEKLY,
     enabled: true,
@@ -108,7 +114,58 @@ export function surchargeRule(
     dates: [],
     appliesToAll: true,
     targets: [],
+    promotion: null,
     createdAt: '2026-01-01T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+/**
+ * Enabled promotion of -10% on every service, every day, the whole day, both channels,
+ * any client, no code or limits; override rule fields and promotion conditions.
+ */
+export function promotionRule(
+  id: string,
+  overrides: Partial<PricingRuleEntry> = {},
+  conditions: Partial<PricingPromotionEntry> = {},
+): PricingRuleEntry {
+  return surchargeRule(id, {
+    kind: PriceRuleKind.PROMOTION,
+    promotion: {
+      publicName: `Акция ${id}`,
+      showAsPromotion: true,
+      bookingFrom: null,
+      bookingTo: null,
+      minLeadMinutes: null,
+      maxLeadMinutes: null,
+      channels: [PromotionChannel.ONLINE, PromotionChannel.ADMIN],
+      staffIds: [],
+      clientFilter: PromotionClientFilter.ANY,
+      birthdayWindowDays: null,
+      promoCode: null,
+      usageLimitTotal: null,
+      usageLimitPerClient: null,
+      usageLimitPeriod: null,
+      minVisitTotal: null,
+      ...conditions,
+    },
+    ...overrides,
+  });
+}
+
+/**
+ * Online context of an unknown client, priced at 2026-11-23 09:00 UTC (location today
+ * 2026-11-23), the visit start unknown; override any field.
+ */
+export function quoteContext(overrides: Partial<QuoteContext> = {}): QuoteContext {
+  return {
+    channel: PromotionChannel.ONLINE,
+    nowMs: Date.UTC(2026, 10, 23, 9, 0),
+    today: '2026-11-23',
+    visitStartMs: null,
+    client: { known: false, isNew: false, birthday: null, discountBp: null },
+    promoCode: null,
+    usage: {},
     ...overrides,
   };
 }

@@ -43,6 +43,10 @@ import { Read, Write } from '../../access/utils/permission.js';
 import { auditActorFromToken } from '../../audit/utils/audit-actor-from-token.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 import { TokenPayload } from '../../auth/decorators/token-payload.decorator.js';
+import { OptionalAuth } from '../../auth/decorators/optional-auth.decorator.js';
+import { OptionalTokenPayload } from '../../auth/decorators/optional-token-payload.decorator.js';
+import { DiscountChoiceMode } from '../../pricing/engine/enums/discount-choice-mode.enum.js';
+import { BookingItemPromotionDto } from '../dto/booking-item-promotion.dto.js';
 import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
 import { AddOrderItemsDto } from '../../orders/dto/add-order-items.dto.js';
 import { OrderProductItemDto } from '../../orders/dto/order-product-item.dto.js';
@@ -135,20 +139,60 @@ export class BookingsController {
 
   @ApiOperation({
     summary: 'Calculate booking pricing preview (public)',
+    description:
+      'With promotions and the client discount (docs/pricing-stage4-api.md). A token that may book in the location (booking or booking.own write) makes it the booking dialog: channel ADMIN, clientId, items[].promotion, internal titles and eligible/ineligible menus. Otherwise channel ONLINE and the client is found by clientPhone.',
   })
   @ApiOkResponse({ type: ApiResponse(BookingPricingResponseDto) })
   @ApiNotFoundResponse({
-    description: 'Location, service, or product not found',
+    description:
+      'Location, service, or product not found; BOOKING_CLIENT_NOT_FOUND: clientId is not a client of the brand',
   })
+  @ApiConflictResponse({
+    description:
+      'PROMOTION_NOT_APPLICABLE { lineIndex, ruleId, reason }: the discount picked for a line does not apply to it',
+  })
+  @ApiForbiddenResponse({
+    description:
+      'clientId or items[].promotion without a cabinet token; a promotion mode other than AUTO without sale.price.override:write',
+    type: ForbiddenException,
+  })
+  @OptionalAuth()
   @Post('public/locations/:locationId/pricing')
   async priceBooking(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Body() dto: BookingPricingRequestDto,
+    @OptionalTokenPayload() tokenPayload: TokenPayloadDto | null,
   ): Promise<BaseResponseDto<BookingPricingResponseDto>> {
-    const pricing = await this.bookingCreateService.price(locationId, dto);
+    const token = tokenPayload ?? undefined;
+    const cabinet =
+      hasPermission(token, Write(Claim.BOOKING), locationId) ||
+      hasPermission(token, Write(Claim.BOOKING_OWN), locationId);
+    const promotions = dto.items?.map((item) => item.promotion) ?? [];
+    if (!cabinet && (dto.clientId || promotions.some(Boolean)))
+      throw new ForbiddenException('Access denied');
+    this.assertDiscountChoice(token, locationId, promotions);
+    const pricing = await this.bookingCreateService.price(locationId, dto, {
+      cabinet,
+    });
     return BaseResponseDto.success(
       BookingPricingResponseDto.fromResult(pricing),
     );
+  }
+
+  /** Picking a discount other than the best one (NONE, RULE, CLIENT_DISCOUNT) overrides the price. */
+  private assertDiscountChoice(
+    token: TokenPayloadDto | undefined,
+    locationId: string,
+    promotions: readonly (BookingItemPromotionDto | undefined)[],
+  ): void {
+    if (
+      promotions.some(
+        (promotion) =>
+          promotion !== undefined &&
+          promotion.mode !== DiscountChoiceMode.AUTO,
+      )
+    )
+      assertPermission(token, Write(Claim.SALE_PRICE_OVERRIDE), locationId);
   }
 
   // ─── Owner / Staff ────────────────────────────────────────────────────────────
@@ -191,6 +235,11 @@ export class BookingsController {
         Write(Claim.SALE_PRICE_OVERRIDE),
         locationId,
       );
+    this.assertDiscountChoice(
+      tokenPayload,
+      locationId,
+      dto.items?.map((item) => item.promotion) ?? [],
+    );
     if (dto.products?.length)
       assertPermission(tokenPayload, Write(Claim.ORDER), locationId);
     const booking = await this.bookingCreateService.createManualBooking(
@@ -379,6 +428,11 @@ export class BookingsController {
         Write(Claim.SALE_PRICE_OVERRIDE),
         locationId,
       );
+    this.assertDiscountChoice(
+      tokenPayload,
+      locationId,
+      dto.items?.map((item) => item.promotion) ?? [],
+    );
     if (dto.confirmProductItemIds?.length)
       assertPermission(tokenPayload, Write(Claim.ORDER), locationId);
     const booking = await this.bookings.update(

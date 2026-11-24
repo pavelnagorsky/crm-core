@@ -137,4 +137,11 @@ describe('bookingRequestHash', () => {
       bookingRequestHash('location', request, attribution),
     );
   });
+
+  it('includes the promo code: it changes the price the guest agreed to', () => {
+    const hash = bookingRequestHash('location', request, attribution);
+    expect(
+      bookingRequestHash('location', { ...request, promoCode: 'AUTUMN' }, attribution),
+    ).not.toBe(hash);
+  });
 });

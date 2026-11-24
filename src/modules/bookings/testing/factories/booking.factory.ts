@@ -60,6 +60,7 @@ export function booking(options: BookingFixtureOptions = {}): BookingWithItems {
     clientEmail: null,
     notes: null,
     internalNotes: null,
+    promoCode: null,
     cancellationReason: null,
     cancelledBy: null,
     cancelledAt: null,

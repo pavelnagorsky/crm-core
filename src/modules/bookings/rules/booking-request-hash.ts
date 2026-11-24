@@ -40,6 +40,8 @@ export function bookingRequestHash(
         notes: dto.notes ?? null,
         expectedTotal: dto.expectedTotal,
         preferredStaffIds: dto.preferredStaffIds ?? null,
+        // The code changes the discount and so the price the guest agreed to.
+        promoCode: dto.promoCode ?? null,
       }),
     )
     .digest('hex');

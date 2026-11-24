@@ -5,9 +5,13 @@ import {
   IsEnum,
   IsOptional,
   IsString,
+  Matches,
   MaxLength,
 } from 'class-validator';
+import { ApiPercent } from '../../../shared/decorators/api-decimal.decorator.js';
 import { IsPhone } from '../../../shared/decorators/is-phone.decorator.js';
+import regularExpressions from '../../../shared/regular-expressions.js';
+import { CanonicalAmount } from '../../../shared/transforms/canonical-amount.transform.js';
 import { TRAFFIC_DETAIL_MAX_LENGTH } from '../../../shared/traffic/constants/traffic-limits.constants.js';
 import { TrafficSource } from '../../../shared/traffic/enums/traffic-source.enum.js';
 
@@ -82,4 +86,19 @@ export class UpdateClientDto {
   @IsString()
   @MaxLength(TRAFFIC_DETAIL_MAX_LENGTH)
   acquisitionSourceDetail?: string | null;
+
+  @ApiPercent({
+    required: false,
+    nullable: true,
+    example: '10.00',
+    description:
+      'Personal discount, percent above 0 and up to 100 (docs/pricing-stage4-api.md). Omit to keep, null to clear.',
+  })
+  @IsOptional()
+  @CanonicalAmount()
+  @Matches(regularExpressions.positivePercent, {
+    message:
+      'discountPercent must be above 0 and at most 100 with at most 2 decimal places',
+  })
+  discountPercent?: string | null;
 }

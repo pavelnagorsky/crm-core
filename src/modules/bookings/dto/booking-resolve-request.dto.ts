@@ -9,6 +9,8 @@ import {
   IsOptional,
   IsUUID,
 } from 'class-validator';
+import { IsOptionalPhone } from '../../../shared/decorators/is-phone.decorator.js';
+import { PromoCodeField } from '../decorators/promo-code-field.decorator.js';
 import { MULTI_SERVICE_MAX_ITEMS } from '../../services/constants/multi-service.constants.js';
 
 export class BookingResolveRequestDto {
@@ -68,4 +70,14 @@ export class BookingResolveRequestDto {
   @IsOptional()
   @IsUUID()
   staffId?: string;
+
+  @PromoCodeField()
+  promoCode?: string;
+
+  /**
+   * Phone of the guest: the brand client with it gets the discounts for new clients,
+   * birthdays and the personal discount; an unknown phone is a new client.
+   */
+  @IsOptionalPhone()
+  clientPhone?: string;
 }

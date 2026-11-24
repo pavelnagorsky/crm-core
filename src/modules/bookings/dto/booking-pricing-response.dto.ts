@@ -2,6 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
 import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { BookingPricingResult } from '../interfaces/booking-pricing-result.interface.js';
+import { PromoCodeResultDto } from '../../pricing/dto/promo-code-result.dto.js';
 import { BookingPricingItemResponseDto } from './booking-pricing-item-response.dto.js';
 
 export class BookingPricingResponseDto {
@@ -26,7 +27,10 @@ export class BookingPricingResponseDto {
   @ApiPrice()
   subtotalAmount: string;
 
-  @ApiPrice()
+  @ApiPrice({
+    description:
+      'Discounts of all lines (promotions, the client discount); listTotalAmount - discountTotal = totalAmount without custom prices.',
+  })
   discountTotal: string;
 
   @ApiPrice()
@@ -34,6 +38,13 @@ export class BookingPricingResponseDto {
 
   @ApiProperty({ type: () => BookingPricingItemResponseDto, isArray: true })
   items: BookingPricingItemResponseDto[];
+
+  @ApiProperty({
+    type: () => PromoCodeResultDto,
+    nullable: true,
+    description: 'What the promo code of the request did; null without one.',
+  })
+  promoCode: PromoCodeResultDto | null;
 
   static fromResult(result: BookingPricingResult): BookingPricingResponseDto {
     return Object.assign(new BookingPricingResponseDto(), {
@@ -46,7 +57,10 @@ export class BookingPricingResponseDto {
       subtotalAmount: MoneyUtils.format(result.subtotalAmount),
       discountTotal: MoneyUtils.format(result.discountTotal),
       totalAmount: MoneyUtils.format(result.totalAmount),
-      items: result.items.map(BookingPricingItemResponseDto.fromLine),
+      items: result.items.map((line) =>
+        BookingPricingItemResponseDto.fromLine(line, result.cabinet),
+      ),
+      promoCode: PromoCodeResultDto.fromResult(result.promoCode),
     });
   }
 }

@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { PublicProductCatalogDto } from '../../products/dto/public-product-catalog.dto.js';
 import { ReviewStaffSummary } from '../../reviews/interfaces/review-staff-summary.interface.js';
+import { PublicPromotionDto } from '../../pricing/dto/public-promotion.dto.js';
 import { BookingSetup } from '../interfaces/booking-setup.interface.js';
 import { BookingSetupCategoryDto } from './booking-setup-category.dto.js';
 import { BookingSetupStaffDto } from './booking-setup-staff.dto.js';
@@ -27,6 +28,14 @@ export class BookingSetupResponseDto {
   })
   anyStaffEnabled: boolean;
 
+  @ApiProperty({
+    type: () => PublicPromotionDto,
+    isArray: true,
+    description:
+      'Enabled promotions shown as such, online, without a promo code, in force now or starting within the online booking window.',
+  })
+  promotions: PublicPromotionDto[];
+
   static fromEntity(
     {
       catalog,
@@ -35,6 +44,7 @@ export class BookingSetupResponseDto {
       isOnlineBookingAvailable,
       anyStaffEnabled,
       prices,
+      promotions,
     }: BookingSetup,
     staffReviewSummaries: ReadonlyMap<string, ReviewStaffSummary> = new Map(),
   ): BookingSetupResponseDto {
@@ -67,6 +77,7 @@ export class BookingSetupResponseDto {
     dto.products = PublicProductCatalogDto.fromEntities(products);
     dto.isOnlineBookingAvailable = isOnlineBookingAvailable;
     dto.anyStaffEnabled = anyStaffEnabled;
+    dto.promotions = promotions.map(PublicPromotionDto.fromView);
     return dto;
   }
 }

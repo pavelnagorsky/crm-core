@@ -7,6 +7,7 @@ import {
   pricingSnapshot,
   pricingStaff,
   sumBundle,
+  promotionRule,
   surchargeRule,
   weekdays,
 } from '../../pricing/engine/testing/pricing-snapshot.factory.js';
@@ -14,6 +15,7 @@ import { createPricingFacadeStub } from '../../pricing/testing/pricing-facade.st
 import { PriceScheduleType } from '../../pricing/engine/enums/price-schedule-type.enum.js';
 import { PricingRuleEntry } from '../../pricing/engine/interfaces/pricing-rule-entry.interface.js';
 import { PublicSlotPricingService } from './public-slot-pricing.service.js';
+import { bookingPricingContextStub } from '../testing/factories/booking-pricing-context.stub.js';
 
 const DATE = '2026-11-10';
 
@@ -68,6 +70,7 @@ function setup(options: Options = {}) {
       anyStaffRule: options.rule ?? AnyStaffRule.CHEAPER_AND_FREER,
     })),
   };
+  const context = bookingPricingContextStub();
   const staffLoad = {
     dayLoads: vi.fn(
       async () =>
@@ -87,8 +90,9 @@ function setup(options: Options = {}) {
     pricing,
     locations as never,
     staffLoad as never,
+    context,
   );
-  return { service, calendar, priceBook, staffLoad };
+  return { service, calendar, priceBook, staffLoad, context };
 }
 
 const slotOf = async (options: Options, dto: object = { serviceId: 'cut' }) => {
@@ -439,6 +443,62 @@ describe('PublicSlotPricingService', () => {
       });
       // Carl 50 + 15% = 57.50, rounded to 60.00.
       expect(slot.price.toFixed(2)).toBe('60.00');
+    });
+  });
+
+  describe('promotions (docs/pricing-stage4-api.md)', () => {
+    // Half price at Boris only: 80 -> 40 beats Carl 50 and Anna 60.
+    const borisHalf = (showAsPromotion = true) =>
+      promotionRule(
+        'boris-half',
+        { value: 5000 },
+        { staffIds: ['boris'], showAsPromotion },
+      );
+
+    it('ranks staff by the discounted price and shows the old price of a shown promotion', async () => {
+      const { slot } = await slotOf({ rules: [borisHalf()] });
+      expect(slot.staffIds).toEqual(['boris']);
+      expect(slot.price.toFixed(2)).toBe('40.00');
+      expect(slot.listPrice?.toFixed(2)).toBe('80.00');
+      expect(slot.promotionId).toBe('boris-half');
+    });
+
+    it('a promotion not shown as one is just a lower price', async () => {
+      const { slot } = await slotOf({ rules: [borisHalf(false)] });
+      expect(slot.price.toFixed(2)).toBe('40.00');
+      expect(slot.listPrice).toBeNull();
+      expect(slot.promotionId).toBeNull();
+    });
+
+    it('a slot without a promotion has no old price', async () => {
+      const { slot } = await slotOf({});
+      expect(slot.listPrice).toBeNull();
+      expect(slot.promotionId).toBeNull();
+    });
+
+    it('prices with the promo code for an unknown online client', async () => {
+      const coded = promotionRule('coded', {}, { promoCode: 'AUTUMN' });
+      const { service, context } = setup({ rules: [coded] });
+      const [day] = await service.getSlots('location-1', {
+        serviceId: 'cut',
+        promoCode: 'AUTUMN',
+      } as never);
+      expect(context.build).toHaveBeenCalledWith(
+        expect.objectContaining({
+          channel: 'ONLINE',
+          promoCode: 'AUTUMN',
+          visitStartAt: null,
+        }),
+      );
+      // Carl 50 - 10% = 45.
+      expect(day.slots[0].price.toFixed(2)).toBe('45.00');
+      expect(day.slots[0].promotionId).toBe('coded');
+    });
+
+    it('builds no context when the location has no promotions', async () => {
+      const { service, context } = setup({});
+      await service.getSlots('location-1', { serviceId: 'cut' } as never);
+      expect(context.build).not.toHaveBeenCalled();
     });
   });
 });

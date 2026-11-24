@@ -1,5 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Client } from '@prisma/client';
+import { ApiPercent } from '../../../shared/decorators/api-decimal.decorator.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
+import { ClientDiscountStats } from '../../bookings/interfaces/client-discount-stats.interface.js';
+import { ClientDiscountStatsDto } from './client-discount-stats.dto.js';
 import { TrafficSource } from '../../../shared/traffic/enums/traffic-source.enum.js';
 
 export class ClientResponseDto {
@@ -67,13 +71,26 @@ export class ClientResponseDto {
   })
   acquisitionBookingId: string | null;
 
+  @ApiPercent({
+    nullable: true,
+    example: '10.00',
+    description: 'Personal discount, percent; null = none.',
+  })
+  discountPercent: string | null;
+
+  @ApiProperty({ type: () => ClientDiscountStatsDto })
+  discountStats: ClientDiscountStatsDto;
+
   @ApiProperty({ type: Date })
   createdAt: Date;
 
   @ApiProperty({ type: Date })
   updatedAt: Date;
 
-  static fromEntity(client: Client): ClientResponseDto {
+  static fromEntity(
+    client: Client,
+    discountStats?: ClientDiscountStats,
+  ): ClientResponseDto {
     const dto = new ClientResponseDto();
     dto.id = client.id;
     dto.brandId = client.brandId;
@@ -91,6 +108,11 @@ export class ClientResponseDto {
     dto.acquisitionSourceDetail = client.acquisitionSourceDetail;
     dto.acquiredAt = client.acquiredAt;
     dto.acquisitionBookingId = client.acquisitionBookingId;
+    dto.discountPercent =
+      client.discountPercent === null
+        ? null
+        : MoneyUtils.format(client.discountPercent);
+    dto.discountStats = ClientDiscountStatsDto.fromStats(discountStats);
     dto.createdAt = client.createdAt;
     dto.updatedAt = client.updatedAt;
     return dto;

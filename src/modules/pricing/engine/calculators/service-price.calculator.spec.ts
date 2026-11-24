@@ -152,7 +152,7 @@ describe('ServicePriceCalculator (plan 2.1, 5.2)', () => {
   it('returns an empty visit for no lines', () => {
     expect(
       ServicePriceCalculator.quote(snapshot, { bundleId: null, lines: [], visit: null }),
-    ).toEqual({ lines: [], listTotal: 0, discountTotal: 0, total: 0 });
+    ).toEqual({ lines: [], listTotal: 0, discountTotal: 0, total: 0, promoCode: null });
   });
 
   it.each([

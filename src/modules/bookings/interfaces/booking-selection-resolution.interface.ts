@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { PromoCodeResult } from '../../pricing/engine/interfaces/promo-code-result.interface.js';
 import { BookingExecutionMode } from '../enums/booking-execution-mode.enum.js';
 import { StaffSelectionMode } from '../enums/staff-selection-mode.enum.js';
 import { BookingStaffOption } from './booking-staff-option.interface.js';
@@ -17,4 +18,6 @@ export interface BookingSelectionResolution {
   resolvedItems: ResolvedBookingItem[];
   /** Exact total of the preview (sum of the charged prices); null without a start time. */
   totalPrice: Prisma.Decimal | null;
+  /** What the promo code did to the preview; null without a code or a start time. */
+  promoCode: PromoCodeResult | null;
 }

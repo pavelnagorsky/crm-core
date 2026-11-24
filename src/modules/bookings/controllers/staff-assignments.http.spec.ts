@@ -63,6 +63,8 @@ describe('Staff assignment HTTP contract', () => {
         PublicSlotsController,
       ],
       providers: [
+        // Public pricing takes an optional cabinet token.
+        { provide: TokenEpochGuard, useValue: { canActivate: () => true } },
         { provide: CalendarFacade, useValue: calendar },
         { provide: PublicSlotPricingService, useValue: slots },
         { provide: CalendarViewFacade, useValue: calendarView },

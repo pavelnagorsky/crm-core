@@ -1,4 +1,5 @@
 import { Prisma } from '@prisma/client';
+import { bookingWithItemsInclude } from '../constants/booking-with-items.include.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { booking } from '../testing/factories/booking.factory.js';
 import { BookingReservationService } from './booking-reservation.service.js';
@@ -71,7 +72,7 @@ describe('BookingReservationService idempotency', () => {
           idempotencyKey: 'key',
         },
       },
-      include: { items: { orderBy: { sortOrder: 'asc' } } },
+      include: bookingWithItemsInclude,
     });
   });
 

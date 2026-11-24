@@ -16,6 +16,11 @@ import { BillingFacade } from '../billing/billing.facade.js';
 import { ClientsService } from '../clients/services/clients.service.js';
 import { LocationService } from '../location/services/location.service.js';
 import { StaffBookingEvent } from '../notifications/enums/staff-booking-event.enum.js';
+import { PriceAdjustmentKind } from '../pricing/engine/enums/price-adjustment-kind.enum.js';
+import { PromoCodeStatus } from '../pricing/engine/enums/promo-code-status.enum.js';
+import { PromotionChannel } from '../pricing/engine/enums/promotion-channel.enum.js';
+import { LineDiscountChoice } from '../pricing/engine/interfaces/line-discount-choice.interface.js';
+import { PromoCodeResult } from '../pricing/engine/interfaces/promo-code-result.interface.js';
 import { BookingPricingRequestDto } from './dto/booking-pricing-request.dto.js';
 import { CreateBookingDto } from './dto/create-booking.dto.js';
 import { ManualBookingItemDto } from './dto/manual-booking-item.dto.js';
@@ -32,6 +37,7 @@ import { BookingTraffic } from './interfaces/booking-traffic.interface.js';
 import { BookingCreationOutcome } from './interfaces/booking-creation-outcome.interface.js';
 import { BookingCreationResult } from './interfaces/booking-creation-result.interface.js';
 import { BookingCreationRequest } from './interfaces/booking-creation-request.interface.js';
+import { BookingPricingAccess } from './interfaces/booking-pricing-access.interface.js';
 import { BookingPricingResult } from './interfaces/booking-pricing-result.interface.js';
 import { BookingSelectionRequest } from './interfaces/booking-selection-request.interface.js';
 import { BookingWithItems } from './interfaces/booking-with-items.interface.js';
@@ -45,6 +51,7 @@ import {
   NO_CLIENT_NOTICE,
 } from './rules/booking-client-notice.rules.js';
 import { BookingEventsService } from './services/booking-events.service.js';
+import { BookingPricingContextService } from './services/booking-pricing-context.service.js';
 import { BookingReservationService } from './services/booking-reservation.service.js';
 import { BookingSchedulingService } from './services/booking-scheduling.service.js';
 import { BookingSelectionService } from './services/booking-selection.service.js';
@@ -68,6 +75,7 @@ export class BookingCreateFacade {
     private readonly billing: BillingFacade,
     private readonly bookingPayment: BookingPaymentService,
     private readonly orders: OrdersFacade,
+    private readonly pricingContext: BookingPricingContextService,
   ) {}
 
   async createPublicBooking(
@@ -100,7 +108,10 @@ export class BookingCreateFacade {
           ),
         )
       : {
-          ...(await this.create(locationId, attribution, traffic, null, dto)),
+          // One transaction, so the limited promotions stay locked until the booking is stored.
+          ...(await this.reservations.createInTransaction(locationId, (tx) =>
+            this.create(locationId, attribution, traffic, null, dto, undefined, tx),
+          )),
           created: true,
         };
     if (!result.created) return result.booking;
@@ -175,8 +186,9 @@ export class BookingCreateFacade {
   price(
     locationId: string,
     dto: BookingPricingRequestDto,
+    access: BookingPricingAccess = { cabinet: false },
   ): Promise<BookingPricingResult> {
-    return this.selection.price(locationId, dto);
+    return this.selection.price(locationId, dto, access);
   }
 
   private async create(
@@ -235,7 +247,23 @@ export class BookingCreateFacade {
       isCustomTime && 'endAt' in dto && dto.endAt
         ? TimeUtils.localToUtc(dto.endAt, location.timezone)
         : null;
-    const items = await this.scheduling.resolveForBooking({
+    // Online, the limited promotions are locked and counted in the booking transaction; a
+    // manual booking re-checks the limits it uses under the location lock (limitGuard).
+    const pricingContext = await this.pricingContext.build({
+      locationId,
+      brandId: location.brandId,
+      timezone: location.timezone,
+      channel: internal ? PromotionChannel.ADMIN : PromotionChannel.ONLINE,
+      visitStartAt: startAt,
+      clientId: internal && 'clientId' in dto ? (dto.clientId ?? null) : null,
+      phone: this.isAnonymousManualBooking(attribution.channel, dto)
+        ? null
+        : (dto.phone ?? null),
+      promoCode: dto.promoCode ?? null,
+      choice: internal ? this.discountChoices(dto) : undefined,
+      tx: internal ? undefined : tx,
+    });
+    const scheduled = await this.scheduling.schedule({
       locationId,
       bundleId: selection.bundleId,
       services: selection.services,
@@ -258,9 +286,11 @@ export class BookingCreateFacade {
         : (dto as PublicCreateBookingDto).preferredStaffIds,
       // Read from the fresh location, so a rule change is applied to the very next booking.
       staffRule: location.anyStaffRule,
+      pricingContext,
     });
+    const items = scheduled.items;
     // The guest agreed to a total; a price edited meanwhile must be confirmed again.
-    if (!internal) this.assertExpectedTotal(dto, items);
+    if (!internal) this.assertExpectedTotal(dto, items, scheduled.promoCode);
     if (ownStaffId && !items.some((item) => item.staffId === ownStaffId))
       throw new AppException(
         ErrorCode.BOOKING_OWN_STAFF_REQUIRED,
@@ -340,6 +370,28 @@ export class BookingCreateFacade {
         actor,
         request,
         paymentPlan,
+        promoCode:
+          scheduled.promoCode?.status === PromoCodeStatus.APPLIED
+            ? scheduled.promoCode.code
+            : null,
+        limitGuard: internal
+          ? (guardTx) =>
+              this.pricingContext.assertLimitsHeld(
+                guardTx,
+                locationId,
+                items.flatMap((item) =>
+                  item.priceAdjustments
+                    .filter(
+                      (adjustment) =>
+                        (adjustment.kind as string) ===
+                        PriceAdjustmentKind.PROMOTION,
+                    )
+                    .map((adjustment) => adjustment.ruleId),
+                ),
+                client.id,
+                envelopeStart,
+              )
+          : undefined,
       },
       tx,
     );
@@ -369,6 +421,7 @@ export class BookingCreateFacade {
   private assertExpectedTotal(
     dto: CreateBookingDto,
     items: ResolvedBookingItem[],
+    promoCode: PromoCodeResult | null,
   ): void {
     const expected =
       'expectedTotal' in dto && typeof dto.expectedTotal === 'string'
@@ -389,7 +442,24 @@ export class BookingCreateFacade {
         staffName: item.staffName,
         price: MoneyUtils.format(item.customPrice ?? item.chargedPrice),
       })),
+      promoCode,
     });
+  }
+
+  /** Discounts picked per line in the booking dialog; a missing one is AUTO. */
+  private discountChoices(
+    dto: CreateBookingDto | ManualCreateBookingDto,
+  ): Record<number, LineDiscountChoice> | undefined {
+    const items = 'items' in dto ? (dto.items ?? []) : [];
+    const choice: Record<number, LineDiscountChoice> = {};
+    items.forEach((item, index) => {
+      if (item.promotion)
+        choice[index] = {
+          mode: item.promotion.mode,
+          ruleId: item.promotion.ruleId ?? null,
+        };
+    });
+    return Object.keys(choice).length > 0 ? choice : undefined;
   }
 
   /** The source staff picked for a manual booking; a detail alone is rejected. */

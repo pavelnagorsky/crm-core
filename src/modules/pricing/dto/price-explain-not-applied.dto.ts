@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { PriceRuleKind } from '../engine/enums/price-rule-kind.enum.js';
 import { PriceRuleSkipReason } from '../engine/enums/price-rule-skip-reason.enum.js';
 import { PriceExplainNotApplied } from '../interfaces/price-explain-not-applied.interface.js';
 import { PriceRuleIntervalResponseDto } from './price-rule-interval-response.dto.js';
@@ -6,6 +7,9 @@ import { PriceRuleIntervalResponseDto } from './price-rule-interval-response.dto
 export class PriceExplainNotAppliedDto {
   @ApiProperty({ type: String })
   ruleId: string;
+
+  @ApiProperty({ enum: PriceRuleKind, enumName: 'PriceRuleKind' })
+  kind: PriceRuleKind;
 
   @ApiProperty({ type: String })
   name: string;
@@ -25,6 +29,7 @@ export class PriceExplainNotAppliedDto {
   ): PriceExplainNotAppliedDto {
     const dto = new PriceExplainNotAppliedDto();
     dto.ruleId = item.ruleId;
+    dto.kind = item.kind;
     dto.name = item.name;
     dto.reason = item.reason;
     dto.intervals = item.intervals.map(({ start, end }) =>

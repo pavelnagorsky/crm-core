@@ -25,6 +25,7 @@ function row(phone: string): ClientImportRow {
     birthDate: null,
     gender: null,
     notes: null,
+    discountPercent: null,
   };
 }
 

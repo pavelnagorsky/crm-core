@@ -7,6 +7,7 @@ import { ServiceCatalogKind } from '../../services/enums/service-catalog-kind.en
 import { BundleMetrics } from '../../services/utils/bundle-metrics.js';
 import { BookingExecutionMode } from '../enums/booking-execution-mode.enum.js';
 import { BookingPriceRange } from '../interfaces/booking-price-range.interface.js';
+import { BookingPromotionLabelDto } from './booking-promotion-label.dto.js';
 
 export class BookingSetupBundleDto {
   @ApiProperty({ type: String })
@@ -54,6 +55,14 @@ export class BookingSetupBundleDto {
   @ApiProperty({ type: String, isArray: true })
   serviceIds: string[];
 
+  @ApiProperty({
+    type: () => BookingPromotionLabelDto,
+    nullable: true,
+    description:
+      'Label of the promotions that reach it (setup.promotions); null without any.',
+  })
+  promotion: BookingPromotionLabelDto | null;
+
   static fromEntity(
     bundle: BookingServiceCatalog['bundles'][number],
     range: BookingPriceRange,
@@ -70,6 +79,7 @@ export class BookingSetupBundleDto {
     dto.price = MoneyUtils.format(BundleMetrics.price(bundle));
     dto.priceFrom = MoneyUtils.format(range.priceFrom);
     dto.priceTo = MoneyUtils.format(range.priceTo);
+    dto.promotion = BookingPromotionLabelDto.fromLabel(range.promotion);
     dto.durationMinutes = BundleMetrics.durationMinutes(bundle);
     dto.executionMode = bundle.executionMode as BookingExecutionMode;
     dto.serviceIds = bundle.items.map((item) => item.serviceId);

@@ -14,7 +14,7 @@ import {
 } from '@nestjs/swagger';
 import { ApiResponseArray } from '../../../shared/dto/api-response-array.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
-import { AvailableSlotsRequestDto } from '../../calendar/dto/available-slots-request.dto.js';
+import { PublicAvailableSlotsRequestDto } from '../dto/public-available-slots-request.dto.js';
 import { PublicAvailableSlotsDayDto } from '../dto/public-available-slots-day.dto.js';
 import { PublicSlotPricingService } from '../services/public-slot-pricing.service.js';
 
@@ -37,7 +37,7 @@ export class PublicSlotsController {
   @Header('Cache-Control', 'no-store')
   async getAvailableSlots(
     @Param('locationId', ParseUUIDPipe) locationId: string,
-    @Query() dto: AvailableSlotsRequestDto,
+    @Query() dto: PublicAvailableSlotsRequestDto,
   ): Promise<BaseResponseDto<PublicAvailableSlotsDayDto[]>> {
     const days = await this.slots.getSlots(locationId, dto);
     return BaseResponseDto.success(

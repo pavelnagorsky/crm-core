@@ -17,6 +17,7 @@ const HEADERS = [
   'Дата рождения',
   'Пол',
   'Заметки',
+  'Скидка, %',
 ];
 
 const service = new ClientsSheetService();
@@ -125,6 +126,7 @@ describe('ClientsSheetService', () => {
         '01.02.1990',
         'ж',
         'постоянный',
+        '7,5%',
       ],
       ['Борис', 'Петров', '+375293334455', 'not-an-email'],
       ['Анна', 'Петрова', '+375291112233', 'other@example.com'],
@@ -150,6 +152,7 @@ describe('ClientsSheetService', () => {
         birthDate: '1990-02-01',
         gender: 'FEMALE',
         notes: 'постоянный',
+        discountPercent: '7.50',
       },
       {
         firstName: 'Вера',
@@ -159,6 +162,7 @@ describe('ClientsSheetService', () => {
         birthDate: '1991-03-04',
         gender: 'MALE',
         notes: null,
+        discountPercent: null,
       },
       {
         firstName: 'Глеб',
@@ -168,6 +172,7 @@ describe('ClientsSheetService', () => {
         birthDate: null,
         gender: null,
         notes: null,
+        discountPercent: null,
       },
     ]);
   });

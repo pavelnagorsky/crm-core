@@ -1,8 +1,12 @@
 import { HttpStatus } from '@nestjs/common';
 import {
+  PriceRuleKind,
   PriceRuleTargetType,
   PriceScheduleType,
   PriceValueType,
+  Prisma,
+  PromotionChannel,
+  PromotionClientFilter,
 } from '@prisma/client';
 import { PriceRuleInputDto } from '../dto/price-rule-input.dto.js';
 import { PriceRulePreviewRequestDto } from '../dto/price-rule-preview-request.dto.js';
@@ -46,16 +50,22 @@ const request = (
 
 describe('PriceRulePreviewService', () => {
   const reads = { findRule: vi.fn(), listForSnapshot: vi.fn() };
-  const ruleCatalog = { assertTargetsInLocation: vi.fn() };
+  const ruleCatalog = {
+    assertTargetsInLocation: vi.fn(),
+    loadCoverage: vi.fn(),
+    nameTargets: vi.fn(),
+  };
   const snapshots = { load: vi.fn() };
   const serviceCatalog = { loadCatalogSnapshot: vi.fn() };
   const locations = { getBookingSettings: vi.fn() };
+  const staff = { namesByIds: vi.fn() };
   const service = new PriceRulePreviewService(
     reads as never,
     ruleCatalog as never,
     snapshots as never,
     serviceCatalog as never,
     locations as never,
+    staff as never,
   );
 
   beforeEach(() => {
@@ -77,6 +87,16 @@ describe('PriceRulePreviewService', () => {
     });
     locations.getBookingSettings.mockResolvedValue({ timezone: 'UTC' });
     reads.listForSnapshot.mockResolvedValue([]);
+    ruleCatalog.loadCoverage.mockResolvedValue({
+      services: [
+        { id: 'cut', categoryId: null },
+        { id: 'color', categoryId: null },
+        { id: 'wash', categoryId: null },
+      ],
+      bundles: [],
+    });
+    ruleCatalog.nameTargets.mockResolvedValue([]);
+    staff.namesByIds.mockResolvedValue(new Map());
   });
 
   it('prices the base level and one other level at the first interval start', async () => {
@@ -92,6 +112,7 @@ describe('PriceRulePreviewService', () => {
         before: 6000,
         raw: 6600,
         after: 6600,
+        amount: 600,
       },
       {
         serviceId: 'cut',
@@ -100,6 +121,7 @@ describe('PriceRulePreviewService', () => {
         before: 8000,
         raw: 8800,
         after: 8800,
+        amount: 800,
       },
       {
         serviceId: 'color',
@@ -108,6 +130,7 @@ describe('PriceRulePreviewService', () => {
         before: 9000,
         raw: 9900,
         after: 9900,
+        amount: 900,
       },
     ]);
     expect(preview.replaces).toEqual([]);
@@ -148,6 +171,7 @@ describe('PriceRulePreviewService', () => {
         before: 1500,
         raw: 1650,
         after: 1700,
+        amount: 200,
       },
     ]);
   });
@@ -281,6 +305,108 @@ describe('PriceRulePreviewService', () => {
     expect(error).toMatchObject({
       errorCode: 'PRICE_RULE_ARCHIVED',
       status: HttpStatus.CONFLICT,
+    });
+  });
+
+  describe('promotions', () => {
+    const promo = (over: Partial<PriceRuleInputDto> = {}): PriceRuleInputDto =>
+      input({
+        kind: PriceRuleKind.PROMOTION,
+        name: 'Morning',
+        value: '15.00',
+        weekdays: [1],
+        intervals: [{ start: '10:00', end: '12:00' }],
+        publicName: 'Утро',
+        channels: [PromotionChannel.ONLINE],
+        clientFilter: PromotionClientFilter.NEW,
+        minVisitTotal: '500.00',
+        ...over,
+      });
+
+    beforeEach(() => {
+      locations.getBookingSettings.mockResolvedValue({
+        timezone: 'UTC',
+        currency: 'BYN',
+      });
+      serviceCatalog.loadCatalogSnapshot.mockResolvedValue({
+        services: [
+          { id: 'cut', title: 'Haircut', status: 'ACTIVE', categoryId: null },
+          { id: 'color', title: 'Color', status: 'ACTIVE', categoryId: null },
+          { id: 'wash', title: 'Wash', status: 'ACTIVE', categoryId: null },
+        ],
+        bundles: [],
+      });
+    });
+
+    it('shows the discount itself, conditions, coverage and past matches', async () => {
+      const loader = vi.fn().mockResolvedValue([
+        {
+          bookingId: 'b1',
+          serviceId: 'cut',
+          staffId: 'anna',
+          bundleId: null,
+          visitStartAt: new Date('2026-11-16T10:30:00.000Z'),
+          channel: 'WIDGET',
+          listPrice: new Prisma.Decimal('60.00'),
+        },
+      ]);
+      const preview = await service.preview(
+        'location',
+        request(promo()),
+        NOW,
+        loader,
+      );
+      expect(preview.nextDate).toBe('2026-11-23');
+      // Client and total conditions are left out of the example: 60.00 - 15% = 51.00.
+      expect(preview.examples[0]).toEqual({
+        serviceId: 'cut',
+        serviceTitle: 'Haircut',
+        levelName: 'Standard',
+        before: 6000,
+        raw: 5100,
+        after: 5100,
+        amount: 900,
+      });
+      expect(preview.conditions).toEqual([
+        '−15% на все услуги',
+        'Пн, начало визита с 10:00 до 12:00',
+        'Для новых клиентов',
+        'Только онлайн-запись',
+        'Визит от 500 BYN',
+        'На услугу действует одна скидка, самая выгодная',
+      ]);
+      expect(preview).toMatchObject({
+        serviceCount: 3,
+        totalServiceCount: 3,
+        replaces: [],
+        conflicts: [],
+        overlaps: [],
+      });
+      expect(loader).toHaveBeenCalledWith(
+        new Date('2026-10-24T10:00:00.000Z'),
+        NOW,
+      );
+      expect(preview.matches30d?.bookingsCount).toBe(1);
+      expect(preview.matches30d?.discount.toFixed(2)).toBe('9.00');
+    });
+
+    it('lists an enabled promotion that meets it', async () => {
+      reads.listForSnapshot.mockResolvedValue([
+        priceRuleRecord({
+          id: 'all-day',
+          name: 'All day',
+          kind: PriceRuleKind.PROMOTION,
+          value: '10.00',
+        }),
+      ]);
+      const preview = await service.preview('location', request(promo()), NOW);
+      expect(preview.overlaps).toEqual([
+        expect.objectContaining({
+          ruleId: 'all-day',
+          example: 'Haircut, пн 10:00',
+        }),
+      ]);
+      expect(preview.matches30d).toBeNull();
     });
   });
 });

@@ -1,9 +1,13 @@
 import {
   BundlePricingMode as PrismaBundlePricingMode,
+  PriceRuleKind,
   PriceRuleTargetType,
   PriceScheduleType,
   PriceValueType,
   Prisma,
+  PromotionChannel,
+  PromotionClientFilter,
+  PromotionLimitPeriod,
 } from '@prisma/client';
 import { CacheDependency } from '../../../shared/cache/cache-dependency.js';
 import { ReadConsistency } from '../../../shared/cache/enums/read-consistency.enum.js';
@@ -349,6 +353,7 @@ describe('PricingSnapshotService', () => {
       expect(rules).toEqual([
         {
           id: 'evening',
+          kind: 'SURCHARGE',
           name: 'Evening',
           scheduleType: 'WEEKLY',
           enabled: true,
@@ -369,9 +374,63 @@ describe('PricingSnapshotService', () => {
             { type: 'SERVICE', id: 'cut', excluded: false },
             { type: 'SERVICE_CATEGORY', id: 'hair', excluded: false },
           ],
+          promotion: null,
           createdAt: '2026-11-02T08:30:00.000Z',
         },
       ]);
+    });
+
+    it('maps a promotion with its conditions, staff and upper-case code', async () => {
+      const { service } = pricingSnapshotService({
+        rules: [
+          priceRuleRecord({
+            id: 'promo',
+            name: 'Autumn',
+            kind: PriceRuleKind.PROMOTION,
+            value: '15.00',
+            promotion: {
+              publicName: 'Осень',
+              showAsPromotion: false,
+              bookingFrom: new Date('2026-11-01T00:00:00.000Z'),
+              bookingTo: new Date('2026-11-30T00:00:00.000Z'),
+              minLeadMinutes: 60,
+              maxLeadMinutes: 600,
+              channels: [PromotionChannel.ONLINE],
+              clientFilter: PromotionClientFilter.BIRTHDAY,
+              birthdayWindowDays: 7,
+              promoCode: 'autumn',
+              usageLimitTotal: 100,
+              usageLimitPerClient: 1,
+              usageLimitPeriod: PromotionLimitPeriod.YEAR,
+              minVisitTotal: new Prisma.Decimal('40.50'),
+              staffIds: ['anna'],
+            },
+          }),
+        ],
+      });
+      const { rules } = await service.load('location', ReadConsistency.FRESH);
+      expect(rules[0]).toMatchObject({
+        id: 'promo',
+        kind: 'PROMOTION',
+        value: 1500,
+        promotion: {
+          publicName: 'Осень',
+          showAsPromotion: false,
+          bookingFrom: '2026-11-01',
+          bookingTo: '2026-11-30',
+          minLeadMinutes: 60,
+          maxLeadMinutes: 600,
+          channels: ['ONLINE'],
+          staffIds: ['anna'],
+          clientFilter: 'BIRTHDAY',
+          birthdayWindowDays: 7,
+          promoCode: 'AUTUMN',
+          usageLimitTotal: 100,
+          usageLimitPerClient: 1,
+          usageLimitPeriod: 'YEAR',
+          minVisitTotal: 4050,
+        },
+      });
     });
 
     it('maps an amount rule to minor units and keeps disabled rules', async () => {

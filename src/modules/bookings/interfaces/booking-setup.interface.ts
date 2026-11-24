@@ -1,6 +1,7 @@
 import { PublicCatalogProduct } from '../../products/interfaces/public-catalog-product.interface.js';
 import { BookingServiceCatalog } from '../../services/catalog/interfaces/booking-service-catalog.interface.js';
 import { BookingStaff } from '../../staff/interfaces/booking-staff.interface.js';
+import { PublicPromotionView } from '../../pricing/interfaces/public-promotion-view.interface.js';
 import { BookingSetupPrices } from './booking-setup-prices.interface.js';
 
 export interface BookingSetup {
@@ -13,4 +14,6 @@ export interface BookingSetup {
   anyStaffEnabled: boolean;
   /** Prices by catalog item and by staff member. */
   prices: BookingSetupPrices;
+  /** Promotions shown online now or within the online booking window, without a code. */
+  promotions: PublicPromotionView[];
 }

@@ -18,6 +18,7 @@ import { MULTI_SERVICE_MAX_ITEMS } from '../../services/constants/multi-service.
 import { IsLocalDateTime } from '../../../shared/time/decorators/is-local-date-time.validator.js';
 import { IsPhone } from '../../../shared/decorators/is-phone.decorator.js';
 import { UpdateBookingItemPriceDto } from './update-booking-item-price.dto.js';
+import { PromoCodeField } from '../decorators/promo-code-field.decorator.js';
 import { MANUAL_TRAFFIC_SOURCES } from '../../../shared/traffic/constants/manual-traffic-sources.constants.js';
 import { TRAFFIC_DETAIL_MAX_LENGTH } from '../../../shared/traffic/constants/traffic-limits.constants.js';
 import { TrafficSource } from '../../../shared/traffic/enums/traffic-source.enum.js';
@@ -147,6 +148,13 @@ export class UpdateBookingDto {
   @ValidateNested({ each: true })
   @Type(() => UpdateBookingItemPriceDto)
   items?: UpdateBookingItemPriceDto[];
+
+  /**
+   * A changed code re-prices every item at its staff and time; null removes the code.
+   * Missing: unchanged.
+   */
+  @PromoCodeField()
+  promoCode?: string | null;
 
   @ApiProperty({
     type: String,

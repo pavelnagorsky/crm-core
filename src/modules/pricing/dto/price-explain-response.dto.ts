@@ -3,6 +3,7 @@ import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
 import { PriceExplain } from '../interfaces/price-explain.interface.js';
 import { minorToApi } from '../rules/pricing-money.rules.js';
 import { PriceExplainCandidateDto } from './price-explain-candidate.dto.js';
+import { PromoCodeResultDto } from './promo-code-result.dto.js';
 import { PriceExplainLineDto } from './price-explain-line.dto.js';
 import { PriceExplainNotAppliedDto } from './price-explain-not-applied.dto.js';
 
@@ -36,6 +37,13 @@ export class PriceExplainResponseDto {
   @ApiProperty({ type: () => PriceExplainNotAppliedDto, isArray: true })
   notApplied: PriceExplainNotAppliedDto[];
 
+  @ApiProperty({
+    type: () => PromoCodeResultDto,
+    nullable: true,
+    description: 'What the promo code did; null without one.',
+  })
+  promoCode: PromoCodeResultDto | null;
+
   static fromExplain(explain: PriceExplain): PriceExplainResponseDto {
     const dto = new PriceExplainResponseDto();
     dto.staffId = explain.staffId;
@@ -49,6 +57,7 @@ export class PriceExplainResponseDto {
     dto.notApplied = explain.notApplied.map(
       PriceExplainNotAppliedDto.fromNotApplied,
     );
+    dto.promoCode = PromoCodeResultDto.fromResult(explain.promoCode);
     return dto;
   }
 }

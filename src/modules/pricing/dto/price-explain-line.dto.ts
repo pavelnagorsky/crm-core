@@ -19,6 +19,17 @@ export class PriceExplainLineDto {
   @ApiPrice({ description: 'After surcharges and rounding.' })
   listPrice: string;
 
+  @ApiProperty({
+    type: () => PriceExplainAdjustmentDto,
+    nullable: true,
+    description:
+      'The promotion or client discount (also the last item of adjustments); null without one.',
+  })
+  discount: PriceExplainAdjustmentDto | null;
+
+  @ApiPrice({ description: 'listPrice minus the discount.' })
+  chargedPrice: string;
+
   @ApiPrice()
   total: string;
 
@@ -30,6 +41,11 @@ export class PriceExplainLineDto {
       PriceExplainAdjustmentDto.fromAdjustment,
     );
     dto.listPrice = minorToApi(line.listPrice);
+    dto.discount =
+      line.discount === null
+        ? null
+        : PriceExplainAdjustmentDto.fromAdjustment(line.discount);
+    dto.chargedPrice = minorToApi(line.chargedPrice);
     dto.total = minorToApi(line.total);
     return dto;
   }

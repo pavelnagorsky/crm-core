@@ -53,6 +53,8 @@ import { ClientImportFile } from '../import/decorators/client-import-upload.deco
 import { ClientImportResponseDto } from '../import/dto/client-import-response.dto.js';
 import { ClientsImportService } from '../import/services/clients-import.service.js';
 import { ClientsService } from '../services/clients.service.js';
+import { BookingsAggregatesService } from '../../bookings/aggregates/services/bookings-aggregates.service.js';
+import { Client } from '@prisma/client';
 
 @ApiTags('Clients')
 @Controller('brands/:brandId/clients')
@@ -61,6 +63,7 @@ export class ClientsController {
     private readonly clientsService: ClientsService,
     private readonly clientsImportService: ClientsImportService,
     private readonly clientsExportService: ClientsExportService,
+    private readonly bookingsAggregates: BookingsAggregatesService,
   ) {}
 
   @ApiOperation({ summary: 'Create a client' })
@@ -209,7 +212,7 @@ export class ClientsController {
     );
     return BaseResponseDto.success(
       new ClientSearchResponseDto(
-        items.map(ClientResponseDto.fromEntity),
+        await this.toResponses(items),
         dto.page,
         dto.pageSize,
         totalItems,
@@ -230,7 +233,8 @@ export class ClientsController {
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<BaseResponseDto<ClientResponseDto>> {
     const client = await this.clientsService.findInBrand(brandId, id);
-    return BaseResponseDto.success(ClientResponseDto.fromEntity(client));
+    const [response] = await this.toResponses([client]);
+    return BaseResponseDto.success(response);
   }
 
   @ApiOperation({ summary: 'Search clients' })
@@ -251,12 +255,22 @@ export class ClientsController {
     );
     return BaseResponseDto.success(
       new ClientSearchResponseDto(
-        items.map(ClientResponseDto.fromEntity),
+        await this.toResponses(items),
         dto.page,
         dto.pageSize,
         totalItems,
         dto.isExport,
       ),
+    );
+  }
+
+  /** Client cards with the personal discount use, one grouped query per page. */
+  private async toResponses(clients: Client[]): Promise<ClientResponseDto[]> {
+    const stats = await this.bookingsAggregates.clientDiscountStats(
+      clients.map((client) => client.id),
+    );
+    return clients.map((client) =>
+      ClientResponseDto.fromEntity(client, stats.get(client.id)),
     );
   }
 }

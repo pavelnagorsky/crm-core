@@ -1,4 +1,4 @@
-import { BookingExecutionMode } from '@prisma/client';
+import { BookingExecutionMode, Prisma } from '@prisma/client';
 import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
 import { ManualBookingProductDto } from '../dto/manual-booking-product.dto.js';
 import { BookingStatus } from '../enums/booking-status.enum.js';
@@ -34,4 +34,11 @@ export interface PreparedBookingReservation {
   request?: BookingCreationRequest;
   /** Products to confirm and the payment, after the booking in the same transaction. */
   paymentPlan?: VisitPaymentPlan | null;
+  /** Promo code the visit was priced with and applied, upper case. */
+  promoCode?: string | null;
+  /**
+   * Runs under the location lock before the slots: re-checks the limits of the promotions the
+   * items use, when they were not counted in this transaction.
+   */
+  limitGuard?: (tx: Prisma.TransactionClient) => Promise<void>;
 }

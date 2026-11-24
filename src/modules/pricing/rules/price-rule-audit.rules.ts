@@ -5,6 +5,11 @@ import { PriceRuleRecord } from '../interfaces/price-rule-record.interface.js';
 import { PriceRuleTargetView } from '../interfaces/price-rule-target-view.interface.js';
 import { maskToWeekdays } from './price-rule-input.rules.js';
 
+const CHANNEL_LABELS: Record<string, string> = {
+  ONLINE: 'Онлайн',
+  ADMIN: 'Администратор',
+};
+
 const day = (date: Date | null): string | null =>
   date ? TimeUtils.dateOnlyStr(date) : null;
 
@@ -15,6 +20,7 @@ const day = (date: Date | null): string | null =>
 export function priceRuleAuditSnapshot(
   rule: PriceRuleRecord,
   targets: readonly PriceRuleTargetView[],
+  staffNames: ReadonlyMap<string, string> = new Map(),
 ): PriceRuleAuditSnapshot {
   return {
     scheduleType: rule.scheduleType,
@@ -43,5 +49,27 @@ export function priceRuleAuditSnapshot(
         (target) => `${target.excluded ? '-' : ''}${target.name ?? target.id}`,
       )
       .join(', '),
+    scenario: rule.scenario,
+    publicName: rule.publicName,
+    publicDescription: rule.publicDescription,
+    showAsPromotion: rule.showAsPromotion,
+    bookingFrom: day(rule.bookingFrom),
+    bookingTo: day(rule.bookingTo),
+    minLeadMinutes: rule.minLeadMinutes,
+    maxLeadMinutes: rule.maxLeadMinutes,
+    channels: (rule.channels ?? [])
+      .map((channel) => CHANNEL_LABELS[channel] ?? channel)
+      .join(', '),
+    staff: rule.staff
+      .map(({ staffId }) => staffNames.get(staffId) ?? staffId)
+      .join(', '),
+    clientFilter: rule.clientFilter,
+    birthdayWindowDays: rule.birthdayWindowDays,
+    promoCode: rule.promoCode,
+    usageLimitTotal: rule.usageLimitTotal,
+    usageLimitPerClient: rule.usageLimitPerClient,
+    usageLimitPeriod: rule.usageLimitPeriod,
+    minVisitTotal:
+      rule.minVisitTotal === null ? null : MoneyUtils.format(rule.minVisitTotal),
   };
 }

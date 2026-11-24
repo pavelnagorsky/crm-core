@@ -55,6 +55,7 @@ export class ClientsService {
           brandId,
           ...this.buildClientFields(dto),
           ...this.acquisitionSourceWrite(null, dto),
+          discountPercent: dto.discountPercent ?? null,
         },
       });
     } catch (e: any) {
@@ -84,6 +85,10 @@ export class ClientsService {
         data: {
           ...this.buildClientFields(dto),
           ...this.acquisitionSourceWrite(old, dto),
+          // Omitted keeps the personal discount, null clears it.
+          ...(dto.discountPercent !== undefined && {
+            discountPercent: dto.discountPercent,
+          }),
         },
       });
     } catch (e: any) {
@@ -458,6 +463,7 @@ export class ClientsService {
             : null,
           gender: row.gender,
           notes: row.notes,
+          discountPercent: row.discountPercent,
           // Imported clients came before Klendo: their first booking here is not an acquisition.
           importedAt: occurredAt,
         })),
@@ -564,5 +570,15 @@ export class ClientsService {
       gender: dto.gender ?? null,
       notes: dto.notes ?? null,
     };
+  }
+
+  /**
+   * The brand client with this phone (trimmed, as booking creation stores it), for the
+   * discounts of an online visit before it is booked (docs/pricing-stage4-api.md).
+   */
+  findByPhoneForBooking(brandId: string, phone: string): Promise<Client | null> {
+    return this.db.client.findFirst({
+      where: { brand: ACTIVE_BRAND_WHERE, brandId, phone: phone.trim() },
+    });
   }
 }

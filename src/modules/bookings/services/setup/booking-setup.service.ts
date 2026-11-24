@@ -29,6 +29,14 @@ import {
 import { BookingPriceWindow } from '../../interfaces/booking-price-window.interface.js';
 import { BookingStaffOption } from '../../interfaces/booking-staff-option.interface.js';
 import { PriceRange } from '../../../pricing/engine/interfaces/price-range.interface.js';
+import { PriceAdjustmentKind } from '../../../pricing/engine/enums/price-adjustment-kind.enum.js';
+import { PromotionChannel } from '../../../pricing/engine/enums/promotion-channel.enum.js';
+import { QuoteContext } from '../../../pricing/engine/interfaces/quote-context.interface.js';
+import { PriceBook } from '../../../pricing/engine/price-book.js';
+import { ResolvedBookingItem } from '../../interfaces/resolved-booking-item.interface.js';
+import { BookingPricingContextService } from '../booking-pricing-context.service.js';
+import { PromotionPublicService } from '../../../pricing/services/promotion-public.service.js';
+import { bookingSetupPromotionLabels } from '../../rules/booking-setup-promotions.rules.js';
 import {
   staffLinePrice,
   staffVisitPrice,
@@ -45,6 +53,8 @@ export class BookingSetupService {
     private readonly scheduling: BookingSchedulingService,
     private readonly billing: BillingFacade,
     private readonly pricing: PricingFacade,
+    private readonly pricingContext: BookingPricingContextService,
+    private readonly promotions: PromotionPublicService,
   ) {}
 
   async getBookingSetup(locationId: string): Promise<BookingSetup> {
@@ -60,18 +70,43 @@ export class BookingSetupService {
         ),
         this.pricing.priceBook(locationId, ReadConsistency.CACHED),
       ]);
+    // "From" prices include the promotions every online client gets without a code.
+    const context = await this.onlineContext(book, location, {
+      catalogFloor: true,
+    });
+    const dates = onlineBookingDates(location);
+    const promotions =
+      book.promotionRules().length > 0
+        ? await this.promotions.listForBookingSetup(
+            locationId,
+            dates[0],
+            dates[dates.length - 1],
+          )
+        : [];
+    const prices = buildBookingSetupPrices(book, catalog, staff, dates, context);
+    const labels = bookingSetupPromotionLabels(promotions, catalog, prices);
     return {
       catalog,
       staff,
       products,
       isOnlineBookingAvailable,
       anyStaffEnabled: location.anyStaffEnabled,
-      prices: buildBookingSetupPrices(
-        book,
-        catalog,
-        staff,
-        onlineBookingDates(location),
-      ),
+      prices: {
+        ...prices,
+        services: new Map(
+          [...prices.services].map(([id, range]) => [
+            id,
+            { ...range, promotion: labels.services.get(id) ?? null },
+          ]),
+        ),
+        bundles: new Map(
+          [...prices.bundles].map(([id, range]) => [
+            id,
+            { ...range, promotion: labels.bundles.get(id) ?? null },
+          ]),
+        ),
+      },
+      promotions,
     };
   }
 
@@ -189,6 +224,7 @@ export class BookingSetupService {
         canAssignStaff: availableStaff.length > 0,
         resolvedItems: [],
         totalPrice: null,
+        promoCode: null,
       };
     }
 
@@ -205,6 +241,14 @@ export class BookingSetupService {
           dates: [],
         }
       : { visit: null, dates: onlineBookingDates(location) };
+    // Online: the code and the client found by phone; the exact start counts lead time.
+    const context = await this.onlineContext(book, location, {
+      visitStartAt: dto.startAt
+        ? TimeUtils.localToUtc(dto.startAt, location.timezone)
+        : null,
+      promoCode: dto.promoCode ?? null,
+      phone: dto.clientPhone ?? null,
+    });
     const toOption = (
       { id, name }: { id: string; name: string },
       { min, max }: PriceRange,
@@ -231,6 +275,7 @@ export class BookingSetupService {
             selectedIds,
             member.id,
             priceWindow,
+            context,
           ),
         ),
       );
@@ -263,6 +308,7 @@ export class BookingSetupService {
               index,
               member.id,
               priceWindow,
+              context,
             ),
           ),
         ),
@@ -283,9 +329,10 @@ export class BookingSetupService {
       };
     });
     const canAssignStaff = assignStaff(candidates, parallel) !== null;
-    const resolvedItems = dto.startAt
-      ? await this.preview(locationId, dto)
-      : [];
+    const preview = dto.startAt
+      ? await this.preview(locationId, dto, context)
+      : null;
+    const resolvedItems = preview?.items ?? [];
 
     return {
       availableServiceIds,
@@ -307,16 +354,67 @@ export class BookingSetupService {
             MoneyUtils.decimal(0),
           )
         : null,
+      promoCode: preview?.promoCode ?? null,
     };
   }
 
-  private async preview(locationId: string, dto: BookingResolveRequestDto) {
+  /**
+   * Pricing facts of an online guest; null when nothing can discount (no promotions, no
+   * phone that may carry a client discount).
+   */
+  private async onlineContext(
+    book: PriceBook,
+    location: { id: string; brandId: string; timezone: string },
+    options: {
+      visitStartAt?: Date | null;
+      promoCode?: string | null;
+      phone?: string | null;
+      catalogFloor?: boolean;
+    },
+  ): Promise<QuoteContext | null> {
+    if (book.promotionRules().length === 0 && !options.phone) return null;
+    const context = await this.pricingContext.build({
+      locationId: location.id,
+      brandId: location.brandId,
+      timezone: location.timezone,
+      channel: PromotionChannel.ONLINE,
+      visitStartAt: options.visitStartAt ?? null,
+      promoCode: options.promoCode ?? null,
+      phone: options.phone ?? null,
+    });
+    return options.catalogFloor ? { ...context, catalogFloor: true } : context;
+  }
+
+  /** Online, a promotion not shown as one is the price itself: no old price, no discount. */
+  private publicItem(item: ResolvedBookingItem): ResolvedBookingItem {
+    const hidden = item.priceAdjustments.some(
+      (adjustment) =>
+        (adjustment.kind as string) === PriceAdjustmentKind.PROMOTION &&
+        adjustment.publicTitle === null,
+    );
+    if (!hidden) return item;
+    return {
+      ...item,
+      listPrice: item.chargedPrice,
+      discountTotal: MoneyUtils.decimal(0),
+      priceAdjustments: item.priceAdjustments.filter(
+        (adjustment) =>
+          (adjustment.kind as string) !== PriceAdjustmentKind.PROMOTION,
+      ),
+    };
+  }
+
+  private async preview(
+    locationId: string,
+    dto: BookingResolveRequestDto,
+    context: QuoteContext | null,
+  ) {
     const [selection, location] = await Promise.all([
       this.selection.resolveForBooking(locationId, dto),
       // Cached like the preview prices; the rule is read with the timezone.
       this.locationService.getBookingSettings(locationId),
     ]);
-    return this.scheduling.resolveForBooking({
+    const scheduled = await this.scheduling.schedule({
       locationId,
       bundleId: selection.bundleId,
       prices: ReadConsistency.CACHED,
@@ -331,6 +429,11 @@ export class BookingSetupService {
       customEndAt: dto.endAt
         ? TimeUtils.localToUtc(dto.endAt, location.timezone)
         : null,
+      pricingContext: context,
     });
+    return {
+      items: scheduled.items.map((item) => this.publicItem(item)),
+      promoCode: scheduled.promoCode,
+    };
   }
 }

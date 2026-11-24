@@ -24,6 +24,7 @@ import { OccupancyBookedHours } from '../../interfaces/occupancy-booked-hours.in
 import { SeriesRow } from '../../interfaces/series-row.interface.js';
 import { ServiceCount } from '../../interfaces/service-count.interface.js';
 import { ChannelCount } from '../../interfaces/channel-count.interface.js';
+import { ClientDiscountStats } from '../../interfaces/client-discount-stats.interface.js';
 import { StaffCount } from '../../interfaces/staff-count.interface.js';
 import { TrafficSourceTotals } from '../../interfaces/traffic-source-totals.interface.js';
 import { TrafficSourceTotalsRow } from '../../interfaces/traffic-source-totals-row.interface.js';
@@ -37,6 +38,8 @@ import {
   catalogCategoryMatch,
   catalogItemMatch,
 } from '../../utils/catalog-item-filter.js';
+
+const CLIENT_STATS_CHUNK = 1000;
 
 @Injectable()
 export class BookingsAggregatesService {
@@ -819,6 +822,54 @@ export class BookingsAggregatesService {
           AND b."startAt" < ${before}::timestamptz AT TIME ZONE 'UTC'
       )
     `;
+  }
+
+  /**
+   * Personal discount use by client (docs/pricing-stage4-api.md): live (not deleted, not
+   * cancelled) bookings with a CLIENT_DISCOUNT layer, all time, in active locations. A
+   * client without such bookings is missing from the map.
+   */
+  async clientDiscountStats(
+    clientIds: readonly string[],
+  ): Promise<Map<string, ClientDiscountStats>> {
+    const result = new Map<string, ClientDiscountStats>();
+    // Chunks keep a long export page under the bind parameter limit.
+    for (let from = 0; from < clientIds.length; from += CLIENT_STATS_CHUNK)
+      for (const [clientId, stats] of await this.clientDiscountStatsChunk(
+        clientIds.slice(from, from + CLIENT_STATS_CHUNK),
+      ))
+        result.set(clientId, stats);
+    return result;
+  }
+
+  private async clientDiscountStatsChunk(
+    clientIds: readonly string[],
+  ): Promise<Map<string, ClientDiscountStats>> {
+    const rows = await this.db.$queryRaw<
+      Array<{ clientId: string; bookingsCount: bigint; amount: string }>
+    >(Prisma.sql`
+      SELECT b."clientId" AS "clientId",
+             COUNT(DISTINCT b."id") AS "bookingsCount",
+             COALESCE(-SUM(a."amount"), 0)::text AS "amount"
+      FROM "Booking" b
+      JOIN "BookingItem" i ON i."bookingId" = b."id"
+      JOIN "BookingItemPriceAdjustment" a ON a."bookingItemId" = i."id"
+      WHERE b."clientId" IN (${Prisma.join([...clientIds])})
+        AND b."deletedAt" IS NULL
+        AND b."status"::text <> ${BookingStatus.CANCELLED}
+        AND a."kind"::text = 'CLIENT_DISCOUNT'
+        AND ${activeLocationSql(Prisma.sql`b."locationId"`)}
+      GROUP BY b."clientId"
+    `);
+    return new Map(
+      rows.map((row) => [
+        row.clientId,
+        {
+          bookingsCount: Number(row.bookingsCount),
+          amount: new Prisma.Decimal(row.amount),
+        },
+      ]),
+    );
   }
 
   private activeLocationScope(locationIds: string[]): Prisma.Sql {

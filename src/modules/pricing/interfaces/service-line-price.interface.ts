@@ -1,4 +1,6 @@
 import { Prisma } from '@prisma/client';
+import { PromotionSkip } from '../engine/interfaces/promotion-skip.interface.js';
+import { ServiceDiscountOption } from './service-discount-option.interface.js';
 import { ServicePriceAdjustment } from './service-price-adjustment.interface.js';
 
 /**
@@ -15,4 +17,10 @@ export interface ServiceLinePrice {
   chargedPrice: Prisma.Decimal;
   customPrice: Prisma.Decimal | null;
   adjustments: ServicePriceAdjustment[];
+  /** The PROMOTION or CLIENT_DISCOUNT layer of adjustments, or null. */
+  discount: ServicePriceAdjustment | null;
+  /** Discounts that apply, best first (a FIXED bundle: of the package). */
+  eligible: ServiceDiscountOption[];
+  /** Enabled promotions that target the line but do not apply. */
+  ineligible: PromotionSkip[];
 }

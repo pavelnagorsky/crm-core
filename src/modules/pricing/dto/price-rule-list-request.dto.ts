@@ -1,6 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Transform } from 'class-transformer';
-import { IsBoolean, IsOptional } from 'class-validator';
+import { PriceRuleKind } from '@prisma/client';
+import { IsBoolean, IsEnum, IsOptional } from 'class-validator';
 
 export class PriceRuleListRequestDto {
   @ApiProperty({
@@ -15,4 +16,14 @@ export class PriceRuleListRequestDto {
   )
   @IsBoolean()
   archived?: boolean;
+
+  @ApiProperty({
+    enum: PriceRuleKind,
+    enumName: 'PriceRuleKind',
+    required: false,
+    default: PriceRuleKind.SURCHARGE,
+  })
+  @IsOptional()
+  @IsEnum(PriceRuleKind)
+  kind?: PriceRuleKind;
 }

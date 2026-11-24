@@ -24,6 +24,8 @@ const regularExpressions = {
   localDateTime: /^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d:[0-5]\d$/,
   // Calendar day before a real-date check — e.g. 2026-10-01
   calendarDate: /^\d{4}-\d{2}-\d{2}$/,
+  // Promo code of a promotion after upper-casing: 3-32 of A-Z, 0-9, hyphen, underscore
+  promoCode: /^[A-Z0-9_-]{3,32}$/,
   // Numeric token before the scale check — e.g. 49, 49.5, -12.5
   decimalToken: /^-?\d+(\.\d+)?$/,
   // Non-negative money after canonicalization to 2 decimal places
@@ -40,6 +42,8 @@ const regularExpressions = {
   signedQuantity: /^-?\d+\.\d{3}$/,
   // Percent 0–100 with up to 2 decimal places
   percent: /^(100(?:\.0{1,2})?|\d{1,2}(?:\.\d{1,2})?)$/,
+  // Percent above 0 and up to 100 with up to 2 decimal places (a discount)
+  positivePercent: /^(?!0+(?:\.0{1,2})?$)(100(?:\.0{1,2})?|\d{1,2}(?:\.\d{1,2})?)$/,
   // Public booking page slug: lowercase segments separated by single hyphens
   bookingPageSlug: /^[a-z0-9]+(?:-[a-z0-9]+)*$/,
   googleTagManagerId: /^GTM-[A-Z0-9]{1,28}$/,

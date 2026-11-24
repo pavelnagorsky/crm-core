@@ -1,7 +1,8 @@
-import { PriceRuleKind, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { TimeUtils } from '../../../shared/time/time.utils.js';
 import { NormalizedPriceRule } from '../interfaces/normalized-price-rule.interface.js';
 import { PriceRuleRecord } from '../interfaces/price-rule-record.interface.js';
+import { promotionColumns } from './price-rule-columns.rules.js';
 
 /** Id of a rule that is not saved yet. */
 export const DRAFT_PRICE_RULE_ID = 'draft';
@@ -22,7 +23,7 @@ export function draftPriceRuleRecord(
   return {
     id,
     locationId,
-    kind: PriceRuleKind.SURCHARGE,
+    kind: rule.kind,
     scheduleType: rule.scheduleType,
     name: rule.name,
     note: rule.note,
@@ -36,6 +37,11 @@ export function draftPriceRuleRecord(
     holidayExclusive: rule.holidayExclusive,
     weekdaysMask: rule.weekdaysMask,
     appliesToAll: rule.appliesToAll,
+    ...promotionColumns(rule),
+    minVisitTotal:
+      rule.promotion?.minVisitTotal == null
+        ? null
+        : new Prisma.Decimal(rule.promotion.minVisitTotal),
     createdById: null,
     createdAt: options.createdAt,
     updatedAt: options.createdAt,
@@ -49,6 +55,10 @@ export function draftPriceRuleRecord(
     dates: rule.dates.map((date) => ({
       ruleId: id,
       date: TimeUtils.dateOnly(date),
+    })),
+    staff: (rule.promotion?.staffIds ?? []).map((staffId) => ({
+      ruleId: id,
+      staffId,
     })),
   };
 }

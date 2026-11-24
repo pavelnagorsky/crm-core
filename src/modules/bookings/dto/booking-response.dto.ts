@@ -114,6 +114,13 @@ export class BookingResponseDto {
   internalNotes: string | null;
 
   @ApiProperty({
+    type: String,
+    nullable: true,
+    description: 'Promo code the visit was priced with, upper case',
+  })
+  promoCode: string | null;
+
+  @ApiProperty({
     type: Boolean,
     description:
       'Staff email the client about this booking: the confirmation and later moves. Set at creation',
@@ -155,7 +162,9 @@ export class BookingResponseDto {
     dto.clientLastName = booking.clientLastName;
     dto.clientPhone = booking.clientPhone;
     dto.clientEmail = booking.clientEmail;
-    dto.items = booking.items.map(BookingItemResponseDto.fromEntity);
+    dto.items = booking.items.map((item) =>
+      BookingItemResponseDto.fromEntity(item),
+    );
     dto.totalListPrice = MoneyUtils.format(
       booking.items.reduce(
         (sum, item) => sum.plus(item.listPrice),
@@ -173,6 +182,7 @@ export class BookingResponseDto {
     );
     dto.notes = booking.notes;
     dto.internalNotes = booking.internalNotes;
+    dto.promoCode = booking.promoCode;
     dto.createdAt = booking.createdAt;
     dto.updatedAt = booking.updatedAt;
     return dto;

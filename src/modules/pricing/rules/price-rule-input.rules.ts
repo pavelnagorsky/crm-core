@@ -1,9 +1,12 @@
 import { HttpStatus } from '@nestjs/common';
 import {
   Prisma,
+  PriceRuleKind,
   PriceRuleTargetType,
   PriceScheduleType,
   PriceValueType,
+  PromotionChannel,
+  PromotionClientFilter,
 } from '@prisma/client';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import regularExpressions from '../../../shared/regular-expressions.js';
@@ -15,13 +18,47 @@ import {
   PRICE_RULE_MAX_INTERVALS,
   PRICE_RULE_MAX_PERCENT,
   PRICE_RULE_MAX_TARGETS,
+  PROMOTION_MAX_BIRTHDAY_WINDOW_DAYS,
+  PROMOTION_MAX_LEAD_MINUTES,
+  PROMOTION_MAX_PERCENT,
+  PROMOTION_MAX_STAFF,
+  PROMOTION_MAX_USAGE_LIMIT,
+  PROMOTION_PUBLIC_DESCRIPTION_MAX_LENGTH,
+  PROMOTION_PUBLIC_NAME_MAX_LENGTH,
 } from '../constants/price-rule.constants.js';
 import { PriceRuleInputDto } from '../dto/price-rule-input.dto.js';
 import { NormalizedPriceRule } from '../interfaces/normalized-price-rule.interface.js';
+import { NormalizedPromotion } from '../interfaces/normalized-promotion.interface.js';
 import { PriceRuleIntervalMinutes } from '../interfaces/price-rule-interval-minutes.interface.js';
 import { PriceRuleTargetRef } from '../interfaces/price-rule-target-ref.interface.js';
 
 const MINUTES_PER_DAY = 1440;
+
+/** Promotion fields; a surcharge input naming any of them is invalid. */
+const PROMOTION_FIELDS = [
+  'scenario',
+  'publicName',
+  'publicDescription',
+  'showAsPromotion',
+  'bookingFrom',
+  'bookingTo',
+  'minLeadMinutes',
+  'maxLeadMinutes',
+  'channels',
+  'staffIds',
+  'clientFilter',
+  'birthdayWindowDays',
+  'promoCode',
+  'usageLimitTotal',
+  'usageLimitPerClient',
+  'usageLimitPeriod',
+  'minVisitTotal',
+] as const satisfies readonly (keyof PriceRuleInputDto)[];
+
+const CHANNEL_ORDER: readonly PromotionChannel[] = [
+  PromotionChannel.ONLINE,
+  PromotionChannel.ADMIN,
+];
 
 /** 400 PRICE_RULE_INVALID; the payload names the field the client should mark. */
 function invalid(field: string): never {
@@ -45,6 +82,12 @@ export function isCalendarDay(value: string): boolean {
 function checkedDay(value: string | null | undefined, field: string): string {
   if (typeof value !== 'string' || !isCalendarDay(value)) invalid(field);
   return value;
+}
+
+/** A promo code as stored: trimmed, upper case; null when it is not a valid code. */
+export function normalizePromoCode(value: string): string | null {
+  const code = value.trim().toUpperCase();
+  return regularExpressions.promoCode.test(code) ? code : null;
 }
 
 /** Bit (isoWeekday - 1) per day; 0 when no day is named. */
@@ -97,21 +140,31 @@ function normalizeIntervals(
   return result;
 }
 
-function normalizeValue(valueType: PriceValueType, raw: string): string {
+function positiveMoney(raw: string, max: string, field: string): string {
   let value: Prisma.Decimal;
   try {
     value = new Prisma.Decimal(raw);
   } catch {
-    return invalid('value');
+    return invalid(field);
   }
-  const max =
-    valueType === PriceValueType.PERCENT
-      ? PRICE_RULE_MAX_PERCENT
-      : PRICE_RULE_MAX_AMOUNT;
   if (!value.isFinite() || value.lte(0) || value.decimalPlaces() > 2)
-    invalid('value');
-  if (value.gt(max)) invalid('value');
+    invalid(field);
+  if (value.gt(max)) invalid(field);
   return value.toFixed(2);
+}
+
+function normalizeValue(
+  kind: PriceRuleKind,
+  valueType: PriceValueType,
+  raw: string,
+): string {
+  const max =
+    valueType === PriceValueType.AMOUNT
+      ? PRICE_RULE_MAX_AMOUNT
+      : kind === PriceRuleKind.PROMOTION
+        ? PROMOTION_MAX_PERCENT
+        : PRICE_RULE_MAX_PERCENT;
+  return positiveMoney(raw, max, 'value');
 }
 
 function normalizeTargets(input: PriceRuleInputDto): PriceRuleTargetRef[] {
@@ -135,18 +188,156 @@ function normalizeTargets(input: PriceRuleInputDto): PriceRuleTargetRef[] {
   return targets;
 }
 
+const isSet = (value: unknown): boolean =>
+  value !== undefined && value !== null;
+
+function optionalInt(
+  value: number | null | undefined,
+  min: number,
+  max: number,
+  field: string,
+): number | null {
+  if (!isSet(value)) return null;
+  if (!Number.isInteger(value) || (value as number) < min || (value as number) > max)
+    invalid(field);
+  return value as number;
+}
+
+/** Promotion fields of a PROMOTION input (docs/pricing-stage4-api.md). */
+function normalizePromotion(input: PriceRuleInputDto): NormalizedPromotion {
+  const publicName = input.publicName?.trim() ?? '';
+  if (
+    publicName.length === 0 ||
+    publicName.length > PROMOTION_PUBLIC_NAME_MAX_LENGTH
+  )
+    invalid('publicName');
+  const publicDescription = input.publicDescription?.trim() || null;
+  if (
+    publicDescription !== null &&
+    publicDescription.length > PROMOTION_PUBLIC_DESCRIPTION_MAX_LENGTH
+  )
+    invalid('publicDescription');
+
+  const bookingFrom = isSet(input.bookingFrom)
+    ? checkedDay(input.bookingFrom, 'bookingFrom')
+    : null;
+  const bookingTo = isSet(input.bookingTo)
+    ? checkedDay(input.bookingTo, 'bookingTo')
+    : null;
+  if (bookingFrom && bookingTo && bookingFrom > bookingTo) invalid('bookingTo');
+
+  const minLeadMinutes = optionalInt(
+    input.minLeadMinutes,
+    0,
+    PROMOTION_MAX_LEAD_MINUTES,
+    'minLeadMinutes',
+  );
+  const maxLeadMinutes = optionalInt(
+    input.maxLeadMinutes,
+    0,
+    PROMOTION_MAX_LEAD_MINUTES,
+    'maxLeadMinutes',
+  );
+  if (
+    minLeadMinutes !== null &&
+    maxLeadMinutes !== null &&
+    minLeadMinutes > maxLeadMinutes
+  )
+    invalid('maxLeadMinutes');
+
+  const channels = input.channels ?? [];
+  if (
+    channels.length === 0 ||
+    new Set(channels).size !== channels.length ||
+    channels.some((channel) => !CHANNEL_ORDER.includes(channel))
+  )
+    invalid('channels');
+
+  const staffIds = [...new Set(input.staffIds ?? [])].sort();
+  if (staffIds.length > PROMOTION_MAX_STAFF) invalid('staffIds');
+
+  const clientFilter = input.clientFilter ?? PromotionClientFilter.ANY;
+  const birthdayWindowDays = optionalInt(
+    input.birthdayWindowDays,
+    0,
+    PROMOTION_MAX_BIRTHDAY_WINDOW_DAYS,
+    'birthdayWindowDays',
+  );
+  if ((clientFilter === PromotionClientFilter.BIRTHDAY) !== (birthdayWindowDays !== null))
+    invalid('birthdayWindowDays');
+
+  let promoCode: string | null = null;
+  if (isSet(input.promoCode) && (input.promoCode as string).trim() !== '') {
+    promoCode = normalizePromoCode(input.promoCode as string);
+    if (promoCode === null) invalid('promoCode');
+  }
+
+  const usageLimitTotal = optionalInt(
+    input.usageLimitTotal,
+    1,
+    PROMOTION_MAX_USAGE_LIMIT,
+    'usageLimitTotal',
+  );
+  const usageLimitPerClient = optionalInt(
+    input.usageLimitPerClient,
+    1,
+    PROMOTION_MAX_USAGE_LIMIT,
+    'usageLimitPerClient',
+  );
+  const usageLimitPeriod = input.usageLimitPeriod ?? null;
+  if ((usageLimitPerClient === null) !== (usageLimitPeriod === null))
+    invalid(usageLimitPerClient === null ? 'usageLimitPerClient' : 'usageLimitPeriod');
+
+  const minVisitTotal = isSet(input.minVisitTotal)
+    ? positiveMoney(
+        input.minVisitTotal as string,
+        PRICE_RULE_MAX_AMOUNT,
+        'minVisitTotal',
+      )
+    : null;
+
+  return {
+    scenario: input.scenario ?? null,
+    publicName,
+    publicDescription,
+    showAsPromotion: input.showAsPromotion ?? true,
+    bookingFrom,
+    bookingTo,
+    minLeadMinutes,
+    maxLeadMinutes,
+    channels: CHANNEL_ORDER.filter((channel) => channels.includes(channel)),
+    staffIds,
+    clientFilter,
+    birthdayWindowDays,
+    promoCode,
+    usageLimitTotal,
+    usageLimitPerClient,
+    usageLimitPeriod,
+    minVisitTotal,
+  };
+}
+
 /**
- * Checks a rule input against its schedule type and turns it into stored form
- * (docs/pricing-stage3-api.md). Fields of another schedule type are rejected, not ignored.
- * Throws 400 PRICE_RULE_INVALID with the offending field.
+ * Checks a rule input against its kind and schedule type and turns it into stored form
+ * (docs/pricing-stage3-api.md, docs/pricing-stage4-api.md). Fields of another schedule type
+ * or kind are rejected, not ignored. A promotion is WEEKLY; its weekdays may be empty (every
+ * day). Throws 400 PRICE_RULE_INVALID with the offending field.
  */
 export function normalizePriceRuleInput(
   input: PriceRuleInputDto,
 ): NormalizedPriceRule {
+  const kind = input.kind ?? PriceRuleKind.SURCHARGE;
+  const isPromotion = kind === PriceRuleKind.PROMOTION;
+  if (!isPromotion)
+    for (const field of PROMOTION_FIELDS)
+      if (isSet(input[field])) invalid(field);
+  if (isPromotion && input.scheduleType !== PriceScheduleType.WEEKLY)
+    invalid('scheduleType');
+
   const name = input.name?.trim() ?? '';
   if (name.length === 0) invalid('name');
   const note = input.note?.trim() || null;
-  const value = normalizeValue(input.valueType, input.value);
+  const value = normalizeValue(kind, input.valueType, input.value);
   const yearly = input.yearly === true;
   const holidayExclusive = input.holidayExclusive === true;
   const dates = [...new Set(input.dates ?? [])];
@@ -163,7 +354,7 @@ export function normalizePriceRuleInput(
       if (yearly) invalid('yearly');
       if (holidayExclusive) invalid('holidayExclusive');
       if (hasDates) invalid('dates');
-      if (weekdaysMask === 0) invalid('weekdays');
+      if (weekdaysMask === 0 && !isPromotion) invalid('weekdays');
       if (input.visitFrom) visitFrom = checkedDay(input.visitFrom, 'visitFrom');
       if (input.visitTo) visitTo = checkedDay(input.visitTo, 'visitTo');
       if (visitFrom && visitTo && visitFrom > visitTo) invalid('visitTo');
@@ -192,6 +383,7 @@ export function normalizePriceRuleInput(
   }
 
   return {
+    kind,
     scheduleType: input.scheduleType,
     name,
     note,
@@ -207,5 +399,6 @@ export function normalizePriceRuleInput(
     dates: input.scheduleType === PriceScheduleType.HOLIDAYS ? dates : [],
     appliesToAll: input.appliesToAll,
     targets,
+    promotion: isPromotion ? normalizePromotion(input) : null,
   };
 }

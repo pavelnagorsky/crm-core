@@ -28,11 +28,20 @@ import { VisitPaymentSummary } from './interfaces/visit-payment-summary.interfac
 import { BookingPaymentReadService } from './services/read/booking-payment-read.service.js';
 import { BookingPaymentService } from './services/write/booking-payment.service.js';
 import { BookingPriceRuleStatsService } from './services/read/booking-price-rule-stats.service.js';
-import { PriceRuleSurchargeStats } from '../pricing/interfaces/price-rule-surcharge-stats.interface.js';
+import { PriceRuleStats } from '../pricing/interfaces/price-rule-stats.interface.js';
+import { PromotionMatchItem } from '../pricing/interfaces/promotion-match-item.interface.js';
+import { PromotionNotReturnedRow } from '../pricing/interfaces/promotion-not-returned-row.interface.js';
+import { PromotionPeriodTotals } from '../pricing/interfaces/promotion-period-totals.interface.js';
+import { PromotionReport } from '../pricing/interfaces/promotion-report.interface.js';
+import { BookingPromotionReportService } from './services/read/booking-promotion-report.service.js';
 
 import { BookingStaffingPreviewService } from './services/booking-staffing-preview.service.js';
 import { StaffingPreview } from './interfaces/staffing-preview.interface.js';
 import { StaffingPreviewRequest } from './interfaces/staffing-preview-request.interface.js';
+import { LocalPricingContextRequest } from './interfaces/local-pricing-context-request.interface.js';
+import { BookingPricingContextService } from './services/booking-pricing-context.service.js';
+import { QuoteContext } from '../pricing/engine/interfaces/quote-context.interface.js';
+import { TimeUtils } from '../../shared/time/time.utils.js';
 @Injectable()
 export class BookingsFacade {
   constructor(
@@ -44,7 +53,9 @@ export class BookingsFacade {
     private readonly payment: BookingPaymentService,
     private readonly paymentReads: BookingPaymentReadService,
     private readonly priceRuleStats: BookingPriceRuleStatsService,
+    private readonly promotionReports: BookingPromotionReportService,
     private readonly staffingPreview: BookingStaffingPreviewService,
+    private readonly pricingContext: BookingPricingContextService,
   ) {}
 
   async getBookingSetup(locationId: string): Promise<BookingSetup> {
@@ -63,15 +74,53 @@ export class BookingsFacade {
   }
 
   /**
-   * Surcharge each rule added to visits of the last 30 days (sum and distinct bookings,
-   * cancelled bookings left out). Rules with nothing to show are absent from the map.
+   * What each rule did to visits of the last 30 days (surcharge or discount, distinct
+   * bookings; promotions also revenue, new clients and all-time usage), cancelled bookings
+   * left out. Rules with nothing to show are absent from the map.
    */
-  getPriceRuleSurchargeStats(
+  getPriceRuleStats(
     locationId: string,
     ruleIds: readonly string[],
     now = new Date(),
-  ): Promise<Map<string, PriceRuleSurchargeStats>> {
-    return this.priceRuleStats.surchargeStats(locationId, ruleIds, now);
+  ): Promise<Map<string, PriceRuleStats>> {
+    return this.priceRuleStats.ruleStats(locationId, ruleIds, now);
+  }
+
+  /** Results of one promotion over visits since the given date (null: all time) up to now. */
+  getPromotionReport(
+    locationId: string,
+    ruleId: string,
+    since: Date | null,
+    now = new Date(),
+  ): Promise<PromotionReport> {
+    return this.promotionReports.report(locationId, ruleId, since, now);
+  }
+
+  /** Clients who did not book again after a promotion visit, for the export. */
+  getPromotionNotReturned(
+    locationId: string,
+    ruleId: string,
+    now = new Date(),
+  ): Promise<PromotionNotReturnedRow[]> {
+    return this.promotionReports.notReturnedRows(locationId, ruleId, now);
+  }
+
+  /** All promotions of the location over visits in [from, to]. */
+  getPromotionTotals(
+    locationId: string,
+    from: Date,
+    to: Date,
+  ): Promise<PromotionPeriodTotals> {
+    return this.promotionReports.periodTotals(locationId, from, to);
+  }
+
+  /** Items of live bookings with a visit start in [from, to], for a promotion preview. */
+  getPromotionMatchItems(
+    locationId: string,
+    from: Date,
+    to: Date,
+  ): Promise<PromotionMatchItem[]> {
+    return this.promotionReports.matchItems(locationId, from, to);
   }
 
   async resolveBookingSelection(
@@ -234,6 +283,29 @@ export class BookingsFacade {
     request: StaffingPreviewRequest,
   ): Promise<StaffingPreview> {
     return this.staffingPreview.preview(locationId, request);
+  }
+
+  /**
+   * Promotions and the client discount of a visit as the price check sets it up: the
+   * channel, the client, the code and when it is booked, all in the location time.
+   */
+  async localPricingContext(
+    locationId: string,
+    request: LocalPricingContextRequest,
+  ): Promise<QuoteContext> {
+    const location = await this.locations.getBookingSettings(locationId);
+    return this.pricingContext.build({
+      locationId,
+      brandId: location.brandId,
+      timezone: location.timezone,
+      channel: request.channel,
+      visitStartAt: TimeUtils.localToUtc(request.visitStart, location.timezone),
+      clientId: request.clientId,
+      promoCode: request.promoCode,
+      now: request.bookedAt
+        ? TimeUtils.localToUtc(request.bookedAt, location.timezone)
+        : undefined,
+    });
   }
 
   private async dayFilterTimezone(

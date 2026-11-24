@@ -221,9 +221,11 @@ describe('Pricing controllers', () => {
       restore: vi.fn(),
       duplicate: vi.fn(),
     };
-    const bookings = { getPriceRuleSurchargeStats: vi.fn() };
+    const bookings = { getPriceRuleStats: vi.fn() };
     const rulesController = new PriceRulesController(
       rules as never,
+      {} as never,
+      {} as never,
       bookings as never,
     );
     const view = {
@@ -245,6 +247,8 @@ describe('Pricing controllers', () => {
           excluded: false,
         },
       ],
+      staff: [],
+      currency: 'BYN',
       serviceCount: 3,
       status: PriceRuleStatus.SCHEDULED,
       nextDate: '2026-12-04',
@@ -259,14 +263,24 @@ describe('Pricing controllers', () => {
     };
 
     beforeEach(() =>
-      bookings.getPriceRuleSurchargeStats.mockResolvedValue(new Map()),
+      bookings.getPriceRuleStats.mockResolvedValue(new Map()),
     );
 
     it('maps a rule to the contract shape', async () => {
       rules.get.mockResolvedValue(view);
-      bookings.getPriceRuleSurchargeStats.mockResolvedValue(
+      bookings.getPriceRuleStats.mockResolvedValue(
         new Map([
-          ['rule-1', { ruleId: 'rule-1', amount: d('21'), bookingsCount: 2 }],
+          [
+            'rule-1',
+            {
+              ruleId: 'rule-1',
+              amount: d('21'),
+              bookingsCount: 2,
+              revenue: d('0'),
+              newClients: 0,
+              usageCount: 0,
+            },
+          ],
         ]),
       );
       const result = await rulesController.get('location-1', 'rule-1');
@@ -292,12 +306,36 @@ describe('Pricing controllers', () => {
         serviceCount: 3,
         status: 'SCHEDULED',
         nextDate: '2026-12-04',
-        stats30d: { amount: '21.00', bookingsCount: 2 },
+        stats30d: {
+          amount: '21.00',
+          bookingsCount: 2,
+          revenue: null,
+          newClients: null,
+        },
+        scenario: null,
+        publicName: null,
+        publicDescription: null,
+        showAsPromotion: true,
+        bookingFrom: null,
+        bookingTo: null,
+        minLeadMinutes: null,
+        maxLeadMinutes: null,
+        channels: [],
+        staff: [],
+        clientFilter: 'ANY',
+        birthdayWindowDays: null,
+        promoCode: null,
+        usageLimitTotal: null,
+        usageLimitPerClient: null,
+        usageLimitPeriod: null,
+        minVisitTotal: null,
+        usageCount: 0,
+        conditions: [],
         createdAt: new Date('2026-11-01T10:00:00.000Z'),
         updatedAt: new Date('2026-11-01T10:00:00.000Z'),
       });
       expect(rules.get).toHaveBeenCalledWith('location-1', 'rule-1');
-      expect(bookings.getPriceRuleSurchargeStats).toHaveBeenCalledWith(
+      expect(bookings.getPriceRuleStats).toHaveBeenCalledWith(
         'location-1',
         ['rule-1'],
       );
@@ -309,6 +347,8 @@ describe('Pricing controllers', () => {
       expect(result.responseValue?.stats30d).toEqual({
         amount: '0.00',
         bookingsCount: 0,
+        revenue: null,
+        newClients: null,
       });
     });
 
@@ -318,13 +358,13 @@ describe('Pricing controllers', () => {
         { ...view, rule: { ...view.rule, id: 'rule-2' } },
       ]);
       const result = await rulesController.list('location-1', {});
-      expect(rules.list).toHaveBeenCalledWith('location-1', false);
+      expect(rules.list).toHaveBeenCalledWith('location-1', false, 'SURCHARGE');
       expect(result.responseValue?.map((rule) => rule.id)).toEqual([
         'rule-1',
         'rule-2',
       ]);
-      expect(bookings.getPriceRuleSurchargeStats).toHaveBeenCalledTimes(1);
-      expect(bookings.getPriceRuleSurchargeStats).toHaveBeenCalledWith(
+      expect(bookings.getPriceRuleStats).toHaveBeenCalledTimes(1);
+      expect(bookings.getPriceRuleStats).toHaveBeenCalledWith(
         'location-1',
         ['rule-1', 'rule-2'],
       );
@@ -333,7 +373,7 @@ describe('Pricing controllers', () => {
     it('lists the archived rules on request', async () => {
       rules.list.mockResolvedValue([]);
       await rulesController.list('location-1', { archived: true });
-      expect(rules.list).toHaveBeenCalledWith('location-1', true);
+      expect(rules.list).toHaveBeenCalledWith('location-1', true, 'SURCHARGE');
     });
 
     it('passes the audit actor to every write', async () => {

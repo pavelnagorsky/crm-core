@@ -1,7 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { BookingItem } from '@prisma/client';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
 import { MoneyUtils } from '../../../shared/money/money.utils.js';
+import { BookingItemWithAdjustments } from '../interfaces/booking-item-with-adjustments.interface.js';
+import { itemDiscount } from '../rules/booking-item-discount.rules.js';
+import { BookingItemAdjustmentResponseDto } from './booking-item-adjustment-response.dto.js';
 
 export class BookingItemResponseDto {
   @ApiProperty({ type: String })
@@ -37,6 +39,21 @@ export class BookingItemResponseDto {
   @ApiPrice({ nullable: true })
   customPrice: string | null;
 
+  @ApiProperty({
+    type: () => BookingItemAdjustmentResponseDto,
+    isArray: true,
+    description:
+      'Price layers from basePrice to chargedPrice: level or personal price, surcharges, rounding, discount',
+  })
+  adjustments: BookingItemAdjustmentResponseDto[];
+
+  @ApiProperty({
+    type: () => BookingItemAdjustmentResponseDto,
+    nullable: true,
+    description: 'The PROMOTION or CLIENT_DISCOUNT layer of adjustments; null without a discount',
+  })
+  discount: BookingItemAdjustmentResponseDto | null;
+
   @ApiProperty({ type: String })
   staffId: string;
 
@@ -52,7 +69,7 @@ export class BookingItemResponseDto {
   @ApiProperty({ type: String, nullable: true })
   calendarEventId: string | null;
 
-  static fromEntity(item: BookingItem): BookingItemResponseDto {
+  static fromEntity(item: BookingItemWithAdjustments): BookingItemResponseDto {
     const dto = new BookingItemResponseDto();
     dto.id = item.id;
     dto.serviceId = item.serviceId;
@@ -65,6 +82,14 @@ export class BookingItemResponseDto {
     dto.chargedPrice = MoneyUtils.format(item.chargedPrice);
     dto.customPrice =
       item.customPrice == null ? null : MoneyUtils.format(item.customPrice);
+    dto.adjustments = (item.priceAdjustments ?? []).map((adjustment) =>
+      BookingItemAdjustmentResponseDto.fromEntity(adjustment),
+    );
+    const discount = itemDiscount(item.priceAdjustments);
+    dto.discount =
+      discount === null
+        ? null
+        : BookingItemAdjustmentResponseDto.fromEntity(discount);
     dto.staffId = item.staffId;
     dto.staffName = item.staffName;
     dto.startAt = item.startAt;

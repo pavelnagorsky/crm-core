@@ -22,6 +22,7 @@ type ClientRow = {
   gender: string;
   notes: string;
   acquisitionSource: string;
+  discountPercent: string;
 };
 
 @Injectable()
@@ -47,6 +48,7 @@ export class ClientsExportService {
       { header: text.gender, key: 'gender' },
       { header: text.notes, key: 'notes', width: 40 },
       { header: text.acquisitionSource, key: 'acquisitionSource', width: 28 },
+      { header: text.discountPercent, key: 'discountPercent', width: 14 },
     ];
     const { items } = await this.clientsService.search(brandId, {
       search: dto.search,
@@ -84,6 +86,7 @@ export class ClientsExportService {
         client.acquisitionSource,
         client.acquisitionSourceDetail,
       ),
+      discountPercent: client.discountPercent?.toString() ?? '',
     };
   }
 

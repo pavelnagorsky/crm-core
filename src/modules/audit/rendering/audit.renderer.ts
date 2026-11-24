@@ -76,9 +76,17 @@ export class AuditRenderer implements OnModuleInit {
     }
   }
 
-  eventTitle(eventType: string, lang = 'ru'): string {
+  /** A promotion rule event has its own title under `<EVENT>_PROMOTION` (payload.kind). */
+  eventTitle(eventType: string, lang = 'ru', payload?: unknown): string {
     const resolvedLang = this.locales.has(lang) ? lang : 'ru';
-    const title = this.locales.get(resolvedLang)?.auditEvent?.[eventType];
+    const titles = this.locales.get(resolvedLang)?.auditEvent;
+    const kind =
+      payload && typeof payload === 'object'
+        ? (payload as { kind?: unknown }).kind
+        : undefined;
+    const title =
+      (kind === 'PROMOTION' ? titles?.[`${eventType}_PROMOTION`] : undefined) ??
+      titles?.[eventType];
     return typeof title === 'string' && title ? title : eventType;
   }
 

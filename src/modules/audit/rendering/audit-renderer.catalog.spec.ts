@@ -146,4 +146,22 @@ describe('AuditRenderer catalog and booking labels', () => {
       'Категория услуг создана',
     );
   });
+
+  it('titles a promotion rule event by payload kind and keeps the surcharge text', () => {
+    const title = (eventType: AuditEvent, kind: string) =>
+      renderer.eventTitle(eventType, 'ru', { name: 'x', kind });
+
+    expect(title(AuditEvent.PRICE_RULE_CREATED, 'PROMOTION')).toBe(
+      'Акция создана',
+    );
+    expect(title(AuditEvent.PRICE_RULE_ARCHIVED, 'PROMOTION')).toBe(
+      'Акция в архиве',
+    );
+    expect(title(AuditEvent.PRICE_RULE_ENABLED, 'SURCHARGE')).toBe(
+      'Наценка включена',
+    );
+    expect(renderer.eventTitle(AuditEvent.PRICE_RULE_CREATED)).toBe(
+      'Наценка создана',
+    );
+  });
 });

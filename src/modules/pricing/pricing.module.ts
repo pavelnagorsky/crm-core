@@ -7,6 +7,7 @@ import { PriceLevelTablesController } from './controllers/price-level-tables.con
 import { PriceLevelsController } from './controllers/price-levels.controller.js';
 import { PricingPreviewController } from './controllers/pricing-preview.controller.js';
 import { PricingSettingsController } from './controllers/pricing-settings.controller.js';
+import { PublicPromotionsController } from './controllers/public-promotions.controller.js';
 import { ServicePricesController } from './controllers/service-prices.controller.js';
 import { PriceRuleTargetCleanupListener } from './listeners/price-rule-target-cleanup.listener.js';
 import { PricingFacade } from './pricing.facade.js';
@@ -20,6 +21,8 @@ import { PriceRulePreviewService } from './services/price-rule-preview.service.j
 import { PriceRuleReadService } from './services/price-rule-read.service.js';
 import { PriceRulesService } from './services/price-rules.service.js';
 import { PricingSnapshotService } from './services/pricing-snapshot.service.js';
+import { PromotionExportService } from './services/promotion-export.service.js';
+import { PromotionPublicService } from './services/promotion-public.service.js';
 import { ServicePricesService } from './services/service-prices.service.js';
 
 /** Prices and promotions (docs/pricing-plan.md). Depends on no booking or order module. */
@@ -31,6 +34,7 @@ import { ServicePricesService } from './services/service-prices.service.js';
     PricingPreviewController,
     ServicePricesController,
     PricingSettingsController,
+    PublicPromotionsController,
   ],
   providers: [
     PricingFacade,
@@ -46,7 +50,16 @@ import { ServicePricesService } from './services/service-prices.service.js';
     PriceRulesService,
     PriceRuleTargetCleanupListener,
     ServicePricesService,
+    PromotionExportService,
+    PromotionPublicService,
   ],
-  exports: [PricingFacade, PricingSnapshotService, PriceRulesService],
+  exports: [
+    PricingFacade,
+    PricingSnapshotService,
+    PriceRulesService,
+    PriceRulePreviewService,
+    PromotionExportService,
+    PromotionPublicService,
+  ],
 })
 export class PricingModule {}

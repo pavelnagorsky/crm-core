@@ -1,3 +1,4 @@
+import { TokenEpochGuard } from '../../auth/guards/token-epoch.guard.js';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
@@ -64,6 +65,8 @@ describe('Client booking API (HTTP)', () => {
         PublicBookingCreateController,
       ],
       providers: [
+        // Public pricing takes an optional cabinet token.
+        { provide: TokenEpochGuard, useValue: { canActivate: () => true } },
         { provide: BookingsFacade, useValue: bookings },
         { provide: BookingCreateFacade, useValue: create },
         { provide: BookingClientTokenService, useValue: tokens },

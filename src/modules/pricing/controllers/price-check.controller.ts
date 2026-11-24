@@ -42,7 +42,8 @@ export class PriceCheckController {
   })
   @ApiOkResponse({ type: ApiResponse(PriceExplainResponseDto) })
   @ApiNotFoundResponse({
-    description: 'Service, bundle or staff member not found',
+    description:
+      'Service, bundle or staff member not found; BOOKING_CLIENT_NOT_FOUND: clientId is not a client of the brand',
   })
   @Permissions(Read(Claim.PRICING))
   @Post('explain')

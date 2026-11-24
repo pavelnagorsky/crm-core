@@ -1,8 +1,10 @@
+import { PriceRuleKind } from '../enums/price-rule-kind.enum.js';
 import { PriceRuleSkipReason } from '../enums/price-rule-skip-reason.enum.js';
 import { PriceScheduleType } from '../enums/price-schedule-type.enum.js';
 import { PriceValueType } from '../enums/price-value-type.enum.js';
 import { PricingRuleEntry } from '../interfaces/pricing-rule-entry.interface.js';
 import { CalendarDayParser } from './calendar-day.parser.js';
+import { CompiledPromotion } from './compiled-promotion.js';
 import { CalendarDay } from './interfaces/calendar-day.interface.js';
 import { RuleTargetContext } from './interfaces/rule-target-context.interface.js';
 import { RuleTargetSets } from './rule-target-sets.js';
@@ -10,18 +12,21 @@ import { RuleTargetSets } from './rule-target-sets.js';
 const MINUTES_PER_DAY = 1440;
 
 /**
- * A surcharge rule in the form the checks need (docs/pricing-stage3-api.md): numeric date
+ * A price rule in the form the checks need (docs/pricing-stage3-api.md): numeric date
  * keys, a weekday mask, sorted intervals and target sets. Built once per PriceBook; every
- * check is a comparison or a Set lookup.
+ * check is a comparison or a Set lookup. A promotion also carries its own conditions.
  */
 export class CompiledRule {
   readonly id: string;
+  readonly kind: PriceRuleKind;
   readonly name: string;
   readonly enabled: boolean;
   readonly valueType: PriceValueType;
   readonly value: number;
   readonly holidayExclusive: boolean;
   readonly createdAt: string;
+  /** Set for PROMOTION, null for SURCHARGE. */
+  readonly promotion: CompiledPromotion | null;
   /** Interval edges inside the day (0 < edge < 1440), where the price may change. */
   readonly breakpoints: readonly number[];
 
@@ -42,6 +47,7 @@ export class CompiledRule {
 
   constructor(entry: PricingRuleEntry) {
     this.id = entry.id;
+    this.kind = entry.kind;
     this.name = entry.name;
     this.enabled = entry.enabled;
     this.valueType = entry.valueType;
@@ -50,6 +56,14 @@ export class CompiledRule {
       entry.scheduleType === PriceScheduleType.HOLIDAYS &&
       entry.holidayExclusive;
     this.createdAt = entry.createdAt;
+    if ((entry.kind === PriceRuleKind.PROMOTION) !== (entry.promotion !== null))
+      throw new RangeError(
+        `Rule ${entry.id}: promotion fields do not match the kind`,
+      );
+    this.promotion =
+      entry.promotion === null
+        ? null
+        : new CompiledPromotion(entry.id, entry.promotion);
     this.weekdaysMask = entry.weekdaysMask;
 
     const intervals = [...entry.intervals].sort((a, b) => a.start - b.start);

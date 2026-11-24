@@ -6,6 +6,7 @@ import {
   CalendarEventType,
   ClientNoticeType,
   OrderItemType,
+  PriceRuleKind,
   Prisma,
 } from '@prisma/client';
 import { ReadConsistency } from '../../shared/cache/enums/read-consistency.enum.js';
@@ -18,6 +19,8 @@ import { PricingFacade } from '../pricing/pricing.facade.js';
 import { PricingSnapshotService } from '../pricing/services/pricing-snapshot.service.js';
 import { PriceRuleRecord } from '../pricing/interfaces/price-rule-record.interface.js';
 import { priceRuleRecord } from '../pricing/testing/price-rule-record.factory.js';
+import { BookingPricingResponseDto } from './dto/booking-pricing-response.dto.js';
+import { DiscountChoiceMode } from '../pricing/engine/enums/discount-choice-mode.enum.js';
 import { BookingCreateFacade } from './booking-create.facade.js';
 import { CLIENT_NOTICE_DELAY_MS } from './rules/booking-client-notice.rules.js';
 import { CreateBookingDto } from './dto/create-booking.dto.js';
@@ -30,6 +33,7 @@ import { BookingEventsService } from './services/booking-events.service.js';
 import { BookingReservationService } from './services/booking-reservation.service.js';
 import { BookingSchedulingService } from './services/booking-scheduling.service.js';
 import { BookingStaffLoadService } from './services/booking-staff-load.service.js';
+import { bookingPricingContextStub } from './testing/factories/booking-pricing-context.stub.js';
 import { BookingSelectionService } from './services/booking-selection.service.js';
 import { BookingSlotLockService } from './services/booking-slot-lock.service.js';
 
@@ -153,6 +157,8 @@ function setup(billing?: { isOnlineBookingOpen: ReturnType<typeof vi.fn> }) {
         },
       ]),
     },
+    // An online booking without a key still runs in one transaction (limited promotions).
+    $transaction: vi.fn((run: (tx: unknown) => Promise<unknown>) => run(db)),
   };
   const service = createBookingService(
     db as never,
@@ -445,6 +451,131 @@ describe('BookingCreateFacade pricing', () => {
       ]);
     },
   );
+
+  describe('promotions (docs/pricing-stage4-api.md)', () => {
+    const startAt = '2099-09-18T12:00:00';
+    const promotion = (id: string, value: string, fields: Record<string, unknown> = {}) =>
+      priceRuleRecord({
+        id,
+        name: 'Внутр. ' + id,
+        kind: PriceRuleKind.PROMOTION,
+        value,
+        promotion: { publicName: 'Акция ' + id, ...fields } as never,
+      });
+
+    it('online: the discount with its public title only, and the code result', async () => {
+      const { service } = pricingSetup([promotion('ten', '10.00')]);
+      const result = await service.price('business-1', {
+        serviceIds: ['service-1'],
+        startAt,
+        promoCode: 'NOPE',
+      });
+      const dto = BookingPricingResponseDto.fromResult(result);
+      expect(dto.serviceTotal).toBe('45.00');
+      expect(dto.items[0]).toMatchObject({
+        listUnitPrice: '50.00',
+        discountTotal: '5.00',
+        lineTotal: '45.00',
+        discount: {
+          kind: 'PROMOTION',
+          ruleId: 'ten',
+          title: null,
+          publicTitle: 'Акция ten',
+          amount: '-5.00',
+        },
+      });
+      expect(dto.items[0].eligible).toBeUndefined();
+      expect(dto.promoCode).toEqual({
+        code: 'NOPE',
+        status: 'NOT_FOUND',
+        reason: null,
+      });
+    });
+
+    it('online: a promotion not shown as one is just the price', async () => {
+      const { service } = pricingSetup([
+        promotion('hidden', '10.00', { showAsPromotion: false }),
+      ]);
+      const result = await service.price('business-1', {
+        serviceIds: ['service-1'],
+        startAt,
+      });
+      const dto = BookingPricingResponseDto.fromResult(result);
+      // The product line of the fixture adds 40.00 list / 30.00 charged.
+      expect(dto).toMatchObject({
+        serviceTotal: '45.00',
+        listTotalAmount: '85.00',
+        discountTotal: '0.00',
+        totalAmount: '75.00',
+      });
+      expect(dto.items[0]).toMatchObject({
+        listUnitPrice: '45.00',
+        discountTotal: '0.00',
+        discount: null,
+      });
+    });
+
+    it('cabinet: internal titles, every applicable discount and the ones that do not apply', async () => {
+      const { service } = pricingSetup([
+        promotion('ten', '10.00'),
+        promotion('hidden', '20.00', { showAsPromotion: false }),
+        promotion('online', '30.00', { channels: ['ONLINE'] }),
+      ]);
+      const result = await service.price(
+        'business-1',
+        { serviceIds: ['service-1'], startAt },
+        { cabinet: true },
+      );
+      const dto = BookingPricingResponseDto.fromResult(result);
+      expect(dto.items[0]).toMatchObject({
+        lineTotal: '40.00',
+        discount: { ruleId: 'hidden', title: 'Внутр. hidden', publicTitle: null },
+        eligible: [
+          { ruleId: 'hidden', amount: '10.00', chargedPrice: '40.00' },
+          { ruleId: 'ten', amount: '5.00', chargedPrice: '45.00' },
+        ],
+        ineligible: [{ ruleId: 'online', reason: 'WRONG_CHANNEL' }],
+      });
+    });
+
+    it('cabinet: the discount picked for a line', async () => {
+      const { service } = pricingSetup([
+        promotion('ten', '10.00'),
+        promotion('twenty', '20.00'),
+      ]);
+      const result = await service.price(
+        'business-1',
+        {
+          items: [
+            {
+              serviceId: 'service-1',
+              promotion: { mode: DiscountChoiceMode.RULE, ruleId: 'ten' },
+            },
+          ],
+          startAt,
+        },
+        { cabinet: true },
+      );
+      expect(result.items[0].lineTotal.toFixed(2)).toBe('45.00');
+    });
+
+    it('online ignores a choice: the best discount applies', async () => {
+      const { service } = pricingSetup([
+        promotion('ten', '10.00'),
+        promotion('twenty', '20.00'),
+      ]);
+      const result = await service.price('business-1', {
+        items: [
+          {
+            serviceId: 'service-1',
+            promotion: { mode: DiscountChoiceMode.NONE },
+          },
+        ],
+        startAt,
+      });
+      expect(result.items[0].lineTotal.toFixed(2)).toBe('40.00');
+    });
+  });
 });
 
 describe('BookingCreateFacade calendar link', () => {
@@ -1897,6 +2028,144 @@ describe('BookingCreateFacade surcharges', () => {
   });
 });
 
+describe('BookingCreateFacade promotions (docs/pricing-stage4-api.md)', () => {
+  const at = '2099-09-18T12:00:00';
+  const promotion = (promotionFields: Record<string, unknown> = {}) =>
+    priceRuleRecord({
+      id: 'promo',
+      kind: PriceRuleKind.PROMOTION,
+      value: '10.00',
+      promotion: promotionFields as never,
+    });
+  const created = (tx: ReturnType<typeof customTimeSetup>['tx']) =>
+    tx.booking.create.mock.calls[0][0].data as unknown as {
+      promoCode: string | null;
+      items: {
+        create: {
+          chargedPrice: Prisma.Decimal;
+          discountTotal: Prisma.Decimal;
+          priceAdjustments: { create: { kind: string; ruleId: string | null }[] };
+        }[];
+      };
+    };
+
+  it('books online at the discounted total and stores the promotion layer', async () => {
+    const { service, tx } = customTimeSetup({ priceRules: [promotion()] });
+    await service.createPublicBooking(
+      'business-1',
+      { ...publicDto, startAt: at, expectedTotal: '45.00' },
+      publicAttribution,
+      directTraffic,
+    );
+    const data = created(tx);
+    expect(data.items.create[0].chargedPrice.toFixed(2)).toBe('45.00');
+    expect(data.items.create[0].discountTotal.toFixed(2)).toBe('5.00');
+    expect(
+      data.items.create[0].priceAdjustments.create.map((layer) => [
+        layer.kind,
+        layer.ruleId,
+      ]),
+    ).toEqual([['PROMOTION', 'promo']]);
+    expect(data.promoCode).toBeNull();
+  });
+
+  it('stores the promo code its promotion was applied with', async () => {
+    const { service, tx } = customTimeSetup({
+      priceRules: [promotion({ promoCode: 'AUTUMN' })],
+    });
+    await service.createPublicBooking(
+      'business-1',
+      { ...publicDto, startAt: at, expectedTotal: '45.00', promoCode: 'AUTUMN' },
+      publicAttribution,
+      directTraffic,
+    );
+    expect(created(tx).promoCode).toBe('AUTUMN');
+  });
+
+  it('answers PRICE_CHANGED with the code status when the guest expected a discount that does not apply', async () => {
+    const { service, tx } = customTimeSetup({
+      priceRules: [promotion({ promoCode: 'AUTUMN', channels: ['ADMIN'] })],
+    });
+    const error = await service
+      .createPublicBooking(
+        'business-1',
+        { ...publicDto, startAt: at, expectedTotal: '45.00', promoCode: 'AUTUMN' },
+        publicAttribution,
+        directTraffic,
+      )
+      .then(
+        () => null,
+        (caught: unknown) => caught as AppException,
+      );
+    expect(error!.errorCode).toBe('PRICE_CHANGED');
+    expect(error!.payload).toMatchObject({
+      total: '50.00',
+      promoCode: { code: 'AUTUMN', status: 'NOT_APPLICABLE', reason: 'WRONG_CHANNEL' },
+    });
+    expect(tx.booking.create).not.toHaveBeenCalled();
+  });
+
+  it('a manual booking takes the discount the administrator picked', async () => {
+    const { service, tx } = customTimeSetup({ priceRules: [promotion()] });
+    await service.createManualBooking(
+      'business-1',
+      {
+        ...dto,
+        startAt: at,
+        serviceId: undefined,
+        staffId: undefined,
+        items: [
+          {
+            serviceId: 'service-1',
+            staffId: 'staff-1',
+            promotion: { mode: DiscountChoiceMode.NONE },
+          },
+        ],
+      },
+      { id: 'user-1', name: 'Ольга', role: AuditActorRole.OWNER },
+    );
+    expect(created(tx).items.create[0].chargedPrice.toFixed(2)).toBe('50.00');
+  });
+
+  it('a manual booking gets the best discount by default', async () => {
+    const { service, tx } = customTimeSetup({ priceRules: [promotion()] });
+    await service.createManualBooking(
+      'business-1',
+      { ...dto, startAt: at },
+      { id: 'user-1', name: 'Ольга', role: AuditActorRole.OWNER },
+    );
+    expect(created(tx).items.create[0].chargedPrice.toFixed(2)).toBe('45.00');
+  });
+
+  it('a picked promotion that does not apply is 409 PROMOTION_NOT_APPLICABLE', async () => {
+    const { service } = customTimeSetup({
+      priceRules: [promotion({ channels: ['ONLINE'] })],
+    });
+    await expect(
+      service.createManualBooking(
+        'business-1',
+        {
+          ...dto,
+          startAt: at,
+          serviceId: undefined,
+          staffId: undefined,
+          items: [
+            {
+              serviceId: 'service-1',
+              staffId: 'staff-1',
+              promotion: { mode: DiscountChoiceMode.RULE, ruleId: 'promo' },
+            },
+          ],
+        },
+        { id: 'user-1', name: 'Ольга', role: AuditActorRole.OWNER },
+      ),
+    ).rejects.toMatchObject({
+      errorCode: 'PROMOTION_NOT_APPLICABLE',
+      payload: { lineIndex: 0, ruleId: 'promo', reason: 'WRONG_CHANNEL' },
+    });
+  });
+});
+
 describe('BookingCreateFacade online price', () => {
   const online = { ...publicDto, startAt: '2099-09-20T10:00:00' };
 
@@ -1991,6 +2260,7 @@ describe('BookingCreateFacade online price', () => {
           price: '50.00',
         },
       ],
+      promoCode: null,
     });
     expect(tx.booking.create).not.toHaveBeenCalled();
   });
@@ -2181,7 +2451,13 @@ function createBookingService(
     bookingClients,
     limiter,
     bookingLocation,
-    new BookingSelectionService(location, services, orders, pricing),
+    new BookingSelectionService(
+      location,
+      services,
+      orders,
+      pricing,
+      bookingPricingContextStub(),
+    ),
     new BookingSchedulingService(
       db,
       staff,
@@ -2205,5 +2481,6 @@ function createBookingService(
     billing as never,
     { plan: vi.fn().mockResolvedValue(null), publish: vi.fn() } as never,
     orders,
+    bookingPricingContextStub(),
   );
 }

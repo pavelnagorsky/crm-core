@@ -79,6 +79,27 @@ export class BookingReservationService {
     );
   }
 
+  /**
+   * An online booking without an idempotency key, in one transaction like reserveOnce: the
+   * limited promotions are counted under their row lock and the booking is stored before it
+   * is released.
+   */
+  async createInTransaction(
+    locationId: string,
+    create: (tx: Prisma.TransactionClient) => Promise<BookingCreationResult>,
+  ): Promise<BookingCreationResult> {
+    return this.db.$transaction(
+      async (tx) => {
+        await this.lockActiveLocation(locationId, tx);
+        return create(tx);
+      },
+      {
+        isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
+        timeout: 30_000,
+      },
+    );
+  }
+
   async reserve(
     input: PreparedBookingReservation,
     tx?: Prisma.TransactionClient,
@@ -120,6 +141,7 @@ export class BookingReservationService {
         input.paymentPlan,
       );
     await this.lockActiveLocation(locationId, tx);
+    await input.limitGuard?.(tx);
     await this.slots.lockSlots(items, timezone, tx);
     // Custom time books over the schedule, as a manual interval does on update; one staff
     // member still cannot do two services of this booking at once.
@@ -180,6 +202,7 @@ export class BookingReservationService {
         clientEmail,
         notes,
         internalNotes,
+        promoCode: input.promoCode ?? null,
         idempotencyKey: input.request?.idempotencyKey ?? null,
         creationRequestHash: input.request?.creationRequestHash ?? null,
         items: {

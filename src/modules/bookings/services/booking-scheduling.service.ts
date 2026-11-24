@@ -17,6 +17,7 @@ import { StaffService } from '../../staff/services/staff.service.js';
 import { BookingScheduleRequest } from '../interfaces/booking-schedule-request.interface.js';
 import { BookingServiceSnapshot } from '../interfaces/booking-service-snapshot.interface.js';
 import { ResolvedBookingItem } from '../interfaces/resolved-booking-item.interface.js';
+import { ScheduledBooking } from '../interfaces/scheduled-booking.interface.js';
 import { visitTimeAt } from '../rules/booking-visit-time.rules.js';
 import { rankStaff } from '../rules/staff-ranking.rules.js';
 import { BookingStaffLoadService } from './booking-staff-load.service.js';
@@ -34,6 +35,11 @@ export class BookingSchedulingService {
   async resolveForBooking(
     request: BookingScheduleRequest,
   ): Promise<ResolvedBookingItem[]> {
+    return (await this.schedule(request)).items;
+  }
+
+  /** Staff assigned and the visit priced, with the promo code result of the quote. */
+  async schedule(request: BookingScheduleRequest): Promise<ScheduledBooking> {
     const {
       locationId,
       services,
@@ -132,6 +138,15 @@ export class BookingSchedulingService {
       request.bundleId,
       services.map((service) => service.id),
     );
+    // Surcharges and promotions look at the start of the visit, its earliest item, and reach
+    // every item. A discount may depend on the staff member, so candidates rank by it.
+    const visit = visitTimeAt(
+      new Date(
+        Math.min(...intervals.map((interval) => interval.startAt.getTime())),
+      ),
+      timezone,
+    );
+    const context = request.pricingContext ?? null;
     const lastAssigned =
       request.staffRule === AnyStaffRule.ROUND_ROBIN
         ? await this.staffLoad.lastAssignedAt(locationId, staffIds)
@@ -147,6 +162,8 @@ export class BookingSchedulingService {
               services[index].id,
               staff.id,
               request.bundleId,
+              visit,
+              context,
             ),
             dayLoad: countByStaff.get(staff.id) ?? 0,
             lastAssignedAt: lastAssigned.get(staff.id) ?? null,
@@ -171,7 +188,7 @@ export class BookingSchedulingService {
       ),
     );
     const staffIdAt = (index: number) => team.get(String(index))!;
-    const { lines } = this.pricing.quoteWithBook(book, {
+    const { lines, promoCode } = this.pricing.quoteWithBook(book, {
       bundleId: request.bundleId,
       lines: services.map((service, index) => {
         const customPrice = manualItems[index]?.customPrice;
@@ -182,16 +199,11 @@ export class BookingSchedulingService {
             customPrice == null ? null : new Prisma.Decimal(customPrice),
         };
       }),
-      // Surcharges look at the start of the visit, its earliest item, and reach every item.
-      visit: visitTimeAt(
-        new Date(
-          Math.min(...intervals.map((interval) => interval.startAt.getTime())),
-        ),
-        timezone,
-      ),
+      visit,
+      context,
     });
 
-    return services.map((service, index) => {
+    const items = services.map((service, index): ResolvedBookingItem => {
       const staffId = staffIdAt(index);
       const price = lines[index];
       return {
@@ -212,6 +224,7 @@ export class BookingSchedulingService {
         staffName: staffNames.get(staffId)!,
       };
     });
+    return { items, prices: lines, promoCode };
   }
 
   private itemInterval(

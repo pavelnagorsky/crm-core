@@ -4,7 +4,11 @@ import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { TimeUtils } from '../../../shared/time/time.utils.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { BookingsFacade } from '../../bookings/bookings.facade.js';
+import { PriceAdjustmentKind } from '../engine/enums/price-adjustment-kind.enum.js';
+import { PromotionChannel } from '../engine/enums/promotion-channel.enum.js';
 import { PriceAdjustment } from '../engine/interfaces/price-adjustment.interface.js';
+import { QuoteContext } from '../engine/interfaces/quote-context.interface.js';
+import { PriceExplainClientType } from '../enums/price-explain-client-type.enum.js';
 import { PricingSnapshot } from '../engine/interfaces/pricing-snapshot.interface.js';
 import { PriceBook } from '../engine/price-book.js';
 import { PriceExplainRequestDto } from '../dto/price-explain-request.dto.js';
@@ -18,6 +22,8 @@ import { PricingSnapshotService } from './pricing-snapshot.service.js';
  * The price check: why a service or bundle costs what it costs at a given local time, and
  * what each staff member would charge. It prices through the same price book as booking, and
  * for "any staff" asks the bookings module who the location rule would assign at that time.
+ * Promotions and the client discount follow the channel, the client, the promo code and the
+ * moment of booking of the request (docs/pricing-stage4-api.md).
  */
 @Injectable()
 export class PriceExplainService {
@@ -52,6 +58,7 @@ export class PriceExplainService {
         HttpStatus.NOT_FOUND,
       );
 
+    const context = await this.context(locationId, dto);
     const staffing = await this.bookings.previewStaffing(locationId, {
       serviceIds,
       bundleId,
@@ -59,6 +66,7 @@ export class PriceExplainService {
       date: dto.date,
       time: dto.time,
       book,
+      context,
     });
     const visit = {
       date: dto.date,
@@ -72,6 +80,7 @@ export class PriceExplainService {
         customPrice: null,
       })),
       visit,
+      context,
     });
     const staffId = staffing.assignedStaffId;
     const explanation = book.explain(quoteFor(staffId));
@@ -108,6 +117,31 @@ export class PriceExplainService {
         ...item,
         intervals: rulesById.get(item.ruleId)?.intervals ?? [],
       })),
+      promoCode: explanation.quote.promoCode,
+    };
+  }
+
+  /** Booking facts of the check; without clientId, clientType imagines a known client. */
+  private async context(
+    locationId: string,
+    dto: PriceExplainRequestDto,
+  ): Promise<QuoteContext> {
+    const context = await this.bookings.localPricingContext(locationId, {
+      channel: dto.channel ?? PromotionChannel.ONLINE,
+      visitStart: `${dto.date}T${dto.time}:00`,
+      bookedAt: dto.bookedAt ?? null,
+      clientId: dto.clientId ?? null,
+      promoCode: dto.promoCode ?? null,
+    });
+    if (dto.clientId || !dto.clientType) return context;
+    return {
+      ...context,
+      client: {
+        known: true,
+        isNew: dto.clientType === PriceExplainClientType.NEW,
+        birthday: null,
+        discountBp: null,
+      },
     };
   }
 }
@@ -131,6 +165,7 @@ function sumLines(
     basePrice: number;
     staffPrice: number;
     listPrice: number;
+    chargedPrice: number;
     total: number;
     adjustments: PriceAdjustment[];
   }[],
@@ -146,11 +181,19 @@ function sumLines(
   }
   const sum = (pick: (line: (typeof lines)[number]) => number) =>
     lines.reduce((total, line) => total + pick(line), 0);
+  const adjustments = [...merged.values()];
   return {
     basePrice: sum((line) => line.basePrice),
     staffPrice: sum((line) => line.staffPrice),
-    adjustments: [...merged.values()],
+    adjustments,
     listPrice: sum((line) => line.listPrice),
+    discount:
+      adjustments.find(
+        (adjustment) =>
+          adjustment.kind === PriceAdjustmentKind.PROMOTION ||
+          adjustment.kind === PriceAdjustmentKind.CLIENT_DISCOUNT,
+      ) ?? null,
+    chargedPrice: sum((line) => line.chargedPrice),
     total: sum((line) => line.total),
   };
 }

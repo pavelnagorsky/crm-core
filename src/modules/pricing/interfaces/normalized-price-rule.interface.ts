@@ -1,9 +1,11 @@
-import { PriceScheduleType, PriceValueType } from '@prisma/client';
+import { PriceRuleKind, PriceScheduleType, PriceValueType } from '@prisma/client';
+import { NormalizedPromotion } from './normalized-promotion.interface.js';
 import { PriceRuleIntervalMinutes } from './price-rule-interval-minutes.interface.js';
 import { PriceRuleTargetRef } from './price-rule-target-ref.interface.js';
 
 /** A validated rule input in the shape the tables store; dates are YYYY-MM-DD. */
 export interface NormalizedPriceRule {
+  kind: PriceRuleKind;
   scheduleType: PriceScheduleType;
   name: string;
   note: string | null;
@@ -21,4 +23,6 @@ export interface NormalizedPriceRule {
   dates: string[];
   appliesToAll: boolean;
   targets: PriceRuleTargetRef[];
+  /** Set for PROMOTION, null for SURCHARGE. */
+  promotion: NormalizedPromotion | null;
 }

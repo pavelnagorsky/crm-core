@@ -302,6 +302,12 @@
     "PRICE_RULE_DISABLED": "Наценка выключена",
     "PRICE_RULE_ARCHIVED": "Наценка в архиве",
     "PRICE_RULE_RESTORED": "Наценка возвращена из архива",
+    "PRICE_RULE_CREATED_PROMOTION": "Акция создана",
+    "PRICE_RULE_UPDATED_PROMOTION": "Акция изменена",
+    "PRICE_RULE_ENABLED_PROMOTION": "Акция включена",
+    "PRICE_RULE_DISABLED_PROMOTION": "Акция выключена",
+    "PRICE_RULE_ARCHIVED_PROMOTION": "Акция в архиве",
+    "PRICE_RULE_RESTORED_PROMOTION": "Акция возвращена из архива",
     "PRICE_ROUNDING_UPDATED": "Округление цен изменено",
     "BUSINESS_UPDATED": "Настройки бизнеса изменены",
     "BRAND_CREATED": "Бренд создан",
@@ -541,7 +547,8 @@
       "notes": "Заметки",
       "genderMale": "Мужской",
       "genderFemale": "Женский",
-      "acquisitionSource": "Источник привлечения"
+      "acquisitionSource": "Источник привлечения",
+      "discountPercent": "Скидка, %"
     },
     "bookings": {
       "sheet": "Записи",
@@ -670,6 +677,25 @@
   "priceValueType": {
     "PERCENT": "Процент",
     "AMOUNT": "Сумма"
+  },
+  "promotionScenario": {
+    "HAPPY_HOURS": "Счастливые часы",
+    "LEAD_TIME": "Горящие окна и запись заранее",
+    "NEW_CLIENTS": "Новым клиентам",
+    "BIRTHDAY": "День рождения",
+    "PROMO_CODE": "Промокод",
+    "CUSTOM": "Своя акция"
+  },
+  "promotionClientFilter": {
+    "ANY": "Все",
+    "NEW": "Новые",
+    "BIRTHDAY": "Именинники"
+  },
+  "promotionLimitPeriod": {
+    "ALL_TIME": "За всё время",
+    "YEAR": "В год",
+    "MONTH": "В месяц",
+    "WEEK": "В неделю"
   },
   "booleanValue": {
     "true": "Да",
@@ -821,7 +847,8 @@
       "bannedAt": "Бан онлайн-записи",
       "banReason": "Причина бана",
       "acquisitionSource": "Источник привлечения",
-      "acquisitionSourceDetail": "Уточнение источника"
+      "acquisitionSourceDetail": "Уточнение источника",
+      "discountPercent": "Скидка клиента, %"
     },
     "STAFF": {
       "name": "Имя",
@@ -863,7 +890,24 @@
       "intervals": "Часы начала визита",
       "dates": "Даты",
       "appliesToAll": "На все услуги",
-      "targets": "Услуги, категории, комплексы"
+      "targets": "Услуги, категории, комплексы",
+      "scenario": "Сценарий",
+      "publicName": "Название для клиентов",
+      "publicDescription": "Описание для клиентов",
+      "showAsPromotion": "Показывать как акцию",
+      "bookingFrom": "Запись с",
+      "bookingTo": "Запись по",
+      "minLeadMinutes": "Не раньше чем за, минут",
+      "maxLeadMinutes": "Не позже чем за, минут",
+      "channels": "Каналы",
+      "staff": "Мастера",
+      "clientFilter": "Клиенты",
+      "birthdayWindowDays": "Дней от дня рождения",
+      "promoCode": "Промокод",
+      "usageLimitTotal": "Лимит применений",
+      "usageLimitPerClient": "Лимит на клиента",
+      "usageLimitPeriod": "Период лимита на клиента",
+      "minVisitTotal": "Сумма визита от"
     },
     "PAYROLL": {
       "startDate": "Начало",

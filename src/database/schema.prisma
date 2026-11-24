@@ -208,9 +208,40 @@ enum PriceValueType {
   AMOUNT
 }
 
-/// Kind of a price rule; promotions join the same table in stage 4.
+/// Kind of a price rule (docs/pricing-stage4-api.md).
 enum PriceRuleKind {
   SURCHARGE
+  PROMOTION
+}
+
+/// Template a promotion was created from: list icon and label only, no effect on pricing.
+enum PromotionScenario {
+  HAPPY_HOURS
+  LEAD_TIME
+  NEW_CLIENTS
+  BIRTHDAY
+  PROMO_CODE
+  CUSTOM
+}
+
+/// Where a promotion applies: ONLINE = booking page and widget, ADMIN = manual bookings.
+enum PromotionChannel {
+  ONLINE
+  ADMIN
+}
+
+enum PromotionClientFilter {
+  ANY
+  NEW
+  BIRTHDAY
+}
+
+/// Per-client limit window, rolling back from the visit date: 365/30/7 days.
+enum PromotionLimitPeriod {
+  ALL_TIME
+  YEAR
+  MONTH
+  WEEK
 }
 
 /// How a price rule picks its days (docs/pricing-stage3-api.md).
@@ -1229,6 +1260,8 @@ model Client {
   acquiredAt              DateTime?
   // Imported clients were acquired before Klendo and are never counted as new.
   importedAt              DateTime?
+  /// Personal discount, percent in (0, 100]; null = none (docs/pricing-stage4-api.md).
+  discountPercent         Decimal?       @db.Decimal(5, 2)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -1330,6 +1363,26 @@ model PriceRule {
   /// Bit (isoWeekday - 1); 0 = every day.
   weekdaysMask     Int               @default(0)
   appliesToAll     Boolean
+  // Promotion only (kind = PROMOTION); null or default for surcharges (CHECK in raw SQL).
+  scenario            PromotionScenario?
+  publicName          String?               @db.VarChar(60)
+  publicDescription   String?               @db.VarChar(300)
+  showAsPromotion     Boolean               @default(true)
+  /// Booking period: the location "today" at the moment of booking.
+  bookingFrom         DateTime?             @db.Date
+  bookingTo           DateTime?             @db.Date
+  /// From the moment of pricing to the visit start, minutes.
+  minLeadMinutes      Int?
+  maxLeadMinutes      Int?
+  channels            PromotionChannel[]    @default([])
+  clientFilter        PromotionClientFilter @default(ANY)
+  birthdayWindowDays  Int?
+  /// Upper case; unique among live promotions of the location, case-insensitive (raw SQL index).
+  promoCode           String?               @db.VarChar(32)
+  usageLimitTotal     Int?
+  usageLimitPerClient Int?
+  usageLimitPeriod    PromotionLimitPeriod?
+  minVisitTotal       Decimal?              @db.Decimal(10, 2)
   createdById      String?
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
@@ -1338,6 +1391,7 @@ model PriceRule {
   targets            PriceRuleTarget[]
   intervals          PriceRuleInterval[]
   dates              PriceRuleDate[]
+  staff              PriceRuleStaff[]
   bookingAdjustments BookingItemPriceAdjustment[]
   orderAdjustments   OrderItemPriceAdjustment[]
 
@@ -1368,6 +1422,18 @@ model PriceRuleInterval {
   rule PriceRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
 
   @@id([ruleId, startMinute])
+}
+
+/// Staff member a promotion is limited to; no rows = every staff member.
+model PriceRuleStaff {
+  ruleId  String
+  staffId String
+
+  rule  PriceRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  staff Staff     @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@id([ruleId, staffId])
+  @@index([staffId])
 }
 
 /// Date of a HOLIDAYS rule.
@@ -1466,6 +1532,7 @@ model Staff {
   payrollResults    PayrollResult[]
   soldOrderItems    OrderItem[]
   reviewStaff       ReviewStaff[]
+  priceRules        PriceRuleStaff[]
 
   @@unique([locationId, userId])
   @@index([locationId])
@@ -1614,6 +1681,9 @@ model Booking {
 
   notes         String? @db.VarChar(1000)
   internalNotes String? @db.VarChar(2000)
+
+  /// Promo code the visit was priced with, upper case.
+  promoCode String? @db.VarChar(32)
 
   cancellationReason String?      @db.VarChar(1000)
   cancelledBy        CancelledBy?

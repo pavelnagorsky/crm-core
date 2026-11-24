@@ -28,6 +28,8 @@ import { BookingAccessService } from './services/booking-access.service.js';
 import { BookingCronService } from './services/booking-cron.service.js';
 import { BookingEventsService } from './services/booking-events.service.js';
 import { BookingReservationService } from './services/booking-reservation.service.js';
+import { BookingPricingContextService } from './services/booking-pricing-context.service.js';
+import { BookingRepricingService } from './services/write/booking-repricing.service.js';
 import { BookingSchedulingService } from './services/booking-scheduling.service.js';
 import { BookingSelectionService } from './services/booking-selection.service.js';
 import { BookingSlotLockService } from './services/booking-slot-lock.service.js';
@@ -45,6 +47,7 @@ import { BookingCalendarReadService } from './services/read/booking-calendar-rea
 import { BookingHistoryReadService } from './services/read/booking-history-read.service.js';
 import { BookingPaymentReadService } from './services/read/booking-payment-read.service.js';
 import { BookingPriceRuleStatsService } from './services/read/booking-price-rule-stats.service.js';
+import { BookingPromotionReportService } from './services/read/booking-promotion-report.service.js';
 import { BookingReadService } from './services/read/booking-read.service.js';
 import { BookingSetupService } from './services/setup/booking-setup.service.js';
 import { BookingStaffNotificationService } from './services/booking-staff-notification.service.js';
@@ -79,6 +82,8 @@ import { JwtBookingClientStrategy } from './strategies/jwt-booking-client.strate
     BookingClientService,
     BookingAccessService,
     BookingReservationService,
+    BookingPricingContextService,
+    BookingRepricingService,
     BookingSelectionService,
     BookingSchedulingService,
     BookingSlotLockService,
@@ -102,6 +107,7 @@ import { JwtBookingClientStrategy } from './strategies/jwt-booking-client.strate
     BookingCalendarReadService,
     BookingReadService,
     BookingPriceRuleStatsService,
+    BookingPromotionReportService,
     BookingHistoryReadService,
     BookingSetupService,
     BookingsExportService,

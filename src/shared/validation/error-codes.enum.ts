@@ -931,6 +931,18 @@ export const ErrorCode = {
     code: 'PRICE_RULE_HOLIDAY_CONFLICT',
     message: 'An exclusive holiday price rule already exists for this date',
   },
+  PROMO_CODE_TAKEN: {
+    code: 'PROMO_CODE_TAKEN',
+    message: 'Another promotion already has this promo code',
+  },
+  PROMOTION_NOT_APPLICABLE: {
+    code: 'PROMOTION_NOT_APPLICABLE',
+    message: 'The promotion does not apply to this service',
+  },
+  PROMOTION_NOT_FOUND: {
+    code: 'PROMOTION_NOT_FOUND',
+    message: 'The promotion is not found or has ended',
+  },
   PRICE_LEVEL_FILL_INVALID: {
     code: 'PRICE_LEVEL_FILL_INVALID',
     message: 'The level price must be greater than zero',

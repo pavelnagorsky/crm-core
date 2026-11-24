@@ -32,6 +32,9 @@ import {
 import { BookingLifecycleService } from './booking-lifecycle.service.js';
 import { BookingPaymentService } from './booking-payment.service.js';
 import { BookingRescheduleService } from './booking-reschedule.service.js';
+import { BookingRepricingService } from './booking-repricing.service.js';
+import { BookingPricingContextService } from '../booking-pricing-context.service.js';
+import { BookingRepricing } from '../../interfaces/booking-repricing.interface.js';
 
 @Injectable()
 export class BookingMutationService {
@@ -46,6 +49,8 @@ export class BookingMutationService {
     private readonly reschedule: BookingRescheduleService,
     private readonly clientLink: BookingClientLinkService,
     private readonly bookingPayment: BookingPaymentService,
+    private readonly repricing: BookingRepricingService,
+    private readonly pricingContext: BookingPricingContextService,
   ) {}
 
   async update(
@@ -68,6 +73,8 @@ export class BookingMutationService {
       Boolean(dto.staffAssignments?.length);
     const trafficWrite = this.trafficWrite(old, dto);
     const pricePatches = this.pricePatches(old, dto);
+    // A discount picked again or a changed promo code: fresh layers for those items.
+    const repricing = await this.repricing.plan(old, dto);
     const clientLink = await this.clientLink.resolve(old, dto);
     // Confirming products and paying come after the edit, in the same transaction.
     const paymentPlan = await this.bookingPayment.plan(
@@ -96,7 +103,8 @@ export class BookingMutationService {
           dto.internalNotes !== undefined
             ? (dto.internalNotes ?? null)
             : undefined,
-        ...this.itemPriceWrite(pricePatches),
+        ...this.itemPriceWrite(pricePatches, repricing),
+        ...(repricing && { promoCode: repricing.promoCode }),
         ...trafficWrite,
       },
       include: bookingWithItemsInclude,
@@ -108,15 +116,27 @@ export class BookingMutationService {
       outcome: VisitPaymentOutcome | null;
     } = { replay: null, outcome: null };
     const hooks: BookingWriteHooks = {
-      beforeLock: paymentPlan
-        ? async (tx) => {
-            payment.replay = await this.bookingPayment.lockForBooking(
-              tx,
-              old,
-              paymentPlan,
-            );
-          }
-        : undefined,
+      beforeLock:
+        paymentPlan || repricing
+          ? async (tx) => {
+              if (paymentPlan)
+                payment.replay = await this.bookingPayment.lockForBooking(
+                  tx,
+                  old,
+                  paymentPlan,
+                );
+              // The promotions the new layers use still have room, counted under their lock.
+              if (repricing)
+                await this.pricingContext.assertLimitsHeld(
+                  tx,
+                  old.locationId,
+                  repricing.ruleIds,
+                  old.clientId,
+                  repricing.visitStartAt,
+                  old.id,
+                );
+            }
+          : undefined,
       afterUpdate: async (booking, tx) => {
         if (clientLink) await this.orders.syncBookingClient(booking, tx);
         if (clientLink || trafficWrite)
@@ -148,7 +168,7 @@ export class BookingMutationService {
           const result = await tx.booking.update(updateArgs);
           if (
             old.status === BookingStatus.COMPLETED &&
-            pricePatches.length > 0
+            (pricePatches.length > 0 || repricing)
           ) {
             const order = await this.orders.syncCompletedBooking(
               result,
@@ -307,17 +327,24 @@ export class BookingMutationService {
     };
   }
 
-  private itemPriceWrite(patches: UpdateBookingItemPriceDto[]): {
+  private itemPriceWrite(
+    patches: UpdateBookingItemPriceDto[],
+    repricing: BookingRepricing | null,
+  ): {
     items?: Prisma.BookingUpdateInput['items'];
   } {
-    if (patches.length === 0) return {};
-    return {
-      items: {
-        update: patches.map((patch) => ({
+    // A re-priced item writes its custom price with its layers.
+    const repriced = new Set(repricing?.itemIds ?? []);
+    const update = [
+      ...patches
+        .filter((patch) => !repriced.has(patch.id))
+        .map((patch) => ({
           where: { id: patch.id },
           data: { customPrice: patch.customPrice },
         })),
-      },
-    };
+      ...(repricing?.itemUpdates ?? []),
+    ];
+    if (update.length === 0) return {};
+    return { items: { update } };
   }
 }

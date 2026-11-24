@@ -6,6 +6,7 @@ export enum ClientSheetColumn {
   BIRTH_DATE = 'birthDate',
   GENDER = 'gender',
   NOTES = 'notes',
+  DISCOUNT_PERCENT = 'discountPercent',
 }
 
 export const CLIENT_SHEET_COLUMNS: readonly ClientSheetColumn[] = [
@@ -16,4 +17,5 @@ export const CLIENT_SHEET_COLUMNS: readonly ClientSheetColumn[] = [
   ClientSheetColumn.BIRTH_DATE,
   ClientSheetColumn.GENDER,
   ClientSheetColumn.NOTES,
+  ClientSheetColumn.DISCOUNT_PERCENT,
 ];

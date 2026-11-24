@@ -5,6 +5,7 @@ import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { BookingServiceCatalog } from '../../services/catalog/interfaces/booking-service-catalog.interface.js';
 import { ServiceCatalogKind } from '../../services/enums/service-catalog-kind.enum.js';
 import { BookingPriceRange } from '../interfaces/booking-price-range.interface.js';
+import { BookingPromotionLabelDto } from './booking-promotion-label.dto.js';
 
 export class BookingSetupServiceDto {
   @ApiProperty({ type: String })
@@ -43,6 +44,14 @@ export class BookingSetupServiceDto {
   @ApiProperty({ type: Number })
   durationMinutes: number;
 
+  @ApiProperty({
+    type: () => BookingPromotionLabelDto,
+    nullable: true,
+    description:
+      'Label of the promotions that reach it (setup.promotions); null without any.',
+  })
+  promotion: BookingPromotionLabelDto | null;
+
   static fromEntity(
     service: BookingServiceCatalog['services'][number],
     range: BookingPriceRange,
@@ -59,6 +68,7 @@ export class BookingSetupServiceDto {
     dto.price = MoneyUtils.format(service.price);
     dto.priceFrom = MoneyUtils.format(range.priceFrom);
     dto.priceTo = MoneyUtils.format(range.priceTo);
+    dto.promotion = BookingPromotionLabelDto.fromLabel(range.promotion);
     dto.durationMinutes = service.durationMinutes;
     return dto;
   }

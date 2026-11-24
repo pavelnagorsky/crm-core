@@ -4,15 +4,21 @@ import { ReadConsistency } from '../../../shared/cache/enums/read-consistency.en
 import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { assignStaff } from '../../../shared/scheduling/assign-staff.js';
 import { CalendarFacade } from '../../calendar/calendar.facade.js';
-import { AvailableSlotsRequestDto } from '../../calendar/dto/available-slots-request.dto.js';
+import { TimeUtils } from '../../../shared/time/time.utils.js';
 import { LocationService } from '../../location/services/location.service.js';
+import { PriceAdjustmentKind } from '../../pricing/engine/enums/price-adjustment-kind.enum.js';
+import { PromotionChannel } from '../../pricing/engine/enums/promotion-channel.enum.js';
+import { QuoteContext } from '../../pricing/engine/interfaces/quote-context.interface.js';
 import { VisitTime } from '../../pricing/engine/interfaces/visit-time.interface.js';
 import { PriceBook } from '../../pricing/engine/price-book.js';
 import { PricingFacade } from '../../pricing/pricing.facade.js';
+import { PublicAvailableSlotsRequestDto } from '../dto/public-available-slots-request.dto.js';
+import { PricedSlot } from '../interfaces/priced-slot.interface.js';
 import { PricedSlotsDay } from '../interfaces/priced-slots-day.interface.js';
 import { StaffRankCandidate } from '../interfaces/staff-rank-candidate.interface.js';
 import { visitTimeOfSlot } from '../rules/booking-visit-time.rules.js';
 import { rankStaff } from '../rules/staff-ranking.rules.js';
+import { BookingPricingContextService } from './booking-pricing-context.service.js';
 import { BookingStaffLoadService } from './booking-staff-load.service.js';
 
 /**
@@ -21,6 +27,9 @@ import { BookingStaffLoadService } from './booking-staff-load.service.js';
  * uses), assigns the team, and prices the visit with the staff it assigns at the slot start
  * (surcharges included), so a slot shows the price of the staff member the booking will get.
  * Ranking stays by staff price: surcharges depend only on the start, equal for every candidate.
+ * Promotions (docs/pricing-stage4-api.md) price slots for an unknown online client, with the
+ * promo code of the request; when the location has any, candidates rank by their discounted
+ * price at each start, since a promotion may be limited to staff.
  *
  * A client who chose a staff member (staffId or staffAssignments) is served by the calendar
  * itself: only that member is free for the item, so the ranking has one candidate.
@@ -40,11 +49,12 @@ export class PublicSlotPricingService {
     private readonly pricing: PricingFacade,
     private readonly locations: LocationService,
     private readonly staffLoad: BookingStaffLoadService,
+    private readonly pricingContext: BookingPricingContextService,
   ) {}
 
   async getSlots(
     locationId: string,
-    dto: AvailableSlotsRequestDto,
+    dto: PublicAvailableSlotsRequestDto,
   ): Promise<PricedSlotsDay[]> {
     const [offers, location, book] = await Promise.all([
       this.calendar.getPublicSlotOffers(locationId, dto),
@@ -79,12 +89,41 @@ export class PublicSlotPricingService {
         : new Map<string, number>(),
     ]);
 
+    // An unknown online client: only promotions without client conditions, and the code.
+    const context: QuoteContext | null =
+      book.promotionRules().length > 0
+        ? await this.pricingContext.build({
+            locationId,
+            brandId: location.brandId,
+            timezone: location.timezone,
+            channel: PromotionChannel.ONLINE,
+            visitStartAt: null,
+            promoCode: dto.promoCode ?? null,
+          })
+        : null;
+    const slotContext = (date: string, time: string): QuoteContext | null =>
+      context && {
+        ...context,
+        visitStartMs: TimeUtils.localToUtc(
+          `${date}T${time}:00`,
+          location.timezone,
+        ).getTime(),
+      };
+
+    // Without promotions a candidate costs the same at every start.
     const priceCache = new Map<string, number>();
-    const priceOf = (serviceId: string, staffId: string): number => {
-      const key = `${serviceId}:${staffId}`;
+    const priceOf = (
+      serviceId: string,
+      staffId: string,
+      visit: VisitTime,
+      atSlot: QuoteContext | null,
+    ): number => {
+      const key = atSlot
+        ? `${serviceId}:${staffId}:${visit.date}:${visit.minute}`
+        : `${serviceId}:${staffId}`;
       let price = priceCache.get(key);
       if (price === undefined) {
-        price = book.candidatePrice(serviceId, staffId, bundleId);
+        price = book.candidatePrice(serviceId, staffId, bundleId, visit, atSlot);
         priceCache.set(key, price);
       }
       return price;
@@ -93,6 +132,8 @@ export class PublicSlotPricingService {
     return offers.days.map((day) => ({
       date: day.date,
       slots: day.slots.flatMap((slot) => {
+        const visit = visitTimeOfSlot(day.date, slot.time);
+        const atSlot = slotContext(day.date, slot.time);
         const team = assignStaff(
           slot.freeStaffIds.map((free, index) => ({
             itemId: String(index),
@@ -100,7 +141,7 @@ export class PublicSlotPricingService {
               free.map((id): StaffRankCandidate => ({
                 id,
                 busy: false,
-                price: priceOf(serviceIds[index], id),
+                price: priceOf(serviceIds[index], id, visit, atSlot),
                 dayLoad: loads.get(id)?.get(day.date) ?? 0,
                 lastAssignedAt: lastAssigned.get(id) ?? null,
               })),
@@ -115,12 +156,13 @@ export class PublicSlotPricingService {
         return [
           {
             time: slot.time,
-            price: this.visitPrice(
+            ...this.visitPrice(
               book,
               bundleId,
               serviceIds,
               assigned,
-              visitTimeOfSlot(day.date, slot.time),
+              visit,
+              atSlot,
             ),
             staffIds: assigned,
           },
@@ -135,8 +177,9 @@ export class PublicSlotPricingService {
     serviceIds: readonly string[],
     staffIds: readonly string[],
     visit: VisitTime,
-  ) {
-    const { total } = book.quote({
+    context: QuoteContext | null,
+  ): Pick<PricedSlot, 'price' | 'listPrice' | 'promotionId'> {
+    const { total, lines } = book.quote({
       bundleId,
       lines: serviceIds.map((serviceId, index) => ({
         serviceId,
@@ -144,7 +187,25 @@ export class PublicSlotPricingService {
         customPrice: null,
       })),
       visit,
+      context,
     });
-    return MoneyUtils.fromMinor(total);
+    // A promotion not shown as one is just the price; a shown one gets the old price.
+    const shown = lines
+      .map((line) => line.discount)
+      .filter(
+        (discount) =>
+          discount !== null &&
+          discount.kind === PriceAdjustmentKind.PROMOTION &&
+          discount.publicTitle !== null,
+      );
+    const shownAmount = shown.reduce(
+      (sum, discount) => sum - (discount?.amount ?? 0),
+      0,
+    );
+    return {
+      price: MoneyUtils.fromMinor(total),
+      listPrice: shownAmount > 0 ? MoneyUtils.fromMinor(total + shownAmount) : null,
+      promotionId: shown[0]?.ruleId ?? null,
+    };
   }
 }

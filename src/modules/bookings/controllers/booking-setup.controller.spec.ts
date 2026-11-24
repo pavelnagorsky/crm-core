@@ -1,3 +1,7 @@
+import { TokenEpochGuard } from '../../auth/guards/token-epoch.guard.js';
+import { BookingPromotionReportService } from '../services/read/booking-promotion-report.service.js';
+import { BookingPricingContextService } from '../services/booking-pricing-context.service.js';
+import { PromotionPublicService } from '../../pricing/services/promotion-public.service.js';
 import { BookingSelectionService } from '../services/booking-selection.service.js';
 import { BookingSchedulingService } from '../services/booking-scheduling.service.js';
 import { INestApplication, NotFoundException } from '@nestjs/common';
@@ -111,6 +115,14 @@ describe('Public booking setup products (HTTP)', () => {
         },
         { provide: BookingPriceRuleStatsService, useValue: {} },
         { provide: BookingStaffingPreviewService, useValue: {} },
+        { provide: BookingPromotionReportService, useValue: {} },
+        { provide: BookingPricingContextService, useValue: {} },
+        {
+          provide: PromotionPublicService,
+          useValue: { listForBookingSetup: vi.fn(async () => []) },
+        },
+        // Public pricing takes an optional cabinet token.
+        { provide: TokenEpochGuard, useValue: { canActivate: () => true } },
         {
           provide: BookingPaymentReadService,
           useValue: { summaries: vi.fn(async () => new Map()) },
@@ -181,6 +193,7 @@ describe('Public booking setup products (HTTP)', () => {
         products: expectedProducts,
         isOnlineBookingAvailable: true,
         anyStaffEnabled: true,
+        promotions: [],
       });
       expect(products.listForPublicCatalog).toHaveBeenCalledWith(locationId);
       expect(catalog.loadForBooking).toHaveBeenCalledWith(locationId);

@@ -1,5 +1,6 @@
 import { BundlePricingMode as PrismaBundlePricingMode } from '@prisma/client';
 import { PriceRange } from '../../pricing/engine/interfaces/price-range.interface.js';
+import { QuoteContext } from '../../pricing/engine/interfaces/quote-context.interface.js';
 import { PriceBook } from '../../pricing/engine/price-book.js';
 import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { BookingPriceRange } from '../interfaces/booking-price-range.interface.js';
@@ -16,12 +17,17 @@ import { BookingStaff } from '../../staff/interfaces/booking-staff.interface.js'
  * one package with its own range; a SUM bundle adds the lowest and the highest prices of its
  * lines, each line priced as part of the bundle. `staff` are the staff the page offers, so
  * the ranges cover only them. No dates: prices without surcharges.
+ *
+ * With a context (catalogFloor, docs/pricing-stage4-api.md) the ranges include the promotions
+ * every online client gets without a code; a promotion may be limited to staff, so each staff
+ * member then has a range of their own.
  */
 export function buildBookingSetupPrices(
   book: PriceBook,
   catalog: Pick<BookingServiceCatalog, 'services' | 'bundles'>,
   staff: readonly BookingStaff[],
   dates: readonly string[],
+  context: QuoteContext | null = null,
 ): BookingSetupPrices {
   const performers = new Map<string, string[]>();
   for (const member of staff)
@@ -50,11 +56,11 @@ export function buildBookingSetupPrices(
       const price = catalogPrice.get(serviceId) ?? 0;
       return { min: price, max: price };
     }
-    const key = `${bundleId ?? ''}:${serviceId}:${book.staffPrice(serviceId, staffId)}`;
+    const key = `${bundleId ?? ''}:${serviceId}:${context ? (staffId ?? '') : book.staffPrice(serviceId, staffId)}`;
     let range = lineRanges.get(key);
     if (!range) {
       range = book.priceRange(
-        { bundleId, lines: [{ serviceId, staffId, customPrice: null }] },
+        { bundleId, lines: [{ serviceId, staffId, customPrice: null }], context },
         dates,
       );
       lineRanges.set(key, range);
@@ -106,6 +112,7 @@ export function buildBookingSetupPrices(
               staffId: null,
               customPrice: null,
             })),
+            context,
           },
           dates,
         );

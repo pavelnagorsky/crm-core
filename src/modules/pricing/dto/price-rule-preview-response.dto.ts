@@ -4,6 +4,8 @@ import { PriceRulePreview } from '../interfaces/price-rule-preview.interface.js'
 import { PriceRulePreviewConflictDto } from './price-rule-preview-conflict.dto.js';
 import { PriceRulePreviewExampleDto } from './price-rule-preview-example.dto.js';
 import { PriceRulePreviewReplacedDto } from './price-rule-preview-replaced.dto.js';
+import { PromotionMatchesDto } from './promotion-matches.dto.js';
+import { PromotionOverlapDto } from './promotion-overlap.dto.js';
 
 export class PriceRulePreviewResponseDto {
   @ApiProperty({ enum: PriceRuleStatus, enumName: 'PriceRuleStatus' })
@@ -40,6 +42,34 @@ export class PriceRulePreviewResponseDto {
   })
   conflicts: PriceRulePreviewConflictDto[];
 
+  @ApiProperty({
+    type: String,
+    isArray: true,
+    description: 'Promotion conditions as clients will read them; empty for a surcharge.',
+  })
+  conditions: string[];
+
+  @ApiProperty({ type: Number, description: 'Distinct services the rule can touch.' })
+  serviceCount: number;
+
+  @ApiProperty({ type: Number, description: 'Services of the bookable catalog.' })
+  totalServiceCount: number;
+
+  @ApiProperty({
+    type: () => PromotionOverlapDto,
+    isArray: true,
+    description:
+      'Promotion: enabled promotions that meet it on a service, channel, staff member and time.',
+  })
+  overlaps: PromotionOverlapDto[];
+
+  @ApiProperty({
+    type: () => PromotionMatchesDto,
+    nullable: true,
+    description: 'Promotion: what it would have reached in the last 30 days; null for a surcharge.',
+  })
+  matches30d: PromotionMatchesDto | null;
+
   static fromPreview(preview: PriceRulePreview): PriceRulePreviewResponseDto {
     const dto = new PriceRulePreviewResponseDto();
     dto.status = preview.status;
@@ -51,6 +81,14 @@ export class PriceRulePreviewResponseDto {
     dto.conflicts = preview.conflicts.map(
       PriceRulePreviewConflictDto.fromConflict,
     );
+    dto.conditions = preview.conditions;
+    dto.serviceCount = preview.serviceCount;
+    dto.totalServiceCount = preview.totalServiceCount;
+    dto.overlaps = preview.overlaps.map(PromotionOverlapDto.fromOverlap);
+    dto.matches30d =
+      preview.matches30d === null
+        ? null
+        : PromotionMatchesDto.fromMatches(preview.matches30d);
     return dto;
   }
 }

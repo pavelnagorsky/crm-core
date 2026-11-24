@@ -73,6 +73,17 @@ export function priceRuleStatus(
       : PriceRuleStatus.SCHEDULED;
   }
   const entry = toPricingRuleEntry(rule);
+  // A promotion also needs its booking period: once it is over nobody can book with it.
+  const promotion = entry.promotion;
+  if (promotion) {
+    if (promotion.bookingTo !== null && promotion.bookingTo < today)
+      return PriceRuleStatus.ENDED;
+    if (entry.visitTo !== null && entry.visitTo < today)
+      return PriceRuleStatus.ENDED;
+    if (nextDate === null) return PriceRuleStatus.ENDED;
+    if (promotion.bookingFrom !== null && promotion.bookingFrom > today)
+      return PriceRuleStatus.SCHEDULED;
+  }
   if (periodIncludes(entry, today)) return PriceRuleStatus.ACTIVE;
   // A yearly season outside its months comes back next year.
   if (entry.yearly) return PriceRuleStatus.SCHEDULED;

@@ -43,6 +43,13 @@ const HEADER_ALIASES: Record<ClientSheetColumn, readonly string[]> = {
   ],
   [ClientSheetColumn.GENDER]: ['пол', 'gender'],
   [ClientSheetColumn.NOTES]: ['заметки', 'notes', 'примечание', 'комментарий'],
+  [ClientSheetColumn.DISCOUNT_PERCENT]: [
+    'скидка, %',
+    'скидка',
+    'discountpercent',
+    'discount percent',
+    'discount',
+  ],
 };
 
 const GENDER_TO_CODE: Record<string, string> = {
@@ -160,6 +167,7 @@ export class ClientsSheetService {
       birthDate: current.birthDate ?? next.birthDate,
       gender: current.gender ?? next.gender,
       notes: current.notes ?? next.notes,
+      discountPercent: current.discountPercent ?? next.discountPercent,
     };
   }
 
@@ -184,7 +192,21 @@ export class ClientsSheetService {
     const notes = raw[ClientSheetColumn.NOTES] || null;
     if (notes && notes.length > NOTES_MAX) return null;
 
-    return { firstName, lastName, phone, email, birthDate, gender, notes };
+    const discountPercent = this.parseDiscountPercent(
+      raw[ClientSheetColumn.DISCOUNT_PERCENT],
+    );
+    if (discountPercent === undefined) return null;
+
+    return {
+      firstName,
+      lastName,
+      phone,
+      email,
+      birthDate,
+      gender,
+      notes,
+      discountPercent,
+    };
   }
 
   private mapHeaderColumns(
@@ -231,6 +253,17 @@ export class ClientsSheetService {
     today.setHours(0, 0, 0, 0);
     if (parsed > today) return undefined;
     return format(parsed, 'yyyy-MM-dd');
+  }
+
+  /** Empty is no discount; "7,5" and "7.5%" are read as 7.50, out-of-range gives undefined. */
+  private parseDiscountPercent(value: string): string | null | undefined {
+    const text = value.replace('%', '').replace(',', '.').trim();
+    if (!text) return null;
+    if (!/^\d{1,3}(\.\d{1,2})?$/.test(text)) return undefined;
+    const canonical = Number(text).toFixed(2);
+    return regularExpressions.positivePercent.test(canonical)
+      ? canonical
+      : undefined;
   }
 
   private normalizeGender(value: string): string | null | undefined {

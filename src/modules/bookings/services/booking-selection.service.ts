@@ -13,15 +13,22 @@ import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { LocationService } from '../../location/services/location.service.js';
 import { OrderPricingLine } from '../../orders/interfaces/order-pricing-line.interface.js';
 import { OrdersFacade } from '../../orders/orders.facade.js';
+import { PromotionChannel } from '../../pricing/engine/enums/promotion-channel.enum.js';
+import { LineDiscountChoice } from '../../pricing/engine/interfaces/line-discount-choice.interface.js';
+import { PromoCodeResult } from '../../pricing/engine/interfaces/promo-code-result.interface.js';
+import { QuoteContext } from '../../pricing/engine/interfaces/quote-context.interface.js';
 import { VisitTime } from '../../pricing/engine/interfaces/visit-time.interface.js';
 import { PricingFacade } from '../../pricing/pricing.facade.js';
 import { ServiceCatalogFacade } from '../../services/catalog/service-catalog.facade.js';
 import { BookingPricingRequestDto } from '../dto/booking-pricing-request.dto.js';
 import { ManualBookingItemDto } from '../dto/manual-booking-item.dto.js';
+import { BookingPricingAccess } from '../interfaces/booking-pricing-access.interface.js';
+import { BookingPricingLine } from '../interfaces/booking-pricing-line.interface.js';
 import { BookingPricingResult } from '../interfaces/booking-pricing-result.interface.js';
 import { BookingSelectionRequest } from '../interfaces/booking-selection-request.interface.js';
 import { ResolvedBookingSelection } from '../interfaces/resolved-booking-selection.interface.js';
 import { visitTimeAt } from '../rules/booking-visit-time.rules.js';
+import { BookingPricingContextService } from './booking-pricing-context.service.js';
 
 @Injectable()
 export class BookingSelectionService {
@@ -30,11 +37,18 @@ export class BookingSelectionService {
     private readonly serviceCatalog: ServiceCatalogFacade,
     private readonly orders: OrdersFacade,
     private readonly pricing: PricingFacade,
+    private readonly pricingContext: BookingPricingContextService,
   ) {}
 
+  /**
+   * Price preview of the booking page, the widget and the booking dialog (cabinet), with
+   * promotions and the client discount (docs/pricing-stage4-api.md). Online, a promotion not
+   * shown as one is just a lower price: no discount, list price or label.
+   */
   async price(
     locationId: string,
     dto: BookingPricingRequestDto,
+    access: BookingPricingAccess = { cabinet: false },
   ): Promise<BookingPricingResult> {
     const location = await this.locationService.findById(locationId);
     if (!location) {
@@ -47,25 +61,40 @@ export class BookingSelectionService {
     const selection = this.hasServiceSelection(dto)
       ? await this.resolveForBooking(locationId, dto)
       : null;
-    const serviceLines = selection
+    // Surcharges and promotions look at the visit start; without one the preview has none.
+    const startAt = dto.startAt
+      ? TimeUtils.localToUtc(dto.startAt, location.timezone)
+      : null;
+    const context = selection
+      ? await this.pricingContext.build({
+          locationId,
+          brandId: location.brandId,
+          timezone: location.timezone,
+          channel: access.cabinet
+            ? PromotionChannel.ADMIN
+            : PromotionChannel.ONLINE,
+          visitStartAt: startAt,
+          clientId: access.cabinet ? (dto.clientId ?? null) : null,
+          phone: dto.clientPhone ?? null,
+          promoCode: dto.promoCode ?? null,
+          choice: access.cabinet ? this.discountChoices(dto) : undefined,
+        })
+      : null;
+    const priced = selection
       ? await this.priceServiceLines(
           locationId,
           selection,
           this.manualItems(dto),
           dto,
-          // Surcharges look at the visit start; without one the preview has none.
-          dto.startAt
-            ? visitTimeAt(
-                TimeUtils.localToUtc(dto.startAt, location.timezone),
-                location.timezone,
-              )
-            : null,
+          startAt ? visitTimeAt(startAt, location.timezone) : null,
+          context,
+          access,
         )
-      : [];
-    const productLines = await this.orders.priceProductItems(
-      locationId,
-      dto.products ?? [],
-    );
+      : { lines: [], promoCode: null };
+    const serviceLines = priced.lines;
+    const productLines: BookingPricingLine[] = (
+      await this.orders.priceProductItems(locationId, dto.products ?? [])
+    ).map((line) => ({ ...line, discount: null, eligible: [], ineligible: [] }));
     const serviceTotals = sumPrices(serviceLines);
     const productTotals = sumPrices(productLines);
     const totals = sumPrices([...serviceLines, ...productLines]);
@@ -78,6 +107,8 @@ export class BookingSelectionService {
       productTotal: productTotals.totalAmount,
       ...totals,
       items: [...serviceLines, ...productLines],
+      promoCode: priced.promoCode,
+      cabinet: access.cabinet,
     };
   }
 
@@ -158,7 +189,9 @@ export class BookingSelectionService {
     manualItems: ManualBookingItemDto[],
     dto: BookingPricingRequestDto,
     visit: VisitTime | null,
-  ): Promise<OrderPricingLine[]> {
+    context: QuoteContext | null,
+    access: BookingPricingAccess,
+  ): Promise<{ lines: BookingPricingLine[]; promoCode: PromoCodeResult | null }> {
     const requested = normalizeStaffAssignments(
       selection.services.map((service) => service.id),
       selection.executionMode,
@@ -166,7 +199,7 @@ export class BookingSelectionService {
       dto.staffAssignments,
       manualItems,
     );
-    const { lines } = await this.pricing.quoteServices(
+    const { lines, promoCode } = await this.pricing.quoteServices(
       locationId,
       {
         bundleId: selection.bundleId,
@@ -181,12 +214,18 @@ export class BookingSelectionService {
           };
         }),
         visit,
+        context,
       },
       ReadConsistency.CACHED,
     );
-    return selection.services.map((service, index) => {
+    const items = selection.services.map((service, index): BookingPricingLine => {
       const quantity = new Prisma.Decimal(1);
       const price = lines[index];
+      // Online, a promotion not shown as one is the price itself.
+      const hidden =
+        !access.cabinet &&
+        price.discount !== null &&
+        price.discount.publicTitle === null;
       return {
         type: OrderItemType.SERVICE,
         catalogItemId: service.id,
@@ -194,14 +233,35 @@ export class BookingSelectionService {
         sku: null,
         unit: null,
         quantity,
-        ...priceLine(
-          quantity,
-          price.listPrice,
-          price.customPrice,
-          price.discountTotal,
-        ),
+        ...(hidden
+          ? priceLine(quantity, price.chargedPrice, price.customPrice)
+          : priceLine(
+              quantity,
+              price.listPrice,
+              price.customPrice,
+              price.discountTotal,
+            )),
+        discount: hidden ? null : price.discount,
+        eligible: access.cabinet ? price.eligible : [],
+        ineligible: access.cabinet ? price.ineligible : [],
       };
     });
+    return { lines: items, promoCode };
+  }
+
+  /** Discounts picked per line in the booking dialog; a missing one is AUTO. */
+  private discountChoices(
+    dto: BookingPricingRequestDto,
+  ): Record<number, LineDiscountChoice> | undefined {
+    const choice: Record<number, LineDiscountChoice> = {};
+    this.manualItems(dto).forEach((item, index) => {
+      if (item.promotion)
+        choice[index] = {
+          mode: item.promotion.mode,
+          ruleId: item.promotion.ruleId ?? null,
+        };
+    });
+    return Object.keys(choice).length > 0 ? choice : undefined;
   }
 
   private manualItems(dto: BookingSelectionRequest): ManualBookingItemDto[] {

@@ -1,5 +1,7 @@
 import {
   PriceRuleKind,
+  PromotionChannel,
+  PromotionClientFilter,
   PriceRuleTargetType,
   PriceScheduleType,
   PriceValueType,
@@ -27,17 +29,43 @@ interface PriceRuleRecordOptions {
   dates?: string[];
   targets?: [PriceRuleTargetType, string, boolean?][];
   createdAt?: Date;
+  kind?: PriceRuleKind;
+  /** Promotion columns (and staffIds); a promotion gets a public name and both channels. */
+  promotion?: Partial<PriceRulePromotionColumns> & { staffIds?: string[] };
 }
+
+type PriceRulePromotionColumns = Pick<
+  PriceRuleRecord,
+  | 'scenario'
+  | 'publicName'
+  | 'publicDescription'
+  | 'showAsPromotion'
+  | 'bookingFrom'
+  | 'bookingTo'
+  | 'minLeadMinutes'
+  | 'maxLeadMinutes'
+  | 'channels'
+  | 'clientFilter'
+  | 'birthdayWindowDays'
+  | 'promoCode'
+  | 'usageLimitTotal'
+  | 'usageLimitPerClient'
+  | 'usageLimitPeriod'
+  | 'minVisitTotal'
+>;
 
 /** A stored rule: by default a weekly +20% on every service, enabled, every day. */
 export function priceRuleRecord(
   options: PriceRuleRecordOptions = {},
 ): PriceRuleRecord {
   const id = options.id ?? 'rule-1';
+  const kind = options.kind ?? PriceRuleKind.SURCHARGE;
+  const promotion = kind === PriceRuleKind.PROMOTION;
+  const { staffIds = [], ...columns } = options.promotion ?? {};
   return {
     id,
     locationId: 'location',
-    kind: PriceRuleKind.SURCHARGE,
+    kind,
     scheduleType: options.scheduleType ?? PriceScheduleType.WEEKLY,
     name: options.name ?? 'Evening',
     note: null,
@@ -51,6 +79,23 @@ export function priceRuleRecord(
     holidayExclusive: options.holidayExclusive ?? false,
     weekdaysMask: options.weekdaysMask ?? 0,
     appliesToAll: options.appliesToAll ?? true,
+    scenario: null,
+    publicName: promotion ? (options.name ?? 'Evening') : null,
+    publicDescription: null,
+    showAsPromotion: true,
+    bookingFrom: null,
+    bookingTo: null,
+    minLeadMinutes: null,
+    maxLeadMinutes: null,
+    channels: promotion ? [PromotionChannel.ONLINE, PromotionChannel.ADMIN] : [],
+    clientFilter: PromotionClientFilter.ANY,
+    birthdayWindowDays: null,
+    promoCode: null,
+    usageLimitTotal: null,
+    usageLimitPerClient: null,
+    usageLimitPeriod: null,
+    minVisitTotal: null,
+    ...columns,
     createdById: null,
     createdAt: options.createdAt ?? new Date('2026-11-01T10:00:00.000Z'),
     updatedAt: new Date('2026-11-01T10:00:00.000Z'),
@@ -71,5 +116,6 @@ export function priceRuleRecord(
       ruleId: id,
       date: day(date),
     })),
+    staff: staffIds.map((staffId) => ({ ruleId: id, staffId })),
   };
 }

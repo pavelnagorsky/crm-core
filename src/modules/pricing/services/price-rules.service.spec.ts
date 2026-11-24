@@ -1,8 +1,10 @@
 import { HttpStatus } from '@nestjs/common';
 import {
+  PriceRuleKind,
   PriceRuleTargetType,
   PriceScheduleType,
   PriceValueType,
+  PromotionChannel,
 } from '@prisma/client';
 import { CacheDependency } from '../../../shared/cache/cache-dependency.js';
 import { AuditActorRole } from '../../audit/enums/audit-actor-role.enum.js';
@@ -63,6 +65,7 @@ describe('PriceRulesService', () => {
     listRules: vi.fn(),
     findRule: vi.fn(),
     listExclusiveHolidays: vi.fn(),
+    findPromoCodeOwner: vi.fn(),
   };
   const catalog = {
     assertTargetsInLocation: vi.fn(),
@@ -70,12 +73,14 @@ describe('PriceRulesService', () => {
     loadCoverage: vi.fn(),
   };
   const locations = { getBookingSettings: vi.fn() };
+  const staff = { listInLocation: vi.fn(), namesByIds: vi.fn() };
   const tx = {
     $executeRaw: vi.fn(),
     priceRule: { create: vi.fn(), update: vi.fn() },
     priceRuleTarget: { deleteMany: vi.fn() },
     priceRuleInterval: { deleteMany: vi.fn() },
     priceRuleDate: { deleteMany: vi.fn() },
+    priceRuleStaff: { deleteMany: vi.fn() },
   };
   const db = {
     $transaction: vi.fn(),
@@ -86,6 +91,7 @@ describe('PriceRulesService', () => {
     reads as never,
     catalog as never,
     locations as never,
+    staff as never,
     cache as never,
     events as never,
   );
@@ -97,6 +103,9 @@ describe('PriceRulesService', () => {
     vi.resetAllMocks();
     vi.useFakeTimers({ now: NOW });
     db.$transaction.mockImplementation((operation) => operation(tx));
+    staff.namesByIds.mockResolvedValue(new Map());
+    staff.listInLocation.mockResolvedValue([]);
+    reads.findPromoCodeOwner.mockResolvedValue(null);
     catalog.assertTargetsInLocation.mockResolvedValue(undefined);
     catalog.nameTargets.mockResolvedValue([]);
     catalog.loadCoverage.mockResolvedValue({ services: [], bundles: [] });
@@ -145,7 +154,7 @@ describe('PriceRulesService', () => {
           entityType: 'PRICE_RULE',
           entityId: 'new',
           eventType: AuditEvent.PRICE_RULE_CREATED,
-          payload: { name: 'Evening' },
+          payload: { name: 'Evening', kind: 'SURCHARGE' },
         }),
       ]);
     });
@@ -368,7 +377,7 @@ describe('PriceRulesService', () => {
       await expect(
         service.update('location', 'rule-1', input(), actor),
       ).rejects.toMatchObject({ errorCode: 'PRICE_RULE_NOT_FOUND' });
-      expect(reads.findRule).toHaveBeenCalledWith('location', 'rule-1', tx);
+      expect(reads.findRule).toHaveBeenCalledWith('location', 'rule-1');
     });
 
     it('does not count the rule itself as a holiday conflict', async () => {
@@ -614,8 +623,8 @@ describe('PriceRulesService', () => {
         ],
         bundles: [],
       });
-      const [view] = await service.list('location', false, NOW);
-      expect(reads.listRules).toHaveBeenCalledWith('location', false);
+      const [view] = await service.list('location', false, PriceRuleKind.SURCHARGE, NOW);
+      expect(reads.listRules).toHaveBeenCalledWith('location', false, PriceRuleKind.SURCHARGE);
       expect(view).toMatchObject({
         status: PriceRuleStatus.ACTIVE,
         nextDate: '2026-11-27',
@@ -626,8 +635,8 @@ describe('PriceRulesService', () => {
 
     it('lists the archived rules on request', async () => {
       reads.listRules.mockResolvedValue([]);
-      expect(await service.list('location', true, NOW)).toEqual([]);
-      expect(reads.listRules).toHaveBeenCalledWith('location', true);
+      expect(await service.list('location', true, PriceRuleKind.SURCHARGE, NOW)).toEqual([]);
+      expect(reads.listRules).toHaveBeenCalledWith('location', true, PriceRuleKind.SURCHARGE);
       expect(locations.getBookingSettings).not.toHaveBeenCalled();
     });
 
@@ -637,7 +646,7 @@ describe('PriceRulesService', () => {
       ]);
       // 23:30 UTC on the 23rd is already the 24th in Minsk (UTC+3).
       const lateNow = new Date('2026-11-23T23:30:00.000Z');
-      const [view] = await service.list('location', false, lateNow);
+      const [view] = await service.list('location', false, PriceRuleKind.SURCHARGE, lateNow);
       expect(view.status).toBe(PriceRuleStatus.ACTIVE);
       expect(view.nextDate).toBe('2026-11-24');
     });
@@ -649,7 +658,7 @@ describe('PriceRulesService', () => {
           targets: [[PriceRuleTargetType.BUNDLE, 'gone']],
         }),
       ]);
-      const [view] = await service.list('location', false, NOW);
+      const [view] = await service.list('location', false, PriceRuleKind.SURCHARGE, NOW);
       expect(view.targets[0].name).toBeNull();
     });
 
@@ -689,6 +698,179 @@ describe('PriceRulesService', () => {
         'combo',
       );
       expect(cache.invalidate).not.toHaveBeenCalled();
+    });
+  });
+  describe('promotions', () => {
+    const promo = (over: Partial<PriceRuleInputDto> = {}) =>
+      input({
+        kind: PriceRuleKind.PROMOTION,
+        weekdays: [],
+        publicName: 'Утро',
+        channels: [PromotionChannel.ONLINE],
+        ...over,
+      });
+    const promoRecord = (over: Parameters<typeof priceRuleRecord>[0] = {}) =>
+      priceRuleRecord({
+        id: 'rule-1',
+        kind: PriceRuleKind.PROMOTION,
+        ...over,
+      });
+
+    beforeEach(() => {
+      staff.listInLocation.mockResolvedValue([
+        { id: 'anna', status: 'ACTIVE' },
+        { id: 'gone', status: 'INACTIVE' },
+      ]);
+      staff.namesByIds.mockResolvedValue(new Map([['anna', 'Анна']]));
+      tx.priceRule.create.mockImplementation(async ({ data }) =>
+        promoRecord({ id: 'new', name: data.name }),
+      );
+      tx.priceRule.update.mockImplementation(async () => promoRecord());
+    });
+
+    it('stores the promotion fields, staff and an upper-case code', async () => {
+      await service.create(
+        'location',
+        promo({ staffIds: ['anna'], promoCode: 'autumn' }),
+        actor,
+      );
+      const { data } = tx.priceRule.create.mock.calls[0][0];
+      expect(data).toMatchObject({
+        kind: 'PROMOTION',
+        publicName: 'Утро',
+        channels: ['ONLINE'],
+        promoCode: 'AUTUMN',
+        clientFilter: 'ANY',
+        showAsPromotion: true,
+        staff: { create: [{ staffId: 'anna' }] },
+      });
+      expect(reads.findPromoCodeOwner).toHaveBeenCalledWith(
+        'location',
+        'AUTUMN',
+        null,
+        tx,
+      );
+    });
+
+    it('answers 409 PROMO_CODE_TAKEN with the other promotion', async () => {
+      reads.findPromoCodeOwner.mockResolvedValue({ id: 'other', name: 'Осень' });
+      await expect(
+        service.create('location', promo({ promoCode: 'AUTUMN' }), actor),
+      ).rejects.toMatchObject({
+        errorCode: 'PROMO_CODE_TAKEN',
+        status: HttpStatus.CONFLICT,
+        payload: { ruleId: 'other', ruleName: 'Осень' },
+      });
+      expect(tx.priceRule.create).not.toHaveBeenCalled();
+    });
+
+    it('reports a unique index hit as PROMO_CODE_TAKEN', async () => {
+      const { Prisma } = await import('@prisma/client');
+      tx.priceRule.create.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('unique', {
+          code: 'P2002',
+          clientVersion: 'test',
+        }),
+      );
+      reads.findPromoCodeOwner
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce({ id: 'race', name: 'Гонка' });
+      await expect(
+        service.create('location', promo({ promoCode: 'AUTUMN' }), actor),
+      ).rejects.toMatchObject({
+        errorCode: 'PROMO_CODE_TAKEN',
+        payload: { ruleId: 'race', ruleName: 'Гонка' },
+      });
+    });
+
+    it('rejects staff that is not active in the location', async () => {
+      await expect(
+        service.create('location', promo({ staffIds: ['gone'] }), actor),
+      ).rejects.toMatchObject({
+        errorCode: 'PRICE_RULE_INVALID',
+        payload: { field: 'staffIds' },
+      });
+    });
+
+    it('keeps staff the rule already has on update, and replaces the staff rows', async () => {
+      reads.findRule.mockResolvedValue(
+        promoRecord({ promotion: { staffIds: ['gone'] } }),
+      );
+      await service.update(
+        'location',
+        'rule-1',
+        promo({ staffIds: ['gone', 'anna'] }),
+        actor,
+      );
+      expect(tx.priceRuleStaff.deleteMany).toHaveBeenCalledWith({
+        where: { ruleId: 'rule-1' },
+      });
+      const { data } = tx.priceRule.update.mock.calls[0][0];
+      expect(data.staff).toEqual({
+        create: [{ staffId: 'anna' }, { staffId: 'gone' }],
+      });
+    });
+
+    it('does not let an update change the kind', async () => {
+      reads.findRule.mockResolvedValue(priceRuleRecord({ id: 'rule-1' }));
+      await expect(
+        service.update('location', 'rule-1', promo(), actor),
+      ).rejects.toMatchObject({
+        errorCode: 'PRICE_RULE_INVALID',
+        payload: { field: 'kind' },
+      });
+    });
+
+    it('a copy keeps the conditions and staff but not the promo code', async () => {
+      reads.findRule.mockResolvedValue(
+        promoRecord({
+          promotion: {
+            promoCode: 'AUTUMN',
+            usageLimitTotal: 10,
+            staffIds: ['anna'],
+          },
+        }),
+      );
+      await service.duplicate('location', 'rule-1', actor);
+      const { data } = tx.priceRule.create.mock.calls[0][0];
+      expect(data).toMatchObject({
+        kind: 'PROMOTION',
+        promoCode: null,
+        usageLimitTotal: 10,
+        enabled: false,
+        staff: { create: [{ staffId: 'anna' }] },
+      });
+    });
+
+    it('restoring a promotion whose code is taken answers PROMO_CODE_TAKEN', async () => {
+      reads.findRule.mockResolvedValue(
+        promoRecord({
+          archivedAt: new Date('2026-11-01T00:00:00.000Z'),
+          promotion: { promoCode: 'AUTUMN' },
+        }),
+      );
+      reads.findPromoCodeOwner.mockResolvedValue({ id: 'other', name: 'Осень' });
+      await expect(
+        service.restore('location', 'rule-1', actor),
+      ).rejects.toMatchObject({ errorCode: 'PROMO_CODE_TAKEN' });
+      expect(tx.priceRule.update).not.toHaveBeenCalled();
+    });
+
+    it('generates a code nobody has, retrying a taken one', async () => {
+      reads.findPromoCodeOwner
+        .mockResolvedValueOnce({ id: 'x', name: 'x' })
+        .mockResolvedValueOnce(null);
+      const code = await service.generatePromoCode('location');
+      expect(code).toMatch(/^[A-HJ-NP-Z2-9]{8}$/);
+      expect(reads.findPromoCodeOwner).toHaveBeenCalledTimes(2);
+    });
+
+    it('a view names the staff', async () => {
+      reads.findRule.mockResolvedValue(
+        promoRecord({ promotion: { staffIds: ['anna'] } }),
+      );
+      const view = await service.get('location', 'rule-1');
+      expect(view.staff).toEqual([{ id: 'anna', name: 'Анна' }]);
     });
   });
 });

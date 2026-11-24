@@ -57,6 +57,7 @@ describe('Widget initialization headers (HTTP)', () => {
       staff: [],
       products: [],
       anyStaffEnabled: true,
+      promotions: [],
       prices: {
         services: new Map(),
         bundles: new Map(),
@@ -154,6 +155,7 @@ describe('Widget initialization headers (HTTP)', () => {
         staff: [staffMember],
         products: [],
         anyStaffEnabled: true,
+        promotions: [],
         prices: {
           services: new Map(),
           bundles: new Map(),

@@ -1,4 +1,5 @@
 import { PriceAdjustmentKind } from './enums/price-adjustment-kind.enum.js';
+import { PriceRuleKind } from './enums/price-rule-kind.enum.js';
 import { PriceRuleSkipReason } from './enums/price-rule-skip-reason.enum.js';
 import { PriceRuleTargetType } from './enums/price-rule-target-type.enum.js';
 import { PriceScheduleType } from './enums/price-schedule-type.enum.js';
@@ -403,13 +404,13 @@ describe('PriceBook: surcharges (docs/pricing-stage3-api.md)', () => {
       });
       expect(quote.total).toBe(6600);
       expect(notApplied).toEqual([
-        { ruleId: 'disabled', name: 'disabled', reason: PriceRuleSkipReason.DISABLED },
-        { ruleId: 'excluded', name: 'excluded', reason: PriceRuleSkipReason.EXCLUDED },
-        { ruleId: 'holiday-date', name: 'holiday-date', reason: PriceRuleSkipReason.NOT_HOLIDAY_DATE },
-        { ruleId: 'interval', name: 'interval', reason: PriceRuleSkipReason.OUT_OF_INTERVAL },
-        { ruleId: 'not-targeted', name: 'not-targeted', reason: PriceRuleSkipReason.NOT_TARGETED },
-        { ruleId: 'period', name: 'period', reason: PriceRuleSkipReason.OUT_OF_PERIOD },
-        { ruleId: 'weekday', name: 'weekday', reason: PriceRuleSkipReason.WRONG_WEEKDAY },
+        { ruleId: 'disabled', kind: PriceRuleKind.SURCHARGE, name: 'disabled', reason: PriceRuleSkipReason.DISABLED },
+        { ruleId: 'excluded', kind: PriceRuleKind.SURCHARGE, name: 'excluded', reason: PriceRuleSkipReason.EXCLUDED },
+        { ruleId: 'holiday-date', kind: PriceRuleKind.SURCHARGE, name: 'holiday-date', reason: PriceRuleSkipReason.NOT_HOLIDAY_DATE },
+        { ruleId: 'interval', kind: PriceRuleKind.SURCHARGE, name: 'interval', reason: PriceRuleSkipReason.OUT_OF_INTERVAL },
+        { ruleId: 'not-targeted', kind: PriceRuleKind.SURCHARGE, name: 'not-targeted', reason: PriceRuleSkipReason.NOT_TARGETED },
+        { ruleId: 'period', kind: PriceRuleKind.SURCHARGE, name: 'period', reason: PriceRuleSkipReason.OUT_OF_PERIOD },
+        { ruleId: 'weekday', kind: PriceRuleKind.SURCHARGE, name: 'weekday', reason: PriceRuleSkipReason.WRONG_WEEKDAY },
       ]);
     });
 
@@ -421,7 +422,7 @@ describe('PriceBook: surcharges (docs/pricing-stage3-api.md)', () => {
       });
       expect(quote.total).toBe(7800);
       expect(notApplied).toEqual([
-        { ruleId: 'plus10', name: 'Выходные', reason: PriceRuleSkipReason.OVERRIDDEN_BY_HOLIDAY },
+        { ruleId: 'plus10', kind: PriceRuleKind.SURCHARGE, name: 'Выходные', reason: PriceRuleSkipReason.OVERRIDDEN_BY_HOLIDAY },
       ]);
     });
 

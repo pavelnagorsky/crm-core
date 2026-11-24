@@ -19,7 +19,7 @@ export class PriceExplainCandidateDto {
   })
   personal: boolean;
 
-  @ApiPrice({ description: 'Total of the visit with this staff member.' })
+  @ApiPrice({ description: 'Total of the visit with this staff member, discounts included.' })
   price: string;
 
   @ApiProperty({

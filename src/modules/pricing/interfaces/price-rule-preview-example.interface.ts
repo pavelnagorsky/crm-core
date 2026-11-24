@@ -4,10 +4,12 @@ export interface PriceRulePreviewExample {
   serviceTitle: string;
   /** Null: the location has no levels. */
   levelName: string | null;
-  /** Staff or level price before the surcharges. */
+  /** Surcharge: staff or level price. Promotion: the list price. */
   before: number;
-  /** Before plus the surcharges, not rounded. */
+  /** Surcharge: before plus the surcharges, not rounded. Promotion: the discounted price. */
   raw: number;
-  /** The list price: rounded to the location step. */
+  /** Surcharge: the list price, rounded. Promotion: the discounted price. */
   after: number;
+  /** Size of the change, positive: the surcharge or the discount. */
+  amount: number;
 }

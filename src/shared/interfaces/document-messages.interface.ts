@@ -61,6 +61,7 @@ export interface DocumentMessages {
     genderMale: string;
     genderFemale: string;
     acquisitionSource: string;
+    discountPercent: string;
   };
   bookings: {
     sheet: string;

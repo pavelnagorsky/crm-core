@@ -7,6 +7,7 @@ import { BookingServiceStaffDto } from './booking-service-staff.dto.js';
 import { BookingResolvedItemDto } from './booking-resolved-item.dto.js';
 import { BookingSelectionResolution } from '../interfaces/booking-selection-resolution.interface.js';
 import { MoneyUtils } from '../../../shared/money/money.utils.js';
+import { PromoCodeResultDto } from '../../pricing/dto/promo-code-result.dto.js';
 
 export class BookingResolveResponseDto {
   @ApiProperty({ type: () => BookingServiceStaffDto, isArray: true })
@@ -57,6 +58,14 @@ export class BookingResolveResponseDto {
   })
   totalPrice: string | null;
 
+  @ApiProperty({
+    type: () => PromoCodeResultDto,
+    nullable: true,
+    description:
+      'What the promo code did to the exact total (startAt); null without a code or startAt.',
+  })
+  promoCode: PromoCodeResultDto | null;
+
   static fromResult(
     result: BookingSelectionResolution,
   ): BookingResolveResponseDto {
@@ -76,6 +85,7 @@ export class BookingResolveResponseDto {
       resolvedItems: result.resolvedItems.map(
         BookingResolvedItemDto.fromResult,
       ),
+      promoCode: PromoCodeResultDto.fromResult(result.promoCode),
     };
   }
 }

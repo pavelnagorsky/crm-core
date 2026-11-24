@@ -7,6 +7,7 @@ import { PriceLevelFillMode } from '../enums/price-level-fill-mode.enum.js';
 import { PriceRuleStatus } from '../enums/price-rule-status.enum.js';
 import { PriceCheckController } from './price-check.controller.js';
 import { PriceLevelTablesController } from './price-level-tables.controller.js';
+import { PriceRulesController } from './price-rules.controller.js';
 import { PricingPreviewController } from './pricing-preview.controller.js';
 
 const allowed = (
@@ -41,10 +42,14 @@ describe('Pricing cabinet controllers', () => {
   const explain = { explain: vi.fn() };
   const weekMap = { weekMap: vi.fn() };
   const token = tokenPayload(BusinessRole.OWNER);
-  const previews = () =>
-    new PricingPreviewController(
+  const previews = () => new PricingPreviewController(roundingPreview as never);
+  const bookings = { getPromotionMatchItems: vi.fn() };
+  const ruleControllers = () =>
+    new PriceRulesController(
+      {} as never,
       rulePreview as never,
-      roundingPreview as never,
+      {} as never,
+      bookings as never,
     );
   const checks = () =>
     new PriceCheckController(explain as never, weekMap as never);
@@ -63,6 +68,7 @@ describe('Pricing cabinet controllers', () => {
           before: 6000,
           raw: 6750,
           after: 6800,
+          amount: 800,
         },
       ],
       replaces: [
@@ -75,8 +81,16 @@ describe('Pricing cabinet controllers', () => {
         },
       ],
       conflicts: [{ ruleId: 'c', ruleName: 'Other', date: '2027-03-08' }],
+      conditions: [],
+      serviceCount: 1,
+      totalServiceCount: 3,
+      overlaps: [],
+      matches30d: null,
     });
-    const result = await previews().previewRule('location-1', {} as never);
+    const result = await ruleControllers().previewRule(
+      'location-1',
+      {} as never,
+    );
     expect(result.responseValue).toEqual({
       status: 'ACTIVE',
       nextDate: '2026-12-04',
@@ -88,6 +102,7 @@ describe('Pricing cabinet controllers', () => {
           before: '60.00',
           raw: '67.50',
           after: '68.00',
+          amount: '8.00',
         },
       ],
       replaces: [
@@ -100,6 +115,11 @@ describe('Pricing cabinet controllers', () => {
         },
       ],
       conflicts: [{ ruleId: 'c', name: 'Other', date: '2027-03-08' }],
+      conditions: [],
+      serviceCount: 1,
+      totalServiceCount: 3,
+      overlaps: [],
+      matches30d: null,
     });
   });
 
@@ -158,8 +178,11 @@ describe('Pricing cabinet controllers', () => {
           },
         ],
         listPrice: 6600,
+        discount: null,
+        chargedPrice: 6600,
         total: 6600,
       },
+      promoCode: null,
       candidates: [
         {
           staffId: 'a',
@@ -321,7 +344,7 @@ describe('Pricing cabinet controllers', () => {
 
   describe('permissions', () => {
     const endpoints: [new (...args: never[]) => object, string][] = [
-      [PricingPreviewController, 'previewRule'],
+      [PriceRulesController, 'previewRule'],
       [PricingPreviewController, 'previewRounding'],
       [PriceCheckController, 'explain'],
       [PriceCheckController, 'weekMap'],

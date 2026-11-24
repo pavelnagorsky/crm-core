@@ -24,6 +24,7 @@ const row: ClientImportRow = {
   birthDate: null,
   gender: null,
   notes: null,
+  discountPercent: null,
 };
 
 describe('ClientsService automatic booking registration', () => {
@@ -121,6 +122,7 @@ function storedClient(overrides: Partial<Client> = {}): Client {
     birthDate: null,
     gender: null,
     notes: null,
+    discountPercent: null,
     bannedAt: null,
     banReason: null,
     acquisitionSource: null,

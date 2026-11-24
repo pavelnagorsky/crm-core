@@ -158,7 +158,7 @@ export class AuditService {
       AuditLogItemDto.fromEntity(
         log,
         this.renderer.render(log, dto.lang),
-        this.renderer.eventTitle(log.eventType, dto.lang),
+        this.renderer.eventTitle(log.eventType, dto.lang, log.payload),
       ),
     );
 

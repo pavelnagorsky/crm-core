@@ -15,6 +15,7 @@ import {
 import { MULTI_SERVICE_MAX_ITEMS } from '../../services/constants/multi-service.constants.js';
 import { IsPhone } from '../../../shared/decorators/is-phone.decorator.js';
 import { IsLocalDateTime } from '../../../shared/time/decorators/is-local-date-time.validator.js';
+import { PromoCodeField } from '../decorators/promo-code-field.decorator.js';
 
 /** The contact rule of the request's own DTO class; a manual booking may omit the client. */
 function requiresClientContacts(dto: CreateBookingDto): boolean {
@@ -127,6 +128,9 @@ export class CreateBookingDto {
   @IsString()
   @MaxLength(1000)
   notes?: string;
+
+  @PromoCodeField()
+  promoCode?: string;
 
   /** Whether firstName and phone must be sent; an online guest always gives them. */
   static requiresClientContacts(_dto: CreateBookingDto): boolean {

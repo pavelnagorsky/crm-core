@@ -23,6 +23,7 @@ import { createBillingFacadeStub } from '../billing/testing/billing-facade.stub.
 import { PricingFacade } from '../pricing/pricing.facade.js';
 import { PricingSnapshotService } from '../pricing/services/pricing-snapshot.service.js';
 import { ReadConsistency } from '../../shared/cache/enums/read-consistency.enum.js';
+import { bookingPricingContextStub } from './testing/factories/booking-pricing-context.stub.js';
 
 function setup() {
   const services = [
@@ -218,6 +219,7 @@ function setup() {
     catalog as never,
     orders as never,
     pricing,
+    bookingPricingContextStub(),
   );
   const scheduling = new BookingSchedulingService(
     db as never,
@@ -249,6 +251,7 @@ function setup() {
     createBillingFacadeStub(),
     { plan: vi.fn().mockResolvedValue(null), publish: vi.fn() } as never,
     {} as never,
+    bookingPricingContextStub(),
   );
   const resolve = new BookingSetupService(
     catalog as never,
@@ -259,6 +262,8 @@ function setup() {
     scheduling,
     createBillingFacadeStub(),
     pricing,
+    bookingPricingContextStub(),
+    { listForBookingSetup: vi.fn().mockResolvedValue([]) } as never,
   );
   const request = {
     locationId: 'location',

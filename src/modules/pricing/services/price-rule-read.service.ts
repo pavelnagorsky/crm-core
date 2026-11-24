@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { Prisma, PriceScheduleType } from '@prisma/client';
+import { Prisma, PriceRuleKind, PriceScheduleType } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
@@ -8,15 +8,19 @@ import { PriceRuleRecord } from '../interfaces/price-rule-record.interface.js';
 
 const DISPLAY_ORDER = [{ createdAt: 'asc' as const }, { id: 'asc' as const }];
 
-/** Reads the surcharge rules, a table the pricing module owns. */
+/** Reads the price rules (surcharges and promotions), a table the pricing module owns. */
 @Injectable()
 export class PriceRuleReadService {
   constructor(private readonly db: DatabaseService) {}
 
-  /** Archived or live rules of the location in display order. */
-  listRules(locationId: string, archived: boolean): Promise<PriceRuleRecord[]> {
+  /** Archived or live rules of one kind of the location in display order. */
+  listRules(
+    locationId: string,
+    archived: boolean,
+    kind: PriceRuleKind = PriceRuleKind.SURCHARGE,
+  ): Promise<PriceRuleRecord[]> {
     return this.db.priceRule.findMany({
-      where: { locationId, archivedAt: archived ? { not: null } : null },
+      where: { locationId, kind, archivedAt: archived ? { not: null } : null },
       include: PRICE_RULE_INCLUDE,
       orderBy: DISPLAY_ORDER,
     });
@@ -63,6 +67,42 @@ export class PriceRuleReadService {
         scheduleType: PriceScheduleType.HOLIDAYS,
         holidayExclusive: true,
         ...(exceptRuleId !== null && { id: { not: exceptRuleId } }),
+      },
+      include: PRICE_RULE_INCLUDE,
+      orderBy: DISPLAY_ORDER,
+    });
+  }
+
+  /**
+   * The live promotion of the location with this code (upper case; codes are stored upper
+   * case), the one being saved left out; null when the code is free.
+   */
+  findPromoCodeOwner(
+    locationId: string,
+    promoCode: string,
+    exceptRuleId: string | null,
+    tx: Prisma.TransactionClient = this.db,
+  ): Promise<{ id: string; name: string } | null> {
+    return tx.priceRule.findFirst({
+      where: {
+        locationId,
+        kind: PriceRuleKind.PROMOTION,
+        archivedAt: null,
+        promoCode: { equals: promoCode, mode: 'insensitive' },
+        ...(exceptRuleId !== null && { id: { not: exceptRuleId } }),
+      },
+      select: { id: true, name: true },
+    });
+  }
+
+  /** Live promotions of the location that are enabled, in display order. */
+  listLivePromotions(locationId: string): Promise<PriceRuleRecord[]> {
+    return this.db.priceRule.findMany({
+      where: {
+        locationId,
+        kind: PriceRuleKind.PROMOTION,
+        archivedAt: null,
+        enabled: true,
       },
       include: PRICE_RULE_INCLUDE,
       orderBy: DISPLAY_ORDER,

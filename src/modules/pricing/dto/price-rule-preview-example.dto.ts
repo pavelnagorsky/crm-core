@@ -18,7 +18,9 @@ export class PriceRulePreviewExampleDto {
   })
   levelName: string | null;
 
-  @ApiPrice({ description: 'Price before the surcharges.' })
+  @ApiPrice({
+    description: 'Price before the surcharges; for a promotion the list price.',
+  })
   before: string;
 
   @ApiPrice({ description: 'Before plus the surcharges, not rounded.' })
@@ -26,6 +28,12 @@ export class PriceRulePreviewExampleDto {
 
   @ApiPrice({ description: 'Price after rounding to the location step.' })
   after: string;
+
+  @ApiPrice({
+    description:
+      'Size of the change, positive: the surcharge, or the discount of a promotion (rounded down).',
+  })
+  amount: string;
 
   static fromExample(
     example: PriceRulePreviewExample,
@@ -37,6 +45,7 @@ export class PriceRulePreviewExampleDto {
     dto.before = minorToApi(example.before);
     dto.raw = minorToApi(example.raw);
     dto.after = minorToApi(example.after);
+    dto.amount = minorToApi(example.amount);
     return dto;
   }
 }

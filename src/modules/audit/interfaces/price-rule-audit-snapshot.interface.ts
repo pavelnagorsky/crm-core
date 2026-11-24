@@ -15,4 +15,21 @@ export interface PriceRuleAuditSnapshot {
   dates: string;
   appliesToAll: boolean;
   targets: string;
+  scenario: string | null;
+  publicName: string | null;
+  publicDescription: string | null;
+  showAsPromotion: boolean;
+  bookingFrom: string | null;
+  bookingTo: string | null;
+  minLeadMinutes: number | null;
+  maxLeadMinutes: number | null;
+  channels: string;
+  staff: string;
+  clientFilter: string;
+  birthdayWindowDays: number | null;
+  promoCode: string | null;
+  usageLimitTotal: number | null;
+  usageLimitPerClient: number | null;
+  usageLimitPeriod: string | null;
+  minVisitTotal: string | null;
 }

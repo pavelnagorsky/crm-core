@@ -6,5 +6,9 @@ export interface PriceExplainLine {
   staffPrice: number;
   adjustments: PriceAdjustment[];
   listPrice: number;
+  /** The discount layer of adjustments (summed over a bundle), or null. */
+  discount: PriceAdjustment | null;
+  /** List price minus the discount. */
+  chargedPrice: number;
   total: number;
 }
