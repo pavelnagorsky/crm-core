@@ -5,7 +5,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule, ThrottlerStorage } from '@nestjs/throttler';
-import { appRole, runsCrons } from './config/app-role.config.js';
+import { appRole, runsBackgroundWork } from './config/app-role.config.js';
 import configuration from './config/configuration.js';
 import { loggerConfig } from './config/logger.config.js';
 import { throttlerConfig } from './config/throttler.config.js';
@@ -57,7 +57,7 @@ import { THROTTLER_STORAGE } from './shared/throttling/throttler-storage.token.j
       cache: true,
     }),
     // Read at import time (main.ts loads `dotenv/config` before AppModule). Without ScheduleModule, `@Cron` stays inert metadata.
-    ...(runsCrons(appRole()) ? [ScheduleModule.forRoot()] : []),
+    ...(runsBackgroundWork(appRole()) ? [ScheduleModule.forRoot()] : []),
     ThrottlerModule.forRootAsync({
       imports: [ThrottlerStorageModule],
       inject: [THROTTLER_STORAGE],

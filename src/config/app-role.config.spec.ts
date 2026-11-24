@@ -1,5 +1,5 @@
 import { AppRole } from '../shared/enums/app-role.enum.js';
-import { appRole, runsCrons } from './app-role.config.js';
+import { appRole, runsBackgroundWork } from './app-role.config.js';
 
 describe('appRole', () => {
   it('defaults to all', () => {
@@ -20,10 +20,10 @@ describe('appRole', () => {
   });
 });
 
-describe('runsCrons', () => {
-  it('runs crons only in worker and all', () => {
-    expect(runsCrons(AppRole.ALL)).toBe(true);
-    expect(runsCrons(AppRole.WORKER)).toBe(true);
-    expect(runsCrons(AppRole.API)).toBe(false);
+describe('runsBackgroundWork', () => {
+  it('runs background work only in worker and all', () => {
+    expect(runsBackgroundWork(AppRole.ALL)).toBe(true);
+    expect(runsBackgroundWork(AppRole.WORKER)).toBe(true);
+    expect(runsBackgroundWork(AppRole.API)).toBe(false);
   });
 });

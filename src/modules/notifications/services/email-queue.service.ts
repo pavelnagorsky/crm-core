@@ -4,8 +4,11 @@ import {
   OnApplicationBootstrap,
   OnModuleDestroy,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
 import { fromPrisma, JobWithMetadata } from 'pg-boss';
+import { runsBackgroundWork } from '../../../config/app-role.config.js';
+import { IAppConfig } from '../../../config/interfaces/app-config.interface.js';
 import { JobQueueService } from '../../../shared/queue/job-queue.service.js';
 import {
   EMAIL_DEAD_LETTER_OPTIONS,
@@ -23,12 +26,16 @@ export class EmailQueueService
   implements OnApplicationBootstrap, OnModuleDestroy
 {
   private readonly logger = new Logger(EmailQueueService.name);
+  private readonly worker: boolean;
   private working = false;
 
   constructor(
     private readonly jobQueue: JobQueueService,
     private readonly delivery: EmailDeliveryService,
-  ) {}
+    config: ConfigService,
+  ) {
+    this.worker = runsBackgroundWork(config.get<IAppConfig>('app')!.role);
+  }
 
   get ready(): boolean {
     return this.jobQueue.ready;
@@ -51,6 +58,8 @@ export class EmailQueueService
       await boss.createQueue(EMAIL_QUEUE, options);
       // createQueue leaves an existing queue as it was; this applies changed options.
       await boss.updateQueue(EMAIL_QUEUE, options);
+      // `api` only puts jobs into the queue; it needs the queue to exist, not to work it.
+      if (!this.worker) return;
       await boss.work(
         EMAIL_QUEUE,
         { localConcurrency: EMAIL_WORKER_CONCURRENCY, includeMetadata: true },
