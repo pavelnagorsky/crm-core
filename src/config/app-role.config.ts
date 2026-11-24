@@ -13,7 +13,10 @@ export function appRole(env: NodeJS.ProcessEnv = process.env): AppRole {
   return value as AppRole;
 }
 
-/** Crons are scheduled only by `worker` and `all`; `api` processes never run them. */
-export function runsCrons(role: AppRole): boolean {
+/**
+ * Background work (crons, job queue workers, queue metrics) runs only in `worker` and `all`; `api` processes
+ * serve HTTP and only put jobs into the queue.
+ */
+export function runsBackgroundWork(role: AppRole): boolean {
   return role !== AppRole.API;
 }

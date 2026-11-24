@@ -1,3 +1,5 @@
+import { ConfigService } from '@nestjs/config';
+import { AppRole } from '../../../shared/enums/app-role.enum.js';
 import {
   EMAIL_DEAD_LETTER_OPTIONS,
   EMAIL_DEAD_LETTER_QUEUE,
@@ -20,11 +22,16 @@ const jobQueue = {
   ),
 };
 const delivery = { process: vi.fn(), abandon: vi.fn() };
+const roleConfig = (role: AppRole) => new ConfigService({ app: { role } });
 
 beforeEach(() => vi.clearAllMocks());
 
 describe('EmailQueueService', () => {
-  const service = new EmailQueueService(jobQueue as never, delivery as never);
+  const service = new EmailQueueService(
+    jobQueue as never,
+    delivery as never,
+    roleConfig(AppRole.WORKER),
+  );
 
   it('keeps dead-lettered jobs only briefly and routes failures there', async () => {
     await service.onApplicationBootstrap();
@@ -79,5 +86,21 @@ describe('EmailQueueService', () => {
     await service.onApplicationBootstrap();
     await service.onModuleDestroy();
     expect(boss.offWork).toHaveBeenCalledWith(EMAIL_QUEUE, { wait: true });
+  });
+
+  it('only sets up the queues in api processes, leaving the work to the worker', async () => {
+    const api = new EmailQueueService(
+      jobQueue as never,
+      delivery as never,
+      roleConfig(AppRole.API),
+    );
+    await api.onApplicationBootstrap();
+    expect(boss.createQueue).toHaveBeenCalledWith(
+      EMAIL_QUEUE,
+      expect.anything(),
+    );
+    expect(boss.work).not.toHaveBeenCalled();
+    await api.onModuleDestroy();
+    expect(boss.offWork).not.toHaveBeenCalled();
   });
 });

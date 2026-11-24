@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Gauge } from 'prom-client';
 import { IAppConfig } from '../../config/interfaces/app-config.interface.js';
-import { AppRole } from '../enums/app-role.enum.js';
+import { runsBackgroundWork } from '../../config/app-role.config.js';
 import { MetricsService } from '../metrics/metrics.service.js';
 import { JobQueueService } from './job-queue.service.js';
 
@@ -21,7 +21,7 @@ export class JobQueueMetrics {
     { registry }: MetricsService,
     config: ConfigService,
   ) {
-    if (config.get<IAppConfig>('app')?.role === AppRole.API) return;
+    if (!runsBackgroundWork(config.get<IAppConfig>('app')!.role)) return;
     const logger = this.logger;
     new Gauge({
       name: 'klendo_job_queue_jobs',
