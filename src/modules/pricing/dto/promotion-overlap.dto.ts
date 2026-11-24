@@ -23,7 +23,8 @@ export class PromotionOverlapDto {
   @ApiProperty({
     type: String,
     example: 'Маникюр, пн 10:00',
-    description: 'First service and start where both promotions apply.',
+    description:
+      'Where both promotions apply: the first common service («Все услуги» when both reach every service), then the weekday when either keeps to weekdays and the start time when either keeps to hours: «Маникюр», «Маникюр, пт», «Маникюр, пн 10:00».',
   })
   example: string;
 

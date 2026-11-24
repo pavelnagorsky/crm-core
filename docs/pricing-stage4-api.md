@@ -47,8 +47,8 @@
   на полную сумму скидки (округление скидки не выделяется в `ROUNDING`).
 - Комплекс FIXED - пакет: акция и скидка клиента считаются от цены комплекса по прайсу (подходит по `BUNDLE` или
   `appliesToAll`), скидка делится по позициям тем же распределением, что и цена.
-- Промокод визита один (`promoCode` в запросе). Результат: `promoCode: { code, status, reason }` (`reason` - только у
-  `NOT_APPLICABLE`), `status`:
+- Промокод визита один (`promoCode` в запросе). Результат: `promoCode: { code, status, reason, minVisitTotal }` (`reason` - только у
+  `NOT_APPLICABLE`, `minVisitTotal` - только у `BELOW_MIN_TOTAL`: сумма визита, от которой работает код), `status`:
   `APPLIED` (акция по коду применена хотя бы к одной позиции), `BETTER_APPLIED` (код подходит, но к позициям
   применена более выгодная скидка), `NOT_APPLICABLE` (код есть, условия не выполнены - `reason` из списка
   причин), `NOT_FOUND`.
@@ -116,7 +116,7 @@ QuoteRequest + context?: {
 - Без `context` акций и скидки клиента нет (поведение этапа 3).
 - `LineQuote.adjustments` получает `PROMOTION | CLIENT_DISCOUNT` с `ruleId`, `title` (внутреннее название),
   `publicTitle` (`publicName`, null при `showAsPromotion = false`), `valueType`, `value`, `amount` (минус).
-- `VisitQuote` + `promoCode: { code, status, reason? } | null`.
+- `VisitQuote` + `promoCode: { code, status, reason?, minVisitTotal? } | null`.
 - `explain` + причины: `WRONG_CHANNEL`, `WRONG_STAFF`, `OUT_OF_BOOKING_PERIOD`, `LEAD_TIME_TOO_SHORT`,
   `LEAD_TIME_TOO_LONG`, `CLIENT_UNKNOWN`, `NOT_NEW_CLIENT`, `NO_BIRTH_DATE`, `NOT_BIRTHDAY`,
   `PROMO_CODE_REQUIRED`, `BELOW_MIN_TOTAL`, `LIMIT_REACHED`, `CLIENT_LIMIT_REACHED`, `LESS_BENEFICIAL`
@@ -162,7 +162,9 @@ PriceRuleInputDto + { kind (по умолчанию SURCHARGE), scenario?, publi
   totalServiceCount, examples: [{ serviceId, serviceTitle, levelName, before, after, amount }],
   overlaps: [{ ruleId, name, publicName, valueType, value, example: string }],
   matches30d: { bookingsCount, discount } }`. `overlaps` - включённые акции, у которых пересекаются услуги,
-  каналы, мастера и время; `example` - короткий текст пересечения («Маникюр, пн 10:00»). `matches30d` - сколько
+  каналы, мастера и время; `example` - короткий текст пересечения: общая услуга («Все услуги»,
+  если обе акции на все услуги), день недели - если у одной из акций есть дни, время - если есть часы
+  («Маникюр», «Маникюр, пт», «Маникюр, пн 10:00»). `matches30d` - сколько
   записей за прошлые 30 дней (неотменённые, по позициям и времени визита, без условий клиента, срока, промокода
   и лимитов) получили бы акцию и скидка по прайсу.
 - `POST price-rules/promo-code` -> `{ code }` - свободный случайный код (8 символов, без 0/O/1/I).
@@ -200,8 +202,9 @@ bookedAt?: string (местное время записи, по умолчани
 ### Окно записи
 
 - `POST public/locations/:locationId/pricing` (с авторизацией кабинета) + `{ clientId?: string | null,
-  promoCode?: string, items[].promotion?: { mode, ruleId? } }`; канал - `ADMIN`, если запрос из кабинета
-  (как сейчас определяется доступ к `customPrice`), иначе `ONLINE`.
+  bookingId?: string | null, promoCode?: string, items[].promotion?: { mode, ruleId? } }`; канал - `ADMIN`, если запрос из кабинета
+  (как сейчас определяется доступ к `customPrice`), иначе `ONLINE`. `bookingId` - запись, которую правят: её
+  использование акций не входит в лимиты, клиент «новый» по записям до неё.
 - Ответ: позиции + `discount: { kind: PROMOTION | CLIENT_DISCOUNT, ruleId, title, publicTitle, valueType, value,
   amount } | null`, `eligible: [{ kind, ruleId, title, amount, chargedPrice }]` (все подходящие скидки позиции,
   лучшая первая), `ineligible: [{ ruleId, title, reason }]` (акции на эту услугу, которые не подошли, для меню);
@@ -300,8 +303,11 @@ bookedAt?: string (местное время записи, по умолчани
 
 Окно записи и записи:
 - Кабинетный запрос `POST public/locations/:locationId/pricing` - с токеном, у которого есть запись записей
-  филиала. `clientId` и `items[].promotion` без такого токена - 403.
-- `promoCode` в ответах: `{ code, status, reason }` (`PromoCodeResultDto`, без `ruleId`). `Booking.promoCode`
+  филиала. `clientId`, `bookingId` и `items[].promotion` без такого токена - 403. `bookingId` не записи
+  филиала (или удалённой) - 404. Правка записи (`PUT`) и проверка лимитов под блокировкой тоже не считают саму
+  запись.
+- `promoCode` в ответах: `{ code, status, reason, minVisitTotal }` (`PromoCodeResultDto`, без `ruleId`;
+  `minVisitTotal` - строка суммы при `BELOW_MIN_TOTAL`, иначе `null`). `Booking.promoCode`
   сохраняется, только если код применён (`APPLIED`).
 - Ручное создание и правка: исчерпанный лимит - 409 `PROMOTION_NOT_APPLICABLE` с `lineIndex: -1` (не
   `PRICE_CHANGED`: сверки `expectedTotal` у администратора нет). `UpdateBookingItemPriceDto.customPrice` остаётся

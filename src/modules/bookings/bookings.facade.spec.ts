@@ -1307,6 +1307,8 @@ describe('BookingsFacade.update details and item prices', () => {
     syncCompletedBooking: vi.fn(),
     syncBookingClient: vi.fn(),
   };
+  const repricing = { plan: vi.fn(async (): Promise<unknown> => null) };
+  const pricingContext = { assertLimitsHeld: vi.fn(async () => undefined) };
   let service: BookingsFacade;
 
   beforeEach(async () => {
@@ -1343,15 +1345,12 @@ describe('BookingsFacade.update details and item prices', () => {
         { provide: BookingPriceRuleStatsService, useValue: {} },
         { provide: BookingStaffingPreviewService, useValue: {} },
         { provide: BookingPromotionReportService, useValue: {} },
-        { provide: BookingPricingContextService, useValue: {} },
+        { provide: BookingPricingContextService, useValue: pricingContext },
         {
           provide: PromotionPublicService,
           useValue: { listForBookingSetup: async () => [] },
         },
-        {
-          provide: BookingRepricingService,
-          useValue: { plan: async () => null },
-        },
+        { provide: BookingRepricingService, useValue: repricing },
         {
           provide: BookingPaymentReadService,
           useValue: { summaries: vi.fn(async () => new Map()) },
@@ -1499,6 +1498,35 @@ describe('BookingsFacade.update details and item prices', () => {
           },
         }),
       }),
+    );
+  });
+
+  it('checks the limits of a re-picked promotion without counting the booking itself', async () => {
+    const current = visit();
+    const visitStartAt = new Date('2026-09-24T10:00:00.000Z');
+    findFirst.mockResolvedValue(current);
+    update.mockResolvedValue(current);
+    repricing.plan.mockResolvedValueOnce({
+      itemIds: ['item-1'],
+      itemUpdates: [],
+      promoCode: 'AUTUMN',
+      ruleIds: ['autumn'],
+      visitStartAt,
+    });
+
+    await service.update(
+      await service.findByIdInLocation('biz', 'booking-1'),
+      auditActorFromToken(token, 'biz'),
+      { promoCode: 'AUTUMN' },
+    );
+
+    expect(pricingContext.assertLimitsHeld).toHaveBeenCalledWith(
+      expect.anything(),
+      current.locationId,
+      ['autumn'],
+      current.clientId,
+      visitStartAt,
+      'booking-1',
     );
   });
 

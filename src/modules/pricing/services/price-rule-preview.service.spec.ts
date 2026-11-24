@@ -403,7 +403,7 @@ describe('PriceRulePreviewService', () => {
       expect(preview.overlaps).toEqual([
         expect.objectContaining({
           ruleId: 'all-day',
-          example: 'Haircut, пн 10:00',
+          example: 'Все услуги, пн 10:00',
         }),
       ]);
       expect(preview.matches30d).toBeNull();

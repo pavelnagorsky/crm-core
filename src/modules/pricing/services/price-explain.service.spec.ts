@@ -296,6 +296,7 @@ describe('PriceExplainService', () => {
         status: 'BETTER_APPLIED',
         ruleId: 'coded',
         reason: null,
+        minVisitTotal: null,
       });
     });
   });

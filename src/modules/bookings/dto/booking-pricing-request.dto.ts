@@ -120,4 +120,16 @@ export class BookingPricingRequestDto {
   @IsOptional()
   @IsUUID()
   clientId?: string | null;
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    required: false,
+    nullable: true,
+    description:
+      'Cabinet only (a token that may book in the location): the booking being edited. Its own use of promotions does not count toward their limits, and only bookings made before it make the client returning. 404 when it is not a booking of the location.',
+  })
+  @IsOptional()
+  @IsUUID()
+  bookingId?: string | null;
 }

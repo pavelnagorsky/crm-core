@@ -1,3 +1,4 @@
+import { NotFoundException } from '@nestjs/common';
 import { Prisma, PromotionLimitPeriod } from '@prisma/client';
 import { PromotionChannel } from '../../pricing/engine/enums/promotion-channel.enum.js';
 import { BookingStatus } from '../enums/booking-status.enum.js';
@@ -34,6 +35,7 @@ function setup(
     clientBookings?: { startAt: Date; ruleIds: string[] }[];
     earlierBooking?: boolean;
     client?: Record<string, unknown> | null;
+    edited?: Record<string, unknown> | null;
   } = {},
 ) {
   const queries: string[] = [];
@@ -49,7 +51,17 @@ function setup(
       findFirst: vi.fn(async () =>
         options.earlierBooking ? { id: 'earlier' } : null,
       ),
-      findUnique: vi.fn(async () => ({ createdAt: NOW })),
+      findUnique: vi.fn(async () =>
+        options.edited === null
+          ? null
+          : {
+              id: 'booking-1',
+              locationId: 'location-1',
+              createdAt: NOW,
+              deletedAt: null,
+              ...options.edited,
+            },
+      ),
       findMany: vi.fn(async () =>
         (options.clientBookings ?? []).map((booking) => ({
           startAt: booking.startAt,
@@ -211,6 +223,17 @@ describe('BookingPricingContextService', () => {
       });
     });
 
+    it.each([
+      ['unknown', null],
+      ['of another location', { locationId: 'location-2' }],
+      ['deleted', { deletedAt: NOW }],
+    ] as const)('an edited booking %s is a 404', async (_name, edited) => {
+      const { service, request } = setup({ edited });
+      await expect(
+        service.build({ ...request, bookingId: 'booking-1' }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
     it('an unknown clientId is a 404', async () => {
       const { service, request } = setup({ client: null });
       await expect(
@@ -258,6 +281,36 @@ describe('BookingPricingContextService', () => {
         monthly: { total: 3, perClient: 2 },
         ever: { total: 0, perClient: 1 },
       });
+    });
+
+    it('does not count the edited booking, in total or for the client', async () => {
+      const { service, request, db } = setup({
+        client: {},
+        limits: [
+          limited('autumn', {
+            usageLimitPerClient: 1,
+            usageLimitPeriod: PromotionLimitPeriod.ALL_TIME,
+          }),
+        ],
+      });
+      await service.build({
+        ...request,
+        clientId: 'client-1',
+        bookingId: 'booking-1',
+      });
+      const totals = db.$queryRaw.mock.calls.find((args) =>
+        sqlOf(args).includes('COUNT(DISTINCT'),
+      )!;
+      expect(sqlOf(totals)).toContain('b."id" <>');
+      expect(totals.slice(1)).toContain('booking-1');
+      expect(db.booking.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            clientId: 'client-1',
+            id: { not: 'booking-1' },
+          }),
+        }),
+      );
     });
 
     it('an unknown client has no uses of its own', async () => {

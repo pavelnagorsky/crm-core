@@ -10,4 +10,6 @@ export interface PromoCodeResult {
   ruleId: string | null;
   /** NOT_APPLICABLE only. */
   reason: PriceRuleSkipReason | null;
+  /** BELOW_MIN_TOTAL only: the visit total the promotion needs, minor units. */
+  minVisitTotal: number | null;
 }

@@ -41,6 +41,36 @@ function firstCommonStart(
   return null;
 }
 
+/** Every service and bundle, nothing excluded. */
+const reachesAll = (entry: PricingRuleEntry): boolean =>
+  entry.appliesToAll && entry.targets.every((target) => !target.excluded);
+
+/**
+ * Where and when the two promotions meet, as the admin reads it: the common service (or
+ * "Все услуги"), then the weekday when either keeps to weekdays and the time when either
+ * keeps to hours. Promotions with no time conditions (new clients, birthday, a code) meet
+ * on the service alone.
+ */
+function overlapExample(
+  a: PricingRuleEntry,
+  b: PricingRuleEntry,
+  scope: PromotionOverlapScope,
+  start: { date: string; minute: number },
+): string {
+  const parts = [reachesAll(a) && reachesAll(b) ? 'Все услуги' : scope.title];
+  const weekday =
+    a.weekdaysMask !== 0 || b.weekdaysMask !== 0
+      ? WEEKDAYS[CalendarDayParser.parse(start.date).isoWeekday - 1]
+      : null;
+  const time =
+    a.intervals.length > 0 || b.intervals.length > 0
+      ? TimeUtils.minutesToHHmm(start.minute)
+      : null;
+  const when = [weekday, time].filter(Boolean).join(' ');
+  if (when) parts.push(when);
+  return parts.join(', ');
+}
+
 /**
  * Enabled promotions that can reach the same visit as the draft: a common service or
  * bundle, channel, staff member and start time from today on. Client conditions, codes and
@@ -70,14 +100,13 @@ export function findPromotionOverlaps(
     if (!scope) continue;
     const start = firstCommonStart(draftRule, rule, today);
     if (!start) continue;
-    const weekday = CalendarDayParser.parse(start.date).isoWeekday;
     result.push({
       ruleId: entry.id,
       name: entry.name,
       publicName: promotion.publicName,
       valueType: entry.valueType as string as PromotionOverlap['valueType'],
       value: new Prisma.Decimal(entry.value).div(100),
-      example: `${scope.title}, ${WEEKDAYS[weekday - 1]} ${TimeUtils.minutesToHHmm(start.minute)}`,
+      example: overlapExample(draft, entry, scope, start),
     });
   }
   return result;

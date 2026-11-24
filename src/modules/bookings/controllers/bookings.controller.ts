@@ -145,7 +145,7 @@ export class BookingsController {
   @ApiOkResponse({ type: ApiResponse(BookingPricingResponseDto) })
   @ApiNotFoundResponse({
     description:
-      'Location, service, or product not found; BOOKING_CLIENT_NOT_FOUND: clientId is not a client of the brand',
+      'Location, service, or product not found; BOOKING_CLIENT_NOT_FOUND: clientId is not a client of the brand; bookingId is not a booking of the location',
   })
   @ApiConflictResponse({
     description:
@@ -153,7 +153,7 @@ export class BookingsController {
   })
   @ApiForbiddenResponse({
     description:
-      'clientId or items[].promotion without a cabinet token; a promotion mode other than AUTO without sale.price.override:write',
+      'clientId, bookingId or items[].promotion without a cabinet token; a promotion mode other than AUTO without sale.price.override:write',
     type: ForbiddenException,
   })
   @OptionalAuth()
@@ -168,7 +168,10 @@ export class BookingsController {
       hasPermission(token, Write(Claim.BOOKING), locationId) ||
       hasPermission(token, Write(Claim.BOOKING_OWN), locationId);
     const promotions = dto.items?.map((item) => item.promotion) ?? [];
-    if (!cabinet && (dto.clientId || promotions.some(Boolean)))
+    if (
+      !cabinet &&
+      (dto.clientId || dto.bookingId || promotions.some(Boolean))
+    )
       throw new ForbiddenException('Access denied');
     this.assertDiscountChoice(token, locationId, promotions);
     const pricing = await this.bookingCreateService.price(locationId, dto, {

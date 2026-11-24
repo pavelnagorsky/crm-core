@@ -489,6 +489,27 @@ describe('BookingCreateFacade pricing', () => {
         code: 'NOPE',
         status: 'NOT_FOUND',
         reason: null,
+        minVisitTotal: null,
+      });
+    });
+
+    it('a code below its minimum visit total tells the minimum', async () => {
+      const { service } = pricingSetup([
+        promotion('big', '10.00', {
+          promoCode: 'BIG',
+          minVisitTotal: new Prisma.Decimal('100.00'),
+        }),
+      ]);
+      const result = await service.price('business-1', {
+        serviceIds: ['service-1'],
+        startAt,
+        promoCode: 'big',
+      });
+      expect(BookingPricingResponseDto.fromResult(result).promoCode).toEqual({
+        code: 'BIG',
+        status: 'NOT_APPLICABLE',
+        reason: 'BELOW_MIN_TOTAL',
+        minVisitTotal: '100.00',
       });
     });
 

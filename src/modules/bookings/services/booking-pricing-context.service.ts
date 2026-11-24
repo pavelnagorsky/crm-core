@@ -1,4 +1,4 @@
-import { HttpStatus, Injectable } from '@nestjs/common';
+import { HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { Client, PromotionLimitPeriod, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
@@ -22,6 +22,8 @@ const PERIOD_DAYS: Record<PromotionLimitPeriod, number | null> = {
   MONTH: 30,
   WEEK: 7,
 };
+type EditedBooking = { id: string; createdAt: Date };
+
 const UNKNOWN_CLIENT: QuoteClient = {
   known: false,
   isNew: false,
@@ -45,6 +47,9 @@ export class BookingPricingContextService {
   async build(request: BookingPricingContextRequest): Promise<QuoteContext> {
     const now = request.now ?? new Date();
     const db = request.tx ?? this.db;
+    const edited = request.bookingId
+      ? await this.editedBooking(request.bookingId, request.locationId, db)
+      : null;
     const client = await this.findClient(request);
     const limited = await this.limitedPromotions(
       request.locationId,
@@ -58,13 +63,13 @@ export class BookingPricingContextService {
       client:
         client === undefined
           ? UNKNOWN_CLIENT
-          : await this.quoteClient(client, request, db),
+          : await this.quoteClient(client, edited, db),
       promoCode: request.promoCode?.trim() || null,
       usage: await this.usage(
         limited,
         client?.id ?? null,
         request.visitStartAt ?? now,
-        request.bookingId ?? null,
+        edited?.id ?? null,
         db,
       ),
       ...(request.choice && { choice: request.choice }),
@@ -141,16 +146,35 @@ export class BookingPricingContextService {
     return this.clients.findByPhoneForBooking(request.brandId, phone);
   }
 
+  /** The booking being edited must be a live booking of the location, else 404. */
+  private async editedBooking(
+    bookingId: string,
+    locationId: string,
+    db: Prisma.TransactionClient,
+  ): Promise<EditedBooking> {
+    const booking = await db.booking.findUnique({
+      where: { id: bookingId },
+      select: { id: true, locationId: true, createdAt: true, deletedAt: true },
+    });
+    if (
+      !booking ||
+      booking.deletedAt !== null ||
+      booking.locationId !== locationId
+    )
+      throw new NotFoundException('Booking not found');
+    return { id: booking.id, createdAt: booking.createdAt };
+  }
+
   private async quoteClient(
     client: Client | null,
-    request: BookingPricingContextRequest,
+    edited: EditedBooking | null,
     db: Prisma.TransactionClient,
   ): Promise<QuoteClient> {
     if (client === null)
       return { known: true, isNew: true, birthday: null, discountBp: null };
     return {
       known: true,
-      isNew: client.importedAt === null && !(await this.hasBookings(client, request, db)),
+      isNew: client.importedAt === null && !(await this.hasBookings(client, edited, db)),
       birthday: client.birthDate
         ? TimeUtils.dateOnlyStr(client.birthDate).slice(5)
         : null,
@@ -164,23 +188,18 @@ export class BookingPricingContextService {
   /** Live bookings of the client in any location of the brand, before the edited one. */
   private async hasBookings(
     client: Client,
-    request: BookingPricingContextRequest,
+    edited: EditedBooking | null,
     db: Prisma.TransactionClient,
   ): Promise<boolean> {
-    const bookingId = request.bookingId ?? null;
-    const edited = bookingId
-      ? await db.booking.findUnique({
-          where: { id: bookingId },
-          select: { createdAt: true },
-        })
-      : null;
     const found = await db.booking.findFirst({
       where: {
         clientId: client.id,
         deletedAt: null,
         status: { not: BookingStatus.CANCELLED },
-        ...(bookingId && { id: { not: bookingId } }),
-        ...(edited && { createdAt: { lt: edited.createdAt } }),
+        ...(edited && {
+          id: { not: edited.id },
+          createdAt: { lt: edited.createdAt },
+        }),
       },
       select: { id: true },
     });

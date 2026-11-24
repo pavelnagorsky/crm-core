@@ -73,11 +73,51 @@ describe('findPromotionOverlaps', () => {
     expect(findPromotionOverlaps(draft, [other], scopes, TODAY)).toEqual([]);
   });
 
-  it('meets on a later day when today does not work', () => {
+  it('meets on a later day when today does not work, without a time when neither keeps to hours', () => {
     const friday = promotionRule('friday', { weekdaysMask: weekdays(5) });
     const other = promotionRule('other', {});
     expect(findPromotionOverlaps(friday, [other], scopes, TODAY)[0].example).toBe(
-      'Стрижка, пт 00:00',
+      'Все услуги, пт',
+    );
+  });
+
+  describe('promotions without time conditions', () => {
+    // New clients, birthday, promo code: no weekdays and no hours.
+    it('name only the common service', () => {
+      const birthday = promotionRule('birthday', { ...nailsOnly });
+      const code = promotionRule('code', {});
+      expect(findPromotionOverlaps(birthday, [code], scopes, TODAY)[0].example).toBe(
+        'Маникюр',
+      );
+    });
+
+    it('say «Все услуги» when both reach every service', () => {
+      const birthday = promotionRule('birthday', {});
+      const code = promotionRule('code', {});
+      expect(findPromotionOverlaps(birthday, [code], scopes, TODAY)[0].example).toBe(
+        'Все услуги',
+      );
+    });
+
+    it('name the first common service when one excludes some', () => {
+      const birthday = promotionRule('birthday', {
+        targets: [{ type: PriceRuleTargetType.SERVICE, id: 'cut', excluded: true }],
+      });
+      const code = promotionRule('code', {});
+      expect(findPromotionOverlaps(birthday, [code], scopes, TODAY)[0].example).toBe(
+        'Маникюр',
+      );
+    });
+  });
+
+  it('takes the time from inside the common hours when only one keeps to hours', () => {
+    const evening = promotionRule('evening', {
+      ...nailsOnly,
+      intervals: [{ start: 1080, end: 1260 }],
+    });
+    const code = promotionRule('code', {});
+    expect(findPromotionOverlaps(code, [evening], scopes, TODAY)[0].example).toBe(
+      'Маникюр, 18:00',
     );
   });
 });

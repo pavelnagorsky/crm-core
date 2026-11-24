@@ -3,6 +3,7 @@ import { Claim } from '../../access/enums/claim.enum.js';
 import { Write, removeGrant } from '../../access/utils/permission.js';
 import { tokenPayload } from '../../auth/testing/factories/token-payload.factory.js';
 import { StaffAccessService } from '../../staff/services/staff-access.service.js';
+import { BookingPricingRequestDto } from '../dto/booking-pricing-request.dto.js';
 import { ManualCreateBookingDto } from '../dto/manual-create-booking.dto.js';
 import { BookingAccessService } from '../services/booking-access.service.js';
 import { BookingsController } from './bookings.controller.js';
@@ -90,5 +91,37 @@ describe('Manual booking API permissions', () => {
       ),
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(create.createManualBooking).not.toHaveBeenCalled();
+  });
+});
+
+describe('Booking price preview access', () => {
+  const create = { price: vi.fn().mockResolvedValue({}) };
+  const controller = new BookingsController(
+    {} as never,
+    create as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+    {} as never,
+  );
+  beforeEach(() => vi.clearAllMocks());
+
+  it('rejects the edited booking from a guest', async () => {
+    const dto = { bookingId: 'booking-1' } as BookingPricingRequestDto;
+    await expect(
+      controller.priceBooking('location-1', dto, null),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(create.price).not.toHaveBeenCalled();
+  });
+
+  it('passes the edited booking on from the cabinet', async () => {
+    const dto = { bookingId: 'booking-1' } as BookingPricingRequestDto;
+    await controller
+      .priceBooking('location-1', dto, tokenPayload('MANAGER'))
+      .catch(() => undefined);
+    expect(create.price).toHaveBeenCalledWith('location-1', dto, {
+      cabinet: true,
+    });
   });
 });

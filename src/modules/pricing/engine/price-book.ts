@@ -682,11 +682,21 @@ export class PriceBook {
         status: PromoCodeStatus.NOT_FOUND,
         ruleId: null,
         reason: null,
+        minVisitTotal: null,
       };
     const result = (
       status: PromoCodeStatus,
       reason: PriceRuleSkipReason | null = null,
-    ): PromoCodeResult => ({ code, status, ruleId: rule.id, reason });
+    ): PromoCodeResult => ({
+      code,
+      status,
+      ruleId: rule.id,
+      reason,
+      minVisitTotal:
+        reason === PriceRuleSkipReason.BELOW_MIN_TOTAL
+          ? (rule.promotion?.minVisitTotal ?? null)
+          : null,
+    });
     if (quote.lines.some((line) => line.discount?.ruleId === rule.id))
       return result(PromoCodeStatus.APPLIED);
     if (

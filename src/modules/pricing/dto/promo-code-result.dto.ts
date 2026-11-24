@@ -1,4 +1,6 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { PriceRuleSkipReason } from '../engine/enums/price-rule-skip-reason.enum.js';
 import { PromoCodeStatus } from '../engine/enums/promo-code-status.enum.js';
 import { PromoCodeResult } from '../engine/interfaces/promo-code-result.interface.js';
@@ -19,6 +21,13 @@ export class PromoCodeResultDto {
   })
   reason: PriceRuleSkipReason | null;
 
+  @ApiPrice({
+    nullable: true,
+    description:
+      'BELOW_MIN_TOTAL only: the visit total the promotion needs, else null.',
+  })
+  minVisitTotal: string | null;
+
   static fromResult(
     result: PromoCodeResult | null | undefined,
   ): PromoCodeResultDto | null {
@@ -27,6 +36,10 @@ export class PromoCodeResultDto {
     dto.code = result.code;
     dto.status = result.status;
     dto.reason = result.reason;
+    dto.minVisitTotal =
+      result.minVisitTotal === null
+        ? null
+        : MoneyUtils.format(MoneyUtils.fromMinor(result.minVisitTotal));
     return dto;
   }
 }

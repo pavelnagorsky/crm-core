@@ -558,6 +558,13 @@ describe('PriceBook: promotions and the client discount (docs/pricing-stage4-api
         R.LIMIT_REACHED,
       ],
       [
+        'code below its minimum visit total, with the minimum',
+        [promotionRule('coded', {}, { promoCode: 'AUTUMN', minVisitTotal: 1_000_000 })],
+        'AUTUMN',
+        NOT_APPLICABLE,
+        R.BELOW_MIN_TOTAL,
+      ],
+      [
         'code of a disabled promotion',
         [promotionRule('coded', { enabled: false }, { promoCode: 'AUTUMN' })],
         'AUTUMN',
@@ -577,6 +584,7 @@ describe('PriceBook: promotions and the client discount (docs/pricing-stage4-api
               status,
               ruleId: status === NOT_FOUND ? null : 'coded',
               reason,
+              minVisitTotal: reason === R.BELOW_MIN_TOTAL ? 1_000_000 : null,
             },
       );
     });

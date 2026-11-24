@@ -30,7 +30,8 @@ export class CompiledPromotion {
   private readonly birthdayWindowDays: number;
   private readonly usageLimitTotal: number | null;
   private readonly usageLimitPerClient: number | null;
-  private readonly minVisitTotal: number | null;
+  /** Minor units; null: no minimum. */
+  readonly minVisitTotal: number | null;
 
   constructor(
     private readonly ruleId: string,

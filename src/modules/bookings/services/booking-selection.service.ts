@@ -78,6 +78,7 @@ export class BookingSelectionService {
           phone: dto.clientPhone ?? null,
           promoCode: dto.promoCode ?? null,
           choice: access.cabinet ? this.discountChoices(dto) : undefined,
+          bookingId: access.cabinet ? (dto.bookingId ?? null) : null,
         })
       : null;
     const priced = selection
