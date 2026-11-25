@@ -220,6 +220,7 @@ function setup() {
     orders as never,
     pricing,
     bookingPricingContextStub(),
+    {} as never,
   );
   const scheduling = new BookingSchedulingService(
     db as never,

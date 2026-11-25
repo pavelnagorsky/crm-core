@@ -175,6 +175,17 @@ function setup(billing?: { isOnlineBookingOpen: ReturnType<typeof vi.fn> }) {
   return { service, clients, staff, db };
 }
 
+/** The booking edited in the booking dialog: its service-1 item has the promotion "ten" picked. */
+const editedBookings = {
+  findDiscountChoices: vi.fn(async () => [
+    {
+      serviceId: 'service-1',
+      discountChoice: DiscountChoiceMode.RULE,
+      discountChoiceRuleId: 'ten',
+    },
+  ]),
+};
+
 function pricingSetup(priceRules: PriceRuleRecord[] = []) {
   const db = {
     location: {
@@ -578,6 +589,39 @@ describe('BookingCreateFacade pricing', () => {
         { cabinet: true },
       );
       expect(result.items[0].lineTotal.toFixed(2)).toBe('45.00');
+    });
+
+    it('cabinet, editing a booking: a line without a pick takes the stored pick of the same item', async () => {
+      const { service } = pricingSetup([
+        promotion('ten', '10.00'),
+        promotion('twenty', '20.00'),
+      ]);
+      const preview = (serviceId: string, bookingId: string | null) =>
+        service.price(
+          'business-1',
+          { items: [{ serviceId }], startAt, bookingId },
+          { cabinet: true },
+        );
+      // Stored "ten" instead of the best "twenty".
+      const stored = await preview('service-1', 'booking-1');
+      expect(stored.items[0].lineTotal.toFixed(2)).toBe('45.00');
+      expect(editedBookings.findDiscountChoices).toHaveBeenCalledWith(
+        'business-1',
+        'booking-1',
+      );
+      // Without the booking the best one applies.
+      const fresh = await preview('service-1', null);
+      expect(fresh.items[0].lineTotal.toFixed(2)).toBe('40.00');
+    });
+
+    it('cabinet, editing a booking: a stored pick that no longer applies gives the best discount, no 409', async () => {
+      const { service } = pricingSetup([promotion('twenty', '20.00')]);
+      const result = await service.price(
+        'business-1',
+        { items: [{ serviceId: 'service-1' }], startAt, bookingId: 'booking-1' },
+        { cabinet: true },
+      );
+      expect(result.items[0].lineTotal.toFixed(2)).toBe('40.00');
     });
 
     it('online ignores a choice: the best discount applies', async () => {
@@ -2146,6 +2190,11 @@ describe('BookingCreateFacade promotions (docs/pricing-stage4-api.md)', () => {
       { id: 'user-1', name: 'Ольга', role: AuditActorRole.OWNER },
     );
     expect(created(tx).items.create[0].chargedPrice.toFixed(2)).toBe('50.00');
+    // The pick is stored, so repricing the booking later keeps it.
+    expect(created(tx).items.create[0]).toMatchObject({
+      discountChoice: 'NONE',
+      discountChoiceRuleId: null,
+    });
   });
 
   it('a manual booking gets the best discount by default', async () => {
@@ -2156,6 +2205,10 @@ describe('BookingCreateFacade promotions (docs/pricing-stage4-api.md)', () => {
       { id: 'user-1', name: 'Ольга', role: AuditActorRole.OWNER },
     );
     expect(created(tx).items.create[0].chargedPrice.toFixed(2)).toBe('45.00');
+    expect(created(tx).items.create[0]).toMatchObject({
+      discountChoice: null,
+      discountChoiceRuleId: null,
+    });
   });
 
   it('a picked promotion that does not apply is 409 PROMOTION_NOT_APPLICABLE', async () => {
@@ -2478,6 +2531,7 @@ function createBookingService(
       orders,
       pricing,
       bookingPricingContextStub(),
+      editedBookings as never,
     ),
     new BookingSchedulingService(
       db,

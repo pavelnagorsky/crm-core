@@ -1,7 +1,7 @@
 import { BookingReminderNotification } from '../../notifications/messages/booking-reminder.notification.js';
 import { NotificationsService } from '../../notifications/services/notifications.service.js';
 import { Test } from '@nestjs/testing';
-import { BookingStatus, ClientNoticeType } from '@prisma/client';
+import { BookingStatus, ClientNoticeType, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { LocationService } from '../../location/services/location.service.js';
 import { ReviewRequestNotification } from '../../notifications/messages/review-request.notification.js';
@@ -352,6 +352,7 @@ describe('BookingCronService.sendClientNotices', () => {
         clientNoticeAt: null,
         clientNoticeType: null,
         clientNoticeFromStartAt: null,
+        clientNoticeFromTotal: null,
         updatedAt: due.updatedAt,
       },
     });
@@ -373,11 +374,12 @@ describe('BookingCronService.sendClientNotices', () => {
     expect(database.$transaction).toHaveBeenCalledOnce();
   });
 
-  it('sends a due move email with the start before the series', async () => {
+  it('sends a due move email with the start and the price before the series', async () => {
     const from = new Date('2026-09-21T08:00:00.000Z');
     const due = pending({
       clientNoticeType: ClientNoticeType.RESCHEDULED,
       clientNoticeFromStartAt: from,
+      clientNoticeFromTotal: new Prisma.Decimal('51.00'),
     });
     db.booking.findMany.mockResolvedValue([due]);
 
@@ -386,8 +388,11 @@ describe('BookingCronService.sendClientNotices', () => {
     expect(events.statusNotification).toHaveBeenCalledWith(
       due,
       'RESCHEDULED',
-      { previousStartAt: from },
-      'Europe/Minsk',
+      {
+        previousStartAt: from,
+        previousServicesTotal: new Prisma.Decimal('51.00'),
+      },
+      expect.objectContaining({ timezone: 'Europe/Minsk' }),
     );
     expect(notifications.enqueue).toHaveBeenCalledExactlyOnceWith(moved, db);
   });

@@ -37,6 +37,8 @@ export function booking(options: BookingFixtureOptions = {}): BookingWithItems {
     customPrice: null,
     staffName: 'Anna',
     calendarEventId: null,
+    discountChoice: null,
+    discountChoiceRuleId: null,
     ...item,
   };
   const items = overrides.items ?? [defaultItem];
@@ -71,6 +73,7 @@ export function booking(options: BookingFixtureOptions = {}): BookingWithItems {
     clientNoticeAt: null,
     clientNoticeType: null,
     clientNoticeFromStartAt: null,
+    clientNoticeFromTotal: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     deletedAt: null,

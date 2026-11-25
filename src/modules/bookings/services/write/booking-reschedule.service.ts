@@ -30,6 +30,8 @@ import {
 import { reminderDueAt } from '../../rules/booking-reminder.rules.js';
 import { BookingWriteLockService } from '../booking-write-lock.service.js';
 import { NotificationsService } from '../../../notifications/services/notifications.service.js';
+import { BookingRepricing } from '../../interfaces/booking-repricing.interface.js';
+import { BookingRepricingService } from './booking-repricing.service.js';
 
 @Injectable()
 export class BookingRescheduleService {
@@ -43,6 +45,7 @@ export class BookingRescheduleService {
     private readonly write: BookingWriteLockService,
     private readonly slots: BookingSlotLockService,
     private readonly notifications: NotificationsService,
+    private readonly repricing: BookingRepricingService,
   ) {}
 
   /** Hooks run in the same transaction: see BookingWriteHooks. */
@@ -56,13 +59,29 @@ export class BookingRescheduleService {
     return this.moveBooking(old, dto, data, actor, false, hooks);
   }
 
+  /**
+   * The client moves the booking: it is priced again at the new time by the rules it was booked
+   * with (docs/pricing-stage5-api.md); a total other than expectedTotal is 409 PRICE_CHANGED.
+   */
   rescheduleByClient(
     old: BookingWithItems,
     startAt: string,
+    expectedTotal: string,
     actor: AuditActor,
   ): Promise<BookingWithItems> {
     assertClientCanManageBooking(old);
-    return this.moveBooking(old, { startAt }, {}, actor, true);
+    const priced: { repricing: BookingRepricing | null } = { repricing: null };
+    return this.moveBooking(old, { startAt }, {}, actor, true, {
+      prepare: async (items) => {
+        priced.repricing = await this.repricing.planClientMove(
+          old,
+          items,
+          expectedTotal,
+        );
+        return this.repricing.bookingWrite(priced.repricing);
+      },
+      beforeLock: (tx) => this.repricing.holdLimits(tx, old, priced.repricing),
+    });
   }
 
   private async moveBooking(
@@ -108,6 +127,8 @@ export class BookingRescheduleService {
         HttpStatus.BAD_REQUEST,
       );
     }
+    // Prices of the new staff and time, if the caller re-prices.
+    const priceWrite = (await hooks.prepare?.(items)) ?? {};
     return this.db.$transaction(
       async (tx) => {
         await hooks.beforeLock?.(tx);
@@ -143,6 +164,7 @@ export class BookingRescheduleService {
           where: { id: old.id },
           data: {
             ...data,
+            ...priceWrite,
             startAt: nextStartAt,
             endAt: new Date(
               Math.max(...items.map((item) => item.endAt.getTime())),

@@ -54,6 +54,8 @@ function item(
     customPrice: customPrice === null ? null : decimal(customPrice),
     staffName: 'Анна',
     calendarEventId: null,
+    discountChoice: null,
+    discountChoiceRuleId: null,
     priceAdjustments,
   };
 }
@@ -106,6 +108,21 @@ describe('Booking item price layers in responses', () => {
     expect(BookingItemResponseDto.fromEntity(item([client])).discount?.kind).toBe(
       PriceAdjustmentKind.CLIENT_DISCOUNT,
     );
+  });
+
+  it('shows the stored discount pick; nothing picked is null (AUTO)', () => {
+    expect(BookingItemResponseDto.fromEntity(item()).discountChoice).toBeNull();
+    expect(
+      BookingItemResponseDto.fromEntity({
+        ...item(),
+        discountChoice: 'RULE',
+        discountChoiceRuleId: 'happy',
+      }).discountChoice,
+    ).toEqual({ mode: 'RULE', ruleId: 'happy' });
+    expect(
+      BookingItemResponseDto.fromEntity({ ...item(), discountChoice: 'NONE' })
+        .discountChoice,
+    ).toEqual({ mode: 'NONE', ruleId: null });
   });
 
   it('an item read without layers has none', () => {

@@ -10,10 +10,17 @@ import {
   IsIn,
   IsOptional,
   IsString,
+  IsEnum,
   IsUUID,
+  Matches,
   MaxLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
+import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
+import regularExpressions from '../../../shared/regular-expressions.js';
+import { CanonicalAmount } from '../../../shared/transforms/canonical-amount.transform.js';
+import { BookingRepricingMode } from '../enums/booking-repricing-mode.enum.js';
 import { MULTI_SERVICE_MAX_ITEMS } from '../../services/constants/multi-service.constants.js';
 import { IsLocalDateTime } from '../../../shared/time/decorators/is-local-date-time.validator.js';
 import { IsPhone } from '../../../shared/decorators/is-phone.decorator.js';
@@ -155,6 +162,33 @@ export class UpdateBookingDto {
    */
   @PromoCodeField()
   promoCode?: string | null;
+
+  @ApiProperty({
+    enum: BookingRepricingMode,
+    enumName: 'BookingRepricingMode',
+    required: false,
+    default: BookingRepricingMode.KEEP,
+    description:
+      'KEEP: prices stay (items whose discount is picked again and a changed promoCode still re-price). RECALCULATE: every item gets fresh price layers at its final staff and time, as at creation: custom prices and the picked discounts stay (a picked promotion that no longer applies gives the best one), the promo code stays if it applies, else it is removed. Allowed without a move. 400 BOOKING_REPRICE_COMPLETED for a COMPLETED, CANCELLED or NO_SHOW booking (docs/pricing-stage5-api.md).',
+  })
+  @IsOptional()
+  @IsEnum(BookingRepricingMode)
+  pricing?: BookingRepricingMode;
+
+  @ApiPrice({
+    required: false,
+    description:
+      'Required with pricing RECALCULATE, ignored otherwise: the services total the administrator saw (serviceTotal of POST pricing with bookingId). A different recalculated total (sum of customPrice ?? chargedPrice) is 409 PRICE_CHANGED { expectedTotal, total, items, promoCode }.',
+  })
+  @ValidateIf(
+    (dto: UpdateBookingDto) => dto.pricing === BookingRepricingMode.RECALCULATE,
+  )
+  @CanonicalAmount()
+  @Matches(regularExpressions.moneyAmount, {
+    message:
+      'expectedTotal must be a non-negative amount with at most 2 decimal places',
+  })
+  expectedTotal?: string;
 
   @ApiProperty({
     type: String,

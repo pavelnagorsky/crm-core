@@ -21,6 +21,7 @@ import { ServiceLinePrice } from './interfaces/service-line-price.interface.js';
 import { ServicePriceAdjustment } from './interfaces/service-price-adjustment.interface.js';
 import { ServicePriceQuote } from './interfaces/service-price-quote.interface.js';
 import { ServicePriceRequest } from './interfaces/service-price-request.interface.js';
+import { UnpriceableLines } from './interfaces/unpriceable-lines.interface.js';
 import { PricingSnapshotService } from './services/pricing-snapshot.service.js';
 
 /** Prices and promotions: the one place that computes what a sale line costs. */
@@ -48,7 +49,8 @@ export class PricingFacade {
    * Same as quoteServices over a price book the caller already loaded, so one request
    * ranks staff and quotes the visit from a single snapshot. A discount an administrator
    * picked (context.choice RULE or CLIENT_DISCOUNT) that does not apply to its line is a
-   * 409 PROMOTION_NOT_APPLICABLE with { lineIndex, ruleId, reason }.
+   * 409 PROMOTION_NOT_APPLICABLE with { lineIndex, ruleId, reason }; a stored one
+   * (fallbackToAuto) gives the line the best discount instead.
    */
   quoteWithBook(
     book: PriceBook,
@@ -94,18 +96,39 @@ export class PricingFacade {
     bundleId: string | null,
     serviceIds: readonly string[],
   ): void {
+    const problem = this.unpriceable(book, bundleId, serviceIds);
+    if (problem) throw new AppException(problem.code, problem.status);
+  }
+
+  /**
+   * Whether the lines can be priced now (see assertPriceable). A stored booking may not:
+   * its service was deactivated or its bundle edited since it was made.
+   */
+  canPrice(
+    book: PriceBook,
+    bundleId: string | null,
+    serviceIds: readonly string[],
+  ): boolean {
+    return this.unpriceable(book, bundleId, serviceIds) === null;
+  }
+
+  private unpriceable(
+    book: PriceBook,
+    bundleId: string | null,
+    serviceIds: readonly string[],
+  ): UnpriceableLines | null {
     if (serviceIds.some((serviceId) => !book.hasService(serviceId)))
-      throw new AppException(
-        ErrorCode.BOOKING_SERVICE_NOT_FOUND,
-        HttpStatus.NOT_FOUND,
-      );
-    if (bundleId === null) return;
+      return {
+        code: ErrorCode.BOOKING_SERVICE_NOT_FOUND,
+        status: HttpStatus.NOT_FOUND,
+      };
+    if (bundleId === null) return null;
     const bundle = book.bundle(bundleId);
     if (!bundle)
-      throw new AppException(
-        ErrorCode.BOOKING_BUNDLE_NOT_FOUND,
-        HttpStatus.NOT_FOUND,
-      );
+      return {
+        code: ErrorCode.BOOKING_BUNDLE_NOT_FOUND,
+        status: HttpStatus.NOT_FOUND,
+      };
     // Bundle lines are the bundle items, each service once. The caller read the bundle
     // separately: if its services differ, the bundle was edited in between.
     const bundleServiceIds = new Set(bundle.serviceIds);
@@ -114,18 +137,19 @@ export class PricingFacade {
       new Set(serviceIds).size !== bundleServiceIds.size ||
       serviceIds.some((serviceId) => !bundleServiceIds.has(serviceId))
     )
-      throw new AppException(
-        ErrorCode.BOOKING_BUNDLE_CHANGED,
-        HttpStatus.CONFLICT,
-      );
+      return {
+        code: ErrorCode.BOOKING_BUNDLE_CHANGED,
+        status: HttpStatus.CONFLICT,
+      };
     if (
       bundle.pricingMode === BundlePricingMode.FIXED &&
       bundle.fixedPrice === null
     )
-      throw new AppException(
-        ErrorCode.BUNDLE_FIXED_PRICE_REQUIRED,
-        HttpStatus.BAD_REQUEST,
-      );
+      return {
+        code: ErrorCode.BUNDLE_FIXED_PRICE_REQUIRED,
+        status: HttpStatus.BAD_REQUEST,
+      };
+    return null;
   }
 
   /** Engine quote in Decimal money, as stored and returned. */
@@ -143,7 +167,8 @@ export class PricingFacade {
     for (const [key, choice] of Object.entries(context.choice ?? {})) {
       const lineIndex = Number(key);
       const line = quote.lines[lineIndex];
-      if (!line || line.customPrice !== null) continue;
+      if (!line || line.customPrice !== null || choice.fallbackToAuto)
+        continue;
       if (
         choice.mode !== DiscountChoiceMode.RULE &&
         choice.mode !== DiscountChoiceMode.CLIENT_DISCOUNT

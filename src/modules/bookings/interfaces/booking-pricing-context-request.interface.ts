@@ -22,4 +22,9 @@ export interface BookingPricingContextRequest {
   tx?: Prisma.TransactionClient;
   /** Defaults to the current time. */
   now?: Date;
+  /**
+   * When the visit was booked, for the booking period of promotions (the location "today");
+   * defaults to now. A client moving a booking keeps the day it was made.
+   */
+  bookedAt?: Date;
 }

@@ -4,6 +4,7 @@ import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { BookingItemWithAdjustments } from '../interfaces/booking-item-with-adjustments.interface.js';
 import { itemDiscount } from '../rules/booking-item-discount.rules.js';
 import { BookingItemAdjustmentResponseDto } from './booking-item-adjustment-response.dto.js';
+import { BookingItemDiscountChoiceResponseDto } from './booking-item-discount-choice-response.dto.js';
 
 export class BookingItemResponseDto {
   @ApiProperty({ type: String })
@@ -54,6 +55,14 @@ export class BookingItemResponseDto {
   })
   discount: BookingItemAdjustmentResponseDto | null;
 
+  @ApiProperty({
+    type: () => BookingItemDiscountChoiceResponseDto,
+    nullable: true,
+    description:
+      'The discount picked in the booking dialog, kept when the booking is priced again; null = AUTO (the best one). A picked promotion that no longer applies at a new time is reset to null on repricing',
+  })
+  discountChoice: BookingItemDiscountChoiceResponseDto | null;
+
   @ApiProperty({ type: String })
   staffId: string;
 
@@ -90,6 +99,7 @@ export class BookingItemResponseDto {
       discount === null
         ? null
         : BookingItemAdjustmentResponseDto.fromEntity(discount);
+    dto.discountChoice = BookingItemDiscountChoiceResponseDto.fromItem(item);
     dto.staffId = item.staffId;
     dto.staffName = item.staffName;
     dto.startAt = item.startAt;

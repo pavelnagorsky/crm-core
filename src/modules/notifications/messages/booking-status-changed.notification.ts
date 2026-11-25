@@ -48,6 +48,7 @@ export class BookingStatusChangedNotification
         variant: this.status,
         cancellationReason: this.details.cancellationReason ?? null,
         previousStartAt: this.details.previousStartAt ?? null,
+        priceChange: this.details.priceChange ?? null,
         manageLink: this.details.manageLink ?? null,
       },
     };

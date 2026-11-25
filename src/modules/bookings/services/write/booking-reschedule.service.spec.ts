@@ -56,6 +56,7 @@ function setup() {
     { lockActiveLocation: vi.fn(), lockUnchangedBooking: vi.fn() } as never,
     new BookingSlotLockService(staff as never, calendar as never),
     { cancelPendingForBooking: vi.fn() } as never,
+    {} as never,
   );
   return { old, service, calendar, db, staff };
 }
@@ -225,5 +226,42 @@ describe('Parallel booking rescheduling', () => {
         actor,
       ),
     ).rejects.toMatchObject({ errorCode: 'BOOKING_STAFF_ASSIGNMENT_OVERLAP' });
+  });
+
+  it('prices the items at their new staff and time before the transaction and writes the prices with the move', async () => {
+    const { old, service, db } = setup();
+    const prices = { promoCode: null };
+    const prepare = vi.fn(async () => prices);
+    const beforeLock = vi.fn(async () => undefined);
+    await service.reschedule(
+      old,
+      {
+        startAt: '2026-11-10T12:00:00',
+        staffAssignments: [{ bookingItemId: 'second', staffId: 'carol' }],
+      },
+      { notes: 'n' },
+      actor,
+      { prepare, beforeLock },
+    );
+    expect(prepare).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: 'first',
+        staffId: 'anna',
+        startAt: new Date('2026-11-10T12:00:00.000Z'),
+      }),
+      expect.objectContaining({
+        id: 'second',
+        staffId: 'carol',
+        startAt: new Date('2026-11-10T12:00:00.000Z'),
+      }),
+    ]);
+    expect(prepare.mock.invocationCallOrder[0]).toBeLessThan(
+      db.$transaction.mock.invocationCallOrder[0],
+    );
+    expect(beforeLock).toHaveBeenCalledWith(db);
+    expect(db.booking.update.mock.calls[0][0].data).toMatchObject({
+      notes: 'n',
+      promoCode: null,
+    });
   });
 });

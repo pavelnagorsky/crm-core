@@ -32,7 +32,7 @@ export class BookingWriteLockService {
   ): Promise<ClientNoticeState> {
     const rows = await tx.$queryRaw<
       BookingRowVersion[]
-    >`SELECT "status", "updatedAt", "clientNoticeAt", "clientNoticeType", "clientNoticeFromStartAt" FROM "Booking" WHERE "id" = ${booking.id} AND "locationId" = ${booking.locationId} AND "deletedAt" IS NULL FOR UPDATE`;
+    >`SELECT "status", "updatedAt", "clientNoticeAt", "clientNoticeType", "clientNoticeFromStartAt", "clientNoticeFromTotal" FROM "Booking" WHERE "id" = ${booking.id} AND "locationId" = ${booking.locationId} AND "deletedAt" IS NULL FOR UPDATE`;
     if (
       !rows[0] ||
       rows[0].status !== booking.status ||
@@ -43,8 +43,17 @@ export class BookingWriteLockService {
         HttpStatus.CONFLICT,
       );
     }
-    const { clientNoticeAt, clientNoticeType, clientNoticeFromStartAt } =
-      rows[0];
-    return { clientNoticeAt, clientNoticeType, clientNoticeFromStartAt };
+    const {
+      clientNoticeAt,
+      clientNoticeType,
+      clientNoticeFromStartAt,
+      clientNoticeFromTotal,
+    } = rows[0];
+    return {
+      clientNoticeAt,
+      clientNoticeType,
+      clientNoticeFromStartAt,
+      clientNoticeFromTotal,
+    };
   }
 }

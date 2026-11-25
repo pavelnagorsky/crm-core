@@ -8,14 +8,22 @@ import { TimeUtils } from '../../../shared/time/time.utils.js';
 import { LocationService } from '../../location/services/location.service.js';
 import { PriceAdjustmentKind } from '../../pricing/engine/enums/price-adjustment-kind.enum.js';
 import { PromotionChannel } from '../../pricing/engine/enums/promotion-channel.enum.js';
+import { LineDiscountChoice } from '../../pricing/engine/interfaces/line-discount-choice.interface.js';
 import { QuoteContext } from '../../pricing/engine/interfaces/quote-context.interface.js';
+import { QuoteLineRequest } from '../../pricing/engine/interfaces/quote-line-request.interface.js';
 import { VisitTime } from '../../pricing/engine/interfaces/visit-time.interface.js';
 import { PriceBook } from '../../pricing/engine/price-book.js';
 import { PricingFacade } from '../../pricing/pricing.facade.js';
 import { PublicAvailableSlotsRequestDto } from '../dto/public-available-slots-request.dto.js';
+import { BookingWithItems } from '../interfaces/booking-with-items.interface.js';
 import { PricedSlot } from '../interfaces/priced-slot.interface.js';
 import { PricedSlotsDay } from '../interfaces/priced-slots-day.interface.js';
 import { StaffRankCandidate } from '../interfaces/staff-rank-candidate.interface.js';
+import {
+  promotionChannelOf,
+  repeatedDiscountChoice,
+} from '../rules/booking-discount-choice.rules.js';
+import { servicesTotal } from '../rules/booking-services-total.rules.js';
 import { visitTimeOfSlot } from '../rules/booking-visit-time.rules.js';
 import { rankStaff } from '../rules/staff-ranking.rules.js';
 import { BookingPricingContextService } from './booking-pricing-context.service.js';
@@ -159,8 +167,11 @@ export class PublicSlotPricingService {
             ...this.visitPrice(
               book,
               bundleId,
-              serviceIds,
-              assigned,
+              serviceIds.map((serviceId, index) => ({
+                serviceId,
+                staffId: assigned[index],
+                customPrice: null,
+              })),
               visit,
               atSlot,
             ),
@@ -171,26 +182,114 @@ export class PublicSlotPricingService {
     }));
   }
 
+  /**
+   * Times a client can move a booking to (docs/pricing-stage5-api.md), each priced as the
+   * booking would be there: its services, staff and custom prices, its client, promo code and
+   * channel (MANUAL is ADMIN), the stored discount picks, promotions by the day it was booked,
+   * the lead time from now and the limits without this booking.
+   */
+  async getRescheduleSlots(
+    booking: BookingWithItems,
+    from: string,
+    to: string,
+  ): Promise<PricedSlotsDay[]> {
+    const [days, location, book] = await Promise.all([
+      this.calendar.getRescheduleSlots(
+        booking.locationId,
+        booking.items,
+        from,
+        to,
+      ),
+      this.locations.getBookingSettings(booking.locationId),
+      this.pricing.priceBook(booking.locationId, ReadConsistency.CACHED),
+    ]);
+    if (days.length === 0) return [];
+
+    const items = [...booking.items].sort(
+      (a, b) => a.sortOrder - b.sortOrder || a.id.localeCompare(b.id),
+    );
+    const lines: QuoteLineRequest[] = items.map((item) => ({
+      serviceId: item.serviceId,
+      staffId: item.staffId,
+      customPrice:
+        item.customPrice === null ? null : MoneyUtils.toMinor(item.customPrice),
+    }));
+    const staffIds = items.map((item) => item.staffId);
+    // A service deactivated or a bundle edited since booking: the move keeps the prices.
+    if (
+      !this.pricing.canPrice(
+        book,
+        booking.bundleId,
+        lines.map((line) => line.serviceId),
+      )
+    ) {
+      const price = servicesTotal(items);
+      return days.map((day) => ({
+        date: day.date,
+        slots: day.slots.map((slot) => ({
+          time: slot.time,
+          price,
+          listPrice: null,
+          promotionId: null,
+          staffIds,
+        })),
+      }));
+    }
+    const choice: Record<number, LineDiscountChoice> = {};
+    items.forEach((item, index) => {
+      const stored = repeatedDiscountChoice(item);
+      if (stored) choice[index] = stored;
+    });
+    // The per-client limit window is counted around the current start; the move re-checks it.
+    const context = await this.pricingContext.build({
+      locationId: booking.locationId,
+      brandId: location.brandId,
+      timezone: location.timezone,
+      channel: promotionChannelOf(booking.channel),
+      visitStartAt: booking.startAt,
+      clientId: booking.clientId,
+      promoCode: booking.promoCode,
+      choice,
+      bookingId: booking.id,
+      bookedAt: booking.createdAt,
+    });
+    return days.map((day) => ({
+      date: day.date,
+      slots: day.slots.map((slot) => ({
+        time: slot.time,
+        ...this.visitPrice(
+          book,
+          booking.bundleId,
+          lines,
+          visitTimeOfSlot(day.date, slot.time),
+          {
+            ...context,
+            visitStartMs: TimeUtils.localToUtc(
+              `${day.date}T${slot.time}:00`,
+              location.timezone,
+            ).getTime(),
+          },
+        ),
+        staffIds,
+      })),
+    }));
+  }
+
   private visitPrice(
     book: PriceBook,
     bundleId: string | null,
-    serviceIds: readonly string[],
-    staffIds: readonly string[],
+    lines: QuoteLineRequest[],
     visit: VisitTime,
     context: QuoteContext | null,
   ): Pick<PricedSlot, 'price' | 'listPrice' | 'promotionId'> {
-    const { total, lines } = book.quote({
+    const { total, lines: quoted } = book.quote({
       bundleId,
-      lines: serviceIds.map((serviceId, index) => ({
-        serviceId,
-        staffId: staffIds[index],
-        customPrice: null,
-      })),
+      lines,
       visit,
       context,
     });
     // A promotion not shown as one is just the price; a shown one gets the old price.
-    const shown = lines
+    const shown = quoted
       .map((line) => line.discount)
       .filter(
         (discount) =>

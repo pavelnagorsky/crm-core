@@ -244,6 +244,15 @@ enum PromotionLimitPeriod {
   WEEK
 }
 
+/// Discount an administrator picked for a booking item (docs/pricing-stage5-api.md). AUTO is
+/// never stored: a null column is AUTO (CHECK in migration pricing_reschedule).
+enum DiscountChoiceMode {
+  AUTO
+  NONE
+  RULE
+  CLIENT_DISCOUNT
+}
+
 /// How a price rule picks its days (docs/pricing-stage3-api.md).
 enum PriceScheduleType {
   WEEKLY
@@ -1394,6 +1403,7 @@ model PriceRule {
   staff              PriceRuleStaff[]
   bookingAdjustments BookingItemPriceAdjustment[]
   orderAdjustments   OrderItemPriceAdjustment[]
+  discountChoices    BookingItem[]
 
   @@index([locationId, archivedAt])
 }
@@ -1701,6 +1711,8 @@ model Booking {
   clientNoticeType        ClientNoticeType?
   // Start before the first reschedule of the pending series, for the "was" line.
   clientNoticeFromStartAt DateTime?
+  // Services total (customPrice ?? chargedPrice) at that start, for the "was" price.
+  clientNoticeFromTotal   Decimal?          @db.Decimal(10, 2)
 
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -1776,6 +1788,10 @@ model BookingItem {
   customPrice     Decimal? @db.Decimal(10, 2)
   staffName       String   @db.VarChar(250)
   calendarEventId String?  @unique
+  /// Discount an administrator picked (docs/pricing-stage5-api.md), kept when the booking is
+  /// priced again; null = AUTO. The rule only with RULE.
+  discountChoice       DiscountChoiceMode?
+  discountChoiceRuleId String?
 
   booking          Booking                      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
   location         Location                     @relation(fields: [locationId], references: [id], onDelete: Cascade)
@@ -1785,6 +1801,7 @@ model BookingItem {
   earnings         StaffEarning[]
   orderItems       OrderItem[]
   priceAdjustments BookingItemPriceAdjustment[]
+  discountChoiceRule PriceRule?               @relation(fields: [discountChoiceRuleId], references: [id], onDelete: SetNull)
 
   @@index([bookingId])
   @@index([locationId])

@@ -447,6 +447,10 @@ describe('PriceBook: promotions and the client discount (docs/pricing-stage4-api
       ['RULE: not applicable gives none', { mode: DiscountChoiceMode.RULE, ruleId: 'admin-only' }, undefined, 0],
       ['RULE: unknown rule gives none', { mode: DiscountChoiceMode.RULE, ruleId: 'nope' }, undefined, 0],
       ['CLIENT_DISCOUNT', { mode: DiscountChoiceMode.CLIENT_DISCOUNT }, null, 300],
+      // A stored choice applied again (stage 5): kept while it applies, else the best one.
+      ['stored RULE that applies', { mode: DiscountChoiceMode.RULE, ruleId: 'ten', fallbackToAuto: true }, 'ten', 600],
+      ['stored RULE that no longer applies: the best', { mode: DiscountChoiceMode.RULE, ruleId: 'admin-only', fallbackToAuto: true }, 'fifteen', 900],
+      ['stored NONE stays', { mode: DiscountChoiceMode.NONE, fallbackToAuto: true }, undefined, 0],
     ] as const)('%s', (_name, choice, ruleId, discount) => {
       const quoted = line([ten, fifteen, adminOnly], 'cut', {
         client: knownClient({ discountBp: 500 }),

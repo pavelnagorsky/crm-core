@@ -943,6 +943,14 @@ export const ErrorCode = {
     code: 'PROMOTION_NOT_FOUND',
     message: 'The promotion is not found or has ended',
   },
+  BOOKING_REPRICE_COMPLETED: {
+    code: 'BOOKING_REPRICE_COMPLETED',
+    message: 'A completed, cancelled or missed visit cannot be repriced',
+  },
+  BOOKING_REPRICE_UNAVAILABLE: {
+    code: 'BOOKING_REPRICE_UNAVAILABLE',
+    message: 'The booking cannot be repriced: its service or bundle has changed',
+  },
   PRICE_LEVEL_FILL_INVALID: {
     code: 'PRICE_LEVEL_FILL_INVALID',
     message: 'The level price must be greater than zero',

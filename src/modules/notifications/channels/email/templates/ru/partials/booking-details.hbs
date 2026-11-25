@@ -28,6 +28,12 @@
           <td class="label" width="112" valign="top" style="width: 112px; padding: 4px 16px 4px 0; font-size: 14px; line-height: 22px; color: #637381;">{{t "email" "common" "specialist"}}</td>
           <td valign="top" style="padding: 4px 0; font-size: 14px; line-height: 22px; font-weight: 600; color: #1C252E;">{{staffName}}</td>
         </tr>
+        {{#if priceChange}}
+        <tr>
+          <td class="label" width="112" valign="top" style="width: 112px; padding: 4px 16px 4px 0; font-size: 14px; line-height: 22px; color: #637381;">{{t "email" "common" "newPrice"}}</td>
+          <td valign="top" style="padding: 4px 0; font-size: 14px; line-height: 22px; font-weight: 600; color: #1C252E;">{{priceChange.price}} <span style="font-weight: 400; color: #919EAB;">({{t "email" "common" "previousPrice"}} {{priceChange.previousPrice}})</span></td>
+        </tr>
+        {{/if}}
         {{#unless clientName}}
         {{#if locationAddress}}
         <tr>

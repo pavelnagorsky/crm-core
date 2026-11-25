@@ -27,8 +27,10 @@ import { BookingPricingLine } from '../interfaces/booking-pricing-line.interface
 import { BookingPricingResult } from '../interfaces/booking-pricing-result.interface.js';
 import { BookingSelectionRequest } from '../interfaces/booking-selection-request.interface.js';
 import { ResolvedBookingSelection } from '../interfaces/resolved-booking-selection.interface.js';
+import { repeatedDiscountChoice } from '../rules/booking-discount-choice.rules.js';
 import { visitTimeAt } from '../rules/booking-visit-time.rules.js';
 import { BookingPricingContextService } from './booking-pricing-context.service.js';
+import { BookingReadService } from './read/booking-read.service.js';
 
 @Injectable()
 export class BookingSelectionService {
@@ -38,6 +40,7 @@ export class BookingSelectionService {
     private readonly orders: OrdersFacade,
     private readonly pricing: PricingFacade,
     private readonly pricingContext: BookingPricingContextService,
+    private readonly bookings: BookingReadService,
   ) {}
 
   /**
@@ -77,7 +80,9 @@ export class BookingSelectionService {
           clientId: access.cabinet ? (dto.clientId ?? null) : null,
           phone: dto.clientPhone ?? null,
           promoCode: dto.promoCode ?? null,
-          choice: access.cabinet ? this.discountChoices(dto) : undefined,
+          choice: access.cabinet
+            ? await this.discountChoices(locationId, dto, selection)
+            : undefined,
           bookingId: access.cabinet ? (dto.bookingId ?? null) : null,
         })
       : null;
@@ -250,17 +255,32 @@ export class BookingSelectionService {
     return { lines: items, promoCode };
   }
 
-  /** Discounts picked per line in the booking dialog; a missing one is AUTO. */
-  private discountChoices(
+  /**
+   * Discounts picked per line in the booking dialog; a missing one is AUTO. Editing a booking
+   * (bookingId), a line without a pick takes the stored pick of the booking item at the same
+   * position with the same service, which falls back to the best discount when it no longer
+   * applies (docs/pricing-stage5-api.md). Lines are the selected services in order, so a
+   * bundle (no items) gets the stored picks too, as the repricing of the booking does.
+   */
+  private async discountChoices(
+    locationId: string,
     dto: BookingPricingRequestDto,
-  ): Record<number, LineDiscountChoice> | undefined {
+    selection: ResolvedBookingSelection,
+  ): Promise<Record<number, LineDiscountChoice> | undefined> {
+    const stored = dto.bookingId
+      ? await this.bookings.findDiscountChoices(locationId, dto.bookingId)
+      : [];
+    const manualItems = this.manualItems(dto);
     const choice: Record<number, LineDiscountChoice> = {};
-    this.manualItems(dto).forEach((item, index) => {
-      if (item.promotion)
-        choice[index] = {
-          mode: item.promotion.mode,
-          ruleId: item.promotion.ruleId ?? null,
-        };
+    selection.services.forEach((service, index) => {
+      const promotion = manualItems[index]?.promotion;
+      const booked = stored[index];
+      const picked = promotion
+        ? { mode: promotion.mode, ruleId: promotion.ruleId ?? null }
+        : booked?.serviceId === service.id
+          ? repeatedDiscountChoice(booked)
+          : undefined;
+      if (picked) choice[index] = picked;
     });
     return Object.keys(choice).length > 0 ? choice : undefined;
   }

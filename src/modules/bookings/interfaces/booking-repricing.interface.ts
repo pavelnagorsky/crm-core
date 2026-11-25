@@ -9,6 +9,8 @@ export interface BookingRepricing {
   promoCode: string | null;
   /** Promotions the re-priced items use, for the limit check under the lock. */
   ruleIds: string[];
+  /** The client the booking is priced for (the one an edit links), for the limit check. */
+  clientId: string | null;
   /** Earliest item start: the per-client limit window is counted from it. */
   visitStartAt: Date;
 }

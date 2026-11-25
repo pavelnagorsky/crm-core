@@ -127,7 +127,7 @@ export class BookingPricingRequestDto {
     required: false,
     nullable: true,
     description:
-      'Cabinet only (a token that may book in the location): the booking being edited. Its own use of promotions does not count toward their limits, and only bookings made before it make the client returning. 404 when it is not a booking of the location.',
+      'Cabinet only (a token that may book in the location): the booking being edited. Its own use of promotions does not count toward their limits, and only bookings made before it make the client returning. An item without promotion takes the stored pick (discountChoice) of the booking item at the same position with the same service; a picked promotion that no longer applies gives the best discount, no 409. serviceTotal of the response is the total to send as expectedTotal of PUT bookings/:id with pricing RECALCULATE. 404 when it is not a booking of the location.',
   })
   @IsOptional()
   @IsUUID()

@@ -4,6 +4,56 @@ import { CreateBookingDto } from './create-booking.dto.js';
 import { PublicCreateBookingDto } from './public-create-booking.dto.js';
 import { ManualCreateBookingDto } from './manual-create-booking.dto.js';
 import { UpdateBookingDto } from './update-booking.dto.js';
+import { RescheduleClientBookingDto } from './reschedule-client-booking.dto.js';
+import { BookingRepricingMode } from '../enums/booking-repricing-mode.enum.js';
+
+describe('UpdateBookingDto pricing', () => {
+  const errors = async (fields: object) =>
+    (
+      await validate(plainToInstance(UpdateBookingDto, fields), {
+        whitelist: true,
+      })
+    ).map((error) => error.property);
+
+  it('requires expectedTotal with RECALCULATE and ignores it with KEEP', async () => {
+    expect(await errors({ pricing: BookingRepricingMode.RECALCULATE })).toEqual(
+      ['expectedTotal'],
+    );
+    expect(
+      await errors({
+        pricing: BookingRepricingMode.RECALCULATE,
+        expectedTotal: '60.00',
+      }),
+    ).toEqual([]);
+    expect(await errors({ pricing: BookingRepricingMode.KEEP })).toEqual([]);
+    expect(await errors({ expectedTotal: 'any' })).toEqual([]);
+  });
+
+  it('rejects an unknown mode and a malformed total', async () => {
+    expect(await errors({ pricing: 'LATER' })).toEqual(['pricing']);
+    expect(
+      await errors({
+        pricing: BookingRepricingMode.RECALCULATE,
+        expectedTotal: '-1',
+      }),
+    ).toEqual(['expectedTotal']);
+  });
+});
+
+describe('RescheduleClientBookingDto', () => {
+  it('requires the price of the chosen slot', async () => {
+    const errors = async (fields: object) =>
+      (await validate(plainToInstance(RescheduleClientBookingDto, fields))).map(
+        (error) => error.property,
+      );
+    expect(await errors({ startAt: '2026-10-29T14:00:00' })).toEqual([
+      'expectedTotal',
+    ]);
+    expect(
+      await errors({ startAt: '2026-10-29T14:00:00', expectedTotal: '42.00' }),
+    ).toEqual([]);
+  });
+});
 
 describe('UpdateBookingDto custom time flag', () => {
   it.each([undefined, true, false])(

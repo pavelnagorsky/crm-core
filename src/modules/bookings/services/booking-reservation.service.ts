@@ -222,6 +222,8 @@ export class BookingReservationService {
             chargedPrice: item.chargedPrice,
             customPrice: item.customPrice,
             priceAdjustments: { create: item.priceAdjustments },
+            discountChoice: item.discountChoice,
+            discountChoiceRuleId: item.discountChoiceRuleId,
             staffName: item.staffName,
             calendarEventId: item.calendarEventId,
           })),

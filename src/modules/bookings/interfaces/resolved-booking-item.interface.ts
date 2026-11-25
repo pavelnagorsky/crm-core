@@ -1,7 +1,9 @@
 import { Prisma } from '@prisma/client';
 import { ServicePriceAdjustment } from '../../pricing/interfaces/service-price-adjustment.interface.js';
+import { BookingItemDiscountChoice } from './booking-item-discount-choice.interface.js';
 
-export interface ResolvedBookingItem {
+/** With the discount the administrator picked for the line (null = AUTO, online always). */
+export interface ResolvedBookingItem extends BookingItemDiscountChoice {
   serviceId: string;
   staffId: string;
   sortOrder: number;

@@ -58,7 +58,11 @@ export class BookingPricingContextService {
     return {
       channel: request.channel,
       nowMs: now.getTime(),
-      today: TimeUtils.zonedDateStr(now, request.timezone),
+      // The booking period looks at the day of booking, the lead time at now.
+      today: TimeUtils.zonedDateStr(
+        request.bookedAt ?? now,
+        request.timezone,
+      ),
       visitStartMs: request.visitStartAt?.getTime() ?? null,
       client:
         client === undefined

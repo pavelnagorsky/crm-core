@@ -1,8 +1,9 @@
-import { Booking, ClientNoticeType } from '@prisma/client';
+import { Booking, BookingItem, ClientNoticeType } from '@prisma/client';
 import { BookingStatus } from '../enums/booking-status.enum.js';
 import { ClientNoticeBooking } from '../interfaces/client-notice-booking.interface.js';
 import { ClientNoticeState } from '../interfaces/client-notice-state.interface.js';
 import { ACTIVE_BOOKING_STATUSES } from './booking-cron.rules.js';
+import { servicesTotal } from './booking-services-total.rules.js';
 
 /** Lets staff undo a mistaken change, or finish a series of moves, before the client hears of it. */
 export const CLIENT_NOTICE_DELAY_MS = 2 * 60 * 1000;
@@ -11,6 +12,7 @@ export const NO_CLIENT_NOTICE: ClientNoticeState = {
   clientNoticeAt: null,
   clientNoticeType: null,
   clientNoticeFromStartAt: null,
+  clientNoticeFromTotal: null,
 };
 
 /** Whether the client can still use an email about this booking: it is ahead and still on. */
@@ -36,16 +38,20 @@ export function createdClientNotice(
     clientNoticeAt: new Date(now.getTime() + CLIENT_NOTICE_DELAY_MS),
     clientNoticeType: ClientNoticeType.CREATED,
     clientNoticeFromStartAt: null,
+    clientNoticeFromTotal: null,
   };
 }
 
 /**
  * The pending email after staff moved the booking. A pending creation email absorbs the move
  * and goes out later with the final time. A series of moves sends one email from the first
- * start, and moving back to it sends nothing.
+ * start, and moving back to it sends nothing. The services total at the first start is kept
+ * for the "was" price, in case the series changes it.
  */
 export function staffRescheduleClientNotice(
-  old: ClientNoticeBooking,
+  old: ClientNoticeBooking & {
+    items: readonly Pick<BookingItem, 'customPrice' | 'chargedPrice'>[];
+  },
   next: Pick<Booking, 'startAt' | 'clientEmail'>,
   notifyOnStaffChanges: boolean,
   now: Date,
@@ -67,6 +73,10 @@ export function staffRescheduleClientNotice(
     clientNoticeAt: sendAt,
     clientNoticeType: ClientNoticeType.RESCHEDULED,
     clientNoticeFromStartAt: fromStartAt,
+    clientNoticeFromTotal:
+      old.clientNoticeFromStartAt === null
+        ? servicesTotal(old.items)
+        : old.clientNoticeFromTotal,
   };
 }
 
@@ -100,5 +110,6 @@ function pendingState(booking: ClientNoticeState): ClientNoticeState {
     clientNoticeAt: booking.clientNoticeAt,
     clientNoticeType: booking.clientNoticeType,
     clientNoticeFromStartAt: booking.clientNoticeFromStartAt,
+    clientNoticeFromTotal: booking.clientNoticeFromTotal,
   };
 }

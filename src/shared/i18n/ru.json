@@ -16,6 +16,8 @@
       "address": "Адрес",
       "phone": "Телефон",
       "previousTime": "Было",
+      "newPrice": "Новая цена",
+      "previousPrice": "было",
       "reason": "Причина отмены",
       "manageAction": "Перенести или отменить",
       "callAction": "Позвонить в салон"

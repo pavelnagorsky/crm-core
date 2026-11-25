@@ -224,8 +224,11 @@ export class BookingCronService {
               : this.events.statusNotification(
                   booking,
                   'RESCHEDULED',
-                  { previousStartAt: booking.clientNoticeFromStartAt },
-                  location.timezone,
+                  {
+                    previousStartAt: booking.clientNoticeFromStartAt,
+                    previousServicesTotal: booking.clientNoticeFromTotal,
+                  },
+                  location,
                 );
           },
         );

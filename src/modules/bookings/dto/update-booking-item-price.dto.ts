@@ -16,7 +16,7 @@ export class UpdateBookingItemPriceDto {
     type: () => BookingItemPromotionDto,
     required: false,
     description:
-      'Pick the discount of the item again: the item gets fresh price layers at its staff and time (send its current customPrice too). Missing: the stored layers are kept.',
+      'Pick the discount of the item again: the item gets fresh price layers at its final staff and time (after a move in the same request; send its current customPrice too), and the pick is stored (discountChoice). Missing: the stored layers and pick are kept.',
   })
   @IsOptional()
   @ValidateNested()

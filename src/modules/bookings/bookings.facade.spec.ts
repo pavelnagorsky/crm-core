@@ -49,6 +49,7 @@ import { BookingPromotionReportService } from './services/read/booking-promotion
 import { BookingPricingContextService } from './services/booking-pricing-context.service.js';
 import { PromotionPublicService } from '../pricing/services/promotion-public.service.js';
 import { BookingRepricingService } from './services/write/booking-repricing.service.js';
+import { bookingRepricingStub } from './testing/factories/booking-repricing.stub.js';
 import { BookingPaymentService } from './services/write/booking-payment.service.js';
 import { BookingLifecycleService } from './services/write/booking-lifecycle.service.js';
 import { BookingMutationService } from './services/write/booking-mutation.service.js';
@@ -59,7 +60,6 @@ import { booking } from './testing/factories/booking.factory.js';
 import { bookingItemPrices } from './testing/factories/booking-item-prices.factory.js';
 import { NO_CLIENT_NOTICE } from './rules/booking-client-notice.rules.js';
 import { NotificationsService } from '../notifications/services/notifications.service.js';
-import { bookingPricingContextStub } from './testing/factories/booking-pricing-context.stub.js';
 
 const serviceCatalog = { loadForBooking: vi.fn() };
 const products = { listForPublicCatalog: vi.fn().mockResolvedValue([]) };
@@ -215,7 +215,7 @@ describe('BookingsFacade.completeElapsed', () => {
         },
         {
           provide: BookingRepricingService,
-          useValue: { plan: async () => null },
+          useValue: bookingRepricingStub(),
         },
         {
           provide: BookingPaymentReadService,
@@ -401,7 +401,7 @@ describe('BookingsFacade.updateStatus transactionality', () => {
         },
         {
           provide: BookingRepricingService,
-          useValue: { plan: async () => null },
+          useValue: bookingRepricingStub(),
         },
         {
           provide: BookingPaymentReadService,
@@ -499,7 +499,7 @@ describe('BookingsFacade.search', () => {
         },
         {
           provide: BookingRepricingService,
-          useValue: { plan: async () => null },
+          useValue: bookingRepricingStub(),
         },
         {
           provide: BookingPaymentReadService,
@@ -800,7 +800,7 @@ describe('BookingCalendarReadService.listForCalendar', () => {
         },
         {
           provide: BookingRepricingService,
-          useValue: { plan: async () => null },
+          useValue: bookingRepricingStub(),
         },
         {
           provide: BookingPaymentReadService,
@@ -1063,7 +1063,7 @@ describe('BookingsFacade catalog selection', () => {
         },
         {
           provide: BookingRepricingService,
-          useValue: { plan: async () => null },
+          useValue: bookingRepricingStub(),
         },
         {
           provide: BookingPaymentReadService,
@@ -1307,8 +1307,8 @@ describe('BookingsFacade.update details and item prices', () => {
     syncCompletedBooking: vi.fn(),
     syncBookingClient: vi.fn(),
   };
-  const repricing = { plan: vi.fn(async (): Promise<unknown> => null) };
   const pricingContext = { assertLimitsHeld: vi.fn(async () => undefined) };
+  const repricing = bookingRepricingStub(pricingContext as never);
   let service: BookingsFacade;
 
   beforeEach(async () => {
@@ -1402,6 +1402,8 @@ describe('BookingsFacade.update details and item prices', () => {
           customPrice: null,
           staffName: 'Anna',
           calendarEventId: null,
+          discountChoice: null,
+          discountChoiceRuleId: null,
         },
         {
           id: 'item-2',
@@ -1418,6 +1420,8 @@ describe('BookingsFacade.update details and item prices', () => {
           customPrice: new Prisma.Decimal('70.00'),
           staffName: 'Anna',
           calendarEventId: null,
+          discountChoice: null,
+          discountChoiceRuleId: null,
         },
       ],
     });
@@ -1506,11 +1510,12 @@ describe('BookingsFacade.update details and item prices', () => {
     const visitStartAt = new Date('2026-09-24T10:00:00.000Z');
     findFirst.mockResolvedValue(current);
     update.mockResolvedValue(current);
-    repricing.plan.mockResolvedValueOnce({
+    vi.mocked(repricing.plan).mockResolvedValueOnce({
       itemIds: ['item-1'],
       itemUpdates: [],
       promoCode: 'AUTUMN',
       ruleIds: ['autumn'],
+      clientId: current.clientId,
       visitStartAt,
     });
 
@@ -1911,7 +1916,7 @@ describe('BookingsFacade.update manual interval', () => {
         },
         {
           provide: BookingRepricingService,
-          useValue: { plan: async () => null },
+          useValue: bookingRepricingStub(),
         },
         {
           provide: BookingPaymentReadService,
@@ -1967,6 +1972,8 @@ describe('BookingsFacade.update manual interval', () => {
           customPrice: null,
           staffName: 'Anna',
           calendarEventId: 'event-1',
+          discountChoice: null,
+          discountChoiceRuleId: null,
         },
         {
           id: 'item-2',
@@ -1983,6 +1990,8 @@ describe('BookingsFacade.update manual interval', () => {
           customPrice: null,
           staffName: 'Anna',
           calendarEventId: 'event-2',
+          discountChoice: null,
+          discountChoiceRuleId: null,
         },
       ],
       ...overrides,
@@ -2225,7 +2234,7 @@ describe('BookingsFacade.addProduct', () => {
         },
         {
           provide: BookingRepricingService,
-          useValue: { plan: async () => null },
+          useValue: bookingRepricingStub(),
         },
         {
           provide: BookingPaymentReadService,
@@ -2357,7 +2366,7 @@ describe('BookingsFacade.cancel draft product cleanup', () => {
         },
         {
           provide: BookingRepricingService,
-          useValue: { plan: async () => null },
+          useValue: bookingRepricingStub(),
         },
         {
           provide: BookingPaymentReadService,
@@ -2432,6 +2441,7 @@ function createMutationService(
     notify: vi.fn(),
   } as never);
   const slots = new BookingSlotLockService(staff, calendar);
+  const repricing = bookingRepricingStub();
   const reschedule = new BookingRescheduleService(
     db,
     calendar,
@@ -2442,6 +2452,7 @@ function createMutationService(
     write,
     slots,
     { cancelPendingForBooking: vi.fn() } as never,
+    repricing,
   );
   return new BookingMutationService(
     db,
@@ -2465,7 +2476,6 @@ function createMutationService(
     reschedule,
     new BookingClientLinkService(bookingClients as never, location),
     { plan: vi.fn().mockResolvedValue(null), publish: vi.fn() } as never,
-    { plan: vi.fn().mockResolvedValue(null) } as never,
-    bookingPricingContextStub(),
+    repricing,
   );
 }

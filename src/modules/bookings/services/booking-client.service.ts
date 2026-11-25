@@ -1,8 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Booking } from '@prisma/client';
 import { AuditActorRole } from '../../audit/enums/audit-actor-role.enum.js';
-import { CalendarFacade } from '../../calendar/calendar.facade.js';
-import { AvailableSlotsDayDto } from '../../calendar/dto/available-slots-day.dto.js';
 import { LocationService } from '../../location/services/location.service.js';
 import { ReviewWithStaff } from '../../reviews/interfaces/review-with-staff.interface.js';
 import { ReviewsFacade } from '../../reviews/reviews.facade.js';
@@ -13,8 +11,11 @@ import { CancelBookingDto } from '../dto/cancel-booking.dto.js';
 import { ClientBookingSlotsRequestDto } from '../dto/client-booking-slots-request.dto.js';
 import { RescheduleClientBookingDto } from '../dto/reschedule-client-booking.dto.js';
 import { BookingWithItems } from '../interfaces/booking-with-items.interface.js';
+import { PricedSlotsDay } from '../interfaces/priced-slots-day.interface.js';
 import { assertClientCanManageBooking } from '../rules/booking-client.rules.js';
+import { servicesTotal } from '../rules/booking-services-total.rules.js';
 import { BookingEventsService } from './booking-events.service.js';
+import { PublicSlotPricingService } from './public-slot-pricing.service.js';
 import { BookingLifecycleService } from './write/booking-lifecycle.service.js';
 import { BookingRescheduleService } from './write/booking-reschedule.service.js';
 
@@ -25,7 +26,7 @@ export class BookingClientService {
   constructor(
     private readonly reschedule: BookingRescheduleService,
     private readonly lifecycle: BookingLifecycleService,
-    private readonly calendar: CalendarFacade,
+    private readonly slotPricing: PublicSlotPricingService,
     private readonly events: BookingEventsService,
     private readonly reviews: ReviewsFacade,
     private readonly locations: LocationService,
@@ -70,17 +71,13 @@ export class BookingClientService {
     return review;
   }
 
+  /** Times the booking can move to, each with the price it would have there. */
   async availableSlots(
     booking: BookingWithItems,
     dto: ClientBookingSlotsRequestDto,
-  ): Promise<AvailableSlotsDayDto[]> {
+  ): Promise<PricedSlotsDay[]> {
     assertClientCanManageBooking(booking);
-    return this.calendar.getRescheduleSlots(
-      booking.locationId,
-      booking.items,
-      dto.from,
-      dto.to,
-    );
+    return this.slotPricing.getRescheduleSlots(booking, dto.from, dto.to);
   }
 
   cancelByClient(
@@ -101,6 +98,7 @@ export class BookingClientService {
     const updated = await this.reschedule.rescheduleByClient(
       booking,
       dto.startAt,
+      dto.expectedTotal,
       actor,
     );
     if (updated.startAt.getTime() === booking.startAt.getTime()) return updated;
@@ -108,6 +106,7 @@ export class BookingClientService {
     try {
       await this.events.notifyStatus(updated, 'RESCHEDULED', {
         previousStartAt: booking.startAt,
+        previousServicesTotal: servicesTotal(booking.items),
       });
     } catch (error) {
       this.logger.error(

@@ -1,9 +1,13 @@
 import { Prisma } from '@prisma/client';
 import { AuditActorRole } from '../../audit/enums/audit-actor-role.enum.js';
 import { StaffBookingEvent } from '../../notifications/enums/staff-booking-event.enum.js';
+import { pricingSnapshot } from '../../pricing/engine/testing/pricing-snapshot.factory.js';
+import { createPricingFacadeStub } from '../../pricing/testing/pricing-facade.stub.js';
 import { BookingStatus } from '../enums/booking-status.enum.js';
 import { booking } from '../testing/factories/booking.factory.js';
+import { bookingPricingContextStub } from '../testing/factories/booking-pricing-context.stub.js';
 import { BookingClientService } from './booking-client.service.js';
+import { BookingRepricingService } from './write/booking-repricing.service.js';
 import { BookingRescheduleService } from './write/booking-reschedule.service.js';
 
 function setup() {
@@ -51,6 +55,18 @@ function setup() {
   const staff = {
     resolveStaffForService: vi.fn().mockResolvedValue([{ id: 'anna' }]),
   };
+  // The booking is priced again at the new time: haircut costs 50, its custom price 42 stays.
+  const repricing = new BookingRepricingService(
+    createPricingFacadeStub(
+      pricingSnapshot({ services: { haircut: 5000 }, bundles: [] }),
+    ),
+    bookingPricingContextStub(),
+    {
+      getBookingSettings: vi
+        .fn()
+        .mockResolvedValue({ brandId: 'brand', timezone: 'Europe/Minsk' }),
+    } as never,
+  );
   const reschedule = new BookingRescheduleService(
     db as never,
     calendar as never,
@@ -61,6 +77,7 @@ function setup() {
     write as never,
     slots as never,
     { cancelPendingForBooking: vi.fn() } as never,
+    repricing,
   );
   const service = new BookingClientService(
     reschedule,
@@ -84,6 +101,7 @@ describe('Client booking changes', () => {
     const { service, old, tx, slots, write, events, calendar, staff } = setup();
     await service.rescheduleByClient(old, {
       startAt: '2026-10-29T14:00:00',
+      expectedTotal: '42.00',
     });
     expect(calendar.getRescheduleSlots).not.toHaveBeenCalled();
     expect(staff.resolveStaffForService).toHaveBeenCalledWith(
@@ -121,6 +139,20 @@ describe('Client booking changes', () => {
       clientNoticeAt: null,
       clientNoticeType: null,
       clientNoticeFromStartAt: null,
+      clientNoticeFromTotal: null,
+      items: {
+        update: [
+          {
+            where: { id: 'booking-1-item-1' },
+            data: expect.objectContaining({
+              chargedPrice: new Prisma.Decimal('50.00'),
+              customPrice: new Prisma.Decimal('42'),
+              priceAdjustments: { deleteMany: {}, create: [] },
+            }),
+          },
+        ],
+      },
+      promoCode: null,
     });
     expect(events.updated).toHaveBeenCalledWith(
       expect.anything(),
@@ -130,7 +162,10 @@ describe('Client booking changes', () => {
     expect(events.notifyStatus).toHaveBeenCalledWith(
       expect.anything(),
       'RESCHEDULED',
-      { previousStartAt: old.startAt },
+      {
+        previousStartAt: old.startAt,
+        previousServicesTotal: new Prisma.Decimal('42'),
+      },
     );
     expect(events.notifyStaff).toHaveBeenCalledWith(
       expect.objectContaining({ startAt: new Date('2026-10-29T11:00:00Z') }),
@@ -139,12 +174,35 @@ describe('Client booking changes', () => {
     );
   });
 
+  it('rejects a price other than the one of the slot with PRICE_CHANGED, before any write', async () => {
+    const { service, old, tx, calendar, events } = setup();
+    await expect(
+      service.rescheduleByClient(old, {
+        startAt: '2026-10-29T14:00:00',
+        expectedTotal: '40.00',
+      }),
+    ).rejects.toMatchObject({
+      errorCode: 'PRICE_CHANGED',
+      payload: {
+        expectedTotal: '40.00',
+        total: '42.00',
+        items: [
+          expect.objectContaining({ serviceId: 'haircut', price: '42.00' }),
+        ],
+      },
+    });
+    expect(calendar.saveBookingEvent).not.toHaveBeenCalled();
+    expect(tx.booking.update).not.toHaveBeenCalled();
+    expect(events.notifyStatus).not.toHaveBeenCalled();
+  });
+
   it('rejects a slot that became occupied after the preview, before changing calendar or booking', async () => {
     const { service, old, calendar, tx, slots, events } = setup();
     slots.assertSlotsAvailable.mockRejectedValue(new Error('slot occupied'));
     await expect(
       service.rescheduleByClient(old, {
         startAt: '2026-10-29T14:00:00',
+        expectedTotal: '42.00',
       }),
     ).rejects.toThrow('slot occupied');
     expect(calendar.saveBookingEvent).not.toHaveBeenCalled();
@@ -161,6 +219,7 @@ describe('Client booking changes', () => {
     await expect(
       service.rescheduleByClient(old, {
         startAt: '2026-10-29T14:00:00',
+        expectedTotal: '42.00',
       }),
     ).rejects.toThrow('concurrent update');
     expect(tx.bookingItem.update).not.toHaveBeenCalled();
@@ -174,7 +233,10 @@ describe('Client booking changes', () => {
     const { service, old, calendar } = setup();
     old.status = status;
     await expect(
-      service.rescheduleByClient(old, { startAt: '2026-10-29T14:00:00' }),
+      service.rescheduleByClient(old, {
+        startAt: '2026-10-29T14:00:00',
+        expectedTotal: '42.00',
+      }),
     ).rejects.toMatchObject({ errorCode: 'BOOKING_CLIENT_ACTION_UNAVAILABLE' });
     expect(calendar.getRescheduleSlots).not.toHaveBeenCalled();
   });
@@ -187,6 +249,7 @@ describe('Client booking changes', () => {
     await expect(
       service.rescheduleByClient(old, {
         startAt: '2026-10-29T14:00:00',
+        expectedTotal: '42.00',
       }),
     ).rejects.toMatchObject({ errorCode: 'BOOKING_CLIENT_ACTION_UNAVAILABLE' });
     expect(calendar.saveBookingEvent).not.toHaveBeenCalled();
@@ -197,6 +260,7 @@ describe('Client booking changes', () => {
     await expect(
       service.rescheduleByClient(old, {
         startAt: '2026-10-29T14:01:00',
+        expectedTotal: '42.00',
       }),
     ).rejects.toMatchObject({ errorCode: 'BOOKING_SLOT_UNAVAILABLE' });
     expect(tx.booking.update).not.toHaveBeenCalled();
@@ -206,7 +270,10 @@ describe('Client booking changes', () => {
     const { service, old, staff, tx } = setup();
     staff.resolveStaffForService.mockResolvedValue([]);
     await expect(
-      service.rescheduleByClient(old, { startAt: '2026-10-29T14:00:00' }),
+      service.rescheduleByClient(old, {
+        startAt: '2026-10-29T14:00:00',
+        expectedTotal: '42.00',
+      }),
     ).rejects.toMatchObject({ errorCode: 'BOOKING_STAFF_NOT_FOUND' });
     expect(tx.booking.update).not.toHaveBeenCalled();
   });
@@ -217,7 +284,10 @@ describe('Client booking changes', () => {
       vi.setSystemTime(old.startAt);
     });
     await expect(
-      service.rescheduleByClient(old, { startAt: '2026-10-29T14:00:00' }),
+      service.rescheduleByClient(old, {
+        startAt: '2026-10-29T14:00:00',
+        expectedTotal: '42.00',
+      }),
     ).rejects.toMatchObject({ errorCode: 'BOOKING_CLIENT_ACTION_UNAVAILABLE' });
     expect(tx.bookingItem.update).not.toHaveBeenCalled();
   });
@@ -226,7 +296,10 @@ describe('Client booking changes', () => {
     const { service, old, events } = setup();
     events.notifyStatus.mockRejectedValue(new Error('locale unavailable'));
     await expect(
-      service.rescheduleByClient(old, { startAt: '2026-10-29T14:00:00' }),
+      service.rescheduleByClient(old, {
+        startAt: '2026-10-29T14:00:00',
+        expectedTotal: '42.00',
+      }),
     ).resolves.toMatchObject({ startAt: new Date('2026-10-29T11:00:00Z') });
     expect(events.updated).toHaveBeenCalledOnce();
   });
@@ -234,7 +307,10 @@ describe('Client booking changes', () => {
   it('does not send a new reminder or notification for an unchanged time', async () => {
     const { service, old, tx, events } = setup();
     await expect(
-      service.rescheduleByClient(old, { startAt: '2026-10-28T13:00:00' }),
+      service.rescheduleByClient(old, {
+        startAt: '2026-10-28T13:00:00',
+        expectedTotal: '42.00',
+      }),
     ).resolves.toBe(old);
     expect(tx.booking.update).not.toHaveBeenCalled();
     expect(events.updated).not.toHaveBeenCalled();
@@ -251,7 +327,10 @@ describe('Client booking changes', () => {
       endAt: new Date('2027-03-30T11:00:00Z'),
     });
     await expect(
-      service.rescheduleByClient(scheduled, { startAt: '2027-03-28T02:30:00' }),
+      service.rescheduleByClient(scheduled, {
+        startAt: '2027-03-28T02:30:00',
+        expectedTotal: '42.00',
+      }),
     ).rejects.toMatchObject({ errorCode: 'BOOKING_SLOT_UNAVAILABLE' });
     expect(tx.booking.update).not.toHaveBeenCalled();
   });

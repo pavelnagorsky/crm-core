@@ -609,6 +609,9 @@ export class PriceBook {
     eligible: readonly DiscountCandidate[],
     choice: LineDiscountChoice | undefined,
   ): DiscountCandidate | null {
+    const best = eligible[0] ?? null;
+    // A stored choice whose discount no longer applies falls back to the best one.
+    const missing = choice?.fallbackToAuto ? best : null;
     switch (choice?.mode ?? DiscountChoiceMode.AUTO) {
       case DiscountChoiceMode.NONE:
         return null;
@@ -618,17 +621,17 @@ export class PriceBook {
             (candidate) =>
               candidate.kind === PriceAdjustmentKind.PROMOTION &&
               candidate.ruleId === choice?.ruleId,
-          ) ?? null
+          ) ?? missing
         );
       case DiscountChoiceMode.CLIENT_DISCOUNT:
         return (
           eligible.find(
             (candidate) =>
               candidate.kind === PriceAdjustmentKind.CLIENT_DISCOUNT,
-          ) ?? null
+          ) ?? missing
         );
       default:
-        return eligible[0] ?? null;
+        return best;
     }
   }
 

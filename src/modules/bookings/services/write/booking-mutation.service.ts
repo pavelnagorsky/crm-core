@@ -33,7 +33,7 @@ import { BookingLifecycleService } from './booking-lifecycle.service.js';
 import { BookingPaymentService } from './booking-payment.service.js';
 import { BookingRescheduleService } from './booking-reschedule.service.js';
 import { BookingRepricingService } from './booking-repricing.service.js';
-import { BookingPricingContextService } from '../booking-pricing-context.service.js';
+import { assertRepricingAllowed } from '../../rules/booking-repricing.rules.js';
 import { BookingRepricing } from '../../interfaces/booking-repricing.interface.js';
 
 @Injectable()
@@ -50,7 +50,6 @@ export class BookingMutationService {
     private readonly clientLink: BookingClientLinkService,
     private readonly bookingPayment: BookingPaymentService,
     private readonly repricing: BookingRepricingService,
-    private readonly pricingContext: BookingPricingContextService,
   ) {}
 
   async update(
@@ -65,6 +64,7 @@ export class BookingMutationService {
         ErrorCode.BOOKING_CUSTOM_TIME_MANUAL_ONLY,
         HttpStatus.BAD_REQUEST,
       );
+    assertRepricingAllowed(old, dto.pricing);
 
     const manualIntervalChanging = dto.endAt !== undefined;
     const slotChanging =
@@ -73,8 +73,6 @@ export class BookingMutationService {
       Boolean(dto.staffAssignments?.length);
     const trafficWrite = this.trafficWrite(old, dto);
     const pricePatches = this.pricePatches(old, dto);
-    // A discount picked again or a changed promo code: fresh layers for those items.
-    const repricing = await this.repricing.plan(old, dto);
     const clientLink = await this.clientLink.resolve(old, dto);
     // Confirming products and paying come after the edit, in the same transaction.
     const paymentPlan = await this.bookingPayment.plan(
@@ -103,8 +101,6 @@ export class BookingMutationService {
           dto.internalNotes !== undefined
             ? (dto.internalNotes ?? null)
             : undefined,
-        ...this.itemPriceWrite(pricePatches, repricing),
-        ...(repricing && { promoCode: repricing.promoCode }),
         ...trafficWrite,
       },
       include: bookingWithItemsInclude,
@@ -115,28 +111,30 @@ export class BookingMutationService {
       replay: PaymentOperationWithPayments | null;
       outcome: VisitPaymentOutcome | null;
     } = { replay: null, outcome: null };
+    // A discount picked again, a changed promo code or RECALCULATE: fresh layers at the final
+    // staff and time of the items, after a move in the same request.
+    const priced: { repricing: BookingRepricing | null } = { repricing: null };
+    const prepare = async (items: BookingWithItems['items']) => {
+      priced.repricing = await this.repricing.plan(
+        old,
+        dto,
+        items,
+        clientLink ? clientLink.clientId : old.clientId,
+      );
+      return this.repricing.bookingWrite(priced.repricing, pricePatches);
+    };
     const hooks: BookingWriteHooks = {
-      beforeLock:
-        paymentPlan || repricing
-          ? async (tx) => {
-              if (paymentPlan)
-                payment.replay = await this.bookingPayment.lockForBooking(
-                  tx,
-                  old,
-                  paymentPlan,
-                );
-              // The promotions the new layers use still have room, counted under their lock.
-              if (repricing)
-                await this.pricingContext.assertLimitsHeld(
-                  tx,
-                  old.locationId,
-                  repricing.ruleIds,
-                  old.clientId,
-                  repricing.visitStartAt,
-                  old.id,
-                );
-            }
-          : undefined,
+      prepare,
+      beforeLock: async (tx) => {
+        if (paymentPlan)
+          payment.replay = await this.bookingPayment.lockForBooking(
+            tx,
+            old,
+            paymentPlan,
+          );
+        // The promotions the new layers use still have room, counted under their lock.
+        await this.repricing.holdLimits(tx, old, priced.repricing);
+      },
       afterUpdate: async (booking, tx) => {
         if (clientLink) await this.orders.syncBookingClient(booking, tx);
         if (clientLink || trafficWrite)
@@ -161,14 +159,18 @@ export class BookingMutationService {
         hooks,
       );
     } else {
+      const priceWrite = await prepare(old.items);
       updated = await this.db.$transaction(
         async (tx) => {
           await hooks.beforeLock?.(tx);
           await this.write.lockUnchangedBooking(tx, old);
-          const result = await tx.booking.update(updateArgs);
+          const result = await tx.booking.update({
+            ...updateArgs,
+            data: { ...updateArgs.data, ...priceWrite },
+          });
           if (
             old.status === BookingStatus.COMPLETED &&
-            (pricePatches.length > 0 || repricing)
+            (pricePatches.length > 0 || priced.repricing)
           ) {
             const order = await this.orders.syncCompletedBooking(
               result,
@@ -325,26 +327,5 @@ export class BookingMutationService {
       clientPhone: link.clientPhone,
       clientEmail: link.clientEmail,
     };
-  }
-
-  private itemPriceWrite(
-    patches: UpdateBookingItemPriceDto[],
-    repricing: BookingRepricing | null,
-  ): {
-    items?: Prisma.BookingUpdateInput['items'];
-  } {
-    // A re-priced item writes its custom price with its layers.
-    const repriced = new Set(repricing?.itemIds ?? []);
-    const update = [
-      ...patches
-        .filter((patch) => !repriced.has(patch.id))
-        .map((patch) => ({
-          where: { id: patch.id },
-          data: { customPrice: patch.customPrice },
-        })),
-      ...(repricing?.itemUpdates ?? []),
-    ];
-    if (update.length === 0) return {};
-    return { items: { update } };
   }
 }

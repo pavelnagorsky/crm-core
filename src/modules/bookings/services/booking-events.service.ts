@@ -13,7 +13,7 @@ import { AuditLogEvent } from '../../audit/interfaces/audit-log-event.interface.
 import { diffFields } from '../../audit/utils/diff-fields.js';
 import { LocationService } from '../../location/services/location.service.js';
 import { BookingNotificationData } from '../../notifications/interfaces/booking-notification-data.interface.js';
-import { BookingStatusChangeDetails } from '../../notifications/interfaces/booking-status-change-details.interface.js';
+import { BookingPriceChange } from '../../notifications/interfaces/booking-price-change.interface.js';
 import { BookingConfirmedNotification } from '../../notifications/messages/booking-confirmed.notification.js';
 import { BookingPendingNotification } from '../../notifications/messages/booking-pending.notification.js';
 import {
@@ -24,6 +24,8 @@ import { NOTIFICATION_EVENT } from '../../notifications/services/notifications.s
 import { StaffBookingEvent } from '../../notifications/enums/staff-booking-event.enum.js';
 import { BookingStatus } from '../enums/booking-status.enum.js';
 import { BookingAuditInput } from '../interfaces/booking-audit-input.interface.js';
+import { BookingStatusNoticeDetails } from '../interfaces/booking-status-notice-details.interface.js';
+import { servicesTotal } from '../rules/booking-services-total.rules.js';
 import { BookingWithItems } from '../interfaces/booking-with-items.interface.js';
 import { BookingClientTokenService } from './booking-client-token.service.js';
 import { BookingStaffNotificationService } from './booking-staff-notification.service.js';
@@ -191,17 +193,15 @@ export class BookingEventsService {
   async notifyStatus(
     booking: BookingWithItems,
     status: BookingStatusChangedStatus,
-    details: Omit<BookingStatusChangeDetails, 'manageLink'> = {},
+    details: BookingStatusNoticeDetails = {},
   ): Promise<void> {
     if (!booking.clientEmail) return;
-    const { timezone } = await this.locationService.getLocale(
-      booking.locationId,
-    );
+    const locale = await this.locationService.getLocale(booking.locationId);
     const notification = this.statusNotification(
       booking,
       status,
       details,
-      timezone,
+      locale,
     );
     if (notification) this.eventEmitter.emit(NOTIFICATION_EVENT, notification);
   }
@@ -210,19 +210,25 @@ export class BookingEventsService {
   statusNotification(
     booking: BookingWithItems,
     status: BookingStatusChangedStatus,
-    details: Omit<BookingStatusChangeDetails, 'manageLink'>,
-    timezone: string,
+    details: BookingStatusNoticeDetails,
+    locale: { timezone: string; currency: string },
   ): BookingStatusChangedNotification | null {
     if (!booking.clientEmail) return null;
     return new BookingStatusChangedNotification(
       {
         ...this.notificationData(booking),
         clientEmail: booking.clientEmail,
-        timezone,
+        timezone: locale.timezone,
       },
       status,
       {
-        ...details,
+        cancellationReason: details.cancellationReason,
+        previousStartAt: details.previousStartAt,
+        priceChange: this.priceChange(
+          booking,
+          details.previousServicesTotal ?? null,
+          locale.currency,
+        ),
         // A cancelled booking has nothing left to manage.
         manageLink:
           status === 'CANCELLED'
@@ -232,6 +238,20 @@ export class BookingEventsService {
               ),
       },
     );
+  }
+
+  /** The new price of a move, when it differs from the total before it. */
+  private priceChange(
+    booking: BookingWithItems,
+    previous: Prisma.Decimal | null,
+    currency: string,
+  ): BookingPriceChange | null {
+    if (previous === null) return null;
+    const total = servicesTotal(booking.items);
+    if (total.equals(previous)) return null;
+    const money = (amount: Prisma.Decimal) =>
+      `${MoneyUtils.format(amount)} ${currency}`;
+    return { price: money(total), previousPrice: money(previous) };
   }
 
   private itemValueChanges(

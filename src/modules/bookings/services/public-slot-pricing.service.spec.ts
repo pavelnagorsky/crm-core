@@ -1,4 +1,4 @@
-import { AnyStaffRule } from '@prisma/client';
+import { AnyStaffRule, BookingChannel, Prisma } from '@prisma/client';
 import { ReadConsistency } from '../../../shared/cache/enums/read-consistency.enum.js';
 import { CalendarSlotOffers } from '../../calendar/interfaces/calendar-slot-offers.interface.js';
 import {
@@ -12,10 +12,14 @@ import {
   weekdays,
 } from '../../pricing/engine/testing/pricing-snapshot.factory.js';
 import { createPricingFacadeStub } from '../../pricing/testing/pricing-facade.stub.js';
+import { DiscountChoiceMode } from '../../pricing/engine/enums/discount-choice-mode.enum.js';
 import { PriceScheduleType } from '../../pricing/engine/enums/price-schedule-type.enum.js';
+import { PromotionChannel } from '../../pricing/engine/enums/promotion-channel.enum.js';
 import { PricingRuleEntry } from '../../pricing/engine/interfaces/pricing-rule-entry.interface.js';
 import { PublicSlotPricingService } from './public-slot-pricing.service.js';
 import { bookingPricingContextStub } from '../testing/factories/booking-pricing-context.stub.js';
+import { bookingItemPrices } from '../testing/factories/booking-item-prices.factory.js';
+import { booking } from '../testing/factories/booking.factory.js';
 
 const DATE = '2026-11-10';
 
@@ -500,5 +504,146 @@ describe('PublicSlotPricingService', () => {
       await service.getSlots('location-1', { serviceId: 'cut' } as never);
       expect(context.build).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('PublicSlotPricingService.getRescheduleSlots', () => {
+  /** Boris (top level: cut 80) booked for 2026-11-10 10:00; the evening costs +20% from 18:00. */
+  function rescheduleSetup(
+    rules: PricingRuleEntry[] = [
+      surchargeRule('evening', {
+        value: 2000,
+        weekdaysMask: weekdays(1, 2, 3, 4, 5, 6, 7),
+        intervals: [{ start: 1080, end: 1440 }],
+      }),
+      promotionRule('morning', { intervals: [{ start: 540, end: 720 }] }),
+    ],
+  ) {
+    const pricing = createPricingFacadeStub(snapshot(rules));
+    const calendar = {
+      getRescheduleSlots: vi.fn(async () => [
+        { date: DATE, slots: [{ time: '09:00' }, { time: '18:00' }] },
+      ]),
+    };
+    const locations = {
+      getBookingSettings: vi.fn(async () => ({
+        brandId: 'brand-1',
+        timezone: 'UTC',
+      })),
+    };
+    const context = bookingPricingContextStub();
+    const service = new PublicSlotPricingService(
+      calendar as never,
+      pricing,
+      locations as never,
+      {} as never,
+      context,
+    );
+    const visit = booking({
+      channel: BookingChannel.PUBLIC_PAGE,
+      clientId: 'client-1',
+      promoCode: 'AUTUMN',
+      createdAt: new Date('2026-11-01T08:00:00.000Z'),
+      startAt: new Date('2026-11-10T10:00:00.000Z'),
+      item: {
+        serviceId: 'cut',
+        staffId: 'boris',
+        ...bookingItemPrices('80.00'),
+      },
+    });
+    return { service, calendar, context, visit };
+  }
+
+  it('prices each time for the staff of the booking, surcharges and promotions included', async () => {
+    const { service, calendar, visit } = rescheduleSetup();
+    const [day] = await service.getRescheduleSlots(
+      visit,
+      '2026-11-10',
+      '2026-11-10',
+    );
+    expect(calendar.getRescheduleSlots).toHaveBeenCalledWith(
+      visit.locationId,
+      visit.items,
+      '2026-11-10',
+      '2026-11-10',
+    );
+    expect(
+      day.slots.map((slot) => [
+        slot.time,
+        slot.price.toFixed(2),
+        slot.listPrice?.toFixed(2) ?? null,
+        slot.promotionId,
+        slot.staffIds,
+      ]),
+    ).toEqual([
+      ['09:00', '72.00', '80.00', 'morning', ['boris']],
+      ['18:00', '96.00', null, null, ['boris']],
+    ]);
+  });
+
+  it('prices for the client, code and channel of the booking, by the day it was booked, without counting it', async () => {
+    const { service, context, visit } = rescheduleSetup();
+    await service.getRescheduleSlots(visit, '2026-11-10', '2026-11-10');
+    expect(context.build).toHaveBeenCalledWith(
+      expect.objectContaining({
+        channel: PromotionChannel.ONLINE,
+        clientId: 'client-1',
+        promoCode: 'AUTUMN',
+        bookingId: visit.id,
+        bookedAt: visit.createdAt,
+      }),
+    );
+    await service.getRescheduleSlots(
+      { ...visit, channel: BookingChannel.MANUAL },
+      '2026-11-10',
+      '2026-11-10',
+    );
+    expect(context.build).toHaveBeenLastCalledWith(
+      expect.objectContaining({ channel: PromotionChannel.ADMIN }),
+    );
+  });
+
+  it('keeps a custom price and a stored NONE', async () => {
+    const { service, visit } = rescheduleSetup();
+    const custom = {
+      ...visit,
+      items: [{ ...visit.items[0], customPrice: new Prisma.Decimal('50.00') }],
+    };
+    const [withCustom] = await service.getRescheduleSlots(custom, DATE, DATE);
+    expect(withCustom.slots.map((slot) => slot.price.toFixed(2))).toEqual([
+      '50.00',
+      '50.00',
+    ]);
+    const none = {
+      ...visit,
+      items: [{ ...visit.items[0], discountChoice: DiscountChoiceMode.NONE }],
+    };
+    const [withNone] = await service.getRescheduleSlots(none, DATE, DATE);
+    expect(withNone.slots.map((slot) => slot.price.toFixed(2))).toEqual([
+      '80.00',
+      '96.00',
+    ]);
+  });
+
+  it('a booking whose service was deactivated keeps its price at every time', async () => {
+    const { service, context, visit } = rescheduleSetup();
+    const gone = {
+      ...visit,
+      items: [{ ...visit.items[0], serviceId: 'gone' }],
+    };
+    const [day] = await service.getRescheduleSlots(gone, DATE, DATE);
+    expect(
+      day.slots.map((slot) => [
+        slot.time,
+        slot.price.toFixed(2),
+        slot.listPrice,
+        slot.promotionId,
+        slot.staffIds,
+      ]),
+    ).toEqual([
+      ['09:00', '80.00', null, null, ['boris']],
+      ['18:00', '80.00', null, null, ['boris']],
+    ]);
+    expect(context.build).not.toHaveBeenCalled();
   });
 });

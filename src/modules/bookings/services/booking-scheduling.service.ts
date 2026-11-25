@@ -18,6 +18,7 @@ import { BookingScheduleRequest } from '../interfaces/booking-schedule-request.i
 import { BookingServiceSnapshot } from '../interfaces/booking-service-snapshot.interface.js';
 import { ResolvedBookingItem } from '../interfaces/resolved-booking-item.interface.js';
 import { ScheduledBooking } from '../interfaces/scheduled-booking.interface.js';
+import { storedDiscountChoice } from '../rules/booking-discount-choice.rules.js';
 import { visitTimeAt } from '../rules/booking-visit-time.rules.js';
 import { rankStaff } from '../rules/staff-ranking.rules.js';
 import { BookingStaffLoadService } from './booking-staff-load.service.js';
@@ -221,6 +222,7 @@ export class BookingSchedulingService {
         chargedPrice: price.chargedPrice,
         customPrice: price.customPrice,
         priceAdjustments: price.adjustments,
+        ...storedDiscountChoice(context?.choice?.[index]),
         staffName: staffNames.get(staffId)!,
       };
     });

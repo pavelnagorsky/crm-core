@@ -447,6 +447,7 @@ describe('Client booking API (HTTP)', () => {
       .send({
         bookingId: 'other',
         startAt: '2026-10-29T14:00:00',
+        expectedTotal: '42.00',
         endAt: '2026-10-29T14:01:00',
         staffId: locationId,
         internalNotes: 'overwrite',
@@ -457,6 +458,7 @@ describe('Client booking API (HTTP)', () => {
       expect.objectContaining({ id }),
       {
         startAt: '2026-10-29T14:00:00',
+        expectedTotal: '42.00',
       },
     );
     await request(app.getHttpServer())

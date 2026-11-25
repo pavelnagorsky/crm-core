@@ -137,6 +137,16 @@ describe('BookingPricingContextService', () => {
       });
     });
 
+    it('a booking moved later keeps the day it was booked for the booking period, the lead time runs from now', async () => {
+      const { service, request } = setup();
+      const context = await service.build({
+        ...request,
+        bookedAt: new Date('2026-11-01T08:00:00.000Z'),
+      });
+      expect(context.today).toBe('2026-11-01');
+      expect(context.nowMs).toBe(NOW.getTime());
+    });
+
     it('an empty code is none, an unknown start is null', async () => {
       const { service, request } = setup();
       const context = await service.build({

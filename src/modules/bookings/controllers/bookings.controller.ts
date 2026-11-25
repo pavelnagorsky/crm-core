@@ -393,15 +393,18 @@ export class BookingsController {
   @ApiOperation({
     summary: 'Update an accessible booking',
     description:
-      'With payment and confirmProductItemIds the visit is paid after the edit in the same transaction, by the rules and errors of PUT bookings/:id/payment.',
+      'With payment and confirmProductItemIds the visit is paid after the edit in the same transaction, by the rules and errors of PUT bookings/:id/payment. Prices (docs/pricing-stage5-api.md): KEEP leaves them, except items whose discount is picked again and a changed promoCode; RECALCULATE prices every item again at the final staff and time, checked against expectedTotal. Re-priced items always use the time and staff after a move in the same request.',
   })
   @ApiOkResponse({ type: ApiResponse(BookingWriteResponseDto) })
   @ApiBadRequestResponse({
     description:
-      'BOOKING_TRAFFIC_SOURCE_READ_ONLY: trafficSource or trafficSourceDetail on an online booking; TRAFFIC_SOURCE_DETAIL_WITHOUT_SOURCE: a detail without a source',
+      'BOOKING_TRAFFIC_SOURCE_READ_ONLY: trafficSource or trafficSourceDetail on an online booking; TRAFFIC_SOURCE_DETAIL_WITHOUT_SOURCE: a detail without a source; BOOKING_REPRICE_COMPLETED: pricing RECALCULATE of a COMPLETED, CANCELLED or NO_SHOW booking; VALIDATION_ERROR: RECALCULATE without expectedTotal',
   })
   @ApiNotFoundResponse({ description: 'Booking not found' })
-  @ApiConflictResponse({ description: 'Slot is no longer available' })
+  @ApiConflictResponse({
+    description:
+      'Slot is no longer available. PRICE_CHANGED { expectedTotal, total, items: [{ serviceId, serviceTitle, staffId, staffName, price }], promoCode }: the recalculated total differs from expectedTotal. PROMOTION_NOT_APPLICABLE { lineIndex, ruleId, reason }: a picked promotion does not apply, or (lineIndex -1) a limited promotion ran out meanwhile. BOOKING_REPRICE_UNAVAILABLE: the booking cannot be priced again (a service deactivated or the bundle edited since booking), for RECALCULATE, a discount picked again or a changed promoCode',
+  })
   @ApiForbiddenResponse({
     description:
       'confirmProductItemIds and replacing an active payment need order:write',

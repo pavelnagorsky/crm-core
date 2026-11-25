@@ -1,4 +1,4 @@
-import { BookingStatus, ClientNoticeType } from '@prisma/client';
+import { BookingStatus, ClientNoticeType, Prisma } from '@prisma/client';
 import { ClientNoticeBooking } from '../interfaces/client-notice-booking.interface.js';
 import {
   CLIENT_NOTICE_DELAY_MS,
@@ -13,15 +13,25 @@ const now = new Date('2026-09-20T10:00:00.000Z');
 const sendAt = new Date(now.getTime() + CLIENT_NOTICE_DELAY_MS);
 const at = (iso: string) => new Date(iso);
 
+const total = (amount: string) => new Prisma.Decimal(amount);
+
+/** A booking whose services cost 50 (one at 30, one with a custom price of 20). */
 function booking(overrides: Partial<ClientNoticeBooking> = {}) {
-  return {
+  const notice: ClientNoticeBooking = {
     status: BookingStatus.CONFIRMED,
     startAt: at('2026-09-21T10:00:00.000Z'),
     clientEmail: 'a@example.com',
     notifyClient: true,
     ...NO_CLIENT_NOTICE,
     ...overrides,
-  } satisfies ClientNoticeBooking;
+  };
+  return {
+    ...notice,
+    items: [
+      { customPrice: null, chargedPrice: total('30.00') },
+      { customPrice: total('20.00'), chargedPrice: total('25.00') },
+    ],
+  };
 }
 
 describe('createdClientNotice', () => {
@@ -30,6 +40,7 @@ describe('createdClientNotice', () => {
       clientNoticeAt: sendAt,
       clientNoticeType: ClientNoticeType.CREATED,
       clientNoticeFromStartAt: null,
+      clientNoticeFromTotal: null,
     });
   });
 
@@ -51,7 +62,7 @@ describe('staffRescheduleClientNotice', () => {
     clientEmail,
   });
 
-  it('queues a move email from the old start', () => {
+  it('queues a move email from the old start and its price', () => {
     expect(
       staffRescheduleClientNotice(
         booking(),
@@ -63,15 +74,17 @@ describe('staffRescheduleClientNotice', () => {
       clientNoticeAt: sendAt,
       clientNoticeType: ClientNoticeType.RESCHEDULED,
       clientNoticeFromStartAt: at('2026-09-21T10:00:00.000Z'),
+      clientNoticeFromTotal: total('50.00'),
     });
   });
 
-  it('keeps the first start and pushes the send time on another move', () => {
+  it('keeps the first start and price and pushes the send time on another move', () => {
     const pending = booking({
       startAt: at('2026-09-22T10:00:00Z'),
       clientNoticeAt: at('2026-09-20T09:59:00Z'),
       clientNoticeType: ClientNoticeType.RESCHEDULED,
       clientNoticeFromStartAt: at('2026-09-21T10:00:00Z'),
+      clientNoticeFromTotal: total('45.00'),
     });
     expect(
       staffRescheduleClientNotice(
@@ -84,6 +97,7 @@ describe('staffRescheduleClientNotice', () => {
       clientNoticeAt: sendAt,
       clientNoticeType: ClientNoticeType.RESCHEDULED,
       clientNoticeFromStartAt: at('2026-09-21T10:00:00Z'),
+      clientNoticeFromTotal: total('45.00'),
     });
   });
 
@@ -120,6 +134,7 @@ describe('staffRescheduleClientNotice', () => {
       clientNoticeAt: sendAt,
       clientNoticeType: ClientNoticeType.CREATED,
       clientNoticeFromStartAt: null,
+      clientNoticeFromTotal: null,
     });
   });
 
@@ -128,6 +143,7 @@ describe('staffRescheduleClientNotice', () => {
       clientNoticeAt: at('2026-09-20T09:59:00Z'),
       clientNoticeType: ClientNoticeType.RESCHEDULED,
       clientNoticeFromStartAt: at('2026-09-19T10:00:00Z'),
+      clientNoticeFromTotal: total('45.00'),
     });
     expect(
       staffRescheduleClientNotice(
@@ -140,6 +156,7 @@ describe('staffRescheduleClientNotice', () => {
       clientNoticeAt: at('2026-09-20T09:59:00Z'),
       clientNoticeType: ClientNoticeType.RESCHEDULED,
       clientNoticeFromStartAt: at('2026-09-19T10:00:00Z'),
+      clientNoticeFromTotal: total('45.00'),
     });
   });
 
@@ -199,6 +216,7 @@ describe('clientRescheduleClientNotice', () => {
       clientNoticeAt: sendAt,
       clientNoticeType: ClientNoticeType.CREATED,
       clientNoticeFromStartAt: null,
+      clientNoticeFromTotal: null,
     };
     expect(clientRescheduleClientNotice(created)).toEqual(created);
   });

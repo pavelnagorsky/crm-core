@@ -8,6 +8,7 @@ import { ACTIVE_LOCATION_WHERE } from '../../../../shared/database/active-busine
 import { BookingSearchRequestDto } from '../../dto/booking-search-request.dto.js';
 import { BookingSearchOrderBy } from '../../enums/booking-search-order-by.enum.js';
 import { BookingStatus } from '../../enums/booking-status.enum.js';
+import { BookingItemChoiceRow } from '../../interfaces/booking-item-choice-row.interface.js';
 import { BookingWithItems } from '../../interfaces/booking-with-items.interface.js';
 import { BookingTrafficDetails } from '../../interfaces/booking-traffic-details.interface.js';
 import { bookingWithItemsInclude } from '../../constants/booking-with-items.include.js';
@@ -49,6 +50,36 @@ export class BookingReadService {
     });
     if (!booking) throw new NotFoundException('Booking not found');
     return booking;
+  }
+
+  /**
+   * The stored discount picks of a booking's items in booking order (the order of its price
+   * lines), for the booking dialog preview; 404 when it is not a booking of the location.
+   */
+  async findDiscountChoices(
+    locationId: string,
+    bookingId: string,
+  ): Promise<BookingItemChoiceRow[]> {
+    const booking = await this.db.booking.findFirst({
+      where: {
+        id: bookingId,
+        locationId,
+        deletedAt: null,
+        location: ACTIVE_LOCATION_WHERE,
+      },
+      select: {
+        items: {
+          orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
+          select: {
+            serviceId: true,
+            discountChoice: true,
+            discountChoiceRuleId: true,
+          },
+        },
+      },
+    });
+    if (!booking) throw new NotFoundException('Booking not found');
+    return booking.items;
   }
 
   /**
