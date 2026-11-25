@@ -27,6 +27,7 @@ import {
   surchargeRule,
   visitAt,
   weekdays,
+  PRICING_TODAY,
 } from './testing/pricing-snapshot.factory.js';
 
 /**
@@ -65,6 +66,7 @@ function book(rules: PricingRuleEntry[], roundingStep = 100): PriceBook {
       rules,
       roundingStep,
     }),
+    PRICING_TODAY,
   );
 }
 

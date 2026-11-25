@@ -1,5 +1,6 @@
 import { PricingBundleEntry } from '../../interfaces/pricing-bundle-entry.interface.js';
 import { PricingLevelEntry } from '../../interfaces/pricing-level-entry.interface.js';
+import { PricingPriceChangeEntry } from '../../interfaces/pricing-price-change-entry.interface.js';
 import { PricingRuleEntry } from '../../interfaces/pricing-rule-entry.interface.js';
 import { PricingStaffEntry } from '../../interfaces/pricing-staff-entry.interface.js';
 
@@ -16,4 +17,8 @@ export interface PricingSnapshotOptions {
   rules?: PricingRuleEntry[];
   /** Rounding step in minor units; 100 (1.00, the location default) when omitted. */
   roundingStep?: number;
+  /** IANA zone; UTC when omitted. */
+  timezone?: string;
+  /** Scheduled price changes; none when omitted. */
+  priceChanges?: PricingPriceChangeEntry[];
 }

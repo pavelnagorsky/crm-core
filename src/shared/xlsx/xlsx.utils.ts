@@ -11,6 +11,7 @@ import { XlsxFile } from './interfaces/xlsx-file.interface.js';
 import { XlsxGrid } from './interfaces/xlsx-grid.interface.js';
 import { XlsxRow } from './interfaces/xlsx-row.interface.js';
 import { XlsxSheet } from './interfaces/xlsx-sheet.interface.js';
+import { XlsxWorkbook } from './interfaces/xlsx-workbook.interface.js';
 
 const OCTET_STREAM = 'application/octet-stream';
 const SHEET_NAME_LIMIT = 31;
@@ -113,6 +114,12 @@ export class XlsxUtils {
 
   /** First worksheet as text cells, or null when the buffer is not a workbook. */
   static async read(buffer: Buffer): Promise<XlsxGrid | null> {
+    const book = await XlsxUtils.readBook(buffer);
+    return book ? book.first() : null;
+  }
+
+  /** All worksheets as text cells, or null when the buffer is not a workbook. */
+  static async readBook(buffer: Buffer): Promise<XlsxWorkbook | null> {
     const workbook = new ExcelJS.Workbook();
     try {
       await workbook.xlsx.load(
@@ -121,8 +128,23 @@ export class XlsxUtils {
     } catch {
       return null;
     }
-    const worksheet = workbook.worksheets[0];
-    if (!worksheet) return null;
+    if (workbook.worksheets.length === 0) return null;
+    return {
+      sheet(name: string) {
+        const wanted = name.trim().toLowerCase();
+        const found = workbook.worksheets.find(
+          (worksheet) => worksheet.name.trim().toLowerCase() === wanted,
+        );
+        return found ? XlsxUtils.gridOf(found) : null;
+      },
+      first() {
+        const first = workbook.worksheets[0];
+        return first ? XlsxUtils.gridOf(first) : null;
+      },
+    };
+  }
+
+  private static gridOf(worksheet: ExcelJS.Worksheet): XlsxGrid {
     return {
       rowCount: worksheet.rowCount,
       row(rowNumber: number): XlsxCells {

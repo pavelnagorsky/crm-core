@@ -22,6 +22,9 @@ export const DEFAULT_SERVICE_PRICES: Readonly<Record<string, number>> = {
   wash: 1500,
 };
 
+/** The location day the engine specs treat as today. */
+export const PRICING_TODAY = '2026-11-25';
+
 export function pricingSnapshot(
   options: PricingSnapshotOptions = {},
 ): PricingSnapshot {
@@ -41,6 +44,8 @@ export function pricingSnapshot(
     staff: options.staff ?? [],
     rules: options.rules ?? [],
     roundingStep: options.roundingStep ?? 100,
+    timezone: options.timezone ?? 'UTC',
+    priceChanges: options.priceChanges ?? [],
   };
 }
 

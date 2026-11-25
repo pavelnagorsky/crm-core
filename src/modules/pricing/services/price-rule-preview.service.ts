@@ -346,12 +346,13 @@ export class PriceRulePreviewService {
     const minute = entry.intervals.length
       ? Math.min(...entry.intervals.map((interval) => interval.start))
       : WHOLE_DAY_EXAMPLE_MINUTE;
-    const baseBook = new PriceBook(snapshot);
+    const today = TimeUtils.zonedDateStr(new Date(), snapshot.timezone);
+    const baseBook = new PriceBook(snapshot, today);
     const promotion = entry.kind === EngineRuleKind.PROMOTION;
     return rows.slice(0, EXAMPLE_LIMIT).map((row) => {
       const scoped =
         row.levelId === null ? null : withLevelScope(snapshot, row.levelId);
-      const book = scoped ? new PriceBook(scoped.snapshot) : baseBook;
+      const book = scoped ? new PriceBook(scoped.snapshot, today) : baseBook;
       const [line] = book.quote({
         bundleId: null,
         lines: [

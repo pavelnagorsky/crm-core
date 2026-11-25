@@ -219,6 +219,7 @@ describe('Cache invalidation through domain writes', () => {
       { listForBooking: async () => [] } as never,
       locations as never,
       cache,
+      {} as never,
     );
     const db = {
       service: {

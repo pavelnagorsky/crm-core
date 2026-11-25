@@ -45,7 +45,10 @@ export class PriceExplainService {
       locationId,
       ReadConsistency.CACHED,
     );
-    const book = new PriceBook(snapshot);
+    const book = new PriceBook(
+      snapshot,
+      TimeUtils.zonedDateStr(new Date(), snapshot.timezone),
+    );
     const bundleId = dto.bundleId ?? null;
     const serviceIds =
       bundleId === null

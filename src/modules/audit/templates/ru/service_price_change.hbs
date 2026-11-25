@@ -1,0 +1,19 @@
+{{#if (eq eventType "SERVICE_PRICE_CHANGE_CREATED")}}
+<p>{{payload.title}} с {{formatValue "effectiveDate" payload.effectiveDate}}: услуг {{payload.servicesCount}}, комплексов {{payload.bundlesCount}}</p>
+{{/if}}
+
+{{#if (eq eventType "SERVICE_PRICES_IMPORTED")}}
+<p>{{payload.fileName}}: изменено цен {{payload.itemsCount}}, новых услуг {{payload.createdServicesCount}}{{#if payload.effectiveDate}} с {{formatValue "effectiveDate" payload.effectiveDate}}{{/if}}</p>
+{{/if}}
+
+{{#if (eq eventType "SERVICE_PRICE_CHANGE_APPLIED")}}
+<p>{{payload.title}}: изменено цен {{payload.appliedCount}}{{#if payload.applySkippedCount}}, пропущено {{payload.applySkippedCount}}{{/if}}</p>
+{{/if}}
+
+{{#if (eq eventType "SERVICE_PRICE_CHANGE_CANCELLED")}}
+<p>{{payload.title}} с {{formatValue "effectiveDate" payload.effectiveDate}}</p>
+{{/if}}
+
+{{#if (eq eventType "SERVICE_PRICE_CHANGE_ROLLED_BACK")}}
+<p>{{payload.title}}: возвращено {{payload.restoredCount}}, не возвращено {{payload.rollbackSkippedCount}}</p>
+{{/if}}

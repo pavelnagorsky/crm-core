@@ -11,6 +11,13 @@ import {
 import { BundlePricingMode } from './enums/bundle-pricing-mode.enum.js';
 import { DiscountChoiceMode } from './enums/discount-choice-mode.enum.js';
 import { PriceAdjustmentKind } from './enums/price-adjustment-kind.enum.js';
+import {
+  PriceTimeline,
+  baseKey,
+  bundleKey,
+  levelKey,
+  staffKey,
+} from './price-timeline.js';
 import { PriceRuleKind } from './enums/price-rule-kind.enum.js';
 import { PriceRuleSkipReason } from './enums/price-rule-skip-reason.enum.js';
 import { PriceValueType } from './enums/price-value-type.enum.js';
@@ -55,6 +62,10 @@ const FULL_PERCENT_BP = 10000;
  * whose schedule, targets and conditions hold, plus the client discount; the biggest discount
  * in money wins (on a tie the client discount, then the earlier promotion). The discounted
  * price is rounded down to the location step, never below 0.
+ *
+ * Scheduled price changes (docs/pricing-stage6-api.md) are read by date: a visit is priced
+ * with the catalog prices of its local date, "today" (the location day, given by the
+ * caller) when there is no visit.
  */
 export class PriceBook {
   private readonly services: Map<string, PricingServiceEntry>;
@@ -64,8 +75,16 @@ export class PriceBook {
   private readonly rules: CompiledRuleSet;
   private readonly promotions: CompiledRuleSet;
   private readonly roundingStep: number;
+  private readonly timeline: PriceTimeline;
 
-  constructor(snapshot: PricingSnapshot) {
+  /** `today` is the location's local date (YYYY-MM-DD); the engine has no clock. */
+  constructor(
+    snapshot: PricingSnapshot,
+    readonly today: string,
+  ) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(today))
+      throw new RangeError(`Invalid today ${today}`);
+    this.timeline = new PriceTimeline(snapshot.priceChanges);
     this.services = new Map(snapshot.services.map((item) => [item.id, item]));
     this.bundles = new Map(snapshot.bundles.map((item) => [item.id, item]));
     this.levels = new Map(snapshot.levels.map((item) => [item.id, item]));
@@ -101,8 +120,58 @@ export class PriceBook {
    * Price of a separate service with this staff member: personal price ?? level price ??
    * base price. No staff member (not chosen yet) costs the base price.
    */
-  staffPrice(serviceId: string, staffId: string | null): number {
-    return this.staffLayer(serviceId, staffId).price;
+  staffPrice(
+    serviceId: string,
+    staffId: string | null,
+    date: string = this.today,
+  ): number {
+    return this.staffLayer(serviceId, staffId, date).price;
+  }
+
+  /** Catalog base price of a service on a local date (scheduled changes included). */
+  basePriceAt(serviceId: string, date: string): number {
+    const service = this.requireService(serviceId);
+    return (
+      this.timeline.resolve(baseKey(serviceId), date, service.price) ??
+      service.price
+    );
+  }
+
+  /** Price of a FIXED bundle on a local date; null for a SUM bundle (no price of its own). */
+  fixedPriceAt(bundleId: string, date: string): number | null {
+    const bundle = this.requireBundle(bundleId);
+    if (bundle.pricingMode !== BundlePricingMode.FIXED) return null;
+    return this.timeline.resolve(bundleKey(bundleId), date, bundle.fixedPrice);
+  }
+
+  /**
+   * Cache key of the staff price over these dates: the price on the first date and on every
+   * date a change reaches inside them, joined by ",". Staff members with the same price
+   * in the whole window share a key.
+   */
+  staffPriceKey(
+    serviceId: string,
+    staffId: string | null,
+    dates: readonly string[],
+  ): string {
+    if (dates.length === 0) return String(this.staffPrice(serviceId, staffId));
+    const sorted = [...dates].sort();
+    const first = sorted[0];
+    const last = sorted[sorted.length - 1];
+    const staff = staffId === null ? undefined : this.staff.get(staffId);
+    const keys = [baseKey(serviceId)];
+    if (staff) {
+      keys.push(staffKey(serviceId, staff.id));
+      if (staff.levelId) keys.push(levelKey(serviceId, staff.levelId));
+    }
+    const starts = new Set<string>([first]);
+    for (const key of keys)
+      for (const date of this.timeline.changeDates(key, first, last))
+        starts.add(date);
+    return [...starts]
+      .sort()
+      .map((date) => this.staffPrice(serviceId, staffId, date))
+      .join(',');
   }
 
   /**
@@ -123,7 +192,7 @@ export class PriceBook {
   ): number {
     if (this.isFixedBundle(bundleId)) return 0;
     if (context === null || visit === null)
-      return this.staffPrice(serviceId, staffId);
+      return this.staffPrice(serviceId, staffId, visit?.date ?? this.today);
     return this.quote({
       bundleId,
       lines: [{ serviceId, staffId, customPrice: null }],
@@ -205,16 +274,29 @@ export class PriceBook {
    */
   priceRange(scope: PriceScope, dates: readonly string[]): PriceRange {
     const request = this.scopeRequest(scope);
-    const flat = this.price(request, []).total;
+    const todayFlat = this.price(request, [], this.today).total;
     const relevant = this.relevantRules(request);
-    if (relevant.size === 0 || dates.length === 0)
-      return { min: flat, max: flat };
+    // Without scheduled changes the price without rules is the same on every date.
+    const flatCache = new Map<string, number>();
+    const flatOn = (date: string): number => {
+      if (this.timeline.isEmpty) return todayFlat;
+      let value = flatCache.get(date);
+      if (value === undefined) {
+        value = this.price(request, [], date).total;
+        flatCache.set(date, value);
+      }
+      return value;
+    };
+    if (dates.length === 0) return { min: todayFlat, max: todayFlat };
+    if (relevant.size === 0 && this.timeline.isEmpty)
+      return { min: todayFlat, max: todayFlat };
 
     let min = Number.POSITIVE_INFINITY;
     let max = Number.NEGATIVE_INFINITY;
     for (const date of dates) {
       const { surcharges, edges } = this.dayRules(date, relevant);
       if (edges.length === 0) {
+        const flat = flatOn(date);
         min = Math.min(min, flat);
         max = Math.max(max, flat);
         continue;
@@ -251,9 +333,14 @@ export class PriceBook {
           ? { ...request, visit: { date, minute: startMinute } }
           : request,
         this.coveringAt(surcharges, startMinute),
+        date,
       );
       const key = JSON.stringify(
-        quote.lines.map((line) => [line.listPrice, line.total, line.adjustments]),
+        quote.lines.map((line) => [
+          line.listPrice,
+          line.total,
+          line.adjustments,
+        ]),
       );
       const last = segments[segments.length - 1];
       if (last && key === previousKey) last.endMinute = endMinute;
@@ -291,14 +378,16 @@ export class PriceBook {
     return request.visit === null ? [] : this.rules.activeAt(request.visit);
   }
 
+  /** Prices a request with the catalog prices of `date` (default: the visit date or today). */
   private price(
     request: QuoteRequest,
     active: readonly CompiledRule[],
+    date: string = request.visit?.date ?? this.today,
   ): VisitQuote {
     if (request.bundleId !== null) this.requireBundle(request.bundleId);
     const lines = this.isFixedBundle(request.bundleId)
-      ? this.fixedBundleLines(request, active)
-      : this.separateLines(request, active);
+      ? this.fixedBundleLines(request, active, date)
+      : this.separateLines(request, active, date);
     const quote: VisitQuote = {
       lines,
       listTotal: lines.reduce((sum, line) => sum + line.listPrice, 0),
@@ -318,9 +407,10 @@ export class PriceBook {
   private separateLines(
     request: QuoteRequest,
     active: readonly CompiledRule[],
+    date: string,
   ): LineQuote[] {
     const listed = request.lines.map((line) =>
-      this.separateLine(line, request.bundleId, active),
+      this.separateLine(line, request.bundleId, active, date),
     );
     const context = request.context ?? null;
     const visitListTotal = listed.reduce(
@@ -357,9 +447,10 @@ export class PriceBook {
     line: QuoteLineRequest,
     bundleId: string | null,
     active: readonly CompiledRule[],
+    date: string,
   ): ListedLine {
     const service = this.requireService(line.serviceId);
-    const layer = this.staffLayer(line.serviceId, line.staffId);
+    const layer = this.staffLayer(line.serviceId, line.staffId, date);
     const surcharges = this.surcharges(
       active,
       { serviceId: service.id, categoryId: service.categoryId, bundleId },
@@ -369,7 +460,7 @@ export class PriceBook {
     const listPrice = this.listPrice(layer.price, raw);
     return {
       line,
-      basePrice: service.price,
+      basePrice: this.basePriceAt(service.id, date),
       staffPrice: layer.price,
       listPrice,
       adjustments: [
@@ -395,13 +486,14 @@ export class PriceBook {
   private fixedBundleLines(
     request: QuoteRequest,
     active: readonly CompiledRule[],
+    date: string,
   ): LineQuote[] {
     const bundle = this.requireBundle(request.bundleId as string);
-    if (bundle.fixedPrice === null)
+    const fixedPrice = this.fixedPriceAt(bundle.id, date);
+    if (fixedPrice === null)
       throw new Error(`Fixed bundle ${bundle.id} has no price`);
-    const fixedPrice = bundle.fixedPrice;
-    const weights = request.lines.map(
-      (line) => this.requireService(line.serviceId).price,
+    const weights = request.lines.map((line) =>
+      this.basePriceAt(line.serviceId, date),
     );
     const basePrices = BundleAllocationCalculator.allocate(fixedPrice, weights);
 
@@ -439,10 +531,7 @@ export class PriceBook {
         basePrice,
         staffPrice: basePrice,
         listPrice: listPrices[index],
-        adjustments: [
-          ...lineSurcharges,
-          ...this.roundingAdjustments(rounding),
-        ],
+        adjustments: [...lineSurcharges, ...this.roundingAdjustments(rounding)],
       };
     });
 
@@ -840,28 +929,36 @@ export class PriceBook {
   private staffLayer(
     serviceId: string,
     staffId: string | null,
+    date: string,
   ): StaffPriceLayer {
-    const service = this.requireService(serviceId);
+    const base = this.basePriceAt(serviceId, date);
     const staff = staffId === null ? undefined : this.staff.get(staffId);
-    if (!staff) return { price: service.price, adjustment: null };
-    const personal = staff.servicePrices[serviceId];
-    if (personal !== undefined)
-      return this.layer(
-        PriceAdjustmentKind.STAFF,
-        staff.name,
-        personal,
-        service.price,
-      );
+    if (!staff) return { price: base, adjustment: null };
+    const service = this.requireService(serviceId);
+    // A null price on a date drops the personal or level price: the next layer applies.
+    const personal = this.timeline.resolve(
+      staffKey(serviceId, staff.id),
+      date,
+      staff.servicePrices[serviceId] ?? null,
+    );
+    if (personal !== null)
+      return this.layer(PriceAdjustmentKind.STAFF, staff.name, personal, base);
     const level = staff.levelId ? this.levels.get(staff.levelId) : undefined;
-    const levelPrice = level ? service.levelPrices[level.id] : undefined;
-    if (level && levelPrice !== undefined)
+    const levelPrice = level
+      ? this.timeline.resolve(
+          levelKey(serviceId, level.id),
+          date,
+          service.levelPrices[level.id] ?? null,
+        )
+      : null;
+    if (level && levelPrice !== null)
       return this.layer(
         PriceAdjustmentKind.LEVEL,
         level.name,
         levelPrice,
-        service.price,
+        base,
       );
-    return { price: service.price, adjustment: null };
+    return { price: base, adjustment: null };
   }
 
   private layer(

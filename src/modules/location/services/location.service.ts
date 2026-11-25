@@ -366,8 +366,9 @@ export class LocationService {
 
   async getLocale(
     locationId: string,
+    db: Prisma.TransactionClient = this.db,
   ): Promise<{ timezone: string; currency: string }> {
-    const location = await this.db.location.findUnique({
+    const location = await db.location.findUnique({
       where: { id: locationId, ...ACTIVE_LOCATION_WHERE },
       select: { timezone: true, currency: true },
     });

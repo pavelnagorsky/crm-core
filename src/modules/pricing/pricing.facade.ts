@@ -6,6 +6,7 @@ import {
 import { ReadConsistency } from '../../shared/cache/enums/read-consistency.enum.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { MoneyUtils } from '../../shared/money/money.utils.js';
+import { TimeUtils } from '../../shared/time/time.utils.js';
 import { ErrorCode } from '../../shared/validation/error-codes.enum.js';
 import { BundlePricingMode } from './engine/enums/bundle-pricing-mode.enum.js';
 import { DiscountChoiceMode } from './engine/enums/discount-choice-mode.enum.js';
@@ -87,7 +88,11 @@ export class PricingFacade {
     locationId: string,
     consistency: ReadConsistency,
   ): Promise<PriceBook> {
-    return new PriceBook(await this.snapshots.load(locationId, consistency));
+    const snapshot = await this.snapshots.load(locationId, consistency);
+    return new PriceBook(
+      snapshot,
+      TimeUtils.zonedDateStr(new Date(), snapshot.timezone),
+    );
   }
 
   /** Lines must be priced services; bundle lines are exactly the bundle items. */

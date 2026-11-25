@@ -39,6 +39,42 @@ export class ServiceCategoriesService {
     });
   }
 
+  /**
+   * The categories of the location with these exact names, created when missing (sort order
+   * after the last one). Returns every named category and the ones just created.
+   */
+  async resolveByNames(
+    tx: Prisma.TransactionClient,
+    locationId: string,
+    names: readonly string[],
+  ): Promise<{
+    categoryByName: Map<string, ServiceCategory>;
+    created: ServiceCategory[];
+  }> {
+    if (names.length === 0) return { categoryByName: new Map(), created: [] };
+    const existing = await tx.serviceCategory.findMany({
+      where: { locationId, name: { in: [...names] } },
+    });
+    const categoryByName = new Map(existing.map((row) => [row.name, row]));
+    const missing = names.filter((name) => !categoryByName.has(name));
+    const last = await tx.serviceCategory.aggregate({
+      where: { locationId },
+      _max: { sortOrder: true },
+    });
+    const first = (last._max.sortOrder ?? -1) + 1;
+    const created = missing.length
+      ? await tx.serviceCategory.createManyAndReturn({
+          data: missing.map((name, index) => ({
+            locationId,
+            name,
+            sortOrder: first + index,
+          })),
+        })
+      : [];
+    for (const row of created) categoryByName.set(row.name, row);
+    return { categoryByName, created };
+  }
+
   private readonly logger = new Logger(ServiceCategoriesService.name);
   constructor(
     private readonly db: DatabaseService,

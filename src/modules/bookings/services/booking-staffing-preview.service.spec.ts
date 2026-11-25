@@ -3,6 +3,7 @@ import { PriceBook } from '../../pricing/engine/price-book.js';
 import {
   pricingSnapshot,
   pricingStaff,
+  PRICING_TODAY,
 } from '../../pricing/engine/testing/pricing-snapshot.factory.js';
 import { BookingStaffingPreviewService } from './booking-staffing-preview.service.js';
 
@@ -33,6 +34,7 @@ describe('BookingStaffingPreviewService', () => {
         pricingStaff('boris', null, { cut: 5000 }),
       ],
     }),
+    PRICING_TODAY,
   );
   const request = {
     serviceIds: ['cut'],

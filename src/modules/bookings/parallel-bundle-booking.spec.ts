@@ -163,6 +163,7 @@ function setup() {
         listLevelPrices: vi.fn(async () => []),
       } as never,
       { listForSnapshot: vi.fn(async () => []) } as never,
+      { listForSnapshot: vi.fn(async () => []) } as never,
       staff as never,
       locations as never,
       {

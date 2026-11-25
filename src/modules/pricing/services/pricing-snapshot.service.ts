@@ -11,6 +11,7 @@ import { PricingSnapshot } from '../engine/interfaces/pricing-snapshot.interface
 import { toPricingRuleEntry } from '../rules/price-rule-entry.rules.js';
 import { PriceLevelReadService } from './price-level-read.service.js';
 import { PriceRuleReadService } from './price-rule-read.service.js';
+import { ScheduledPriceChangeReadService } from './scheduled-price-change-read.service.js';
 
 /**
  * Loads what the price engine needs for one location. Every caller goes through this one
@@ -22,6 +23,7 @@ export class PricingSnapshotService {
     private readonly serviceCatalog: ServiceCatalogFacade,
     private readonly levels: PriceLevelReadService,
     private readonly rules: PriceRuleReadService,
+    private readonly priceChanges: ScheduledPriceChangeReadService,
     private readonly staff: StaffService,
     private readonly locations: LocationService,
     private readonly cache: AppCacheService,
@@ -46,18 +48,28 @@ export class PricingSnapshotService {
    * entry of another replica must not be kept for a day inside the snapshot.
    */
   private async loadFresh(locationId: string): Promise<PricingSnapshot> {
-    const [catalog, levels, levelPrices, rules, roundingStep, staff] =
-      await Promise.all([
-        this.serviceCatalog.loadCatalogSnapshot(
-          locationId,
-          ReadConsistency.FRESH,
-        ),
-        this.levels.listLevels(locationId),
-        this.levels.listLevelPrices(locationId),
-        this.rules.listForSnapshot(locationId),
-        this.locations.findPriceRoundingStep(locationId),
-        this.staff.listPricingProfiles(locationId),
-      ]);
+    const [
+      catalog,
+      levels,
+      levelPrices,
+      rules,
+      roundingStep,
+      staff,
+      locale,
+      priceChanges,
+    ] = await Promise.all([
+      this.serviceCatalog.loadCatalogSnapshot(
+        locationId,
+        ReadConsistency.FRESH,
+      ),
+      this.levels.listLevels(locationId),
+      this.levels.listLevelPrices(locationId),
+      this.rules.listForSnapshot(locationId),
+      this.locations.findPriceRoundingStep(locationId),
+      this.staff.listPricingProfiles(locationId),
+      this.locations.getLocale(locationId),
+      this.priceChanges.listForSnapshot(locationId),
+    ]);
     const levelPricesByService = new Map<string, Record<string, number>>();
     for (const row of levelPrices) {
       const prices = levelPricesByService.get(row.serviceId) ?? {};
@@ -98,6 +110,8 @@ export class PricingSnapshotService {
       })),
       rules: rules.map(toPricingRuleEntry),
       roundingStep: MoneyUtils.toMinor(roundingStep),
+      timezone: locale.timezone,
+      priceChanges,
     };
   }
 }

@@ -76,7 +76,9 @@ export class BookingSetupBundleDto {
     dto.image = bundle.imageFile
       ? FileResponseDto.fromEntity(bundle.imageFile)
       : null;
-    dto.price = MoneyUtils.format(BundleMetrics.price(bundle));
+    dto.price = MoneyUtils.format(
+      range.listPrice ?? BundleMetrics.price(bundle),
+    );
     dto.priceFrom = MoneyUtils.format(range.priceFrom);
     dto.priceTo = MoneyUtils.format(range.priceTo);
     dto.promotion = BookingPromotionLabelDto.fromLabel(range.promotion);

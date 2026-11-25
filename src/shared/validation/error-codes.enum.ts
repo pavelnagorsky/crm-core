@@ -963,4 +963,64 @@ export const ErrorCode = {
     code: 'ONLINE_BOOKING_UNAVAILABLE',
     message: 'Online booking is temporarily unavailable',
   },
+  SERVICE_PRICE_CHANGE_NOT_FOUND: {
+    code: 'SERVICE_PRICE_CHANGE_NOT_FOUND',
+    message: 'Price change not found',
+  },
+  SERVICE_PRICE_CHANGE_INVALID: {
+    code: 'SERVICE_PRICE_CHANGE_INVALID',
+    message: 'The price change conditions are invalid',
+  },
+  SERVICE_PRICE_CHANGE_DATE_INVALID: {
+    code: 'SERVICE_PRICE_CHANGE_DATE_INVALID',
+    message: 'The date must be after today and within two years',
+  },
+  SERVICE_PRICE_CHANGE_TOO_LARGE: {
+    code: 'SERVICE_PRICE_CHANGE_TOO_LARGE',
+    message: 'Too many prices in one change',
+  },
+  SERVICE_PRICE_CHANGE_ROW_INVALID: {
+    code: 'SERVICE_PRICE_CHANGE_ROW_INVALID',
+    message: 'The new price of a row is invalid',
+  },
+  SERVICE_PRICE_CHANGE_EMPTY: {
+    code: 'SERVICE_PRICE_CHANGE_EMPTY',
+    message: 'No prices would change',
+  },
+  SERVICE_PRICE_CHANGE_STALE: {
+    code: 'SERVICE_PRICE_CHANGE_STALE',
+    message: 'Prices have changed since the preview',
+  },
+  SERVICE_PRICE_CHANGE_DATE_CONFLICT: {
+    code: 'SERVICE_PRICE_CHANGE_DATE_CONFLICT',
+    message: 'A change of these services is already scheduled for this date',
+  },
+  SERVICE_PRICE_CHANGE_LIMIT: {
+    code: 'SERVICE_PRICE_CHANGE_LIMIT',
+    message: 'Too many price changes are scheduled',
+  },
+  SERVICE_PRICE_CHANGE_NOT_SCHEDULED: {
+    code: 'SERVICE_PRICE_CHANGE_NOT_SCHEDULED',
+    message: 'The price change is no longer scheduled',
+  },
+  SERVICE_PRICE_CHANGE_NOT_APPLIED: {
+    code: 'SERVICE_PRICE_CHANGE_NOT_APPLIED',
+    message: 'Only an applied price change can be rolled back',
+  },
+  SERVICE_PRICE_IMPORT_FILE_INVALID: {
+    code: 'SERVICE_PRICE_IMPORT_FILE_INVALID',
+    message: 'The price file cannot be imported',
+  },
+  SERVICE_PRICE_IMPORT_FILE_TOO_LARGE: {
+    code: 'SERVICE_PRICE_IMPORT_FILE_TOO_LARGE',
+    message: 'The price file exceeds the maximum allowed size',
+  },
+  SERVICE_PRICE_IMPORT_INVALID: {
+    code: 'SERVICE_PRICE_IMPORT_INVALID',
+    message: 'The price file has rows with errors',
+  },
+  SERVICE_PRICE_IMPORT_SERVICE_ACCESS: {
+    code: 'SERVICE_PRICE_IMPORT_SERVICE_ACCESS',
+    message: 'Creating services from the price file requires service access',
+  },
 } as const satisfies Record<string, ErrorCodeEntry>;

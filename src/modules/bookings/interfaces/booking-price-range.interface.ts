@@ -5,6 +5,8 @@ import { BookingPromotionLabel } from './booking-promotion-label.interface.js';
 export interface BookingPriceRange {
   priceFrom: Prisma.Decimal;
   priceTo: Prisma.Decimal;
+  /** Catalog items only: the catalog price on the location today, scheduled changes read by date. */
+  listPrice?: Prisma.Decimal;
   /** Catalog items only: the promotion label, null without promotions. */
   promotion?: BookingPromotionLabel | null;
 }

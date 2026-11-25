@@ -38,6 +38,7 @@ describe('ServiceCatalogFacade.loadCatalogSnapshot', () => {
       { listForBooking: async () => [] } as never,
       locations as never,
       cache,
+      {} as never,
     );
   });
   afterEach(() => cache.onModuleDestroy());

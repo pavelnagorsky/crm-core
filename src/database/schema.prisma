@@ -344,6 +344,7 @@ enum AuditEntity {
   REVIEW
   PRICE_LEVEL
   PRICE_RULE
+  SERVICE_PRICE_CHANGE
 }
 
 enum AuditEvent {
@@ -402,6 +403,11 @@ enum AuditEvent {
   PRICE_RULE_ARCHIVED
   PRICE_RULE_RESTORED
   PRICE_ROUNDING_UPDATED
+  SERVICE_PRICE_CHANGE_CREATED
+  SERVICE_PRICE_CHANGE_APPLIED
+  SERVICE_PRICE_CHANGE_CANCELLED
+  SERVICE_PRICE_CHANGE_ROLLED_BACK
+  SERVICE_PRICES_IMPORTED
   BRAND_CREATED
   BRAND_UPDATED
   BRAND_DELETED
@@ -731,6 +737,7 @@ model Location {
   trafficStats               BookingTrafficStat[]
   priceLevels                PriceLevel[]
   priceRules                 PriceRule[]
+  servicePriceChanges        ServicePriceChange[]
 
   @@index([brandId, deletedAt])
 }
@@ -1319,14 +1326,15 @@ model Service {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
-  location        Location                       @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  category        ServiceCategory?               @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  imageFile       File?                          @relation(fields: [imageFileId], references: [id], onDelete: Restrict)
-  staffServices   StaffService[]
-  bookingItems    BookingItem[]
-  bundleItems     ServiceBundleItem[]
-  commissionRates StaffCompensationServiceRate[]
-  levelPrices     ServiceLevelPrice[]
+  location                Location                       @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  category                ServiceCategory?               @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  imageFile               File?                          @relation(fields: [imageFileId], references: [id], onDelete: Restrict)
+  staffServices           StaffService[]
+  bookingItems            BookingItem[]
+  bundleItems             ServiceBundleItem[]
+  commissionRates         StaffCompensationServiceRate[]
+  levelPrices             ServiceLevelPrice[]
+  servicePriceChangeItems ServicePriceChangeItem[]
 
   @@index([locationId])
   @@index([categoryId])
@@ -1344,9 +1352,10 @@ model PriceLevel {
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  location      Location            @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  staff         Staff[]
-  servicePrices ServiceLevelPrice[]
+  location                Location                 @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  staff                   Staff[]
+  servicePrices           ServiceLevelPrice[]
+  servicePriceChangeItems ServicePriceChangeItem[]
 
   @@unique([locationId, name])
   @@index([locationId])
@@ -1354,24 +1363,24 @@ model PriceLevel {
 
 /// Surcharge rule of a location (docs/pricing-stage3-api.md). Checks (value > 0, intervals) live in raw SQL.
 model PriceRule {
-  id               String            @id @default(uuid())
-  locationId       String
-  kind             PriceRuleKind
-  scheduleType     PriceScheduleType
-  name             String            @db.VarChar(100)
-  note             String?           @db.VarChar(500)
-  enabled          Boolean           @default(true)
-  archivedAt       DateTime?
-  valueType        PriceValueType
+  id                  String                @id @default(uuid())
+  locationId          String
+  kind                PriceRuleKind
+  scheduleType        PriceScheduleType
+  name                String                @db.VarChar(100)
+  note                String?               @db.VarChar(500)
+  enabled             Boolean               @default(true)
+  archivedAt          DateTime?
+  valueType           PriceValueType
   /// Percent or amount, by valueType.
-  value            Decimal           @db.Decimal(10, 2)
-  visitFrom        DateTime?         @db.Date
-  visitTo          DateTime?         @db.Date
-  yearly           Boolean           @default(false)
-  holidayExclusive Boolean           @default(false)
+  value               Decimal               @db.Decimal(10, 2)
+  visitFrom           DateTime?             @db.Date
+  visitTo             DateTime?             @db.Date
+  yearly              Boolean               @default(false)
+  holidayExclusive    Boolean               @default(false)
   /// Bit (isoWeekday - 1); 0 = every day.
-  weekdaysMask     Int               @default(0)
-  appliesToAll     Boolean
+  weekdaysMask        Int                   @default(0)
+  appliesToAll        Boolean
   // Promotion only (kind = PROMOTION); null or default for surcharges (CHECK in raw SQL).
   scenario            PromotionScenario?
   publicName          String?               @db.VarChar(60)
@@ -1392,9 +1401,9 @@ model PriceRule {
   usageLimitPerClient Int?
   usageLimitPeriod    PromotionLimitPeriod?
   minVisitTotal       Decimal?              @db.Decimal(10, 2)
-  createdById      String?
-  createdAt        DateTime          @default(now())
-  updatedAt        DateTime          @updatedAt
+  createdById         String?
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
 
   location           Location                     @relation(fields: [locationId], references: [id], onDelete: Cascade)
   targets            PriceRuleTarget[]
@@ -1484,11 +1493,12 @@ model ServiceBundle {
   createdAt     DateTime             @default(now())
   updatedAt     DateTime             @updatedAt
 
-  location  Location            @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  category  ServiceCategory?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  imageFile File?               @relation(fields: [imageFileId], references: [id], onDelete: Restrict)
-  items     ServiceBundleItem[]
-  bookings  Booking[]
+  location                Location                 @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  category                ServiceCategory?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  imageFile               File?                    @relation(fields: [imageFileId], references: [id], onDelete: Restrict)
+  items                   ServiceBundleItem[]
+  bookings                Booking[]
+  servicePriceChangeItems ServicePriceChangeItem[]
 
   @@index([locationId])
   @@index([categoryId])
@@ -1529,20 +1539,21 @@ model Staff {
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
 
-  location          Location                @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  user              User?                   @relation(fields: [userId], references: [id], onDelete: SetNull)
-  avatarFile        File?                   @relation(fields: [avatarFileId], references: [id], onDelete: Restrict)
-  priceLevel        PriceLevel?             @relation(fields: [priceLevelId], references: [id], onDelete: SetNull)
-  staffServices     StaffService[]
-  shifts            StaffShift[]
-  calendarEvents    CalendarEvent[]
-  bookingItems      BookingItem[]
-  compensationPlans StaffCompensationPlan[]
-  earnings          StaffEarning[]
-  payrollResults    PayrollResult[]
-  soldOrderItems    OrderItem[]
-  reviewStaff       ReviewStaff[]
-  priceRules        PriceRuleStaff[]
+  location                Location                 @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  user                    User?                    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  avatarFile              File?                    @relation(fields: [avatarFileId], references: [id], onDelete: Restrict)
+  priceLevel              PriceLevel?              @relation(fields: [priceLevelId], references: [id], onDelete: SetNull)
+  staffServices           StaffService[]
+  shifts                  StaffShift[]
+  calendarEvents          CalendarEvent[]
+  bookingItems            BookingItem[]
+  compensationPlans       StaffCompensationPlan[]
+  earnings                StaffEarning[]
+  payrollResults          PayrollResult[]
+  soldOrderItems          OrderItem[]
+  reviewStaff             ReviewStaff[]
+  priceRules              PriceRuleStaff[]
+  servicePriceChangeItems ServicePriceChangeItem[]
 
   @@unique([locationId, userId])
   @@index([locationId])
@@ -1767,41 +1778,41 @@ enum ClientNoticeType {
 }
 
 model BookingItem {
-  id              String   @id @default(uuid())
-  bookingId       String
-  locationId      String
-  serviceId       String
-  staffId         String
-  sortOrder       Int      @default(0)
-  startAt         DateTime
-  endAt           DateTime
-  serviceTitle    String   @db.VarChar(150)
-  serviceDuration Int
+  id                   String              @id @default(uuid())
+  bookingId            String
+  locationId           String
+  serviceId            String
+  staffId              String
+  sortOrder            Int                 @default(0)
+  startAt              DateTime
+  endAt                DateTime
+  serviceTitle         String              @db.VarChar(150)
+  serviceDuration      Int
   /// Price layers (docs/pricing-plan.md 2.1), fixed at creation:
   /// base -> staff (level) -> list (surcharges) -> charged (discount) -> customPrice.
   /// CHECK "chargedPrice" = "listPrice" - "discountTotal" lives in raw SQL (migration pricing_core).
-  basePrice       Decimal  @db.Decimal(10, 2)
-  staffPrice      Decimal  @db.Decimal(10, 2)
-  listPrice       Decimal  @db.Decimal(10, 2)
-  discountTotal   Decimal  @db.Decimal(10, 2)
-  chargedPrice    Decimal  @db.Decimal(10, 2)
-  customPrice     Decimal? @db.Decimal(10, 2)
-  staffName       String   @db.VarChar(250)
-  calendarEventId String?  @unique
+  basePrice            Decimal             @db.Decimal(10, 2)
+  staffPrice           Decimal             @db.Decimal(10, 2)
+  listPrice            Decimal             @db.Decimal(10, 2)
+  discountTotal        Decimal             @db.Decimal(10, 2)
+  chargedPrice         Decimal             @db.Decimal(10, 2)
+  customPrice          Decimal?            @db.Decimal(10, 2)
+  staffName            String              @db.VarChar(250)
+  calendarEventId      String?             @unique
   /// Discount an administrator picked (docs/pricing-stage5-api.md), kept when the booking is
   /// priced again; null = AUTO. The rule only with RULE.
   discountChoice       DiscountChoiceMode?
   discountChoiceRuleId String?
 
-  booking          Booking                      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  location         Location                     @relation(fields: [locationId], references: [id], onDelete: Cascade)
-  service          Service                      @relation(fields: [serviceId], references: [id], onDelete: Restrict)
-  staff            Staff                        @relation(fields: [staffId], references: [id], onDelete: Restrict)
-  calendarEvent    CalendarEvent?               @relation(fields: [calendarEventId], references: [id], onDelete: SetNull)
-  earnings         StaffEarning[]
-  orderItems       OrderItem[]
-  priceAdjustments BookingItemPriceAdjustment[]
-  discountChoiceRule PriceRule?               @relation(fields: [discountChoiceRuleId], references: [id], onDelete: SetNull)
+  booking            Booking                      @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  location           Location                     @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  service            Service                      @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  staff              Staff                        @relation(fields: [staffId], references: [id], onDelete: Restrict)
+  calendarEvent      CalendarEvent?               @relation(fields: [calendarEventId], references: [id], onDelete: SetNull)
+  earnings           StaffEarning[]
+  orderItems         OrderItem[]
+  priceAdjustments   BookingItemPriceAdjustment[]
+  discountChoiceRule PriceRule?                   @relation(fields: [discountChoiceRuleId], references: [id], onDelete: SetNull)
 
   @@index([bookingId])
   @@index([locationId])
@@ -2604,4 +2615,100 @@ model EmailMessageEvent {
 
   @@index([messageId, occurredAt])
   @@index([occurredAt])
+}
+
+enum ServicePriceChangeSource {
+  RULE
+  IMPORT
+}
+
+enum ServicePriceChangeStatus {
+  SCHEDULED
+  APPLIED
+  CANCELLED
+  ROLLED_BACK
+}
+
+enum ServicePriceChangeTarget {
+  BASE
+  LEVEL
+  STAFF
+  BUNDLE
+}
+
+/// Why a row was not written on apply or not returned on rollback.
+enum ServicePriceChangeSkip {
+  TARGET_DELETED
+  STAFF_NOT_ASSIGNED
+  BUNDLE_NOT_FIXED
+  CHANGED_AFTER
+  LEVEL_IS_DEFAULT
+}
+
+/// Price change of a location (docs/pricing-stage6-api.md): applied now or from a date.
+model ServicePriceChange {
+  id                   String                   @id @default(uuid())
+  locationId           String
+  source               ServicePriceChangeSource
+  status               ServicePriceChangeStatus
+  /// Local date the prices apply from. "Now" changes store the location today.
+  effectiveDate        DateTime                 @db.Date
+  title                String                   @db.VarChar(200)
+  /// RULE: { mode, value, priceRoundingStep, include } as sent; IMPORT: null.
+  ruleSpec             Json?
+  fileName             String?                  @db.VarChar(255)
+  servicesCount        Int
+  bundlesCount         Int
+  itemsCount           Int
+  /// IMPORT: services created by the same upload.
+  createdServicesCount Int                      @default(0)
+  applySkippedCount    Int                      @default(0)
+  rollbackSkippedCount Int                      @default(0)
+  createdById          String?
+  cancelledById        String?
+  rolledBackById       String?
+  appliedAt            DateTime?
+  cancelledAt          DateTime?
+  rolledBackAt         DateTime?
+  createdAt            DateTime                 @default(now())
+  updatedAt            DateTime                 @updatedAt
+
+  location Location                 @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  items    ServicePriceChangeItem[]
+
+  @@index([locationId, status, effectiveDate])
+  @@index([status, effectiveDate])
+  @@index([locationId, createdAt])
+}
+
+model ServicePriceChangeItem {
+  id           String                   @id @default(uuid())
+  changeId     String
+  targetType   ServicePriceChangeTarget
+  serviceId    String?
+  priceLevelId String?
+  staffId      String?
+  bundleId     String?
+  /// Names at creation, so history survives deleted targets.
+  targetTitle  String                   @db.VarChar(150)
+  levelName    String?                  @db.VarChar(60)
+  staffName    String?                  @db.VarChar(250)
+  /// Null: no level price (as base) / no personal price. Never null for BASE and BUNDLE.
+  beforePrice  Decimal?                 @db.Decimal(10, 2)
+  afterPrice   Decimal?                 @db.Decimal(10, 2)
+  applySkip    ServicePriceChangeSkip?
+  rollbackSkip ServicePriceChangeSkip?
+  rolledBack   Boolean                  @default(false)
+
+  change     ServicePriceChange @relation(fields: [changeId], references: [id], onDelete: Cascade)
+  service    Service?           @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  priceLevel PriceLevel?        @relation(fields: [priceLevelId], references: [id], onDelete: SetNull)
+  staff      Staff?             @relation(fields: [staffId], references: [id], onDelete: SetNull)
+  bundle     ServiceBundle?     @relation(fields: [bundleId], references: [id], onDelete: SetNull)
+
+  @@index([changeId])
+  @@index([serviceId])
+  @@index([priceLevelId])
+  @@index([staffId])
+  @@index([bundleId])
 }

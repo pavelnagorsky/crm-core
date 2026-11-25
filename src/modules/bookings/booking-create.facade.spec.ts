@@ -2492,6 +2492,9 @@ function createBookingService(
     findPriceRoundingStep:
       (location as { findPriceRoundingStep?: unknown }).findPriceRoundingStep ??
       vi.fn().mockResolvedValue('1.00'),
+    getLocale:
+      (location as { getLocale?: unknown }).getLocale ??
+      vi.fn().mockResolvedValue({ timezone: 'UTC', currency: 'BYN' }),
   }) as typeof location;
   // Personal prices come from the staff mock when it has them; none otherwise.
   const pricingStaff = Object.assign(Object.create(staff), {
@@ -2507,6 +2510,7 @@ function createBookingService(
         listLevelPrices: vi.fn().mockResolvedValue([]),
       } as never,
       { listForSnapshot: vi.fn().mockResolvedValue(priceRules) } as never,
+      { listForSnapshot: vi.fn().mockResolvedValue([]) } as never,
       pricingStaff,
       bookingLocation,
       {

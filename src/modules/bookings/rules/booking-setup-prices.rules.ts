@@ -21,6 +21,9 @@ import { BookingStaff } from '../../staff/interfaces/booking-staff.interface.js'
  * With a context (catalogFloor, docs/pricing-stage4-api.md) the ranges include the promotions
  * every online client gets without a code; a promotion may be limited to staff, so each staff
  * member then has a range of their own.
+ *
+ * `listDate` is the day of the catalog (list) prices: the visit date when the setup is for
+ * a visit, the location today by default.
  */
 export function buildBookingSetupPrices(
   book: PriceBook,
@@ -28,6 +31,7 @@ export function buildBookingSetupPrices(
   staff: readonly BookingStaff[],
   dates: readonly string[],
   context: QuoteContext | null = null,
+  listDate: string = book.today,
 ): BookingSetupPrices {
   const performers = new Map<string, string[]>();
   for (const member of staff)
@@ -56,11 +60,15 @@ export function buildBookingSetupPrices(
       const price = catalogPrice.get(serviceId) ?? 0;
       return { min: price, max: price };
     }
-    const key = `${bundleId ?? ''}:${serviceId}:${context ? (staffId ?? '') : book.staffPrice(serviceId, staffId)}`;
+    const key = `${bundleId ?? ''}:${serviceId}:${context ? (staffId ?? '') : book.staffPriceKey(serviceId, staffId, dates)}`;
     let range = lineRanges.get(key);
     if (!range) {
       range = book.priceRange(
-        { bundleId, lines: [{ serviceId, staffId, customPrice: null }], context },
+        {
+          bundleId,
+          lines: [{ serviceId, staffId, customPrice: null }],
+          context,
+        },
         dates,
       );
       lineRanges.set(key, range);
@@ -88,7 +96,14 @@ export function buildBookingSetupPrices(
   const services = new Map(
     catalog.services.map((service) => [
       service.id,
-      toDecimalRange(performedRange(null, service.id)),
+      {
+        ...toDecimalRange(performedRange(null, service.id)),
+        listPrice: MoneyUtils.fromMinor(
+          book.hasService(service.id)
+            ? book.basePriceAt(service.id, listDate)
+            : (catalogPrice.get(service.id) ?? 0),
+        ),
+      },
     ]),
   );
   const bundles = new Map(
@@ -127,7 +142,24 @@ export function buildBookingSetupPrices(
           },
           { min: 0, max: 0 },
         );
-      return [bundle.id, toDecimalRange(range)] as const;
+      // Catalog price today: the package price, or the sum of the service prices of today.
+      const listPrice =
+        priced && serviceIds.every((serviceId) => book.hasService(serviceId))
+          ? (book.fixedPriceAt(bundle.id, listDate) ??
+            serviceIds.reduce(
+              (sum, serviceId) => sum + book.basePriceAt(serviceId, listDate),
+              0,
+            ))
+          : null;
+      return [
+        bundle.id,
+        {
+          ...toDecimalRange(range),
+          ...(listPrice === null
+            ? {}
+            : { listPrice: MoneyUtils.fromMinor(listPrice) }),
+        },
+      ] as const;
     }),
   );
   const staffServicePrices = new Map(

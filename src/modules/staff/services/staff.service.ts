@@ -51,6 +51,7 @@ import { normalizeStaffName } from '../rules/staff-name.rules.js';
 import { BookingStaff } from '../interfaces/booking-staff.interface.js';
 import { StaffPricingProfile } from '../interfaces/staff-pricing-profile.interface.js';
 import { StaffNameMatch } from '../interfaces/staff-name-match.interface.js';
+import { StaffAssignmentRow } from '../interfaces/staff-assignment-row.interface.js';
 import { StaffPersonalPriceRow } from '../interfaces/staff-personal-price-row.interface.js';
 import { StaffServicePriceRow } from '../interfaces/staff-service-price-row.interface.js';
 import { StaffServicePrices } from '../interfaces/staff-service-prices.interface.js';
@@ -686,6 +687,35 @@ export class StaffService {
     return rows.flatMap(({ staff, serviceId, price }) =>
       price === null ? [] : [{ staff, serviceId, price }],
     );
+  }
+
+  /** Every service assignment of the active staff of the location, by staff name, with the personal price. */
+  async listActiveAssignments(
+    locationId: string,
+    db: Prisma.TransactionClient = this.db,
+  ): Promise<StaffAssignmentRow[]> {
+    const rows = await db.staffService.findMany({
+      where: {
+        staff: {
+          location: ACTIVE_LOCATION_WHERE,
+          locationId,
+          status: StaffStatus.ACTIVE,
+        },
+      },
+      select: {
+        staffId: true,
+        serviceId: true,
+        price: true,
+        staff: { select: { name: true } },
+      },
+      orderBy: [{ staff: { name: 'asc' } }, { staffId: 'asc' }, { serviceId: 'asc' }],
+    });
+    return rows.map(({ staffId, serviceId, price, staff }) => ({
+      staffId,
+      staffName: staff.name,
+      serviceId,
+      price,
+    }));
   }
 
   /** Personal prices of one staff member for every service they perform. */

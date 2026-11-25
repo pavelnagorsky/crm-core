@@ -57,7 +57,10 @@ export class PriceWeekMapService {
       snapshot = scoped.snapshot;
       staffId = scoped.staffId;
     }
-    const book = new PriceBook(snapshot);
+    const book = new PriceBook(
+      snapshot,
+      TimeUtils.zonedDateStr(new Date(), snapshot.timezone),
+    );
     if (!book.hasService(query.serviceId))
       throw new AppException(
         ErrorCode.BOOKING_SERVICE_NOT_FOUND,

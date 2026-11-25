@@ -65,7 +65,7 @@ export class BookingSetupServiceDto {
     dto.image = service.imageFile
       ? FileResponseDto.fromEntity(service.imageFile)
       : null;
-    dto.price = MoneyUtils.format(service.price);
+    dto.price = MoneyUtils.format(range.listPrice ?? service.price);
     dto.priceFrom = MoneyUtils.format(range.priceFrom);
     dto.priceTo = MoneyUtils.format(range.priceTo);
     dto.promotion = BookingPromotionLabelDto.fromLabel(range.promotion);

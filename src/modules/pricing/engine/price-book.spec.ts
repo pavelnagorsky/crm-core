@@ -7,6 +7,7 @@ import {
   pricingStaff,
   quoteLine,
   sumBundle,
+  PRICING_TODAY,
 } from './testing/pricing-snapshot.factory.js';
 
 /**
@@ -40,7 +41,7 @@ const snapshot = pricingSnapshot({
     fixedBundle('fixed-without-price', null),
   ],
 });
-const book = new PriceBook(snapshot);
+const book = new PriceBook(snapshot, PRICING_TODAY);
 
 function adjustmentsOf(serviceId: string, staffId: string | null) {
   const { lines } = book.quote({

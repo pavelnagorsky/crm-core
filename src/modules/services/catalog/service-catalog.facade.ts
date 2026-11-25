@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { ServiceStatus } from '@prisma/client';
+import { Prisma, ServiceStatus } from '@prisma/client';
 import { AppCacheService } from '../../../shared/cache/app-cache.service.js';
 import { ReadConsistency } from '../../../shared/cache/enums/read-consistency.enum.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
@@ -19,6 +19,8 @@ import { ServiceFilter } from './interfaces/service-filter.interface.js';
 import { ServicePriceEntry } from './interfaces/service-price-entry.interface.js';
 import { ServiceWithImage } from './interfaces/service-with-image.interface.js';
 import { ServiceWithStaffCount } from './interfaces/service-with-staff-count.interface.js';
+import { ServicePriceCatalog } from './interfaces/service-price-catalog.interface.js';
+import { ServicePriceCatalogReadService } from './services/service-price-catalog-read.service.js';
 import { ServiceBundleReadService } from './services/service-bundle-read.service.js';
 import { ServiceCatalogReadService } from './services/service-catalog-read.service.js';
 import { ServiceReadService } from './services/service-read.service.js';
@@ -32,6 +34,7 @@ export class ServiceCatalogFacade {
     private readonly categories: ServiceCategoriesService,
     private readonly locations: LocationService,
     private readonly cache: AppCacheService,
+    private readonly priceCatalog: ServicePriceCatalogReadService,
   ) {}
 
   async loadForBooking(locationId: string): Promise<BookingServiceCatalog> {
@@ -215,6 +218,14 @@ export class ServiceCatalogFacade {
     bundleIds: readonly string[],
   ): Promise<Map<string, string>> {
     return this.bundles.findTitlesInLocation(locationId, bundleIds);
+  }
+
+  /** Categories, services and bundles in any status with their prices: the price file lists them. */
+  loadPriceCatalog(
+    locationId: string,
+    db?: Prisma.TransactionClient,
+  ): Promise<ServicePriceCatalog> {
+    return this.priceCatalog.load(locationId, db);
   }
 
   countBookableServices(locationId: string): Promise<number> {

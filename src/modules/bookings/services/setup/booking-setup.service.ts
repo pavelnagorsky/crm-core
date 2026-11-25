@@ -83,7 +83,13 @@ export class BookingSetupService {
             dates[dates.length - 1],
           )
         : [];
-    const prices = buildBookingSetupPrices(book, catalog, staff, dates, context);
+    const prices = buildBookingSetupPrices(
+      book,
+      catalog,
+      staff,
+      dates,
+      context,
+    );
     const labels = bookingSetupPromotionLabels(promotions, catalog, prices);
     return {
       catalog,
@@ -279,12 +285,17 @@ export class BookingSetupService {
           ),
         ),
       );
-    const totalListPrice = bundle
-      ? BundleMetrics.price(bundle)
-      : selected.reduce(
-          (sum, service) => sum.plus(service.price),
-          new Prisma.Decimal(0),
-        );
+    // Catalog prices of the visit day (the location today without a start), before rules.
+    const priceDate = priceWindow.visit?.date ?? book.today;
+    const totalListPrice = MoneyUtils.fromMinor(
+      (priceBundleId === null
+        ? null
+        : book.fixedPriceAt(priceBundleId, priceDate)) ??
+        selectedIds.reduce(
+          (sum, serviceId) => sum + book.basePriceAt(serviceId, priceDate),
+          0,
+        ),
+    );
     const totalDuration = BundleMetrics.durationMinutes({
       executionMode,
       items: selected.map((service) => ({ service })),

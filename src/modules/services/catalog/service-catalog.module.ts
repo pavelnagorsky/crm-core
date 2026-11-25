@@ -6,6 +6,7 @@ import { ServiceCatalogController } from './controllers/service-catalog.controll
 import { ServiceCatalogItemFactory } from './factories/service-catalog-item.factory.js';
 import { ServiceCatalogFacade } from './service-catalog.facade.js';
 import { ServiceBundleReadService } from './services/service-bundle-read.service.js';
+import { ServicePriceCatalogReadService } from './services/service-price-catalog-read.service.js';
 import { ServiceCatalogReadService } from './services/service-catalog-read.service.js';
 import { ServiceReadService } from './services/service-read.service.js';
 
@@ -17,6 +18,7 @@ import { ServiceReadService } from './services/service-read.service.js';
     ServiceCatalogReadService,
     ServiceReadService,
     ServiceBundleReadService,
+    ServicePriceCatalogReadService,
     ServiceCatalogItemFactory,
   ],
   exports: [ServiceCatalogFacade],

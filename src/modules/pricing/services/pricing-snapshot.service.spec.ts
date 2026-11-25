@@ -47,6 +47,8 @@ describe('PricingSnapshotService', () => {
         staff: [],
         rules: [],
         roundingStep: 100,
+        timezone: 'UTC',
+        priceChanges: [],
       });
     });
 
@@ -472,6 +474,19 @@ describe('PricingSnapshotService', () => {
         dates: ['2028-02-29', '2026-12-31'],
         targets: [{ type: 'BUNDLE', id: 'fixed-bundle', excluded: false }],
       });
+    });
+
+    it('carries the location zone and the scheduled price changes', async () => {
+      const priceChanges = [
+        { id: 'c1', effectiveDate: '2027-01-01', items: [] },
+      ];
+      const { service, getLocale, listScheduledChanges } =
+        pricingSnapshotService({ timezone: 'Europe/Minsk', priceChanges });
+      const snapshot = await service.load('location', ReadConsistency.FRESH);
+      expect(snapshot.timezone).toBe('Europe/Minsk');
+      expect(snapshot.priceChanges).toEqual(priceChanges);
+      expect(getLocale).toHaveBeenCalledWith('location');
+      expect(listScheduledChanges).toHaveBeenCalledWith('location');
     });
 
     it('reads the rules and the step of the requested location only', async () => {

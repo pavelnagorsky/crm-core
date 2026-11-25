@@ -1,5 +1,5 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { PriceLevel } from '@prisma/client';
+import { Prisma, PriceLevel } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
@@ -11,8 +11,11 @@ export class PriceLevelReadService {
   constructor(private readonly db: DatabaseService) {}
 
   /** Levels of the location, the default one included, in display order. */
-  listLevels(locationId: string): Promise<PriceLevel[]> {
-    return this.db.priceLevel.findMany({
+  listLevels(
+    locationId: string,
+    db: Prisma.TransactionClient = this.db,
+  ): Promise<PriceLevel[]> {
+    return db.priceLevel.findMany({
       where: { locationId },
       orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }, { id: 'asc' }],
     });
@@ -54,8 +57,11 @@ export class PriceLevelReadService {
   }
 
   /** Level prices of the location's services. The default level has none: its price is the base price. */
-  listLevelPrices(locationId: string): Promise<ServiceLevelPriceRow[]> {
-    return this.db.serviceLevelPrice.findMany({
+  listLevelPrices(
+    locationId: string,
+    db: Prisma.TransactionClient = this.db,
+  ): Promise<ServiceLevelPriceRow[]> {
+    return db.serviceLevelPrice.findMany({
       where: { priceLevel: { locationId, isDefault: false } },
       orderBy: [{ serviceId: 'asc' }, { priceLevelId: 'asc' }],
       select: { serviceId: true, priceLevelId: true, price: true },

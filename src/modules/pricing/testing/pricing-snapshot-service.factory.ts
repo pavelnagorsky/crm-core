@@ -53,14 +53,20 @@ export function pricingSnapshotService(
   const findPriceRoundingStep = vi.fn(
     async () => options.roundingStep ?? '1.00',
   );
+  const listScheduledChanges = vi.fn(async () => options.priceChanges ?? []);
+  const getLocale = vi.fn(async () => ({
+    timezone: options.timezone ?? 'UTC',
+    currency: 'BYN',
+  }));
   const getBookingSettings = vi.fn(async () => ({ brandId: 'brand' }));
   const cache = createTestCache(options.cacheEnabled ?? true);
   const service = new PricingSnapshotService(
     { loadCatalogSnapshot } as never,
     { listLevels, listLevelPrices } as unknown as PriceLevelReadService,
     { listForSnapshot } as never,
+    { listForSnapshot: listScheduledChanges } as never,
     { listPricingProfiles } as never,
-    { getBookingSettings, findPriceRoundingStep } as never,
+    { getBookingSettings, findPriceRoundingStep, getLocale } as never,
     cache,
   );
   return {
@@ -73,5 +79,7 @@ export function pricingSnapshotService(
     listForSnapshot,
     findPriceRoundingStep,
     getBookingSettings,
+    getLocale,
+    listScheduledChanges,
   };
 }
