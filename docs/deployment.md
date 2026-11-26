@@ -60,7 +60,7 @@ IMAGE_TAG=<sha> bash scripts/deploy/deploy.sh
 `45.87.219.81` - общий хост под ISPmanager (на нём же прод другого проекта: чужие контейнеры,
 сети и общий `~/.docker` не трогать, глобальный `docker prune` не запускать).
 
-- Каталог `/opt/klendo-core`: `.env` (копия `.env.staging`), `secrets/google-credentials.json`
+- Каталог `/opt/klendo-core`: `.env` (пишет деплой из секрета `ENV_FILE`), `secrets/google-credentials.json`
   (читается UID 1000), остальное кладёт деплой.
 - Postgres 13 стоит на хосте (не в compose), база `booking-crm-stage`, роль `api`.
 - HTTPS: vhost `stage-api.klendo.by` в ISPmanager проксирует на `127.0.0.1:3000`
@@ -73,6 +73,7 @@ IMAGE_TAG=<sha> bash scripts/deploy/deploy.sh
 | --- | --- | --- |
 | `DEPLOY_SSH_KEY` | secret | приватный ключ пользователя деплоя |
 | `DEPLOY_KNOWN_HOSTS` | secret | проверенные строки `ssh-keyscan` сервера |
+| `ENV_FILE` | secret | всё содержимое `.env.stage` (секреты бэкенда, `CORE_IMAGE`) |
 | `DEPLOY_HOST` | variable | адрес сервера |
 | `DEPLOY_USER` | variable | пользователь деплоя |
 | `DEPLOY_PORT` | variable | необязательно, по умолчанию `22` |
@@ -89,10 +90,10 @@ Compose читает только `.env` в каталоге проекта. К�
 | --- | --- | --- |
 | `.env.example` | репозиторий | да: шаблон со всеми переменными, без секретов |
 | `.env` | у разработчика и на каждом сервере | нет |
-| `.env.staging`, `.env.production` | у владельца и в менеджере паролей, на сервер копируются как `.env` | нет |
+| `.env.stage`, `.env.production` | у владельца и в менеджере паролей; содержимое - секрет `ENV_FILE` окружения GitHub | нет |
 
-`.env.staging` на сервер: `scp .env.staging <host>:/opt/klendo-core/.env`. Строку `IMAGE_TAG`
-дописывает деплой: при замене файла целиком допишите её обратно или просто запустите деплой.
+Каждый деплой записывает `.env` на сервер из секрета `ENV_FILE` (весь файл целиком), затем `deploy.sh`
+дописывает `IMAGE_TAG`. Поменять настройку: обновить секрет и перезапустить деплой.
 Новая переменная в коде - сразу в `.env.example` и в оба серверных файла.
 
 ## Миграции

@@ -112,6 +112,14 @@ jobs:
           EOF
       - name: Copy compose files
         run: rsync -az --delete --relative compose.yaml docker scripts/deploy deploy:"$DEPLOY_PATH"/
+      - name: Write .env
+        # The server .env is the environment secret ENV_FILE (never in git). Replaced atomically, mode 600.
+        env:
+          ENV_FILE: ${{ secrets.ENV_FILE }}
+        run: |
+          test -n "$ENV_FILE" || { echo 'ENV_FILE secret is empty' >&2; exit 1; }
+          printf '%s\n' "$ENV_FILE" |
+            ssh deploy "umask 077 && cat > '$DEPLOY_PATH/.env.next' && mv '$DEPLOY_PATH/.env.next' '$DEPLOY_PATH/.env'"
       - name: Deploy
         env:
           TOKEN: ${{ secrets.GITHUB_TOKEN }}
