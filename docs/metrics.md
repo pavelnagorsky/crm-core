@@ -88,4 +88,4 @@ Prometheus напрямую — `http://127.0.0.1:9090` (только для о�
 
   Без неё панели Postgres пустые, `pg_up = 0`; остальное работает.
 - Память: Prometheus до 512 МБ, экспортеры по 64 МБ (`mem_limit`).
-- Деплой (`prod-deploy.yml`) поднимает `prometheus` и экспортеры вместе с Loki и Grafana.
+- Деплой (`scripts/deploy/deploy.sh`) поднимает `prometheus` и экспортеры вместе с Loki и Grafana.
