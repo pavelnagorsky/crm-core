@@ -943,6 +943,14 @@ export const ErrorCode = {
     code: 'PROMO_CODE_TAKEN',
     message: 'Another promotion already has this promo code',
   },
+  PRICE_ANALYTICS_FILTER_INVALID: {
+    code: 'PRICE_ANALYTICS_FILTER_INVALID',
+    message: 'A rule filter needs the reason PROMOTION or SURCHARGE',
+  },
+  PRICE_ANALYTICS_EXPORT_TOO_LARGE: {
+    code: 'PRICE_ANALYTICS_EXPORT_TOO_LARGE',
+    message: 'Too many items to export; narrow the period or the filters',
+  },
   PROMOTION_NOT_APPLICABLE: {
     code: 'PROMOTION_NOT_APPLICABLE',
     message: 'The promotion does not apply to this service',

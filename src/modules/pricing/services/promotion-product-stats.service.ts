@@ -171,7 +171,12 @@ export class PromotionProductStatsService {
         type: OrderItemType.PRODUCT,
         status: OrderItemStatus.CONFIRMED,
         confirmedAt: { ...(since && { gte: since }), lte: to },
-        order: { locationId, status: OrderStatus.ACTIVE },
+        order: {
+          locationId,
+          status: OrderStatus.ACTIVE,
+          // Products of a deleted booking are not counted, as in usageCounts.
+          OR: [{ bookingId: null }, { booking: { deletedAt: null } }],
+        },
         priceAdjustments: { some: layer },
       },
       select: {
@@ -220,8 +225,9 @@ export class PromotionProductStatsService {
   }
 
   /**
-   * Clients of the live bookings the promotion page counts (visit in the period, an item
-   * with the promotion), to count distinct clients over bookings and sales.
+   * Clients of the bookings the promotion page counts (confirmed or completed, the visit
+   * started in the period, an item with the promotion), to count distinct clients over
+   * bookings and sales.
    */
   private async bookingClientIds(
     locationId: string,
@@ -232,11 +238,11 @@ export class PromotionProductStatsService {
     const items = await this.db.bookingItem.findMany({
       where: {
         locationId,
-        startAt: { ...(since && { gte: since }), lte: now },
         booking: {
-          status: { not: BookingStatus.CANCELLED },
+          status: { in: [BookingStatus.CONFIRMED, BookingStatus.COMPLETED] },
           deletedAt: null,
           clientId: { not: null },
+          startAt: { ...(since && { gte: since }), lte: now },
         },
         priceAdjustments: {
           some: { kind: PriceAdjustmentKind.PROMOTION, ruleId },

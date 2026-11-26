@@ -22,11 +22,19 @@ const LIVE_BOOKING = {
   status: { not: BookingStatus.CANCELLED },
   deletedAt: null,
 } satisfies Prisma.BookingWhereInput;
+/**
+ * Visits the promotion page counts: the statuses of the revenue of the analytics
+ * (dashboard-widget.constants.ts), docs/pricing-stage8-api.md, «База отчёта».
+ */
+const REPORT_STATUSES = [BookingStatus.CONFIRMED, BookingStatus.COMPLETED];
 
 /**
- * Results of promotions (docs/pricing-stage4-api.md, «Страница акции»). The base is live
- * bookings with a visit in the period (up to now) and an item with a PROMOTION layer of the
- * rule. The price layers of booking items are owned here.
+ * Results of promotions (docs/pricing-stage4-api.md, «Страница акции»). The base is
+ * confirmed or completed bookings whose visit has started and lies in the period, with an
+ * item with a PROMOTION layer of the rule and without a custom price (a custom price replaces
+ * the automatic discount, docs/pricing-stage8-api.md). The discount of an item is
+ * listPrice - chargedPrice, as the PROMOTION reason of the analytics. The price layers of
+ * booking items are owned here.
  */
 @Injectable()
 export class BookingPromotionReportService {
@@ -35,14 +43,20 @@ export class BookingPromotionReportService {
     private readonly staff: StaffService,
   ) {}
 
-  /** One promotion over visits since `since` (null: all time) up to now. */
+  /**
+   * One promotion over the visits that started in [since, until] (since null: all time;
+   * until is now, or the end of a past window such as the previous period). Who has not
+   * returned is counted from the current moment, also for a past window: 14 days after a
+   * visit is enough to have booked again.
+   */
   async report(
     locationId: string,
     ruleId: string,
     since: Date | null,
-    now: Date,
+    until: Date,
   ): Promise<PromotionReport> {
-    const rows = await this.items(locationId, ruleId, since, now);
+    const now = new Date();
+    const rows = await this.items(locationId, ruleId, since, until);
     const revenue = sum(rows.map(itemTotal));
     const discount = sum(rows.map((row) => row.discount));
     const bookings = new Set(rows.map((row) => row.bookingId));
@@ -131,18 +145,18 @@ export class BookingPromotionReportService {
         kind: PriceAdjustmentKind.PROMOTION,
         bookingItem: {
           locationId,
+          customPrice: null,
           startAt: { gte: from, lte: to },
-          booking: LIVE_BOOKING,
+          booking: { status: { in: REPORT_STATUSES }, deletedAt: null },
         },
       },
       select: {
-        amount: true,
         bookingItem: {
           select: {
             id: true,
             bookingId: true,
+            listPrice: true,
             chargedPrice: true,
-            customPrice: true,
             booking: { select: { acquiredClient: { select: { id: true } } } },
           },
         },
@@ -154,8 +168,9 @@ export class BookingPromotionReportService {
     let discount = ZERO;
     for (const layer of layers) {
       const item = layer.bookingItem;
-      discount = discount.minus(layer.amount);
-      items.set(item.id, item.customPrice ?? item.chargedPrice);
+      if (!items.has(item.id))
+        discount = discount.plus(item.listPrice.minus(item.chargedPrice));
+      items.set(item.id, item.chargedPrice);
       bookings.add(item.bookingId);
       if (item.booking.acquiredClient) clients.add(item.booking.acquiredClient.id);
     }
@@ -201,13 +216,17 @@ export class BookingPromotionReportService {
     locationId: string,
     ruleId: string,
     since: Date | null,
-    now: Date,
+    until: Date,
   ): Promise<PromotionItemRow[]> {
     const items = await this.db.bookingItem.findMany({
       where: {
         locationId,
-        startAt: { ...(since && { gte: since }), lte: now },
-        booking: LIVE_BOOKING,
+        customPrice: null,
+        booking: {
+          status: { in: REPORT_STATUSES },
+          deletedAt: null,
+          startAt: { ...(since && { gte: since }), lte: until },
+        },
         priceAdjustments: {
           some: { kind: PriceAdjustmentKind.PROMOTION, ruleId },
         },
@@ -219,12 +238,8 @@ export class BookingPromotionReportService {
         staffName: true,
         serviceTitle: true,
         startAt: true,
+        listPrice: true,
         chargedPrice: true,
-        customPrice: true,
-        priceAdjustments: {
-          where: { kind: PriceAdjustmentKind.PROMOTION, ruleId },
-          select: { amount: true },
-        },
         booking: {
           select: {
             clientId: true,
@@ -240,14 +255,14 @@ export class BookingPromotionReportService {
       },
       orderBy: [{ startAt: 'asc' }, { id: 'asc' }],
     });
-    return items.map(({ priceAdjustments, ...item }) => ({
+    return items.map((item) => ({
       ...item,
-      discount: sum(priceAdjustments.map((layer) => layer.amount)).negated(),
+      discount: item.listPrice.minus(item.chargedPrice),
     }));
   }
 
   /**
-   * Clients who booked again after their last completed promotion visit: a live booking in
+   * Clients who booked again after their last promotion visit: a live booking in
    * the brand (clients are brand-level) starting later, without this promotion.
    */
   private async returnedClients(
@@ -329,7 +344,7 @@ function sum(values: readonly Prisma.Decimal[]): Prisma.Decimal {
 }
 
 function itemTotal(row: PromotionItemRow): Prisma.Decimal {
-  return row.customPrice ?? row.chargedPrice;
+  return row.chargedPrice;
 }
 
 function clientName(row: PromotionItemRow): string {
@@ -338,7 +353,7 @@ function clientName(row: PromotionItemRow): string {
     .join(' ');
 }
 
-/** Clients with a completed promotion visit at least 14 days before now, by their last one. */
+/** Clients with a promotion visit of the base at least 14 days before now, by their last one. */
 function returnCandidates(
   rows: readonly PromotionItemRow[],
   now: Date,
@@ -347,7 +362,7 @@ function returnCandidates(
   const byClient = new Map<string, PromotionReturnCandidate>();
   for (const row of rows) {
     const clientId = row.booking.clientId;
-    if (!clientId || row.booking.status !== BookingStatus.COMPLETED) continue;
+    if (!clientId) continue;
     if (row.booking.startAt.getTime() > cutoff) continue;
     const candidate = byClient.get(clientId) ?? {
       clientId,

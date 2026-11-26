@@ -8,9 +8,9 @@ export interface PromotionItemRow {
   staffName: string;
   serviceTitle: string;
   startAt: Date;
+  listPrice: Prisma.Decimal;
   chargedPrice: Prisma.Decimal;
-  customPrice: Prisma.Decimal | null;
-  /** Discount of the promotion on the item, positive. */
+  /** Whole discount of the item with its rounding, listPrice - chargedPrice, positive. */
   discount: Prisma.Decimal;
   booking: {
     clientId: string | null;

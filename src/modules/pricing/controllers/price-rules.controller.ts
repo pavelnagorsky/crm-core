@@ -37,8 +37,13 @@ import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 import { TokenPayload } from '../../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
 import { BookingsFacade } from '../../bookings/bookings.facade.js';
+import { DashboardRangeDto } from '../../dashboard/dto/dashboard-range.dto.js';
 import { InventoryFacade } from '../../inventory/inventory.facade.js';
 import { PRICE_RULE_STATS_DAYS } from '../constants/price-rule.constants.js';
+import { PriceAnalyticsItemsFilterDto } from '../dto/price-analytics-items-filter.dto.js';
+import { PriceAnalyticsItemsRequestDto } from '../dto/price-analytics-items-request.dto.js';
+import { PriceAnalyticsItemsResponseDto } from '../dto/price-analytics-items-response.dto.js';
+import { PriceAnalyticsResponseDto } from '../dto/price-analytics-response.dto.js';
 import { PriceRuleInputDto } from '../dto/price-rule-input.dto.js';
 import { PriceRuleListRequestDto } from '../dto/price-rule-list-request.dto.js';
 import { PriceRulePreviewRequestDto } from '../dto/price-rule-preview-request.dto.js';
@@ -53,17 +58,15 @@ import { SetPriceRuleEnabledDto } from '../dto/set-price-rule-enabled.dto.js';
 import { PromotionReportPeriod } from '../enums/promotion-report-period.enum.js';
 import { PriceRuleView } from '../interfaces/price-rule-view.interface.js';
 import { promotionSummary } from '../rules/promotion-summary.rules.js';
+import { PriceAnalyticsExportService } from '../services/price-analytics-export.service.js';
+import { PriceAnalyticsService } from '../services/price-analytics.service.js';
 import { PriceRulePreviewService } from '../services/price-rule-preview.service.js';
 import { PriceRulesService } from '../services/price-rules.service.js';
 import { PromotionExportService } from '../services/promotion-export.service.js';
 import { PromotionProductStatsService } from '../services/promotion-product-stats.service.js';
+import { PromotionReportService } from '../services/promotion-report.service.js';
 
 const MS_PER_DAY = 86_400_000;
-const REPORT_DAYS: Record<PromotionReportPeriod, number | null> = {
-  [PromotionReportPeriod.DAYS_30]: 30,
-  [PromotionReportPeriod.DAYS_90]: 90,
-  [PromotionReportPeriod.ALL]: null,
-};
 
 /**
  * Surcharges and promotions. Responses carry what the bookings made with each rule, which
@@ -79,6 +82,9 @@ export class PriceRulesController {
     private readonly bookings: BookingsFacade,
     private readonly productStats: PromotionProductStatsService,
     private readonly inventory: InventoryFacade,
+    private readonly analytics: PriceAnalyticsService,
+    private readonly analyticsExports: PriceAnalyticsExportService,
+    private readonly promotionReport: PromotionReportService,
   ) {}
 
   @ApiOperation({
@@ -189,6 +195,82 @@ export class PriceRulesController {
     });
   }
 
+  @ApiOperation({
+    summary:
+      'Discounts and surcharges of the period: regular prices + surcharges - discounts = received, the previous period, rows per reason and per staff member',
+    description:
+      'Services of CONFIRMED and COMPLETED visits that started in the period and not later than now; CONFIRMED product lines of ACTIVE orders confirmed in the period, net of posted returns. Period as in the location analytics; groupBy is ignored.',
+  })
+  @ApiOkResponse({ type: ApiResponse(PriceAnalyticsResponseDto) })
+  @ApiBadRequestResponse({
+    description: 'DASHBOARD_CUSTOM_RANGE_REQUIRED or DASHBOARD_CUSTOM_RANGE_INVALID',
+  })
+  @Permissions(Read(Claim.ANALYTICS_LOCATION))
+  @Get('analytics')
+  async priceAnalytics(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Query() query: DashboardRangeDto,
+  ): Promise<BaseResponseDto<PriceAnalyticsResponseDto>> {
+    return BaseResponseDto.success(
+      PriceAnalyticsResponseDto.fromSummary(
+        await this.analytics.summary(locationId, query),
+      ),
+    );
+  }
+
+  @ApiOperation({
+    summary:
+      'Items of the period whose price a surcharge, a discount or a custom price changed, newest first, with totals over the filter',
+    description:
+      'reason keeps the items with that reason (their other changes are shown too); ruleId only with reason PROMOTION or SURCHARGE; staffId "none" - items without a staff member or seller. compareWithPrevious and groupBy are ignored.',
+  })
+  @ApiOkResponse({ type: ApiResponse(PriceAnalyticsItemsResponseDto) })
+  @ApiBadRequestResponse({
+    description:
+      'PRICE_ANALYTICS_FILTER_INVALID, DASHBOARD_CUSTOM_RANGE_REQUIRED or DASHBOARD_CUSTOM_RANGE_INVALID',
+  })
+  @Permissions(Read(Claim.ANALYTICS_LOCATION))
+  @Get('analytics/items')
+  async priceAnalyticsItems(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Query() query: PriceAnalyticsItemsRequestDto,
+  ): Promise<BaseResponseDto<PriceAnalyticsItemsResponseDto>> {
+    return BaseResponseDto.success(
+      new PriceAnalyticsItemsResponseDto(
+        await this.analytics.items(locationId, query),
+        query.page,
+        query.pageSize,
+      ),
+    );
+  }
+
+  @ApiOperation({
+    summary:
+      'Export the items of the filter (xlsx): date and time in the location zone, the changes as text, a total row',
+  })
+  @ApiProduces(XlsxUtils.mimeType)
+  @ApiOkResponse({
+    description: 'xlsx skidki-i-natsenki-<from>-<to>.xlsx, sheet "Позиции"',
+  })
+  @ApiBadRequestResponse({
+    description:
+      'PRICE_ANALYTICS_EXPORT_TOO_LARGE, payload { limit }: more than 50 000 items; PRICE_ANALYTICS_FILTER_INVALID; DASHBOARD_CUSTOM_RANGE_*',
+  })
+  @Permissions(Read(Claim.ANALYTICS_LOCATION))
+  @Get('analytics/items/export')
+  async exportPriceAnalyticsItems(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Query() query: PriceAnalyticsItemsFilterDto,
+    @Res({ passthrough: true })
+    res: { setHeader: (name: string, value: string) => void },
+  ): Promise<StreamableFile> {
+    const { stream, filename } = this.analyticsExports.items(
+      await this.analytics.exportItems(locationId, query),
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return new StreamableFile(stream, { type: XlsxUtils.mimeType });
+  }
+
   @ApiOperation({ summary: 'Get a surcharge or a promotion' })
   @ApiOkResponse({ type: ApiResponse(PriceRuleResponseDto) })
   @ApiNotFoundResponse({ description: 'PRICE_RULE_NOT_FOUND' })
@@ -217,25 +299,13 @@ export class PriceRulesController {
     @Param('ruleId', ParseUUIDPipe) ruleId: string,
     @Query() query: PromotionReportRequestDto,
   ): Promise<BaseResponseDto<PromotionReportResponseDto>> {
-    await this.rules.get(locationId, ruleId);
-    const now = new Date();
-    const days = REPORT_DAYS[query.period ?? PromotionReportPeriod.DAYS_30];
-    const since =
-      days === null ? null : new Date(now.getTime() - days * MS_PER_DAY);
-    const visits = await this.bookings.getPromotionReport(
-      locationId,
-      ruleId,
-      since,
-      now,
-    );
+    const { rule } = await this.rules.get(locationId, ruleId);
     return BaseResponseDto.success(
       PromotionReportResponseDto.fromReport(
-        await this.productStats.fullReport(
+        await this.promotionReport.build(
           locationId,
-          ruleId,
-          since,
-          now,
-          visits,
+          rule,
+          query.period ?? PromotionReportPeriod.DAYS_30,
         ),
       ),
     );

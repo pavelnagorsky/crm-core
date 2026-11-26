@@ -28,6 +28,7 @@ import { OrderPaymentService } from './services/order-payment.service.js';
 import { OrderPersistenceService } from './services/order-persistence.service.js';
 import { OrderProductTransitionService } from './services/order-product-transition.service.js';
 import { OrderProductPricingService } from './services/order-product-pricing.service.js';
+import { OrderPriceAnalyticsService } from './services/order-price-analytics.service.js';
 import { OrderPricingPreviewService } from './services/order-pricing-preview.service.js';
 import { OrderReturnService } from './services/order-return.service.js';
 
@@ -56,6 +57,7 @@ import { OrderReturnService } from './services/order-return.service.js';
     OrderPricingCalculator,
     OrderProductPricingService,
     OrderPricingPreviewService,
+    OrderPriceAnalyticsService,
     OrderPersistenceService,
     OrderDraftService,
     OrderBookingSyncService,

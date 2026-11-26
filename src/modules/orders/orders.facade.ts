@@ -41,6 +41,9 @@ import { OrderPaymentService } from './services/order-payment.service.js';
 import { OrderPersistenceService } from './services/order-persistence.service.js';
 import { OrderProductTransitionService } from './services/order-product-transition.service.js';
 import { OrderReturnService } from './services/order-return.service.js';
+import { OrderPriceAnalyticsService } from './services/order-price-analytics.service.js';
+import { PriceAnalyticsItem } from '../pricing/interfaces/price-analytics-item.interface.js';
+import { PriceAnalyticsQuery } from '../pricing/interfaces/price-analytics-query.interface.js';
 @Injectable()
 export class OrdersFacade {
   constructor(
@@ -56,6 +59,7 @@ export class OrdersFacade {
     private readonly orderPayments: OrderPaymentService,
     private readonly pricingPreview: OrderPricingPreviewService,
     private readonly productPricing: OrderProductPricingService,
+    private readonly priceAnalytics: OrderPriceAnalyticsService,
   ) {}
   create(
     locationId: string,
@@ -461,5 +465,25 @@ export class OrdersFacade {
   ): Promise<string | undefined> {
     if (!dto.dateFrom && !dto.dateTo) return undefined;
     return (await this.locations.getLocale(locationId)).timezone;
+  }
+
+  /**
+   * Product lines of the discounts and surcharges report: CONFIRMED lines of ACTIVE orders
+   * confirmed in [from, to), split into regular price, surcharges, discounts and what was
+   * received, net of posted returns; fully returned lines are left out.
+   */
+  getPriceAnalyticsItems(
+    locationId: string,
+    query: PriceAnalyticsQuery,
+  ): Promise<PriceAnalyticsItem[]> {
+    return this.priceAnalytics.items(locationId, query);
+  }
+
+  /** How many product lines the report loader would select (before returns and reasons). */
+  countPriceAnalyticsCandidates(
+    locationId: string,
+    query: PriceAnalyticsQuery,
+  ): Promise<number> {
+    return this.priceAnalytics.countCandidates(locationId, query);
   }
 }

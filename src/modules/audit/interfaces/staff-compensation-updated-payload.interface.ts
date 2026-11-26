@@ -5,5 +5,6 @@ export interface StaffCompensationUpdatedPayload {
   fixedSalaryAmount: string | null;
   hourlyRate: string | null;
   salaryMode: string;
+  commissionBase?: string;
   currency: string;
 }

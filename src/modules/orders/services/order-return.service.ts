@@ -24,7 +24,10 @@ import { CreateOrderReturnItemDto } from '../dto/create-order-return-item.dto.js
 import { CreateOrderReturnDto } from '../dto/create-order-return.dto.js';
 import { OrderReturnPreview } from '../interfaces/order-return-preview.interface.js';
 import { ResolvedReturnLine } from '../interfaces/resolved-return-line.interface.js';
-import { allocateReturn } from '../rules/order-return-allocation.rules.js';
+import {
+  allocateReturn,
+  postedReturns,
+} from '../rules/order-return-allocation.rules.js';
 import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
 import { OrderStateRules } from '../rules/order-state.rules.js';
 import { NESTED_PAYMENT_KEY_PREFIX } from '../../payments/constants/payment.constants.js';
@@ -115,7 +118,10 @@ export class OrderReturnService {
             tx,
             item.id,
           );
-          if (item.sellerStaffId) {
+          const orderItem = order.items.find(
+            (line) => line.id === item.orderItemId,
+          );
+          if (item.sellerStaffId && orderItem) {
             await this.earnings.reverseForProductOrderItemAmount(
               locationId,
               orderId,
@@ -125,6 +131,12 @@ export class OrderReturnService {
               actor,
               tx,
               item.id,
+              {
+                lineQuantity: orderItem.quantity,
+                lineTotal: orderItem.lineTotal,
+                returnedQuantity: postedReturns(orderItem).quantity,
+                quantity: item.quantity,
+              },
             );
           }
         }

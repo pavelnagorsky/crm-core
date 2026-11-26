@@ -9,6 +9,7 @@ import { AppException } from '../../../../shared/exceptions/app.exception.js';
 import { MoneyUtils } from '../../../../shared/money/money.utils.js';
 import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
 import { AuditActor } from '../../../audit/interfaces/audit-actor.interface.js';
+import { ProductReturnShare } from '../interfaces/product-return-share.interface.js';
 import { EarningCalculator } from '../calculators/earning.calculator.js';
 import { StaffEarningWriterService } from './staff-earning-writer.service.js';
 import { ACTIVE_LOCATION_WHERE } from '../../../../shared/database/active-business.where.js';
@@ -29,6 +30,7 @@ export class ProductSaleEarningReversalService {
     orderItemId?: string,
     baseAmountByOrderItem: Map<string, Prisma.Decimal> = new Map(),
     returnItemByOrderItem: Map<string, string> = new Map(),
+    returnShareByOrderItem: Map<string, ProductReturnShare> = new Map(),
   ): Promise<StaffEarning[]> {
     const originals = await tx.staffEarning.findMany({
       where: {
@@ -59,8 +61,21 @@ export class ProductSaleEarningReversalService {
         new Prisma.Decimal(0),
       );
       const remainingBaseAmount = original.baseAmount.minus(reversedBaseAmount);
+      const returnShare = returnShareByOrderItem.get(original.orderItemId);
+      // The earning's base differs from the line total (commission from the list price): take
+      // the same share of that base as the return takes of the line. The CHARGED base is the
+      // line total, so the returned line total is already the right base.
       const requestedBaseAmount =
-        baseAmountByOrderItem.get(original.orderItemId) ?? remainingBaseAmount;
+        returnShare && !original.baseAmount.equals(returnShare.lineTotal)
+          ? MoneyUtils.allocateCumulative(
+              original.baseAmount,
+              returnShare.lineQuantity,
+              returnShare.quantity,
+              returnShare.returnedQuantity,
+              reversedBaseAmount,
+            )
+          : (baseAmountByOrderItem.get(original.orderItemId) ??
+            remainingBaseAmount);
       if (requestedBaseAmount.lte(0) || remainingBaseAmount.lte(0)) {
         reversals.push(...existingReversals);
         continue;

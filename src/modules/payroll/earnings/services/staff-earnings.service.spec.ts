@@ -1,6 +1,6 @@
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Test } from '@nestjs/testing';
-import { BookingStatus, Prisma } from '@prisma/client';
+import { BookingStatus, CommissionBase, Prisma } from '@prisma/client';
 import { bookingItemPrices } from '../../../bookings/testing/factories/booking-item-prices.factory.js';
 import { booking as bookingFixture } from '../../../bookings/testing/factories/booking.factory.js';
 import { BookingFixtureOptions } from '../../../bookings/testing/interfaces/booking-fixture-options.interface.js';
@@ -339,6 +339,7 @@ describe('StaffEarningsService', () => {
           orderItemId: 'order-item-1',
           staffId: 'anna',
           amount: new Prisma.Decimal(80),
+          listAmount: new Prisma.Decimal(80),
           description: 'Shampoo',
         },
       ],
@@ -417,6 +418,232 @@ describe('StaffEarningsService', () => {
     expect(data.baseAmount.toFixed(2)).toBe('30.00');
   });
 
+  describe('commission base', () => {
+    const discounted = (customPrice: string | null = null) =>
+      booking({
+        items: [
+          {
+            ...booking().items[0],
+            ...bookingItemPrices('100.00', '20.00'),
+            customPrice: customPrice ? new Prisma.Decimal(customPrice) : null,
+          },
+        ],
+      });
+
+    const planWith = (commissionBase: CommissionBase | undefined) =>
+      compensation.resolveForDate.mockResolvedValue({
+        id: 'plan-1',
+        commissionBase,
+        productCommissionPercent: new Prisma.Decimal(10),
+      } as CompensationPlanWithRates);
+
+    const echoUpsert = () =>
+      db.staffEarning.upsert.mockImplementation(({ create: data }) =>
+        Promise.resolve({ id: 'earn-1', ...data }),
+      );
+
+    it.each([
+      [undefined, null, '80', '32'],
+      [CommissionBase.CHARGED, null, '80', '32'],
+      [CommissionBase.LIST, null, '100', '40'],
+      [CommissionBase.CHARGED, '60.00', '60', '24'],
+      [CommissionBase.LIST, '60.00', '100', '40'],
+      [CommissionBase.CHARGED, '130.00', '130', '52'],
+      [CommissionBase.LIST, '130.00', '130', '52'],
+    ])(
+      'takes a booking commission from the right price (plan %s, own price %s)',
+      async (commissionBase, customPrice, expectedBase, expectedAmount) => {
+        planWith(commissionBase);
+        compensation.resolveServicePercent.mockReturnValue('40');
+        echoUpsert();
+
+        const [earning] = await service.recordForCompletedBooking(
+          discounted(customPrice),
+          db as never,
+        );
+
+        expect(earning.baseAmount?.toString()).toBe(expectedBase);
+        expect(earning.amount.toString()).toBe(expectedAmount);
+      },
+    );
+
+    const syncTx = () => ({
+      payrollPeriod: { findFirst: vi.fn().mockResolvedValue(null) },
+      staffEarning: {
+        findMany: vi
+          .fn()
+          .mockResolvedValue([
+            { staffId: 'anna', amount: new Prisma.Decimal('40.00') },
+          ]),
+        upsert: vi.fn(({ create: data }) =>
+          Promise.resolve({ id: 'adjustment-1', ...data }),
+        ),
+        findUnique: vi.fn(),
+      },
+    });
+
+    it('corrects a changed booking against the list price base', async () => {
+      const tx = syncTx();
+      planWith(CommissionBase.LIST);
+      compensation.resolveServicePercent.mockReturnValue('40');
+
+      // Own price 130 is above the list price 100: the base grows from 100 to 130.
+      const corrections = await service.syncForCompletedBooking(
+        discounted('130.00'),
+        { name: 'Owner', role: AuditActorRole.OWNER },
+        tx as never,
+      );
+
+      expect(corrections[0].amount.toFixed(2)).toBe('12.00');
+      expect(corrections[0].baseAmount?.toString()).toBe('130');
+    });
+
+    it('does not correct a booking whose list price commission is unchanged', async () => {
+      const tx = syncTx();
+      planWith(CommissionBase.LIST);
+      compensation.resolveServicePercent.mockReturnValue('40');
+
+      // The own price 60 is below the list price: the LIST base stays 100.
+      await expect(
+        service.syncForCompletedBooking(
+          discounted('60.00'),
+          { name: 'Owner', role: AuditActorRole.OWNER },
+          tx as never,
+        ),
+      ).resolves.toEqual([]);
+      expect(tx.staffEarning.upsert).not.toHaveBeenCalled();
+    });
+
+    const productTx = () => ({
+      payrollPeriod: { findFirst: vi.fn().mockResolvedValue(null) },
+      staffEarning: {
+        upsert: vi.fn(({ create: data }) =>
+          Promise.resolve({ id: 'earning-1', ...data }),
+        ),
+        findUnique: vi.fn(),
+      },
+    });
+
+    it.each([
+      [undefined, '80', '100', '80', '8'],
+      [CommissionBase.CHARGED, '80', '100', '80', '8'],
+      [CommissionBase.LIST, '80', '100', '100', '10'],
+      [CommissionBase.LIST, '130', '100', '130', '13'],
+    ])(
+      'takes a product commission from the right base (plan %s, line %s, list %s)',
+      async (commissionBase, amount, listAmount, expectedBase, expected) => {
+        planWith(commissionBase);
+
+        const [earning] = await service.recordForProductOrder(
+          'biz',
+          'order-1',
+          new Date('2026-09-15T10:00:00.000Z'),
+          'RUB',
+          [
+            {
+              orderItemId: 'order-item-1',
+              staffId: 'anna',
+              amount: new Prisma.Decimal(amount),
+              listAmount: new Prisma.Decimal(listAmount),
+              description: 'Shampoo',
+            },
+          ],
+          productTx() as never,
+        );
+
+        expect(earning.baseAmount?.toString()).toBe(expectedBase);
+        expect(earning.amount.toString()).toBe(expected);
+      },
+    );
+
+    const reversalTx = (reversedBases: string[], originalBase = '100.00') => ({
+      payrollPeriod: { findFirst: vi.fn().mockResolvedValue(null) },
+      staffEarning: {
+        findMany: vi
+          .fn()
+          .mockResolvedValueOnce([
+            {
+              id: 'earning-1',
+              staffId: 'anna',
+              amount: new Prisma.Decimal('10.00'),
+              currency: 'RUB',
+              earnedOn: new Date('2026-09-15T00:00:00.000Z'),
+              baseAmount: new Prisma.Decimal(originalBase),
+              ratePercent: new Prisma.Decimal('10.00'),
+              description: 'Shampoo',
+              compensationPlanId: 'plan-1',
+              orderItemId: 'order-item-1',
+            },
+          ])
+          .mockResolvedValueOnce(
+            reversedBases.map((base) => ({
+              baseAmount: new Prisma.Decimal(`-${base}`),
+            })),
+          ),
+        upsert: vi.fn(({ create: data }) =>
+          Promise.resolve({ id: 'reversal-1', ...data }),
+        ),
+        findUnique: vi.fn(),
+      },
+    });
+
+    // A line of 4 pcs sold for 80.00 (list 100.00): the LIST earning base is 100.00.
+    const returnOf = (
+      tx: ReturnType<typeof reversalTx>,
+      quantity: string,
+      returnedLineTotal: string,
+      returnedQuantity: string,
+    ) =>
+      service.reverseForProductOrderItemAmount(
+        'biz',
+        'order-1',
+        'order-item-1',
+        new Prisma.Decimal(returnedLineTotal),
+        'customer returned part',
+        { id: 'owner-1', name: 'Owner', role: AuditActorRole.OWNER },
+        tx as never,
+        'return-item-1',
+        {
+          lineQuantity: new Prisma.Decimal(4),
+          lineTotal: new Prisma.Decimal('80.00'),
+          returnedQuantity: new Prisma.Decimal(returnedQuantity),
+          quantity: new Prisma.Decimal(quantity),
+        },
+      );
+
+    it('reverses the same share of the list price base on a partial return', async () => {
+      const [reversal] = await returnOf(reversalTx([]), '1', '20.00', '0');
+
+      expect(reversal.baseAmount?.toFixed(2)).toBe('25.00');
+      expect(reversal.amount.toFixed(2)).toBe('-2.50');
+      expect(reversal.reversesEarningId).toBeNull();
+    });
+
+    it('reverses the rest of the list price base on the return that completes the line', async () => {
+      const [reversal] = await returnOf(
+        reversalTx(['25.00']),
+        '3',
+        '60.00',
+        '1',
+      );
+
+      expect(reversal.baseAmount?.toFixed(2)).toBe('75.00');
+      expect(reversal.amount.toFixed(2)).toBe('-7.50');
+    });
+
+    it('keeps reversing the returned line total when the base is the line total', async () => {
+      const [reversal] = await returnOf(
+        reversalTx([], '80.00'),
+        '1',
+        '20.00',
+        '0',
+      );
+
+      expect(reversal.baseAmount?.toFixed(2)).toBe('20.00');
+      expect(reversal.amount.toFixed(2)).toBe('-2.00');
+    });
+  });
+
   it('does not consult payroll locks when an order creates no commission', async () => {
     const tx = {
       payrollPeriod: { findFirst: vi.fn() },
@@ -435,6 +662,7 @@ describe('StaffEarningsService', () => {
             orderItemId: 'order-item-1',
             staffId: 'anna',
             amount: new Prisma.Decimal(80),
+            listAmount: new Prisma.Decimal(80),
             description: 'Shampoo',
           },
         ],

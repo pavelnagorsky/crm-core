@@ -1,6 +1,7 @@
 import { ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { BusinessRole, Prisma } from '@prisma/client';
+import { PassThrough } from 'stream';
 import { PermissionGuard } from '../../auth/guards/permission.guard.js';
 import { tokenPayload } from '../../auth/testing/factories/token-payload.factory.js';
 import { PriceLevelFillMode } from '../enums/price-level-fill-mode.enum.js';
@@ -50,6 +51,9 @@ describe('Pricing cabinet controllers', () => {
   const ruleService = { get: vi.fn() };
   const productStats = { saleLines: vi.fn(), fullReport: vi.fn() };
   const inventory = { lastPurchaseUnitCosts: vi.fn() };
+  const analytics = { summary: vi.fn(), items: vi.fn(), exportItems: vi.fn() };
+  const analyticsExports = { items: vi.fn() };
+  const promotionReport = { build: vi.fn() };
   const ruleControllers = () =>
     new PriceRulesController(
       ruleService as never,
@@ -58,6 +62,9 @@ describe('Pricing cabinet controllers', () => {
       bookings as never,
       productStats as never,
       inventory as never,
+      analytics as never,
+      analyticsExports as never,
+      promotionReport as never,
     );
   const checks = () =>
     new PriceCheckController(explain as never, weekMap as never);
@@ -209,10 +216,18 @@ describe('Pricing cabinet controllers', () => {
   });
 
   it('builds the promotion report from the visits and the product lines', async () => {
-    ruleService.get.mockResolvedValue({});
-    const visits = { revenue: new Prisma.Decimal('100') };
-    bookings.getPromotionReport.mockResolvedValue(visits);
-    productStats.fullReport.mockResolvedValue({
+    const rule = { id: 'rule-1', createdAt: new Date('2026-10-01T00:00:00Z') };
+    ruleService.get.mockResolvedValue({ rule });
+    promotionReport.build.mockResolvedValue({
+      period: { from: '2026-10-28', to: '2026-11-26' },
+      previous: {
+        revenue: new Prisma.Decimal('90'),
+        discount: new Prisma.Decimal('12'),
+        bookingsCount: 1,
+        salesCount: 0,
+        clientsCount: 1,
+        returnedRate: 50,
+      },
       revenue: new Prisma.Decimal('130'),
       servicesRevenue: new Prisma.Decimal('100'),
       productsRevenue: new Prisma.Decimal('30'),
@@ -251,14 +266,10 @@ describe('Pricing cabinet controllers', () => {
     const result = (
       await ruleControllers().report('location-1', 'rule-1', {})
     ).responseValue;
-    expect(productStats.fullReport).toHaveBeenCalledWith(
-      'location-1',
-      'rule-1',
-      expect.any(Date),
-      expect.any(Date),
-      visits,
-    );
+    expect(promotionReport.build).toHaveBeenCalledWith('location-1', rule, '30d');
     expect(result).toMatchObject({
+      period: { from: '2026-10-28', to: '2026-11-26' },
+      previous: { revenue: '90.00', discount: '12.00', returnedRate: 50 },
       revenue: '130.00',
       servicesRevenue: '100.00',
       productsRevenue: '30.00',
@@ -511,7 +522,187 @@ describe('Pricing cabinet controllers', () => {
     expect(applied.responseValue).toEqual({ updated: 3 });
   });
 
+  it('maps the discounts and surcharges summary, items and export', async () => {
+    const d = (value: string) => new Prisma.Decimal(value);
+    const totals = {
+      regular: d('100'),
+      surcharges: d('15'),
+      discounts: d('17.25'),
+      received: d('97.75'),
+      listTotal: d('115'),
+      itemsCount: 2,
+      bookingsCount: 1,
+      salesCount: 1,
+      clientsCount: 1,
+    };
+    analytics.summary.mockResolvedValue({
+      period: {
+        from: new Date('2026-11-01T00:00:00Z'),
+        to: new Date('2026-12-01T00:00:00Z'),
+      },
+      previousPeriod: null,
+      currency: 'BYN',
+      totals,
+      previousTotals: null,
+      discounts: [
+        {
+          reason: 'PROMOTION',
+          rule: {
+            id: 'r',
+            name: 'Осень',
+            kind: 'PROMOTION',
+            scenario: 'PROMO_CODE',
+            valueType: 'PERCENT',
+            value: d('15'),
+            promoCode: 'OSEN15',
+            archived: false,
+          },
+          name: 'Осень',
+          bookingsCount: 1,
+          salesCount: 0,
+          clientsCount: 1,
+          itemsCount: 1,
+          amount: d('17.25'),
+          sharePct: 100,
+        },
+      ],
+      surcharges: [],
+      staff: [],
+      discountsCounts: {
+        itemsCount: 1,
+        bookingsCount: 1,
+        salesCount: 0,
+        clientsCount: 1,
+      },
+      surchargesCounts: {
+        itemsCount: 0,
+        bookingsCount: 0,
+        salesCount: 0,
+        clientsCount: 0,
+      },
+    });
+    const summary = await ruleControllers().priceAnalytics('location-1', {
+      period: 'LAST_30D',
+    } as never);
+    expect(analytics.summary).toHaveBeenCalledWith('location-1', {
+      period: 'LAST_30D',
+    });
+    expect(summary.responseValue).toMatchObject({
+      period: { from: '2026-11-01T00:00:00.000Z', to: '2026-12-01T00:00:00.000Z' },
+      previousPeriod: null,
+      totals: {
+        regular: '100.00',
+        surcharges: '15.00',
+        discounts: '17.25',
+        received: '97.75',
+        listTotal: '115.00',
+      },
+      discounts: [
+        {
+          reason: 'PROMOTION',
+          rule: { id: 'r', value: '15.00', promoCode: 'OSEN15' },
+          amount: '17.25',
+          sharePct: 100,
+        },
+      ],
+      discountsCounts: {
+        itemsCount: 1,
+        bookingsCount: 1,
+        salesCount: 0,
+        clientsCount: 1,
+      },
+      surchargesCounts: { itemsCount: 0, clientsCount: 0 },
+    });
+
+    analytics.items.mockResolvedValue({
+      items: [
+        {
+          id: 'oi',
+          itemType: 'PRODUCT',
+          source: 'SALE',
+          bookingId: null,
+          orderId: 'o',
+          at: new Date('2026-11-20T10:00:00Z'),
+          title: 'Шампунь',
+          quantity: d('2'),
+          clientId: null,
+          clientName: null,
+          staffId: 's',
+          staffName: 'Анна',
+          returned: true,
+          regular: d('40'),
+          surcharges: d('0'),
+          discounts: d('6'),
+          received: d('34'),
+          changes: [
+            {
+              reason: 'PROMOTION',
+              ruleId: 'r',
+              name: 'Осень',
+              valueType: 'PERCENT',
+              value: d('15'),
+              amount: d('6'),
+            },
+          ],
+        },
+      ],
+      totalItems: 26,
+      summary: totals,
+      currency: 'BYN',
+    });
+    const items = await ruleControllers().priceAnalyticsItems('location-1', {
+      page: 2,
+      pageSize: 25,
+    } as never);
+    expect(items.responseValue).toMatchObject({
+      page: 2,
+      totalItems: 26,
+      totalPages: 2,
+      currency: 'BYN',
+      items: [
+        {
+          id: 'oi',
+          source: 'SALE',
+          quantity: '2.000',
+          client: null,
+          staff: { id: 's', name: 'Анна' },
+          received: '34.00',
+          returned: true,
+          changes: [{ reason: 'PROMOTION', value: '15.00', amount: '-6.00' }],
+        },
+      ],
+      summary: { received: '97.75' },
+    });
+
+    const data = { items: [] };
+    analytics.exportItems.mockResolvedValue(data);
+    analyticsExports.items.mockReturnValue({
+      stream: new PassThrough(),
+      filename: 'skidki-i-natsenki-2026-11-01-2026-11-30.xlsx',
+    });
+    const setHeader = vi.fn();
+    await ruleControllers().exportPriceAnalyticsItems(
+      'location-1',
+      {} as never,
+      { setHeader },
+    );
+    expect(analyticsExports.items).toHaveBeenCalledWith(data);
+    expect(setHeader).toHaveBeenCalledWith(
+      'Content-Disposition',
+      'attachment; filename="skidki-i-natsenki-2026-11-01-2026-11-30.xlsx"',
+    );
+  });
+
   describe('permissions', () => {
+    it.each(['priceAnalytics', 'priceAnalyticsItems', 'exportPriceAnalyticsItems'])(
+      'PriceRulesController.%s needs analytics.location: the owner and the manager',
+      (handler) => {
+        expect(allowed(PriceRulesController, handler, BusinessRole.OWNER)).toBe(true);
+        expect(allowed(PriceRulesController, handler, BusinessRole.MANAGER)).toBe(true);
+        expect(allowed(PriceRulesController, handler, BusinessRole.STAFF)).toBe(false);
+      },
+    );
+
     const endpoints: [new (...args: never[]) => object, string][] = [
       [PriceRulesController, 'previewRule'],
       [PricingPreviewController, 'previewRounding'],

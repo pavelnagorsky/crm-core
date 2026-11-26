@@ -9,6 +9,7 @@ import { createHash } from 'crypto';
 import { DatabaseService } from '../../../database/database.service.js';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
 import { InventorySaleLine } from '../../inventory/interfaces/inventory-sale-line.interface.js';
@@ -363,6 +364,9 @@ export class OrderProductTransitionService {
                 orderItemId: item.id,
                 staffId: item.sellerStaffId,
                 amount: item.lineTotal,
+                listAmount: MoneyUtils.quantize(
+                  item.quantity.mul(item.listUnitPrice),
+                ),
                 description: item.title,
               },
             ]

@@ -10,6 +10,7 @@ const layer = (
   options: {
     kind?: 'SURCHARGE' | 'PROMOTION';
     itemId?: string;
+    list?: string;
     charged?: string;
     custom?: string | null;
     acquiredClient?: string | null;
@@ -21,6 +22,7 @@ const layer = (
   bookingItem: {
     id: options.itemId ?? `${bookingId}-item`,
     bookingId,
+    listPrice: d(options.list ?? '50.00'),
     chargedPrice: d(options.charged ?? '50.00'),
     customPrice: options.custom ? d(options.custom) : null,
     booking: {
@@ -57,7 +59,7 @@ describe('BookingPriceRuleStatsService', () => {
               gte: new Date('2026-10-24T10:00:00.000Z'),
               lte: NOW,
             },
-            booking: { status: { not: 'CANCELLED' }, deletedAt: null },
+            booking: { status: { in: ['CONFIRMED', 'COMPLETED'] }, deletedAt: null },
           },
         },
       }),
@@ -79,31 +81,74 @@ describe('BookingPriceRuleStatsService', () => {
     expect(stats.has('c')).toBe(false);
   });
 
-  it('gives a promotion its discount as a positive amount, item revenue, new clients and all-time usage', async () => {
+  it('gives a promotion its whole discount (list - charged) as a positive amount, item revenue, new clients and all-time usage', async () => {
     db.bookingItemPriceAdjustment.findMany.mockResolvedValue([
-      layer('p', '-5.00', 'booking-1', {
+      // The layer says 4.90, the item lost 5.00 with its rounding: the item discount counts.
+      layer('p', '-4.90', 'booking-1', {
         kind: 'PROMOTION',
         itemId: 'i1',
+        list: '50.00',
         charged: '45.00',
         acquiredClient: 'client-1',
       }),
       layer('p', '-3.00', 'booking-2', {
         kind: 'PROMOTION',
         itemId: 'i2',
+        list: '30.00',
         charged: '27.00',
-        custom: '20.00',
       }),
     ]);
     db.$queryRaw.mockResolvedValue([{ ruleId: 'p', count: 34 }]);
     const stats = await service.ruleStats('location', ['p'], NOW);
     const promo = stats.get('p');
     expect(promo?.amount.toFixed(2)).toBe('8.00');
-    expect(promo?.revenue.toFixed(2)).toBe('65.00');
+    expect(promo?.revenue.toFixed(2)).toBe('72.00');
     expect(promo).toMatchObject({
       bookingsCount: 2,
       newClients: 1,
       usageCount: 34,
     });
+  });
+
+  it('skips the promotion of an item with a custom price, keeps its surcharge', async () => {
+    db.bookingItemPriceAdjustment.findMany.mockResolvedValue([
+      layer('p', '-3.00', 'booking-1', {
+        kind: 'PROMOTION',
+        itemId: 'i1',
+        list: '30.00',
+        charged: '27.00',
+        custom: '20.00',
+        acquiredClient: 'client-1',
+      }),
+      layer('s', '5.00', 'booking-1', {
+        kind: 'SURCHARGE',
+        itemId: 'i1',
+        custom: '20.00',
+      }),
+    ]);
+    const stats = await service.ruleStats('location', ['p', 's'], NOW);
+    expect(stats.has('p')).toBe(false);
+    expect(stats.get('s')?.amount.toFixed(2)).toBe('5.00');
+  });
+
+  it('counts the discount of an item once over several layers of the rule', async () => {
+    db.bookingItemPriceAdjustment.findMany.mockResolvedValue([
+      layer('p', '-2.00', 'booking-1', {
+        kind: 'PROMOTION',
+        itemId: 'i1',
+        list: '30.00',
+        charged: '27.00',
+      }),
+      layer('p', '-1.00', 'booking-1', {
+        kind: 'PROMOTION',
+        itemId: 'i1',
+        list: '30.00',
+        charged: '27.00',
+      }),
+    ]);
+    const stats = await service.ruleStats('location', ['p'], NOW);
+    expect(stats.get('p')?.amount.toFixed(2)).toBe('3.00');
+    expect(stats.get('p')?.revenue.toFixed(2)).toBe('27.00');
   });
 
   it('keeps the all-time usage of a promotion without visits in the window', async () => {

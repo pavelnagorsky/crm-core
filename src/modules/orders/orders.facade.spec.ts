@@ -316,6 +316,7 @@ function setup() {
     orderPayments,
     pricingPreview as never,
     {} as never,
+    {} as never,
   );
   return {
     service,
@@ -869,6 +870,7 @@ describe('OrdersFacade', () => {
           orderItemId: 'item-1',
           staffId: 'staff-1',
           amount: expect.objectContaining({}),
+          listAmount: expect.objectContaining({}),
           description: 'Shampoo',
         },
       ],
@@ -1697,6 +1699,7 @@ describe('OrdersFacade', () => {
           orderItemId: 'item-1',
           staffId: 'staff-1',
           amount: draftOrder.items[0].lineTotal,
+          listAmount: expect.objectContaining({}),
           description: 'Shampoo',
         },
       ],
@@ -2865,6 +2868,10 @@ describe('OrdersFacade', () => {
       owner,
       tx,
       'return-item-1',
+      expect.objectContaining({
+        lineQuantity: expect.objectContaining({}),
+        returnedQuantity: expect.objectContaining({}),
+      }),
     );
     expect(
       earnings.reverseForProductOrderItemAmount.mock.calls[0][3].toFixed(2),

@@ -11,6 +11,7 @@ import {
 } from 'class-validator';
 import { IsOptionalPrice } from '../../../../shared/decorators/is-price.decorator.js';
 import { IsOptionalPercent } from '../../../../shared/decorators/is-percent.decorator.js';
+import { CommissionBase } from '../enums/commission-base.enum.js';
 import { CompensationSalaryMode } from '../enums/compensation-salary-mode.enum.js';
 import { ServiceCommissionRateDto } from './service-commission-rate.dto.js';
 
@@ -39,6 +40,18 @@ export class ReplaceCompensationPlanDto {
   @IsOptional()
   @IsEnum(CompensationSalaryMode)
   salaryMode?: CompensationSalaryMode;
+
+  @ApiProperty({
+    enum: CommissionBase,
+    enumName: 'CommissionBase',
+    required: false,
+    default: CommissionBase.CHARGED,
+    description:
+      'Price the commission percent is taken from: CHARGED - the price after discounts, LIST - the list price. Applies to service and product commission.',
+  })
+  @IsOptional()
+  @IsEnum(CommissionBase)
+  commissionBase?: CommissionBase;
 
   @ApiProperty({
     type: String,

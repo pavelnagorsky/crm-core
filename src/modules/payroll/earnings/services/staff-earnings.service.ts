@@ -36,6 +36,7 @@ import { RecordProductSaleDto } from '../dto/record-product-sale.dto.js';
 import { StaffEarningSearchRequestDto } from '../dto/staff-earning-search-request.dto.js';
 import { StaffEarningSearchOrderBy } from '../enums/staff-earning-search-order-by.enum.js';
 import { ProductOrderCommissionLine } from '../interfaces/product-order-commission-line.interface.js';
+import { ProductReturnShare } from '../interfaces/product-return-share.interface.js';
 import { ProductSaleEarningReversalService } from './product-sale-earning-reversal.service.js';
 import { StaffEarningWriterService } from './staff-earning-writer.service.js';
 
@@ -112,7 +113,7 @@ export class StaffEarningsService {
       const percent = plan
         ? this.compensation.resolveServicePercent(plan, item.serviceId)
         : null;
-      const base = item.customPrice ?? item.chargedPrice;
+      const base = this.calculator.serviceBase(item, plan?.commissionBase);
       const expected =
         percent === null
           ? new Prisma.Decimal(0)
@@ -301,8 +302,13 @@ export class StaffEarningsService {
         await this.writer.assertDateUnlocked(locationId, earnedOn, tx);
         dateChecked = true;
       }
-      const amount = this.calculator.commission(
+      const base = this.calculator.productBase(
         line.amount,
+        line.listAmount,
+        plan.commissionBase,
+      );
+      const amount = this.calculator.commission(
+        base,
         plan.productCommissionPercent,
       );
       earnings.push(
@@ -315,7 +321,7 @@ export class StaffEarningsService {
             earnedOn,
             amount,
             currency,
-            baseAmount: line.amount,
+            baseAmount: base,
             ratePercent: plan.productCommissionPercent,
             description: line.description,
             idempotencyKey: this.writer.idempotencyKey({
@@ -376,6 +382,7 @@ export class StaffEarningsService {
     actor: AuditActor,
     tx: Prisma.TransactionClient,
     orderReturnItemId?: string,
+    returnShare?: ProductReturnShare,
   ): Promise<StaffEarning[]> {
     return this.productSaleReversals.reverse(
       locationId,
@@ -388,6 +395,7 @@ export class StaffEarningsService {
       orderReturnItemId
         ? new Map([[orderItemId, orderReturnItemId]])
         : new Map(),
+      returnShare ? new Map([[orderItemId, returnShare]]) : new Map(),
     );
   }
 
@@ -690,7 +698,7 @@ export class StaffEarningsService {
         await this.writer.assertDateUnlocked(booking.locationId, earnedOn, tx);
         dateChecked = true;
       }
-      const base = item.customPrice ?? item.chargedPrice;
+      const base = this.calculator.serviceBase(item, plan.commissionBase);
       const amount = this.calculator.commission(base, percent);
       earnings.push(
         await this.writer.insert(

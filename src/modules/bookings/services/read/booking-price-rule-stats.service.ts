@@ -17,10 +17,13 @@ export class BookingPriceRuleStatsService {
   constructor(private readonly db: DatabaseService) {}
 
   /**
-   * What each rule did to the items whose visit started in the last 30 days: the sum of its
-   * layers (a promotion's discount as a positive amount) and distinct bookings; for
-   * promotions also what those items cost, the new clients they brought and the live
-   * bookings with the promotion of all time. Rules without layers are absent from the result.
+   * What each rule did to the items whose visit started in the last 30 days: for a surcharge
+   * the sum of its layers (without the ROUNDING layer after it), for a promotion the whole
+   * discount of its items (listPrice - chargedPrice, with rounding, as the analytics) and
+   * distinct bookings; for promotions also what those items cost, the new clients they brought
+   * and the live bookings with the promotion of all time. Items with a custom price are not
+   * promotion items (it replaces the automatic discount). Rules without layers are absent
+   * from the result.
    */
   async ruleStats(
     locationId: string,
@@ -43,7 +46,7 @@ export class BookingPriceRuleStatsService {
               lte: now,
             },
             booking: {
-              status: { not: BookingStatus.CANCELLED },
+              status: { in: [BookingStatus.CONFIRMED, BookingStatus.COMPLETED] },
               deletedAt: null,
             },
           },
@@ -56,6 +59,7 @@ export class BookingPriceRuleStatsService {
             select: {
               id: true,
               bookingId: true,
+              listPrice: true,
               chargedPrice: true,
               customPrice: true,
               booking: { select: { acquiredClient: { select: { id: true } } } },
@@ -88,22 +92,24 @@ export class BookingPriceRuleStatsService {
       const ruleId = layer.ruleId;
       const item = layer.bookingItem;
       const promotion = layer.kind === PriceAdjustmentKind.PROMOTION;
+      if (promotion && item.customPrice !== null) continue;
       const current = statsOf(ruleId);
       const seen = bookings.get(ruleId) ?? new Set<string>();
       seen.add(item.bookingId);
       bookings.set(ruleId, seen);
       current.bookingsCount = seen.size;
-      current.amount = current.amount.plus(
-        promotion ? layer.amount.negated() : layer.amount,
-      );
-      if (!promotion) continue;
+      if (!promotion) {
+        current.amount = current.amount.plus(layer.amount);
+        continue;
+      }
       const counted = items.get(ruleId) ?? new Set<string>();
       if (!counted.has(item.id)) {
         counted.add(item.id);
         items.set(ruleId, counted);
-        current.revenue = current.revenue.plus(
-          item.customPrice ?? item.chargedPrice,
+        current.amount = current.amount.plus(
+          item.listPrice.minus(item.chargedPrice),
         );
+        current.revenue = current.revenue.plus(item.chargedPrice);
       }
       const acquired = item.booking.acquiredClient?.id;
       if (acquired) {
