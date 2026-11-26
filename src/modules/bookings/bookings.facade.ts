@@ -34,6 +34,9 @@ import { PromotionNotReturnedRow } from '../pricing/interfaces/promotion-not-ret
 import { PromotionPeriodTotals } from '../pricing/interfaces/promotion-period-totals.interface.js';
 import { PromotionReport } from '../pricing/interfaces/promotion-report.interface.js';
 import { BookingPromotionReportService } from './services/read/booking-promotion-report.service.js';
+import { BookingPriceAnalyticsService } from './services/read/booking-price-analytics.service.js';
+import { PriceAnalyticsItem } from '../pricing/interfaces/price-analytics-item.interface.js';
+import { PriceAnalyticsQuery } from '../pricing/interfaces/price-analytics-query.interface.js';
 
 import { BookingStaffingPreviewService } from './services/booking-staffing-preview.service.js';
 import { StaffingPreview } from './interfaces/staffing-preview.interface.js';
@@ -56,6 +59,7 @@ export class BookingsFacade {
     private readonly promotionReports: BookingPromotionReportService,
     private readonly staffingPreview: BookingStaffingPreviewService,
     private readonly pricingContext: PricingContextService,
+    private readonly priceAnalytics: BookingPriceAnalyticsService,
   ) {}
 
   async getBookingSetup(
@@ -323,5 +327,25 @@ export class BookingsFacade {
     )
       return undefined;
     return (await this.locations.getLocale(locationId)).timezone;
+  }
+
+  /**
+   * Booking services of the discounts and surcharges report: CONFIRMED and COMPLETED visits
+   * started in [from, to) and not later than now, split into regular price, surcharges,
+   * discounts and what was received.
+   */
+  getPriceAnalyticsItems(
+    locationId: string,
+    query: PriceAnalyticsQuery,
+  ): Promise<PriceAnalyticsItem[]> {
+    return this.priceAnalytics.items(locationId, query);
+  }
+
+  /** How many booking items the report loader would select (before the reasons are computed). */
+  countPriceAnalyticsCandidates(
+    locationId: string,
+    query: PriceAnalyticsQuery,
+  ): Promise<number> {
+    return this.priceAnalytics.countCandidates(locationId, query);
   }
 }

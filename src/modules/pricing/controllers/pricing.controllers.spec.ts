@@ -230,6 +230,9 @@ describe('Pricing controllers', () => {
       bookings as never,
       productStats as never,
       {} as never,
+      {} as never,
+      {} as never,
+      {} as never,
     );
     const view = {
       rule: priceRuleRecord({

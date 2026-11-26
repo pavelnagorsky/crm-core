@@ -1,5 +1,6 @@
 import { TokenEpochGuard } from '../../auth/guards/token-epoch.guard.js';
 import { BookingPromotionReportService } from '../services/read/booking-promotion-report.service.js';
+import { BookingPriceAnalyticsService } from '../services/read/booking-price-analytics.service.js';
 import { PricingContextService } from '../../pricing/services/pricing-context.service.js';
 import { PromotionPublicService } from '../../pricing/services/promotion-public.service.js';
 import { BookingSelectionService } from '../services/booking-selection.service.js';
@@ -116,6 +117,7 @@ describe('Public booking setup products (HTTP)', () => {
         { provide: BookingPriceRuleStatsService, useValue: {} },
         { provide: BookingStaffingPreviewService, useValue: {} },
         { provide: BookingPromotionReportService, useValue: {} },
+        { provide: BookingPriceAnalyticsService, useValue: {} },
         { provide: PricingContextService, useValue: {} },
         {
           provide: PromotionPublicService,

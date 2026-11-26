@@ -1,19 +1,36 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
 import { MoneyUtils } from '../../../shared/money/money.utils.js';
-import { PromotionFullReport } from '../interfaces/promotion-full-report.interface.js';
+import { PromotionPageReport } from '../interfaces/promotion-page-report.interface.js';
 import { PromotionNotReturnedClientDto } from './promotion-not-returned-client.dto.js';
 import { PromotionNotReturnedDto } from './promotion-not-returned.dto.js';
+import { PromotionReportPeriodDto } from './promotion-report-period.dto.js';
+import { PromotionReportPreviousDto } from './promotion-report-previous.dto.js';
 import { PromotionReportProductDto } from './promotion-report-product.dto.js';
 import { PromotionReportStaffDto } from './promotion-report-staff.dto.js';
 
 /**
- * Results of a promotion (docs/pricing-stage4-api.md, docs/pricing-stage7-api.md «Страница
- * акции»): live bookings with a visit in the period up to now and an item with the
- * promotion, and confirmed product lines with it confirmed in the period (active orders),
- * net of all posted returns.
+ * Results of a promotion (docs/pricing-stage4-api.md, docs/pricing-stage7-api.md,
+ * docs/pricing-stage8-api.md «Страница акции»): confirmed or completed bookings whose visit
+ * started in the period and an item with the promotion, and confirmed product lines with it
+ * confirmed in the period (active orders), net of all posted returns.
  */
 export class PromotionReportResponseDto {
+  @ApiProperty({
+    type: () => PromotionReportPeriodDto,
+    description:
+      'The period of the report as calendar days in the location timezone, both inclusive; the "all" period starts on the day the rule was created.',
+  })
+  period: PromotionReportPeriodDto;
+
+  @ApiProperty({
+    type: () => PromotionReportPreviousDto,
+    nullable: true,
+    description:
+      'The same figures for the 30 or 90 days before the period; null for the period "all".',
+  })
+  previous: PromotionReportPreviousDto | null;
+
   @ApiPrice({ description: 'servicesRevenue + productsRevenue.' })
   revenue: string;
 
@@ -68,7 +85,7 @@ export class PromotionReportResponseDto {
     nullable: true,
     example: 0.42,
     description:
-      'Share 0-1 of clients 14+ days after a completed promotion visit who booked again without the promotion; null when there are none.',
+      'Share 0-1 of clients 14+ days after a promotion visit who booked again without the promotion; null when there are none.',
   })
   returnedRate: number | null;
 
@@ -83,8 +100,12 @@ export class PromotionReportResponseDto {
   @ApiProperty({ type: () => PromotionNotReturnedDto })
   notReturned: PromotionNotReturnedDto;
 
-  static fromReport(report: PromotionFullReport): PromotionReportResponseDto {
+  static fromReport(report: PromotionPageReport): PromotionReportResponseDto {
     const dto = new PromotionReportResponseDto();
+    dto.period = { from: report.period.from, to: report.period.to };
+    dto.previous = report.previous
+      ? PromotionReportPreviousDto.fromPrevious(report.previous)
+      : null;
     dto.revenue = MoneyUtils.format(report.revenue);
     dto.servicesRevenue = MoneyUtils.format(report.servicesRevenue);
     dto.productsRevenue = MoneyUtils.format(report.productsRevenue);

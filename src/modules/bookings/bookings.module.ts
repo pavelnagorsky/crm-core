@@ -46,6 +46,7 @@ import { BookingCalendarReadService } from './services/read/booking-calendar-rea
 import { BookingHistoryReadService } from './services/read/booking-history-read.service.js';
 import { BookingPaymentReadService } from './services/read/booking-payment-read.service.js';
 import { BookingPriceRuleStatsService } from './services/read/booking-price-rule-stats.service.js';
+import { BookingPriceAnalyticsService } from './services/read/booking-price-analytics.service.js';
 import { BookingPromotionReportService } from './services/read/booking-promotion-report.service.js';
 import { BookingReadService } from './services/read/booking-read.service.js';
 import { BookingSetupService } from './services/setup/booking-setup.service.js';
@@ -105,6 +106,7 @@ import { JwtBookingClientStrategy } from './strategies/jwt-booking-client.strate
     BookingCalendarReadService,
     BookingReadService,
     BookingPriceRuleStatsService,
+    BookingPriceAnalyticsService,
     BookingPromotionReportService,
     BookingHistoryReadService,
     BookingSetupService,

@@ -46,6 +46,7 @@ import { BookingPaymentReadService } from './services/read/booking-payment-read.
 import { BookingPriceRuleStatsService } from './services/read/booking-price-rule-stats.service.js';
 import { BookingStaffingPreviewService } from './services/booking-staffing-preview.service.js';
 import { BookingPromotionReportService } from './services/read/booking-promotion-report.service.js';
+import { BookingPriceAnalyticsService } from './services/read/booking-price-analytics.service.js';
 import { PricingContextService } from '../pricing/services/pricing-context.service.js';
 import { PromotionPublicService } from '../pricing/services/promotion-public.service.js';
 import { BookingRepricingService } from './services/write/booking-repricing.service.js';
@@ -209,6 +210,7 @@ describe('BookingsFacade.completeElapsed', () => {
         { provide: BookingPriceRuleStatsService, useValue: {} },
         { provide: BookingStaffingPreviewService, useValue: {} },
         { provide: BookingPromotionReportService, useValue: {} },
+        { provide: BookingPriceAnalyticsService, useValue: {} },
         { provide: PricingContextService, useValue: {} },
         {
           provide: PromotionPublicService,
@@ -396,6 +398,7 @@ describe('BookingsFacade.updateStatus transactionality', () => {
         { provide: BookingPriceRuleStatsService, useValue: {} },
         { provide: BookingStaffingPreviewService, useValue: {} },
         { provide: BookingPromotionReportService, useValue: {} },
+        { provide: BookingPriceAnalyticsService, useValue: {} },
         { provide: PricingContextService, useValue: {} },
         {
           provide: PromotionPublicService,
@@ -494,6 +497,7 @@ describe('BookingsFacade.search', () => {
         { provide: BookingPriceRuleStatsService, useValue: {} },
         { provide: BookingStaffingPreviewService, useValue: {} },
         { provide: BookingPromotionReportService, useValue: {} },
+        { provide: BookingPriceAnalyticsService, useValue: {} },
         { provide: PricingContextService, useValue: {} },
         {
           provide: PromotionPublicService,
@@ -795,6 +799,7 @@ describe('BookingCalendarReadService.listForCalendar', () => {
         { provide: BookingPriceRuleStatsService, useValue: {} },
         { provide: BookingStaffingPreviewService, useValue: {} },
         { provide: BookingPromotionReportService, useValue: {} },
+        { provide: BookingPriceAnalyticsService, useValue: {} },
         { provide: PricingContextService, useValue: {} },
         {
           provide: PromotionPublicService,
@@ -1058,6 +1063,7 @@ describe('BookingsFacade catalog selection', () => {
         { provide: BookingPriceRuleStatsService, useValue: {} },
         { provide: BookingStaffingPreviewService, useValue: {} },
         { provide: BookingPromotionReportService, useValue: {} },
+        { provide: BookingPriceAnalyticsService, useValue: {} },
         { provide: PricingContextService, useValue: {} },
         {
           provide: PromotionPublicService,
@@ -1348,6 +1354,7 @@ describe('BookingsFacade.update details and item prices', () => {
         { provide: BookingPriceRuleStatsService, useValue: {} },
         { provide: BookingStaffingPreviewService, useValue: {} },
         { provide: BookingPromotionReportService, useValue: {} },
+        { provide: BookingPriceAnalyticsService, useValue: {} },
         { provide: PricingContextService, useValue: pricingContext },
         {
           provide: PromotionPublicService,
@@ -1913,6 +1920,7 @@ describe('BookingsFacade.update manual interval', () => {
         { provide: BookingPriceRuleStatsService, useValue: {} },
         { provide: BookingStaffingPreviewService, useValue: {} },
         { provide: BookingPromotionReportService, useValue: {} },
+        { provide: BookingPriceAnalyticsService, useValue: {} },
         { provide: PricingContextService, useValue: {} },
         {
           provide: PromotionPublicService,
@@ -2231,6 +2239,7 @@ describe('BookingsFacade.addProduct', () => {
         { provide: BookingPriceRuleStatsService, useValue: {} },
         { provide: BookingStaffingPreviewService, useValue: {} },
         { provide: BookingPromotionReportService, useValue: {} },
+        { provide: BookingPriceAnalyticsService, useValue: {} },
         { provide: PricingContextService, useValue: {} },
         {
           provide: PromotionPublicService,
@@ -2363,6 +2372,7 @@ describe('BookingsFacade.cancel draft product cleanup', () => {
         { provide: BookingPriceRuleStatsService, useValue: {} },
         { provide: BookingStaffingPreviewService, useValue: {} },
         { provide: BookingPromotionReportService, useValue: {} },
+        { provide: BookingPriceAnalyticsService, useValue: {} },
         { provide: PricingContextService, useValue: {} },
         {
           provide: PromotionPublicService,

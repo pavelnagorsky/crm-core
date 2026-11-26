@@ -608,6 +608,13 @@ enum CompensationSalaryMode {
   GUARANTEED_MINIMUM
 }
 
+/// Price a commission percent is taken from: the price charged to the client (after discounts)
+/// or the list price (docs/pricing-stage8-api.md, «Зарплата: база процента»).
+enum CommissionBase {
+  CHARGED
+  LIST
+}
+
 // ─── Models ──────────────────────────────────────────────────────────────────
 
 model User {
@@ -2074,6 +2081,7 @@ model StaffCompensationPlan {
   serviceCommissionPercent Decimal?               @db.Decimal(5, 2)
   productCommissionPercent Decimal?               @db.Decimal(5, 2)
   salaryMode               CompensationSalaryMode @default(GUARANTEED_MINIMUM)
+  commissionBase           CommissionBase         @default(CHARGED)
   note                     String?                @db.VarChar(1000)
   createdAt                DateTime               @default(now())
 

@@ -1,6 +1,7 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import {
+  PriceRule,
   Prisma,
   PriceRuleKind,
   PriceRuleTargetType,
@@ -83,6 +84,11 @@ export class PriceRulesService {
   ): Promise<PriceRuleView> {
     const rule = await this.reads.findRule(locationId, ruleId);
     return (await this.toViews(locationId, [rule], now))[0];
+  }
+
+  /** Rules of the location with these ids (archived included) for report rows; missing ids are absent. */
+  listByIds(locationId: string, ids: readonly string[]): Promise<PriceRule[]> {
+    return this.reads.listByIds(locationId, ids);
   }
 
   /**

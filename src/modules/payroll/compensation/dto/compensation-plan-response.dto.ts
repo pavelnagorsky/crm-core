@@ -5,6 +5,7 @@ import {
 } from '../../../../shared/decorators/api-decimal.decorator.js';
 import { MoneyUtils } from '../../../../shared/money/money.utils.js';
 import { TimeUtils } from '../../../../shared/time/time.utils.js';
+import { CommissionBase } from '../enums/commission-base.enum.js';
 import { CompensationSalaryMode } from '../enums/compensation-salary-mode.enum.js';
 import { CompensationPlanWithRates } from '../interfaces/compensation-plan-with-rates.interface.js';
 import { CompensationServiceRateResponseDto } from './compensation-service-rate-response.dto.js';
@@ -39,6 +40,9 @@ export class CompensationPlanResponseDto {
     enumName: 'CompensationSalaryMode',
   })
   salaryMode: CompensationSalaryMode;
+
+  @ApiProperty({ enum: CommissionBase, enumName: 'CommissionBase' })
+  commissionBase: CommissionBase;
 
   @ApiProperty({ type: String, nullable: true })
   note: string | null;
@@ -77,6 +81,7 @@ export class CompensationPlanResponseDto {
         ? MoneyUtils.format(plan.productCommissionPercent)
         : null;
     dto.salaryMode = plan.salaryMode;
+    dto.commissionBase = plan.commissionBase;
     dto.note = plan.note;
     dto.serviceRates = plan.serviceRates.map(
       CompensationServiceRateResponseDto.fromEntity,

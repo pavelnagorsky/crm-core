@@ -1,5 +1,10 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { Prisma, PriceRuleKind, PriceScheduleType } from '@prisma/client';
+import {
+  PriceRule,
+  PriceRuleKind,
+  PriceScheduleType,
+  Prisma,
+} from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
@@ -106,6 +111,14 @@ export class PriceRuleReadService {
       },
       include: PRICE_RULE_INCLUDE,
       orderBy: DISPLAY_ORDER,
+    });
+  }
+
+  /** Rules of the location with these ids, archived ones included, without their parts. */
+  listByIds(locationId: string, ids: readonly string[]): Promise<PriceRule[]> {
+    if (ids.length === 0) return Promise.resolve([]);
+    return this.db.priceRule.findMany({
+      where: { locationId, id: { in: [...ids] } },
     });
   }
 }

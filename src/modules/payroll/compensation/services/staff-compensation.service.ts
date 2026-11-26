@@ -17,6 +17,7 @@ import { LocationService } from '../../../location/services/location.service.js'
 import { ServiceCatalogFacade } from '../../../services/catalog/service-catalog.facade.js';
 import { StaffService } from '../../../staff/services/staff.service.js';
 import { ReplaceCompensationPlanDto } from '../dto/replace-compensation-plan.dto.js';
+import { CommissionBase } from '../enums/commission-base.enum.js';
 import { CompensationSalaryMode } from '../enums/compensation-salary-mode.enum.js';
 import { CompensationPlanWithRates } from '../interfaces/compensation-plan-with-rates.interface.js';
 import { assertCompensationVersionStart } from '../rules/compensation-plan.rules.js';
@@ -146,6 +147,7 @@ export class StaffCompensationService {
             productCommissionPercent: dto.productCommissionPercent ?? null,
             salaryMode:
               dto.salaryMode ?? CompensationSalaryMode.GUARANTEED_MINIMUM,
+            commissionBase: dto.commissionBase ?? CommissionBase.CHARGED,
             note: dto.note ?? null,
             serviceRates: serviceRates.length
               ? {
@@ -184,6 +186,7 @@ export class StaffCompensationService {
         fixedSalaryAmount: dto.fixedSalaryAmount ?? null,
         hourlyRate: dto.hourlyRate ?? null,
         salaryMode: plan.salaryMode,
+        commissionBase: plan.commissionBase,
         currency,
       },
     };
