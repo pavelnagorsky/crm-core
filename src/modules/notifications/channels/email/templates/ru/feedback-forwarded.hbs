@@ -1,0 +1,17 @@
+<p style="margin: 0 0 28px; font-size: 16px; line-height: 26px; color: #637381;">{{#if email}}{{tv "intro"}} <strong style="font-weight: 600; color: #1C252E;">{{email}}</strong>.{{else}}{{tv "introPhone"}}{{/if}}</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 0 0 28px;">
+  <tr>
+    <td class="panel" bgcolor="#F4F6F8" style="background: #F4F6F8; border-radius: 12px; padding: 16px 24px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        {{> billingRow label=(tv "name") value=name}}
+        {{#if company}}{{> billingRow label=(tv "company") value=company}}{{/if}}
+        {{#if phone}}{{> billingRow label=(tv "phone") value=phone href=(concat "tel:" phone)}}{{/if}}
+        {{#if email}}{{> billingRow label=(tv "email") value=email href=(concat "mailto:" email)}}{{/if}}
+        {{#if message}}{{> billingRow label=(tv "message") value=message multiline=true}}{{/if}}
+      </table>
+    </td>
+  </tr>
+</table>
+{{> button href=adminLink label=(tv "action")}}
+<p style="margin: 0; font-size: 14px; line-height: 22px; color: #637381;">{{tv "hint"}}</p>
+{{> linkFallback href=adminLink}}

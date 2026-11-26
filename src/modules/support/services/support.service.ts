@@ -1,5 +1,9 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { Prisma, SupportRequestStatus } from '@prisma/client';
+import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { Prisma, SupportRequestStatus, User } from '@prisma/client';
+import { IFrontendConfig } from '../../../config/interfaces/frontend-config.interface.js';
+import { IMailerConfig } from '../../../config/interfaces/mailer-config.interface.js';
 import { DatabaseService } from '../../../database/database.service.js';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
 import { stableOrderBy } from '../../../shared/database/stable-order-by.js';
@@ -8,6 +12,10 @@ import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { PaginatedResult } from '../../../shared/interfaces/paginated-result.interface.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { PrivateFilesService } from '../../files/services/private-files.service.js';
+import { SupportRequestEmailData } from '../../notifications/interfaces/support-request-email-data.interface.js';
+import { SupportRequestForwardedNotification } from '../../notifications/messages/support-request-forwarded.notification.js';
+import { SupportRequestReceivedNotification } from '../../notifications/messages/support-request-received.notification.js';
+import { NOTIFICATION_EVENT } from '../../notifications/services/notifications.service.js';
 import { UserService } from '../../user/services/user.service.js';
 import { CreateSupportRequestDto } from '../dto/create-support-request.dto.js';
 import { SupportRequestSearchRequestDto } from '../dto/support-request-search-request.dto.js';
@@ -25,13 +33,24 @@ const ATTACHMENTS_INCLUDE = {
 
 @Injectable()
 export class SupportService {
+  private readonly supportEmail: string;
+  private readonly domain: string;
+
   constructor(
     private readonly db: DatabaseService,
     private readonly privateFiles: PrivateFilesService,
     private readonly userService: UserService,
-  ) {}
+    private readonly events: EventEmitter2,
+    config: ConfigService,
+  ) {
+    this.supportEmail = config.get<IMailerConfig>('emailConfig')!.supportEmail;
+    this.domain = config.get<IFrontendConfig>('frontend')!.domain;
+  }
 
-  /** `userId` is null for guests. Attachments are linked in the given order. */
+  /**
+   * `userId` is null for guests. Attachments are linked in the given order. Once stored, the author
+   * gets a confirmation and support gets a copy; the emails never fail the request.
+   */
   async create(
     dto: CreateSupportRequestDto,
     userId: string | null,
@@ -43,8 +62,9 @@ export class SupportService {
         HttpStatus.BAD_REQUEST,
       );
     }
-    const email = await this.resolveReplyEmail(dto.email, userId);
-    return this.db.$transaction(async (tx) => {
+    const user = userId ? await this.userService.findById(userId) : null;
+    const email = this.resolveReplyEmail(dto.email, user);
+    const created = await this.db.$transaction(async (tx) => {
       const request = await tx.supportRequest.create({
         data: { userId, email, message: dto.message.trim() },
       });
@@ -63,6 +83,8 @@ export class SupportService {
         attachments: attachmentIds.map((privateFileId) => ({ privateFileId })),
       };
     });
+    this.notify(created, user);
+    return created;
   }
 
   async search(
@@ -173,15 +195,44 @@ export class SupportService {
     return current ?? new Date();
   }
 
-  private async resolveReplyEmail(
+  /** Queued through the notifications listener, which logs its own failures. */
+  private notify(request: SupportRequestWithAttachments, user: User | null) {
+    const data: SupportRequestEmailData = {
+      requestId: request.id,
+      email: request.email,
+      userName: user
+        ? [user.firstName, user.lastName].filter(Boolean).join(' ') ||
+          this.accountEmail(user) ||
+          user.phone
+        : null,
+      message: request.message,
+      attachmentCount: request.attachments.length,
+      adminLink: new URL(
+        `/admin/support/${request.id}/`,
+        this.domain,
+      ).toString(),
+    };
+    this.events.emit(
+      NOTIFICATION_EVENT,
+      new SupportRequestReceivedNotification(data),
+    );
+    this.events.emit(
+      NOTIFICATION_EVENT,
+      new SupportRequestForwardedNotification(this.supportEmail, data),
+    );
+  }
+
+  private accountEmail(user: User | null): string | null {
+    return user?.email?.trim().toLowerCase() || null;
+  }
+
+  private resolveReplyEmail(
     email: string | null | undefined,
-    userId: string | null,
-  ): Promise<string> {
+    user: User | null,
+  ): string {
     const provided = email?.trim().toLowerCase();
     if (provided) return provided;
-    const accountEmail = userId
-      ? (await this.userService.findById(userId)).email?.trim().toLowerCase()
-      : null;
+    const accountEmail = this.accountEmail(user);
     if (!accountEmail) {
       throw new AppException(
         ErrorCode.SUPPORT_EMAIL_REQUIRED,

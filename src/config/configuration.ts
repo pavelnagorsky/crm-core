@@ -59,6 +59,9 @@ export default () => {
     },
     emailConfig: {
       email: process.env['EMAIL'],
+      // Same SMTP server and password; unset means the default mailbox (a dev machine with one test mailbox).
+      salesEmail: process.env['SALES_EMAIL'] || process.env['EMAIL'],
+      supportEmail: process.env['SUPPORT_EMAIL'] || process.env['EMAIL'],
       emailPw: process.env['EMAIL_PW'],
       smtpHost: process.env['SMTP_HOST'] ?? 'smtp.hoster.by',
       smtpPort: parseInt(process.env['SMTP_PORT'] ?? '', 10) || 465,
@@ -66,7 +69,8 @@ export default () => {
     notificationsConfig: {
       // Enabled by default. CLIENT_NOTIFICATIONS_ENABLED=false (dev/stage) mutes only emails to a business's clients: those
       // environments hold fake bookings that may still carry real contacts. Emails to CRM accounts (registration,
-      // password reset, invitations, staff and billing notices) are always sent.
+      // password reset, invitations, staff and billing notices) and to people who wrote to Klendo (support and demo requests)
+      // are always sent.
       clientNotificationsEnabled:
         process.env['CLIENT_NOTIFICATIONS_ENABLED'] !== 'false',
     },

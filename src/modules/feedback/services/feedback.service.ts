@@ -3,12 +3,20 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Feedback, Prisma } from '@prisma/client';
+import { IFrontendConfig } from '../../../config/interfaces/frontend-config.interface.js';
+import { IMailerConfig } from '../../../config/interfaces/mailer-config.interface.js';
 import { DatabaseService } from '../../../database/database.service.js';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
 import { stableOrderBy } from '../../../shared/database/stable-order-by.js';
 import { OrderDirection } from '../../../shared/enums/order-direction.enum.js';
 import { PaginatedResult } from '../../../shared/interfaces/paginated-result.interface.js';
+import { FeedbackEmailData } from '../../notifications/interfaces/feedback-email-data.interface.js';
+import { FeedbackForwardedNotification } from '../../notifications/messages/feedback-forwarded.notification.js';
+import { FeedbackReceivedNotification } from '../../notifications/messages/feedback-received.notification.js';
+import { NOTIFICATION_EVENT } from '../../notifications/services/notifications.service.js';
 import { CreateFeedbackDto } from '../dto/create-feedback.dto.js';
 import { FeedbackSearchRequestDto } from '../dto/feedback-search-request.dto.js';
 import { UpdateFeedbackDto } from '../dto/update-feedback.dto.js';
@@ -16,14 +24,28 @@ import { FeedbackOrderBy } from '../enums/feedback-order-by.enum.js';
 
 @Injectable()
 export class FeedbackService {
-  constructor(private readonly db: DatabaseService) {}
+  private readonly salesEmail: string;
+  private readonly domain: string;
 
-  create(dto: CreateFeedbackDto): Promise<Feedback> {
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly events: EventEmitter2,
+    config: ConfigService,
+  ) {
+    this.salesEmail = config.get<IMailerConfig>('emailConfig')!.salesEmail;
+    this.domain = config.get<IFrontendConfig>('frontend')!.domain;
+  }
+
+  /**
+   * Once stored, sales gets a copy and the author a confirmation when they left an email; the
+   * emails never fail the request.
+   */
+  async create(dto: CreateFeedbackDto): Promise<Feedback> {
     const phone = this.optionalText(dto.phone);
     const email = this.optionalText(dto.email)?.toLowerCase() ?? null;
     if (!phone && !email)
       throw new BadRequestException('Phone or email is required');
-    return this.db.feedback.create({
+    const feedback = await this.db.feedback.create({
       data: {
         name: dto.name.trim(),
         company: this.optionalText(dto.company),
@@ -32,6 +54,8 @@ export class FeedbackService {
         message: this.optionalText(dto.message),
       },
     });
+    this.notify(feedback);
+    return feedback;
   }
 
   async search(
@@ -102,6 +126,31 @@ export class FeedbackService {
     } catch (error) {
       this.rethrowNotFound(error);
     }
+  }
+
+  /** Queued through the notifications listener, which logs its own failures. */
+  private notify(feedback: Feedback): void {
+    const data: FeedbackEmailData = {
+      feedbackId: feedback.id,
+      name: feedback.name,
+      company: feedback.company,
+      phone: feedback.phone,
+      email: feedback.email,
+      message: feedback.message,
+      adminLink: new URL(
+        `/admin/feedback/${feedback.id}/`,
+        this.domain,
+      ).toString(),
+    };
+    if (feedback.email)
+      this.events.emit(
+        NOTIFICATION_EVENT,
+        new FeedbackReceivedNotification(feedback.email, data),
+      );
+    this.events.emit(
+      NOTIFICATION_EVENT,
+      new FeedbackForwardedNotification(this.salesEmail, data),
+    );
   }
 
   private optionalText(value: string | null | undefined): string | null {

@@ -17,4 +17,8 @@ export enum EmailTemplate {
   SUBSCRIPTION_PAYMENT_RECEIVED = 'subscription-payment-received',
   ADMIN_SUBSCRIPTION_PAYMENT_REQUESTED = 'admin-subscription-payment-requested',
   SMTP_TEST = 'smtp-test',
+  SUPPORT_REQUEST_RECEIVED = 'support-request-received',
+  SUPPORT_REQUEST_FORWARDED = 'support-request-forwarded',
+  FEEDBACK_RECEIVED = 'feedback-received',
+  FEEDBACK_FORWARDED = 'feedback-forwarded',
 }

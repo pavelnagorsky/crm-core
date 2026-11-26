@@ -1,0 +1,16 @@
+<p style="margin: 0 0 28px; font-size: 16px; line-height: 26px; color: #637381;">{{tv "intro"}} <strong style="font-weight: 600; color: #1C252E;">{{email}}</strong>.</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 0 0 28px;">
+  <tr>
+    <td class="panel" bgcolor="#F4F6F8" style="background: #F4F6F8; border-radius: 12px; padding: 16px 24px;">
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+        {{> billingRow label=(tv "from") value=email href=(concat "mailto:" email)}}
+        {{#if userName}}{{> billingRow label=(tv "account") value=userName}}{{/if}}
+        {{#if attachmentCount}}{{> billingRow label=(tv "attachments") value=(plural attachmentCount (tv "files"))}}{{/if}}
+        {{> billingRow label=(tv "message") value=message multiline=true}}
+      </table>
+    </td>
+  </tr>
+</table>
+{{> button href=adminLink label=(tv "action")}}
+<p style="margin: 0; font-size: 14px; line-height: 22px; color: #637381;">{{tv "hint"}}</p>
+{{> linkFallback href=adminLink}}

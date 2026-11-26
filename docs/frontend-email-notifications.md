@@ -115,3 +115,30 @@
 | `subscription-payment-received` | владелец | Оплата получена |
 | `admin-subscription-payment-requested` | админ | Новая заявка на оплату |
 | `smtp-test` | админ | Проверка отправки |
+| `support-request-received` | автор обращения | Обращение в поддержку получено |
+| `support-request-forwarded` | ящик поддержки | Новое обращение, ссылка на `/admin/support/<id>/` |
+| `feedback-received` | автор заявки на демо (если оставил email) | Заявка получена |
+| `feedback-forwarded` | ящик продаж | Новая заявка на демо, ссылка на `/admin/feedback/<id>/` |
+
+Письма поддержки и заявок на демо идут с `audience = ACCOUNT`: адрес человек оставил сам, письма
+уходят и на stage.
+
+## Отправители и Reply-To
+
+Правила в одном месте: `src/modules/notifications/rules/email-sender.rules.ts`. Отправитель
+решается по типу письма, поэтому повтор из журнала уходит с того же ящика. Имя отправителя не
+меняется: Klendo или название бренда.
+
+| Письма | From | Reply-To | Строка в подвале |
+| --- | --- | --- | --- |
+| `subscription-*`, `feedback-received` | sales | - | Ответ получит менеджер |
+| `confirm-email`, `reset-password`, `access-invitation`, `staff-booking-event` | noreply | support | Отвечать не нужно |
+| `support-request-received` | noreply | support | Ответьте, чтобы дополнить обращение |
+| `support-request-forwarded`, `feedback-forwarded` | noreply | автор (из данных письма) | Ответ уйдёт клиенту |
+| Письма клиентам бизнеса, `admin-subscription-payment-requested`, `smtp-test` | noreply | - | Отвечать не нужно |
+
+- Адрес автора для Reply-To хранится в данных письма (`payload.replyTo`), поэтому переживает повтор.
+  У заявки только с телефоном Reply-To нет.
+- Письмам клиентам бизнеса Reply-To не ставится: ответ там адресован салону, а не Klendo.
+- Если роли указывают на один ящик (dev), Reply-To, равный From, не ставится.
+- `GET /settings` -> `sender` - ящик noreply. `POST /test` шлёт с него.

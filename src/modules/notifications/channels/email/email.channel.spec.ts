@@ -8,22 +8,39 @@ import { BookingStatusChangedNotification } from '../../messages/booking-status-
 import { ConfirmEmailNotification } from '../../messages/confirm-email.notification.js';
 import { ReviewRequestNotification } from '../../messages/review-request.notification.js';
 import { ResetPasswordNotification } from '../../messages/reset-password.notification.js';
+import { FeedbackForwardedNotification } from '../../messages/feedback-forwarded.notification.js';
+import { FeedbackReceivedNotification } from '../../messages/feedback-received.notification.js';
+import { SupportRequestForwardedNotification } from '../../messages/support-request-forwarded.notification.js';
+import { SupportRequestReceivedNotification } from '../../messages/support-request-received.notification.js';
+import { SupportRequestEmailData } from '../../interfaces/support-request-email-data.interface.js';
+import { FeedbackEmailData } from '../../interfaces/feedback-email-data.interface.js';
 import { EmailChannel } from './email.channel.js';
 import { EmailRenderer } from './email.renderer.js';
 import { EmailTemplate } from '../../enums/email-template.enum.js';
 import { HasEmailChannel } from '../../interfaces/has-email-channel.interface.js';
 import { AbstractNotification } from '../../messages/abstract.notification.js';
 
-const { sendMail } = vi.hoisted(() => ({ sendMail: vi.fn() }));
-vi.mock('nodemailer', () => ({
-  createTransport: () => ({ sendMail }),
-}));
+const { sendMail, createTransport } = vi.hoisted(() => {
+  const sendMail = vi.fn();
+  return {
+    sendMail,
+    createTransport: vi.fn((_options: { auth: { user: string } }) => ({
+      sendMail,
+    })),
+  };
+});
+vi.mock('nodemailer', () => ({ createTransport }));
 
 describe('Email branding', () => {
   const config = new ConfigService({
     app: { locale: 'ru' },
     frontend: { domain: 'https://klendo.by' },
-    emailConfig: { email: 'mail@klendo.example', emailPw: 'test' },
+    emailConfig: {
+      email: 'mail@klendo.example',
+      salesEmail: 'sales@klendo.example',
+      supportEmail: 'support@klendo.example',
+      emailPw: 'test',
+    },
   });
   const locations = { findPublicProfile: vi.fn() };
   const renderer = new EmailRenderer(config);
@@ -216,5 +233,246 @@ describe('Email branding', () => {
     expect(mail.html).toContain('Оставить отзыв');
     expect(mail.html).toContain('Haircut');
     expect(mail.html).toContain('Olga');
+  });
+});
+
+describe('Email senders', () => {
+  const config = new ConfigService({
+    app: { locale: 'ru' },
+    frontend: { domain: 'https://klendo.by' },
+    emailConfig: {
+      email: 'noreply@klendo.example',
+      salesEmail: 'sales@klendo.example',
+      supportEmail: 'support@klendo.example',
+      emailPw: 'secret',
+      smtpHost: 'mail.klendo.example',
+      smtpPort: 465,
+    },
+  });
+  const renderer = new EmailRenderer(config);
+  renderer.onModuleInit();
+  const channel = new EmailChannel(
+    config,
+    renderer,
+    {} as unknown as LocationService,
+  );
+  const support: SupportRequestEmailData = {
+    requestId: 'request-id',
+    email: 'author@example.com',
+    userName: 'Anna Ivanova',
+    message: 'Не работает <b>запись</b>',
+    attachmentCount: 2,
+    adminLink: 'https://klendo.by/admin/support/request-id/',
+  };
+  const feedback: FeedbackEmailData = {
+    feedbackId: 'feedback-id',
+    name: 'Pavel',
+    company: 'Studio',
+    phone: '+375291234567',
+    email: 'lead@example.com',
+    message: 'Хочу демо',
+    adminLink: 'https://klendo.by/admin/feedback/feedback-id/',
+  };
+  /** Sends as the queue worker does: the data goes through the log as JSON. */
+  const send = async (notification: AbstractNotification & HasEmailChannel) => {
+    const payload = notification.toEmail();
+    await channel.transmit(
+      await channel.compose({
+        template: notification.emailTemplate,
+        to: payload.to,
+        data: JSON.parse(JSON.stringify(payload.data)),
+      }),
+    );
+    return sendMail.mock.calls[sendMail.mock.calls.length - 1][0];
+  };
+
+  beforeEach(() => {
+    sendMail.mockReset();
+    sendMail.mockResolvedValue({});
+  });
+
+  it('sends account emails from noreply with Reply-To support', async () => {
+    const mail = await send(
+      new ResetPasswordNotification('user@example.com', '123456'),
+    );
+    expect(mail.from).toEqual({
+      name: 'Klendo',
+      address: 'noreply@klendo.example',
+    });
+    expect(mail.replyTo).toBe('support@klendo.example');
+  });
+
+  it('sends client booking emails from noreply without Reply-To', async () => {
+    const reviews = new EmailChannel(config, renderer, {
+      findPublicProfile: vi.fn().mockResolvedValue({
+        brand: { name: 'Studio Brand', logoFile: null },
+      }),
+    } as unknown as LocationService);
+    const notification = new ReviewRequestNotification(
+      {
+        id: 'booking',
+        locationId: 'location',
+        clientEmail: 'client@example.com',
+        clientFirstName: 'Anna',
+        clientLastName: 'Ivanova',
+        serviceTitle: 'Haircut',
+        staffName: 'Olga',
+        startAt: new Date('2026-10-26T10:00:00Z'),
+        endAt: new Date('2026-10-26T11:00:00Z'),
+        timezone: 'Europe/Moscow',
+      },
+      'https://example.com/manage',
+    );
+    const payload = notification.toEmail();
+    await reviews.transmit(
+      await reviews.compose({
+        template: notification.emailTemplate,
+        ...payload,
+      }),
+    );
+    const mail = sendMail.mock.calls[0][0];
+    expect(mail.from.address).toBe('noreply@klendo.example');
+    expect(mail).not.toHaveProperty('replyTo');
+  });
+
+  it('logs in to SMTP as the sender mailbox, one reused transport per mailbox', async () => {
+    const fresh = new EmailChannel(
+      config,
+      renderer,
+      {} as unknown as LocationService,
+    );
+    const created = createTransport.mock.calls.length;
+    const email = { to: 'user@example.com', subject: 's', html: 'h' };
+    for (const from of [
+      'noreply@klendo.example',
+      'sales@klendo.example',
+      'noreply@klendo.example',
+    ])
+      await fresh.transmit({ ...email, from, replyTo: null, senderName: 'K' });
+    const logins = createTransport.mock.calls
+      .slice(created)
+      .map(([options]) => options.auth.user);
+    expect(logins).toEqual(['noreply@klendo.example', 'sales@klendo.example']);
+    expect(sendMail.mock.calls.map(([mail]) => mail.from.address)).toEqual([
+      'noreply@klendo.example',
+      'sales@klendo.example',
+      'noreply@klendo.example',
+    ]);
+    expect(createTransport.mock.calls[created][0]).toMatchObject({
+      host: 'mail.klendo.example',
+      port: 465,
+      secure: true,
+      auth: { user: 'noreply@klendo.example', pass: 'secret' },
+    });
+  });
+
+  it('confirms a support request to the author with Reply-To support and the escaped message', async () => {
+    const mail = await send(new SupportRequestReceivedNotification(support));
+    expect(mail.to).toBe('author@example.com');
+    expect(mail.from).toEqual({
+      name: 'Klendo',
+      address: 'noreply@klendo.example',
+    });
+    expect(mail.replyTo).toBe('support@klendo.example');
+    expect(mail.subject).toMatch(/^Klendo .+ Получили ваше обращение$/);
+    expect(mail.html).toContain('Здравствуйте! Поддержка Klendo ответит');
+    expect(mail.html).toContain('Не работает &lt;b&gt;запись&lt;/b&gt;');
+    expect(mail.html).toContain(
+      'Ответьте на это письмо, чтобы дополнить обращение.',
+    );
+    expect(mail.html).not.toContain('отвечать на него не нужно');
+    expect(mail.html).not.toContain('admin/support');
+  });
+
+  it('forwards a support request to support with Reply-To the author, kept through the log', async () => {
+    const mail = await send(
+      new SupportRequestForwardedNotification(
+        'support@klendo.example',
+        support,
+      ),
+    );
+    expect(mail.to).toBe('support@klendo.example');
+    expect(mail.from.address).toBe('noreply@klendo.example');
+    expect(mail.replyTo).toBe('author@example.com');
+    expect(mail.html).toContain('href="mailto:author@example.com"');
+    expect(mail.html).toContain('Anna Ivanova');
+    expect(mail.html).toContain('2 файла');
+    expect(mail.html).toContain(
+      'href="https://klendo.by/admin/support/request-id/"',
+    );
+    expect(mail.html).toContain('Не работает &lt;b&gt;запись&lt;/b&gt;');
+    expect(mail.html).toContain(
+      'Письмо отправлено автоматически. Ответ на него уйдёт клиенту.',
+    );
+  });
+
+  it.each([
+    [1, '1 файл'],
+    [5, '5 файлов'],
+    [21, '21 файл'],
+  ])('names %i attachments as "%s"', async (attachmentCount, label) => {
+    const mail = await send(
+      new SupportRequestForwardedNotification('support@klendo.example', {
+        ...support,
+        attachmentCount,
+      }),
+    );
+    expect(mail.html).toContain(`>${label}</td>`);
+  });
+
+  it('confirms a demo request from sales without Reply-To', async () => {
+    const mail = await send(
+      new FeedbackReceivedNotification('lead@example.com', feedback),
+    );
+    expect(mail.to).toBe('lead@example.com');
+    expect(mail.from).toEqual({
+      name: 'Klendo',
+      address: 'sales@klendo.example',
+    });
+    expect(mail).not.toHaveProperty('replyTo');
+    expect(mail.subject).toMatch(/^Klendo .+ Получили вашу заявку на демо$/);
+    expect(mail.html).toContain(
+      'Здравствуйте, <strong style="font-weight: 600; color: #1C252E;">Pavel</strong>! Скоро свяжемся с вами',
+    );
+    expect(mail.html).toContain('Хочу демо');
+    expect(mail.html).toContain(
+      'Письмо отправил отдел продаж Klendo. Ответ на него получит менеджер.',
+    );
+    expect(mail.html).not.toContain('admin/feedback');
+  });
+
+  it('keeps the standard footer on account emails despite Reply-To support', async () => {
+    const mail = await send(
+      new ResetPasswordNotification('user@example.com', '123456'),
+    );
+    expect(mail.html).toContain(
+      'Письмо отправлено автоматически, отвечать на него не нужно.',
+    );
+  });
+
+  it('forwards a demo request to sales with the phone link and Reply-To the author', async () => {
+    const mail = await send(
+      new FeedbackForwardedNotification('sales@klendo.example', feedback),
+    );
+    expect(mail.to).toBe('sales@klendo.example');
+    expect(mail.from.address).toBe('noreply@klendo.example');
+    expect(mail.replyTo).toBe('lead@example.com');
+    expect(mail.html).toContain('href="tel:+375291234567"');
+    expect(mail.html).toContain(
+      'href="https://klendo.by/admin/feedback/feedback-id/"',
+    );
+  });
+
+  it('forwards a phone-only demo request without Reply-To', async () => {
+    const mail = await send(
+      new FeedbackForwardedNotification('sales@klendo.example', {
+        ...feedback,
+        email: null,
+      }),
+    );
+    expect(mail).not.toHaveProperty('replyTo');
+    expect(mail.html).toContain(
+      'Клиент оставил только телефон - позвоните ему.',
+    );
   });
 });

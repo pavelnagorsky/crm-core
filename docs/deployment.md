@@ -118,7 +118,9 @@ Compose читает только `.env` в каталоге проекта. К�
 - При остановке письма, которые уже отправляются, дописываются. Прерванная попытка повторится
   через ~2 минуты.
 - SMTP: `SMTP_HOST` (по умолчанию `smtp.hoster.by`), `SMTP_PORT` (465 - TLS сразу, другие -
-  STARTTLS), логин `EMAIL` / `EMAIL_PW`.
+  STARTTLS). Ящики-отправители на одном сервере с общим паролем `EMAIL_PW`: `EMAIL` (noreply,
+  по умолчанию), `SALES_EMAIL`, `SUPPORT_EMAIL`. Сервер требует, чтобы логин совпадал с From, поэтому
+  каждый ящик входит под собой. Не заданные `SALES_EMAIL` / `SUPPORT_EMAIL` равны `EMAIL`.
 - Журнал, повтор и отмена писем, проверка SMTP - в админке, API `/admin/notifications/emails`
   ([frontend-email-notifications.md](frontend-email-notifications.md)).
 

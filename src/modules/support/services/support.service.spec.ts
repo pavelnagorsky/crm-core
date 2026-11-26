@@ -1,4 +1,6 @@
 import { HttpStatus } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { Prisma, SupportRequestStatus } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
@@ -7,6 +9,9 @@ import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { PrivateFilesService } from '../../files/services/private-files.service.js';
 import { UserService } from '../../user/services/user.service.js';
 import { SupportRequestSearchRequestDto } from '../dto/support-request-search-request.dto.js';
+import { SupportRequestForwardedNotification } from '../../notifications/messages/support-request-forwarded.notification.js';
+import { SupportRequestReceivedNotification } from '../../notifications/messages/support-request-received.notification.js';
+import { NOTIFICATION_EVENT } from '../../notifications/services/notifications.service.js';
 import { SupportService } from './support.service.js';
 
 const FILE_A = '11111111-1111-4111-8111-111111111111';
@@ -39,12 +44,19 @@ function setup() {
   const userService = {
     findById: vi.fn().mockResolvedValue({ email: 'Account@Example.com' }),
   };
+  const events = { emit: vi.fn() };
+  const config = new ConfigService({
+    emailConfig: { supportEmail: 'support@klendo.example' },
+    frontend: { domain: 'https://klendo.example' },
+  });
   const service = new SupportService(
     db as unknown as DatabaseService,
     privateFiles as unknown as PrivateFilesService,
     userService as unknown as UserService,
+    events as unknown as EventEmitter2,
+    config,
   );
-  return { db, privateFiles, userService, service };
+  return { db, privateFiles, userService, events, service };
 }
 
 async function expectAppError(
@@ -122,12 +134,11 @@ describe('SupportService.create', () => {
   });
 
   it('prefers an explicitly provided email over the account email', async () => {
-    const { db, userService, service } = setup();
+    const { db, service } = setup();
     await service.create(
       { message: 'Help', email: 'other@example.com' },
       'user-id',
     );
-    expect(userService.findById).not.toHaveBeenCalled();
     expect(db.supportRequest.create.mock.calls[0][0].data.email).toBe(
       'other@example.com',
     );
@@ -178,6 +189,68 @@ describe('SupportService.create', () => {
       HttpStatus.NOT_FOUND,
     );
     expect(db.supportRequestAttachment.createMany).not.toHaveBeenCalled();
+  });
+
+  it('confirms to the author and forwards to support with Reply-To the author', async () => {
+    const { db, userService, events, service } = setup();
+    db.supportRequest.create.mockImplementation(({ data }: { data: object }) =>
+      Promise.resolve({ id: 'request-id', ...data }),
+    );
+    userService.findById.mockResolvedValue({
+      email: 'Account@Example.com',
+      firstName: 'Anna',
+      lastName: 'Ivanova',
+    });
+    await service.create(
+      { message: 'Help', email: 'reply@example.com', fileIds: [FILE_A] },
+      'user-id',
+    );
+    expect(events.emit).toHaveBeenCalledTimes(2);
+    const [received, forwarded] = events.emit.mock.calls.map(
+      ([event, notification]) => {
+        expect(event).toBe(NOTIFICATION_EVENT);
+        return notification;
+      },
+    );
+    expect(received).toBeInstanceOf(SupportRequestReceivedNotification);
+    expect(received.toEmail()).toEqual({
+      to: 'reply@example.com',
+      data: { message: 'Help' },
+    });
+    expect(forwarded).toBeInstanceOf(SupportRequestForwardedNotification);
+    expect(forwarded.toEmail()).toEqual({
+      to: 'support@klendo.example',
+      data: {
+        requestId: 'request-id',
+        email: 'reply@example.com',
+        userName: 'Anna Ivanova',
+        message: 'Help',
+        attachmentCount: 1,
+        adminLink: 'https://klendo.example/admin/support/request-id/',
+        replyTo: 'reply@example.com',
+      },
+    });
+  });
+
+  it('forwards a guest request without account details', async () => {
+    const { db, events, service } = setup();
+    db.supportRequest.create.mockImplementation(({ data }: { data: object }) =>
+      Promise.resolve({ id: 'request-id', ...data }),
+    );
+    await service.create({ message: 'Help', email: 'guest@example.com' }, null);
+    expect(events.emit.mock.calls[1][1].toEmail().data).toMatchObject({
+      userName: null,
+      replyTo: 'guest@example.com',
+    });
+  });
+
+  it('does not email when the request is not stored', async () => {
+    const { privateFiles, events, service } = setup();
+    privateFiles.attach.mockRejectedValue(new Error('storage down'));
+    await expect(
+      service.create({ message: 'Help', fileIds: [FILE_A] }, 'user-id'),
+    ).rejects.toThrow('storage down');
+    expect(events.emit).not.toHaveBeenCalled();
   });
 
   it('skips attaching when there are no files', async () => {

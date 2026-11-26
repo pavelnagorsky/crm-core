@@ -7,8 +7,10 @@ import { fileURLToPath } from 'url';
 import { IAppConfig } from '../../../../config/interfaces/app-config.interface.js';
 import { IFrontendConfig } from '../../../../config/interfaces/frontend-config.interface.js';
 import { I18nLocale } from '../../../../shared/interfaces/i18n-locale.interface.js';
+import { EmailFooter } from '../../enums/email-footer.enum.js';
 import { EmailTemplate } from '../../enums/email-template.enum.js';
 import { RenderedEmail } from '../../interfaces/rendered-email.interface.js';
+import { EMAIL_SENDER_RULES } from '../../rules/email-sender.rules.js';
 import { EMAIL_CHIP_COLORS, EMAIL_CHIP_TONES } from './email-chips.js';
 
 type CompiledTemplate = Handlebars.TemplateDelegate;
@@ -28,6 +30,10 @@ const PLATFORM_TEMPLATES: ReadonlySet<EmailTemplate> = new Set([
   EmailTemplate.SUBSCRIPTION_PAYMENT_RECEIVED,
   EmailTemplate.ADMIN_SUBSCRIPTION_PAYMENT_REQUESTED,
   EmailTemplate.SMTP_TEST,
+  EmailTemplate.SUPPORT_REQUEST_RECEIVED,
+  EmailTemplate.SUPPORT_REQUEST_FORWARDED,
+  EmailTemplate.FEEDBACK_RECEIVED,
+  EmailTemplate.FEEDBACK_FORWARDED,
 ]);
 /** Sent to the brand's own team: the salon's contacts mean nothing to them. */
 const TEAM_TEMPLATES: ReadonlySet<EmailTemplate> = new Set([
@@ -61,12 +67,16 @@ export class EmailRenderer implements OnModuleInit {
     string
   >;
   private locale!: I18nLocale;
+  private readonly pluralRules: Intl.PluralRules;
   private layoutTemplate!: CompiledTemplate;
   private platformLogo!: Buffer;
 
   constructor(private readonly config: ConfigService) {
     this.hbs = Handlebars.create();
     this.lang = this.config.get<IAppConfig>('app')!.locale;
+    this.pluralRules = new Intl.PluralRules(
+      LANG_TO_INTL_LOCALE[this.lang] ?? 'ru-RU',
+    );
     const domain = this.config.get<IFrontendConfig>('frontend')!.domain;
     this.siteUrl = new URL('/', domain).toString();
     this.platformFooterLinks = Object.fromEntries(
@@ -181,7 +191,7 @@ export class EmailRenderer implements OnModuleInit {
       footerContact: contact.length
         ? [senderName, ...contact].join(' · ')
         : null,
-      footerNote: texts.footerNote ?? null,
+      footerNote: texts.footerNote ?? this.footer(template),
       siteUrl: this.siteUrl,
       footerLinks: isPlatform ? this.platformFooterLinks : null,
       content,
@@ -207,6 +217,16 @@ export class EmailRenderer implements OnModuleInit {
           }
         : {}),
     };
+  }
+
+  /** The footer line about replies, by the sender rule; null keeps the standard "no need to reply". */
+  private footer(template: EmailTemplate): string | null {
+    const footer = EMAIL_SENDER_RULES[template].footer;
+    if (footer === EmailFooter.NO_REPLY) return null;
+    const footers = this.locale.email.common.footers as
+      Record<string, unknown> | undefined;
+    const text = footers?.[footer];
+    return typeof text === 'string' ? text : null;
   }
 
   /** Layout texts of the template, or of its `variant` section when the data names one. */
@@ -272,6 +292,27 @@ export class EmailRenderer implements OnModuleInit {
     );
 
     this.hbs.registerHelper('eq', (a: unknown, b: unknown) => a === b);
+
+    // A link from parts, e.g. (concat "tel:" phone); the result is escaped where it is printed.
+    this.hbs.registerHelper('concat', (...rawArgs: unknown[]) =>
+      rawArgs
+        .slice(0, -1)
+        .map((part) => String(part ?? ''))
+        .join(''),
+    );
+
+    // "2 файла": the count and its form from "one|few|many".
+    this.hbs.registerHelper('plural', (count: unknown, forms: unknown) => {
+      const value = Number(count);
+      const [one, few, many] = String(forms).split('|');
+      const byRule: Partial<Record<Intl.LDMLPluralRule, string>> = {
+        one,
+        few,
+        many,
+      };
+      const form = byRule[this.pluralRules.select(value)] ?? many;
+      return `${value} ${form}`;
+    });
 
     this.hbs.registerHelper('capitalize', (value: unknown) => {
       const text = String(value ?? '');

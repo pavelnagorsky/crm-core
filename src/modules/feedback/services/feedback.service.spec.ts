@@ -1,9 +1,15 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { FeedbackStatus, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
 import { OrderDirection } from '../../../shared/enums/order-direction.enum.js';
 import { FeedbackSearchRequestDto } from '../dto/feedback-search-request.dto.js';
+import { EmailTemplate } from '../../notifications/enums/email-template.enum.js';
+import { FeedbackForwardedNotification } from '../../notifications/messages/feedback-forwarded.notification.js';
+import { FeedbackReceivedNotification } from '../../notifications/messages/feedback-received.notification.js';
+import { NOTIFICATION_EVENT } from '../../notifications/services/notifications.service.js';
 import { FeedbackService } from './feedback.service.js';
 
 function setup() {
@@ -18,18 +24,35 @@ function setup() {
     },
     $transaction: vi.fn((queries: Promise<unknown>[]) => Promise.all(queries)),
   };
-  return { db, service: new FeedbackService(db as unknown as DatabaseService) };
+  db.feedback.create.mockImplementation(({ data }: { data: object }) =>
+    Promise.resolve({ id: 'feedback-id', ...data }),
+  );
+  const events = { emit: vi.fn() };
+  const config = new ConfigService({
+    emailConfig: { salesEmail: 'sales@klendo.example' },
+    frontend: { domain: 'https://klendo.example' },
+  });
+  return {
+    db,
+    events,
+    service: new FeedbackService(
+      db as unknown as DatabaseService,
+      events as unknown as EventEmitter2,
+      config,
+    ),
+  };
 }
 
 describe('Feedback operations', () => {
   it.each([{}, { phone: null, email: null }, { phone: ' ', email: ' ' }])(
     'requires a contact before writing to the database: %j',
-    (contacts) => {
-      const { db, service } = setup();
-      expect(() => service.create({ name: 'Pavel', ...contacts })).toThrow(
-        BadRequestException,
-      );
+    async (contacts) => {
+      const { db, events, service } = setup();
+      await expect(
+        service.create({ name: 'Pavel', ...contacts }),
+      ).rejects.toThrow(BadRequestException);
       expect(db.feedback.create).not.toHaveBeenCalled();
+      expect(events.emit).not.toHaveBeenCalled();
     },
   );
 
@@ -53,6 +76,63 @@ describe('Feedback operations', () => {
         message: null,
       },
     });
+  });
+
+  it('confirms to the author and forwards to sales with Reply-To the author', async () => {
+    const { events, service } = setup();
+    await service.create({
+      name: 'Pavel',
+      company: 'Studio',
+      phone: '+375291234567',
+      email: 'client@example.com',
+      message: 'Demo please',
+    });
+    expect(events.emit).toHaveBeenCalledTimes(2);
+    const [received, forwarded] = events.emit.mock.calls.map(
+      ([event, notification]) => {
+        expect(event).toBe(NOTIFICATION_EVENT);
+        return notification;
+      },
+    );
+    expect(received).toBeInstanceOf(FeedbackReceivedNotification);
+    expect(received.emailTemplate).toBe(EmailTemplate.FEEDBACK_RECEIVED);
+    expect(received.toEmail()).toEqual({
+      to: 'client@example.com',
+      data: {
+        name: 'Pavel',
+        company: 'Studio',
+        phone: '+375291234567',
+        email: 'client@example.com',
+        message: 'Demo please',
+      },
+    });
+    expect(forwarded).toBeInstanceOf(FeedbackForwardedNotification);
+    expect(forwarded.toEmail()).toEqual({
+      to: 'sales@klendo.example',
+      data: expect.objectContaining({
+        feedbackId: 'feedback-id',
+        replyTo: 'client@example.com',
+        adminLink: 'https://klendo.example/admin/feedback/feedback-id/',
+      }),
+    });
+  });
+
+  it('only forwards a phone-only request to sales, without Reply-To', async () => {
+    const { events, service } = setup();
+    await service.create({ name: 'Pavel', phone: '+375291234567' });
+    expect(events.emit).toHaveBeenCalledTimes(1);
+    const notification = events.emit.mock.calls[0][1];
+    expect(notification).toBeInstanceOf(FeedbackForwardedNotification);
+    expect(notification.toEmail().data.replyTo).toBeNull();
+  });
+
+  it('does not email when the request is not stored', async () => {
+    const { db, events, service } = setup();
+    db.feedback.create.mockRejectedValue(new Error('db down'));
+    await expect(
+      service.create({ name: 'Pavel', email: 'a@example.com' }),
+    ).rejects.toThrow('db down');
+    expect(events.emit).not.toHaveBeenCalled();
   });
 
   it('combines status and text search with stable pagination and matching count', async () => {
