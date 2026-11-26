@@ -437,6 +437,22 @@ describe('normalizePriceRuleInput', () => {
         ).toEqual([]);
       });
 
+      it('only products: no public name needed, never shown as a promotion', () => {
+        const rule = normalizePriceRuleInput(
+          promotion({
+            appliesToAllServices: false,
+            targets: [product],
+            publicName: '  ',
+            showAsPromotion: true,
+          }),
+        );
+        expect(rule.promotion?.publicName).toBeNull();
+        expect(rule.promotion?.showAsPromotion).toBe(false);
+        expect(
+          invalidField(promotion({ targets: [product], publicName: '' })),
+        ).toBe('publicName');
+      });
+
       it('needs something included: only product exclusions is 400', () => {
         expect(
           invalidField(

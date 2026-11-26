@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { PriceChangeCatalog } from '@prisma/client';
 import { XlsxUtils } from '../../../shared/xlsx/xlsx.utils.js';
 import {
   PRODUCT_PRICE_IMPORT_MAX_ROWS,
@@ -12,6 +13,7 @@ import { ServicePriceImportFileReason } from '../enums/service-price-import-file
 import { ProductPriceSheetReadResult } from '../interfaces/product-price-sheet-read-result.interface.js';
 import { ProductPriceSheetRow } from '../interfaces/product-price-sheet-row.interface.js';
 import { ServicePriceImportUpload } from '../interfaces/service-price-import-upload.interface.js';
+import { readPriceExportSnapshot } from '../rules/price-export-snapshot.rules.js';
 import { normalizeName } from '../rules/service-price-import.rules.js';
 
 /**
@@ -32,7 +34,7 @@ export class ProductPriceSheetService {
     const grid = workbook
       ? (workbook.sheet(PRODUCT_PRICE_SHEET_NAME) ?? workbook.first())
       : null;
-    if (!grid) return { ok: false, reason: ServicePriceImportFileReason.CORRUPT };
+    if (!workbook || !grid) return { ok: false, reason: ServicePriceImportFileReason.CORRUPT };
 
     const known = new Map<string, ProductPriceSheetColumn>();
     for (const key of Object.values(ProductPriceSheetColumn))
@@ -81,6 +83,7 @@ export class ProductPriceSheetService {
         idHeader: headers[ProductPriceSheetColumn.ID],
         priceHeader: headers[ProductPriceSheetColumn.PRICE],
         rows,
+        snapshot: readPriceExportSnapshot(workbook, PriceChangeCatalog.PRODUCTS),
       },
     };
   }

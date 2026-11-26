@@ -74,11 +74,18 @@ export function productPriceOn(
  */
 export function productChangeRow(
   product: PricedLocationProduct,
-  prices: { before: number; after: number; invalid: boolean; checked: boolean },
+  prices: {
+    before: number;
+    after: number;
+    invalid: boolean;
+    checked: boolean;
+    replacesScheduledDate?: string | null;
+  },
   cost: Prisma.Decimal | null,
   canReadCost: boolean,
 ): ProductPriceChangeRow {
   return {
+    replacesScheduledDate: null,
     key: productRowKey(product.productId),
     productId: product.productId,
     productLocationId: product.productLocationId,

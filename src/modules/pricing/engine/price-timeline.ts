@@ -86,6 +86,18 @@ export class PriceTimeline {
     return result;
   }
 
+  /** Date of the last change on or before the local date; null when the price there is the stored one. */
+  sourceDate(key: string, date: string): string | null {
+    const list = this.points.get(key);
+    if (!list) return null;
+    let result: string | null = null;
+    for (const point of list) {
+      if (point.date > date) break;
+      result = point.date;
+    }
+    return result;
+  }
+
   /** Dates of the target's changes strictly after `from` and not after `to`, ascending. */
   changeDates(key: string, from: string, to: string): string[] {
     const list = this.points.get(key);

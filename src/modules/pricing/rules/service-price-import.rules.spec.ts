@@ -8,10 +8,10 @@ import { ServicePriceImportCatalog } from '../interfaces/service-price-import-ca
 import { ServicePriceSheetRow } from '../interfaces/service-price-sheet-row.interface.js';
 import {
   parseDurationCell,
-  parsePriceCell,
   planServicePriceImport,
   serviceKey,
 } from './service-price-import.rules.js';
+import { parsePriceCell } from './price-cell.rules.js';
 
 const SERVICE_ID = '11111111-1111-4111-8111-111111111111';
 const BUNDLE_ID = '22222222-2222-4222-8222-222222222222';
@@ -67,6 +67,7 @@ const book = (
     rows,
   },
   staff,
+  snapshot: null,
 });
 
 const codes = (plan: ReturnType<typeof planServicePriceImport>) =>

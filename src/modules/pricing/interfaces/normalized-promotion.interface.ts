@@ -8,7 +8,7 @@ import {
 /** Validated promotion fields in stored form; dates are YYYY-MM-DD, money two-digit strings. */
 export interface NormalizedPromotion {
   scenario: PromotionScenario | null;
-  publicName: string;
+  publicName: string | null;
   publicDescription: string | null;
   showAsPromotion: boolean;
   bookingFrom: string | null;

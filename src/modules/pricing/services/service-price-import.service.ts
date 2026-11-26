@@ -42,6 +42,7 @@ import {
   buildImportChange,
 } from '../rules/service-price-import-change.rules.js';
 import { planServicePriceImport } from '../rules/service-price-import.rules.js';
+import { snapshotForLocation } from '../rules/price-export-snapshot.rules.js';
 import { parseImportEffectiveDate } from '../rules/price-import-date.rules.js';
 import { PriceLevelReadService } from './price-level-read.service.js';
 import { ScheduledPriceChangeReadService } from './scheduled-price-change-read.service.js';
@@ -83,7 +84,7 @@ export class ServicePriceImportService {
     now = new Date(),
   ): Promise<ServicePriceImportPreview> {
     const effectiveDate = await this.parseDate(locationId, rawDate, now);
-    const book = await this.readBook(file);
+    const book = await this.readBook(locationId, file);
     const { plan, facts, change } = await this.load(
       locationId,
       book,
@@ -133,7 +134,7 @@ export class ServicePriceImportService {
     now = new Date(),
   ): Promise<ServicePriceImportResult> {
     const effectiveDate = await this.parseDate(locationId, rawDate, now);
-    const book = await this.readBook(file);
+    const book = await this.readBook(locationId, file);
     const early = await this.load(locationId, book, effectiveDate, now);
     this.assertImportable(early.plan);
     if (
@@ -284,10 +285,15 @@ export class ServicePriceImportService {
   }
 
   private async readBook(
+    locationId: string,
     file: ServicePriceImportUpload | undefined,
   ): Promise<ServicePriceBook> {
     const read = await this.sheet.read(file);
-    if (read.ok) return read.book;
+    if (read.ok)
+      return {
+        ...read.book,
+        snapshot: snapshotForLocation(read.book.snapshot, locationId),
+      };
     const { reason, sheet, columns } = read;
     throw new AppException(
       ErrorCode.PRICE_IMPORT_FILE_INVALID,

@@ -10,6 +10,13 @@ import { ServicePriceSheetColumn } from '../enums/service-price-sheet-column.enu
 import { ServicePriceStaffColumn } from '../enums/service-price-staff-column.enum.js';
 import { ServicePriceExportInput } from '../interfaces/service-price-export-input.interface.js';
 import { ServicePriceExportSheets } from '../interfaces/service-price-export-sheets.interface.js';
+import {
+  baseKey,
+  bundleKey,
+  levelKey as levelPriceKey,
+  staffKey,
+} from '../engine/price-timeline.js';
+import { snapshotPrice } from './price-export-snapshot.rules.js';
 
 const ID_WIDTH = 38;
 
@@ -92,6 +99,7 @@ export function buildServicePriceExport(
   );
 
   const rows: Record<string, unknown>[] = [];
+  const exported = new Map<string, string | null>();
   const addGroup = (categoryId: string | null) => {
     for (const service of input.catalog.services) {
       if (service.categoryId !== categoryId) continue;
@@ -104,14 +112,17 @@ export function buildServicePriceExport(
         price: cell(service.price),
         description: service.description ?? '',
       };
+      exported.set(baseKey(service.id), snapshotPrice(service.price));
       for (const level of levels) {
         const price = levelPrices.get(`${service.id}:${level.id}`);
         row[levelKey(level.id)] = price ? cell(price) : '';
+        exported.set(levelPriceKey(service.id, level.id), snapshotPrice(price));
       }
       rows.push(row);
     }
     for (const bundle of bundles) {
       if (bundle.categoryId !== categoryId || !bundle.fixedPrice) continue;
+      exported.set(bundleKey(bundle.id), snapshotPrice(bundle.fixedPrice));
       rows.push({
         id: bundle.id,
         category: categoryId ? (categoryName.get(categoryId) ?? '') : '',
@@ -132,6 +143,10 @@ export function buildServicePriceExport(
   const staffRows = input.assignments.flatMap((assignment) => {
     const title = titles.get(assignment.serviceId);
     if (title === undefined) return [];
+    exported.set(
+      staffKey(assignment.serviceId, assignment.staffId),
+      snapshotPrice(assignment.price),
+    );
     return [
       {
         serviceId: assignment.serviceId,
@@ -148,6 +163,7 @@ export function buildServicePriceExport(
     priceRows: rows,
     staffColumns: staffColumns(),
     staffRows,
+    exported,
   };
 }
 
@@ -180,5 +196,6 @@ export function buildServicePriceTemplate(
     priceRows: [first, second],
     staffColumns: staffColumns(),
     staffRows: [],
+    exported: null,
   };
 }

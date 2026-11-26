@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { PriceChangeCatalog } from '@prisma/client';
 import { TimeUtils } from '../../../shared/time/time.utils.js';
 import { XlsxFile } from '../../../shared/xlsx/interfaces/xlsx-file.interface.js';
 import { XlsxUtils } from '../../../shared/xlsx/xlsx.utils.js';
@@ -10,12 +11,14 @@ import {
   PRODUCT_PRICE_SHEET_NAME,
   PRODUCT_PRICE_TEMPLATE_FILE,
 } from '../constants/product-price-import.constants.js';
+import { writePriceExportSnapshot } from '../rules/price-export-snapshot.rules.js';
 import { buildProductPriceSheet } from '../rules/product-price-export.rules.js';
 
 /**
  * The product price file: the retail prices of the products the location sells. The template
  * is the same sheet under another name: the rows carry the IDs the upload needs, and the
- * upload cannot create products.
+ * upload cannot create products. Both keep their prices in a very hidden sheet, so the upload
+ * changes only the cells people edited.
  */
 @Injectable()
 export class ProductPriceExportService {
@@ -56,6 +59,12 @@ export class ProductPriceExportService {
       const prices = book.addSheet(PRODUCT_PRICE_SHEET_NAME);
       prices.setColumns(sheet.columns);
       for (const row of sheet.rows) prices.addRow(row);
+      writePriceExportSnapshot(book, {
+        catalog: PriceChangeCatalog.PRODUCTS,
+        locationId,
+        exportedAt: new Date().toISOString(),
+        values: sheet.exported,
+      });
     });
   }
 }

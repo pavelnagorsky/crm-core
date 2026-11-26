@@ -28,6 +28,7 @@ import { ProductPriceImportPreview } from '../interfaces/product-price-import-pr
 import { ProductPriceImportResult } from '../interfaces/product-price-import-result.interface.js';
 import { ProductPriceSheet } from '../interfaces/product-price-sheet.interface.js';
 import { ServicePriceImportUpload } from '../interfaces/service-price-import-upload.interface.js';
+import { snapshotForLocation } from '../rules/price-export-snapshot.rules.js';
 import { parseImportEffectiveDate } from '../rules/price-import-date.rules.js';
 import {
   buildProductImportRows,
@@ -74,7 +75,7 @@ export class ProductPriceImportService {
     now = new Date(),
   ): Promise<ProductPriceImportPreview> {
     const effectiveDate = await this.parseDate(locationId, rawDate, now);
-    const sheet = await this.readSheet(file);
+    const sheet = await this.readSheet(locationId, file);
     const { date, plan, rows } = await this.load(
       locationId,
       sheet,
@@ -110,7 +111,7 @@ export class ProductPriceImportService {
     now = new Date(),
   ): Promise<ProductPriceImportResult> {
     const effectiveDate = await this.parseDate(locationId, rawDate, now);
-    const sheet = await this.readSheet(file);
+    const sheet = await this.readSheet(locationId, file);
     this.assertImportable(
       (await this.load(locationId, sheet, effectiveDate, false, now)).plan,
     );
@@ -199,10 +200,15 @@ export class ProductPriceImportService {
 
   /** 400 PRICE_IMPORT_FILE_INVALID { reason[, columns] } for a file that cannot be read. */
   private async readSheet(
+    locationId: string,
     file: ServicePriceImportUpload | undefined,
   ): Promise<ProductPriceSheet> {
     const read = await this.sheets.read(file);
-    if (read.ok) return read.sheet;
+    if (read.ok)
+      return {
+        ...read.sheet,
+        snapshot: snapshotForLocation(read.sheet.snapshot, locationId),
+      };
     throw new AppException(
       ErrorCode.PRICE_IMPORT_FILE_INVALID,
       HttpStatus.BAD_REQUEST,

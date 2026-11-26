@@ -33,6 +33,7 @@ type XlsxStoredColumn = { header: string; key: string; width?: number };
 type XlsxStoredRow = unknown[] | Record<string, unknown>;
 type XlsxStoredSheet = {
   name: string;
+  hidden: boolean;
   columns: XlsxStoredColumn[] | null;
   rows: XlsxStoredRow[];
 };
@@ -76,32 +77,37 @@ export class XlsxUtils {
   /** Streaming workbook. `filename` is the download name, including `.xlsx`. */
   static write(filename: string, build: (book: XlsxBook) => void): XlsxFile {
     const sheets: XlsxStoredSheet[] = [];
-    const book: XlsxBook = {
-      addSheet(name: string, fallback = 'Sheet'): XlsxSheet {
-        const sheet: XlsxStoredSheet = {
-          name: XlsxUtils.sheetName(name, fallback),
-          columns: null,
-          rows: [],
-        };
-        sheets.push(sheet);
-        return {
-          setColumns(columns) {
-            sheet.columns = columns.map((column) => ({ ...column }));
-          },
-          addRow(values) {
-            sheet.rows.push(
-              Array.isArray(values) ? [...values] : { ...values },
-            );
-          },
-        };
-      },
+    const add = (name: string, fallback: string, hidden: boolean): XlsxSheet => {
+      const sheet: XlsxStoredSheet = {
+        name: XlsxUtils.sheetName(name, fallback),
+        hidden,
+        columns: null,
+        rows: [],
+      };
+      sheets.push(sheet);
+      return {
+        setColumns(columns) {
+          sheet.columns = columns.map((column) => ({ ...column }));
+        },
+        addRow(values) {
+          sheet.rows.push(Array.isArray(values) ? [...values] : { ...values });
+        },
+      };
     };
-    build(book);
+    build({
+      addSheet: (name, fallback = 'Sheet') => add(name, fallback, false),
+      addHiddenSheet: (name) => add(name, 'Data', true),
+    });
 
     const stream = new PassThrough();
     const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({ stream });
     for (const sheet of sheets) {
-      const worksheet = workbook.addWorksheet(sheet.name);
+      const worksheet = workbook.addWorksheet(
+        sheet.name,
+        sheet.hidden ? { state: 'veryHidden' } : undefined,
+      );
+      // No password: the lock only keeps the cells from accidental edits. The writer sets it synchronously.
+      if (sheet.hidden) void worksheet.protect('', {});
       const columns = XlsxUtils.columns(sheet);
       if (columns.length > 0) worksheet.columns = columns;
       for (const row of sheet.rows) worksheet.addRow(row).commit();

@@ -101,6 +101,7 @@ function makeRow(
     after,
     invalid,
     checked: !invalid && after !== before,
+    replacesScheduledDate: null,
   };
 }
 

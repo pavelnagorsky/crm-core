@@ -59,6 +59,15 @@ export class ServicePriceChangeRowDto {
   })
   checked: boolean;
 
+  @ApiProperty({
+    type: String,
+    format: 'date',
+    nullable: true,
+    description:
+      'File upload: date of the scheduled change that set "before" and that the new price replaces; null otherwise.',
+  })
+  replacesScheduledDate: string | null;
+
   static fromRow(row: PriceChangeRow): ServicePriceChangeRowDto {
     const dto = new ServicePriceChangeRowDto();
     dto.key = row.key;
@@ -71,6 +80,7 @@ export class ServicePriceChangeRowDto {
     dto.after = row.after === null ? null : minorToApi(row.after);
     dto.invalid = row.invalid;
     dto.checked = row.checked;
+    dto.replacesScheduledDate = row.replacesScheduledDate;
     return dto;
   }
 }

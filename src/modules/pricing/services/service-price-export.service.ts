@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { PriceChangeCatalog } from '@prisma/client';
 import { TimeUtils } from '../../../shared/time/time.utils.js';
 import { XlsxFile } from '../../../shared/xlsx/interfaces/xlsx-file.interface.js';
 import { XlsxUtils } from '../../../shared/xlsx/xlsx.utils.js';
@@ -12,13 +13,17 @@ import {
   SERVICE_PRICE_TEMPLATE_FILE,
 } from '../constants/service-price-import.constants.js';
 import { ServicePriceExportSheets } from '../interfaces/service-price-export-sheets.interface.js';
+import { writePriceExportSnapshot } from '../rules/price-export-snapshot.rules.js';
 import {
   buildServicePriceExport,
   buildServicePriceTemplate,
 } from '../rules/service-price-export.rules.js';
 import { PriceLevelReadService } from './price-level-read.service.js';
 
-/** The price file: the current prices (export) and the empty example (template). */
+/**
+ * The price file: the current prices (export) and the empty example (template). The export also
+ * keeps its prices in a very hidden sheet, so the upload changes only the cells people edited.
+ */
 @Injectable()
 export class ServicePriceExportService {
   constructor(
@@ -28,7 +33,7 @@ export class ServicePriceExportService {
     private readonly locations: LocationService,
   ) {}
 
-  async export(locationId: string): Promise<XlsxFile> {
+  async export(locationId: string, now = new Date()): Promise<XlsxFile> {
     const [catalog, levels, levelPrices, assignments, settings] =
       await Promise.all([
         this.catalog.loadPriceCatalog(locationId),
@@ -37,10 +42,12 @@ export class ServicePriceExportService {
         this.staff.listActiveAssignments(locationId),
         this.locations.getBookingSettings(locationId),
       ]);
-    const day = TimeUtils.zonedDateStr(new Date(), settings.timezone);
+    const day = TimeUtils.zonedDateStr(now, settings.timezone);
     return this.write(
       `${SERVICE_PRICE_FILE_PREFIX}-${day}.xlsx`,
       buildServicePriceExport({ catalog, levels, levelPrices, assignments }),
+      locationId,
+      now,
     );
   }
 
@@ -49,10 +56,17 @@ export class ServicePriceExportService {
     return this.write(
       SERVICE_PRICE_TEMPLATE_FILE,
       buildServicePriceTemplate(levels),
+      locationId,
+      new Date(),
     );
   }
 
-  private write(filename: string, sheets: ServicePriceExportSheets): XlsxFile {
+  private write(
+    filename: string,
+    sheets: ServicePriceExportSheets,
+    locationId: string,
+    now: Date,
+  ): XlsxFile {
     return XlsxUtils.write(filename, (book) => {
       const prices = book.addSheet(SERVICE_PRICE_SHEET_NAME);
       prices.setColumns(sheets.priceColumns);
@@ -60,6 +74,13 @@ export class ServicePriceExportService {
       const staff = book.addSheet(SERVICE_PRICE_STAFF_SHEET_NAME);
       staff.setColumns(sheets.staffColumns);
       for (const row of sheets.staffRows) staff.addRow(row);
+      if (sheets.exported)
+        writePriceExportSnapshot(book, {
+          catalog: PriceChangeCatalog.SERVICES,
+          locationId,
+          exportedAt: now.toISOString(),
+          values: sheets.exported,
+        });
     });
   }
 }

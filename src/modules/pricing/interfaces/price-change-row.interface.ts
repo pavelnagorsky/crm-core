@@ -15,4 +15,6 @@ export interface PriceChangeRow {
   after: number | null;
   invalid: boolean;
   checked: boolean;
+  /** File upload: date of the scheduled change that set "before" and that the new price replaces. */
+  replacesScheduledDate: string | null;
 }

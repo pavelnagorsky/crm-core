@@ -5,6 +5,8 @@ import {
   PRODUCT_PRICE_UNIT_LABELS,
 } from '../constants/product-price-import.constants.js';
 import { ProductPriceSheetColumn } from '../enums/product-price-sheet-column.enum.js';
+import { snapshotPrice } from './price-export-snapshot.rules.js';
+import { productRowKey } from './product-price-change-rows.rules.js';
 
 const ID_WIDTH = 38;
 
@@ -23,6 +25,8 @@ export function buildProductPriceSheet(
 ): {
   columns: { header: string; key: string; width: number }[];
   rows: Record<string, string | number | null>[];
+  /** The exported price of every row by its key (see PriceExportSnapshot). */
+  exported: Map<string, string | null>;
 } {
   const h = PRODUCT_PRICE_SHEET_HEADERS;
   const columns = [
@@ -56,5 +60,11 @@ export function buildProductPriceSheet(
       ...(withCost ? { cost: cost ? cell(cost) : null } : {}),
     };
   });
-  return { columns, rows };
+  const exported = new Map(
+    products.map((product) => [
+      productRowKey(product.productId),
+      snapshotPrice(product.retailPrice),
+    ]),
+  );
+  return { columns, rows, exported };
 }

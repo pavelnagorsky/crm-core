@@ -17,6 +17,8 @@ export interface ProductPriceChangeRow {
   after: number;
   invalid: boolean;
   checked: boolean;
+  /** File upload: date of the scheduled change that set "before" and that the new price replaces. */
+  replacesScheduledDate: string | null;
   /** Last purchase unit cost; null without receipts or without the inventory read access. */
   lastPurchaseUnitCost: Prisma.Decimal | null;
   /** "After" is below the last purchase unit cost (computed with or without the access). */

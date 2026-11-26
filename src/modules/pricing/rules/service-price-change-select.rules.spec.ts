@@ -23,6 +23,7 @@ const row = (
   after,
   invalid,
   checked: !invalid && before !== after,
+  replacesScheduledDate: null,
 });
 
 const groups: PriceChangeGroup[] = [

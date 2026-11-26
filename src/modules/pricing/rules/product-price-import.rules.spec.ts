@@ -46,6 +46,7 @@ const sheet = (rows: [string, string][]): ProductPriceSheet => ({
   idHeader: 'ID',
   priceHeader: 'Цена',
   rows: rows.map(([id, price], index) => ({ row: index + 2, id, price })),
+  snapshot: null,
 });
 
 const refs = new Map<string, LocationProductRef>([

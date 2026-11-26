@@ -217,6 +217,16 @@ function normalizeTargets(
   return targets;
 }
 
+/** No service, category or bundle is reached: the promotion applies to products only. */
+function isProductsOnlyInput(input: PriceRuleInputDto): boolean {
+  return (
+    !input.appliesToAllServices &&
+    !(input.targets ?? []).some(
+      (target) => !target.excluded && !isProductTarget(target.type),
+    )
+  );
+}
+
 const isSet = (value: unknown): boolean =>
   value !== undefined && value !== null;
 
@@ -234,12 +244,16 @@ function optionalInt(
 
 /** Promotion fields of a PROMOTION input (docs/pricing-stage4-api.md). */
 function normalizePromotion(input: PriceRuleInputDto): NormalizedPromotion {
-  const publicName = input.publicName?.trim() ?? '';
+  // Clients never see a products-only promotion (online booking does not sell products):
+  // its public name is optional and it is never shown as a promotion.
+  const productsOnly = isProductsOnlyInput(input);
+  const typedName = input.publicName?.trim() ?? '';
   if (
-    publicName.length === 0 ||
-    publicName.length > PROMOTION_PUBLIC_NAME_MAX_LENGTH
+    (!productsOnly && typedName.length === 0) ||
+    typedName.length > PROMOTION_PUBLIC_NAME_MAX_LENGTH
   )
     invalid('publicName');
+  const publicName = typedName || null;
   const publicDescription = input.publicDescription?.trim() || null;
   if (
     publicDescription !== null &&
@@ -329,7 +343,7 @@ function normalizePromotion(input: PriceRuleInputDto): NormalizedPromotion {
     scenario: input.scenario ?? null,
     publicName,
     publicDescription,
-    showAsPromotion: input.showAsPromotion ?? true,
+    showAsPromotion: productsOnly ? false : (input.showAsPromotion ?? true),
     bookingFrom,
     bookingTo,
     minLeadMinutes,

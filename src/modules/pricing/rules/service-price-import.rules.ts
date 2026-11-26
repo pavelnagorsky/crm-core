@@ -1,3 +1,9 @@
+import {
+  baseKey,
+  bundleKey,
+  levelKey,
+  staffKey,
+} from '../engine/price-timeline.js';
 import { ServicePriceImportItemType } from '../enums/service-price-import-item-type.enum.js';
 import { ServicePriceImportRowError } from '../enums/service-price-import-row-error.enum.js';
 import { ServicePriceImportSheet } from '../enums/service-price-import-sheet.enum.js';
@@ -6,7 +12,6 @@ import {
   SERVICE_PRICE_CATEGORY_MAX,
   SERVICE_PRICE_DESCRIPTION_MAX,
   SERVICE_PRICE_DURATION_MAX,
-  SERVICE_PRICE_MAX_UNITS,
   SERVICE_PRICE_TITLE_MAX,
 } from '../constants/service-price-import.constants.js';
 import { ServicePriceBook } from '../interfaces/service-price-book.interface.js';
@@ -17,12 +22,12 @@ import { ServicePriceImportPlan } from '../interfaces/service-price-import-plan.
 import { ServicePriceNewService } from '../interfaces/service-price-new-service.interface.js';
 import { ServicePriceSheetRow } from '../interfaces/service-price-sheet-row.interface.js';
 import { ServicePriceStaffEdit } from '../interfaces/service-price-staff-edit.interface.js';
+import { parsePriceCell } from './price-cell.rules.js';
+import { isUntouchedPrice } from './price-export-snapshot.rules.js';
 
 const SPACES = /[\s ]+/g;
-const PRICE_TEXT = /^\d+(\.\d+)?$/;
 const DURATION_TEXT = /^\d+(\.0+)?$/;
 const BUNDLE_TYPES = new Set(['комплекс', 'bundle']);
-const NOISE = 1e-6;
 
 type LevelRef = { levelId: string; levelName: string } | null;
 
@@ -41,28 +46,6 @@ export function serviceKey(category: string | null, title: string): string {
   return `${normalizeName(category ?? '')}|${normalizeName(title)}`;
 }
 
-/**
- * A price cell: `55`, `55.5`, `55,50`, `1 200`. Null for an empty cell, undefined for text that is
- * not a price (not a number, negative, over two decimals, over the maximum). Binary noise of a
- * spreadsheet number (55.00000000000001) is rounded away.
- */
-export function parsePriceCell(text: string): string | null | undefined {
-  const cleaned = text.replace(SPACES, '').replace(',', '.');
-  if (cleaned === '') return null;
-  if (!PRICE_TEXT.test(cleaned)) return undefined;
-  const [units, fraction = ''] = cleaned.split('.');
-  let canonicalUnits = units.replace(/^0+(?=\d)/, '');
-  let canonicalFraction = fraction;
-  if (fraction.length > 2) {
-    const scaled = Number(cleaned) * 100;
-    if (Math.abs(scaled - Math.round(scaled)) > NOISE) return undefined;
-    const rounded = (Math.round(scaled) / 100).toFixed(2);
-    [canonicalUnits, canonicalFraction] = rounded.split('.');
-  }
-  if (Number(canonicalUnits) > SERVICE_PRICE_MAX_UNITS) return undefined;
-  return `${canonicalUnits}.${canonicalFraction.padEnd(2, '0')}`;
-}
-
 /** Whole minutes 1-1440; null for an empty cell, undefined for anything else. */
 export function parseDurationCell(text: string): number | null | undefined {
   const cleaned = text.replace(SPACES, '');
@@ -74,7 +57,11 @@ export function parseDurationCell(text: string): number | null | undefined {
     : undefined;
 }
 
-/** Checks every row of the file and splits it into new services, price edits and errors. */
+/**
+ * Checks every row of the file and splits it into new services, price edits and errors. With
+ * export data (book.snapshot) a price cell still holding its exported value is not a change;
+ * a row or a personal price left as exported is skipped without checks.
+ */
 export function planServicePriceImport(
   book: ServicePriceBook,
   catalog: ServicePriceImportCatalog,
@@ -160,6 +147,22 @@ function planEdit(
   fail: Fail,
 ): ServicePriceEdit | null {
   const id = row.id.toLowerCase();
+  const { snapshot } = book;
+  // A bundle row was exported with the bundle key; its level cells are not read.
+  const exportedAsBundle = isUntouchedPrice(snapshot, bundleKey(id), row.price);
+  const baseUntouched =
+    exportedAsBundle || isUntouchedPrice(snapshot, baseKey(id), row.price);
+  const levelUntouched = book.prices.levelColumns.map((_, index) => {
+    const level = levelRefs[index];
+    return (
+      !level ||
+      isUntouchedPrice(snapshot, levelKey(id, level.levelId), row.levels[index] ?? '')
+    );
+  });
+  // A row exported and left as is: nothing to check, nothing changes.
+  if (baseUntouched && (exportedAsBundle || levelUntouched.every(Boolean)))
+    return null;
+
   const item = catalog.items.get(id);
   if (seenIds.has(id)) {
     fail(ServicePriceSheetColumn.ID, ServicePriceImportRowError.DUPLICATE_ID);
@@ -180,7 +183,7 @@ function planEdit(
   }
 
   let failed = false;
-  const basePrice = parsePriceCell(row.price);
+  const basePrice = baseUntouched ? null : parsePriceCell(row.price);
   if (basePrice === undefined) {
     fail(
       ServicePriceSheetColumn.PRICE,
@@ -192,7 +195,7 @@ function planEdit(
   if (!isBundle) {
     book.prices.levelColumns.forEach((column, index) => {
       const level = levelRefs[index];
-      if (!level) return;
+      if (!level || levelUntouched[index]) return;
       const price = parsePriceCell(row.levels[index] ?? '');
       if (price === undefined) {
         fail(column.header, ServicePriceImportRowError.PRICE_INVALID);
@@ -345,6 +348,9 @@ function planStaffEdits(
     };
     const serviceId = row.serviceId.toLowerCase();
     const staffId = row.staffId.toLowerCase();
+    // A personal price exported and left as is: nothing to check, nothing changes.
+    if (isUntouchedPrice(book.snapshot, staffKey(serviceId, staffId), row.price))
+      continue;
     const item = catalog.items.get(serviceId);
     if (!item || item.type !== ServicePriceImportItemType.SERVICE)
       reject(

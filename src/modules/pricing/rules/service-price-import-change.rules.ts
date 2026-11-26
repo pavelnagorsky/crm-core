@@ -72,7 +72,8 @@ const minor = (value: { toFixed(places: number): string } | string | null) =>
 /**
  * The price changes a file makes on the date: "before" is the price in force that day (stored
  * price plus the scheduled changes up to it), "after" comes from the file. Equal prices give
- * no row. Rows are grouped by service or bundle in the order of the file.
+ * no row. A row whose "before" comes from a scheduled change carries its date
+ * (`replacesScheduledDate`). Rows are grouped by service or bundle in the order of the file.
  */
 export function buildImportChange(
   plan: ServicePriceImportPlan,
@@ -101,7 +102,10 @@ export function buildImportChange(
   const push = (
     id: string,
     kind: ServicePriceChangeGroupKind,
-    row: Omit<PriceChangeRow, 'invalid' | 'checked' | 'before'> & {
+    row: Omit<
+      PriceChangeRow,
+      'invalid' | 'checked' | 'before' | 'replacesScheduledDate'
+    > & {
       current: number | null;
     },
   ) => {
@@ -110,7 +114,13 @@ export function buildImportChange(
     const group = groups.get(id) ?? newGroup(id, kind);
     groups.set(id, group);
     const { current: _current, ...rest } = row;
-    group.rows.push({ ...rest, before, invalid: false, checked: true });
+    group.rows.push({
+      ...rest,
+      before,
+      invalid: false,
+      checked: true,
+      replacesScheduledDate: timeline.sourceDate(row.key, date),
+    });
     const isBundle = kind === ServicePriceChangeGroupKind.BUNDLE;
     drafts.push({
       targetType: row.targetType,

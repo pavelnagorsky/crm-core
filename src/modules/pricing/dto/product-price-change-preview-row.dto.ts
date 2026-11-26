@@ -51,6 +51,15 @@ export class ProductPriceChangePreviewRowDto {
   @ApiProperty({ type: Boolean })
   checked: boolean;
 
+  @ApiProperty({
+    type: String,
+    format: 'date',
+    nullable: true,
+    description:
+      'File upload: date of the scheduled change that set "before" and that the new price replaces; null otherwise.',
+  })
+  replacesScheduledDate: string | null;
+
   @ApiUnitCost(true)
   lastPurchaseUnitCost: string | null;
 
@@ -75,6 +84,7 @@ export class ProductPriceChangePreviewRowDto {
       after: minorToApi(row.after),
       invalid: row.invalid,
       checked: row.checked,
+      replacesScheduledDate: row.replacesScheduledDate,
       lastPurchaseUnitCost:
         row.lastPurchaseUnitCost === null
           ? null

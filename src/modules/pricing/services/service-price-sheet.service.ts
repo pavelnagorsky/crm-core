@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { PriceChangeCatalog } from '@prisma/client';
 import { XlsxCells } from '../../../shared/xlsx/interfaces/xlsx-cells.interface.js';
 import { XlsxGrid } from '../../../shared/xlsx/interfaces/xlsx-grid.interface.js';
 import { XlsxUtils } from '../../../shared/xlsx/xlsx.utils.js';
@@ -24,6 +25,7 @@ import { ServicePriceSheetRow } from '../interfaces/service-price-sheet-row.inte
 import { ServicePriceStaffRow } from '../interfaces/service-price-staff-row.interface.js';
 import { ServicePriceStaffSheet } from '../interfaces/service-price-staff-sheet.interface.js';
 import { ServicePricesSheet } from '../interfaces/service-prices-sheet.interface.js';
+import { readPriceExportSnapshot } from '../rules/price-export-snapshot.rules.js';
 import { normalizeName } from '../rules/service-price-import.rules.js';
 
 const LEVEL_HEADER = /^цена\s*:\s*(.+)$/;
@@ -61,7 +63,17 @@ export class ServicePriceSheetService {
 
     if (prices.rows.length === 0 && (!staff || staff.rows.length === 0))
       return { ok: false, reason: ServicePriceImportFileReason.EMPTY };
-    return { ok: true, book: { prices, staff } };
+    return {
+      ok: true,
+      book: {
+        prices,
+        staff,
+        snapshot: readPriceExportSnapshot(
+          workbook,
+          PriceChangeCatalog.SERVICES,
+        ),
+      },
+    };
   }
 
   private readPrices(grid: XlsxGrid): ServicePricesSheet | Failure {
