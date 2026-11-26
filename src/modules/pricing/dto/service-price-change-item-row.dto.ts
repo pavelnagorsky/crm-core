@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
-  ServicePriceChangeSkip,
-  ServicePriceChangeTarget,
+  PriceChangeSkip,
+  PriceChangeTarget,
 } from '@prisma/client';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
 import { PriceChangeItemRow } from '../interfaces/price-change-item-row.interface.js';
@@ -13,10 +13,10 @@ export class ServicePriceChangeItemRowDto {
   itemId: string;
 
   @ApiProperty({
-    enum: ServicePriceChangeTarget,
-    enumName: 'ServicePriceChangeTarget',
+    enum: PriceChangeTarget,
+    enumName: 'PriceChangeTarget',
   })
-  targetType: ServicePriceChangeTarget;
+  targetType: PriceChangeTarget;
 
   @ApiProperty({ type: String, nullable: true, format: 'uuid' })
   levelId: string | null;
@@ -44,20 +44,20 @@ export class ServicePriceChangeItemRowDto {
   current?: string | null;
 
   @ApiProperty({
-    enum: ServicePriceChangeSkip,
-    enumName: 'ServicePriceChangeSkip',
+    enum: PriceChangeSkip,
+    enumName: 'PriceChangeSkip',
     nullable: true,
     description: 'Why the row was not written on apply.',
   })
-  applySkip: ServicePriceChangeSkip | null;
+  applySkip: PriceChangeSkip | null;
 
   @ApiProperty({
-    enum: ServicePriceChangeSkip,
-    enumName: 'ServicePriceChangeSkip',
+    enum: PriceChangeSkip,
+    enumName: 'PriceChangeSkip',
     nullable: true,
     description: 'Why the row was not returned on rollback.',
   })
-  rollbackSkip: ServicePriceChangeSkip | null;
+  rollbackSkip: PriceChangeSkip | null;
 
   @ApiProperty({ type: Boolean })
   rolledBack: boolean;

@@ -92,13 +92,28 @@ export class CreateClientDto {
     nullable: true,
     example: '10.00',
     description:
-      'Personal discount, percent above 0 and up to 100 (docs/pricing-stage4-api.md). Omit or null: none.',
+      'Personal discount on services, percent above 0 and up to 100 (docs/pricing-stage7-api.md). Omit or null: none.',
   })
   @IsOptional()
   @CanonicalAmount()
   @Matches(regularExpressions.positivePercent, {
     message:
-      'discountPercent must be above 0 and at most 100 with at most 2 decimal places',
+      'servicesDiscountPercent must be above 0 and at most 100 with at most 2 decimal places',
   })
-  discountPercent?: string | null;
+  servicesDiscountPercent?: string | null;
+
+  @ApiPercent({
+    required: false,
+    nullable: true,
+    example: '10.00',
+    description:
+      'Personal discount on products, percent above 0 and up to 100 (docs/pricing-stage7-api.md). Omit or null: none.',
+  })
+  @IsOptional()
+  @CanonicalAmount()
+  @Matches(regularExpressions.positivePercent, {
+    message:
+      'productsDiscountPercent must be above 0 and at most 100 with at most 2 decimal places',
+  })
+  productsDiscountPercent?: string | null;
 }

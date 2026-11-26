@@ -5,6 +5,7 @@ import {
   pricingStaff,
   PRICING_TODAY,
 } from '../../pricing/engine/testing/pricing-snapshot.factory.js';
+import { BookingSchedulingService } from './booking-scheduling.service.js';
 import { BookingStaffingPreviewService } from './booking-staffing-preview.service.js';
 
 describe('BookingStaffingPreviewService', () => {
@@ -18,13 +19,22 @@ describe('BookingStaffingPreviewService', () => {
     resolveServicesForAvailability: vi.fn(),
     resolveBundleForAvailability: vi.fn(),
   };
-  const staffLoad = { dayLoads: vi.fn(), lastAssignedAt: vi.fn() };
+  const staffLoad = { lastAssignedAt: vi.fn() };
+  const db = { bookingItem: { groupBy: vi.fn() } };
+  // Ranking is the one booking creation uses.
+  const scheduling = new BookingSchedulingService(
+    db as never,
+    staff as never,
+    calendar as never,
+    { assertPriceable: vi.fn() } as never,
+    staffLoad as never,
+  );
   const service = new BookingStaffingPreviewService(
     staff as never,
     calendar as never,
     locations as never,
     catalog as never,
-    staffLoad as never,
+    scheduling,
   );
   const book = new PriceBook(
     pricingSnapshot({
@@ -52,7 +62,7 @@ describe('BookingStaffingPreviewService', () => {
       anyStaffRule: AnyStaffRule.CHEAPER_AND_FREER,
     });
     catalog.resolveServicesForAvailability.mockResolvedValue([
-      { durationMinutes: 50, bufferMinutes: 10 },
+      { id: 'cut', title: 'Cut', durationMinutes: 50, bufferMinutes: 10 },
     ]);
     staff.resolveStaffForService.mockResolvedValue([
       { id: 'anna' },
@@ -62,7 +72,7 @@ describe('BookingStaffingPreviewService', () => {
       { id: 'anna' },
       { id: 'boris' },
     ]);
-    staffLoad.dayLoads.mockResolvedValue(new Map());
+    db.bookingItem.groupBy.mockResolvedValue([]);
     staffLoad.lastAssignedAt.mockResolvedValue(new Map());
   });
 
@@ -102,8 +112,8 @@ describe('BookingStaffingPreviewService', () => {
 
   it('needs one staff member for a bundle and lasts the sum, or the longest when parallel', async () => {
     catalog.resolveServicesForAvailability.mockResolvedValue([
-      { durationMinutes: 30, bufferMinutes: 0 },
-      { durationMinutes: 45, bufferMinutes: 15 },
+      { id: 'cut', title: 'Cut', durationMinutes: 30, bufferMinutes: 0 },
+      { id: 'color', title: 'Color', durationMinutes: 45, bufferMinutes: 15 },
     ]);
     staff.resolveStaffingForServices.mockResolvedValue({
       coverableBySingle: [{ id: 'anna' }],
@@ -114,15 +124,37 @@ describe('BookingStaffingPreviewService', () => {
     });
     const bundle = { ...request, serviceIds: ['cut', 'color'], bundleId: 'b' };
     await service.preview('location', bundle);
-    expect(
-      calendar.filterAvailableStaff.mock.calls[0][4].toISOString(),
-    ).toBe('2026-12-04T19:30:00.000Z');
+    expect(calendar.filterAvailableStaff.mock.calls[0][4].toISOString()).toBe(
+      '2026-12-04T19:30:00.000Z',
+    );
     catalog.resolveBundleForAvailability.mockResolvedValue({
       executionMode: 'PARALLEL',
     });
+    calendar.filterAvailableStaff.mockClear();
     await service.preview('location', bundle);
-    expect(
-      calendar.filterAvailableStaff.mock.calls[1][4].toISOString(),
-    ).toBe('2026-12-04T19:00:00.000Z');
+    expect(calendar.filterAvailableStaff.mock.calls[0][4].toISOString()).toBe(
+      '2026-12-04T19:00:00.000Z',
+    );
+  });
+
+  it('gives a bundle one staff member, ranked by the price of the whole visit', async () => {
+    catalog.resolveServicesForAvailability.mockResolvedValue([
+      { id: 'cut', title: 'Cut', durationMinutes: 30, bufferMinutes: 0 },
+      { id: 'color', title: 'Color', durationMinutes: 45, bufferMinutes: 15 },
+    ]);
+    staff.resolveStaffingForServices.mockResolvedValue({
+      coverableBySingle: [{ id: 'anna' }, { id: 'boris' }],
+      requiresMultiple: false,
+    });
+    catalog.resolveBundleForAvailability.mockResolvedValue({
+      executionMode: 'SEQUENTIAL',
+    });
+    // Boris is cheaper for the cut (50 against 70), color is 90 for both.
+    const result = await service.preview('location', {
+      ...request,
+      serviceIds: ['cut', 'color'],
+      bundleId: null,
+    });
+    expect(result.assignedStaffId).toBe('boris');
   });
 });

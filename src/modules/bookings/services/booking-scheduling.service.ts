@@ -12,9 +12,12 @@ import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { assignStaff } from '../../../shared/scheduling/assign-staff.js';
 import { normalizeStaffAssignments } from '../../../shared/scheduling/normalize-staff-assignments.js';
 import { CalendarFacade } from '../../calendar/calendar.facade.js';
+import { PriceBook } from '../../pricing/engine/price-book.js';
+import { VisitTime } from '../../pricing/engine/interfaces/visit-time.interface.js';
 import { PricingFacade } from '../../pricing/pricing.facade.js';
 import { StaffService } from '../../staff/services/staff.service.js';
 import { BookingScheduleRequest } from '../interfaces/booking-schedule-request.interface.js';
+import { BookingTeamRequest } from '../interfaces/booking-team-request.interface.js';
 import { BookingServiceSnapshot } from '../interfaces/booking-service-snapshot.interface.js';
 import { ResolvedBookingItem } from '../interfaces/resolved-booking-item.interface.js';
 import { ScheduledBooking } from '../interfaces/scheduled-booking.interface.js';
@@ -41,154 +44,23 @@ export class BookingSchedulingService {
 
   /** Staff assigned and the visit priced, with the promo code result of the quote. */
   async schedule(request: BookingScheduleRequest): Promise<ScheduledBooking> {
-    const {
-      locationId,
-      services,
-      startAt,
-      executionMode,
-      requestedStaffId,
-      timezone,
-      manualItems,
-      customEndAt,
-    } = request;
-    const requested = normalizeStaffAssignments(
-      services.map((service) => service.id),
-      executionMode,
-      requestedStaffId,
-      request.staffAssignments,
-      manualItems,
-    );
-    const cursor = new Date(startAt);
-    const intervals = services.map((_, index) => {
-      const interval = this.itemInterval(
-        services,
-        index,
-        startAt,
-        cursor,
-        executionMode,
-        customEndAt,
-      );
-      if (executionMode === PrismaBookingExecutionMode.SEQUENTIAL)
-        cursor.setTime(interval.endAt.getTime());
-      return interval;
-    });
-    // One snapshot prices the ranking and the quote, so they cannot disagree.
-    const [candidates, book] = await Promise.all([
-      Promise.all(
-        services.map(async (service, index) => {
-          const requestedId =
-            manualItems[index]?.staffId ?? requested.get(service.id);
-          const qualified = await this.staffService.resolveStaffForService(
-            locationId,
-            service.id,
-            requestedId,
-          );
-          if (requestedId && qualified.length === 0) {
-            throw new AppException(
-              ErrorCode.BOOKING_STAFF_NOT_FOUND,
-              HttpStatus.NOT_FOUND,
-            );
-          }
-          const interval = intervals[index];
-          const free = await this.calendar.filterAvailableStaff(
-            locationId,
-            qualified,
-            TimeUtils.zonedDateStr(interval.startAt, timezone),
-            interval.startAt,
-            interval.endAt,
-            timezone,
-          );
-          if (!request.allowConflicts)
-            return free.map((staff) => ({ id: staff.id, busy: false }));
-          const freeIds = new Set(free.map((staff) => staff.id));
-          return qualified.map((staff) => ({
-            id: staff.id,
-            busy: !freeIds.has(staff.id),
-          }));
-        }),
-      ),
-      this.pricing.priceBook(locationId, request.prices),
-    ]);
-    const staffIds = [
-      ...new Set(candidates.flatMap((group) => group.map((staff) => staff.id))),
-    ];
-    const dayStart = TimeUtils.localToUtc(
-      `${TimeUtils.zonedDateStr(startAt, timezone)}T00:00:00`,
-      timezone,
-    );
-    const counts = staffIds.length
-      ? await this.db.bookingItem.groupBy({
-          by: ['staffId'],
-          where: {
-            location: ACTIVE_LOCATION_WHERE,
-            locationId,
-            staffId: { in: staffIds },
-            startAt: {
-              gte: dayStart,
-              lt: TimeUtils.addDaysInTz(dayStart, 1, timezone),
-            },
-          },
-          _count: { id: true },
-        })
-      : [];
-    const countByStaff = new Map(
-      counts.map((row) => [row.staffId, row._count.id]),
-    );
-    this.pricing.assertPriceable(
-      book,
-      request.bundleId,
-      services.map((service) => service.id),
-    );
-    // Surcharges and promotions look at the start of the visit, its earliest item, and reach
-    // every item. A discount may depend on the staff member, so candidates rank by it.
-    const visit = visitTimeAt(
-      new Date(
-        Math.min(...intervals.map((interval) => interval.startAt.getTime())),
-      ),
-      timezone,
-    );
-    const context = request.pricingContext ?? null;
-    const lastAssigned =
-      request.staffRule === AnyStaffRule.ROUND_ROBIN
-        ? await this.staffLoad.lastAssignedAt(locationId, staffIds)
-        : new Map<string, number>();
-    const team = assignStaff(
-      candidates.map((group, index) => ({
-        itemId: String(index),
-        staffIds: rankStaff(
-          group.map((staff) => ({
-            id: staff.id,
-            busy: staff.busy,
-            price: book.candidatePrice(
-              services[index].id,
-              staff.id,
-              request.bundleId,
-              visit,
-              context,
-            ),
-            dayLoad: countByStaff.get(staff.id) ?? 0,
-            lastAssignedAt: lastAssigned.get(staff.id) ?? null,
-          })),
-          request.staffRule,
-          request.preferredStaffIds?.[index] ?? request.preferredStaffId,
-        ),
-      })),
-      executionMode === PrismaBookingExecutionMode.PARALLEL,
-    );
-    if (!team)
+    const { services, manualItems } = request;
+    const { book, intervals, visit, staffIds } = await this.team(request);
+    if (!staffIds || !intervals || !visit)
       throw new AppException(
         ErrorCode.BOOKING_NO_STAFF_AVAILABLE,
         HttpStatus.CONFLICT,
       );
+    const context = request.pricingContext ?? null;
     const staffNames = new Map(
       await Promise.all(
-        [...new Set(team.values())].map(async (id) => {
+        [...new Set(staffIds)].map(async (id) => {
           const staff = await this.staffService.findById(id);
           return [id, staff.name] as const;
         }),
       ),
     );
-    const staffIdAt = (index: number) => team.get(String(index))!;
+    const staffIdAt = (index: number) => staffIds[index];
     const { lines, promoCode } = this.pricing.quoteWithBook(book, {
       bundleId: request.bundleId,
       lines: services.map((service, index) => {
@@ -227,6 +99,236 @@ export class BookingSchedulingService {
       };
     });
     return { items, prices: lines, promoCode };
+  }
+
+  /**
+   * Staff of each item (services order) as booking creation assigns them: the booking price
+   * preview calls it, so the staff member and the price it shows are the ones a booking made
+   * with the same request gets. Null when there is no complete team.
+   */
+  async assignTeam(request: BookingTeamRequest): Promise<string[] | null> {
+    return (await this.team(request)).staffIds;
+  }
+
+  /**
+   * Qualified staff of each item, the free ones at the item interval (all with
+   * allowConflicts, busy ranked last), ranked by the location rule with prices from one
+   * snapshot, then a complete team. Without a start everyone counts as free, with no day load.
+   */
+  private async team(request: BookingTeamRequest): Promise<{
+    book: PriceBook;
+    intervals: { startAt: Date; endAt: Date }[] | null;
+    visit: VisitTime | null;
+    staffIds: string[] | null;
+  }> {
+    const {
+      locationId,
+      services,
+      startAt,
+      executionMode,
+      requestedStaffId,
+      timezone,
+      manualItems,
+      customEndAt,
+    } = request;
+    const requested = normalizeStaffAssignments(
+      services.map((service) => service.id),
+      executionMode,
+      requestedStaffId,
+      request.staffAssignments,
+      manualItems,
+    );
+    const intervals = startAt
+      ? this.intervals(services, startAt, executionMode, customEndAt)
+      : null;
+    // One snapshot prices the ranking and the quote, so they cannot disagree.
+    const [candidates, book] = await Promise.all([
+      Promise.all(
+        services.map(async (service, index) => {
+          const requestedId =
+            manualItems[index]?.staffId ?? requested.get(service.id);
+          const qualified = await this.staffService.resolveStaffForService(
+            locationId,
+            service.id,
+            requestedId,
+          );
+          if (requestedId && qualified.length === 0) {
+            throw new AppException(
+              ErrorCode.BOOKING_STAFF_NOT_FOUND,
+              HttpStatus.NOT_FOUND,
+            );
+          }
+          if (!intervals)
+            return qualified.map((staff) => ({ id: staff.id, busy: false }));
+          const interval = intervals[index];
+          const free = await this.calendar.filterAvailableStaff(
+            locationId,
+            qualified,
+            TimeUtils.zonedDateStr(interval.startAt, timezone),
+            interval.startAt,
+            interval.endAt,
+            timezone,
+          );
+          if (!request.allowConflicts)
+            return free.map((staff) => ({ id: staff.id, busy: false }));
+          const freeIds = new Set(free.map((staff) => staff.id));
+          return qualified.map((staff) => ({
+            id: staff.id,
+            busy: !freeIds.has(staff.id),
+          }));
+        }),
+      ),
+      request.book ?? this.pricing.priceBook(locationId, request.prices),
+    ]);
+    const staffIds = [
+      ...new Set(candidates.flatMap((group) => group.map((staff) => staff.id))),
+    ];
+    const countByStaff = startAt
+      ? await this.dayCounts(locationId, staffIds, startAt, timezone)
+      : new Map<string, number>();
+    this.pricing.assertPriceable(
+      book,
+      request.bundleId,
+      services.map((service) => service.id),
+    );
+    // Surcharges and promotions look at the start of the visit, its earliest item, and reach
+    // every item. A discount may depend on the staff member, so candidates rank by it.
+    const visit = intervals
+      ? visitTimeAt(
+          new Date(
+            Math.min(
+              ...intervals.map((interval) => interval.startAt.getTime()),
+            ),
+          ),
+          timezone,
+        )
+      : null;
+    const context = request.pricingContext ?? null;
+    const lastAssigned =
+      request.staffRule === AnyStaffRule.ROUND_ROBIN
+        ? await this.staffLoad.lastAssignedAt(locationId, staffIds)
+        : new Map<string, number>();
+    const price = (index: number, staffId: string) =>
+      book.candidatePrice(
+        services[index].id,
+        staffId,
+        request.bundleId,
+        visit,
+        context,
+      );
+    const rank = (
+      group: { id: string; busy: boolean }[],
+      priceOf: (staffId: string) => number,
+      preferredStaffId: string | undefined,
+    ) =>
+      rankStaff(
+        group.map((staff) => ({
+          id: staff.id,
+          busy: staff.busy,
+          price: priceOf(staff.id),
+          dayLoad: countByStaff.get(staff.id) ?? 0,
+          lastAssignedAt: lastAssigned.get(staff.id) ?? null,
+        })),
+        request.staffRule,
+        preferredStaffId,
+      );
+    if (request.oneStaffForAll) {
+      // Who can take every item, ranked by the price of the whole visit.
+      const common = candidates[0]
+        .filter((staff) =>
+          candidates.every((group) =>
+            group.some((other) => other.id === staff.id),
+          ),
+        )
+        .map((staff) => ({
+          id: staff.id,
+          busy: candidates.some(
+            (group) => group.find((other) => other.id === staff.id)?.busy,
+          ),
+        }));
+      const [first] = rank(
+        common,
+        (staffId) =>
+          services.reduce((sum, _, index) => sum + price(index, staffId), 0),
+        request.preferredStaffId,
+      );
+      return {
+        book,
+        intervals,
+        visit,
+        staffIds: first ? services.map(() => first) : null,
+      };
+    }
+    const team = assignStaff(
+      candidates.map((group, index) => ({
+        itemId: String(index),
+        staffIds: rank(
+          group,
+          (staffId) => price(index, staffId),
+          request.preferredStaffIds?.[index] ?? request.preferredStaffId,
+        ),
+      })),
+      executionMode === PrismaBookingExecutionMode.PARALLEL,
+    );
+    return {
+      book,
+      intervals,
+      visit,
+      staffIds: team
+        ? services.map((_, index) => team.get(String(index))!)
+        : null,
+    };
+  }
+
+  /** Booking items of each staff member on the location day of the start. */
+  private async dayCounts(
+    locationId: string,
+    staffIds: string[],
+    startAt: Date,
+    timezone: string,
+  ): Promise<Map<string, number>> {
+    if (staffIds.length === 0) return new Map();
+    const dayStart = TimeUtils.localToUtc(
+      `${TimeUtils.zonedDateStr(startAt, timezone)}T00:00:00`,
+      timezone,
+    );
+    const counts = await this.db.bookingItem.groupBy({
+      by: ['staffId'],
+      where: {
+        location: ACTIVE_LOCATION_WHERE,
+        locationId,
+        staffId: { in: staffIds },
+        startAt: {
+          gte: dayStart,
+          lt: TimeUtils.addDaysInTz(dayStart, 1, timezone),
+        },
+      },
+      _count: { id: true },
+    });
+    return new Map(counts.map((row) => [row.staffId, row._count.id]));
+  }
+
+  /** Item intervals: one after another (sequential) or all from the start (parallel). */
+  private intervals(
+    services: BookingServiceSnapshot[],
+    startAt: Date,
+    executionMode: PrismaBookingExecutionMode,
+    customEndAt: Date | null,
+  ): { startAt: Date; endAt: Date }[] {
+    const cursor = new Date(startAt);
+    return services.map((_, index) => {
+      const interval = this.itemInterval(
+        services,
+        index,
+        startAt,
+        cursor,
+        executionMode,
+        customEndAt,
+      );
+      if (executionMode === PrismaBookingExecutionMode.SEQUENTIAL)
+        cursor.setTime(interval.endAt.getTime());
+      return interval;
+    });
   }
 
   private itemInterval(

@@ -1,5 +1,6 @@
 import { ForbiddenException, HttpStatus, Injectable } from '@nestjs/common';
 import {
+  DiscountChoiceMode as PrismaDiscountChoiceMode,
   OrderItemStatus,
   OrderItemType,
   Prisma,
@@ -15,9 +16,13 @@ import { StaffService } from '../../staff/services/staff.service.js';
 import { OrderPricingCalculator } from '../calculators/order-pricing.calculator.js';
 import { CreateOrderDto } from '../dto/create-order.dto.js';
 import { OrderProductItemDto } from '../dto/order-product-item.dto.js';
-import { OrderPricingLine } from '../interfaces/order-pricing-line.interface.js';
 import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
 import { ResolvedOrderDraft } from '../interfaces/resolved-order-draft.interface.js';
+import { LineDiscountChoice } from '../../pricing/engine/interfaces/line-discount-choice.interface.js';
+import {
+  assertChoiceAccess,
+  requestedChoice,
+} from '../rules/order-product-price.rules.js';
 
 @Injectable()
 export class OrderDraftService {
@@ -79,6 +84,10 @@ export class OrderDraftService {
       clientPhone: client?.phone ?? null,
       occurredAt,
       note: dto.note || null,
+      promoCode:
+        dto.promoCode === undefined
+          ? (existing?.promoCode ?? null)
+          : dto.promoCode,
       items,
       totals: this.compute.totals(
         items.map((item) => ({
@@ -99,50 +108,6 @@ export class OrderDraftService {
         })),
       ),
     };
-  }
-
-  async priceProductItems(
-    locationId: string,
-    items: OrderProductItemDto[],
-  ): Promise<OrderPricingLine[]> {
-    if (items.length === 0) return [];
-    const productIds = items.map((item) => item.productId);
-    this.assertPositiveQuantities(items);
-    this.assertUniqueProducts(productIds);
-    const productRows = await this.products.resolveForSale(
-      locationId,
-      productIds,
-    );
-    if (productRows.length !== productIds.length) {
-      throw new AppException(
-        ErrorCode.ORDER_PRODUCT_NOT_SELLABLE,
-        HttpStatus.BAD_REQUEST,
-      );
-    }
-    const productsById = new Map(
-      productRows.map((row) => [row.productId, row]),
-    );
-    return items.map((item) => {
-      const product = productsById.get(item.productId)!;
-      const quantity = new Prisma.Decimal(item.quantity);
-      this.assertQuantityMatchesUnit(quantity, product.product.unit);
-      const price = this.compute.priceLine(
-        quantity,
-        product.retailPrice,
-        item.customUnitPrice == null
-          ? null
-          : new Prisma.Decimal(item.customUnitPrice),
-      );
-      return {
-        type: OrderItemType.PRODUCT,
-        catalogItemId: product.productId,
-        title: product.product.name,
-        sku: product.product.sku,
-        unit: product.product.unit,
-        quantity,
-        ...price,
-      };
-    });
   }
 
   async resolveProductItemAdditions(
@@ -260,6 +225,17 @@ export class OrderDraftService {
         .filter((item) => item.type === OrderItemType.PRODUCT)
         .map((item) => [item.catalogItemId, item.customUnitPrice]) ?? [],
     );
+    const oldChoiceByProduct = new Map(
+      existing?.items
+        .filter((item) => item.type === OrderItemType.PRODUCT)
+        .map((item) => [item.catalogItemId, item]) ?? [],
+    );
+    for (const item of items)
+      assertChoiceAccess(
+        canOverridePrice,
+        item.promotion,
+        oldChoiceByProduct.get(item.productId) ?? null,
+      );
     return items.map((item) => {
       const product = productsById.get(item.productId)!;
       const seller = item.sellerStaffId
@@ -290,8 +266,54 @@ export class OrderDraftService {
         lineTotal: price.lineTotal,
         sellerStaffId: seller?.id ?? null,
         sellerName: seller?.name ?? null,
+        ...this.choiceColumns(item, oldChoiceByProduct.get(item.productId)),
       };
     });
+  }
+
+  /**
+   * Choices sent in a draft write, by product id, and the index of each product in the
+   * request: the draft is priced again with them strictly (OrderProductPricingService).
+   */
+  requestChoices(items: readonly OrderProductItemDto[]): {
+    explicit: Map<string, LineDiscountChoice | null>;
+    lineIndexOf: Map<string, number>;
+  } {
+    const explicit = new Map<string, LineDiscountChoice | null>();
+    const lineIndexOf = new Map<string, number>();
+    items.forEach((item, index) => {
+      lineIndexOf.set(item.productId, index);
+      if (item.promotion !== undefined)
+        explicit.set(item.productId, requestedChoice(item.promotion));
+    });
+    return { explicit, lineIndexOf };
+  }
+
+  /** The sent choice, or the stored one of the line; AUTO is null. */
+  private choiceColumns(
+    item: OrderProductItemDto,
+    existing:
+      | Pick<
+          OrderWithItems['items'][number],
+          'discountChoice' | 'discountChoiceRuleId'
+        >
+      | undefined,
+  ): {
+    discountChoice: PrismaDiscountChoiceMode | null;
+    discountChoiceRuleId: string | null;
+  } {
+    if (item.promotion === undefined)
+      return {
+        discountChoice: existing?.discountChoice ?? null,
+        discountChoiceRuleId: existing?.discountChoiceRuleId ?? null,
+      };
+    const choice = requestedChoice(item.promotion);
+    return {
+      discountChoice: choice
+        ? (choice.mode as PrismaDiscountChoiceMode)
+        : null,
+      discountChoiceRuleId: choice?.ruleId ?? null,
+    };
   }
 
   private assertCustomPriceAccess(
@@ -344,6 +366,12 @@ export class OrderDraftService {
     return item.customUnitPrice == null
       ? null
       : new Prisma.Decimal(item.customUnitPrice);
+  }
+
+  /** Quantities above 0, each product once. */
+  validateItems(items: OrderProductItemDto[]): void {
+    this.assertPositiveQuantities(items);
+    this.assertUniqueProducts(items.map((item) => item.productId));
   }
 
   private assertPositiveQuantities(items: OrderProductItemDto[]): void {

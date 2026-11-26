@@ -36,7 +36,8 @@ export function draftPriceRuleRecord(
     yearly: rule.yearly,
     holidayExclusive: rule.holidayExclusive,
     weekdaysMask: rule.weekdaysMask,
-    appliesToAll: rule.appliesToAll,
+    appliesToAllServices: rule.appliesToAllServices,
+    appliesToAllProducts: rule.appliesToAllProducts,
     ...promotionColumns(rule),
     minVisitTotal:
       rule.promotion?.minVisitTotal == null

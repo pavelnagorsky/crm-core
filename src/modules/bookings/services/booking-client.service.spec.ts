@@ -5,7 +5,7 @@ import { pricingSnapshot } from '../../pricing/engine/testing/pricing-snapshot.f
 import { createPricingFacadeStub } from '../../pricing/testing/pricing-facade.stub.js';
 import { BookingStatus } from '../enums/booking-status.enum.js';
 import { booking } from '../testing/factories/booking.factory.js';
-import { bookingPricingContextStub } from '../testing/factories/booking-pricing-context.stub.js';
+import { pricingContextStub } from '../../pricing/testing/pricing-context.stub.js';
 import { BookingClientService } from './booking-client.service.js';
 import { BookingRepricingService } from './write/booking-repricing.service.js';
 import { BookingRescheduleService } from './write/booking-reschedule.service.js';
@@ -60,19 +60,20 @@ function setup() {
     createPricingFacadeStub(
       pricingSnapshot({ services: { haircut: 5000 }, bundles: [] }),
     ),
-    bookingPricingContextStub(),
+    pricingContextStub(),
     {
       getBookingSettings: vi
         .fn()
         .mockResolvedValue({ brandId: 'brand', timezone: 'Europe/Minsk' }),
     } as never,
+    { quoteVisitDrafts: vi.fn(async () => null) } as never,
   );
   const reschedule = new BookingRescheduleService(
     db as never,
     calendar as never,
     staff as never,
     locations as never,
-    {} as never,
+    { repriceBookingDrafts: vi.fn() } as never,
     {} as never,
     write as never,
     slots as never,

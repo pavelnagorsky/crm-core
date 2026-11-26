@@ -1,14 +1,14 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { ServicePriceChangeMode } from '../enums/service-price-change-mode.enum.js';
+import { PriceChangeMode } from '../enums/price-change-mode.enum.js';
 import { ServicePriceChangeIncludeDto } from './service-price-change-include.dto.js';
 
 /** The rule of a RULE change as it was sent. */
 export class ServicePriceChangeRuleSpecDto {
   @ApiProperty({
-    enum: ServicePriceChangeMode,
-    enumName: 'ServicePriceChangeMode',
+    enum: PriceChangeMode,
+    enumName: 'PriceChangeMode',
   })
-  mode: ServicePriceChangeMode;
+  mode: PriceChangeMode;
 
   @ApiProperty({ type: String, nullable: true })
   value: string | null;

@@ -1,5 +1,6 @@
 import { ForbiddenException } from '@nestjs/common';
 import { Claim } from '../../access/enums/claim.enum.js';
+import { DiscountChoiceMode } from '../../pricing/engine/enums/discount-choice-mode.enum.js';
 import { Write, removeGrant } from '../../access/utils/permission.js';
 import { tokenPayload } from '../../auth/testing/factories/token-payload.factory.js';
 import { StaffAccessService } from '../../staff/services/staff-access.service.js';
@@ -36,6 +37,22 @@ describe('Manual booking API permissions', () => {
     expect(create.createManualBooking).not.toHaveBeenCalled();
   });
 
+  it('rejects a product discount pick without sale.price.override', async () => {
+    const dto = {
+      products: [
+        {
+          productId: 'product',
+          quantity: '1',
+          promotion: { mode: DiscountChoiceMode.NONE },
+        },
+      ],
+    } as ManualCreateBookingDto;
+    await expect(
+      controller.createManual('location-1', dto, tokenPayload('STAFF')),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(create.createManualBooking).not.toHaveBeenCalled();
+  });
+
   it('rejects adding products when order editing was disabled', async () => {
     const token = tokenPayload('MANAGER');
     removeGrant(token.permissions!['L:location-1'], Write(Claim.ORDER));
@@ -59,6 +76,7 @@ describe('Manual booking API permissions', () => {
       dto,
       expect.objectContaining({ id: token.sub }),
       undefined,
+      true,
     );
     expect(staff.resolveOwnProfile).not.toHaveBeenCalled();
   });
@@ -76,6 +94,7 @@ describe('Manual booking API permissions', () => {
       dto,
       expect.objectContaining({ id: token.sub }),
       'anna',
+      false,
     );
   });
 
@@ -101,7 +120,7 @@ describe('Booking price preview access', () => {
     create as never,
     {} as never,
     {} as never,
-    {} as never,
+    { createStaffId: vi.fn().mockResolvedValue(undefined) } as never,
     {} as never,
     {} as never,
   );
@@ -122,6 +141,8 @@ describe('Booking price preview access', () => {
       .catch(() => undefined);
     expect(create.price).toHaveBeenCalledWith('location-1', dto, {
       cabinet: true,
+      canReadPurchaseCost: true,
+      ownStaffId: undefined,
     });
   });
 });

@@ -12,6 +12,8 @@ export interface VisitPaymentOutcome {
   /** The visit order, null when the step needed none. */
   order: OrderWithItems | null;
   confirmedItemIds: string[];
+  /** Confirmed lines whose total at confirmation differs from the draft. */
+  repricedItemIds: string[];
   /** The journal write; null for a retry or a step without payment. */
   change: PaymentChange | null;
   /** The recorded or replayed payment operation. */

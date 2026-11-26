@@ -1,5 +1,5 @@
 import { HttpStatus } from '@nestjs/common';
-import { ServicePriceChangeTarget, ServiceStatus } from '@prisma/client';
+import { PriceChangeTarget, ServiceStatus } from '@prisma/client';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
 import { ServicePriceChangeGroupKind } from '../enums/service-price-change-group-kind.enum.js';
 import { PriceChangeGroup } from '../interfaces/price-change-group.interface.js';
@@ -8,7 +8,7 @@ import { selectPriceChangeRows } from './service-price-change-select.rules.js';
 
 const row = (
   key: string,
-  targetType: ServicePriceChangeTarget,
+  targetType: PriceChangeTarget,
   before: number,
   after: number,
   invalid = false,
@@ -34,9 +34,9 @@ const groups: PriceChangeGroup[] = [
     categoryName: null,
     status: ServiceStatus.ACTIVE,
     rows: [
-      row('BASE:s1', ServicePriceChangeTarget.BASE, 5000, 5500),
-      row('LEVEL:s1:l1', ServicePriceChangeTarget.LEVEL, 7000, 7000),
-      row('STAFF:s1:st1', ServicePriceChangeTarget.STAFF, 600, 0, true),
+      row('BASE:s1', PriceChangeTarget.BASE, 5000, 5500),
+      row('LEVEL:s1:l1', PriceChangeTarget.LEVEL, 7000, 7000),
+      row('STAFF:s1:st1', PriceChangeTarget.STAFF, 600, 0, true),
     ],
   },
 ];
@@ -75,7 +75,7 @@ describe('selectPriceChangeRows', () => {
     expect(
       code(() => selectPriceChangeRows(groups, ['BASE:s1', 'BASE:gone'], [])),
     ).toEqual({
-      code: 'SERVICE_PRICE_CHANGE_STALE',
+      code: 'PRICE_CHANGE_STALE',
       status: HttpStatus.CONFLICT,
       payload: { keys: ['BASE:gone'] },
     });
@@ -89,7 +89,7 @@ describe('selectPriceChangeRows', () => {
   it('400 ROW_INVALID for a null base price, an override outside the selection, or an unedited invalid row', () => {
     expect(
       code(() => selectPriceChangeRows(groups, ['BASE:s1'], [{ key: 'BASE:s1', price: null }])),
-    ).toMatchObject({ code: 'SERVICE_PRICE_CHANGE_ROW_INVALID', payload: { key: 'BASE:s1' } });
+    ).toMatchObject({ code: 'PRICE_CHANGE_ROW_INVALID', payload: { key: 'BASE:s1' } });
     expect(
       code(() => selectPriceChangeRows(groups, ['BASE:s1'], [{ key: 'LEVEL:s1:l1', price: 1 }])).payload,
     ).toEqual({ key: 'LEVEL:s1:l1' });
@@ -100,12 +100,12 @@ describe('selectPriceChangeRows', () => {
       code(() =>
         selectPriceChangeRows(groups, ['BASE:s1'], [{ key: 'BASE:s1', price: 10_000_000_000 }]),
       ).code,
-    ).toBe('SERVICE_PRICE_CHANGE_ROW_INVALID');
+    ).toBe('PRICE_CHANGE_ROW_INVALID');
   });
 
   it('400 EMPTY when nothing changes', () => {
     expect(
       code(() => selectPriceChangeRows(groups, ['LEVEL:s1:l1'], [])).code,
-    ).toBe('SERVICE_PRICE_CHANGE_EMPTY');
+    ).toBe('PRICE_CHANGE_EMPTY');
   });
 });

@@ -46,7 +46,7 @@ import { BookingPaymentReadService } from './services/read/booking-payment-read.
 import { BookingPriceRuleStatsService } from './services/read/booking-price-rule-stats.service.js';
 import { BookingStaffingPreviewService } from './services/booking-staffing-preview.service.js';
 import { BookingPromotionReportService } from './services/read/booking-promotion-report.service.js';
-import { BookingPricingContextService } from './services/booking-pricing-context.service.js';
+import { PricingContextService } from '../pricing/services/pricing-context.service.js';
 import { PromotionPublicService } from '../pricing/services/promotion-public.service.js';
 import { BookingRepricingService } from './services/write/booking-repricing.service.js';
 import { bookingRepricingStub } from './testing/factories/booking-repricing.stub.js';
@@ -161,6 +161,7 @@ describe('BookingsFacade.completeElapsed', () => {
   const order = { id: 'order-1', items: [] };
   const orders = {
     syncCompletedBooking: vi.fn().mockResolvedValue(order),
+    repriceBookingDrafts: vi.fn(),
   };
   const emitter = { emit: vi.fn() };
 
@@ -208,7 +209,7 @@ describe('BookingsFacade.completeElapsed', () => {
         { provide: BookingPriceRuleStatsService, useValue: {} },
         { provide: BookingStaffingPreviewService, useValue: {} },
         { provide: BookingPromotionReportService, useValue: {} },
-        { provide: BookingPricingContextService, useValue: {} },
+        { provide: PricingContextService, useValue: {} },
         {
           provide: PromotionPublicService,
           useValue: { listForBookingSetup: async () => [] },
@@ -325,6 +326,7 @@ describe('BookingsFacade.updateStatus transactionality', () => {
   const order = { id: 'order-1', items: [] };
   const orders = {
     syncCompletedBooking: vi.fn(),
+    repriceBookingDrafts: vi.fn(),
   };
   const earnings = {
     recordForCompletedBooking: vi.fn(),
@@ -394,7 +396,7 @@ describe('BookingsFacade.updateStatus transactionality', () => {
         { provide: BookingPriceRuleStatsService, useValue: {} },
         { provide: BookingStaffingPreviewService, useValue: {} },
         { provide: BookingPromotionReportService, useValue: {} },
-        { provide: BookingPricingContextService, useValue: {} },
+        { provide: PricingContextService, useValue: {} },
         {
           provide: PromotionPublicService,
           useValue: { listForBookingSetup: async () => [] },
@@ -492,7 +494,7 @@ describe('BookingsFacade.search', () => {
         { provide: BookingPriceRuleStatsService, useValue: {} },
         { provide: BookingStaffingPreviewService, useValue: {} },
         { provide: BookingPromotionReportService, useValue: {} },
-        { provide: BookingPricingContextService, useValue: {} },
+        { provide: PricingContextService, useValue: {} },
         {
           provide: PromotionPublicService,
           useValue: { listForBookingSetup: async () => [] },
@@ -793,7 +795,7 @@ describe('BookingCalendarReadService.listForCalendar', () => {
         { provide: BookingPriceRuleStatsService, useValue: {} },
         { provide: BookingStaffingPreviewService, useValue: {} },
         { provide: BookingPromotionReportService, useValue: {} },
-        { provide: BookingPricingContextService, useValue: {} },
+        { provide: PricingContextService, useValue: {} },
         {
           provide: PromotionPublicService,
           useValue: { listForBookingSetup: async () => [] },
@@ -1056,7 +1058,7 @@ describe('BookingsFacade catalog selection', () => {
         { provide: BookingPriceRuleStatsService, useValue: {} },
         { provide: BookingStaffingPreviewService, useValue: {} },
         { provide: BookingPromotionReportService, useValue: {} },
-        { provide: BookingPricingContextService, useValue: {} },
+        { provide: PricingContextService, useValue: {} },
         {
           provide: PromotionPublicService,
           useValue: { listForBookingSetup: async () => [] },
@@ -1305,6 +1307,7 @@ describe('BookingsFacade.update details and item prices', () => {
   } as TokenPayloadDto);
   const orders = {
     syncCompletedBooking: vi.fn(),
+    repriceBookingDrafts: vi.fn(),
     syncBookingClient: vi.fn(),
   };
   const pricingContext = { assertLimitsHeld: vi.fn(async () => undefined) };
@@ -1345,7 +1348,7 @@ describe('BookingsFacade.update details and item prices', () => {
         { provide: BookingPriceRuleStatsService, useValue: {} },
         { provide: BookingStaffingPreviewService, useValue: {} },
         { provide: BookingPromotionReportService, useValue: {} },
-        { provide: BookingPricingContextService, useValue: pricingContext },
+        { provide: PricingContextService, useValue: pricingContext },
         {
           provide: PromotionPublicService,
           useValue: { listForBookingSetup: async () => [] },
@@ -1870,6 +1873,7 @@ describe('BookingsFacade.update manual interval', () => {
   } as TokenPayloadDto);
   const orders = {
     syncCompletedBooking: vi.fn(),
+    repriceBookingDrafts: vi.fn(),
     syncBookingClient: vi.fn(),
   };
   let service: BookingsFacade;
@@ -1909,7 +1913,7 @@ describe('BookingsFacade.update manual interval', () => {
         { provide: BookingPriceRuleStatsService, useValue: {} },
         { provide: BookingStaffingPreviewService, useValue: {} },
         { provide: BookingPromotionReportService, useValue: {} },
-        { provide: BookingPricingContextService, useValue: {} },
+        { provide: PricingContextService, useValue: {} },
         {
           provide: PromotionPublicService,
           useValue: { listForBookingSetup: async () => [] },
@@ -2227,7 +2231,7 @@ describe('BookingsFacade.addProduct', () => {
         { provide: BookingPriceRuleStatsService, useValue: {} },
         { provide: BookingStaffingPreviewService, useValue: {} },
         { provide: BookingPromotionReportService, useValue: {} },
-        { provide: BookingPricingContextService, useValue: {} },
+        { provide: PricingContextService, useValue: {} },
         {
           provide: PromotionPublicService,
           useValue: { listForBookingSetup: async () => [] },
@@ -2359,7 +2363,7 @@ describe('BookingsFacade.cancel draft product cleanup', () => {
         { provide: BookingPriceRuleStatsService, useValue: {} },
         { provide: BookingStaffingPreviewService, useValue: {} },
         { provide: BookingPromotionReportService, useValue: {} },
-        { provide: BookingPricingContextService, useValue: {} },
+        { provide: PricingContextService, useValue: {} },
         {
           provide: PromotionPublicService,
           useValue: { listForBookingSetup: async () => [] },

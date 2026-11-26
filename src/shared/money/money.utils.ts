@@ -88,6 +88,31 @@ export class MoneyUtils {
   }
 
   /**
+   * As allocateCumulative, but the cumulative target is rounded down: each part gets its share
+   * rounded down and the part that completes the total takes the remainder (3 x 1 of 10.00 -
+   * 3.33, 3.33, 3.34).
+   */
+  static allocateCumulativeDown(
+    total: Prisma.Decimal,
+    totalQuantity: Prisma.Decimal,
+    quantity: Prisma.Decimal,
+    allocatedQuantity: Prisma.Decimal,
+    allocatedAmount: Prisma.Decimal,
+  ): Prisma.Decimal {
+    const target = total
+      .mul(allocatedQuantity.plus(quantity))
+      .div(totalQuantity)
+      .toDecimalPlaces(SCALE, Prisma.Decimal.ROUND_DOWN);
+    return Prisma.Decimal.max(
+      0,
+      Prisma.Decimal.min(
+        total.minus(allocatedAmount),
+        target.minus(allocatedAmount),
+      ),
+    );
+  }
+
+  /**
    * ru-RU currency label. `amount` is a decimal string and is not parsed with Number().
    */
   static formatCurrency(amount: string, currency: string): string {

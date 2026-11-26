@@ -33,7 +33,7 @@ function reaches(
 ): boolean {
   const included = promotion.targets.filter((target) => !target.excluded);
   const excluded = promotion.targets.filter((target) => target.excluded);
-  return promotion.appliesToAll
+  return promotion.appliesToAllServices
     ? !names(excluded, item)
     : names(included, item);
 }

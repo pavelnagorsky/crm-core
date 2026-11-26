@@ -16,6 +16,8 @@ export enum PriceRuleSkipReason {
   WRONG_STAFF = 'WRONG_STAFF',
   /** The location "today" is outside bookingFrom - bookingTo. */
   OUT_OF_BOOKING_PERIOD = 'OUT_OF_BOOKING_PERIOD',
+  /** A lead time condition on a sale without a visit (docs/pricing-stage7-api.md). */
+  NO_VISIT = 'NO_VISIT',
   /** Booked later than minLeadMinutes before the visit (or the visit start is unknown). */
   LEAD_TIME_TOO_SHORT = 'LEAD_TIME_TOO_SHORT',
   /** Booked earlier than maxLeadMinutes before the visit (or the visit start is unknown). */

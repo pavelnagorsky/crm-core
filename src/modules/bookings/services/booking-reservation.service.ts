@@ -269,7 +269,7 @@ export class BookingReservationService {
             manualProducts,
             operationActor,
             tx,
-            true,
+            input.canOverridePrice === true,
           )
         : null;
     const payment = input.paymentPlan

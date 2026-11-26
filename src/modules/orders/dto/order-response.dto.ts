@@ -54,6 +54,14 @@ export class OrderResponseDto {
   @ApiProperty({ type: String, nullable: true })
   note: string | null;
 
+  @ApiProperty({
+    type: String,
+    nullable: true,
+    description:
+      'Promo code of a sale as entered (upper case); null for a visit order (the booking holds it).',
+  })
+  promoCode: string | null;
+
   @ApiProperty({ type: String })
   createdByName: string;
 
@@ -99,6 +107,7 @@ export class OrderResponseDto {
     dto.discountTotal = MoneyUtils.format(entity.discountTotal);
     dto.totalAmount = MoneyUtils.format(entity.totalAmount);
     dto.note = entity.note;
+    dto.promoCode = entity.promoCode;
     dto.createdByName = entity.createdByName;
     dto.voidedAt = entity.voidedAt;
     dto.voidReason = entity.voidReason;

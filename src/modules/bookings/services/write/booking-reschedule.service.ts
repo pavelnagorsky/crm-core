@@ -81,6 +81,8 @@ export class BookingRescheduleService {
         return this.repricing.bookingWrite(priced.repricing);
       },
       beforeLock: (tx) => this.repricing.holdLimits(tx, old, priced.repricing),
+      // Draft products are priced at the new visit start.
+      afterUpdate: (booking, tx) => this.orders.repriceBookingDrafts(booking, tx),
     });
   }
 

@@ -6,7 +6,13 @@ import { ClientsService } from './clients.service.js';
 
 const actor = {} as AuditActor;
 
-function stored(discountPercent: string | null): Client {
+const decimal = (value: string | null): Prisma.Decimal | null =>
+  value === null ? null : new Prisma.Decimal(value);
+
+function stored(
+  servicesDiscountPercent: string | null,
+  productsDiscountPercent: string | null = null,
+): Client {
   return {
     id: 'c1',
     brandId: 'brand-1',
@@ -25,22 +31,26 @@ function stored(discountPercent: string | null): Client {
     acquisitionBookingId: null,
     acquiredAt: null,
     importedAt: null,
-    discountPercent:
-      discountPercent === null ? null : new Prisma.Decimal(discountPercent),
+    servicesDiscountPercent: decimal(servicesDiscountPercent),
+    productsDiscountPercent: decimal(productsDiscountPercent),
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
     updatedAt: new Date('2026-01-01T00:00:00.000Z'),
   };
 }
 
-const dto = (discountPercent?: string | null): UpdateClientDto =>
+const dto = (
+  servicesDiscountPercent?: string | null,
+  productsDiscountPercent?: string | null,
+): UpdateClientDto =>
   Object.assign(new UpdateClientDto(), {
     firstName: 'Анна',
     lastName: 'Иванова',
     phone: '+375291112233',
-    ...(discountPercent !== undefined && { discountPercent }),
+    ...(servicesDiscountPercent !== undefined && { servicesDiscountPercent }),
+    ...(productsDiscountPercent !== undefined && { productsDiscountPercent }),
   });
 
-describe('ClientsService personal discount (docs/pricing-stage4-api.md)', () => {
+describe('ClientsService personal discount (docs/pricing-stage7-api.md)', () => {
   const findFirst = vi.fn();
   const update = vi.fn();
   const create = vi.fn();
@@ -53,17 +63,27 @@ describe('ClientsService personal discount (docs/pricing-stage4-api.md)', () => 
 
   beforeEach(() => {
     vi.clearAllMocks();
-    current = stored('10.00');
+    current = stored('10.00', '5.00');
     findFirst.mockImplementation(async () => current);
     update.mockImplementation(async (args: { data: Partial<Client> }) => ({
       ...current,
       ...args.data,
-      discountPercent:
-        args.data.discountPercent === undefined
-          ? current.discountPercent
-          : args.data.discountPercent === null
-            ? null
-            : new Prisma.Decimal(String(args.data.discountPercent)),
+      servicesDiscountPercent:
+        args.data.servicesDiscountPercent === undefined
+          ? current.servicesDiscountPercent
+          : decimal(
+              args.data.servicesDiscountPercent === null
+                ? null
+                : String(args.data.servicesDiscountPercent),
+            ),
+      productsDiscountPercent:
+        args.data.productsDiscountPercent === undefined
+          ? current.productsDiscountPercent
+          : decimal(
+              args.data.productsDiscountPercent === null
+                ? null
+                : String(args.data.productsDiscountPercent),
+            ),
     }));
     create.mockImplementation(async (args: { data: Partial<Client> }) => ({
       ...stored(null),
@@ -71,32 +91,41 @@ describe('ClientsService personal discount (docs/pricing-stage4-api.md)', () => 
     }));
   });
 
-  it('keeps the discount when it is omitted', async () => {
+  it('keeps the discounts when they are omitted', async () => {
     await service.update('brand-1', 'c1', dto(), actor);
-    expect(update.mock.calls[0][0].data).not.toHaveProperty('discountPercent');
+    const data = update.mock.calls[0][0].data;
+    expect(data).not.toHaveProperty('servicesDiscountPercent');
+    expect(data).not.toHaveProperty('productsDiscountPercent');
     expect(emit).not.toHaveBeenCalled();
   });
 
-  it('clears it with null and audits the change', async () => {
+  it('clears services with null, keeps products and audits the change', async () => {
     await service.update('brand-1', 'c1', dto(null), actor);
-    expect(update.mock.calls[0][0].data.discountPercent).toBeNull();
+    const data = update.mock.calls[0][0].data;
+    expect(data.servicesDiscountPercent).toBeNull();
+    expect(data).not.toHaveProperty('productsDiscountPercent');
     expect(emit.mock.calls[0][1].payload.changes).toEqual([
-      { field: 'discountPercent', from: '10', to: '—' },
+      { field: 'servicesDiscountPercent', from: '10', to: '—' },
     ]);
   });
 
-  it('sets a new percent', async () => {
-    await service.update('brand-1', 'c1', dto('15.50'), actor);
-    expect(update.mock.calls[0][0].data.discountPercent).toBe('15.50');
+  it('sets new percents independently', async () => {
+    await service.update('brand-1', 'c1', dto('15.50', null), actor);
+    const data = update.mock.calls[0][0].data;
+    expect(data.servicesDiscountPercent).toBe('15.50');
+    expect(data.productsDiscountPercent).toBeNull();
     expect(emit.mock.calls[0][1].payload.changes).toEqual([
-      { field: 'discountPercent', from: '10', to: '15.5' },
+      { field: 'servicesDiscountPercent', from: '10', to: '15.5' },
+      { field: 'productsDiscountPercent', from: '5', to: '—' },
     ]);
   });
 
-  it('creates a client with a discount or without one', async () => {
-    await service.create('brand-1', { ...dto('5.00') }, actor);
+  it('creates a client with discounts or without them', async () => {
+    await service.create('brand-1', { ...dto('5.00', '7.00') }, actor);
     await service.create('brand-1', { ...dto() }, actor);
-    expect(create.mock.calls[0][0].data.discountPercent).toBe('5.00');
-    expect(create.mock.calls[1][0].data.discountPercent).toBeNull();
+    expect(create.mock.calls[0][0].data.servicesDiscountPercent).toBe('5.00');
+    expect(create.mock.calls[0][0].data.productsDiscountPercent).toBe('7.00');
+    expect(create.mock.calls[1][0].data.servicesDiscountPercent).toBeNull();
+    expect(create.mock.calls[1][0].data.productsDiscountPercent).toBeNull();
   });
 });

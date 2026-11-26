@@ -8,7 +8,18 @@ import { BookingWithItems } from '../bookings/interfaces/booking-with-items.inte
 import { LocationService } from '../location/services/location.service.js';
 import { AddOrderItemsDto } from './dto/add-order-items.dto.js';
 import { ConfirmOrderItemsDto } from './dto/confirm-order-items.dto.js';
+import { CreateOrderReturnItemDto } from './dto/create-order-return-item.dto.js';
 import { CreateOrderReturnDto } from './dto/create-order-return.dto.js';
+import { OrderReturnPreview } from './interfaces/order-return-preview.interface.js';
+import { OrderPricingRequestDto } from './dto/order-pricing-request.dto.js';
+import { OrderPricingPreview } from './interfaces/order-pricing-preview.interface.js';
+import { PurchaseCostAccess } from './interfaces/purchase-cost-access.interface.js';
+import { ProductPricingVisit } from './interfaces/product-pricing-scope.interface.js';
+import { VisitProductsPricing } from './interfaces/visit-products-pricing.interface.js';
+import { ReadConsistency } from '../../shared/cache/enums/read-consistency.enum.js';
+import { OrderPricingPreviewService } from './services/order-pricing-preview.service.js';
+import { OrderProductPricingService } from './services/order-product-pricing.service.js';
+import { ProductPriceQuote } from '../pricing/interfaces/product-price-quote.interface.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
 import { OrderProductItemDto } from './dto/order-product-item.dto.js';
 import { OrderSearchRequestDto } from './dto/order-search-request.dto.js';
@@ -17,8 +28,8 @@ import { UpdateOrderDto } from './dto/update-order.dto.js';
 import { OrderTargetStatus } from './enums/order-target-status.enum.js';
 import { BookingOrderProducts } from './interfaces/booking-order-products.interface.js';
 import { DraftProductsAdded } from './interfaces/draft-products-added.interface.js';
-import { OrderPricingLine } from './interfaces/order-pricing-line.interface.js';
 import { OrderStatusCount } from './interfaces/order-status-count.interface.js';
+import { OrderTransition } from './interfaces/order-transition.interface.js';
 import { OrderWithItems } from './interfaces/order-with-items.interface.js';
 import { orderProductsNet } from './rules/order-payment-due.rules.js';
 import { OrderAuditService } from './services/order-audit.service.js';
@@ -43,6 +54,8 @@ export class OrdersFacade {
     private readonly mutations: OrderDraftMutationService,
     private readonly audits: OrderAuditService,
     private readonly orderPayments: OrderPaymentService,
+    private readonly pricingPreview: OrderPricingPreviewService,
+    private readonly productPricing: OrderProductPricingService,
   ) {}
   create(
     locationId: string,
@@ -144,7 +157,7 @@ export class OrdersFacade {
 
   /**
    * The visit order of a booking, created when missing and locked FOR UPDATE. The caller
-   * holds the booking lock (lock order: payment key, booking, order).
+   * holds the booking lock (lock order: payment key, limited promotions, booking, order).
    */
   lockBookingOrder(
     booking: BookingWithItems,
@@ -168,25 +181,38 @@ export class OrdersFacade {
 
   /**
    * Confirms draft product lines of a locked visit order: stock, cost and seller commission
-   * like a group confirmation. 404 ORDER_ITEM_NOT_FOUND, 409 ORDER_ITEM_NOT_DRAFT,
-   * ORDER_PRODUCT_NOT_SELLABLE, ORDER_SELLER_INVALID.
+   * like a group confirmation. The lines are priced again with fresh data and must add up to
+   * `expectedProductTotal` (409 PRICE_CHANGED). 404 ORDER_ITEM_NOT_FOUND, 409
+   * ORDER_ITEM_NOT_DRAFT, ORDER_PRODUCT_NOT_SELLABLE, ORDER_SELLER_INVALID.
    */
   async confirmBookingProducts(
     order: OrderWithItems,
     orderItemIds: string[],
+    expectedProductTotal: Prisma.Decimal,
     tx: Prisma.TransactionClient,
     occurredAt = new Date(),
-  ): Promise<OrderWithItems> {
-    if (orderItemIds.length === 0) return order;
-    const transition = await this.transitions.confirmProductItemsInTransaction(
+  ): Promise<OrderTransition> {
+    if (orderItemIds.length === 0) return { order, changed: false };
+    return this.transitions.confirmProductItemsInTransaction(
       order.locationId,
       order.id,
       orderItemIds,
       tx,
+      { expectedTotal: expectedProductTotal },
       occurredAt,
       { order },
     );
-    return transition.order;
+  }
+
+  /**
+   * Prices the draft products of a visit order again after a booking write that changes
+   * their context (start, client, promo code, services). The caller holds the booking lock.
+   */
+  repriceBookingDrafts(
+    booking: Pick<BookingWithItems, 'id' | 'locationId'>,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    return this.bookingSync.repriceBookingDrafts(booking, tx);
   }
 
   /** Order history entry of product lines confirmed with a visit. Call after commit. */
@@ -194,6 +220,7 @@ export class OrdersFacade {
     order: OrderWithItems,
     orderItemIds: string[],
     actor: AuditActor,
+    repricedItemIds: string[] = [],
   ): Promise<void> {
     if (orderItemIds.length === 0) return;
     const location = await this.locations.findById(order.locationId);
@@ -206,6 +233,7 @@ export class OrdersFacade {
       actor,
       {
         orderItemIds,
+        repricedItemIds,
         totalAmount: order.totalAmount.toFixed(2),
         currency: order.currency,
       },
@@ -226,13 +254,6 @@ export class OrdersFacade {
     client?: Prisma.TransactionClient,
   ): Promise<Map<string, BookingOrderProducts>> {
     return this.persistence.productTotalsByBookings(bookingIds, client);
-  }
-
-  priceProductItems(
-    locationId: string,
-    items: OrderProductItemDto[],
-  ): Promise<OrderPricingLine[]> {
-    return this.drafts.priceProductItems(locationId, items);
   }
 
   async search(
@@ -328,6 +349,7 @@ export class OrdersFacade {
         actor,
         {
           orderItemIds: dto.itemIds,
+          repricedItemIds: transition.repricedItemIds ?? [],
           totalAmount: transition.order.totalAmount.toFixed(2),
           currency: transition.order.currency,
         },
@@ -374,6 +396,63 @@ export class OrdersFacade {
     );
     this.orderPayments.publish(refund, actor, order.bookingId);
     return order;
+  }
+
+  /**
+   * New product lines of a visit priced in the booking context (booking window, booking
+   * creation). Nothing is stored.
+   */
+  priceVisitProducts(
+    locationId: string,
+    brand: { brandId: string; timezone: string },
+    visit: ProductPricingVisit,
+    items: OrderProductItemDto[],
+    consistency: ReadConsistency,
+    access: PurchaseCostAccess,
+  ): Promise<VisitProductsPricing> {
+    return this.pricingPreview.priceVisitProducts(
+      locationId,
+      brand,
+      visit,
+      items,
+      consistency,
+      access,
+    );
+  }
+
+  /**
+   * Draft products of a booking's visit order priced in the visit context a booking edit is
+   * about to write. Nothing is stored; null without drafts.
+   */
+  quoteVisitDrafts(
+    location: { id: string; brandId: string; timezone: string },
+    visit: ProductPricingVisit & { bookingId: string },
+  ): Promise<ProductPriceQuote | null> {
+    return this.productPricing.quoteVisitDrafts(location, visit);
+  }
+
+  /** POST orders/pricing: product lines priced, nothing stored. */
+  previewPricing(
+    locationId: string,
+    dto: OrderPricingRequestDto,
+    canOverridePrice: boolean,
+    access: PurchaseCostAccess,
+  ): Promise<OrderPricingPreview> {
+    return this.pricingPreview.preview(
+      locationId,
+      dto,
+      canOverridePrice,
+      access,
+    );
+  }
+
+  /** Amounts of a product return without storing it (same rules as createReturn). */
+  previewReturn(
+    locationId: string,
+    orderId: string,
+    items: CreateOrderReturnItemDto[],
+  ): Promise<OrderReturnPreview> {
+    return this.returns.preview(locationId, orderId, items);
   }
 
   private async dayFilterTimezone(

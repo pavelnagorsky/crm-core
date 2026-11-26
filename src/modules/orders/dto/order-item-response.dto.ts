@@ -1,4 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
+import { PriceAdjustmentKind } from '@prisma/client';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
 import { ApiUnitCost } from '../../../shared/decorators/api-unit-cost.decorator.js';
 import { FileResponseDto } from '../../../shared/dto/file-response.dto.js';
@@ -8,8 +9,11 @@ import { QuantityUtils } from '../../../shared/quantity/quantity.utils.js';
 import { ProductUnit } from '../../products/enums/product-unit.enum.js';
 import { OrderItemStatus } from '../enums/order-item-status.enum.js';
 import { OrderItemType } from '../enums/order-item-type.enum.js';
-import { OrderReturnStatus } from '../enums/order-return-status.enum.js';
 import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
+import { PromotionChoiceDto } from '../../pricing/dto/promotion-choice.dto.js';
+import { DiscountChoiceMode } from '../../pricing/engine/enums/discount-choice-mode.enum.js';
+import { postedReturns } from '../rules/order-return-allocation.rules.js';
+import { OrderPriceAdjustmentDto } from './order-price-adjustment.dto.js';
 
 export class OrderItemResponseDto {
   @ApiProperty({ type: String, format: 'uuid' })
@@ -84,6 +88,37 @@ export class OrderItemResponseDto {
   @ApiProperty({ type: String, nullable: true })
   sellerName: string | null;
 
+  @ApiProperty({
+    type: () => OrderPriceAdjustmentDto,
+    isArray: true,
+    description:
+      'Price layers: of the booking item for a service line, the discount for a product line.',
+  })
+  adjustments: OrderPriceAdjustmentDto[];
+
+  @ApiProperty({
+    type: () => OrderPriceAdjustmentDto,
+    nullable: true,
+    description: 'PROMOTION or CLIENT_DISCOUNT layer of the line.',
+  })
+  discount: OrderPriceAdjustmentDto | null;
+
+  @ApiProperty({
+    type: () => PromotionChoiceDto,
+    nullable: true,
+    description: 'Stored discount choice of a product line; null = AUTO.',
+  })
+  promotion: PromotionChoiceDto | null;
+
+  @ApiPrice({ description: 'Σ lineTotal of posted returns of the line.' })
+  returnedAmount: string;
+
+  @ApiPrice({
+    description:
+      'CONFIRMED: lineTotal - returnedAmount ("К возврату" of the whole rest); otherwise "0.00".',
+  })
+  returnableAmount: string;
+
   @ApiProperty({ type: Date, nullable: true })
   confirmedAt: Date | null;
 
@@ -93,9 +128,8 @@ export class OrderItemResponseDto {
   static fromEntity(
     entity: OrderWithItems['items'][number],
   ): OrderItemResponseDto {
-    const returnedQuantity = entity.returnItems
-      .filter((item) => item.return.status === OrderReturnStatus.POSTED)
-      .reduce((sum, item) => sum.plus(item.quantity), QuantityUtils.decimal(0));
+    const returned = postedReturns(entity);
+    const returnedQuantity = returned.quantity;
     const returnableQuantity =
       entity.status === OrderItemStatus.CONFIRMED
         ? entity.quantity.minus(returnedQuantity)
@@ -134,6 +168,29 @@ export class OrderItemResponseDto {
       entity.lineCostSnapshot == null
         ? null
         : MoneyUtils.format(entity.lineCostSnapshot);
+    dto.adjustments = entity.priceAdjustments.map(
+      OrderPriceAdjustmentDto.fromLayer,
+    );
+    const discount = entity.priceAdjustments.find(
+      (layer) =>
+        layer.kind === PriceAdjustmentKind.PROMOTION ||
+        layer.kind === PriceAdjustmentKind.CLIENT_DISCOUNT,
+    );
+    dto.discount = discount ? OrderPriceAdjustmentDto.fromLayer(discount) : null;
+    dto.promotion =
+      entity.discountChoice === null ||
+      entity.discountChoice === DiscountChoiceMode.AUTO
+        ? null
+        : Object.assign(new PromotionChoiceDto(), {
+            mode: entity.discountChoice,
+            ruleId: entity.discountChoiceRuleId,
+          });
+    dto.returnedAmount = MoneyUtils.format(returned.lineTotal);
+    dto.returnableAmount = MoneyUtils.format(
+      entity.status === OrderItemStatus.CONFIRMED
+        ? entity.lineTotal.minus(returned.lineTotal)
+        : 0,
+    );
     dto.sellerStaffId = entity.sellerStaffId;
     dto.sellerName = entity.sellerName;
     dto.confirmedAt = entity.confirmedAt;

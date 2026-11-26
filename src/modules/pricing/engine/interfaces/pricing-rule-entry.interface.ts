@@ -30,7 +30,10 @@ export interface PricingRuleEntry {
   intervals: PricingRuleIntervalEntry[];
   /** HOLIDAYS dates. */
   dates: string[];
-  appliesToAll: boolean;
+  /** Every service and bundle except the excluded service-kind targets. */
+  appliesToAllServices: boolean;
+  /** Every product except the excluded product-kind targets; promotions only. */
+  appliesToAllProducts: boolean;
   targets: PricingRuleTargetEntry[];
   /** Set for PROMOTION, null for SURCHARGE. */
   promotion: PricingPromotionEntry | null;

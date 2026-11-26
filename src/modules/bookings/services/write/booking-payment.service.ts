@@ -1,4 +1,11 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import {
+  HttpStatus,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
+import { AppException } from '../../../../shared/exceptions/app.exception.js';
+import { ErrorCode } from '../../../../shared/validation/error-codes.enum.js';
 import { Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
 import { AuditActionType } from '../../../audit/enums/audit-action-type.enum.js';
@@ -38,11 +45,13 @@ import {
   productItemIdsToConfirm,
 } from '../../rules/visit-payment-step.rules.js';
 import { BookingEventsService } from '../booking-events.service.js';
+import { PricingContextService } from '../../../pricing/services/pricing-context.service.js';
 import { BookingLifecycleService } from './booking-lifecycle.service.js';
 
 /**
  * Payment of a visit: completion of a started visit, confirmation of product lines and the
- * journal write, in one transaction. Lock order: payment key, booking, order, journal.
+ * journal write, in one transaction. Lock order: payment key, limited promotions (only when
+ * products are confirmed), booking, order, journal.
  * Nothing here runs on its own: only a person paying a visit records money.
  */
 @Injectable()
@@ -57,6 +66,7 @@ export class BookingPaymentService {
     private readonly payments: PaymentsFacade,
     private readonly lifecycle: BookingLifecycleService,
     private readonly events: BookingEventsService,
+    private readonly pricingContext: PricingContextService,
   ) {}
 
   /**
@@ -74,12 +84,29 @@ export class BookingPaymentService {
       confirmAllDraftProducts: input.confirmAllDraftProducts === true,
     };
     if (!input.payment && !confirmsProducts(products)) return null;
+    // Products are sold at the price the caller saw: their total is required.
+    if (confirmsProducts(products) && input.expectedProductTotal == null)
+      throw new AppException(
+        ErrorCode.VALIDATION_ERROR,
+        HttpStatus.BAD_REQUEST,
+        { field: 'expectedProductTotal' },
+      );
     const now = new Date();
     const { timezone } = await this.locations.getLocale(locationId);
     const payment = input.payment
       ? await this.planPayment(locationId, input.payment, timezone, now)
       : null;
-    return { ...products, payment, canReplace, timezone, now };
+    return {
+      ...products,
+      expectedProductTotal:
+        input.expectedProductTotal == null
+          ? null
+          : new Prisma.Decimal(input.expectedProductTotal),
+      payment,
+      canReplace,
+      timezone,
+      now,
+    };
   }
 
   /**
@@ -96,7 +123,11 @@ export class BookingPaymentService {
   ): Promise<VisitPaymentResult> {
     const plan = (await this.plan(
       booking.locationId,
-      { payment: dto, confirmProductItemIds: dto.confirmProductItemIds },
+      {
+        payment: dto,
+        confirmProductItemIds: dto.confirmProductItemIds,
+        expectedProductTotal: dto.expectedProductTotal,
+      },
       canReplace,
     ))!;
     const result = await this.db.$transaction(
@@ -130,13 +161,16 @@ export class BookingPaymentService {
     booking: Pick<BookingWithItems, 'id' | 'locationId'>,
     plan: VisitPaymentPlan,
   ): Promise<PaymentOperationWithPayments | null> {
-    if (!plan.payment) return null;
-    return this.payments.lockKeyForReplay(
-      tx,
-      booking.locationId,
-      plan.payment.input.idempotencyKey,
-      this.requestHash(booking.id, plan),
-    );
+    const replay = plan.payment
+      ? await this.payments.lockKeyForReplay(
+          tx,
+          booking.locationId,
+          plan.payment.input.idempotencyKey,
+          this.requestHash(booking.id, plan),
+        )
+      : null;
+    if (!replay) await this.lockLimitsForProducts(tx, booking.locationId, plan);
+    return replay;
   }
 
   /**
@@ -148,12 +182,26 @@ export class BookingPaymentService {
     locationId: string,
     plan: VisitPaymentPlan,
   ): Promise<void> {
-    if (!plan.payment) return;
-    await this.payments.lockUnusedKey(
-      tx,
-      locationId,
-      plan.payment.input.idempotencyKey,
-    );
+    if (plan.payment)
+      await this.payments.lockUnusedKey(
+        tx,
+        locationId,
+        plan.payment.input.idempotencyKey,
+      );
+    await this.lockLimitsForProducts(tx, locationId, plan);
+  }
+
+  /**
+   * Confirmed products fix their prices under the lock of the limited promotions; it is taken
+   * here, before the booking and the order, as every write that takes it does.
+   */
+  private async lockLimitsForProducts(
+    tx: Prisma.TransactionClient,
+    locationId: string,
+    plan: VisitPaymentPlan,
+  ): Promise<void> {
+    if (confirmsProducts(plan))
+      await this.pricingContext.lockLimits(tx, locationId);
   }
 
   /**
@@ -174,21 +222,24 @@ export class BookingPaymentService {
       : booking;
     const locked = await this.orders.lockBookingOrder(current, actor, tx);
     const confirmedItemIds = productItemIdsToConfirm(plan, locked.items);
-    const order =
+    const confirmation =
       confirmedItemIds.length > 0
         ? await this.orders.confirmBookingProducts(
             locked,
             confirmedItemIds,
+            plan.expectedProductTotal!,
             tx,
             plan.now,
           )
-        : locked;
+        : null;
+    const order = confirmation?.order ?? locked;
     const change = await this.recordPayment(tx, current, order, plan, actor);
     return {
       booking: current,
       completedFrom: completes ? (booking.status as BookingStatus) : null,
       order,
       confirmedItemIds,
+      repricedItemIds: confirmation?.repricedItemIds ?? [],
       change,
       operationId: change?.operation.id ?? null,
     };
@@ -228,6 +279,7 @@ export class BookingPaymentService {
         outcome.order,
         outcome.confirmedItemIds,
         actor,
+        outcome.repricedItemIds,
       );
     if (outcome.change)
       this.payments.publish(outcome.change, actor, outcome.booking.id);
@@ -337,6 +389,7 @@ export class BookingPaymentService {
       plan.confirmAllDraftProducts
         ? ['ALL_DRAFT_PRODUCTS']
         : plan.confirmProductItemIds,
+      plan.expectedProductTotal?.toFixed(2) ?? null,
     );
   }
 }

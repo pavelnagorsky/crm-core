@@ -10,7 +10,9 @@ import {
 } from '@prisma/client';
 import { PriceRuleInputDto } from '../dto/price-rule-input.dto.js';
 import { PriceRulePreviewRequestDto } from '../dto/price-rule-preview-request.dto.js';
+import { ProductUnit } from '../engine/enums/product-unit.enum.js';
 import {
+  pricingProduct,
   pricingSnapshot,
   priceLevel,
 } from '../engine/testing/pricing-snapshot.factory.js';
@@ -28,7 +30,7 @@ const input = (over: Partial<PriceRuleInputDto> = {}): PriceRuleInputDto => ({
   value: '10.00',
   weekdays: [5],
   intervals: [{ start: '17:00', end: '21:00' }],
-  appliesToAll: true,
+  appliesToAllServices: true,
   ...over,
 });
 
@@ -59,6 +61,7 @@ describe('PriceRulePreviewService', () => {
   const serviceCatalog = { loadCatalogSnapshot: vi.fn() };
   const locations = { getBookingSettings: vi.fn() };
   const staff = { namesByIds: vi.fn() };
+  const products = { listPriced: vi.fn() };
   const service = new PriceRulePreviewService(
     reads as never,
     ruleCatalog as never,
@@ -66,6 +69,7 @@ describe('PriceRulePreviewService', () => {
     serviceCatalog as never,
     locations as never,
     staff as never,
+    products as never,
   );
 
   beforeEach(() => {
@@ -97,6 +101,7 @@ describe('PriceRulePreviewService', () => {
     });
     ruleCatalog.nameTargets.mockResolvedValue([]);
     staff.namesByIds.mockResolvedValue(new Map());
+    products.listPriced.mockResolvedValue([]);
   });
 
   it('prices the base level and one other level at the first interval start', async () => {
@@ -157,7 +162,7 @@ describe('PriceRulePreviewService', () => {
       request(
         input({
           intervals: undefined,
-          appliesToAll: false,
+          appliesToAllServices: false,
           targets: [{ type: PriceRuleTargetType.SERVICE, id: 'wash' }],
         }),
       ),
@@ -250,7 +255,7 @@ describe('PriceRulePreviewService', () => {
         priceRuleRecord({ id: 'tuesday', weekdaysMask: 1 << 1 }),
         priceRuleRecord({
           id: 'other-service',
-          appliesToAll: false,
+          appliesToAllServices: false,
           targets: [[PriceRuleTargetType.SERVICE, 'color']],
         }),
         priceRuleRecord({ id: 'off', enabled: false }),
@@ -259,7 +264,7 @@ describe('PriceRulePreviewService', () => {
         'location',
         request(
           holidayInput({
-            appliesToAll: false,
+            appliesToAllServices: false,
             targets: [{ type: PriceRuleTargetType.SERVICE, id: 'cut' }],
           }),
         ),
@@ -354,7 +359,7 @@ describe('PriceRulePreviewService', () => {
         'location',
         request(promo()),
         NOW,
-        loader,
+        { loadMatchItems: loader },
       );
       expect(preview.nextDate).toBe('2026-11-23');
       // Client and total conditions are left out of the example: 60.00 - 15% = 51.00.
@@ -407,6 +412,196 @@ describe('PriceRulePreviewService', () => {
         }),
       ]);
       expect(preview.matches30d).toBeNull();
+    });
+
+    describe('products (docs/pricing-stage7-api.md)', () => {
+      const withProducts = () =>
+        snapshots.load.mockResolvedValue(
+          pricingSnapshot({
+            services: { cut: 6000 },
+            levels: [priceLevel('std', 'Standard', true)],
+            roundingStep: 100,
+            products: [
+              pricingProduct('shampoo', 2000, { categoryId: 'care' }),
+              pricingProduct('mask', 1000, { categoryId: 'care' }),
+              pricingProduct('oil', 3000, {
+                categoryId: 'care',
+                unit: ProductUnit.MILLILITER,
+              }),
+              pricingProduct('comb', 500),
+            ],
+          }),
+        );
+      const productPromo = (over: Partial<PriceRuleInputDto> = {}) =>
+        promo({
+          appliesToAllServices: false,
+          targets: [
+            { type: PriceRuleTargetType.PRODUCT_CATEGORY, id: 'care' },
+          ],
+          channels: [PromotionChannel.ADMIN],
+          clientFilter: PromotionClientFilter.ANY,
+          minVisitTotal: null,
+          ...over,
+        });
+
+      beforeEach(() => {
+        withProducts();
+        products.listPriced.mockResolvedValue([
+          { productLocationId: 'pl-shampoo', name: 'Шампунь' },
+          { productLocationId: 'pl-mask', name: 'Маска' },
+          { productLocationId: 'pl-oil', name: 'Масло' },
+          { productLocationId: 'pl-comb', name: 'Расчёска' },
+        ]);
+      });
+
+      it('counts reached products and prices one unit; below the purchase cost first', async () => {
+        const costs = vi.fn().mockResolvedValue(
+          new Map([
+            // 15% off 10.00 = 8.50 -> 8.00 (step 1.00): below 9.00.
+            ['pl-mask', new Prisma.Decimal('9')],
+            ['pl-shampoo', new Prisma.Decimal('5')],
+          ]),
+        );
+        const preview = await service.preview(
+          'location',
+          request(productPromo()),
+          NOW,
+          { loadPurchaseCosts: costs, canReadPurchaseCost: true },
+        );
+        expect(preview.productCount).toBe(3);
+        expect(preview.totalProductCount).toBe(4);
+        expect(preview.serviceCount).toBe(0);
+        expect(preview.examples).toEqual([]);
+        expect(costs).toHaveBeenCalledWith(['pl-shampoo', 'pl-mask', 'pl-oil']);
+        expect(preview.belowCostCount).toBe(1);
+        expect(
+          preview.productExamples.map((example) => ({
+            ...example,
+            before: example.before.toFixed(2),
+            after: example.after.toFixed(2),
+            amount: example.amount.toFixed(2),
+            lastPurchaseUnitCost: example.lastPurchaseUnitCost?.toFixed(2) ?? null,
+          })),
+        ).toEqual([
+          {
+            productId: 'mask',
+            productName: 'Маска',
+            unit: ProductUnit.PIECE,
+            before: '10.00',
+            after: '8.00',
+            amount: '2.00',
+            lastPurchaseUnitCost: '9.00',
+            belowCost: true,
+          },
+          {
+            productId: 'oil',
+            productName: 'Масло',
+            unit: ProductUnit.MILLILITER,
+            before: '30.00',
+            after: '25.00',
+            amount: '5.00',
+            lastPurchaseUnitCost: null,
+            belowCost: false,
+          },
+          {
+            productId: 'shampoo',
+            productName: 'Шампунь',
+            unit: ProductUnit.PIECE,
+            before: '20.00',
+            after: '17.00',
+            amount: '3.00',
+            lastPurchaseUnitCost: '5.00',
+            belowCost: false,
+          },
+        ]);
+      });
+
+      it('hides the cost number without Read(INVENTORY) but still counts below cost', async () => {
+        const preview = await service.preview(
+          'location',
+          request(productPromo()),
+          NOW,
+          {
+            loadPurchaseCosts: vi
+              .fn()
+              .mockResolvedValue(new Map([['pl-mask', new Prisma.Decimal('9')]])),
+          },
+        );
+        expect(preview.belowCostCount).toBe(1);
+        expect(
+          preview.productExamples.every(
+            (example) => example.lastPurchaseUnitCost === null,
+          ),
+        ).toBe(true);
+      });
+
+      it('"all products" except one; a promotion on services reaches no product', async () => {
+        const allButComb = await service.preview(
+          'location',
+          request(
+            productPromo({
+              appliesToAllProducts: true,
+              targets: [
+                {
+                  type: PriceRuleTargetType.PRODUCT,
+                  id: 'comb',
+                  excluded: true,
+                },
+              ],
+            }),
+          ),
+          NOW,
+        );
+        expect(allButComb.productCount).toBe(3);
+        const servicesOnly = await service.preview(
+          'location',
+          request(promo()),
+          NOW,
+        );
+        expect(servicesOnly.productCount).toBe(0);
+        expect(servicesOnly.productExamples).toEqual([]);
+      });
+
+      it('counts the separate sales of the last 30 days', async () => {
+        const saleLines = vi.fn().mockResolvedValue([
+          {
+            orderId: 'o1',
+            productId: 'shampoo',
+            productCategoryId: 'care',
+            unit: ProductUnit.PIECE,
+            quantity: new Prisma.Decimal('1'),
+            listUnitPrice: new Prisma.Decimal('20.00'),
+            sellerStaffId: null,
+            // Monday 16 November, 10:30.
+            confirmedAt: new Date('2026-11-16T10:30:00.000Z'),
+          },
+        ]);
+        const preview = await service.preview(
+          'location',
+          request(productPromo()),
+          NOW,
+          { loadMatchItems: vi.fn().mockResolvedValue([]), loadSaleLines: saleLines },
+        );
+        expect(saleLines).toHaveBeenCalledWith(
+          new Date('2026-10-24T10:00:00.000Z'),
+          NOW,
+        );
+        expect(preview.matches30d).toEqual({
+          bookingsCount: 0,
+          salesCount: 1,
+          discount: new Prisma.Decimal('3.00'),
+        });
+      });
+
+      it('a surcharge has no product part', async () => {
+        const preview = await service.preview('location', request(input()), NOW);
+        expect(preview).toMatchObject({
+          productCount: 0,
+          totalProductCount: 4,
+          productExamples: [],
+          belowCostCount: 0,
+        });
+      });
     });
   });
 });

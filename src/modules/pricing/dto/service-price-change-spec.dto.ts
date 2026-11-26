@@ -16,7 +16,7 @@ import regularExpressions from '../../../shared/regular-expressions.js';
 import { IsCalendarDate } from '../../../shared/time/decorators/is-calendar-date.validator.js';
 import { CanonicalAmount } from '../../../shared/transforms/canonical-amount.transform.js';
 import { PRICE_ROUNDING_STEPS } from '../constants/price-rounding-steps.constants.js';
-import { ServicePriceChangeMode } from '../enums/service-price-change-mode.enum.js';
+import { PriceChangeMode } from '../enums/price-change-mode.enum.js';
 import { ServicePriceChangeIncludeDto } from './service-price-change-include.dto.js';
 
 const MAX_SCOPE_IDS = 5000;
@@ -60,11 +60,11 @@ export class ServicePriceChangeSpecDto {
   bundleIds: string[];
 
   @ApiProperty({
-    enum: ServicePriceChangeMode,
-    enumName: 'ServicePriceChangeMode',
+    enum: PriceChangeMode,
+    enumName: 'PriceChangeMode',
   })
-  @IsEnum(ServicePriceChangeMode)
-  mode: ServicePriceChangeMode;
+  @IsEnum(PriceChangeMode)
+  mode: PriceChangeMode;
 
   @ApiSignedAmount({
     required: true,

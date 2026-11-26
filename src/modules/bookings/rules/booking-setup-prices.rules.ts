@@ -6,6 +6,7 @@ import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { BookingPriceRange } from '../interfaces/booking-price-range.interface.js';
 import { BookingServiceCatalog } from '../../services/catalog/interfaces/booking-service-catalog.interface.js';
 import { BookingSetupPrices } from '../interfaces/booking-setup-prices.interface.js';
+import { CatalogListPrices } from '../interfaces/catalog-list-prices.interface.js';
 import { BookingStaffServicePrice } from '../interfaces/booking-staff-service-price.interface.js';
 import { BookingStaff } from '../../staff/interfaces/booking-staff.interface.js';
 
@@ -33,13 +34,7 @@ export function buildBookingSetupPrices(
   context: QuoteContext | null = null,
   listDate: string = book.today,
 ): BookingSetupPrices {
-  const performers = new Map<string, string[]>();
-  for (const member of staff)
-    for (const { serviceId } of member.staffServices) {
-      const ids = performers.get(serviceId);
-      if (ids) ids.push(member.id);
-      else performers.set(serviceId, [member.id]);
-    }
+  const performers = performersByService(staff);
 
   const catalogPrice = new Map(
     catalog.services.map((service) => [
@@ -174,4 +169,80 @@ export function buildBookingSetupPrices(
     ]),
   );
   return { services, bundles, staffServicePrices };
+}
+
+/**
+ * Price-list ranges of the cabinet catalog (docs/pricing-stage7-api.md): what the staff
+ * charge by the price list on `listDate`, with no surcharges and no promotions. A service
+ * costs from the lowest to the highest list price among the staff who perform it (personal
+ * price, else level price, else base price - PriceBook.staffPrice); a service nobody
+ * performs costs its base price. A FIXED bundle costs its package price; a SUM bundle adds
+ * the lowest and the highest list prices of its lines, whatever its execution mode.
+ */
+export function buildCatalogListPrices(
+  book: PriceBook,
+  catalog: Pick<BookingServiceCatalog, 'services' | 'bundles'>,
+  staff: readonly BookingStaff[],
+  listDate: string = book.today,
+): CatalogListPrices {
+  const performers = performersByService(staff);
+  const catalogPrice = new Map(
+    catalog.services.map((service) => [
+      service.id,
+      MoneyUtils.toMinor(service.price),
+    ]),
+  );
+  const serviceRange = (serviceId: string): PriceRange => {
+    if (!book.hasService(serviceId)) {
+      const price = catalogPrice.get(serviceId) ?? 0;
+      return { min: price, max: price };
+    }
+    const staffIds = performers.get(serviceId) ?? [];
+    const prices = staffIds.length
+      ? staffIds.map((staffId) => book.staffPrice(serviceId, staffId, listDate))
+      : [book.basePriceAt(serviceId, listDate)];
+    return { min: Math.min(...prices), max: Math.max(...prices) };
+  };
+  const services = new Map(
+    catalog.services.map((service) => [service.id, serviceRange(service.id)]),
+  );
+  const bundles = new Map(
+    catalog.bundles.map((bundle) => {
+      const serviceIds = bundle.items.map((item) => item.serviceId);
+      let range: PriceRange;
+      if (
+        bundle.pricingMode === PrismaBundlePricingMode.FIXED &&
+        bundle.fixedPrice !== null
+      ) {
+        const price =
+          (book.bundle(bundle.id) !== undefined
+            ? book.fixedPriceAt(bundle.id, listDate)
+            : null) ?? MoneyUtils.toMinor(bundle.fixedPrice);
+        range = { min: price, max: price };
+      } else
+        range = serviceIds.reduce(
+          (sum, serviceId) => {
+            const item = serviceRange(serviceId);
+            return { min: sum.min + item.min, max: sum.max + item.max };
+          },
+          { min: 0, max: 0 },
+        );
+      return [bundle.id, range] as const;
+    }),
+  );
+  return { services, bundles };
+}
+
+/** Ids of the staff who perform each service, by service id. */
+function performersByService(
+  staff: readonly BookingStaff[],
+): Map<string, string[]> {
+  const performers = new Map<string, string[]>();
+  for (const member of staff)
+    for (const { serviceId } of member.staffServices) {
+      const ids = performers.get(serviceId);
+      if (ids) ids.push(member.id);
+      else performers.set(serviceId, [member.id]);
+    }
+  return performers;
 }

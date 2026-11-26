@@ -23,7 +23,7 @@ const target = (type: PriceRuleTargetType, id: string, excluded = false) => ({
 describe('affectedServiceCount', () => {
   it('counts every service for a rule that applies to all', () => {
     expect(
-      affectedServiceCount({ appliesToAll: true, targets: [] }, catalog),
+      affectedServiceCount({ appliesToAllServices: true, targets: [] }, catalog),
     ).toBe(4);
   });
 
@@ -31,7 +31,7 @@ describe('affectedServiceCount', () => {
     expect(
       affectedServiceCount(
         {
-          appliesToAll: true,
+          appliesToAllServices: true,
           targets: [
             target(SERVICE, 'spa', true),
             target(SERVICE_CATEGORY, 'hair', true),
@@ -45,7 +45,7 @@ describe('affectedServiceCount', () => {
   it('does not take the services of an excluded bundle out', () => {
     expect(
       affectedServiceCount(
-        { appliesToAll: true, targets: [target(BUNDLE, 'combo', true)] },
+        { appliesToAllServices: true, targets: [target(BUNDLE, 'combo', true)] },
         catalog,
       ),
     ).toBe(4);
@@ -55,7 +55,7 @@ describe('affectedServiceCount', () => {
     expect(
       affectedServiceCount(
         {
-          appliesToAll: false,
+          appliesToAllServices: false,
           targets: [
             target(SERVICE, 'cut'),
             target(SERVICE_CATEGORY, 'hair'),
@@ -71,7 +71,7 @@ describe('affectedServiceCount', () => {
     expect(
       affectedServiceCount(
         {
-          appliesToAll: false,
+          appliesToAllServices: false,
           targets: [target(SERVICE, 'gone'), target(BUNDLE, 'gone-bundle')],
         },
         catalog,
@@ -81,7 +81,7 @@ describe('affectedServiceCount', () => {
 
   it('counts nothing for a rule whose targets were all removed', () => {
     expect(
-      affectedServiceCount({ appliesToAll: false, targets: [] }, catalog),
+      affectedServiceCount({ appliesToAllServices: false, targets: [] }, catalog),
     ).toBe(0);
   });
 });

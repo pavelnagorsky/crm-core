@@ -80,6 +80,7 @@ export class BookingMutationService {
       {
         payment: dto.payment,
         confirmProductItemIds: dto.confirmProductItemIds,
+        expectedProductTotal: dto.expectedProductTotal,
       },
       canReplacePayment,
     );
@@ -137,6 +138,8 @@ export class BookingMutationService {
       },
       afterUpdate: async (booking, tx) => {
         if (clientLink) await this.orders.syncBookingClient(booking, tx);
+        // Draft products follow the context of the visit: start, client, promo code, services.
+        await this.orders.repriceBookingDrafts(booking, tx);
         if (clientLink || trafficWrite)
           await this.clientLink.syncAcquisition(old, booking, tx);
         // A retry of the same payment has done its step already.

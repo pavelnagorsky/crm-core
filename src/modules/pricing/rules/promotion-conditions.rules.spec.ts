@@ -1,4 +1,5 @@
 import {
+  PriceRuleTargetType,
   PriceValueType,
   PromotionChannel,
   PromotionClientFilter,
@@ -9,6 +10,7 @@ import {
   buildPromotionConditions,
   durationText,
   PROMOTION_ONE_DISCOUNT_LINE,
+  PROMOTION_ONE_DISCOUNT_PRODUCT_LINE,
 } from './promotion-conditions.rules.js';
 import { weekdaysToMask } from './price-rule-input.rules.js';
 
@@ -16,7 +18,8 @@ const base: PromotionConditionsInput = {
   valueType: PriceValueType.PERCENT,
   value: '10.00',
   currency: 'BYN',
-  appliesToAll: true,
+  appliesToAllServices: true,
+  appliesToAllProducts: false,
   targets: [],
   weekdaysMask: 0,
   intervals: [],
@@ -37,7 +40,100 @@ const base: PromotionConditionsInput = {
   usageCount: null,
 };
 
-const target = (name: string | null, excluded = false) => ({ name, excluded });
+const target = (name: string | null, excluded = false) => ({
+  type: PriceRuleTargetType.SERVICE,
+  name,
+  excluded,
+});
+const product = (name: string, excluded = false) => ({
+  type: PriceRuleTargetType.PRODUCT,
+  name,
+  excluded,
+});
+
+describe('buildPromotionConditions: products (docs/pricing-stage7-api.md)', () => {
+  it.each([
+    [
+      'all services and products',
+      { appliesToAllProducts: true },
+      '−10% на все услуги и товары',
+    ],
+    [
+      'all products',
+      { appliesToAllServices: false, appliesToAllProducts: true },
+      '−10% на все товары',
+    ],
+    [
+      'all products except one',
+      {
+        value: '15.00',
+        appliesToAllServices: false,
+        appliesToAllProducts: true,
+        targets: [product('Шампунь X', true)],
+      },
+      '−15% на все товары, кроме: Шампунь X',
+    ],
+    [
+      'services first, then products',
+      {
+        valueType: PriceValueType.AMOUNT,
+        value: '15.00',
+        appliesToAllServices: false,
+        targets: [product('Шампунь X'), target('Маникюр')],
+      },
+      '−15 BYN на Маникюр и Шампунь X',
+    ],
+    [
+      'all services and a product',
+      { targets: [product('Шампунь X')] },
+      '−10% на все услуги и на Шампунь X',
+    ],
+    [
+      'all services except one and all products except one',
+      {
+        appliesToAllProducts: true,
+        targets: [target('Окрашивание', true), product('Шампунь X', true)],
+      },
+      '−10% на все услуги и товары, кроме: Окрашивание и Шампунь X',
+    ],
+  ] as const)('size: %s', (_name, overrides, line) => {
+    expect(
+      buildPromotionConditions({
+        ...base,
+        ...overrides,
+      } as PromotionConditionsInput)[0],
+    ).toBe(line);
+  });
+
+  it('a promotion only on products: "Покупка от" and the product one-discount line', () => {
+    const lines = buildPromotionConditions({
+      ...base,
+      appliesToAllServices: false,
+      appliesToAllProducts: true,
+      minVisitTotal: '40.00',
+    });
+    expect(lines).toContain('Покупка от 40 BYN');
+    expect(lines[lines.length - 1]).toBe(PROMOTION_ONE_DISCOUNT_PRODUCT_LINE);
+  });
+
+  it('services and products: "Визит от" and the product one-discount line', () => {
+    const lines = buildPromotionConditions({
+      ...base,
+      targets: [product('Шампунь X')],
+      minVisitTotal: '40.00',
+    });
+    expect(lines).toContain('Визит от 40 BYN');
+    expect(lines[lines.length - 1]).toBe(PROMOTION_ONE_DISCOUNT_PRODUCT_LINE);
+  });
+
+  it('excluded products alone do not make a product promotion', () => {
+    const lines = buildPromotionConditions({
+      ...base,
+      targets: [target('Окрашивание', true)],
+    });
+    expect(lines[lines.length - 1]).toBe(PROMOTION_ONE_DISCOUNT_LINE);
+  });
+});
 
 describe('buildPromotionConditions (docs/pricing-stage4-api.md, «Условия»)', () => {
   it('no restrictions: the size and the one-discount line', () => {
@@ -54,7 +150,7 @@ describe('buildPromotionConditions (docs/pricing-stage4-api.md, «Условия
       {
         valueType: PriceValueType.AMOUNT,
         value: '15.00',
-        appliesToAll: false,
+        appliesToAllServices: false,
         targets: [target('Маникюр'), target('Педикюр')],
       },
       '−15 BYN на Маникюр и Педикюр',
@@ -62,7 +158,7 @@ describe('buildPromotionConditions (docs/pricing-stage4-api.md, «Условия
     [
       'more than three targets',
       {
-        appliesToAll: false,
+        appliesToAllServices: false,
         targets: ['A', 'B', 'C', 'D', 'E'].map((name) => target(name)),
       },
       '−10% на A, B, C и ещё 2',
@@ -70,7 +166,7 @@ describe('buildPromotionConditions (docs/pricing-stage4-api.md, «Условия
     ['fraction percent', { value: '12.50' }, '−12,5% на все услуги'],
     [
       'a deleted target is left out',
-      { appliesToAll: false, targets: [target(null), target('Стрижка')] },
+      { appliesToAllServices: false, targets: [target(null), target('Стрижка')] },
       '−10% на Стрижка',
     ],
   ] as const)('size: %s', (_name, overrides, line) => {

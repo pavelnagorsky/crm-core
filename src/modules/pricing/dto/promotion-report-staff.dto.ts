@@ -1,7 +1,7 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
 import { MoneyUtils } from '../../../shared/money/money.utils.js';
-import { PromotionReportStaff } from '../interfaces/promotion-report-staff.interface.js';
+import { PromotionReportStaffRow } from '../interfaces/promotion-report-staff-row.interface.js';
 
 export class PromotionReportStaffDto {
   @ApiProperty({ type: String })
@@ -13,16 +13,24 @@ export class PromotionReportStaffDto {
   @ApiProperty({ type: String, nullable: true })
   avatarUrl: string | null;
 
-  @ApiProperty({ type: Number })
+  @ApiProperty({
+    type: Number,
+    description: 'Bookings with the promotion; 0 for a staff member who only sold products.',
+  })
   bookingsCount: number;
 
-  @ApiPrice()
+  @ApiPrice({ description: 'Booking items with the promotion.' })
   revenue: string;
 
-  @ApiPrice()
+  @ApiPrice({ description: 'Discount on the booking items.' })
   discount: string;
 
-  static fromStaff(staff: PromotionReportStaff): PromotionReportStaffDto {
+  @ApiPrice({
+    description: 'Product lines with the promotion sold by the staff member, net of returns.',
+  })
+  productsRevenue: string;
+
+  static fromStaff(staff: PromotionReportStaffRow): PromotionReportStaffDto {
     const dto = new PromotionReportStaffDto();
     dto.staffId = staff.staffId;
     dto.name = staff.name;
@@ -30,6 +38,7 @@ export class PromotionReportStaffDto {
     dto.bookingsCount = staff.bookingsCount;
     dto.revenue = MoneyUtils.format(staff.revenue);
     dto.discount = MoneyUtils.format(staff.discount);
+    dto.productsRevenue = MoneyUtils.format(staff.productsRevenue);
     return dto;
   }
 }

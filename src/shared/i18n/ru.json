@@ -303,6 +303,11 @@
     "SERVICE_PRICE_CHANGE_CANCELLED": "Изменение цен отменено",
     "SERVICE_PRICE_CHANGE_ROLLED_BACK": "Прежние цены возвращены",
     "SERVICE_PRICES_IMPORTED": "Цены загружены из Excel",
+    "PRODUCT_PRICE_CHANGE_CREATED": "Изменение цен товаров запланировано",
+    "PRODUCT_PRICE_CHANGE_APPLIED": "Цены товаров изменены",
+    "PRODUCT_PRICE_CHANGE_CANCELLED": "Изменение цен товаров отменено",
+    "PRODUCT_PRICE_CHANGE_ROLLED_BACK": "Прежние цены товаров возвращены",
+    "PRODUCT_PRICES_IMPORTED": "Цены товаров загружены из Excel",
     "PRICE_RULE_CREATED": "Наценка создана",
     "PRICE_RULE_UPDATED": "Наценка изменена",
     "PRICE_RULE_ENABLED": "Наценка включена",
@@ -555,7 +560,8 @@
       "genderMale": "Мужской",
       "genderFemale": "Женский",
       "acquisitionSource": "Источник привлечения",
-      "discountPercent": "Скидка, %"
+      "servicesDiscountPercent": "Скидка на услуги, %",
+      "productsDiscountPercent": "Скидка на товары, %"
     },
     "bookings": {
       "sheet": "Записи",
@@ -855,7 +861,8 @@
       "banReason": "Причина бана",
       "acquisitionSource": "Источник привлечения",
       "acquisitionSourceDetail": "Уточнение источника",
-      "discountPercent": "Скидка клиента, %"
+      "servicesDiscountPercent": "Скидка клиента на услуги, %",
+      "productsDiscountPercent": "Скидка клиента на товары, %"
     },
     "STAFF": {
       "name": "Имя",
@@ -896,8 +903,9 @@
       "weekdays": "Дни недели",
       "intervals": "Часы начала визита",
       "dates": "Даты",
-      "appliesToAll": "На все услуги",
-      "targets": "Услуги, категории, комплексы",
+      "appliesToAllServices": "На все услуги",
+      "appliesToAllProducts": "На все товары",
+      "targets": "Услуги, товары, категории, комплексы",
       "scenario": "Сценарий",
       "publicName": "Название для клиентов",
       "publicDescription": "Описание для клиентов",

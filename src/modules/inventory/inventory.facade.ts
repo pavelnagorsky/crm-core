@@ -17,6 +17,7 @@ import { InventoryDocumentWithItems } from './interfaces/inventory-document-with
 import { InventorySaleCost } from './interfaces/inventory-sale-cost.interface.js';
 import { InventorySaleLine } from './interfaces/inventory-sale-line.interface.js';
 import { InventoryDocumentService } from './services/inventory-document.service.js';
+import { InventoryPurchaseCostService } from './services/inventory-purchase-cost.service.js';
 import { InventoryReadService } from './services/inventory-read.service.js';
 import { InventorySalesService } from './services/inventory-sales.service.js';
 
@@ -26,7 +27,25 @@ export class InventoryFacade {
     private readonly documents: InventoryDocumentService,
     private readonly read: InventoryReadService,
     private readonly sales: InventorySalesService,
+    private readonly purchaseCosts: InventoryPurchaseCostService,
   ) {}
+
+  /**
+   * Last purchase unit cost (posted receipts) of each product line of the location, in the
+   * product unit. Products never received are absent.
+   */
+  lastPurchaseUnitCosts(
+    locationId: string,
+    productLocationIds: readonly string[],
+    tx?: Prisma.TransactionClient,
+  ): Promise<Map<string, Prisma.Decimal>> {
+    return this.purchaseCosts.lastPurchaseUnitCosts(
+      locationId,
+      productLocationIds,
+      tx,
+    );
+  }
+
   createDocument(
     locationId: string,
     dto: CreateInventoryDocumentDto,

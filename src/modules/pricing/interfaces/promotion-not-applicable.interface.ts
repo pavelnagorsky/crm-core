@@ -5,4 +5,6 @@ export interface PromotionNotApplicable {
   lineIndex: number;
   ruleId: string | null;
   reason: PriceRuleSkipReason;
+  /** A product line: its brand product. */
+  productId?: string;
 }

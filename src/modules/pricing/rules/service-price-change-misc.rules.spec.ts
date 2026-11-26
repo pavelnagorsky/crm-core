@@ -1,5 +1,5 @@
-import { ServicePriceChangeSkip, ServicePriceChangeTarget } from '@prisma/client';
-import { ServicePriceChangeMode } from '../enums/service-price-change-mode.enum.js';
+import { PriceChangeSkip, PriceChangeTarget } from '@prisma/client';
+import { PriceChangeMode } from '../enums/price-change-mode.enum.js';
 import { applyDecision, rollbackDecision } from './service-price-change-apply.rules.js';
 import {
   assertPriceChangeDate,
@@ -29,17 +29,17 @@ describe('rollbackDecision', () => {
   it('skips a changed price as CHANGED_AFTER', () => {
     expect(rollbackDecision(item, ok(5600))).toEqual({
       kind: 'SKIP',
-      skip: ServicePriceChangeSkip.CHANGED_AFTER,
+      skip: PriceChangeSkip.CHANGED_AFTER,
     });
   });
 
   it('skips with the target reason and ignores rows that were never applied', () => {
     expect(
-      rollbackDecision(item, { skip: ServicePriceChangeSkip.TARGET_DELETED, current: null }),
-    ).toEqual({ kind: 'SKIP', skip: ServicePriceChangeSkip.TARGET_DELETED });
+      rollbackDecision(item, { skip: PriceChangeSkip.TARGET_DELETED, current: null }),
+    ).toEqual({ kind: 'SKIP', skip: PriceChangeSkip.TARGET_DELETED });
     expect(
       rollbackDecision(
-        { ...item, applySkip: ServicePriceChangeSkip.STAFF_NOT_ASSIGNED },
+        { ...item, applySkip: PriceChangeSkip.STAFF_NOT_ASSIGNED },
         ok(5500),
       ),
     ).toEqual({ kind: 'IGNORE' });
@@ -50,25 +50,25 @@ describe('applyDecision', () => {
   it('writes unless the target is gone or cannot take the price', () => {
     expect(applyDecision({ skip: null, current: 1 })).toEqual({ write: true, skip: null });
     expect(
-      applyDecision({ skip: ServicePriceChangeSkip.BUNDLE_NOT_FIXED, current: null }),
-    ).toEqual({ write: false, skip: ServicePriceChangeSkip.BUNDLE_NOT_FIXED });
+      applyDecision({ skip: PriceChangeSkip.BUNDLE_NOT_FIXED, current: null }),
+    ).toEqual({ write: false, skip: PriceChangeSkip.BUNDLE_NOT_FIXED });
   });
 });
 
 describe('ruleChangeTitle', () => {
-  const t = (mode: ServicePriceChangeMode, value: number | null, step = 1) =>
+  const t = (mode: PriceChangeMode, value: number | null, step = 1) =>
     ruleChangeTitle({ mode, value, step }, 'BYN');
   it('formats percent, amount and new prices with a plain hyphen', () => {
-    expect(t(ServicePriceChangeMode.PERCENT, 1000)).toBe('+10%');
-    expect(t(ServicePriceChangeMode.PERCENT, -500)).toBe('-5%');
-    expect(t(ServicePriceChangeMode.PERCENT, 250)).toBe('+2.5%');
-    expect(t(ServicePriceChangeMode.AMOUNT, 500)).toBe('+5 BYN');
-    expect(t(ServicePriceChangeMode.AMOUNT, -500)).toBe('-5 BYN');
-    expect(t(ServicePriceChangeMode.SET, 8000)).toBe('Новые цены');
+    expect(t(PriceChangeMode.PERCENT, 1000)).toBe('+10%');
+    expect(t(PriceChangeMode.PERCENT, -500)).toBe('-5%');
+    expect(t(PriceChangeMode.PERCENT, 250)).toBe('+2.5%');
+    expect(t(PriceChangeMode.AMOUNT, 500)).toBe('+5 BYN');
+    expect(t(PriceChangeMode.AMOUNT, -500)).toBe('-5 BYN');
+    expect(t(PriceChangeMode.SET, 8000)).toBe('Новые цены');
   });
   it('adds the rounding step unless it is 0.01', () => {
-    expect(t(ServicePriceChangeMode.PERCENT, 1000, 100)).toBe('+10%, округление до 1 BYN');
-    expect(t(ServicePriceChangeMode.PERCENT, 1000, 10)).toBe('+10%, округление до 0.1 BYN');
+    expect(t(PriceChangeMode.PERCENT, 1000, 100)).toBe('+10%, округление до 1 BYN');
+    expect(t(PriceChangeMode.PERCENT, 1000, 10)).toBe('+10%, округление до 0.1 BYN');
   });
   it('titles an upload', () => {
     expect(importChangeTitle('prices.xlsx')).toBe('Загрузка из Excel: prices.xlsx');
@@ -90,7 +90,7 @@ describe('price change date and spec', () => {
       serviceIds: [],
       categoryIds: [],
       bundleIds: [],
-      mode: ServicePriceChangeMode.PERCENT,
+      mode: PriceChangeMode.PERCENT,
       value: '10.00',
       priceRoundingStep: '1.00',
       include: { levelPrices: true, staffPrices: true, fixedBundles: true },
@@ -103,8 +103,8 @@ describe('price change date and spec', () => {
     expect(() => dto({ value: '-99.01' })).toThrow();
     expect(() => dto({ value: '1000.01' })).toThrow();
     expect(() => dto({ value: null })).toThrow();
-    expect(() => dto({ mode: ServicePriceChangeMode.SET, value: null })).not.toThrow();
-    expect(() => dto({ mode: ServicePriceChangeMode.SET, value: '-1.00' })).toThrow();
+    expect(() => dto({ mode: PriceChangeMode.SET, value: null })).not.toThrow();
+    expect(() => dto({ mode: PriceChangeMode.SET, value: '-1.00' })).toThrow();
     expect(() => dto({ allServices: false })).toThrow();
   });
 });
@@ -116,7 +116,7 @@ describe('buildUpcoming', () => {
     items: items as never[],
   });
   const base = (serviceId: string, afterPrice: number | null) => ({
-    targetType: ServicePriceChangeTarget.BASE,
+    targetType: PriceChangeTarget.BASE,
     serviceId,
     bundleId: null,
     afterPrice,
@@ -127,9 +127,9 @@ describe('buildUpcoming', () => {
         change('2027-01-01', [
           base('s1', 5500),
           base('s2', 3000),
-          { targetType: ServicePriceChangeTarget.BUNDLE, serviceId: null, bundleId: 'b1', afterPrice: 9000 },
+          { targetType: PriceChangeTarget.BUNDLE, serviceId: null, bundleId: 'b1', afterPrice: 9000 },
         ]),
-        change('2027-01-01', [{ targetType: ServicePriceChangeTarget.LEVEL, serviceId: 's1', bundleId: null, afterPrice: 1 }], 'c-2027-01-01b'),
+        change('2027-01-01', [{ targetType: PriceChangeTarget.LEVEL, serviceId: 's1', bundleId: null, afterPrice: 1 }], 'c-2027-01-01b'),
         change('2027-02-01', [base('s1', 6000)]),
       ],
       new Map([
@@ -172,13 +172,13 @@ describe('buildUpcoming', () => {
 });
 
 describe('level that became the default', () => {
-  const state = { skip: ServicePriceChangeSkip.LEVEL_IS_DEFAULT, current: null };
+  const state = { skip: PriceChangeSkip.LEVEL_IS_DEFAULT, current: null };
   it('is skipped on apply', () => {
-    expect(applyDecision(state)).toEqual({ write: false, skip: ServicePriceChangeSkip.LEVEL_IS_DEFAULT });
+    expect(applyDecision(state)).toEqual({ write: false, skip: PriceChangeSkip.LEVEL_IS_DEFAULT });
   });
   it('is skipped on rollback', () => {
     expect(
       rollbackDecision({ applySkip: null, beforePrice: 100, afterPrice: 200 }, state),
-    ).toEqual({ kind: 'SKIP', skip: ServicePriceChangeSkip.LEVEL_IS_DEFAULT });
+    ).toEqual({ kind: 'SKIP', skip: PriceChangeSkip.LEVEL_IS_DEFAULT });
   });
 });

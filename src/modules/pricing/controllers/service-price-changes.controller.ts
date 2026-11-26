@@ -25,7 +25,7 @@ import { auditActorFromToken } from '../../audit/utils/audit-actor-from-token.js
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 import { TokenPayload } from '../../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
-import { SERVICE_PRICE_CHANGE_MAX_PAGE_SIZE } from '../constants/service-price-change.constants.js';
+import { PRICE_CHANGE_MAX_PAGE_SIZE } from '../constants/price-change.constants.js';
 import { CreateServicePriceChangeDto } from '../dto/create-service-price-change.dto.js';
 import { ServicePriceChangeDetailDto } from '../dto/service-price-change-detail.dto.js';
 import { ServicePriceChangeListRequestDto } from '../dto/service-price-change-list-request.dto.js';
@@ -55,7 +55,7 @@ export class ServicePriceChangesController {
   @ApiOkResponse({ type: ApiResponse(ServicePriceChangePreviewResponseDto) })
   @ApiBadRequestResponse({
     description:
-      'SERVICE_PRICE_CHANGE_INVALID, SERVICE_PRICE_CHANGE_DATE_INVALID or SERVICE_PRICE_CHANGE_TOO_LARGE',
+      'PRICE_CHANGE_INVALID, PRICE_CHANGE_DATE_INVALID or PRICE_CHANGE_TOO_LARGE',
   })
   @Permissions(Read(Claim.PRICING))
   @Post('preview')
@@ -77,10 +77,10 @@ export class ServicePriceChangesController {
   @ApiOkResponse({ type: ApiResponse(ServicePriceChangeDetailDto) })
   @ApiBadRequestResponse({
     description:
-      'SERVICE_PRICE_CHANGE_INVALID, DATE_INVALID, TOO_LARGE, ROW_INVALID or EMPTY',
+      'PRICE_CHANGE_INVALID, DATE_INVALID, TOO_LARGE, ROW_INVALID or EMPTY',
   })
   @ApiConflictResponse({
-    description: 'SERVICE_PRICE_CHANGE_STALE, DATE_CONFLICT or LIMIT',
+    description: 'PRICE_CHANGE_STALE, DATE_CONFLICT or LIMIT',
   })
   @Permissions(Write(Claim.PRICING))
   @Post()
@@ -129,7 +129,7 @@ export class ServicePriceChangesController {
       new ServicePriceChangeListResponseDto(
         items.map(ServicePriceChangeSummaryDto.fromView),
         dto.page,
-        Math.min(dto.pageSize, SERVICE_PRICE_CHANGE_MAX_PAGE_SIZE),
+        Math.min(dto.pageSize, PRICE_CHANGE_MAX_PAGE_SIZE),
         totalItems,
         counts,
       ),
@@ -138,7 +138,7 @@ export class ServicePriceChangesController {
 
   @ApiOperation({ summary: 'One price change with its rows' })
   @ApiOkResponse({ type: ApiResponse(ServicePriceChangeDetailDto) })
-  @ApiNotFoundResponse({ description: 'SERVICE_PRICE_CHANGE_NOT_FOUND' })
+  @ApiNotFoundResponse({ description: 'PRICE_CHANGE_NOT_FOUND' })
   @Permissions(Read(Claim.PRICING))
   @Get(':changeId')
   async get(
@@ -154,8 +154,8 @@ export class ServicePriceChangesController {
 
   @ApiOperation({ summary: 'Cancel a scheduled price change' })
   @ApiOkResponse({ type: ApiResponse(ServicePriceChangeDetailDto) })
-  @ApiNotFoundResponse({ description: 'SERVICE_PRICE_CHANGE_NOT_FOUND' })
-  @ApiConflictResponse({ description: 'SERVICE_PRICE_CHANGE_NOT_SCHEDULED' })
+  @ApiNotFoundResponse({ description: 'PRICE_CHANGE_NOT_FOUND' })
+  @ApiConflictResponse({ description: 'PRICE_CHANGE_NOT_SCHEDULED' })
   @Permissions(Write(Claim.PRICING))
   @Post(':changeId/cancel')
   @HttpCode(HttpStatus.OK)
@@ -180,8 +180,8 @@ export class ServicePriceChangesController {
       'Return the previous prices of an applied change where they were not changed since',
   })
   @ApiOkResponse({ type: ApiResponse(ServicePriceChangeRollbackResponseDto) })
-  @ApiNotFoundResponse({ description: 'SERVICE_PRICE_CHANGE_NOT_FOUND' })
-  @ApiConflictResponse({ description: 'SERVICE_PRICE_CHANGE_NOT_APPLIED' })
+  @ApiNotFoundResponse({ description: 'PRICE_CHANGE_NOT_FOUND' })
+  @ApiConflictResponse({ description: 'PRICE_CHANGE_NOT_APPLIED' })
   @Permissions(Write(Claim.PRICING))
   @Post(':changeId/rollback')
   @HttpCode(HttpStatus.OK)

@@ -8,7 +8,7 @@ import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { LocationService } from '../../location/services/location.service.js';
 import { ServiceCatalogFacade } from '../../services/catalog/service-catalog.facade.js';
 import { StaffService } from '../../staff/services/staff.service.js';
-import { SERVICE_PRICE_CHANGE_MAX_ITEMS } from '../constants/service-price-change.constants.js';
+import { PRICE_CHANGE_MAX_ITEMS } from '../constants/price-change.constants.js';
 import { ServicePriceChangeSpecDto } from '../dto/service-price-change-spec.dto.js';
 import { ServicePriceChangeGroupKind } from '../enums/service-price-change-group-kind.enum.js';
 import { PriceTimeline } from '../engine/price-timeline.js';
@@ -26,7 +26,7 @@ import {
 } from '../rules/service-price-change-spec.rules.js';
 import { PriceLevelReadService } from './price-level-read.service.js';
 import { ScheduledPriceChangeReadService } from './scheduled-price-change-read.service.js';
-import { ServicePriceChangeWriter } from './service-price-change-writer.service.js';
+import { PriceChangeWriter } from './price-change-writer.service.js';
 
 /** Computes the rows of a price change rule: what each price is on the date and becomes. */
 @Injectable()
@@ -38,7 +38,7 @@ export class ServicePriceChangePreviewService {
     private readonly staff: StaffService,
     private readonly locations: LocationService,
     private readonly scheduled: ScheduledPriceChangeReadService,
-    private readonly writer: ServicePriceChangeWriter,
+    private readonly writer: PriceChangeWriter,
   ) {}
 
   /** The preview of a rule request. */
@@ -144,11 +144,11 @@ export class ServicePriceChangePreviewService {
       new PriceTimeline(entries),
     );
     const counts = countPriceChangeRows(groups);
-    if (counts.rows > SERVICE_PRICE_CHANGE_MAX_ITEMS)
+    if (counts.rows > PRICE_CHANGE_MAX_ITEMS)
       throw new AppException(
-        ErrorCode.SERVICE_PRICE_CHANGE_TOO_LARGE,
+        ErrorCode.PRICE_CHANGE_TOO_LARGE,
         HttpStatus.BAD_REQUEST,
-        { max: SERVICE_PRICE_CHANGE_MAX_ITEMS },
+        { max: PRICE_CHANGE_MAX_ITEMS },
       );
     const groupServiceIds = groups
       .filter((group) => group.kind === ServicePriceChangeGroupKind.SERVICE)
@@ -172,14 +172,13 @@ export class ServicePriceChangePreviewService {
             db,
             locationId,
             spec.effectiveDate,
-            groupServiceIds,
-            groupBundleIds,
+            { serviceIds: groupServiceIds, bundleIds: groupBundleIds },
           ),
     ]);
     return { date, groups, counts, affectedBookingsCount, conflicts };
   }
 
-  /** 400 SERVICE_PRICE_CHANGE_INVALID { field } for ids that are not the location's. */
+  /** 400 PRICE_CHANGE_INVALID { field } for ids that are not the location's. */
   private assertScope(
     spec: PriceChangeSpec,
     catalog: {
@@ -192,7 +191,7 @@ export class ServicePriceChangePreviewService {
     const check = (field: string, ok: boolean) => {
       if (!ok)
         throw new AppException(
-          ErrorCode.SERVICE_PRICE_CHANGE_INVALID,
+          ErrorCode.PRICE_CHANGE_INVALID,
           HttpStatus.BAD_REQUEST,
           { field },
         );

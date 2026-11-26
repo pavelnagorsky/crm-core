@@ -14,6 +14,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { TrimString } from '../../../shared/transforms/trim-string.transform.js';
+import { OrderPromoCodeField } from '../decorators/order-promo-code-field.decorator.js';
 import { UpdateOrderItemDto } from './update-order-item.dto.js';
 
 export class UpdateOrderDto {
@@ -52,6 +53,11 @@ export class UpdateOrderDto {
   @TrimString()
   @MaxLength(1000)
   note?: string | null;
+
+  @OrderPromoCodeField(
+    'Promo code of a sale: not sent - unchanged, null - removed. A visit order takes the code of its booking: 409 ORDER_PROMO_CODE_VIA_BOOKING.',
+  )
+  promoCode?: string | null;
 
   @ApiProperty({ type: () => UpdateOrderItemDto, isArray: true })
   @IsArray()

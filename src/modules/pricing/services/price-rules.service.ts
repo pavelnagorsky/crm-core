@@ -343,7 +343,8 @@ export class PriceRulesService {
           yearly: source.yearly,
           holidayExclusive: source.holidayExclusive,
           weekdaysMask: source.weekdaysMask,
-          appliesToAll: source.appliesToAll,
+          appliesToAllServices: source.appliesToAllServices,
+          appliesToAllProducts: source.appliesToAllProducts,
           scenario: source.scenario,
           publicName: source.publicName,
           publicDescription: source.publicDescription,
@@ -421,6 +422,31 @@ export class PriceRulesService {
       where: { targetType, targetId, rule: { locationId } },
     });
     if (count > 0)
+      await this.cache.invalidate(CacheDependency.pricing(locationId));
+  }
+
+  /**
+   * Drops the rule targets that point at a deleted product or product category in every
+   * location of the brand (products belong to the brand). The rules stay.
+   */
+  async removeBrandTargets(
+    brandId: string,
+    targetType: PriceRuleTargetType,
+    targetId: string,
+  ): Promise<void> {
+    const where = {
+      targetType,
+      targetId,
+      rule: { location: { brandId } },
+    } satisfies Prisma.PriceRuleTargetWhereInput;
+    const affected = await this.db.priceRuleTarget.findMany({
+      where,
+      select: { rule: { select: { locationId: true } } },
+    });
+    if (affected.length === 0) return;
+    await this.db.priceRuleTarget.deleteMany({ where });
+    const locationIds = new Set(affected.map((target) => target.rule.locationId));
+    for (const locationId of locationIds)
       await this.cache.invalidate(CacheDependency.pricing(locationId));
   }
 
@@ -571,7 +597,7 @@ export class PriceRulesService {
         })),
         currency,
         serviceCount: affectedServiceCount(
-          { appliesToAll: rule.appliesToAll, targets: refs },
+          { appliesToAllServices: rule.appliesToAllServices, targets: refs },
           coverage,
         ),
         ...priceRuleSchedule(rule, today),
@@ -675,7 +701,8 @@ function updateData(
     yearly: rule.yearly,
     holidayExclusive: rule.holidayExclusive,
     weekdaysMask: rule.weekdaysMask,
-    appliesToAll: rule.appliesToAll,
+    appliesToAllServices: rule.appliesToAllServices,
+    appliesToAllProducts: rule.appliesToAllProducts,
     ...promotionColumns(rule),
     ...children(rule),
   };
@@ -701,7 +728,8 @@ function createData(
     yearly: rule.yearly,
     holidayExclusive: rule.holidayExclusive,
     weekdaysMask: rule.weekdaysMask,
-    appliesToAll: rule.appliesToAll,
+    appliesToAllServices: rule.appliesToAllServices,
+    appliesToAllProducts: rule.appliesToAllProducts,
     ...promotionColumns(rule),
     createdById,
     ...children(rule),

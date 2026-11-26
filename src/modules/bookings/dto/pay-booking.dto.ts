@@ -6,6 +6,7 @@ import {
   IsOptional,
   IsUUID,
 } from 'class-validator';
+import { IsOptionalPrice } from '../../../shared/decorators/is-price.decorator.js';
 import { PaymentInputDto } from '../../payments/dto/payment-input.dto.js';
 
 export class PayBookingDto extends PaymentInputDto {
@@ -23,4 +24,9 @@ export class PayBookingDto extends PaymentInputDto {
   @ArrayUnique()
   @IsUUID(undefined, { each: true })
   confirmProductItemIds?: string[];
+
+  @IsOptionalPrice(
+    'Required with a non-empty confirmProductItemIds (400 VALIDATION_ERROR): Σ lineTotal of those lines the user saw. A different total after fresh pricing is 409 PRICE_CHANGED { expectedTotal, total, products, promoCode }. Part of the request hash.',
+  )
+  expectedProductTotal?: string | null;
 }

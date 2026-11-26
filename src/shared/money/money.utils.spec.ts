@@ -21,6 +21,26 @@ describe('MoneyUtils', () => {
     expect(amounts).toEqual(['33.33', '33.34', '33.33']);
     expect(allocated.toFixed(2)).toBe('100.00');
   });
+
+  it('allocates rounding down, the part that completes the total takes the remainder', () => {
+    const total = new Prisma.Decimal('10.00');
+    const totalQuantity = new Prisma.Decimal(3);
+    let allocated = new Prisma.Decimal(0);
+    const amounts: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const amount = MoneyUtils.allocateCumulativeDown(
+        total,
+        totalQuantity,
+        new Prisma.Decimal(1),
+        new Prisma.Decimal(i),
+        allocated,
+      );
+      allocated = allocated.plus(amount);
+      amounts.push(amount.toFixed(2));
+    }
+    expect(amounts).toEqual(['3.33', '3.33', '3.34']);
+    expect(allocated.toFixed(2)).toBe('10.00');
+  });
   it('pads an exact amount and keeps arithmetic exact until quantize', () => {
     expect(MoneyUtils.format(20)).toBe('20.00');
     expect(MoneyUtils.format('9.5')).toBe('9.50');

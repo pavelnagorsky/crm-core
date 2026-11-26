@@ -40,6 +40,7 @@ describe('OrderDraftMutationService transaction boundaries', () => {
         resolveDraft: vi
           .fn()
           .mockResolvedValue({ location: { brandId: 'brand' }, items: [] }),
+        requestChoices: vi.fn().mockReturnValue({}),
         resolveProductItemAdditions: vi
           .fn()
           .mockResolvedValue({ created: [], updated: [] }),
@@ -51,6 +52,7 @@ describe('OrderDraftMutationService transaction boundaries', () => {
         new OrderStateRules(),
         audit as never,
         { hasOperations: vi.fn().mockResolvedValue(false) } as never,
+        { repriceDrafts: vi.fn() } as never,
       );
       await expect(
         service[operation](

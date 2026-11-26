@@ -19,7 +19,8 @@ const labels = {
   genderMale: 'Мужской',
   genderFemale: 'Женский',
   acquisitionSource: 'Источник привлечения',
-  discountPercent: 'Скидка, %',
+  servicesDiscountPercent: 'Скидка на услуги, %',
+  productsDiscountPercent: 'Скидка на товары, %',
 };
 
 function collect(stream: PassThrough): Promise<Buffer> {
@@ -50,7 +51,8 @@ function client(overrides: Partial<Client> = {}): Client {
     acquisitionBookingId: null,
     acquiredAt: null,
     importedAt: null,
-    discountPercent: null,
+    servicesDiscountPercent: null,
+    productsDiscountPercent: null,
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
     updatedAt: new Date('2026-01-02T00:00:00.000Z'),
     ...overrides,

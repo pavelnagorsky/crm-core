@@ -1,7 +1,9 @@
 import {
+  PriceRuleKind,
   PriceRuleTargetType,
   PriceScheduleType,
   PriceValueType,
+  PromotionChannel,
 } from '@prisma/client';
 import { PriceRuleInputDto } from '../dto/price-rule-input.dto.js';
 import {
@@ -16,7 +18,7 @@ const weekly = (over: Partial<PriceRuleInputDto> = {}): PriceRuleInputDto => ({
   valueType: PriceValueType.PERCENT,
   value: '20.00',
   weekdays: [5, 6],
-  appliesToAll: true,
+  appliesToAllServices: true,
   ...over,
 });
 
@@ -27,7 +29,7 @@ const season = (over: Partial<PriceRuleInputDto> = {}): PriceRuleInputDto => ({
   value: '10.00',
   visitFrom: '2026-12-15',
   visitTo: '2027-01-10',
-  appliesToAll: true,
+  appliesToAllServices: true,
   ...over,
 });
 
@@ -39,7 +41,7 @@ const holidays = (
   valueType: PriceValueType.PERCENT,
   value: '30.00',
   dates: ['2027-03-08'],
-  appliesToAll: true,
+  appliesToAllServices: true,
   ...over,
 });
 
@@ -320,15 +322,15 @@ describe('normalizePriceRuleInput', () => {
     const category = { type: PriceRuleTargetType.SERVICE_CATEGORY, id: 'hair' };
 
     it('needs at least one target when the rule does not apply to all', () => {
-      expect(invalidField(weekly({ appliesToAll: false }))).toBe('targets');
-      expect(invalidField(weekly({ appliesToAll: false, targets: [] }))).toBe(
+      expect(invalidField(weekly({ appliesToAllServices: false }))).toBe('targets');
+      expect(invalidField(weekly({ appliesToAllServices: false, targets: [] }))).toBe(
         'targets',
       );
     });
 
     it('keeps listed targets as included', () => {
       const rule = normalizePriceRuleInput(
-        weekly({ appliesToAll: false, targets: [service, category] }),
+        weekly({ appliesToAllServices: false, targets: [service, category] }),
       );
       expect(rule.targets).toEqual([
         { type: 'SERVICE', id: 'cut', excluded: false },
@@ -349,7 +351,7 @@ describe('normalizePriceRuleInput', () => {
       expect(
         invalidField(
           weekly({
-            appliesToAll: false,
+            appliesToAllServices: false,
             targets: [service, { ...category, excluded: true }],
           }),
         ),
@@ -359,16 +361,115 @@ describe('normalizePriceRuleInput', () => {
     it('rejects a target listed twice', () => {
       expect(
         invalidField(
-          weekly({ appliesToAll: false, targets: [service, service] }),
+          weekly({ appliesToAllServices: false, targets: [service, service] }),
         ),
       ).toBe('targets');
+    });
+
+    describe('by kind (docs/pricing-stage7-api.md)', () => {
+      const product = { type: PriceRuleTargetType.PRODUCT, id: 'shampoo' };
+      const productCategory = {
+        type: PriceRuleTargetType.PRODUCT_CATEGORY,
+        id: 'care',
+      };
+      const promotion = (
+        over: Partial<PriceRuleInputDto> = {},
+      ): PriceRuleInputDto =>
+        weekly({
+          kind: PriceRuleKind.PROMOTION,
+          publicName: 'Акция',
+          channels: [PromotionChannel.ADMIN],
+          ...over,
+        });
+
+      it('all services with listed products: services excluded, products included', () => {
+        const rule = normalizePriceRuleInput(
+          promotion({
+            targets: [{ ...service, excluded: true }, product, productCategory],
+          }),
+        );
+        expect(rule.appliesToAllServices).toBe(true);
+        expect(rule.appliesToAllProducts).toBe(false);
+        expect(rule.targets).toEqual([
+          { type: 'SERVICE', id: 'cut', excluded: true },
+          { type: 'PRODUCT', id: 'shampoo', excluded: false },
+          { type: 'PRODUCT_CATEGORY', id: 'care', excluded: false },
+        ]);
+      });
+
+      it('all products takes only product exclusions', () => {
+        const rule = normalizePriceRuleInput(
+          promotion({
+            appliesToAllServices: false,
+            appliesToAllProducts: true,
+            targets: [{ ...product, excluded: true }, service],
+          }),
+        );
+        expect(rule.appliesToAllProducts).toBe(true);
+        expect(rule.targets).toHaveLength(2);
+        expect(
+          invalidField(
+            promotion({
+              appliesToAllServices: false,
+              appliesToAllProducts: true,
+              targets: [product],
+            }),
+          ),
+        ).toBe('targets');
+      });
+
+      it('a product exclusion without "all products" is 400', () => {
+        expect(
+          invalidField(promotion({ targets: [{ ...product, excluded: true }] })),
+        ).toBe('targets');
+      });
+
+      it('only products: valid without services', () => {
+        expect(
+          normalizePriceRuleInput(
+            promotion({ appliesToAllServices: false, targets: [product] }),
+          ).targets,
+        ).toEqual([{ type: 'PRODUCT', id: 'shampoo', excluded: false }]);
+        expect(
+          normalizePriceRuleInput(
+            promotion({ appliesToAllServices: false, appliesToAllProducts: true }),
+          ).targets,
+        ).toEqual([]);
+      });
+
+      it('needs something included: only product exclusions is 400', () => {
+        expect(
+          invalidField(
+            promotion({
+              appliesToAllServices: false,
+              targets: [{ ...product, excluded: true }],
+            }),
+          ),
+        ).toBe('targets');
+      });
+
+      it('a surcharge with product targets or "all products" is 400', () => {
+        expect(
+          invalidField(
+            weekly({ appliesToAllServices: false, targets: [product] }),
+          ),
+        ).toBe('targets');
+        expect(invalidField(weekly({ appliesToAllProducts: true }))).toBe(
+          'targets',
+        );
+        expect(
+          invalidField(
+            weekly({ targets: [{ ...productCategory, excluded: true }] }),
+          ),
+        ).toBe('targets');
+      });
     });
 
     it('treats the same id of another type as another target', () => {
       expect(
         invalidField(
           weekly({
-            appliesToAll: false,
+            appliesToAllServices: false,
             targets: [
               { type: PriceRuleTargetType.SERVICE, id: 'x' },
               { type: PriceRuleTargetType.BUNDLE, id: 'x' },

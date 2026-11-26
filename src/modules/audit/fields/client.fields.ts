@@ -13,5 +13,6 @@ export const CLIENT_AUDIT_FIELDS: FieldDescriptor<Client>[] = [
   { key: 'banReason' },
   { key: 'acquisitionSource', i18n: 'trafficSource' },
   { key: 'acquisitionSourceDetail' },
-  { key: 'discountPercent' },
+  { key: 'servicesDiscountPercent' },
+  { key: 'productsDiscountPercent' },
 ];

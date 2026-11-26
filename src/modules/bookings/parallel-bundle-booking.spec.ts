@@ -18,12 +18,13 @@ import { BookingReservationService } from './services/booking-reservation.servic
 import { BookingSlotLockService } from './services/booking-slot-lock.service.js';
 import { BookingSetupService } from './services/setup/booking-setup.service.js';
 import { StaffSelectionMode } from './enums/staff-selection-mode.enum.js';
+import { BookingLineStaffSource } from './enums/booking-line-staff-source.enum.js';
 import { BookingCalendarReadService } from './services/read/booking-calendar-read.service.js';
 import { createBillingFacadeStub } from '../billing/testing/billing-facade.stub.js';
 import { PricingFacade } from '../pricing/pricing.facade.js';
 import { PricingSnapshotService } from '../pricing/services/pricing-snapshot.service.js';
 import { ReadConsistency } from '../../shared/cache/enums/read-consistency.enum.js';
-import { bookingPricingContextStub } from './testing/factories/booking-pricing-context.stub.js';
+import { pricingContextStub } from '../pricing/testing/pricing-context.stub.js';
 
 function setup() {
   const services = [
@@ -67,6 +68,14 @@ function setup() {
     }));
   const staff = {
     listActiveWithServices: vi.fn(async () => directory),
+    namesByIds: vi.fn(
+      async (ids: string[]) =>
+        new Map(
+          directory
+            .filter((member) => ids.includes(member.id))
+            .map((member) => [member.id, member.name]),
+        ),
+    ),
     resolveStaffForService: vi.fn(
       async (_location: string, serviceId: string, id?: string) =>
         directory.filter(
@@ -165,6 +174,7 @@ function setup() {
       { listForSnapshot: vi.fn(async () => []) } as never,
       { listForSnapshot: vi.fn(async () => []) } as never,
       staff as never,
+      { listPriced: vi.fn(async () => []) } as never,
       locations as never,
       {
         getOrLoad: (_cache: unknown, _key: unknown, load: () => unknown) =>
@@ -172,7 +182,7 @@ function setup() {
       } as never,
     ),
   );
-  const orders = { priceProductItems: vi.fn(async () => []) };
+  const orders = {};
   const db = {
     bookingItem: { groupBy: vi.fn(async () => []) },
     $queryRaw: vi.fn(
@@ -215,20 +225,22 @@ function setup() {
       calendarEvents.createBookingEvent.bind(calendarEvents),
     ),
   };
-  const selection = new BookingSelectionService(
-    locations as never,
-    catalog as never,
-    orders as never,
-    pricing,
-    bookingPricingContextStub(),
-    {} as never,
-  );
   const scheduling = new BookingSchedulingService(
     db as never,
     staff as never,
     calendar as never,
     pricing,
     new BookingStaffLoadService(db as never),
+  );
+  const selection = new BookingSelectionService(
+    locations as never,
+    catalog as never,
+    orders as never,
+    pricing,
+    pricingContextStub(),
+    {} as never,
+    scheduling,
+    staff as never,
   );
   const slots = new BookingSlotLockService(staff as never, calendar as never);
   const reservation = new BookingReservationService(
@@ -253,7 +265,7 @@ function setup() {
     createBillingFacadeStub(),
     { plan: vi.fn().mockResolvedValue(null), publish: vi.fn() } as never,
     {} as never,
-    bookingPricingContextStub(),
+    pricingContextStub(),
   );
   const resolve = new BookingSetupService(
     catalog as never,
@@ -264,7 +276,7 @@ function setup() {
     scheduling,
     createBillingFacadeStub(),
     pricing,
-    bookingPricingContextStub(),
+    pricingContextStub(),
     { listForBookingSetup: vi.fn().mockResolvedValue([]) } as never,
   );
   const request = {
@@ -912,7 +924,8 @@ describe('Price-dependent staff assignment', () => {
       selection
         .price('location', { serviceIds: ['a'], ...dto })
         .then((result) => result.serviceTotal.toFixed(2));
-    expect(await price({})).toBe('60.00');
+    // No staff member chosen: the one the rule gives (y), not the base price.
+    expect(await price({})).toBe('50.00');
     expect(await price({ staffId: 'x' })).toBe('70.00');
     expect(
       await price({ staffAssignments: [{ serviceId: 'a', staffId: 'y' }] }),
@@ -921,5 +934,196 @@ describe('Price-dependent staff assignment', () => {
       '50.00',
     );
     expect(catalog.loadCatalogSnapshot).toHaveBeenCalled();
+  });
+});
+
+describe('Any staff: the price preview and creation agree', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-01T00:00:00Z'));
+  });
+  afterEach(() => vi.useRealTimers());
+
+  /** Service "a" (base 60) by x (personal 70) and y (personal 52); y is blocked from 11:15. */
+  function anyStaff() {
+    const context = setup();
+    context.staff.listPricingProfiles.mockResolvedValue([
+      {
+        id: 'x',
+        name: 'X',
+        priceLevelId: null,
+        servicePrices: [{ serviceId: 'a', price: new Prisma.Decimal(70) }],
+      },
+      {
+        id: 'y',
+        name: 'Y',
+        priceLevelId: null,
+        servicePrices: [{ serviceId: 'a', price: new Prisma.Decimal(52) }],
+      },
+    ]);
+    return context;
+  }
+  const actor = { name: 'Admin', role: AuditActorRole.OWNER };
+  const preview = (
+    selection: BookingSelectionService,
+    dto: Record<string, unknown>,
+  ) =>
+    selection.price(
+      'location',
+      { serviceIds: ['a'], ...dto },
+      { cabinet: true },
+    );
+  /** The manual booking the dialog saves for the preview it showed. */
+  const save = (
+    create: BookingCreateFacade,
+    startAt: string,
+    shown: Awaited<ReturnType<typeof preview>>,
+  ) =>
+    create.createManualBooking(
+      'location',
+      {
+        serviceIds: ['a'],
+        startAt,
+        anonymous: true,
+        firstName: '',
+        phone: '',
+        preferredStaffIds: shown.items.map((line) => line.staffId!),
+        expectedTotal: shown.serviceTotal.toFixed(2),
+      },
+      actor,
+    );
+
+  it('prices the line with the staff member creation assigns (CHEAPER_AND_FREER, personal price)', async () => {
+    const { selection, create } = anyStaff();
+    const startAt = '2026-11-10T10:00:00';
+    const shown = await preview(selection, { startAt });
+    expect(
+      shown.items.map((line) => [
+        line.staffId,
+        line.staffName,
+        line.staffSource,
+      ]),
+    ).toEqual([['y', 'Y', BookingLineStaffSource.ASSIGNED]]);
+    expect(shown.serviceTotal.toFixed(2)).toBe('52.00');
+    const booking = await save(create, startAt, shown);
+    expect(
+      booking.items.map((item) => [item.staffId, item.chargedPrice.toFixed(2)]),
+    ).toEqual([['y', '52.00']]);
+  });
+
+  it('skips a staff member who is busy at the start, as creation does', async () => {
+    const { selection, create } = anyStaff();
+    // y is blocked from 11:15, the visit runs 11:00-12:10.
+    const startAt = '2026-11-10T11:00:00';
+    const shown = await preview(selection, { startAt });
+    expect(shown.items.map((line) => line.staffId)).toEqual(['x']);
+    expect(shown.serviceTotal.toFixed(2)).toBe('70.00');
+    const booking = await save(create, startAt, shown);
+    expect(
+      booking.items.map((item) => [item.staffId, item.chargedPrice.toFixed(2)]),
+    ).toEqual([['x', '70.00']]);
+  });
+
+  it('without a start, prices with the rule among all qualified staff', async () => {
+    const { selection } = anyStaff();
+    const shown = await preview(selection, {});
+    expect(shown.items.map((line) => [line.staffId, line.staffSource])).toEqual(
+      [['y', BookingLineStaffSource.ESTIMATED]],
+    );
+    expect(shown.serviceTotal.toFixed(2)).toBe('52.00');
+  });
+
+  it('marks a chosen staff member as requested', async () => {
+    const { selection } = anyStaff();
+    const shown = await preview(selection, {
+      startAt: '2026-11-10T10:00:00',
+      staffId: 'x',
+    });
+    expect(shown.items.map((line) => [line.staffId, line.staffSource])).toEqual(
+      [['x', BookingLineStaffSource.REQUESTED]],
+    );
+    expect(shown.serviceTotal.toFixed(2)).toBe('70.00');
+  });
+
+  it('keeps the staff member the preview showed while they are free', async () => {
+    const { create } = anyStaff();
+    // The dialog showed x at 70 (say, y was busy then); y is free again, x is kept.
+    const booking = await create.createManualBooking(
+      'location',
+      {
+        serviceIds: ['a'],
+        startAt: '2026-11-10T10:00:00',
+        anonymous: true,
+        firstName: '',
+        phone: '',
+        preferredStaffIds: ['x'],
+        expectedTotal: '70.00',
+      },
+      actor,
+    );
+    expect(booking.items.map((item) => item.staffId)).toEqual(['x']);
+  });
+
+  it('refuses another price when the shown staff member was taken before saving', async () => {
+    const { selection, create, blockingEvents, db } = anyStaff();
+    const startAt = '2026-11-10T10:00:00';
+    const shown = await preview(selection, { startAt });
+    expect(shown.items.map((line) => line.staffId)).toEqual(['y']);
+    // y gets busy between the preview and the save: the rule gives x at 70.
+    blockingEvents.push({
+      ...blockingEvents[0],
+      id: 'block-y-morning',
+      startDateTime: new Date('2026-11-10T09:00:00Z'),
+      endDateTime: new Date('2026-11-10T11:00:00Z'),
+    });
+    await expect(save(create, startAt, shown)).rejects.toMatchObject({
+      errorCode: 'PRICE_CHANGED',
+      status: 409,
+      payload: {
+        expectedTotal: '52.00',
+        total: '70.00',
+        items: [expect.objectContaining({ staffId: 'x', price: '70.00' })],
+      },
+    });
+    expect(db.booking.create).not.toHaveBeenCalled();
+  });
+
+  it('refuses another staff member at the same price: BOOKING_STAFF_CHANGED with the recounted team', async () => {
+    const { selection, create, blockingEvents, db, staff } = anyStaff();
+    // x and y both ask 52: the rule takes x (same price and load, then id).
+    staff.listPricingProfiles.mockResolvedValue(
+      ['x', 'y'].map((id) => ({
+        id,
+        name: id.toUpperCase(),
+        priceLevelId: null,
+        servicePrices: [{ serviceId: 'a', price: new Prisma.Decimal(52) }],
+      })),
+    );
+    const startAt = '2026-11-10T10:00:00';
+    const shown = await preview(selection, { startAt });
+    expect(shown.items.map((line) => line.staffId)).toEqual(['x']);
+    blockingEvents.push({
+      ...blockingEvents[0],
+      id: 'block-x-morning',
+      staffId: 'x',
+      startDateTime: new Date('2026-11-10T09:00:00Z'),
+      endDateTime: new Date('2026-11-10T11:00:00Z'),
+    });
+    await expect(save(create, startAt, shown)).rejects.toMatchObject({
+      errorCode: 'BOOKING_STAFF_CHANGED',
+      status: 409,
+      payload: {
+        expectedTotal: '52.00',
+        total: '52.00',
+        items: [
+          expect.objectContaining({
+            staffId: 'y',
+            staffName: 'Y',
+            price: '52.00',
+          }),
+        ],
+      },
+    });
+    expect(db.booking.create).not.toHaveBeenCalled();
   });
 });

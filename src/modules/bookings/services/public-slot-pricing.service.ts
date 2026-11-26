@@ -26,7 +26,7 @@ import {
 import { servicesTotal } from '../rules/booking-services-total.rules.js';
 import { visitTimeOfSlot } from '../rules/booking-visit-time.rules.js';
 import { rankStaff } from '../rules/staff-ranking.rules.js';
-import { BookingPricingContextService } from './booking-pricing-context.service.js';
+import { PricingContextService } from '../../pricing/services/pricing-context.service.js';
 import { BookingStaffLoadService } from './booking-staff-load.service.js';
 
 /**
@@ -57,7 +57,7 @@ export class PublicSlotPricingService {
     private readonly pricing: PricingFacade,
     private readonly locations: LocationService,
     private readonly staffLoad: BookingStaffLoadService,
-    private readonly pricingContext: BookingPricingContextService,
+    private readonly pricingContext: PricingContextService,
   ) {}
 
   async getSlots(

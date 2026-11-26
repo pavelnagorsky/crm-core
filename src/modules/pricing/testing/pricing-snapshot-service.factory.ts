@@ -54,6 +54,7 @@ export function pricingSnapshotService(
     async () => options.roundingStep ?? '1.00',
   );
   const listScheduledChanges = vi.fn(async () => options.priceChanges ?? []);
+  const listPriced = vi.fn(async () => options.products ?? []);
   const getLocale = vi.fn(async () => ({
     timezone: options.timezone ?? 'UTC',
     currency: 'BYN',
@@ -66,6 +67,7 @@ export function pricingSnapshotService(
     { listForSnapshot } as never,
     { listForSnapshot: listScheduledChanges } as never,
     { listPricingProfiles } as never,
+    { listPriced } as never,
     { getBookingSettings, findPriceRoundingStep, getLocale } as never,
     cache,
   );

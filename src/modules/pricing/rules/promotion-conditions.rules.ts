@@ -1,4 +1,5 @@
 import {
+  PriceRuleTargetType,
   PriceValueType,
   PromotionChannel,
   PromotionClientFilter,
@@ -38,6 +39,47 @@ const LIMIT_PERIOD_TEXT: Record<PromotionLimitPeriod, string> = {
 };
 export const PROMOTION_ONE_DISCOUNT_LINE =
   'На услугу действует одна скидка, самая выгодная';
+/** The one-discount line of a promotion that reaches products. */
+export const PROMOTION_ONE_DISCOUNT_PRODUCT_LINE =
+  'На услугу или товар действует одна скидка, самая выгодная';
+
+type ConditionTarget = PromotionConditionsInput['targets'][number];
+
+const isProduct = (target: ConditionTarget): boolean =>
+  target.type === PriceRuleTargetType.PRODUCT ||
+  target.type === PriceRuleTargetType.PRODUCT_CATEGORY;
+
+/** Names of the targets that still exist, by kind and inclusion. */
+function targetNames(
+  input: PromotionConditionsInput,
+  products: boolean,
+  excluded: boolean,
+): string[] {
+  return input.targets
+    .filter(
+      (target) =>
+        isProduct(target) === products &&
+        target.excluded === excluded &&
+        target.name !== null,
+    )
+    .map((target) => target.name as string);
+}
+
+/** The promotion reaches products: all of them or an included product target. */
+function reachesProducts(input: PromotionConditionsInput): boolean {
+  return (
+    input.appliesToAllProducts ||
+    input.targets.some((target) => isProduct(target) && !target.excluded)
+  );
+}
+
+/** The promotion reaches no service or bundle: products only. */
+function productsOnly(input: PromotionConditionsInput): boolean {
+  return (
+    !input.appliesToAllServices &&
+    !input.targets.some((target) => !isProduct(target) && !target.excluded)
+  );
+}
 
 /** Russian plural: one (1, 21), few (2-4, 22-24), many (0, 5-20, 25...). */
 function plural(count: number, one: string, few: string, many: string): string {
@@ -78,14 +120,34 @@ function sizeLine(input: PromotionConditionsInput): string {
     input.valueType === PriceValueType.PERCENT
       ? `${MINUS}${formatPromotionNumber(input.value)}%`
       : `${MINUS}${money(input.value, input.currency)}`;
-  const names = input.targets
-    .filter((target) => target.name !== null)
-    .map((target) => target.name as string);
-  if (input.appliesToAll)
-    return names.length === 0
-      ? `${size} на все услуги`
-      : `${size} на все услуги, кроме: ${nameList(names)}`;
-  return `${size} на ${nameList(names)}`;
+  const all = (what: string, excluded: readonly string[]): string =>
+    excluded.length === 0 ? what : `${what}, кроме: ${nameList(excluded)}`;
+  const segments: string[] = [];
+  if (input.appliesToAllServices && input.appliesToAllProducts)
+    segments.push(
+      all('все услуги и товары', [
+        ...targetNames(input, false, true),
+        ...targetNames(input, true, true),
+      ]),
+    );
+  else {
+    if (input.appliesToAllServices)
+      segments.push(all('все услуги', targetNames(input, false, true)));
+    if (input.appliesToAllProducts)
+      segments.push(all('все товары', targetNames(input, true, true)));
+  }
+  // Included targets: services first, then products.
+  const included = [
+    ...targetNames(input, false, false),
+    ...targetNames(input, true, false),
+  ];
+  if (included.length > 0 || segments.length === 0)
+    segments.push(nameList(included));
+  // "кроме: A и B" already holds an "и": the next part goes after a semicolon.
+  const separator = segments.some((segment) => segment.includes('кроме:'))
+    ? '; на '
+    : ' и на ';
+  return `${size} на ${segments.join(separator)}`;
 }
 
 /** "Пн-Чт", "Пн, Ср, Пт", "Пн-Ср, Сб-Вс". */
@@ -219,7 +281,9 @@ function channelLine(input: PromotionConditionsInput): string | null {
 function limitLines(input: PromotionConditionsInput): string[] {
   const lines: string[] = [];
   if (input.minVisitTotal !== null)
-    lines.push(`Визит от ${money(input.minVisitTotal, input.currency)}`);
+    lines.push(
+      `${productsOnly(input) ? 'Покупка' : 'Визит'} от ${money(input.minVisitTotal, input.currency)}`,
+    );
   if (input.usageLimitPerClient !== null) {
     const times = input.usageLimitPerClient;
     const period =
@@ -255,7 +319,9 @@ export function buildPromotionConditions(
       : null,
     channelLine(input),
     ...limitLines(input),
-    PROMOTION_ONE_DISCOUNT_LINE,
+    reachesProducts(input)
+      ? PROMOTION_ONE_DISCOUNT_PRODUCT_LINE
+      : PROMOTION_ONE_DISCOUNT_LINE,
   ];
   return lines.filter((line): line is string => line !== null && line !== '');
 }
@@ -267,7 +333,11 @@ const dateOf = (date: Date | null): string | null =>
 export function promotionConditionsInput(
   rule: PriceRuleRecord,
   names: {
-    targets: readonly { name: string | null; excluded: boolean }[];
+    targets: readonly {
+      type: PriceRuleTargetType;
+      name: string | null;
+      excluded: boolean;
+    }[];
     staffNames: readonly string[];
     currency: string;
     usageCount: number | null;
@@ -277,7 +347,8 @@ export function promotionConditionsInput(
     valueType: rule.valueType,
     value: MoneyUtils.format(rule.value),
     currency: names.currency,
-    appliesToAll: rule.appliesToAll,
+    appliesToAllServices: rule.appliesToAllServices,
+    appliesToAllProducts: rule.appliesToAllProducts,
     targets: [...names.targets],
     weekdaysMask: rule.weekdaysMask,
     intervals: rule.intervals,

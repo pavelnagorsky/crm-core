@@ -26,6 +26,13 @@ export class ServicePriceChangeConflictDto {
   })
   bundleIds: string[];
 
+  @ApiProperty({
+    type: String,
+    isArray: true,
+    description: 'Products both changes touch (Product.id); empty for services.',
+  })
+  productIds: string[];
+
   static fromConflict(
     conflict: PriceChangeConflict,
   ): ServicePriceChangeConflictDto {

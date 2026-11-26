@@ -17,6 +17,6 @@ export interface PublicPromotionView {
   requiresCode: boolean;
   conditions: string[];
   /** What it applies to, for the labels of services and bundles. */
-  appliesToAll: boolean;
+  appliesToAllServices: boolean;
   targets: { type: PriceRuleTargetType; id: string; excluded: boolean }[];
 }

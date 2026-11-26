@@ -2,6 +2,8 @@ import { Prisma } from '@prisma/client';
 import { TimeUtils } from '../../../shared/time/time.utils.js';
 import { CalendarDayParser } from '../engine/compile/calendar-day.parser.js';
 import { CompiledRule } from '../engine/compile/compiled-rule.js';
+import { PriceRuleTargetType } from '../engine/enums/price-rule-target-type.enum.js';
+import { RuleTargetKind } from '../engine/enums/rule-target-kind.enum.js';
 import { PricingRuleEntry } from '../engine/interfaces/pricing-rule-entry.interface.js';
 import { PromotionOverlap } from '../interfaces/promotion-overlap.interface.js';
 import { PromotionOverlapScope } from '../interfaces/promotion-overlap-scope.interface.js';
@@ -41,13 +43,27 @@ function firstCommonStart(
   return null;
 }
 
-/** Every service and bundle, nothing excluded. */
-const reachesAll = (entry: PricingRuleEntry): boolean =>
-  entry.appliesToAll && entry.targets.every((target) => !target.excluded);
+const PRODUCT_TYPES: readonly PriceRuleTargetType[] = [
+  PriceRuleTargetType.PRODUCT,
+  PriceRuleTargetType.PRODUCT_CATEGORY,
+];
+
+/** Every service and bundle (or every product), nothing of that kind excluded. */
+function reachesAll(entry: PricingRuleEntry, kind: RuleTargetKind): boolean {
+  const products = kind === RuleTargetKind.PRODUCT;
+  const all = products ? entry.appliesToAllProducts : entry.appliesToAllServices;
+  return (
+    all &&
+    entry.targets.every(
+      (target) =>
+        !target.excluded || PRODUCT_TYPES.includes(target.type) !== products,
+    )
+  );
+}
 
 /**
- * Where and when the two promotions meet, as the admin reads it: the common service (or
- * "Все услуги"), then the weekday when either keeps to weekdays and the time when either
+ * Where and when the two promotions meet, as the admin reads it: the common service or
+ * product (or "Все услуги" / "Все товары"), then the weekday when either keeps to weekdays and the time when either
  * keeps to hours. Promotions with no time conditions (new clients, birthday, a code) meet
  * on the service alone.
  */
@@ -57,7 +73,11 @@ function overlapExample(
   scope: PromotionOverlapScope,
   start: { date: string; minute: number },
 ): string {
-  const parts = [reachesAll(a) && reachesAll(b) ? 'Все услуги' : scope.title];
+  const kind = scope.context.kind;
+  const all = kind === RuleTargetKind.PRODUCT ? 'Все товары' : 'Все услуги';
+  const parts = [
+    reachesAll(a, kind) && reachesAll(b, kind) ? all : scope.title,
+  ];
   const weekday =
     a.weekdaysMask !== 0 || b.weekdaysMask !== 0
       ? WEEKDAYS[CalendarDayParser.parse(start.date).isoWeekday - 1]
@@ -72,8 +92,8 @@ function overlapExample(
 }
 
 /**
- * Enabled promotions that can reach the same visit as the draft: a common service or
- * bundle, channel, staff member and start time from today on. Client conditions, codes and
+ * Enabled promotions that can reach the same visit or sale as the draft: a common service,
+ * bundle or product (scopes list services first), channel, staff member and start time from today on. Client conditions, codes and
  * limits are not compared: when both hold, the bigger discount wins.
  */
 export function findPromotionOverlaps(

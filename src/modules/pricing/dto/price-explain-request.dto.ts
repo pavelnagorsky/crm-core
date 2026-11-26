@@ -9,18 +9,20 @@ import {
   MaxLength,
   ValidateIf,
 } from 'class-validator';
+import { IsOptionalQuantity } from '../../../shared/decorators/is-quantity.decorator.js';
 import regularExpressions from '../../../shared/regular-expressions.js';
 import { IsCalendarDate } from '../../../shared/time/decorators/is-calendar-date.validator.js';
 import { IsLocalDateTime } from '../../../shared/time/decorators/is-local-date-time.validator.js';
 import { PromotionChannel } from '../engine/enums/promotion-channel.enum.js';
 import { PriceExplainClientType } from '../enums/price-explain-client-type.enum.js';
+import { PriceExplainProductContext } from '../enums/price-explain-product-context.enum.js';
 
 export class PriceExplainRequestDto {
   @ApiProperty({
     type: String,
     format: 'uuid',
     required: false,
-    description: 'A service; exactly one of serviceId and bundleId.',
+    description: 'A service; exactly one of serviceId, bundleId and productId.',
   })
   @IsOptional()
   @IsUUID()
@@ -30,7 +32,7 @@ export class PriceExplainRequestDto {
     type: String,
     format: 'uuid',
     required: false,
-    description: 'A bundle; exactly one of serviceId and bundleId.',
+    description: 'A bundle; exactly one of serviceId, bundleId and productId.',
   })
   @IsOptional()
   @IsUUID()
@@ -39,9 +41,36 @@ export class PriceExplainRequestDto {
   @ApiProperty({
     type: String,
     format: 'uuid',
+    required: false,
+    description:
+      'A brand product the location sells (Product.id); exactly one of serviceId, bundleId and productId.',
+  })
+  @IsOptional()
+  @IsUUID()
+  productId?: string;
+
+  /** Product only; default "1". Must be above 0 and whole for a PIECE product. */
+  @IsOptionalQuantity()
+  quantity?: string;
+
+  @ApiProperty({
+    enum: PriceExplainProductContext,
+    enumName: 'PriceExplainProductContext',
+    required: false,
+    default: PriceExplainProductContext.SALE,
+    description:
+      'Product only: SALE - a separate sale (channel ADMIN, no visit: lead time conditions fail with NO_VISIT; channel and bookedAt are ignored); BOOKING - a product in a booking (channel and bookedAt as for a service).',
+  })
+  @IsOptional()
+  @IsEnum(PriceExplainProductContext)
+  productContext?: PriceExplainProductContext;
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
     nullable: true,
     description:
-      'Staff member; null: "any staff" is assigned by the location rule.',
+      'Staff member; null: "any staff" is assigned by the location rule. For a product the seller (null: no seller).',
   })
   @ValidateIf((dto: PriceExplainRequestDto) => dto.staffId !== null)
   @IsUUID()

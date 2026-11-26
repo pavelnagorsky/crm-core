@@ -8,6 +8,7 @@ import { StaffService } from '../../staff/services/staff.service.js';
 import { PriceRuleRecord } from '../interfaces/price-rule-record.interface.js';
 import { PublicPromotionView } from '../interfaces/public-promotion-view.interface.js';
 import { toPricingRuleEntry } from '../rules/price-rule-entry.rules.js';
+import { isProductTarget } from '../rules/price-rule-input.rules.js';
 import { nextRuleDate } from '../rules/price-rule-schedule.rules.js';
 import {
   buildPromotionConditions,
@@ -34,9 +35,10 @@ export class PromotionPublicService {
   ) {}
 
   /**
-   * Enabled live promotions shown as promotions, online, without a promo code, that are in
-   * force today or start by `windowEnd` (the online booking window): their visit dates and
-   * booking period are not over and a visit day falls in [today, windowEnd].
+   * Enabled live promotions shown as promotions, online, without a promo code, that reach a
+   * service or bundle and are in force today or start by `windowEnd` (the online booking
+   * window): their visit dates and booking period are not over and a visit day falls in
+   * [today, windowEnd]. A promotion only on products is not public (docs/pricing-stage7-api.md).
    */
   async listForBookingSetup(
     locationId: string,
@@ -48,6 +50,7 @@ export class PromotionPublicService {
         rule.showAsPromotion &&
         rule.promoCode === null &&
         (rule.channels ?? []).includes(PromotionChannel.ONLINE) &&
+        reachesServices(rule) &&
         isCurrent(rule, today, windowEnd),
     );
     return this.toViews(locationId, rules);
@@ -55,8 +58,8 @@ export class PromotionPublicService {
 
   /**
    * One promotion for the shared link, a promo code promotion too (the code is not
-   * returned). 404 PROMOTION_NOT_FOUND when it is archived, disabled, of another location
-   * or over.
+   * returned). 404 PROMOTION_NOT_FOUND when it is archived, disabled, of another location,
+   * over, or only on products.
    */
   async findPublic(
     locationId: string,
@@ -66,7 +69,7 @@ export class PromotionPublicService {
     const rule = (await this.reads.listLivePromotions(locationId)).find(
       (item) => item.id === promotionId,
     );
-    if (!rule || !isCurrent(rule, today, null))
+    if (!rule || !reachesServices(rule) || !isCurrent(rule, today, null))
       throw new AppException(
         ErrorCode.PROMOTION_NOT_FOUND,
         HttpStatus.NOT_FOUND,
@@ -115,6 +118,7 @@ export class PromotionPublicService {
       conditions: buildPromotionConditions(
         promotionConditionsInput(rule, {
           targets: rule.targets.map((target) => ({
+            type: target.targetType,
             name: nameOf.get(`${target.targetType}:${target.targetId}`) ?? null,
             excluded: target.excluded,
           })),
@@ -126,7 +130,7 @@ export class PromotionPublicService {
           usageCount: null,
         }),
       ),
-      appliesToAll: rule.appliesToAll,
+      appliesToAllServices: rule.appliesToAllServices,
       targets: rule.targets.map((target) => ({
         type: target.targetType,
         id: target.targetId,
@@ -134,6 +138,16 @@ export class PromotionPublicService {
       })),
     }));
   }
+}
+
+/** The promotion reaches a service or bundle: all of them or an included service-kind target. */
+function reachesServices(rule: PriceRuleRecord): boolean {
+  return (
+    rule.appliesToAllServices ||
+    rule.targets.some(
+      (target) => !target.excluded && !isProductTarget(target.targetType),
+    )
+  );
 }
 
 /**

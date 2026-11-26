@@ -39,6 +39,10 @@ import { CreateOrderReturnDto } from '../dto/create-order-return.dto.js';
 import { CreateOrderDto } from '../dto/create-order.dto.js';
 import { OrderPaymentResponseDto } from '../dto/order-payment-response.dto.js';
 import { OrderResponseDto } from '../dto/order-response.dto.js';
+import { OrderPricingRequestDto } from '../dto/order-pricing-request.dto.js';
+import { OrderPricingResponseDto } from '../dto/order-pricing-response.dto.js';
+import { OrderReturnPreviewRequestDto } from '../dto/order-return-preview-request.dto.js';
+import { OrderReturnPreviewDto } from '../dto/order-return-preview.dto.js';
 import { OrderSearchRequestDto } from '../dto/order-search-request.dto.js';
 import { OrderSearchResponseDto } from '../dto/order-search-response.dto.js';
 import { OrderStatusCountResponseDto } from '../dto/order-status-count-response.dto.js';
@@ -120,6 +124,44 @@ export class OrdersController {
         Object.assign(new OrderStatusCountResponseDto(), row),
       ),
     );
+  }
+
+  @ApiOperation({
+    summary: 'Price product lines of a sale or a visit',
+    description:
+      'For the sale form (new and draft), the "add products" dialog of a booking and the order page (docs/pricing-stage7-api.md). Writes nothing, prices through the cache. totalAmount is expectedTotal of selling the whole set. lastPurchaseUnitCost only with inventory:read; belowCost always.',
+  })
+  @ApiOkResponse({ type: ApiResponse(OrderPricingResponseDto) })
+  @ApiBadRequestResponse({
+    description:
+      'VALIDATION_ERROR: orderId and bookingId of different bookings. ORDER_PRODUCT_NOT_SELLABLE, ORDER_SELLER_INVALID, ORDER_QUANTITY_INVALID, ORDER_QUANTITY_MUST_BE_WHOLE, ORDER_DUPLICATE_PRODUCT',
+  })
+  @ApiConflictResponse({
+    description:
+      'ORDER_PROMO_CODE_VIA_BOOKING: promoCode with a booking context. PROMOTION_NOT_APPLICABLE { lineIndex, ruleId, reason, productId }: a picked discount does not apply',
+  })
+  @ApiNotFoundResponse({ description: 'Order or booking not found' })
+  @Permissions(Read(Claim.ORDER))
+  @Post('pricing')
+  @HttpCode(HttpStatus.OK)
+  async pricing(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Body() dto: OrderPricingRequestDto,
+    @TokenPayload() token: TokenPayloadDto,
+  ): Promise<BaseResponseDto<OrderPricingResponseDto>> {
+    const preview = await this.orders.previewPricing(
+      locationId,
+      dto,
+      hasPermission(token, Write(Claim.SALE_PRICE_OVERRIDE), locationId),
+      {
+        canReadPurchaseCost: hasPermission(
+          token,
+          Read(Claim.INVENTORY),
+          locationId,
+        ),
+      },
+    );
+    return BaseResponseDto.success(OrderPricingResponseDto.fromPreview(preview));
   }
 
   @ApiOperation({ summary: 'Get an internal order' })
@@ -256,6 +298,31 @@ export class OrdersController {
       auditActorFromToken(token, locationId),
     );
     return BaseResponseDto.success({ id: order.id });
+  }
+
+  @ApiOperation({
+    summary: 'Preview a product return',
+    description:
+      'Line amounts of a return of these quantities (share of the actual line total, cumulative), its total and the money it would give back. Writes nothing. Errors as in POST returns.',
+  })
+  @ApiOkResponse({ type: ApiResponse(OrderReturnPreviewDto) })
+  @ApiConflictResponse({
+    description: 'ORDER_STATUS_INVALID, ORDER_NOT_ACTIVE',
+  })
+  @Permissions(Write(Claim.ORDER_RETURN))
+  @Post(':orderId/returns/preview')
+  @HttpCode(HttpStatus.OK)
+  async previewReturn(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+    @Param('orderId', ParseUUIDPipe) orderId: string,
+    @Body() dto: OrderReturnPreviewRequestDto,
+  ): Promise<BaseResponseDto<OrderReturnPreviewDto>> {
+    const preview = await this.orders.previewReturn(
+      locationId,
+      orderId,
+      dto.items,
+    );
+    return BaseResponseDto.success(OrderReturnPreviewDto.fromPreview(preview));
   }
 
   @ApiOperation({

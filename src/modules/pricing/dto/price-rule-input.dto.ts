@@ -199,14 +199,25 @@ export class PriceRuleInputDto {
       'true: applies to every service and bundle except the excluded targets. false: only to the listed targets.',
   })
   @IsBoolean()
-  appliesToAll: boolean;
+  appliesToAllServices: boolean;
+
+  @ApiProperty({
+    type: Boolean,
+    required: false,
+    default: false,
+    description:
+      'Promotion only. true: applies to every product except the excluded product targets. A surcharge with true is 400.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  appliesToAllProducts?: boolean;
 
   @ApiProperty({
     type: () => PriceRuleTargetInputDto,
     isArray: true,
     required: false,
     description:
-      'Services, categories and bundles of this location: the targets, or the exclusions when appliesToAll.',
+      'Services, categories and bundles of this location, products and product categories of its brand (promotions only): the targets, or the exclusions of the kind whose "all" flag is set.',
   })
   @IsOptional()
   @IsArray()

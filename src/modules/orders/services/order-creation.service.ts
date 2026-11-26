@@ -1,4 +1,5 @@
 import { BadRequestException, HttpStatus, Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
@@ -16,6 +17,7 @@ import { OrderDraftService } from './order-draft.service.js';
 import { OrderPaymentService } from './order-payment.service.js';
 import { OrderPersistenceService } from './order-persistence.service.js';
 import { OrderProductTransitionService } from './order-product-transition.service.js';
+import { OrderProductPricingService } from './order-product-pricing.service.js';
 
 @Injectable()
 export class OrderCreationService {
@@ -26,6 +28,7 @@ export class OrderCreationService {
     private readonly transitions: OrderProductTransitionService,
     private readonly audits: OrderAuditService,
     private readonly orderPayments: OrderPaymentService,
+    private readonly productPricing: OrderProductPricingService,
   ) {}
   async create(
     locationId: string,
@@ -46,32 +49,51 @@ export class OrderCreationService {
         canOverridePrice,
       );
     }
-    const draft = await this.drafts.resolveDraft(
-      locationId,
-      dto,
-      actor,
-      undefined,
-      undefined,
-      undefined,
-      canOverridePrice,
-    );
-    const order = await this.db.order.create({
-      data: {
-        locationId,
-        bookingId: draft.bookingId,
-        clientId: draft.clientId,
-        clientName: draft.clientName,
-        clientPhone: draft.clientPhone,
-        currency: draft.location.currency,
-        occurredAt: draft.occurredAt,
-        note: draft.note,
-        createdById: actor.id ?? null,
-        createdByName: actor.name,
-        ...draft.totals,
-        items: { create: draft.items },
+    const { order, draft } = await this.persistence.inTransaction(
+      async (tx) => {
+        const draft = await this.drafts.resolveDraft(
+          locationId,
+          dto,
+          actor,
+          undefined,
+          tx,
+          undefined,
+          canOverridePrice,
+        );
+        const created = await tx.order.create({
+          data: {
+            locationId,
+            bookingId: draft.bookingId,
+            clientId: draft.clientId,
+            clientName: draft.clientName,
+            clientPhone: draft.clientPhone,
+            currency: draft.location.currency,
+            occurredAt: draft.occurredAt,
+            note: draft.note,
+            promoCode: draft.promoCode,
+            createdById: actor.id ?? null,
+            createdByName: actor.name,
+            ...draft.totals,
+            items: { create: draft.items },
+          },
+          select: { id: true },
+        });
+        // The draft shows the price of now: promotions, the client discount, the promo code.
+        await this.productPricing.repriceDrafts(
+          tx,
+          locationId,
+          created.id,
+          this.drafts.requestChoices(dto.items),
+        );
+        const order = await this.persistence.refreshTotals(
+          tx,
+          locationId,
+          created.id,
+          { incrementVersion: false },
+        );
+        return { order, draft };
       },
-      include: orderInclude,
-    });
+    );
     this.audits.record(
       draft.location.brandId,
       locationId,
@@ -79,9 +101,18 @@ export class OrderCreationService {
       AuditEvent.ORDER_CREATED,
       AuditActionType.CREATE,
       actor,
-      { totalAmount: order.totalAmount.toFixed(2), currency: order.currency },
+      this.createdPayload(order),
     );
     return order;
+  }
+
+  /** ORDER_CREATED: totals and the promo code of the sale. */
+  private createdPayload(order: OrderWithItems): Record<string, unknown> {
+    return {
+      totalAmount: order.totalAmount.toFixed(2),
+      currency: order.currency,
+      promoCode: order.promoCode,
+    };
   }
 
   private async createAndConfirmProductSale(
@@ -96,6 +127,13 @@ export class OrderCreationService {
         'idempotencyKey is required for confirmed product sales',
       );
     }
+    if (dto.expectedTotal == null)
+      throw new AppException(
+        ErrorCode.VALIDATION_ERROR,
+        HttpStatus.BAD_REQUEST,
+        { field: 'expectedTotal' },
+      );
+    const expectedTotal = new Prisma.Decimal(dto.expectedTotal);
     const requestHash = saleRequestHash(locationId, dto);
     const now = new Date();
     const paymentRequest = dto.payment
@@ -143,6 +181,7 @@ export class OrderCreationService {
           currency: draft.location.currency,
           occurredAt: draft.occurredAt,
           note: draft.note,
+          promoCode: draft.promoCode,
           idempotencyKey,
           creationRequestHash: requestHash,
           createdById: actor.id ?? null,
@@ -158,6 +197,11 @@ export class OrderCreationService {
           order.id,
           order.items.map((item) => item.id),
           tx,
+          {
+            expectedTotal,
+            ...this.drafts.requestChoices(dto.items),
+            saleAt: order.occurredAt,
+          },
           order.occurredAt,
         );
       const payment = paymentRequest
@@ -181,10 +225,7 @@ export class OrderCreationService {
         AuditEvent.ORDER_CREATED,
         AuditActionType.CREATE,
         actor,
-        {
-          totalAmount: result.order.totalAmount.toFixed(2),
-          currency: result.order.currency,
-        },
+        this.createdPayload(result.order),
       );
       this.orderPayments.publish(result.payment, actor);
     }

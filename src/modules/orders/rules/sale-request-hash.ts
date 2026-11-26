@@ -17,6 +17,11 @@ export function saleRequestHash(
           ? new Date(dto.occurredAt).toISOString()
           : null,
         note: dto.note?.trim() || null,
+        promoCode: dto.promoCode?.trim().toUpperCase() || null,
+        expectedTotal:
+          dto.expectedTotal == null
+            ? null
+            : new Prisma.Decimal(dto.expectedTotal).toFixed(2),
         items: dto.items
           .map((item) => ({
             productId: item.productId,
@@ -26,6 +31,12 @@ export function saleRequestHash(
                 ? null
                 : new Prisma.Decimal(item.customUnitPrice).toString(),
             sellerStaffId: item.sellerStaffId ?? null,
+            promotion: item.promotion
+              ? {
+                  mode: item.promotion.mode,
+                  ruleId: item.promotion.ruleId ?? null,
+                }
+              : null,
           }))
           .sort((left, right) => left.productId.localeCompare(right.productId)),
         // Only when present, so sales without a payment keep their earlier hash.

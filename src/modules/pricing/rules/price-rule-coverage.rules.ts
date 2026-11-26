@@ -9,7 +9,7 @@ import { PriceRuleTargetRef } from '../interfaces/price-rule-target-ref.interfac
  * take its services out: they are still priced on their own.
  */
 export function affectedServiceCount(
-  rule: { appliesToAll: boolean; targets: readonly PriceRuleTargetRef[] },
+  rule: { appliesToAllServices: boolean; targets: readonly PriceRuleTargetRef[] },
   catalog: PriceRuleCatalogCoverage,
 ): number {
   const idsOf = (type: PriceRuleTargetType, excluded: boolean): Set<string> =>
@@ -20,7 +20,7 @@ export function affectedServiceCount(
         )
         .map((target) => target.id),
     );
-  if (rule.appliesToAll) {
+  if (rule.appliesToAllServices) {
     const services = idsOf(PriceRuleTargetType.SERVICE, true);
     const categories = idsOf(PriceRuleTargetType.SERVICE_CATEGORY, true);
     return catalog.services.filter(

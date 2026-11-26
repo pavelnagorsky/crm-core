@@ -5,6 +5,10 @@ import { CompiledRuleSet } from './compile/compiled-rule-set.js';
 import { RuleTargetContext } from './compile/interfaces/rule-target-context.interface.js';
 import { RuleCompiler } from './compile/rule-compiler.js';
 import {
+  productTargetContext,
+  serviceTargetContext,
+} from './compile/rule-target-contexts.js';
+import {
   CLIENT_DISCOUNT_PUBLIC_TITLE,
   CLIENT_DISCOUNT_TITLE,
 } from './constants/discount-titles.constants.js';
@@ -16,11 +20,13 @@ import {
   baseKey,
   bundleKey,
   levelKey,
+  productKey,
   staffKey,
 } from './price-timeline.js';
 import { PriceRuleKind } from './enums/price-rule-kind.enum.js';
 import { PriceRuleSkipReason } from './enums/price-rule-skip-reason.enum.js';
 import { PriceValueType } from './enums/price-value-type.enum.js';
+import { ProductUnit } from './enums/product-unit.enum.js';
 import { PromoCodeStatus } from './enums/promo-code-status.enum.js';
 import { RoundingMode } from './enums/rounding-mode.enum.js';
 import { DaySegment } from './interfaces/day-segment.interface.js';
@@ -34,8 +40,14 @@ import { PriceAdjustment } from './interfaces/price-adjustment.interface.js';
 import { PriceRange } from './interfaces/price-range.interface.js';
 import { PriceRuleNotApplied } from './interfaces/price-rule-not-applied.interface.js';
 import { PriceScope } from './interfaces/price-scope.interface.js';
+import { ProductExplanation } from './interfaces/product-explanation.interface.js';
+import { ProductLineQuote } from './interfaces/product-line-quote.interface.js';
+import { ProductQuoteLineRequest } from './interfaces/product-quote-line-request.interface.js';
+import { ProductQuoteRequest } from './interfaces/product-quote-request.interface.js';
+import { ProductsQuote } from './interfaces/products-quote.interface.js';
 import { PricingBundleEntry } from './interfaces/pricing-bundle-entry.interface.js';
 import { PricingLevelEntry } from './interfaces/pricing-level-entry.interface.js';
+import { PricingProductEntry } from './interfaces/pricing-product-entry.interface.js';
 import { PricingServiceEntry } from './interfaces/pricing-service-entry.interface.js';
 import { PricingSnapshot } from './interfaces/pricing-snapshot.interface.js';
 import { PricingStaffEntry } from './interfaces/pricing-staff-entry.interface.js';
@@ -52,6 +64,7 @@ import { VisitTime } from './interfaces/visit-time.interface.js';
 const MINUTES_PER_DAY = 1440;
 const ROUNDING_TITLE = 'Округление';
 const FULL_PERCENT_BP = 10000;
+const MILLI = 1000;
 
 /**
  * Prices of one location, indexed once (docs/pricing-plan.md 2.1, 2.2, 2.5, 3.2, 5.2). Pure:
@@ -66,12 +79,17 @@ const FULL_PERCENT_BP = 10000;
  * Scheduled price changes (docs/pricing-stage6-api.md) are read by date: a visit is priced
  * with the catalog prices of its local date, "today" (the location day, given by the
  * caller) when there is no visit.
+ *
+ * Product lines (docs/pricing-stage7-api.md) get the retail price of their date, then one best
+ * discount on the line total (promotions with product targets, or the client discount on
+ * products), then a custom price. Surcharges, levels and personal prices never reach them.
  */
 export class PriceBook {
   private readonly services: Map<string, PricingServiceEntry>;
   private readonly bundles: Map<string, PricingBundleEntry>;
   private readonly levels: Map<string, PricingLevelEntry>;
   private readonly staff: Map<string, PricingStaffEntry>;
+  private readonly products: Map<string, PricingProductEntry>;
   private readonly rules: CompiledRuleSet;
   private readonly promotions: CompiledRuleSet;
   private readonly roundingStep: number;
@@ -89,6 +107,9 @@ export class PriceBook {
     this.bundles = new Map(snapshot.bundles.map((item) => [item.id, item]));
     this.levels = new Map(snapshot.levels.map((item) => [item.id, item]));
     this.staff = new Map(snapshot.staff.map((item) => [item.id, item]));
+    this.products = new Map(
+      snapshot.products.map((item) => [item.productLocationId, item]),
+    );
     this.rules = RuleCompiler.compile(
       snapshot.rules.filter((rule) => rule.kind === PriceRuleKind.SURCHARGE),
     );
@@ -109,6 +130,97 @@ export class PriceBook {
 
   bundle(bundleId: string): PricingBundleEntry | undefined {
     return this.bundles.get(bundleId);
+  }
+
+  /** The location sells this product (retail price set, for sale). */
+  hasProduct(productLocationId: string): boolean {
+    return this.products.has(productLocationId);
+  }
+
+  product(productLocationId: string): PricingProductEntry | undefined {
+    return this.products.get(productLocationId);
+  }
+
+  /** Retail price of a product on a local date (scheduled changes included), minor units. */
+  productPriceAt(productLocationId: string, date: string): number {
+    const product = this.requireProduct(productLocationId);
+    return (
+      this.timeline.resolve(
+        productKey(productLocationId),
+        date,
+        product.retailPrice,
+      ) ?? product.retailPrice
+    );
+  }
+
+  /**
+   * Product lines of one visit order or sale (docs/pricing-stage7-api.md). Each line: the
+   * retail price of time.date, the list line total (quantity x price, half up), one best
+   * discount on the line (rounded down to the location step, never below 0), or a custom
+   * price without candidates. A promotion minimum compares otherListTotal plus every line
+   * list total of the request.
+   */
+  quoteProducts(request: ProductQuoteRequest): ProductsQuote {
+    const visitListTotal =
+      request.otherListTotal +
+      request.lines.reduce(
+        (sum, line) => sum + this.listLineTotal(line, request.time.date),
+        0,
+      );
+    const lines = request.lines.map((line, index) =>
+      this.productLine(line, index, request, visitListTotal),
+    );
+    const quote: ProductsQuote = {
+      lines,
+      listTotal: lines.reduce((sum, line) => sum + line.listLineTotal, 0),
+      discountTotal: lines.reduce((sum, line) => sum + line.discountTotal, 0),
+      total: lines.reduce((sum, line) => sum + line.lineTotal, 0),
+      promoCode: null,
+    };
+    quote.promoCode = this.productPromoCodeResult(request, quote);
+    return quote;
+  }
+
+  /**
+   * One product line and every promotion that did not reach it, with the first failed check
+   * (schedule, targets, own conditions; LESS_BENEFICIAL when it holds but lost). Surcharges
+   * never reach products and are not listed. Without a context nothing is explained.
+   */
+  explainProduct(
+    line: ProductQuoteLineRequest,
+    time: VisitTime,
+    context: QuoteContext | null,
+    otherListTotal: number,
+  ): ProductExplanation {
+    const request: ProductQuoteRequest = {
+      lines: [line],
+      time,
+      context,
+      otherListTotal,
+    };
+    const quote = this.quoteProducts(request);
+    if (context === null) return { quote, notApplied: [] };
+    const quoted = quote.lines[0];
+    const eligible = new Set(
+      quoted.eligible
+        .map((candidate) => candidate.ruleId)
+        .filter((id): id is string => id !== null),
+    );
+    const notApplied: PriceRuleNotApplied[] = [];
+    for (const rule of this.promotions.rules) {
+      if (quoted.discount?.ruleId === rule.id) continue;
+      const reason = eligible.has(rule.id)
+        ? PriceRuleSkipReason.LESS_BENEFICIAL
+        : (this.productPromotionReason(rule, request, quote) ??
+          PriceRuleSkipReason.LESS_BENEFICIAL);
+      notApplied.push({
+        ruleId: rule.id,
+        kind: PriceRuleKind.PROMOTION,
+        name: rule.name,
+        reason,
+      });
+    }
+    return { quote, notApplied };
   }
 
   /** Promotions that are not archived (enabled or not), in display order. */
@@ -422,16 +534,14 @@ export class PriceBook {
         return this.lineQuote(item, null, { eligible: [], ineligible: [] });
       const service = this.requireService(item.line.serviceId);
       const options = this.lineDiscounts(
-        {
-          serviceId: service.id,
-          categoryId: service.categoryId,
-          bundleId: request.bundleId,
-        },
+        serviceTargetContext(service.id, service.categoryId, request.bundleId),
         [item.line.staffId],
         item.listPrice,
         visitListTotal,
         request.visit,
         context,
+        context.client.servicesDiscountBp,
+        (value, listPrice) => listPrice - value,
       );
       const chosen = this.choose(options.eligible, context.choice?.[index]);
       return this.lineQuote(
@@ -453,7 +563,7 @@ export class PriceBook {
     const layer = this.staffLayer(line.serviceId, line.staffId, date);
     const surcharges = this.surcharges(
       active,
-      { serviceId: service.id, categoryId: service.categoryId, bundleId },
+      serviceTargetContext(service.id, service.categoryId, bundleId),
       layer.price,
     );
     const raw = layer.price + this.sumOf(surcharges);
@@ -499,7 +609,7 @@ export class PriceBook {
 
     const surcharges = this.surcharges(
       active,
-      { serviceId: null, categoryId: null, bundleId: bundle.id },
+      serviceTargetContext(null, null, bundle.id),
       fixedPrice,
     );
     const raw = fixedPrice + this.sumOf(surcharges);
@@ -540,12 +650,14 @@ export class PriceBook {
     if (context === null)
       return listed.map((item) => this.lineQuote(item, null, none));
     const options = this.lineDiscounts(
-      { serviceId: null, categoryId: null, bundleId: bundle.id },
+      serviceTargetContext(null, null, bundle.id),
       request.lines.map((line) => line.staffId),
       bundleList,
       bundleList,
       request.visit,
       context,
+      context.client.servicesDiscountBp,
+      (value, listPrice) => listPrice - value,
     );
     const choice = request.lines
       .map((_, index) => context.choice?.[index])
@@ -611,6 +723,8 @@ export class PriceBook {
   /**
    * Discounts that apply to a line, best first, and the enabled promotions that target it
    * but do not apply. Promotions need a visit time; the client discount does not.
+   * `amountPrice` gives the price after an AMOUNT discount (a service takes the value once,
+   * a product line per piece or once per line).
    */
   private lineDiscounts(
     target: RuleTargetContext,
@@ -619,11 +733,14 @@ export class PriceBook {
     visitListTotal: number,
     visit: VisitTime | null,
     context: QuoteContext,
+    clientDiscountBp: number | null,
+    amountPrice: (value: number, listPrice: number) => number,
+    noVisit = false,
   ): LineDiscountOptions {
     const eligible: DiscountCandidate[] = [];
     const ineligible: PromotionSkip[] = [];
     const { client } = context;
-    if (client.known && client.discountBp !== null && client.discountBp > 0)
+    if (client.known && clientDiscountBp !== null && clientDiscountBp > 0)
       eligible.push(
         this.candidate(
           PriceAdjustmentKind.CLIENT_DISCOUNT,
@@ -631,13 +748,14 @@ export class PriceBook {
           CLIENT_DISCOUNT_TITLE,
           CLIENT_DISCOUNT_PUBLIC_TITLE,
           PriceValueType.PERCENT,
-          Math.min(client.discountBp, FULL_PERCENT_BP),
+          Math.min(clientDiscountBp, FULL_PERCENT_BP),
           listPrice,
+          amountPrice,
         ),
       );
     if (visit !== null && !this.promotions.isEmpty) {
       const { day } = this.promotions.onDate(visit.date);
-      const check = { context, day, staffIds, visitListTotal };
+      const check = { context, day, staffIds, visitListTotal, noVisit };
       for (const rule of this.promotions.rules) {
         const promotion = rule.promotion;
         if (!rule.enabled || promotion === null) continue;
@@ -655,6 +773,7 @@ export class PriceBook {
               rule.valueType,
               rule.value,
               listPrice,
+              amountPrice,
             ),
           );
         else ineligible.push({ ruleId: rule.id, title: rule.name, reason });
@@ -673,11 +792,12 @@ export class PriceBook {
     valueType: PriceValueType,
     value: number,
     listPrice: number,
+    amountPrice: (value: number, listPrice: number) => number,
   ): DiscountCandidate {
     const raw =
       valueType === PriceValueType.PERCENT
         ? listPrice - RoundingCalculator.percent(listPrice, value)
-        : listPrice - value;
+        : amountPrice(value, listPrice);
     const chargedPrice = Math.min(
       listPrice,
       RoundingCalculator.round(raw, this.roundingStep, RoundingMode.DOWN),
@@ -870,14 +990,206 @@ export class PriceBook {
   /** What rule targets are matched against: the package, or each line. */
   private targetContexts(request: QuoteRequest): RuleTargetContext[] {
     if (this.isFixedBundle(request.bundleId))
-      return [
-        { serviceId: null, categoryId: null, bundleId: request.bundleId },
-      ];
-    return request.lines.map((line) => ({
-      serviceId: line.serviceId,
-      categoryId: this.requireService(line.serviceId).categoryId,
-      bundleId: request.bundleId,
-    }));
+      return [serviceTargetContext(null, null, request.bundleId)];
+    return request.lines.map((line) =>
+      serviceTargetContext(
+        line.serviceId,
+        this.requireService(line.serviceId).categoryId,
+        request.bundleId,
+      ),
+    );
+  }
+
+  /** quantity x unit price, half up to a minor unit. */
+  private static lineAmount(quantityMilli: number, unitPrice: number): number {
+    if (!Number.isSafeInteger(quantityMilli) || quantityMilli < 0)
+      throw new RangeError(`Invalid quantity ${quantityMilli}`);
+    const product = quantityMilli * unitPrice;
+    if (Number.isSafeInteger(product))
+      return Math.floor((product + MILLI / 2) / MILLI);
+    return Number(
+      (BigInt(quantityMilli) * BigInt(unitPrice) + BigInt(MILLI / 2)) /
+        BigInt(MILLI),
+    );
+  }
+
+  private listLineTotal(line: ProductQuoteLineRequest, date: string): number {
+    return PriceBook.lineAmount(
+      line.quantityMilli,
+      this.productPriceAt(line.productLocationId, date),
+    );
+  }
+
+  private productContext(product: PricingProductEntry): RuleTargetContext {
+    return productTargetContext(product.productId, product.categoryId);
+  }
+
+  private productLine(
+    line: ProductQuoteLineRequest,
+    index: number,
+    request: ProductQuoteRequest,
+    visitListTotal: number,
+  ): ProductLineQuote {
+    const product = this.requireProduct(line.productLocationId);
+    const listUnitPrice = this.productPriceAt(
+      line.productLocationId,
+      request.time.date,
+    );
+    const listLineTotal = PriceBook.lineAmount(line.quantityMilli, listUnitPrice);
+    const base = {
+      productLocationId: product.productLocationId,
+      productId: product.productId,
+      baseUnitPrice: listUnitPrice,
+      listUnitPrice,
+      listLineTotal,
+      customUnitPrice: line.customUnitPrice,
+    };
+    const context = request.context;
+    if (line.customUnitPrice !== null || context === null) {
+      const lineSubtotal =
+        line.customUnitPrice === null
+          ? listLineTotal
+          : PriceBook.lineAmount(line.quantityMilli, line.customUnitPrice);
+      return {
+        ...base,
+        lineSubtotal,
+        discountTotal: 0,
+        lineTotal: lineSubtotal,
+        adjustments: [],
+        discount: null,
+        eligible: [],
+        ineligible: [],
+      };
+    }
+    // AMOUNT: per piece for counted products, once per line for weighed or measured ones.
+    const perPiece = product.unit === ProductUnit.PIECE;
+    const options = this.lineDiscounts(
+      this.productContext(product),
+      [line.sellerStaffId],
+      listLineTotal,
+      visitListTotal,
+      request.time,
+      context,
+      context.client.productsDiscountBp,
+      (value, listPrice) =>
+        listPrice -
+        (perPiece ? PriceBook.lineAmount(line.quantityMilli, value) : value),
+      context.visitStartMs === null,
+    );
+    const chosen = this.choose(options.eligible, context.choice?.[index]);
+    const discountTotal =
+      chosen === null || chosen.amount <= 0 ? 0 : chosen.amount;
+    const discount: PriceAdjustment | null =
+      chosen === null || discountTotal === 0
+        ? null
+        : {
+            kind: chosen.kind,
+            ruleId: chosen.ruleId,
+            title: chosen.title,
+            publicTitle: chosen.publicTitle,
+            valueType: chosen.valueType,
+            value: chosen.value,
+            amount: -discountTotal,
+          };
+    return {
+      ...base,
+      lineSubtotal: listLineTotal,
+      discountTotal,
+      lineTotal: listLineTotal - discountTotal,
+      adjustments: discount === null ? [] : [discount],
+      discount,
+      eligible: options.eligible,
+      ineligible: options.ineligible,
+    };
+  }
+
+  /**
+   * First reason a promotion does not reach the product lines: DISABLED, then targets
+   * (EXCLUDED wins over NOT_TARGETED), then the schedule, then its conditions on the first
+   * targeted line. Targets go before the schedule: a promotion for services or for other
+   * products does not relate to the line at any time.
+   */
+  private productPromotionReason(
+    rule: CompiledRule,
+    request: ProductQuoteRequest,
+    quote: ProductsQuote,
+  ): PriceRuleSkipReason | null {
+    const context = request.context;
+    if (context === null) return null;
+    if (!rule.enabled) return PriceRuleSkipReason.DISABLED;
+    const contexts = request.lines.map((line) =>
+      this.productContext(this.requireProduct(line.productLocationId)),
+    );
+    const targetReason = this.targetReason(rule, contexts);
+    if (targetReason !== null) return targetReason;
+    const { day } = this.promotions.onDate(request.time.date);
+    const timeReason = rule.timeReason(day, request.time.minute);
+    if (timeReason !== null) return timeReason;
+    const index = contexts.findIndex(
+      (target) => rule.targetReason(target) === null,
+    );
+    return (
+      rule.promotion?.conditionReason({
+        context,
+        day,
+        staffIds: [request.lines[index].sellerStaffId],
+        visitListTotal: request.otherListTotal + quote.listTotal,
+        noVisit: context.visitStartMs === null,
+      }) ?? null
+    );
+  }
+
+  /** The promo code on product lines, by the stage 4 algorithm. */
+  private productPromoCodeResult(
+    request: ProductQuoteRequest,
+    quote: ProductsQuote,
+  ): PromoCodeResult | null {
+    const context = request.context;
+    const code = context?.promoCode?.trim().toUpperCase() ?? '';
+    if (context === null || code === '') return null;
+    const rule = this.promotions.rules.find(
+      (item) => item.promotion?.promoCode === code,
+    );
+    if (!rule)
+      return {
+        code,
+        status: PromoCodeStatus.NOT_FOUND,
+        ruleId: null,
+        reason: null,
+        minVisitTotal: null,
+      };
+    const result = (
+      status: PromoCodeStatus,
+      reason: PriceRuleSkipReason | null = null,
+    ): PromoCodeResult => ({
+      code,
+      status,
+      ruleId: rule.id,
+      reason,
+      minVisitTotal:
+        reason === PriceRuleSkipReason.BELOW_MIN_TOTAL
+          ? (rule.promotion?.minVisitTotal ?? null)
+          : null,
+    });
+    if (quote.lines.some((line) => line.discount?.ruleId === rule.id))
+      return result(PromoCodeStatus.APPLIED);
+    if (
+      quote.lines.some((line) =>
+        line.eligible.some((candidate) => candidate.ruleId === rule.id),
+      )
+    )
+      return result(PromoCodeStatus.BETTER_APPLIED);
+    const reason = this.productPromotionReason(rule, request, quote);
+    return reason === null
+      ? result(PromoCodeStatus.BETTER_APPLIED)
+      : result(PromoCodeStatus.NOT_APPLICABLE, reason);
+  }
+
+  private requireProduct(productLocationId: string): PricingProductEntry {
+    const product = this.products.get(productLocationId);
+    if (!product)
+      throw new Error(`Product ${productLocationId} is not priced`);
+    return product;
   }
 
   /** Null when the rule targets some line; otherwise EXCLUDED wins over NOT_TARGETED. */

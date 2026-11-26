@@ -30,15 +30,17 @@ export interface PreparedBookingReservation {
   notes: string | null;
   internalNotes: string | null;
   products: ManualBookingProductDto[];
+  /** sale.price.override:write: custom prices and discount picks of the products. */
+  canOverridePrice?: boolean;
   actor: AuditActor | null;
   request?: BookingCreationRequest;
   /** Products to confirm and the payment, after the booking in the same transaction. */
   paymentPlan?: VisitPaymentPlan | null;
-  /** Promo code the visit was priced with and applied, upper case. */
+  /** Promo code the visit (services or products) was priced with and applied, upper case. */
   promoCode?: string | null;
   /**
    * Runs under the location lock before the slots: re-checks the limits of the promotions the
-   * items use, when they were not counted in this transaction.
+   * items and products use, when they were not counted in this transaction.
    */
   limitGuard?: (tx: Prisma.TransactionClient) => Promise<void>;
 }

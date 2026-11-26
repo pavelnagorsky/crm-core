@@ -1,6 +1,10 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { format, isValid, parse } from 'date-fns';
-import { BookingStatus, Prisma, ServicePriceChangeSource } from '@prisma/client';
+import {
+  BookingStatus,
+  Prisma,
+  PriceChangeCatalog,
+  PriceChangeSource,
+} from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { AppCacheService } from '../../../shared/cache/app-cache.service.js';
 import { CacheDependency } from '../../../shared/cache/cache-dependency.js';
@@ -10,7 +14,6 @@ import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { Claim } from '../../access/enums/claim.enum.js';
 import { Write } from '../../access/utils/permission.js';
 import { hasPermission } from '../../access/utils/assert-permission.js';
-import { AuditEvent } from '../../audit/enums/audit-event.enum.js';
 import { AuditActor } from '../../audit/interfaces/audit-actor.interface.js';
 import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
 import { LocationService } from '../../location/services/location.service.js';
@@ -19,14 +22,14 @@ import { ImportedCatalogCreation } from '../../services/service-write/interfaces
 import { ServiceImportWriteService } from '../../services/service-write/services/service-import-write.service.js';
 import { StaffService } from '../../staff/services/staff.service.js';
 import {
-  SERVICE_PRICE_CHANGE_MAX_ITEMS,
-  SERVICE_PRICE_CHANGE_TX_TIMEOUT_MS,
-} from '../constants/service-price-change.constants.js';
+  PRICE_CHANGE_MAX_ITEMS,
+  PRICE_CHANGE_TX_TIMEOUT_MS,
+} from '../constants/price-change.constants.js';
 import { SERVICE_PRICE_IMPORT_MAX_LISTED_ERRORS } from '../constants/service-price-import.constants.js';
 import { PriceTimeline } from '../engine/price-timeline.js';
 import { ServicePriceImportFileReason } from '../enums/service-price-import-file-reason.enum.js';
 import { ServicePriceImportCounts } from '../interfaces/service-price-import-counts.interface.js';
-import { ServicePriceChangeWriteResult } from '../interfaces/service-price-change-write-result.interface.js';
+import { PriceChangeWriteResult } from '../interfaces/price-change-write-result.interface.js';
 import { ServicePriceImportChange } from '../interfaces/service-price-import-change.interface.js';
 import { ServicePriceImportFacts } from '../interfaces/service-price-import-facts.interface.js';
 import { ServicePriceImportPlan } from '../interfaces/service-price-import-plan.interface.js';
@@ -39,13 +42,13 @@ import {
   buildImportChange,
 } from '../rules/service-price-import-change.rules.js';
 import { planServicePriceImport } from '../rules/service-price-import.rules.js';
-import { assertPriceChangeDate } from '../rules/service-price-change-spec.rules.js';
+import { parseImportEffectiveDate } from '../rules/price-import-date.rules.js';
 import { PriceLevelReadService } from './price-level-read.service.js';
 import { ScheduledPriceChangeReadService } from './scheduled-price-change-read.service.js';
-import { ServicePriceChangeApplier } from './service-price-change-applier.service.js';
-import { ServicePriceChangeLock } from './service-price-change-lock.service.js';
+import { PriceChangeApplier } from './price-change-applier.service.js';
+import { PriceChangeLock } from './price-change-lock.service.js';
 import { ServicePriceChangeReadService } from './service-price-change-read.service.js';
-import { ServicePriceChangeWriter } from './service-price-change-writer.service.js';
+import { PriceChangeWriter } from './price-change-writer.service.js';
 import { ServicePriceSheetService } from './service-price-sheet.service.js';
 
 type Loaded = {
@@ -65,9 +68,9 @@ export class ServicePriceImportService {
     private readonly staff: StaffService,
     private readonly locations: LocationService,
     private readonly scheduled: ScheduledPriceChangeReadService,
-    private readonly lock: ServicePriceChangeLock,
-    private readonly applier: ServicePriceChangeApplier,
-    private readonly writer: ServicePriceChangeWriter,
+    private readonly lock: PriceChangeLock,
+    private readonly applier: PriceChangeApplier,
+    private readonly writer: PriceChangeWriter,
     private readonly readService: ServicePriceChangeReadService,
     private readonly serviceImport: ServiceImportWriteService,
     private readonly cache: AppCacheService,
@@ -102,8 +105,7 @@ export class ServicePriceImportService {
             this.db,
             locationId,
             effectiveDate,
-            change.serviceIds,
-            change.bundleIds,
+            { serviceIds: change.serviceIds, bundleIds: change.bundleIds },
           ),
     ]);
     const counts = this.counts(plan, change);
@@ -184,7 +186,8 @@ export class ServicePriceImportService {
 
         const written = await this.writer.write(tx, {
           locationId,
-          source: ServicePriceChangeSource.IMPORT,
+          catalog: PriceChangeCatalog.SERVICES,
+          source: PriceChangeSource.IMPORT,
           effectiveDate,
           ruleSpec: null,
           fileName,
@@ -199,7 +202,7 @@ export class ServicePriceImportService {
           due: written ? [] : this.applier.takeDueApplied(tx),
         };
       },
-      { timeout: SERVICE_PRICE_CHANGE_TX_TIMEOUT_MS },
+      { timeout: PRICE_CHANGE_TX_TIMEOUT_MS },
     );
 
     await this.afterCommit(locationId, done, actor);
@@ -215,8 +218,8 @@ export class ServicePriceImportService {
     locationId: string,
     done: {
       creation: ImportedCatalogCreation;
-      written: ServicePriceChangeWriteResult | null;
-      due: ServicePriceChangeWriteResult['dueApplied'];
+      written: PriceChangeWriteResult | null;
+      due: PriceChangeWriteResult['dueApplied'];
     },
     actor: AuditActor,
   ): Promise<void> {
@@ -226,7 +229,7 @@ export class ServicePriceImportService {
         locationId,
         done.written,
         actor,
-        AuditEvent.SERVICE_PRICES_IMPORTED,
+        true,
       );
     else await this.writer.afterCommitDue(locationId, done.due ?? []);
     if (done.creation.services.length > 0)
@@ -234,10 +237,10 @@ export class ServicePriceImportService {
   }
 
   private async summary(
-    written: ServicePriceChangeWriteResult | null,
+    written: PriceChangeWriteResult | null,
   ): Promise<ServicePriceImportResult['change']> {
     if (!written) return null;
-    const change = await this.db.servicePriceChange.findUnique({
+    const change = await this.db.priceChange.findUnique({
       where: { id: written.changeId },
     });
     if (!change) return null;
@@ -261,7 +264,7 @@ export class ServicePriceImportService {
   private assertImportable(plan: ServicePriceImportPlan): void {
     if (plan.errors.length > 0)
       throw new AppException(
-        ErrorCode.SERVICE_PRICE_IMPORT_INVALID,
+        ErrorCode.PRICE_IMPORT_INVALID,
         HttpStatus.BAD_REQUEST,
         {
           errorCount: plan.errors.length,
@@ -276,16 +279,8 @@ export class ServicePriceImportService {
     raw: string | undefined,
     now: Date,
   ): Promise<string | null> {
-    const effectiveDate = raw?.trim() || null;
     const { timezone } = await this.locations.getLocale(locationId);
-    const today = TimeUtils.zonedDateStr(now, timezone);
-    const valid =
-      effectiveDate === null ||
-      (/^\d{4}-\d{2}-\d{2}$/.test(effectiveDate) &&
-        format(parse(effectiveDate, 'yyyy-MM-dd', new Date()), 'yyyy-MM-dd') ===
-          effectiveDate);
-    assertPriceChangeDate(valid ? effectiveDate : '0000-00-00', today);
-    return effectiveDate;
+    return parseImportEffectiveDate(raw, TimeUtils.zonedDateStr(now, timezone));
   }
 
   private async readBook(
@@ -295,7 +290,7 @@ export class ServicePriceImportService {
     if (read.ok) return read.book;
     const { reason, sheet, columns } = read;
     throw new AppException(
-      ErrorCode.SERVICE_PRICE_IMPORT_FILE_INVALID,
+      ErrorCode.PRICE_IMPORT_FILE_INVALID,
       HttpStatus.BAD_REQUEST,
       {
         reason,
@@ -337,11 +332,11 @@ export class ServicePriceImportService {
     };
     const plan = planServicePriceImport(book, buildImportCatalog(facts));
     const change = buildImportChange(plan, facts);
-    if (change.drafts.length > SERVICE_PRICE_CHANGE_MAX_ITEMS)
+    if (change.drafts.length > PRICE_CHANGE_MAX_ITEMS)
       throw new AppException(
-        ErrorCode.SERVICE_PRICE_CHANGE_TOO_LARGE,
+        ErrorCode.PRICE_CHANGE_TOO_LARGE,
         HttpStatus.BAD_REQUEST,
-        { max: SERVICE_PRICE_CHANGE_MAX_ITEMS },
+        { max: PRICE_CHANGE_MAX_ITEMS },
       );
     return { plan, facts, change };
   }

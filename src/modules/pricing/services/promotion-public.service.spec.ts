@@ -54,7 +54,7 @@ describe('PromotionPublicService', () => {
   it('lists the promotions clients may see in the online window', async () => {
     reads.listLivePromotions.mockResolvedValue([
       promotion('shown', {
-        appliesToAll: false,
+        appliesToAllServices: false,
         targets: [[PriceRuleTargetType.SERVICE, 'nails']],
       }),
       promotion('hidden', { promotion: { showAsPromotion: false } }),
@@ -73,7 +73,7 @@ describe('PromotionPublicService', () => {
     expect(views[0]).toMatchObject({
       publicName: 'Акция shown',
       requiresCode: false,
-      appliesToAll: false,
+      appliesToAllServices: false,
       targets: [{ type: 'SERVICE', id: 'nails', excluded: false }],
       conditions: [
         '−15% на Маникюр',
@@ -96,6 +96,28 @@ describe('PromotionPublicService', () => {
     ['over', [promotion('p', { visitTo: '2026-11-01' })]],
   ])('answers 404 PROMOTION_NOT_FOUND when %s', async (_name, rules) => {
     reads.listLivePromotions.mockResolvedValue(rules);
+    await expect(
+      service.findPublic('location', 'p', TODAY),
+    ).rejects.toMatchObject({ errorCode: 'PROMOTION_NOT_FOUND', status: 404 });
+  });
+
+  it('keeps a promotion only on products out of the public list and its link (docs/pricing-stage7-api.md)', async () => {
+    const productsOnly = promotion('p', {
+      appliesToAllServices: false,
+      appliesToAllProducts: true,
+    });
+    const mixed = promotion('mixed', {
+      appliesToAllServices: false,
+      appliesToAllProducts: true,
+      targets: [[PriceRuleTargetType.SERVICE, 'nails']],
+    });
+    reads.listLivePromotions.mockResolvedValue([productsOnly, mixed]);
+    const views = await service.listForBookingSetup('location', TODAY, WINDOW_END);
+    expect(views.map((view) => view.id)).toEqual(['mixed']);
+    expect(views[0].conditions).toEqual([
+      '−15% на все товары и на Маникюр',
+      'На услугу или товар действует одна скидка, самая выгодная',
+    ]);
     await expect(
       service.findPublic('location', 'p', TODAY),
     ).rejects.toMatchObject({ errorCode: 'PROMOTION_NOT_FOUND', status: 404 });

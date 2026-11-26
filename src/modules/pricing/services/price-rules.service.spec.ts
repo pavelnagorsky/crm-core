@@ -24,7 +24,7 @@ const input = (over: Partial<PriceRuleInputDto> = {}): PriceRuleInputDto => ({
   value: '20.00',
   weekdays: [5, 6],
   intervals: [{ start: '17:00', end: '21:00' }],
-  appliesToAll: true,
+  appliesToAllServices: true,
   ...over,
 });
 
@@ -84,7 +84,7 @@ describe('PriceRulesService', () => {
   };
   const db = {
     $transaction: vi.fn(),
-    priceRuleTarget: { deleteMany: vi.fn() },
+    priceRuleTarget: { deleteMany: vi.fn(), findMany: vi.fn() },
   };
   const service = new PriceRulesService(
     db as never,
@@ -134,7 +134,7 @@ describe('PriceRulesService', () => {
         valueType: 'PERCENT',
         value: '20.00',
         weekdaysMask: 0b0110000,
-        appliesToAll: true,
+        appliesToAllServices: true,
         createdById: 'owner',
       });
       expect(data.intervals.create).toEqual([
@@ -168,7 +168,7 @@ describe('PriceRulesService', () => {
       await service.create(
         'location',
         holidayInput({
-          appliesToAll: false,
+          appliesToAllServices: false,
           targets: [{ type: PriceRuleTargetType.BUNDLE, id: 'combo' }],
         }),
         actor,
@@ -204,7 +204,7 @@ describe('PriceRulesService', () => {
         service.create(
           'location',
           input({
-            appliesToAll: false,
+            appliesToAllServices: false,
             targets: [{ type: PriceRuleTargetType.SERVICE, id: 'foreign' }],
           }),
           actor,
@@ -550,7 +550,7 @@ describe('PriceRulesService', () => {
           name: 'Evening',
           weekdaysMask: 0b0110000,
           intervals: [[1020, 1260]],
-          appliesToAll: false,
+          appliesToAllServices: false,
           targets: [[PriceRuleTargetType.SERVICE, 'cut']],
         }),
       );
@@ -609,7 +609,7 @@ describe('PriceRulesService', () => {
       reads.listRules.mockResolvedValue([
         priceRuleRecord({
           weekdaysMask: 1 << 4,
-          appliesToAll: false,
+          appliesToAllServices: false,
           targets: [[PriceRuleTargetType.SERVICE, 'cut']],
         }),
       ]);
@@ -654,7 +654,7 @@ describe('PriceRulesService', () => {
     it('names a target that is gone with null', async () => {
       reads.listRules.mockResolvedValue([
         priceRuleRecord({
-          appliesToAll: false,
+          appliesToAllServices: false,
           targets: [[PriceRuleTargetType.BUNDLE, 'gone']],
         }),
       ]);
@@ -700,6 +700,44 @@ describe('PriceRulesService', () => {
       expect(cache.invalidate).not.toHaveBeenCalled();
     });
   });
+
+  describe('removeBrandTargets (docs/pricing-stage7-api.md)', () => {
+    const where = {
+      targetType: 'PRODUCT',
+      targetId: 'shampoo',
+      rule: { location: { brandId: 'brand' } },
+    };
+
+    it('deletes the targets of a deleted product in every location of the brand', async () => {
+      db.priceRuleTarget.findMany.mockResolvedValue([
+        { rule: { locationId: 'a' } },
+        { rule: { locationId: 'b' } },
+        { rule: { locationId: 'a' } },
+      ]);
+      db.priceRuleTarget.deleteMany.mockResolvedValue({ count: 3 });
+      await service.removeBrandTargets(
+        'brand',
+        PriceRuleTargetType.PRODUCT,
+        'shampoo',
+      );
+      expect(db.priceRuleTarget.deleteMany).toHaveBeenCalledWith({ where });
+      expect(cache.invalidate).toHaveBeenCalledTimes(2);
+      expect(cache.invalidate).toHaveBeenCalledWith(CacheDependency.pricing('a'));
+      expect(cache.invalidate).toHaveBeenCalledWith(CacheDependency.pricing('b'));
+    });
+
+    it('does nothing when no rule targeted it', async () => {
+      db.priceRuleTarget.findMany.mockResolvedValue([]);
+      await service.removeBrandTargets(
+        'brand',
+        PriceRuleTargetType.PRODUCT,
+        'shampoo',
+      );
+      expect(db.priceRuleTarget.deleteMany).not.toHaveBeenCalled();
+      expect(cache.invalidate).not.toHaveBeenCalled();
+    });
+  });
+
   describe('promotions', () => {
     const promo = (over: Partial<PriceRuleInputDto> = {}) =>
       input({

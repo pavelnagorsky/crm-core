@@ -1,6 +1,7 @@
 import { BookingChannel, Prisma } from '@prisma/client';
 import { DiscountChoiceMode } from '../../../pricing/engine/enums/discount-choice-mode.enum.js';
 import { PromotionChannel } from '../../../pricing/engine/enums/promotion-channel.enum.js';
+import { PromoCodeStatus } from '../../../pricing/engine/enums/promo-code-status.enum.js';
 import {
   pricingSnapshot,
   promotionRule,
@@ -12,7 +13,7 @@ import { BookingRepricingMode } from '../../enums/booking-repricing-mode.enum.js
 import { BookingRepricing } from '../../interfaces/booking-repricing.interface.js';
 import { BookingWithItems } from '../../interfaces/booking-with-items.interface.js';
 import { bookingItemPrices } from '../../testing/factories/booking-item-prices.factory.js';
-import { bookingPricingContextStub } from '../../testing/factories/booking-pricing-context.stub.js';
+import { pricingContextStub } from '../../../pricing/testing/pricing-context.stub.js';
 import { booking } from '../../testing/factories/booking.factory.js';
 import { BookingRepricingService } from './booking-repricing.service.js';
 
@@ -21,13 +22,19 @@ function setup(rules = [promotionRule('ten'), promotionRule('coded', { value: 20
   const pricing = createPricingFacadeStub(
     pricingSnapshot({ services: { cut: 6000, wash: 1500 }, bundles: [], rules }),
   );
-  const context = bookingPricingContextStub();
-  const service = new BookingRepricingService(pricing, context, {
-    getBookingSettings: vi.fn(async () => ({
-      brandId: 'brand-1',
-      timezone: 'UTC',
-    })),
-  } as never);
+  const context = pricingContextStub();
+  const orders = { quoteVisitDrafts: vi.fn(async () => null) };
+  const service = new BookingRepricingService(
+    pricing,
+    context,
+    {
+      getBookingSettings: vi.fn(async () => ({
+        brandId: 'brand-1',
+        timezone: 'UTC',
+      })),
+    } as never,
+    orders as never,
+  );
   const item = (id: string, serviceId: string, sortOrder: number, minutes: number) => ({
     id,
     serviceId,
@@ -44,7 +51,7 @@ function setup(rules = [promotionRule('ten'), promotionRule('coded', { value: 20
     promoCode: null as string | null,
     items: [item('item-wash', 'wash', 1, 60), item('item-cut', 'cut', 0, 0)],
   } as unknown as BookingWithItems;
-  return { service, context, old };
+  return { service, context, old, orders };
 }
 
 describe('BookingRepricingService', () => {
@@ -109,6 +116,57 @@ describe('BookingRepricingService', () => {
     expect(plan?.promoCode).toBeNull();
     expect(plan?.ruleIds).toEqual(['ten', 'ten']);
   });
+
+  it('keeps a code that applies only to a draft product of the visit order', async () => {
+    const { service, old, orders } = setup();
+    orders.quoteVisitDrafts.mockResolvedValueOnce({
+      promoCode: {
+        code: 'GOODS',
+        status: PromoCodeStatus.APPLIED,
+        ruleId: 'goods',
+        reason: null,
+      },
+    } as never);
+    const plan = await service.plan(
+      {
+        ...old,
+        channel: BookingChannel.MANUAL,
+        createdAt: new Date('2026-11-01T08:00:00.000Z'),
+      } as BookingWithItems,
+      { promoCode: 'GOODS' },
+    );
+    expect(plan?.promoCode).toBe('GOODS');
+    // The drafts are priced in the visit the edit writes: its start, client and new code.
+    expect(orders.quoteVisitDrafts).toHaveBeenCalledWith(
+      { id: 'location-1', brandId: 'brand-1', timezone: 'UTC' },
+      expect.objectContaining({
+        bookingId: 'booking-1',
+        startAt: new Date(Date.UTC(2026, 11, 10, 10, 0)),
+        bookedAt: new Date('2026-11-01T08:00:00.000Z'),
+        channel: PromotionChannel.ADMIN,
+        clientId: 'client-1',
+        promoCode: 'GOODS',
+      }),
+    );
+  });
+
+  it('drops a code that applies neither to the services nor to the products', async () => {
+    const { service, old, orders } = setup();
+    const plan = await service.plan(
+      { ...old, channel: BookingChannel.MANUAL } as BookingWithItems,
+      { promoCode: 'GOODS' },
+    );
+    expect(orders.quoteVisitDrafts).toHaveBeenCalled();
+    expect(plan?.promoCode).toBeNull();
+  });
+
+  it('does not price the products when the code applies to a service', async () => {
+    const { service, old, orders } = setup();
+    expect((await service.plan(old, { promoCode: 'AUTUMN' }))?.promoCode).toBe(
+      'AUTUMN',
+    );
+    expect(orders.quoteVisitDrafts).not.toHaveBeenCalled();
+  });
 });
 
 /** At 2026-12-10 (UTC location) hh:mm. */
@@ -138,13 +196,19 @@ function moveSetup(rules = [EVENING, MORNING, CODED]) {
   const pricing = createPricingFacadeStub(
     pricingSnapshot({ services: { cut: 6000, wash: 2000 }, bundles: [], rules }),
   );
-  const context = bookingPricingContextStub();
-  const service = new BookingRepricingService(pricing, context, {
-    getBookingSettings: vi.fn(async () => ({
-      brandId: 'brand-1',
-      timezone: 'UTC',
-    })),
-  } as never);
+  const context = pricingContextStub();
+  const orders = { quoteVisitDrafts: vi.fn(async () => null) };
+  const service = new BookingRepricingService(
+    pricing,
+    context,
+    {
+      getBookingSettings: vi.fn(async () => ({
+        brandId: 'brand-1',
+        timezone: 'UTC',
+      })),
+    } as never,
+    orders as never,
+  );
   const item = (
     id: string,
     serviceId: string,

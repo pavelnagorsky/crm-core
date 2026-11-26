@@ -46,7 +46,7 @@ import { TokenPayload } from '../../auth/decorators/token-payload.decorator.js';
 import { OptionalAuth } from '../../auth/decorators/optional-auth.decorator.js';
 import { OptionalTokenPayload } from '../../auth/decorators/optional-token-payload.decorator.js';
 import { DiscountChoiceMode } from '../../pricing/engine/enums/discount-choice-mode.enum.js';
-import { BookingItemPromotionDto } from '../dto/booking-item-promotion.dto.js';
+import { PromotionChoiceDto } from '../../pricing/dto/promotion-choice.dto.js';
 import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
 import { AddOrderItemsDto } from '../../orders/dto/add-order-items.dto.js';
 import { OrderProductItemDto } from '../../orders/dto/order-product-item.dto.js';
@@ -105,19 +105,24 @@ export class BookingsController {
   async getBookingSetup(
     @Param('locationId', ParseUUIDPipe) locationId: string,
   ): Promise<BaseResponseDto<BookingSetupResponseDto>> {
-    const [setup, settings] = await Promise.all([
-      this.bookings.getBookingSetup(locationId),
-      this.locations.getBookingSettings(locationId),
-    ]);
-    const staffSummaries = settings.reviewsEnabled
-      ? await this.reviews.getStaffSummaries(
-          locationId,
-          setup.staff.map((staff) => staff.id),
-        )
-      : undefined;
-    return BaseResponseDto.success(
-      BookingSetupResponseDto.fromEntity(setup, staffSummaries),
-    );
+    return BaseResponseDto.success(await this.bookingSetup(locationId, false));
+  }
+
+  @ApiOperation({
+    summary:
+      'Get services, staff and products for the cabinet booking dialog: the public booking setup plus price-list ranges',
+    description:
+      'Same as GET /public/locations/{locationId}/booking-setup; every service and bundle also has listPriceFrom / listPriceTo - the price-list range by staff on the location today, without surcharges and promotions.',
+  })
+  @ApiOkResponse({ type: ApiResponse(BookingSetupResponseDto) })
+  @ApiNotFoundResponse({ description: 'Location not found' })
+  @Permissions([Read(Claim.BOOKING), Read(Claim.BOOKING_OWN)])
+  @Get('locations/:locationId/booking-setup')
+  @Header('Cache-Control', 'no-store')
+  async getCabinetBookingSetup(
+    @Param('locationId', ParseUUIDPipe) locationId: string,
+  ): Promise<BaseResponseDto<BookingSetupResponseDto>> {
+    return BaseResponseDto.success(await this.bookingSetup(locationId, true));
   }
 
   @ApiOperation({
@@ -167,32 +172,56 @@ export class BookingsController {
     const cabinet =
       hasPermission(token, Write(Claim.BOOKING), locationId) ||
       hasPermission(token, Write(Claim.BOOKING_OWN), locationId);
-    const promotions = dto.items?.map((item) => item.promotion) ?? [];
-    if (
-      !cabinet &&
-      (dto.clientId || dto.bookingId || promotions.some(Boolean))
-    )
+    const promotions = [
+      ...(dto.items?.map((item) => item.promotion) ?? []),
+      ...(dto.products?.map((product) => product.promotion) ?? []),
+    ];
+    if (!cabinet && (dto.clientId || dto.bookingId || promotions.some(Boolean)))
       throw new ForbiddenException('Access denied');
     this.assertDiscountChoice(token, locationId, promotions);
     const pricing = await this.bookingCreateService.price(locationId, dto, {
       cabinet,
+      canReadPurchaseCost:
+        cabinet && hasPermission(token, Read(Claim.INVENTORY), locationId),
+      // A master booking for themselves is ranked first, as on manual creation.
+      ownStaffId:
+        cabinet && token
+          ? await this.access.createStaffId(token, locationId)
+          : undefined,
     });
     return BaseResponseDto.success(
       BookingPricingResponseDto.fromResult(pricing),
     );
   }
 
+  /** The booking setup with staff review summaries; `listPrices` for the cabinet. */
+  private async bookingSetup(
+    locationId: string,
+    listPrices: boolean,
+  ): Promise<BookingSetupResponseDto> {
+    const [setup, settings] = await Promise.all([
+      this.bookings.getBookingSetup(locationId, { listPrices }),
+      this.locations.getBookingSettings(locationId),
+    ]);
+    const staffSummaries = settings.reviewsEnabled
+      ? await this.reviews.getStaffSummaries(
+          locationId,
+          setup.staff.map((staff) => staff.id),
+        )
+      : undefined;
+    return BookingSetupResponseDto.fromEntity(setup, staffSummaries);
+  }
+
   /** Picking a discount other than the best one (NONE, RULE, CLIENT_DISCOUNT) overrides the price. */
   private assertDiscountChoice(
     token: TokenPayloadDto | undefined,
     locationId: string,
-    promotions: readonly (BookingItemPromotionDto | undefined)[],
+    promotions: readonly (PromotionChoiceDto | undefined)[],
   ): void {
     if (
       promotions.some(
         (promotion) =>
-          promotion !== undefined &&
-          promotion.mode !== DiscountChoiceMode.AUTO,
+          promotion !== undefined && promotion.mode !== DiscountChoiceMode.AUTO,
       )
     )
       assertPermission(token, Write(Claim.SALE_PRICE_OVERRIDE), locationId);
@@ -215,11 +244,11 @@ export class BookingsController {
   })
   @ApiConflictResponse({
     description:
-      'BOOKING_NO_STAFF_AVAILABLE: no qualified staff member is free for a service (with isCustomTime: nobody performs it, or a parallel bundle has fewer distinct qualified staff than services). BOOKING_SLOT_UNAVAILABLE: the slot was taken while saving (never with isCustomTime). With payment: the payment errors of PUT bookings/:id/payment, PAYMENT_TRACKING_DISABLED included (nothing is created)',
+      'BOOKING_NO_STAFF_AVAILABLE: no qualified staff member is free for a service (with isCustomTime: nobody performs it, or a parallel bundle has fewer distinct qualified staff than services). BOOKING_SLOT_UNAVAILABLE: the slot was taken while saving (never with isCustomTime). PRICE_CHANGED { expectedTotal, total, items, promoCode }: the services total differs from expectedTotal (a price changed, or a staff member of preferredStaffIds is no longer free and the rule gave one with another price). BOOKING_STAFF_CHANGED, same payload: a staff member of preferredStaffIds is no longer free and the rule gave another at the same total. With payment: the payment errors of PUT bookings/:id/payment, PAYMENT_TRACKING_DISABLED included (nothing is created)',
   })
   @ApiForbiddenResponse({
     description:
-      'BOOKING_OWN_STAFF_REQUIRED: with booking.own:write only, the caller performs none of the services. Custom prices also need sale.price.override:write, products and confirmProducts order:write. A payment needs no extra permission',
+      'BOOKING_OWN_STAFF_REQUIRED: with booking.own:write only, the caller performs none of the services. Custom prices and a promotion other than AUTO (items[].promotion, products[].promotion) also need sale.price.override:write, products and confirmProducts order:write. A payment needs no extra permission',
     type: ForbiddenException,
   })
   @Permissions([Write(Claim.BOOKING), Write(Claim.BOOKING_OWN)])
@@ -238,11 +267,10 @@ export class BookingsController {
         Write(Claim.SALE_PRICE_OVERRIDE),
         locationId,
       );
-    this.assertDiscountChoice(
-      tokenPayload,
-      locationId,
-      dto.items?.map((item) => item.promotion) ?? [],
-    );
+    this.assertDiscountChoice(tokenPayload, locationId, [
+      ...(dto.items?.map((item) => item.promotion) ?? []),
+      ...(dto.products?.map((product) => product.promotion) ?? []),
+    ]);
     if (dto.products?.length)
       assertPermission(tokenPayload, Write(Claim.ORDER), locationId);
     const booking = await this.bookingCreateService.createManualBooking(
@@ -250,6 +278,7 @@ export class BookingsController {
       dto,
       auditActorFromToken(tokenPayload, locationId),
       await this.access.createStaffId(tokenPayload, locationId),
+      hasPermission(tokenPayload, Write(Claim.SALE_PRICE_OVERRIDE), locationId),
     );
     return BaseResponseDto.success(
       BookingWriteResponseDto.fromBooking(booking),

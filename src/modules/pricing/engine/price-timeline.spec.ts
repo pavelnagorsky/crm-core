@@ -1,4 +1,4 @@
-import { ServicePriceChangeTarget } from './enums/service-price-change-target.enum.js';
+import { PriceChangeTarget } from './enums/price-change-target.enum.js';
 import { PricingPriceChangeEntry } from './interfaces/pricing-price-change-entry.interface.js';
 import {
   PriceTimeline,
@@ -16,18 +16,19 @@ const change = (
   id,
   effectiveDate,
   items: items.map((item) => ({
-    target: ServicePriceChangeTarget.BASE,
+    target: PriceChangeTarget.BASE,
     serviceId: null,
     levelId: null,
     staffId: null,
     bundleId: null,
+    productLocationId: null,
     price: 0,
     ...item,
   })),
 });
 
 const base = (serviceId: string, price: number | null) => ({
-  target: ServicePriceChangeTarget.BASE,
+  target: PriceChangeTarget.BASE,
   serviceId,
   price,
 });
@@ -76,13 +77,13 @@ describe('PriceTimeline', () => {
     const timeline = new PriceTimeline([
       change('c1', '2027-01-01', [
         {
-          target: ServicePriceChangeTarget.LEVEL,
+          target: PriceChangeTarget.LEVEL,
           serviceId: 'cut',
           levelId: 'senior',
           price: null,
         },
         {
-          target: ServicePriceChangeTarget.STAFF,
+          target: PriceChangeTarget.STAFF,
           serviceId: 'cut',
           staffId: 'anna',
           price: null,
@@ -98,8 +99,8 @@ describe('PriceTimeline', () => {
     const timeline = new PriceTimeline([
       change('c1', '2027-01-01', [
         base('cut', 1),
-        { target: ServicePriceChangeTarget.BASE, serviceId: null, price: 2 },
-        { target: ServicePriceChangeTarget.BUNDLE, bundleId: null, price: 3 },
+        { target: PriceChangeTarget.BASE, serviceId: null, price: 2 },
+        { target: PriceChangeTarget.BUNDLE, bundleId: null, price: 3 },
       ]),
     ]);
     expect(timeline.has('BASE:cut')).toBe(true);

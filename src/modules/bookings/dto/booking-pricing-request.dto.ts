@@ -4,6 +4,7 @@ import {
   ArrayMaxSize,
   ArrayNotEmpty,
   IsArray,
+  IsBoolean,
   IsOptional,
   IsUUID,
   ValidateNested,
@@ -51,7 +52,8 @@ export class BookingPricingRequestDto {
     format: 'uuid',
     required: false,
     nullable: true,
-    description: 'Staff member the services are priced with',
+    description:
+      'Staff member the services are priced with. A service line without one is priced with the staff member creation would assign (items[].staffId of the response).',
   })
   @IsOptional()
   @IsUUID()
@@ -70,6 +72,28 @@ export class BookingPricingRequestDto {
   @IsOptional()
   @IsLocalDateTime()
   startAt?: string;
+
+  @ApiProperty({
+    type: Boolean,
+    required: false,
+    default: false,
+    description:
+      'Cabinet booking dialog: the visit has custom time, as isCustomTime of manual creation. A service line without a staff member then goes to the staff member creation would assign with custom time (busy staff allowed, free ones first).',
+  })
+  @IsOptional()
+  @IsBoolean()
+  isCustomTime?: boolean;
+
+  @ApiProperty({
+    type: String,
+    example: '2026-09-20T18:30:00',
+    required: false,
+    description:
+      'With isCustomTime: the custom end, local datetime like endAt of manual creation. Ignored otherwise.',
+  })
+  @IsOptional()
+  @IsLocalDateTime()
+  endAt?: string;
 
   @ApiProperty({
     type: () => ManualBookingItemDto,

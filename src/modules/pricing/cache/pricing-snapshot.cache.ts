@@ -7,7 +7,7 @@ import { PricingSnapshot } from '../engine/interfaces/pricing-snapshot.interface
 
 /**
  * Prices of a location as the engine reads them. Plain data (records and arrays, no Map).
- * Invalidated by the services, staff and pricing writes that change a price.
+ * Invalidated by the services, staff, products and pricing writes that change a price.
  */
 export const PRICING_SNAPSHOT_CACHE = defineCache<
   LocationCacheContext,
@@ -21,6 +21,8 @@ export const PRICING_SNAPSHOT_CACHE = defineCache<
     CacheDependency.serviceCatalog(locationId),
     CacheDependency.staffDirectory(locationId),
     CacheDependency.pricing(locationId),
+    CacheDependency.brandProducts(brandId),
+    CacheDependency.locationProducts(locationId),
   ],
   policy: CATALOG_CACHE_POLICY,
 });

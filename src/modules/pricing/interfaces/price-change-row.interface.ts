@@ -1,10 +1,10 @@
-import { ServicePriceChangeTarget } from '@prisma/client';
+import { PriceChangeTarget } from '@prisma/client';
 
 /** One price of a preview, minor units. */
 export interface PriceChangeRow {
   /** BASE:<serviceId> | LEVEL:<serviceId>:<levelId> | STAFF:<serviceId>:<staffId> | BUNDLE:<bundleId> */
   key: string;
-  targetType: ServicePriceChangeTarget;
+  targetType: PriceChangeTarget;
   levelId: string | null;
   levelName: string | null;
   staffId: string | null;

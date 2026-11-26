@@ -18,6 +18,7 @@ import {
   ValidateNested,
 } from 'class-validator';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
+import { IsOptionalPrice } from '../../../shared/decorators/is-price.decorator.js';
 import regularExpressions from '../../../shared/regular-expressions.js';
 import { CanonicalAmount } from '../../../shared/transforms/canonical-amount.transform.js';
 import { BookingRepricingMode } from '../enums/booking-repricing-mode.enum.js';
@@ -251,6 +252,11 @@ export class UpdateBookingDto {
   @ArrayUnique()
   @IsUUID(undefined, { each: true })
   confirmProductItemIds?: string[];
+
+  @IsOptionalPrice(
+    'Required with a non-empty confirmProductItemIds (400 VALIDATION_ERROR): Σ lineTotal of those lines the administrator saw. They are priced again with fresh data at confirmation; a different total is 409 PRICE_CHANGED { expectedTotal, total, products, promoCode }. Checked after expectedTotal of the services.',
+  )
+  expectedProductTotal?: string | null;
 
   @ApiProperty({
     type: () => PaymentInputDto,

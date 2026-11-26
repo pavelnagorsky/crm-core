@@ -1,3 +1,4 @@
+import { PricedLocationProduct } from '../../../products/interfaces/priced-location-product.interface.js';
 import { PriceLevel } from '@prisma/client';
 import { BookingCatalogSnapshot } from '../../../services/catalog/interfaces/booking-catalog-snapshot.interface.js';
 import { StaffPricingProfile } from '../../../staff/interfaces/staff-pricing-profile.interface.js';
@@ -19,4 +20,6 @@ export interface PricingSnapshotServiceOptions {
   timezone?: string;
   /** Scheduled price changes the reader returns. */
   priceChanges?: PricingPriceChangeEntry[];
+  /** Priced products of the location (ProductsService.listPriced). */
+  products?: PricedLocationProduct[];
 }

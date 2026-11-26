@@ -83,6 +83,8 @@ export class CompiledPromotion {
       return PriceRuleSkipReason.WRONG_STAFF;
     if (!this.inBookingPeriod(context.today))
       return PriceRuleSkipReason.OUT_OF_BOOKING_PERIOD;
+    if (check.noVisit && (this.minLeadMs !== null || this.maxLeadMs !== null))
+      return PriceRuleSkipReason.NO_VISIT;
     const lead =
       context.visitStartMs === null || context.catalogFloor === true
         ? null

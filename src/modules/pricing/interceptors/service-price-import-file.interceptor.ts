@@ -22,7 +22,7 @@ export class ServicePriceImportFileInterceptor implements NestInterceptor {
           return throwError(
             () =>
               new AppException(
-                ErrorCode.SERVICE_PRICE_IMPORT_FILE_TOO_LARGE,
+                ErrorCode.PRICE_IMPORT_FILE_TOO_LARGE,
                 HttpStatus.PAYLOAD_TOO_LARGE,
               ),
           );

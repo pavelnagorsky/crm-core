@@ -1,7 +1,9 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsOptional, IsUUID } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsOptional, IsUUID, ValidateNested } from 'class-validator';
 import { IsOptionalPrice } from '../../../shared/decorators/is-price.decorator.js';
 import { IsQuantity } from '../../../shared/decorators/is-quantity.decorator.js';
+import { PromotionChoiceDto } from '../../pricing/dto/promotion-choice.dto.js';
 
 export class ManualBookingProductDto {
   @ApiProperty({ type: String, format: 'uuid' })
@@ -23,4 +25,15 @@ export class ManualBookingProductDto {
   @IsOptional()
   @IsUUID()
   sellerStaffId?: string | null;
+
+  @ApiProperty({
+    type: () => PromotionChoiceDto,
+    required: false,
+    description:
+      'Discount of the product line, cabinet only (docs/pricing-stage7-api.md): AUTO by default; NONE, RULE and CLIENT_DISCOUNT need sale.price.override:write.',
+  })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => PromotionChoiceDto)
+  promotion?: PromotionChoiceDto;
 }

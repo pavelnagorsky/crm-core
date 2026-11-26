@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { ServicePriceChangeTarget } from '@prisma/client';
+import { PriceChangeTarget } from '@prisma/client';
 import { ApiPrice } from '../../../shared/decorators/api-decimal.decorator.js';
 import { PriceChangeRow } from '../interfaces/price-change-row.interface.js';
 import { minorToApi } from '../rules/pricing-money.rules.js';
@@ -15,10 +15,10 @@ export class ServicePriceChangeRowDto {
   key: string;
 
   @ApiProperty({
-    enum: ServicePriceChangeTarget,
-    enumName: 'ServicePriceChangeTarget',
+    enum: PriceChangeTarget,
+    enumName: 'PriceChangeTarget',
   })
-  targetType: ServicePriceChangeTarget;
+  targetType: PriceChangeTarget;
 
   @ApiProperty({ type: String, nullable: true, format: 'uuid' })
   levelId: string | null;

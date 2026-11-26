@@ -192,6 +192,10 @@ export const ErrorCode = {
     code: 'PRICE_CHANGED',
     message: 'The price changed, confirm the new total',
   },
+  BOOKING_STAFF_CHANGED: {
+    code: 'BOOKING_STAFF_CHANGED',
+    message: 'The staff member shown is no longer free, confirm the new one',
+  },
   BOOKING_PARALLEL_STAFF_REQUIRED: {
     code: 'BOOKING_PARALLEL_STAFF_REQUIRED',
     message:
@@ -610,6 +614,10 @@ export const ErrorCode = {
     code: 'ORDER_PAYMENT_VIA_BOOKING',
     message: 'A visit order is paid through its booking',
   },
+  ORDER_PROMO_CODE_VIA_BOOKING: {
+    code: 'ORDER_PROMO_CODE_VIA_BOOKING',
+    message: 'The promo code of a visit order is set on its booking',
+  },
   ORDER_HAS_PAYMENTS: {
     code: 'ORDER_HAS_PAYMENTS',
     message:
@@ -963,60 +971,60 @@ export const ErrorCode = {
     code: 'ONLINE_BOOKING_UNAVAILABLE',
     message: 'Online booking is temporarily unavailable',
   },
-  SERVICE_PRICE_CHANGE_NOT_FOUND: {
-    code: 'SERVICE_PRICE_CHANGE_NOT_FOUND',
+  PRICE_CHANGE_NOT_FOUND: {
+    code: 'PRICE_CHANGE_NOT_FOUND',
     message: 'Price change not found',
   },
-  SERVICE_PRICE_CHANGE_INVALID: {
-    code: 'SERVICE_PRICE_CHANGE_INVALID',
+  PRICE_CHANGE_INVALID: {
+    code: 'PRICE_CHANGE_INVALID',
     message: 'The price change conditions are invalid',
   },
-  SERVICE_PRICE_CHANGE_DATE_INVALID: {
-    code: 'SERVICE_PRICE_CHANGE_DATE_INVALID',
+  PRICE_CHANGE_DATE_INVALID: {
+    code: 'PRICE_CHANGE_DATE_INVALID',
     message: 'The date must be after today and within two years',
   },
-  SERVICE_PRICE_CHANGE_TOO_LARGE: {
-    code: 'SERVICE_PRICE_CHANGE_TOO_LARGE',
+  PRICE_CHANGE_TOO_LARGE: {
+    code: 'PRICE_CHANGE_TOO_LARGE',
     message: 'Too many prices in one change',
   },
-  SERVICE_PRICE_CHANGE_ROW_INVALID: {
-    code: 'SERVICE_PRICE_CHANGE_ROW_INVALID',
+  PRICE_CHANGE_ROW_INVALID: {
+    code: 'PRICE_CHANGE_ROW_INVALID',
     message: 'The new price of a row is invalid',
   },
-  SERVICE_PRICE_CHANGE_EMPTY: {
-    code: 'SERVICE_PRICE_CHANGE_EMPTY',
+  PRICE_CHANGE_EMPTY: {
+    code: 'PRICE_CHANGE_EMPTY',
     message: 'No prices would change',
   },
-  SERVICE_PRICE_CHANGE_STALE: {
-    code: 'SERVICE_PRICE_CHANGE_STALE',
+  PRICE_CHANGE_STALE: {
+    code: 'PRICE_CHANGE_STALE',
     message: 'Prices have changed since the preview',
   },
-  SERVICE_PRICE_CHANGE_DATE_CONFLICT: {
-    code: 'SERVICE_PRICE_CHANGE_DATE_CONFLICT',
-    message: 'A change of these services is already scheduled for this date',
+  PRICE_CHANGE_DATE_CONFLICT: {
+    code: 'PRICE_CHANGE_DATE_CONFLICT',
+    message: 'A change of these prices is already scheduled for this date',
   },
-  SERVICE_PRICE_CHANGE_LIMIT: {
-    code: 'SERVICE_PRICE_CHANGE_LIMIT',
+  PRICE_CHANGE_LIMIT: {
+    code: 'PRICE_CHANGE_LIMIT',
     message: 'Too many price changes are scheduled',
   },
-  SERVICE_PRICE_CHANGE_NOT_SCHEDULED: {
-    code: 'SERVICE_PRICE_CHANGE_NOT_SCHEDULED',
+  PRICE_CHANGE_NOT_SCHEDULED: {
+    code: 'PRICE_CHANGE_NOT_SCHEDULED',
     message: 'The price change is no longer scheduled',
   },
-  SERVICE_PRICE_CHANGE_NOT_APPLIED: {
-    code: 'SERVICE_PRICE_CHANGE_NOT_APPLIED',
+  PRICE_CHANGE_NOT_APPLIED: {
+    code: 'PRICE_CHANGE_NOT_APPLIED',
     message: 'Only an applied price change can be rolled back',
   },
-  SERVICE_PRICE_IMPORT_FILE_INVALID: {
-    code: 'SERVICE_PRICE_IMPORT_FILE_INVALID',
+  PRICE_IMPORT_FILE_INVALID: {
+    code: 'PRICE_IMPORT_FILE_INVALID',
     message: 'The price file cannot be imported',
   },
-  SERVICE_PRICE_IMPORT_FILE_TOO_LARGE: {
-    code: 'SERVICE_PRICE_IMPORT_FILE_TOO_LARGE',
+  PRICE_IMPORT_FILE_TOO_LARGE: {
+    code: 'PRICE_IMPORT_FILE_TOO_LARGE',
     message: 'The price file exceeds the maximum allowed size',
   },
-  SERVICE_PRICE_IMPORT_INVALID: {
-    code: 'SERVICE_PRICE_IMPORT_INVALID',
+  PRICE_IMPORT_INVALID: {
+    code: 'PRICE_IMPORT_INVALID',
     message: 'The price file has rows with errors',
   },
   SERVICE_PRICE_IMPORT_SERVICE_ACCESS: {

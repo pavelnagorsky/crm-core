@@ -2,7 +2,7 @@ import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import { IsOptional, IsUUID, ValidateNested } from 'class-validator';
 import { IsOptionalPrice } from '../../../shared/decorators/is-price.decorator.js';
-import { BookingItemPromotionDto } from './booking-item-promotion.dto.js';
+import { PromotionChoiceDto } from '../../pricing/dto/promotion-choice.dto.js';
 
 export class ManualBookingItemDto {
   @ApiProperty({ type: String, format: 'uuid' })
@@ -24,13 +24,13 @@ export class ManualBookingItemDto {
   customPrice?: string;
 
   @ApiProperty({
-    type: () => BookingItemPromotionDto,
+    type: () => PromotionChoiceDto,
     required: false,
     description:
       'Discount of the line; missing = AUTO (the best). A line with customPrice has no discount',
   })
   @IsOptional()
   @ValidateNested()
-  @Type(() => BookingItemPromotionDto)
-  promotion?: BookingItemPromotionDto;
+  @Type(() => PromotionChoiceDto)
+  promotion?: PromotionChoiceDto;
 }

@@ -3,7 +3,8 @@ import { ReadConsistency } from '../../../shared/cache/enums/read-consistency.en
 import { bookingCatalogSnapshot } from '../testing/booking-catalog-snapshot.factory.js';
 import { PriceRuleCatalogService } from './price-rule-catalog.service.js';
 
-const { SERVICE, SERVICE_CATEGORY, BUNDLE } = PriceRuleTargetType;
+const { SERVICE, SERVICE_CATEGORY, BUNDLE, PRODUCT, PRODUCT_CATEGORY } =
+  PriceRuleTargetType;
 const ref = (type: PriceRuleTargetType, id: string) => ({
   type,
   id,
@@ -17,7 +18,18 @@ describe('PriceRuleCatalogService', () => {
     findBundleTitlesInLocation: vi.fn(),
     loadCatalogSnapshot: vi.fn(),
   };
-  const service = new PriceRuleCatalogService(catalog as never);
+  const products = {
+    findNames: vi.fn(),
+    findRuleTargets: vi.fn(),
+  };
+  const locations = {
+    getBookingSettings: vi.fn(),
+  };
+  const service = new PriceRuleCatalogService(
+    catalog as never,
+    products as never,
+    locations as never,
+  );
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -28,7 +40,57 @@ describe('PriceRuleCatalogService', () => {
     catalog.findBundleTitlesInLocation.mockResolvedValue(
       new Map([['combo', 'Combo']]),
     );
+    products.findNames.mockResolvedValue({
+      products: [{ id: 'shampoo', name: 'Shampoo' }],
+      categories: [{ id: 'care', name: 'Care' }],
+    });
+    products.findRuleTargets.mockResolvedValue({
+      products: [{ id: 'shampoo', name: 'Shampoo' }],
+      categories: [{ id: 'care', name: 'Care' }],
+    });
+    locations.getBookingSettings.mockResolvedValue({ brandId: 'brand' });
   });
+
+  it('names products and product categories of the brand', async () => {
+    const names = await service.targetNames('location', [
+      ref(PRODUCT, 'shampoo'),
+      ref(PRODUCT_CATEGORY, 'care'),
+    ]);
+    expect(products.findNames).toHaveBeenCalledWith(['shampoo'], ['care']);
+    expect(names.get('PRODUCT:shampoo')).toBe('Shampoo');
+    expect(names.get('PRODUCT_CATEGORY:care')).toBe('Care');
+  });
+
+  it('checks product targets in the brand: for sale, with a row in the location', async () => {
+    await expect(
+      service.assertTargetsInLocation('location', [
+        ref(PRODUCT, 'shampoo'),
+        ref(PRODUCT_CATEGORY, 'care'),
+      ]),
+    ).resolves.toBeUndefined();
+    expect(products.findRuleTargets).toHaveBeenCalledWith(
+      'brand',
+      'location',
+      ['shampoo'],
+      ['care'],
+    );
+    expect(catalog.findServicePriceEntries).not.toHaveBeenCalled();
+  });
+
+  it.each([[ref(PRODUCT, 'foreign')], [ref(PRODUCT_CATEGORY, 'foreign')]])(
+    'rejects the product target %j outside the brand',
+    async (target) => {
+      await expect(
+        service.assertTargetsInLocation('location', [
+          ref(PRODUCT, 'shampoo'),
+          target,
+        ]),
+      ).rejects.toMatchObject({
+        errorCode: 'PRICE_RULE_INVALID',
+        payload: { field: 'targets' },
+      });
+    },
+  );
 
   it('asks the catalog for each kind of target of the location', async () => {
     await service.targetNames('location', [

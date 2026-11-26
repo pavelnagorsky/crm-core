@@ -21,7 +21,10 @@ import { BookingSchedulingService } from '../booking-scheduling.service.js';
 import { BookingExecutionMode } from '../../enums/booking-execution-mode.enum.js';
 import { StaffSelectionMode } from '../../enums/staff-selection-mode.enum.js';
 import { BookingSetup } from '../../interfaces/booking-setup.interface.js';
-import { buildBookingSetupPrices } from '../../rules/booking-setup-prices.rules.js';
+import {
+  buildBookingSetupPrices,
+  buildCatalogListPrices,
+} from '../../rules/booking-setup-prices.rules.js';
 import {
   onlineBookingDates,
   visitTimeAt,
@@ -34,7 +37,7 @@ import { PromotionChannel } from '../../../pricing/engine/enums/promotion-channe
 import { QuoteContext } from '../../../pricing/engine/interfaces/quote-context.interface.js';
 import { PriceBook } from '../../../pricing/engine/price-book.js';
 import { ResolvedBookingItem } from '../../interfaces/resolved-booking-item.interface.js';
-import { BookingPricingContextService } from '../booking-pricing-context.service.js';
+import { PricingContextService } from '../../../pricing/services/pricing-context.service.js';
 import { PromotionPublicService } from '../../../pricing/services/promotion-public.service.js';
 import { bookingSetupPromotionLabels } from '../../rules/booking-setup-promotions.rules.js';
 import {
@@ -53,11 +56,18 @@ export class BookingSetupService {
     private readonly scheduling: BookingSchedulingService,
     private readonly billing: BillingFacade,
     private readonly pricing: PricingFacade,
-    private readonly pricingContext: BookingPricingContextService,
+    private readonly pricingContext: PricingContextService,
     private readonly promotions: PromotionPublicService,
   ) {}
 
-  async getBookingSetup(locationId: string): Promise<BookingSetup> {
+  /**
+   * `listPrices` (the cabinet setup) adds the price-list ranges by staff to every catalog
+   * item: listPriceFrom / listPriceTo, no surcharges, no promotions.
+   */
+  async getBookingSetup(
+    locationId: string,
+    { listPrices = false }: { listPrices?: boolean } = {},
+  ): Promise<BookingSetup> {
     const settings = this.locationService.getBookingSettings(locationId);
     const [catalog, staff, products, location, isOnlineBookingAvailable, book] =
       await Promise.all([
@@ -91,6 +101,16 @@ export class BookingSetupService {
       context,
     );
     const labels = bookingSetupPromotionLabels(promotions, catalog, prices);
+    const list = listPrices
+      ? buildCatalogListPrices(book, catalog, staff)
+      : null;
+    const withList = (range: PriceRange | undefined) =>
+      range
+        ? {
+            listPriceFrom: MoneyUtils.fromMinor(range.min),
+            listPriceTo: MoneyUtils.fromMinor(range.max),
+          }
+        : {};
     return {
       catalog,
       staff,
@@ -102,13 +122,21 @@ export class BookingSetupService {
         services: new Map(
           [...prices.services].map(([id, range]) => [
             id,
-            { ...range, promotion: labels.services.get(id) ?? null },
+            {
+              ...range,
+              ...withList(list?.services.get(id)),
+              promotion: labels.services.get(id) ?? null,
+            },
           ]),
         ),
         bundles: new Map(
           [...prices.bundles].map(([id, range]) => [
             id,
-            { ...range, promotion: labels.bundles.get(id) ?? null },
+            {
+              ...range,
+              ...withList(list?.bundles.get(id)),
+              promotion: labels.bundles.get(id) ?? null,
+            },
           ]),
         ),
       },

@@ -2,6 +2,7 @@ import { HttpStatus, Injectable } from '@nestjs/common';
 import {
   PriceAdjustmentKind as PrismaPriceAdjustmentKind,
   PriceValueType as PrismaPriceValueType,
+  Prisma,
 } from '@prisma/client';
 import { ReadConsistency } from '../../shared/cache/enums/read-consistency.enum.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
@@ -13,17 +14,30 @@ import { DiscountChoiceMode } from './engine/enums/discount-choice-mode.enum.js'
 import { PriceAdjustmentKind } from './engine/enums/price-adjustment-kind.enum.js';
 import { PriceRuleSkipReason } from './engine/enums/price-rule-skip-reason.enum.js';
 import { LineQuote } from './engine/interfaces/line-quote.interface.js';
+import { DiscountCandidate } from './engine/interfaces/discount-candidate.interface.js';
 import { PriceAdjustment } from './engine/interfaces/price-adjustment.interface.js';
+import { ProductLineQuote } from './engine/interfaces/product-line-quote.interface.js';
+import { ProductQuoteRequest } from './engine/interfaces/product-quote-request.interface.js';
+import { ProductsQuote } from './engine/interfaces/products-quote.interface.js';
+import { VisitTime } from './engine/interfaces/visit-time.interface.js';
 import { QuoteContext } from './engine/interfaces/quote-context.interface.js';
 import { VisitQuote } from './engine/interfaces/visit-quote.interface.js';
 import { PriceBook } from './engine/price-book.js';
+import { ProductLinePrice } from './interfaces/product-line-price.interface.js';
+import { ProductPriceExplanation } from './interfaces/product-price-explanation.interface.js';
+import { ProductPriceLineRequest } from './interfaces/product-price-line-request.interface.js';
+import { ProductPriceQuote } from './interfaces/product-price-quote.interface.js';
+import { ProductPriceRequest } from './interfaces/product-price-request.interface.js';
 import { PromotionNotApplicable } from './interfaces/promotion-not-applicable.interface.js';
+import { ServiceDiscountOption } from './interfaces/service-discount-option.interface.js';
 import { ServiceLinePrice } from './interfaces/service-line-price.interface.js';
 import { ServicePriceAdjustment } from './interfaces/service-price-adjustment.interface.js';
 import { ServicePriceQuote } from './interfaces/service-price-quote.interface.js';
 import { ServicePriceRequest } from './interfaces/service-price-request.interface.js';
 import { UnpriceableLines } from './interfaces/unpriceable-lines.interface.js';
 import { PricingSnapshotService } from './services/pricing-snapshot.service.js';
+
+const QUANTITY_SCALE = 3;
 
 /** Prices and promotions: the one place that computes what a sale line costs. */
 @Injectable()
@@ -78,6 +92,80 @@ export class PricingFacade {
     });
     if (context !== null) this.assertChoices(quote, context);
     return this.toQuote(quote);
+  }
+
+  /**
+   * Product lines of one visit order or sale (docs/pricing-stage7-api.md): retail price of
+   * the date, one best discount per line, custom price. FRESH when the result is stored
+   * (confirmation), CACHED when it is only shown or kept in a draft.
+   */
+  async quoteProducts(
+    locationId: string,
+    request: ProductPriceRequest,
+    consistency: ReadConsistency,
+  ): Promise<ProductPriceQuote> {
+    return this.quoteProductsWithBook(
+      await this.priceBook(locationId, consistency),
+      request,
+    );
+  }
+
+  /**
+   * Same as quoteProducts over a price book the caller already loaded (a booking window
+   * prices services and products from one snapshot). A product the book does not sell is a
+   * 409 ORDER_PRODUCT_NOT_SELLABLE. A discount an administrator picked that does not apply
+   * is a 409 PROMOTION_NOT_APPLICABLE with { lineIndex, ruleId, reason, productId }; a stored
+   * one (fallbackToAuto) gives the line the best discount instead.
+   */
+  quoteProductsWithBook(
+    book: PriceBook,
+    request: ProductPriceRequest,
+  ): ProductPriceQuote {
+    const engineRequest = this.productEngineRequest(book, request);
+    const quote = book.quoteProducts(engineRequest);
+    if (request.context !== null)
+      this.assertProductChoices(quote, request.context);
+    return this.toProductQuote(quote);
+  }
+
+  /**
+   * One product line and every promotion that did not reach it (pricing/explain). Choices are
+   * not checked: explain shows what AUTO gives.
+   */
+  explainProduct(
+    book: PriceBook,
+    line: ProductPriceLineRequest,
+    time: VisitTime,
+    context: QuoteContext | null,
+    otherListTotal: Prisma.Decimal,
+  ): ProductPriceExplanation {
+    const request = this.productEngineRequest(book, {
+      lines: [line],
+      time,
+      context,
+      otherListTotal,
+    });
+    const explanation = book.explainProduct(
+      request.lines[0],
+      time,
+      context,
+      request.otherListTotal,
+    );
+    return {
+      quote: this.toProductQuote(explanation.quote),
+      notApplied: explanation.notApplied,
+    };
+  }
+
+  /** Engine quote of product lines in Decimal money, as stored and returned. */
+  toProductQuote(quote: ProductsQuote): ProductPriceQuote {
+    return {
+      lines: quote.lines.map((line) => this.toProductLinePrice(line)),
+      listTotal: MoneyUtils.fromMinor(quote.listTotal),
+      discountTotal: MoneyUtils.fromMinor(quote.discountTotal),
+      total: MoneyUtils.fromMinor(quote.total),
+      promoCode: quote.promoCode,
+    };
   }
 
   /**
@@ -168,6 +256,110 @@ export class PricingFacade {
     };
   }
 
+  private productEngineRequest(
+    book: PriceBook,
+    request: ProductPriceRequest,
+  ): ProductQuoteRequest {
+    for (const line of request.lines)
+      if (!book.hasProduct(line.productLocationId))
+        throw new AppException(
+          ErrorCode.ORDER_PRODUCT_NOT_SELLABLE,
+          HttpStatus.CONFLICT,
+        );
+    return {
+      lines: request.lines.map((line) => ({
+        productLocationId: line.productLocationId,
+        quantityMilli: this.quantityMilli(line.quantity),
+        customUnitPrice:
+          line.customUnitPrice === null
+            ? null
+            : MoneyUtils.toMinor(line.customUnitPrice),
+        sellerStaffId: line.sellerStaffId,
+      })),
+      time: request.time,
+      context: request.context,
+      otherListTotal: MoneyUtils.toMinor(request.otherListTotal),
+    };
+  }
+
+  private quantityMilli(quantity: Prisma.Decimal): number {
+    if (quantity.decimalPlaces() > QUANTITY_SCALE || quantity.isNegative())
+      throw new RangeError(`Invalid quantity ${quantity.toString()}`);
+    const milli = quantity.mul(10 ** QUANTITY_SCALE).toNumber();
+    if (!Number.isSafeInteger(milli))
+      throw new RangeError(`Quantity ${quantity.toString()} is out of range`);
+    return milli;
+  }
+
+  private assertProductChoices(
+    quote: ProductsQuote,
+    context: QuoteContext,
+  ): void {
+    for (const [key, choice] of Object.entries(context.choice ?? {})) {
+      const lineIndex = Number(key);
+      const line = quote.lines[lineIndex];
+      if (!line || line.customUnitPrice !== null || choice.fallbackToAuto)
+        continue;
+      if (
+        choice.mode !== DiscountChoiceMode.RULE &&
+        choice.mode !== DiscountChoiceMode.CLIENT_DISCOUNT
+      )
+        continue;
+      if (line.eligible.some((candidate) => this.wanted(choice, candidate)))
+        continue;
+      const payload: PromotionNotApplicable = {
+        lineIndex,
+        ruleId: choice.ruleId ?? null,
+        reason:
+          line.ineligible.find((skip) => skip.ruleId === choice.ruleId)
+            ?.reason ?? PriceRuleSkipReason.NOT_TARGETED,
+        productId: line.productId,
+      };
+      throw new AppException(
+        ErrorCode.PROMOTION_NOT_APPLICABLE,
+        HttpStatus.CONFLICT,
+        payload,
+      );
+    }
+  }
+
+  private wanted(
+    choice: { mode: DiscountChoiceMode; ruleId?: string | null },
+    adjustment: { kind: string; ruleId: string | null },
+  ): boolean {
+    return choice.mode === DiscountChoiceMode.RULE
+      ? adjustment.kind === PriceAdjustmentKind.PROMOTION &&
+          adjustment.ruleId === choice.ruleId
+      : adjustment.kind === PriceAdjustmentKind.CLIENT_DISCOUNT;
+  }
+
+  private toProductLinePrice(line: ProductLineQuote): ProductLinePrice {
+    const adjustments = line.adjustments.map((adjustment, sortOrder) =>
+      this.toAdjustment(adjustment, sortOrder),
+    );
+    const listUnitPrice = MoneyUtils.fromMinor(line.listUnitPrice);
+    const customUnitPrice =
+      line.customUnitPrice === null
+        ? null
+        : MoneyUtils.fromMinor(line.customUnitPrice);
+    return {
+      productLocationId: line.productLocationId,
+      productId: line.productId,
+      baseUnitPrice: MoneyUtils.fromMinor(line.baseUnitPrice),
+      listUnitPrice,
+      listLineTotal: MoneyUtils.fromMinor(line.listLineTotal),
+      customUnitPrice,
+      unitPrice: customUnitPrice ?? listUnitPrice,
+      lineSubtotal: MoneyUtils.fromMinor(line.lineSubtotal),
+      discountTotal: MoneyUtils.fromMinor(line.discountTotal),
+      lineTotal: MoneyUtils.fromMinor(line.lineTotal),
+      adjustments,
+      discount: line.discount === null ? null : adjustments[0],
+      eligible: line.eligible.map((candidate) => this.toOption(candidate)),
+      ineligible: line.ineligible,
+    };
+  }
+
   private assertChoices(quote: VisitQuote, context: QuoteContext): void {
     for (const [key, choice] of Object.entries(context.choice ?? {})) {
       const lineIndex = Number(key);
@@ -179,12 +371,8 @@ export class PricingFacade {
         choice.mode !== DiscountChoiceMode.CLIENT_DISCOUNT
       )
         continue;
-      const wanted = (adjustment: { kind: string; ruleId: string | null }) =>
-        choice.mode === DiscountChoiceMode.RULE
-          ? adjustment.kind === PriceAdjustmentKind.PROMOTION &&
-            adjustment.ruleId === choice.ruleId
-          : adjustment.kind === PriceAdjustmentKind.CLIENT_DISCOUNT;
-      if (line.eligible.some(wanted)) continue;
+      if (line.eligible.some((candidate) => this.wanted(choice, candidate)))
+        continue;
       const payload: PromotionNotApplicable = {
         lineIndex,
         ruleId: choice.ruleId ?? null,
@@ -217,17 +405,21 @@ export class PricingFacade {
           : MoneyUtils.fromMinor(line.customPrice),
       adjustments,
       discount: line.discount === null ? null : adjustments[adjustments.length - 1],
-      eligible: line.eligible.map((candidate) => ({
-        kind: candidate.kind as PrismaPriceAdjustmentKind,
-        ruleId: candidate.ruleId,
-        title: candidate.title,
-        publicTitle: candidate.publicTitle,
-        valueType: candidate.valueType as PrismaPriceValueType,
-        value: MoneyUtils.fromMinor(candidate.value),
-        amount: MoneyUtils.fromMinor(candidate.amount),
-        chargedPrice: MoneyUtils.fromMinor(candidate.chargedPrice),
-      })),
+      eligible: line.eligible.map((candidate) => this.toOption(candidate)),
       ineligible: line.ineligible,
+    };
+  }
+
+  private toOption(candidate: DiscountCandidate): ServiceDiscountOption {
+    return {
+      kind: candidate.kind as PrismaPriceAdjustmentKind,
+      ruleId: candidate.ruleId,
+      title: candidate.title,
+      publicTitle: candidate.publicTitle,
+      valueType: candidate.valueType as PrismaPriceValueType,
+      value: MoneyUtils.fromMinor(candidate.value),
+      amount: MoneyUtils.fromMinor(candidate.amount),
+      chargedPrice: MoneyUtils.fromMinor(candidate.chargedPrice),
     };
   }
 

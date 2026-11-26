@@ -6,5 +6,6 @@ export interface ClientImportRow {
   birthDate: string | null;
   gender: string | null;
   notes: string | null;
-  discountPercent: string | null;
+  servicesDiscountPercent: string | null;
+  productsDiscountPercent: string | null;
 }

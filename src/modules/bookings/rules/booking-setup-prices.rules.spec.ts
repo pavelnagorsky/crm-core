@@ -2,7 +2,7 @@ import {
   BundlePricingMode as PrismaBundlePricingMode,
   Prisma,
 } from '@prisma/client';
-import { ServicePriceChangeTarget } from '../../pricing/engine/enums/service-price-change-target.enum.js';
+import { PriceChangeTarget } from '../../pricing/engine/enums/price-change-target.enum.js';
 import { PriceBook } from '../../pricing/engine/price-book.js';
 import {
   PRICING_TODAY,
@@ -34,6 +34,7 @@ function prices(dates: string[]) {
     levelId: null,
     staffId: null,
     bundleId: null,
+    productLocationId: null,
   };
   const book = new PriceBook(
     pricingSnapshot({
@@ -47,13 +48,13 @@ function prices(dates: string[]) {
           items: [
             {
               ...target,
-              target: ServicePriceChangeTarget.BASE,
+              target: PriceChangeTarget.BASE,
               serviceId: 'cut',
               price: 6600,
             },
             {
               ...target,
-              target: ServicePriceChangeTarget.BUNDLE,
+              target: PriceChangeTarget.BUNDLE,
               bundleId: 'fixed-bundle',
               price: 13200,
             },

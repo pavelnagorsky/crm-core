@@ -30,12 +30,14 @@ import { ApiResponse } from '../../../shared/dto/api-response.dto.js';
 import { BaseResponseDto } from '../../../shared/dto/base-response.dto.js';
 import { XlsxUtils } from '../../../shared/xlsx/xlsx.utils.js';
 import { Claim } from '../../access/enums/claim.enum.js';
+import { hasPermission } from '../../access/utils/assert-permission.js';
 import { Read, Write } from '../../access/utils/permission.js';
 import { auditActorFromToken } from '../../audit/utils/audit-actor-from-token.js';
 import { Permissions } from '../../auth/decorators/permissions.decorator.js';
 import { TokenPayload } from '../../auth/decorators/token-payload.decorator.js';
 import { TokenPayloadDto } from '../../auth/dto/token-payload.dto.js';
 import { BookingsFacade } from '../../bookings/bookings.facade.js';
+import { InventoryFacade } from '../../inventory/inventory.facade.js';
 import { PRICE_RULE_STATS_DAYS } from '../constants/price-rule.constants.js';
 import { PriceRuleInputDto } from '../dto/price-rule-input.dto.js';
 import { PriceRuleListRequestDto } from '../dto/price-rule-list-request.dto.js';
@@ -54,6 +56,7 @@ import { promotionSummary } from '../rules/promotion-summary.rules.js';
 import { PriceRulePreviewService } from '../services/price-rule-preview.service.js';
 import { PriceRulesService } from '../services/price-rules.service.js';
 import { PromotionExportService } from '../services/promotion-export.service.js';
+import { PromotionProductStatsService } from '../services/promotion-product-stats.service.js';
 
 const MS_PER_DAY = 86_400_000;
 const REPORT_DAYS: Record<PromotionReportPeriod, number | null> = {
@@ -74,6 +77,8 @@ export class PriceRulesController {
     private readonly preview: PriceRulePreviewService,
     private readonly exports: PromotionExportService,
     private readonly bookings: BookingsFacade,
+    private readonly productStats: PromotionProductStatsService,
+    private readonly inventory: InventoryFacade,
   ) {}
 
   @ApiOperation({
@@ -114,14 +119,23 @@ export class PriceRulesController {
     const twoMonthsAgo = new Date(
       now.getTime() - 2 * PRICE_RULE_STATS_DAYS * MS_PER_DAY,
     );
-    const [views, current, previous] = await Promise.all([
-      this.rules.list(locationId, false, PriceRuleKind.PROMOTION, now),
-      this.bookings.getPromotionTotals(locationId, monthAgo, now),
-      this.bookings.getPromotionTotals(locationId, twoMonthsAgo, monthAgo),
-    ]);
+    const [views, current, previous, currentProducts, previousProducts] =
+      await Promise.all([
+        this.rules.list(locationId, false, PriceRuleKind.PROMOTION, now),
+        this.bookings.getPromotionTotals(locationId, monthAgo, now),
+        this.bookings.getPromotionTotals(locationId, twoMonthsAgo, monthAgo),
+        this.productStats.periodTotals(locationId, monthAgo, now),
+        this.productStats.periodTotals(locationId, twoMonthsAgo, monthAgo),
+      ]);
     return BaseResponseDto.success(
       PriceRuleSummaryResponseDto.fromSummary(
-        promotionSummary(views, current, previous),
+        promotionSummary(
+          views,
+          current,
+          previous,
+          currentProducts,
+          previousProducts,
+        ),
       ),
     );
   }
@@ -139,13 +153,21 @@ export class PriceRulesController {
   async previewRule(
     @Param('locationId', ParseUUIDPipe) locationId: string,
     @Body() dto: PriceRulePreviewRequestDto,
+    @TokenPayload() tokenPayload: TokenPayloadDto,
   ): Promise<BaseResponseDto<PriceRulePreviewResponseDto>> {
-    const preview = await this.preview.preview(
-      locationId,
-      dto,
-      new Date(),
-      (from, to) => this.bookings.getPromotionMatchItems(locationId, from, to),
-    );
+    const preview = await this.preview.preview(locationId, dto, new Date(), {
+      loadMatchItems: (from, to) =>
+        this.bookings.getPromotionMatchItems(locationId, from, to),
+      loadSaleLines: (from, to) =>
+        this.productStats.saleLines(locationId, from, to),
+      loadPurchaseCosts: (productLocationIds) =>
+        this.inventory.lastPurchaseUnitCosts(locationId, productLocationIds),
+      canReadPurchaseCost: hasPermission(
+        tokenPayload,
+        Read(Claim.INVENTORY),
+        locationId,
+      ),
+    });
     return BaseResponseDto.success(
       PriceRulePreviewResponseDto.fromPreview(preview),
     );
@@ -200,9 +222,21 @@ export class PriceRulesController {
     const days = REPORT_DAYS[query.period ?? PromotionReportPeriod.DAYS_30];
     const since =
       days === null ? null : new Date(now.getTime() - days * MS_PER_DAY);
+    const visits = await this.bookings.getPromotionReport(
+      locationId,
+      ruleId,
+      since,
+      now,
+    );
     return BaseResponseDto.success(
       PromotionReportResponseDto.fromReport(
-        await this.bookings.getPromotionReport(locationId, ruleId, since, now),
+        await this.productStats.fullReport(
+          locationId,
+          ruleId,
+          since,
+          now,
+          visits,
+        ),
       ),
     );
   }
@@ -394,12 +428,24 @@ export class PriceRulesController {
     locationId: string,
     views: PriceRuleView[],
   ): Promise<PriceRuleResponseDto[]> {
-    const stats = await this.bookings.getPriceRuleStats(
-      locationId,
-      views.map((view) => view.rule.id),
-    );
+    const now = new Date();
+    const promotionIds = views
+      .filter((view) => view.rule.kind === PriceRuleKind.PROMOTION)
+      .map((view) => view.rule.id);
+    const [stats, sales] = await Promise.all([
+      this.bookings.getPriceRuleStats(
+        locationId,
+        views.map((view) => view.rule.id),
+        now,
+      ),
+      this.productStats.ruleStats(locationId, promotionIds, now),
+    ]);
     return views.map((view) =>
-      PriceRuleResponseDto.fromView(view, stats.get(view.rule.id)),
+      PriceRuleResponseDto.fromView(
+        view,
+        stats.get(view.rule.id),
+        sales.get(view.rule.id),
+      ),
     );
   }
 }

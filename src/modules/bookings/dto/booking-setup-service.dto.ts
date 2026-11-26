@@ -41,6 +41,20 @@ export class BookingSetupServiceDto {
   })
   priceTo: string;
 
+  @ApiPrice({
+    nullable: true,
+    description:
+      'Cabinet setup only (GET /locations/{locationId}/booking-setup), null in the public one: lowest price-list price among the staff who perform the service in the location (personal price, else level price, else base price) on the location today, no surcharges, no promotions; the base price when nobody does',
+  })
+  listPriceFrom: string | null;
+
+  @ApiPrice({
+    nullable: true,
+    description:
+      'Cabinet setup only, null in the public one: highest price-list price among the staff who perform the service, no surcharges, no promotions; the base price when nobody does',
+  })
+  listPriceTo: string | null;
+
   @ApiProperty({ type: Number })
   durationMinutes: number;
 
@@ -68,6 +82,12 @@ export class BookingSetupServiceDto {
     dto.price = MoneyUtils.format(range.listPrice ?? service.price);
     dto.priceFrom = MoneyUtils.format(range.priceFrom);
     dto.priceTo = MoneyUtils.format(range.priceTo);
+    dto.listPriceFrom = range.listPriceFrom
+      ? MoneyUtils.format(range.listPriceFrom)
+      : null;
+    dto.listPriceTo = range.listPriceTo
+      ? MoneyUtils.format(range.listPriceTo)
+      : null;
     dto.promotion = BookingPromotionLabelDto.fromLabel(range.promotion);
     dto.durationMinutes = service.durationMinutes;
     return dto;

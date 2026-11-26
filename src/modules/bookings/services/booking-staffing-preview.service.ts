@@ -1,8 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import {
-  AnyStaffRule,
-  BookingExecutionMode,
-} from '@prisma/client';
+import { BookingExecutionMode } from '@prisma/client';
+import { ReadConsistency } from '../../../shared/cache/enums/read-consistency.enum.js';
 import { TimeUtils } from '../../../shared/time/time.utils.js';
 import { CalendarFacade } from '../../calendar/calendar.facade.js';
 import { LocationService } from '../../location/services/location.service.js';
@@ -10,15 +8,14 @@ import { ServiceCatalogFacade } from '../../services/catalog/service-catalog.fac
 import { StaffService } from '../../staff/services/staff.service.js';
 import { StaffingPreview } from '../interfaces/staffing-preview.interface.js';
 import { StaffingPreviewRequest } from '../interfaces/staffing-preview-request.interface.js';
-import { rankStaff } from '../rules/staff-ranking.rules.js';
-import { BookingStaffLoadService } from './booking-staff-load.service.js';
+import { BookingServiceSnapshot } from '../interfaces/booking-service-snapshot.interface.js';
+import { BookingSchedulingService } from './booking-scheduling.service.js';
 
 /**
- * Staffing of a visit at a given local start, for the cabinet price check. It reads what
- * booking creation reads (qualified staff, calendar availability, day load) and ranks the
- * free staff with the same rule (rankStaff), so the staff member shown is the one a booking
- * made at that time would get. A bundle needs one staff member for all its items; the visit
- * lasts the sum of the items (sequential) or the longest one (parallel).
+ * Staffing of a visit at a given local start, for the cabinet price check. The staff member
+ * is ranked by BookingSchedulingService.assignTeam, the function booking creation uses. A
+ * bundle needs one staff member for all its items (oneStaffForAll); the visit lasts the sum
+ * of the items (sequential) or the longest one (parallel).
  */
 @Injectable()
 export class BookingStaffingPreviewService {
@@ -27,7 +24,7 @@ export class BookingStaffingPreviewService {
     private readonly calendar: CalendarFacade,
     private readonly locations: LocationService,
     private readonly catalog: ServiceCatalogFacade,
-    private readonly staffLoad: BookingStaffLoadService,
+    private readonly scheduling: BookingSchedulingService,
   ) {}
 
   async preview(
@@ -44,7 +41,10 @@ export class BookingStaffingPreviewService {
         ? await this.staff.resolveStaffForService(locationId, serviceIds[0])
         : (await this.staff.resolveStaffingForServices(locationId, serviceIds))
             .coverableBySingle;
-    const startAt = TimeUtils.localToUtc(`${date}T${time}:00`, location.timezone);
+    const startAt = TimeUtils.localToUtc(
+      `${date}T${time}:00`,
+      location.timezone,
+    );
     const endAt = new Date(startAt.getTime() + visit.minutes * 60_000);
     const free = await this.calendar.filterAvailableStaff(
       locationId,
@@ -60,61 +60,26 @@ export class BookingStaffingPreviewService {
       freeStaffIds,
       assignedStaffId:
         request.staffId ??
-        (await this.rankFirst(
-          locationId,
-          request,
-          freeStaffIds,
-          location.anyStaffRule,
-          location.timezone,
-        )),
+        (freeStaffIds.length === 0
+          ? null
+          : ((
+              await this.scheduling.assignTeam({
+                locationId,
+                bundleId,
+                services: visit.services,
+                prices: ReadConsistency.CACHED,
+                book: request.book,
+                startAt,
+                executionMode: visit.executionMode,
+                timezone: location.timezone,
+                manualItems: [],
+                customEndAt: null,
+                staffRule: location.anyStaffRule,
+                pricingContext: request.context ?? null,
+                oneStaffForAll: true,
+              })
+            )?.[0] ?? null)),
     };
-  }
-
-  private async rankFirst(
-    locationId: string,
-    request: StaffingPreviewRequest,
-    freeStaffIds: readonly string[],
-    rule: AnyStaffRule,
-    timezone: string,
-  ): Promise<string | null> {
-    if (freeStaffIds.length === 0) return null;
-    const [loads, lastAssigned] = await Promise.all([
-      this.staffLoad.dayLoads(
-        locationId,
-        freeStaffIds,
-        request.date,
-        request.date,
-        timezone,
-      ),
-      rule === AnyStaffRule.ROUND_ROBIN
-        ? this.staffLoad.lastAssignedAt(locationId, freeStaffIds)
-        : new Map<string, number>(),
-    ]);
-    const ranked = rankStaff(
-      freeStaffIds.map((id) => ({
-        id,
-        busy: false,
-        price: request.serviceIds.reduce(
-          (sum, serviceId) =>
-            sum +
-            request.book.candidatePrice(
-              serviceId,
-              id,
-              request.bundleId,
-              {
-                date: request.date,
-                minute: TimeUtils.hhmmToMinutes(request.time),
-              },
-              request.context ?? null,
-            ),
-          0,
-        ),
-        dayLoad: loads.get(id)?.get(request.date) ?? 0,
-        lastAssignedAt: lastAssigned.get(id) ?? null,
-      })),
-      rule,
-    );
-    return ranked[0] ?? null;
   }
 
   /** Minutes the visit takes, buffers included. */
@@ -122,7 +87,11 @@ export class BookingStaffingPreviewService {
     locationId: string,
     serviceIds: readonly string[],
     bundleId: string | null,
-  ): Promise<{ minutes: number }> {
+  ): Promise<{
+    minutes: number;
+    services: BookingServiceSnapshot[];
+    executionMode: BookingExecutionMode;
+  }> {
     const services = await this.catalog.resolveServicesForAvailability(
       locationId,
       [...serviceIds],
@@ -135,6 +104,10 @@ export class BookingStaffingPreviewService {
       (await this.catalog.resolveBundleForAvailability(locationId, bundleId))
         .executionMode === BookingExecutionMode.PARALLEL;
     return {
+      services,
+      executionMode: parallel
+        ? BookingExecutionMode.PARALLEL
+        : BookingExecutionMode.SEQUENTIAL,
       minutes: parallel
         ? Math.max(...lengths)
         : lengths.reduce((sum, length) => sum + length, 0),

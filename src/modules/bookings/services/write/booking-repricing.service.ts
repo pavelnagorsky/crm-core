@@ -11,6 +11,8 @@ import { PromotionChannel } from '../../../pricing/engine/enums/promotion-channe
 import { LineDiscountChoice } from '../../../pricing/engine/interfaces/line-discount-choice.interface.js';
 import { ServiceLinePrice } from '../../../pricing/interfaces/service-line-price.interface.js';
 import { PromoCodeResult } from '../../../pricing/engine/interfaces/promo-code-result.interface.js';
+import { mergePromoCodeResults } from '../../../pricing/engine/promo-code-merge.js';
+import { OrdersFacade } from '../../../orders/orders.facade.js';
 import { PricingFacade } from '../../../pricing/pricing.facade.js';
 import { UpdateBookingItemPriceDto } from '../../dto/update-booking-item-price.dto.js';
 import { UpdateBookingDto } from '../../dto/update-booking.dto.js';
@@ -27,7 +29,7 @@ import {
 } from '../../rules/booking-discount-choice.rules.js';
 import { servicesTotal } from '../../rules/booking-services-total.rules.js';
 import { visitTimeAt } from '../../rules/booking-visit-time.rules.js';
-import { BookingPricingContextService } from '../booking-pricing-context.service.js';
+import { PricingContextService } from '../../../pricing/services/pricing-context.service.js';
 
 /**
  * New prices of an existing booking (docs/pricing-stage4-api.md, docs/pricing-stage5-api.md),
@@ -44,8 +46,9 @@ import { BookingPricingContextService } from '../booking-pricing-context.service
 export class BookingRepricingService {
   constructor(
     private readonly pricing: PricingFacade,
-    private readonly pricingContext: BookingPricingContextService,
+    private readonly pricingContext: PricingContextService,
     private readonly locations: LocationService,
+    private readonly orders: OrdersFacade,
   ) {}
 
   /**
@@ -241,6 +244,22 @@ export class BookingRepricingService {
     const repriced = items
       .map((item, index) => ({ item, index, line: quote.lines[index] }))
       .filter(({ item }) => request.repriced(item));
+    const promoCode = request.keepPromoCode
+      ? request.promoCode
+      : await this.appliedPromoCode(old, request, location, {
+          servicesCode: quote.promoCode,
+          visitStartAt,
+          // Σ listPrice the booking will have: new prices of re-priced items, the rest kept.
+          servicesListTotal: items.reduce(
+            (sum, item, index) =>
+              sum.plus(
+                request.repriced(item)
+                  ? quote.lines[index].listPrice
+                  : item.listPrice,
+              ),
+            new Prisma.Decimal(0),
+          ),
+        });
     return {
       itemIds: repriced.map(({ item }) => item.id),
       itemUpdates: repriced.map(({ item, index, line }) => ({
@@ -256,11 +275,7 @@ export class BookingRepricingService {
           ...this.choiceWrite(choices[index], line),
         },
       })),
-      promoCode: request.keepPromoCode
-        ? request.promoCode
-        : quote.promoCode?.status === PromoCodeStatus.APPLIED
-          ? quote.promoCode.code
-          : null,
+      promoCode,
       ruleIds: repriced.flatMap(({ line }) =>
         line.adjustments
           .filter(
@@ -273,6 +288,47 @@ export class BookingRepricingService {
       clientId: request.clientId,
       visitStartAt,
     };
+  }
+
+  /**
+   * The promo code stored with the booking: kept when it applies to a service or to a draft
+   * product of the visit order priced in the new visit context (a code only on products stays
+   * while the visit has such a product, docs/pricing-stage7-api.md).
+   */
+  private async appliedPromoCode(
+    old: BookingWithItems,
+    request: BookingRepricingRequest,
+    location: { brandId: string; timezone: string },
+    services: {
+      servicesCode: PromoCodeResult | null;
+      visitStartAt: Date;
+      servicesListTotal: Prisma.Decimal;
+    },
+  ): Promise<string | null> {
+    if (services.servicesCode?.status === PromoCodeStatus.APPLIED)
+      return services.servicesCode.code;
+    if (!request.promoCode) return null;
+    const products = await this.orders.quoteVisitDrafts(
+      {
+        id: old.locationId,
+        brandId: location.brandId,
+        timezone: location.timezone,
+      },
+      {
+        bookingId: old.id,
+        startAt: services.visitStartAt,
+        bookedAt: old.createdAt,
+        channel: promotionChannelOf(old.channel),
+        clientId: request.clientId,
+        promoCode: request.promoCode,
+        servicesListTotal: services.servicesListTotal,
+      },
+    );
+    const merged = mergePromoCodeResults(
+      services.servicesCode,
+      products?.promoCode ?? null,
+    );
+    return merged?.status === PromoCodeStatus.APPLIED ? merged.code : null;
   }
 
   /** A new pick is stored; a stored one is reset to AUTO when its discount did not apply. */

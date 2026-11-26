@@ -1,14 +1,15 @@
-import { ServicePriceChangeTarget } from '@prisma/client';
+import { PriceChangeTarget } from '@prisma/client';
 import { ServicePriceChangeGroupKind } from '../enums/service-price-change-group-kind.enum.js';
 import { PriceChangeDetailGroup } from '../interfaces/price-change-detail-group.interface.js';
 import { PriceChangeItemRecord } from '../interfaces/price-change-item-record.interface.js';
 import { PriceChangeItemRow } from '../interfaces/price-change-item-row.interface.js';
 
-const TARGET_ORDER: Record<ServicePriceChangeTarget, number> = {
+const TARGET_ORDER: Record<PriceChangeTarget, number> = {
   BASE: 0,
   LEVEL: 1,
   STAFF: 2,
   BUNDLE: 3,
+  PRODUCT: 4,
 };
 
 export function toItemRow(
@@ -42,7 +43,7 @@ export function groupChangeItems(
   const groups = new Map<string, PriceChangeDetailGroup>();
   for (const item of items) {
     const kind =
-      item.targetType === ServicePriceChangeTarget.BUNDLE
+      item.targetType === PriceChangeTarget.BUNDLE
         ? ServicePriceChangeGroupKind.BUNDLE
         : ServicePriceChangeGroupKind.SERVICE;
     const id = kind === ServicePriceChangeGroupKind.BUNDLE ? item.bundleId : item.serviceId;

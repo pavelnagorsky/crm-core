@@ -15,7 +15,7 @@ import { PricingRuleEntry } from '../../../pricing/engine/interfaces/pricing-rul
 import { BookingSetupService } from './booking-setup.service.js';
 import { PromotionChannel } from '../../../pricing/engine/enums/promotion-channel.enum.js';
 import { PromotionClientFilter } from '../../../pricing/engine/enums/promotion-client-filter.enum.js';
-import { bookingPricingContextStub } from '../../testing/factories/booking-pricing-context.stub.js';
+import { pricingContextStub } from '../../../pricing/testing/pricing-context.stub.js';
 
 const money = (value: string) => new Prisma.Decimal(value);
 
@@ -117,7 +117,7 @@ function setup(
     (options.scheduling ?? { schedule: vi.fn() }) as never,
     billing as never,
     options.pricing ?? createPricingFacadeStub(),
-    bookingPricingContextStub(),
+    pricingContextStub(),
     {
       listForBookingSetup: vi.fn().mockResolvedValue(options.promotions ?? []),
     } as never,
@@ -226,8 +226,46 @@ describe('BookingSetupService.getBookingSetup', () => {
     expect(range('color')).toEqual(['90.00', '90.00']);
   });
 
+  it('adds price-list ranges by staff for the cabinet, without surcharges', async () => {
+    const { pricing, catalog, directory } = pricedSalon([FRIDAY_EVENING]);
+    const { service } = setup({ pricing, catalog, directory });
+
+    const { prices } = await service.getBookingSetup('location-1', {
+      listPrices: true,
+    });
+
+    const list = (entry: {
+      listPriceFrom?: Prisma.Decimal;
+      listPriceTo?: Prisma.Decimal;
+    }) => [format(entry.listPriceFrom!), format(entry.listPriceTo!)];
+    // anna base 60, carl personal 70, boris level 80; the Friday surcharge is left out.
+    expect(list(prices.services.get('cut')!)).toEqual(['60.00', '80.00']);
+    expect(format(prices.services.get('cut')!.priceTo)).toBe('96.00');
+    expect(list(prices.services.get('color')!)).toEqual(['90.00', '90.00']);
+    expect(list(prices.bundles.get('sum')!)).toEqual(['150.00', '170.00']);
+    expect(list(prices.bundles.get('fixed')!)).toEqual(['120.00', '120.00']);
+  });
+
+  it('leaves price-list ranges out of the public setup', async () => {
+    const { pricing, catalog, directory } = pricedSalon();
+    const { service } = setup({ pricing, catalog, directory });
+
+    const { prices } = await service.getBookingSetup('location-1');
+
+    expect(prices.services.get('cut')?.listPriceFrom).toBeUndefined();
+    expect(prices.bundles.get('sum')?.listPriceTo).toBeUndefined();
+  });
+
   describe('promotions (docs/pricing-stage4-api.md)', () => {
-    const range = (prices: { services: ReadonlyMap<string, { priceFrom: Prisma.Decimal; priceTo: Prisma.Decimal }> }, id: string) => {
+    const range = (
+      prices: {
+        services: ReadonlyMap<
+          string,
+          { priceFrom: Prisma.Decimal; priceTo: Prisma.Decimal }
+        >;
+      },
+      id: string,
+    ) => {
       const entry = prices.services.get(id)!;
       return [format(entry.priceFrom), format(entry.priceTo)];
     };
@@ -240,13 +278,20 @@ describe('BookingSetupService.getBookingSetup', () => {
       clientFilter: 'ANY',
       requiresCode: false,
       conditions: ['−10% на все услуги'],
-      appliesToAll: true,
+      appliesToAllServices: true,
       targets: [],
     };
 
     it('"from" includes promotions every online client gets, and the label and list come along', async () => {
-      const { pricing, catalog, directory } = pricedSalon([promotionRule('ten')]);
-      const { service } = setup({ pricing, catalog, directory, promotions: [view] });
+      const { pricing, catalog, directory } = pricedSalon([
+        promotionRule('ten'),
+      ]);
+      const { service } = setup({
+        pricing,
+        catalog,
+        directory,
+        promotions: [view],
+      });
       const setupResult = await service.getBookingSetup('location-1');
       // Anna 60 - 10% = 54, Boris 80 - 10% = 72.
       expect(range(setupResult.prices, 'cut')).toEqual(['54.00', '72.00']);
@@ -263,14 +308,17 @@ describe('BookingSetupService.getBookingSetup', () => {
       ['a minimum total', { minVisitTotal: 100 }],
       ['a lead time', { maxLeadMinutes: 180 }],
       ['the admin channel only', { channels: [PromotionChannel.ADMIN] }],
-    ] as const)('"from" leaves out a promotion with %s', async (_name, conditions) => {
-      const { pricing, catalog, directory } = pricedSalon([
-        promotionRule('ten', {}, { ...conditions } as never),
-      ]);
-      const { service } = setup({ pricing, catalog, directory });
-      const { prices } = await service.getBookingSetup('location-1');
-      expect(range(prices, 'cut')).toEqual(['60.00', '80.00']);
-    });
+    ] as const)(
+      '"from" leaves out a promotion with %s',
+      async (_name, conditions) => {
+        const { pricing, catalog, directory } = pricedSalon([
+          promotionRule('ten', {}, { ...conditions } as never),
+        ]);
+        const { service } = setup({ pricing, catalog, directory });
+        const { prices } = await service.getBookingSetup('location-1');
+        expect(range(prices, 'cut')).toEqual(['60.00', '80.00']);
+      },
+    );
 
     it('a staff-limited promotion lowers only that staff member', async () => {
       const { pricing, catalog, directory } = pricedSalon([

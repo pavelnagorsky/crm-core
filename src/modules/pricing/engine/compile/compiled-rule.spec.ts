@@ -1,4 +1,5 @@
 import { PriceRuleSkipReason } from '../enums/price-rule-skip-reason.enum.js';
+import { serviceTargetContext } from './rule-target-contexts.js';
 import { PriceRuleTargetType } from '../enums/price-rule-target-type.enum.js';
 import { PriceScheduleType } from '../enums/price-schedule-type.enum.js';
 import { PricingRuleEntry } from '../interfaces/pricing-rule-entry.interface.js';
@@ -97,7 +98,12 @@ describe('CompiledRule: time conditions', () => {
   describe('weekday (ISO, from the date)', () => {
     it.each([
       ['Monday in Mon-Fri', weekdays(1, 2, 3, 4, 5), '2026-11-23', null],
-      ['Sunday not in Mon-Fri', weekdays(1, 2, 3, 4, 5), '2026-11-29', WRONG_WEEKDAY],
+      [
+        'Sunday not in Mon-Fri',
+        weekdays(1, 2, 3, 4, 5),
+        '2026-11-29',
+        WRONG_WEEKDAY,
+      ],
       ['Sunday in Sat-Sun', weekdays(6, 7), '2026-11-29', null],
       ['Saturday in Sat-Sun', weekdays(6, 7), '2026-11-28', null],
       ['Friday not in Sat-Sun', weekdays(6, 7), '2026-11-27', WRONG_WEEKDAY],
@@ -135,9 +141,24 @@ describe('CompiledRule: time conditions', () => {
       ['yearly across new year: 31.12', yearlyWinter, '2030-12-31', null],
       ['yearly across new year: 01.01', yearlyWinter, '2031-01-01', null],
       ['yearly across new year: 10.01', yearlyWinter, '2031-01-10', null],
-      ['yearly across new year: 11.01', yearlyWinter, '2031-01-11', OUT_OF_PERIOD],
-      ['yearly across new year: 14.12', yearlyWinter, '2031-12-14', OUT_OF_PERIOD],
-      ['yearly across new year: summer', yearlyWinter, '2031-07-01', OUT_OF_PERIOD],
+      [
+        'yearly across new year: 11.01',
+        yearlyWinter,
+        '2031-01-11',
+        OUT_OF_PERIOD,
+      ],
+      [
+        'yearly across new year: 14.12',
+        yearlyWinter,
+        '2031-12-14',
+        OUT_OF_PERIOD,
+      ],
+      [
+        'yearly across new year: summer',
+        yearlyWinter,
+        '2031-07-01',
+        OUT_OF_PERIOD,
+      ],
       [
         'yearly inside one year',
         {
@@ -175,15 +196,20 @@ describe('CompiledRule: time conditions', () => {
       ['once: second date', once, '2027-01-07', null],
       ['once: next year', once, '2027-12-31', NOT_HOLIDAY_DATE],
       ['once: other date', once, '2026-12-30', NOT_HOLIDAY_DATE],
-      [
-        'yearly: any year',
-        { ...once, yearly: true },
-        '2035-12-31',
-        null,
-      ],
+      ['yearly: any year', { ...once, yearly: true }, '2035-12-31', null],
       ['yearly 29.02: leap year 2028', leapDay, '2028-02-29', null],
-      ['yearly 29.02: not 28.02 of 2027', leapDay, '2027-02-28', NOT_HOLIDAY_DATE],
-      ['yearly 29.02: not 01.03 of 2027', leapDay, '2027-03-01', NOT_HOLIDAY_DATE],
+      [
+        'yearly 29.02: not 28.02 of 2027',
+        leapDay,
+        '2027-02-28',
+        NOT_HOLIDAY_DATE,
+      ],
+      [
+        'yearly 29.02: not 01.03 of 2027',
+        leapDay,
+        '2027-03-01',
+        NOT_HOLIDAY_DATE,
+      ],
       [
         'interval is checked before the date',
         { ...once, intervals: [{ start: 8 * 60, end: 9 * 60 }] },
@@ -196,13 +222,21 @@ describe('CompiledRule: time conditions', () => {
   });
 
   it.each([
-    ['disabled first', { enabled: false, weekdaysMask: weekdays(2) }, PriceRuleSkipReason.DISABLED],
+    [
+      'disabled first',
+      { enabled: false, weekdaysMask: weekdays(2) },
+      PriceRuleSkipReason.DISABLED,
+    ],
     [
       'period before weekday',
       { visitFrom: '2027-01-01', weekdaysMask: weekdays(2) },
       OUT_OF_PERIOD,
     ],
-    ['weekday before interval', { weekdaysMask: weekdays(2), ...evening }, WRONG_WEEKDAY],
+    [
+      'weekday before interval',
+      { weekdaysMask: weekdays(2), ...evening },
+      WRONG_WEEKDAY,
+    ],
   ])('check order: %s', (_name, overrides, expected) => {
     expect(reasonAt(overrides, '2026-11-23', '12:00')).toBe(expected);
   });
@@ -235,14 +269,20 @@ describe('CompiledRule: time conditions', () => {
 
 describe('CompiledRule: targets', () => {
   const { SERVICE, SERVICE_CATEGORY, BUNDLE } = PriceRuleTargetType;
-  const cutLine = { serviceId: 'cut', categoryId: 'hair', bundleId: null };
-  const sumLine = { serviceId: 'cut', categoryId: 'hair', bundleId: 'sum' };
-  const fixedPackage = { serviceId: null, categoryId: null, bundleId: 'fixed' };
+  const cutLine = serviceTargetContext('cut', 'hair', null);
+  const sumLine = serviceTargetContext('cut', 'hair', 'sum');
+  const fixedPackage = serviceTargetContext(null, null, 'fixed');
 
   it.each([
     ['all', true, [], cutLine, null],
     ['all reaches a FIXED bundle', true, [], fixedPackage, null],
-    ['all, service excluded', true, [[SERVICE, 'cut', true]], cutLine, 'EXCLUDED'],
+    [
+      'all, service excluded',
+      true,
+      [[SERVICE, 'cut', true]],
+      cutLine,
+      'EXCLUDED',
+    ],
     [
       'all, category excluded',
       true,
@@ -250,7 +290,13 @@ describe('CompiledRule: targets', () => {
       cutLine,
       'EXCLUDED',
     ],
-    ['all, FIXED bundle excluded', true, [[BUNDLE, 'fixed', true]], fixedPackage, 'EXCLUDED'],
+    [
+      'all, FIXED bundle excluded',
+      true,
+      [[BUNDLE, 'fixed', true]],
+      fixedPackage,
+      'EXCLUDED',
+    ],
     [
       'all, category excluded does not reach a FIXED bundle',
       true,
@@ -259,11 +305,41 @@ describe('CompiledRule: targets', () => {
       null,
     ],
     ['service target', false, [[SERVICE, 'cut', false]], cutLine, null],
-    ['category target', false, [[SERVICE_CATEGORY, 'hair', false]], cutLine, null],
-    ['other service', false, [[SERVICE, 'color', false]], cutLine, 'NOT_TARGETED'],
-    ['SUM bundle line by service', false, [[SERVICE, 'cut', false]], sumLine, null],
-    ['SUM bundle line by its bundle', false, [[BUNDLE, 'sum', false]], sumLine, null],
-    ['FIXED bundle by bundle target', false, [[BUNDLE, 'fixed', false]], fixedPackage, null],
+    [
+      'category target',
+      false,
+      [[SERVICE_CATEGORY, 'hair', false]],
+      cutLine,
+      null,
+    ],
+    [
+      'other service',
+      false,
+      [[SERVICE, 'color', false]],
+      cutLine,
+      'NOT_TARGETED',
+    ],
+    [
+      'SUM bundle line by service',
+      false,
+      [[SERVICE, 'cut', false]],
+      sumLine,
+      null,
+    ],
+    [
+      'SUM bundle line by its bundle',
+      false,
+      [[BUNDLE, 'sum', false]],
+      sumLine,
+      null,
+    ],
+    [
+      'FIXED bundle by bundle target',
+      false,
+      [[BUNDLE, 'fixed', false]],
+      fixedPackage,
+      null,
+    ],
     [
       'FIXED bundle ignores service targets',
       false,
@@ -278,15 +354,22 @@ describe('CompiledRule: targets', () => {
       fixedPackage,
       'NOT_TARGETED',
     ],
-  ] as const)('%s', (_name, appliesToAll, targets, context, expected) => {
-    const rule = new CompiledRule(
-      surchargeRule('r', {
-        appliesToAll,
-        targets: targets.map(([type, id, excluded]) => ({ type, id, excluded })),
-      }),
-    );
-    expect(rule.targetReason(context)).toBe(expected);
-  });
+  ] as const)(
+    '%s',
+    (_name, appliesToAllServices, targets, context, expected) => {
+      const rule = new CompiledRule(
+        surchargeRule('r', {
+          appliesToAllServices,
+          targets: targets.map(([type, id, excluded]) => ({
+            type,
+            id,
+            excluded,
+          })),
+        }),
+      );
+      expect(rule.targetReason(context)).toBe(expected);
+    },
+  );
 });
 
 describe('RuleCompiler', () => {

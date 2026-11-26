@@ -1,4 +1,4 @@
-import { ServicePriceChangeTarget } from './enums/service-price-change-target.enum.js';
+import { PriceChangeTarget } from './enums/price-change-target.enum.js';
 import { PriceTimelinePoint } from './interfaces/price-timeline-point.interface.js';
 import { PricingPriceChangeEntry } from './interfaces/pricing-price-change-entry.interface.js';
 import { PricingPriceChangeItem } from './interfaces/pricing-price-change-item.interface.js';
@@ -13,24 +13,31 @@ export const staffKey = (serviceId: string, staffId: string): string =>
   `STAFF:${serviceId}:${staffId}`;
 /** Key of the fixed price of a bundle. */
 export const bundleKey = (bundleId: string): string => `BUNDLE:${bundleId}`;
+/** Key of the retail price of a product in a location. */
+export const productKey = (productLocationId: string): string =>
+  `PRODUCT:${productLocationId}`;
 
 /** Key of a change row, or null when its target reference is gone. */
 export function priceChangeItemKey(
   item: PricingPriceChangeItem,
 ): string | null {
   switch (item.target) {
-    case ServicePriceChangeTarget.BASE:
+    case PriceChangeTarget.BASE:
       return item.serviceId ? baseKey(item.serviceId) : null;
-    case ServicePriceChangeTarget.LEVEL:
+    case PriceChangeTarget.LEVEL:
       return item.serviceId && item.levelId
         ? levelKey(item.serviceId, item.levelId)
         : null;
-    case ServicePriceChangeTarget.STAFF:
+    case PriceChangeTarget.STAFF:
       return item.serviceId && item.staffId
         ? staffKey(item.serviceId, item.staffId)
         : null;
-    case ServicePriceChangeTarget.BUNDLE:
+    case PriceChangeTarget.BUNDLE:
       return item.bundleId ? bundleKey(item.bundleId) : null;
+    case PriceChangeTarget.PRODUCT:
+      return item.productLocationId
+        ? productKey(item.productLocationId)
+        : null;
   }
 }
 

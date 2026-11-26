@@ -10,7 +10,6 @@ import {
 import { createHash } from 'crypto';
 import { PrismaErrorCode } from '../../../shared/database/prisma-error-codes.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
-import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { AUDIT_EVENT } from '../../audit/constants/audit.constants.js';
 import { AuditActionType } from '../../audit/enums/audit-action-type.enum.js';
@@ -21,8 +20,11 @@ import { AuditLogEvent } from '../../audit/interfaces/audit-log-event.interface.
 import { InventoryFacade } from '../../inventory/inventory.facade.js';
 import { LocationService } from '../../location/services/location.service.js';
 import { StaffEarningsService } from '../../payroll/earnings/services/staff-earnings.service.js';
-import { OrderPricingCalculator } from '../calculators/order-pricing.calculator.js';
+import { CreateOrderReturnItemDto } from '../dto/create-order-return-item.dto.js';
 import { CreateOrderReturnDto } from '../dto/create-order-return.dto.js';
+import { OrderReturnPreview } from '../interfaces/order-return-preview.interface.js';
+import { ResolvedReturnLine } from '../interfaces/resolved-return-line.interface.js';
+import { allocateReturn } from '../rules/order-return-allocation.rules.js';
 import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
 import { OrderStateRules } from '../rules/order-state.rules.js';
 import { NESTED_PAYMENT_KEY_PREFIX } from '../../payments/constants/payment.constants.js';
@@ -45,7 +47,6 @@ export class OrderReturnService {
     private readonly inventory: InventoryFacade,
     private readonly earnings: StaffEarningsService,
     private readonly persistence: OrderPersistenceService,
-    private readonly compute: OrderPricingCalculator,
     private readonly stateAssertions: OrderStateRules,
     private readonly locations: LocationService,
     private readonly eventEmitter: EventEmitter2,
@@ -88,7 +89,7 @@ export class OrderReturnService {
             HttpStatus.BAD_REQUEST,
           );
         }
-        const returnItems = this.resolveReturnItems(order, dto);
+        const returnItems = this.resolveReturnItems(order, dto.items);
         const orderReturn = await tx.orderReturn.create({
           data: {
             locationId,
@@ -173,6 +174,47 @@ export class OrderReturnService {
   }
 
   /**
+   * What a return of these quantities would give back, by the same allocation and refund rules
+   * as create. Writes nothing; the visit and the order are locked like a return, so the
+   * numbers are those the return would take now.
+   */
+  async preview(
+    locationId: string,
+    orderId: string,
+    items: readonly CreateOrderReturnItemDto[],
+  ): Promise<OrderReturnPreview> {
+    return this.persistence.inTransaction(async (tx) => {
+      const locked = await this.locks.lockOrderWithVisit(
+        tx,
+        locationId,
+        orderId,
+      );
+      this.stateAssertions.assertActive(locked.order.status);
+      const lines = this.resolveReturnItems(locked.order, items);
+      const totalAmount = lines.reduce(
+        (sum, line) => sum.plus(line.lineTotal),
+        new Prisma.Decimal(0),
+      );
+      const refundAmount = returnRefundAmount(
+        await this.payments.paidAmount(tx, orderId),
+        lockedOrderAmountDue(locked).minus(totalAmount),
+        totalAmount,
+      );
+      return {
+        items: lines.map((line) => ({
+          orderItemId: line.orderItemId,
+          quantity: line.quantity,
+          lineSubtotal: line.lineSubtotal,
+          discountTotal: line.discountTotal,
+          lineTotal: line.lineTotal,
+        })),
+        totalAmount,
+        refundAmount,
+      };
+    });
+  }
+
+  /**
    * Money goes back together with the goods: what was paid beyond the amount due after the
    * return, at most the return total, dated like the return. Money that was never received
    * is not refunded. `refund` is required only when something goes back; otherwise it is
@@ -221,16 +263,16 @@ export class OrderReturnService {
 
   private resolveReturnItems(
     order: OrderWithItems,
-    dto: CreateOrderReturnDto,
-  ): Prisma.OrderReturnItemUncheckedCreateWithoutReturnInput[] {
-    const ids = dto.items.map((item) => item.orderItemId);
+    items: readonly CreateOrderReturnItemDto[],
+  ): ResolvedReturnLine[] {
+    const ids = items.map((item) => item.orderItemId);
     if (new Set(ids).size !== ids.length) {
       throw new AppException(
         ErrorCode.ORDER_DUPLICATE_ITEM,
         HttpStatus.BAD_REQUEST,
       );
     }
-    return dto.items.map((dtoItem) => {
+    return items.map((dtoItem) => {
       const orderItem = order.items.find(
         (item) => item.id === dtoItem.orderItemId,
       );
@@ -267,11 +309,7 @@ export class OrderReturnService {
           HttpStatus.BAD_REQUEST,
         );
       }
-      const price = this.compute.priceLine(
-        quantity,
-        orderItem.listUnitPrice,
-        orderItem.customUnitPrice,
-      );
+      const allocation = allocateReturn(orderItem, quantity);
       return {
         orderItemId: orderItem.id,
         productLocationId: orderItem.productLocationId,
@@ -281,30 +319,14 @@ export class OrderReturnService {
         sku: orderItem.sku,
         unit: orderItem.unit,
         quantity,
-        listUnitPrice: price.listUnitPrice,
-        customUnitPrice: price.customUnitPrice,
-        unitPrice: price.unitPrice,
-        lineSubtotal: price.lineSubtotal,
-        discountTotal: price.discountTotal,
-        lineTotal: price.lineTotal,
+        listUnitPrice: orderItem.listUnitPrice,
+        customUnitPrice: orderItem.customUnitPrice,
+        unitPrice: orderItem.unitPrice,
+        lineSubtotal: allocation.lineSubtotal,
+        discountTotal: allocation.discountTotal,
+        lineTotal: allocation.lineTotal,
         unitCostSnapshot: orderItem.unitCostSnapshot,
-        lineCostSnapshot:
-          orderItem.lineCostSnapshot == null
-            ? null
-            : MoneyUtils.allocateCumulative(
-                orderItem.lineCostSnapshot,
-                orderItem.quantity,
-                quantity,
-                returnedQuantity,
-                orderItem.returnItems
-                  .filter(
-                    (item) => item.return.status === OrderReturnStatus.POSTED,
-                  )
-                  .reduce(
-                    (sum, item) => sum.plus(item.lineCostSnapshot ?? 0),
-                    new Prisma.Decimal(0),
-                  ),
-              ),
+        lineCostSnapshot: allocation.lineCostSnapshot,
         sellerStaffId: orderItem.sellerStaffId,
         sellerName: orderItem.sellerName,
       };

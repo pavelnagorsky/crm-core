@@ -2,6 +2,7 @@ import { PriceRuleKind } from '../enums/price-rule-kind.enum.js';
 import { PriceRuleSkipReason } from '../enums/price-rule-skip-reason.enum.js';
 import { PriceScheduleType } from '../enums/price-schedule-type.enum.js';
 import { PriceValueType } from '../enums/price-value-type.enum.js';
+import { RuleTargetKind } from '../enums/rule-target-kind.enum.js';
 import { PricingRuleEntry } from '../interfaces/pricing-rule-entry.interface.js';
 import { CalendarDayParser } from './calendar-day.parser.js';
 import { CompiledPromotion } from './compiled-promotion.js';
@@ -41,7 +42,10 @@ export class CompiledRule {
   private readonly holidays: ReadonlySet<number> | null;
   private readonly holidaysYearly: boolean;
 
-  private readonly appliesToAll: boolean;
+  /** Every service and bundle (SERVICE contexts) except the excluded ones. */
+  readonly appliesToAllServices: boolean;
+  /** Every product (PRODUCT contexts) except the excluded ones; promotions only. */
+  readonly appliesToAllProducts: boolean;
   private readonly included: RuleTargetSets;
   private readonly excluded: RuleTargetSets;
 
@@ -98,7 +102,10 @@ export class CompiledRule {
           )
         : null;
 
-    this.appliesToAll = entry.appliesToAll;
+    this.appliesToAllServices = entry.appliesToAllServices;
+    // Surcharges never reach products (stage 7): the flag only means something on a promotion.
+    this.appliesToAllProducts =
+      entry.kind === PriceRuleKind.PROMOTION && entry.appliesToAllProducts;
     this.included = new RuleTargetSets();
     this.excluded = new RuleTargetSets();
     for (const target of entry.targets)
@@ -144,10 +151,14 @@ export class CompiledRule {
   /**
    * Null when the rule targets the context. A FIXED bundle context has no service: only
    * BUNDLE targets and "all" reach it. A SUM bundle line matches by its service, its
-   * category or its bundle.
+   * category or its bundle. A product line matches by its product or product category, or
+   * "all products"; surcharges never reach products.
    */
   targetReason(context: RuleTargetContext): PriceRuleSkipReason | null {
-    if (this.appliesToAll)
+    const product = context.kind === RuleTargetKind.PRODUCT;
+    if (product && this.kind === PriceRuleKind.SURCHARGE)
+      return PriceRuleSkipReason.NOT_TARGETED;
+    if (product ? this.appliesToAllProducts : this.appliesToAllServices)
       return this.excluded.has(context)
         ? PriceRuleSkipReason.EXCLUDED
         : null;

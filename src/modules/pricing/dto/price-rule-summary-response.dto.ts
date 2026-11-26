@@ -14,17 +14,28 @@ export class PriceRuleSummaryResponseDto {
   @ApiProperty({ type: String, nullable: true, example: '2026-12-01' })
   nextStartDate: string | null;
 
-  @ApiPrice({ description: 'What the items with a promotion cost, last 30 days.' })
+  @ApiPrice({
+    description:
+      'What the items and product lines (net of returns) with a promotion cost, last 30 days.',
+  })
   revenue30d: string;
 
   @ApiPrice({ description: 'The same for the 30 days before.' })
   revenuePrev30d: string;
 
-  @ApiPrice({ description: 'Discounts given, last 30 days.' })
+  @ApiPrice({
+    description: 'Discounts given, last 30 days, product returns deducted.',
+  })
   discount30d: string;
 
   @ApiProperty({ type: Number })
   bookings30d: number;
+
+  @ApiProperty({
+    type: Number,
+    description: 'Separate sales with a promotion, last 30 days.',
+  })
+  sales30d: number;
 
   @ApiProperty({ type: Number, description: 'First bookings in the brand with a promotion.' })
   newClients30d: number;
@@ -38,6 +49,7 @@ export class PriceRuleSummaryResponseDto {
     dto.revenuePrev30d = MoneyUtils.format(summary.previous.revenue);
     dto.discount30d = MoneyUtils.format(summary.current.discount);
     dto.bookings30d = summary.current.bookingsCount;
+    dto.sales30d = summary.current.salesCount;
     dto.newClients30d = summary.current.newClients;
     return dto;
   }

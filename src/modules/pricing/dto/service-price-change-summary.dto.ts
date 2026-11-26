@@ -1,10 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
 import {
-  ServicePriceChangeSource,
-  ServicePriceChangeStatus,
+  PriceChangeSource,
+  PriceChangeStatus,
 } from '@prisma/client';
 import { TimeUtils } from '../../../shared/time/time.utils.js';
-import { ServicePriceChangeSummaryView } from '../interfaces/service-price-change-summary-view.interface.js';
+import { PriceChangeSummaryView } from '../interfaces/price-change-summary-view.interface.js';
 import { ServicePriceChangeAuthorDto } from './service-price-change-author.dto.js';
 import { ServicePriceChangeRuleSpecDto } from './service-price-change-rule-spec.dto.js';
 
@@ -13,16 +13,16 @@ export class ServicePriceChangeSummaryDto {
   id: string;
 
   @ApiProperty({
-    enum: ServicePriceChangeSource,
-    enumName: 'ServicePriceChangeSource',
+    enum: PriceChangeSource,
+    enumName: 'PriceChangeSource',
   })
-  source: ServicePriceChangeSource;
+  source: PriceChangeSource;
 
   @ApiProperty({
-    enum: ServicePriceChangeStatus,
-    enumName: 'ServicePriceChangeStatus',
+    enum: PriceChangeStatus,
+    enumName: 'PriceChangeStatus',
   })
-  status: ServicePriceChangeStatus;
+  status: PriceChangeStatus;
 
   @ApiProperty({ type: String })
   title: string;
@@ -78,7 +78,7 @@ export class ServicePriceChangeSummaryDto {
   static fromView({
     change,
     createdBy,
-  }: ServicePriceChangeSummaryView): ServicePriceChangeSummaryDto {
+  }: PriceChangeSummaryView): ServicePriceChangeSummaryDto {
     const dto = new ServicePriceChangeSummaryDto();
     dto.id = change.id;
     dto.source = change.source;
@@ -98,8 +98,8 @@ export class ServicePriceChangeSummaryDto {
     dto.appliedAt = change.appliedAt?.toISOString() ?? null;
     dto.cancelledAt = change.cancelledAt?.toISOString() ?? null;
     dto.rolledBackAt = change.rolledBackAt?.toISOString() ?? null;
-    dto.canCancel = change.status === ServicePriceChangeStatus.SCHEDULED;
-    dto.canRollback = change.status === ServicePriceChangeStatus.APPLIED;
+    dto.canCancel = change.status === PriceChangeStatus.SCHEDULED;
+    dto.canRollback = change.status === PriceChangeStatus.APPLIED;
     return dto;
   }
 }

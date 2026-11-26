@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { serviceTargetContext } from '../engine/compile/rule-target-contexts.js';
 import { ServiceStatus } from '@prisma/client';
 import { ReadConsistency } from '../../../shared/cache/enums/read-consistency.enum.js';
 import { MoneyUtils } from '../../../shared/money/money.utils.js';
@@ -117,9 +118,7 @@ export class PriceRoundingPreviewService {
     return Array.from(
       { length: EXAMPLE_LIMIT },
       (_, index) =>
-        sorted[
-          Math.round((index * (sorted.length - 1)) / (EXAMPLE_LIMIT - 1))
-        ],
+        sorted[Math.round((index * (sorted.length - 1)) / (EXAMPLE_LIMIT - 1))],
     );
   }
 
@@ -130,11 +129,9 @@ export class PriceRoundingPreviewService {
   ): RoundingPreviewExample {
     const rule = rules.find(
       (item) =>
-        new CompiledRule(item).targetReason({
-          serviceId: service.id,
-          categoryId: service.categoryId,
-          bundleId: null,
-        }) === null,
+        new CompiledRule(item).targetReason(
+          serviceTargetContext(service.id, service.categoryId, null),
+        ) === null,
     );
     const basisPoints = rule?.value ?? SAMPLE_SURCHARGE_BP;
     const raw =
@@ -159,8 +156,7 @@ export class PriceRoundingPreviewService {
       label,
       raw,
       rounded,
-      largeStep:
-        Math.abs(rounded - raw) * 100 > raw * LARGE_STEP_SHARE_PERCENT,
+      largeStep: Math.abs(rounded - raw) * 100 > raw * LARGE_STEP_SHARE_PERCENT,
     };
   }
 }

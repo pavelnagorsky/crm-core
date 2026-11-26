@@ -43,7 +43,8 @@ export function priceRuleAuditSnapshot(
     dates: rule.dates
       .map((item) => TimeUtils.dateOnlyStr(item.date))
       .join(', '),
-    appliesToAll: rule.appliesToAll,
+    appliesToAllServices: rule.appliesToAllServices,
+    appliesToAllProducts: rule.appliesToAllProducts,
     targets: targets
       .map(
         (target) => `${target.excluded ? '-' : ''}${target.name ?? target.id}`,

@@ -19,7 +19,7 @@ describe('ServicePriceImportFileInterceptor', () => {
     expect(error).toBeInstanceOf(AppException);
     const exception = error as AppException;
     expect(exception.errorCode).toBe(
-      ErrorCode.SERVICE_PRICE_IMPORT_FILE_TOO_LARGE.code,
+      ErrorCode.PRICE_IMPORT_FILE_TOO_LARGE.code,
     );
     expect(exception.getStatus()).toBe(HttpStatus.PAYLOAD_TOO_LARGE);
   });

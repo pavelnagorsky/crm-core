@@ -14,6 +14,7 @@ export type OrderWithItems = Prisma.OrderGetPayload<{
             return: true;
           };
         };
+        priceAdjustments: true;
       };
     };
   };

@@ -54,3 +54,9 @@ export const PROMOTION_RETURN_DAYS = 14;
 
 /** Clients listed in "not returned" on the promotion page. */
 export const PROMOTION_NOT_RETURNED_LIMIT = 50;
+
+/** Products listed on the promotion page, by revenue. */
+export const PROMOTION_REPORT_PRODUCT_LIMIT = 20;
+
+/** Product examples in a promotion preview. */
+export const PROMOTION_PRODUCT_EXAMPLE_LIMIT = 5;

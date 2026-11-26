@@ -13,6 +13,7 @@ import { InventoryDocumentDraftService } from './services/inventory-document-dra
 import { InventoryDocumentMovementService } from './services/inventory-document-movement.service.js';
 import { InventoryDocumentService } from './services/inventory-document.service.js';
 import { InventoryExportService } from './export/services/inventory-export.service.js';
+import { InventoryPurchaseCostService } from './services/inventory-purchase-cost.service.js';
 import { InventoryReadService } from './services/inventory-read.service.js';
 import { InventorySaleReversalService } from './services/inventory-sale-reversal.service.js';
 import { InventorySalesService } from './services/inventory-sales.service.js';
@@ -23,6 +24,7 @@ import { InventoryStockReadService } from './services/inventory-stock-read.servi
   controllers: [InventoryController],
   providers: [
     InventoryReadService,
+    InventoryPurchaseCostService,
     InventoryStockReadService,
     InventoryDocumentMovementService,
     InventorySalesService,

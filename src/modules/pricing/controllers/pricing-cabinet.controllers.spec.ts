@@ -43,13 +43,21 @@ describe('Pricing cabinet controllers', () => {
   const weekMap = { weekMap: vi.fn() };
   const token = tokenPayload(BusinessRole.OWNER);
   const previews = () => new PricingPreviewController(roundingPreview as never);
-  const bookings = { getPromotionMatchItems: vi.fn() };
+  const bookings = {
+    getPromotionMatchItems: vi.fn(),
+    getPromotionReport: vi.fn(),
+  };
+  const ruleService = { get: vi.fn() };
+  const productStats = { saleLines: vi.fn(), fullReport: vi.fn() };
+  const inventory = { lastPurchaseUnitCosts: vi.fn() };
   const ruleControllers = () =>
     new PriceRulesController(
-      {} as never,
+      ruleService as never,
       rulePreview as never,
       {} as never,
       bookings as never,
+      productStats as never,
+      inventory as never,
     );
   const checks = () =>
     new PriceCheckController(explain as never, weekMap as never);
@@ -84,12 +92,17 @@ describe('Pricing cabinet controllers', () => {
       conditions: [],
       serviceCount: 1,
       totalServiceCount: 3,
+      productCount: 0,
+      totalProductCount: 4,
+      productExamples: [],
+      belowCostCount: 0,
       overlaps: [],
       matches30d: null,
     });
     const result = await ruleControllers().previewRule(
       'location-1',
       {} as never,
+      token,
     );
     expect(result.responseValue).toEqual({
       status: 'ACTIVE',
@@ -118,8 +131,158 @@ describe('Pricing cabinet controllers', () => {
       conditions: [],
       serviceCount: 1,
       totalServiceCount: 3,
+      productCount: 0,
+      totalProductCount: 4,
+      productExamples: [],
+      belowCostCount: 0,
       overlaps: [],
       matches30d: null,
+    });
+  });
+
+  it('maps product examples and matches of a promotion preview; the sources read sales and costs', async () => {
+    rulePreview.preview.mockResolvedValue({
+      status: PriceRuleStatus.ACTIVE,
+      nextDate: '2026-12-04',
+      examples: [],
+      replaces: [],
+      conflicts: [],
+      conditions: ['−10% на все товары'],
+      serviceCount: 0,
+      totalServiceCount: 3,
+      productCount: 2,
+      totalProductCount: 2,
+      productExamples: [
+        {
+          productId: 'p1',
+          productName: 'Шампунь',
+          unit: 'PIECE',
+          before: new Prisma.Decimal('20'),
+          after: new Prisma.Decimal('18'),
+          amount: new Prisma.Decimal('2'),
+          lastPurchaseUnitCost: new Prisma.Decimal('19.5'),
+          belowCost: true,
+        },
+      ],
+      belowCostCount: 1,
+      overlaps: [],
+      matches30d: {
+        bookingsCount: 0,
+        salesCount: 2,
+        discount: new Prisma.Decimal('4'),
+      },
+    });
+    const result = await ruleControllers().previewRule(
+      'location-1',
+      {} as never,
+      token,
+    );
+    expect(result.responseValue?.productExamples).toEqual([
+      {
+        productId: 'p1',
+        productName: 'Шампунь',
+        unit: 'PIECE',
+        before: '20.00',
+        after: '18.00',
+        amount: '2.00',
+        lastPurchaseUnitCost: '19.50000000',
+        belowCost: true,
+      },
+    ]);
+    expect(result.responseValue?.belowCostCount).toBe(1);
+    expect(result.responseValue?.matches30d).toEqual({
+      bookingsCount: 0,
+      salesCount: 2,
+      discount: '4.00',
+    });
+    const sources = rulePreview.preview.mock.calls[0][3];
+    expect(sources.canReadPurchaseCost).toBe(true);
+    const from = new Date('2026-11-01');
+    const to = new Date('2026-12-01');
+    await sources.loadSaleLines(from, to);
+    expect(productStats.saleLines).toHaveBeenCalledWith('location-1', from, to);
+    await sources.loadPurchaseCosts(['pl-1']);
+    expect(inventory.lastPurchaseUnitCosts).toHaveBeenCalledWith(
+      'location-1',
+      ['pl-1'],
+    );
+  });
+
+  it('builds the promotion report from the visits and the product lines', async () => {
+    ruleService.get.mockResolvedValue({});
+    const visits = { revenue: new Prisma.Decimal('100') };
+    bookings.getPromotionReport.mockResolvedValue(visits);
+    productStats.fullReport.mockResolvedValue({
+      revenue: new Prisma.Decimal('130'),
+      servicesRevenue: new Prisma.Decimal('100'),
+      productsRevenue: new Prisma.Decimal('30'),
+      productsDiscount: new Prisma.Decimal('3.33'),
+      productsReturned: new Prisma.Decimal('10'),
+      salesCount: 1,
+      products: [
+        {
+          productId: 'p1',
+          title: 'Шампунь',
+          quantity: new Prisma.Decimal('2'),
+          revenue: new Prisma.Decimal('30'),
+          discount: new Prisma.Decimal('3.33'),
+        },
+      ],
+      discount: new Prisma.Decimal('13.33'),
+      bookingsCount: 1,
+      clientsCount: 2,
+      newClients: 1,
+      returningClients: 1,
+      avgDiscount: new Prisma.Decimal('10'),
+      returnedRate: null,
+      staff: [
+        {
+          staffId: 's1',
+          name: 'Anna',
+          avatarUrl: null,
+          bookingsCount: 0,
+          revenue: new Prisma.Decimal('0'),
+          discount: new Prisma.Decimal('0'),
+          productsRevenue: new Prisma.Decimal('30'),
+        },
+      ],
+      notReturned: { count: 0, items: [] },
+    });
+    const result = (
+      await ruleControllers().report('location-1', 'rule-1', {})
+    ).responseValue;
+    expect(productStats.fullReport).toHaveBeenCalledWith(
+      'location-1',
+      'rule-1',
+      expect.any(Date),
+      expect.any(Date),
+      visits,
+    );
+    expect(result).toMatchObject({
+      revenue: '130.00',
+      servicesRevenue: '100.00',
+      productsRevenue: '30.00',
+      productsDiscount: '3.33',
+      productsReturned: '10.00',
+      salesCount: 1,
+      products: [
+        {
+          productId: 'p1',
+          title: 'Шампунь',
+          quantity: '2.000',
+          revenue: '30.00',
+          discount: '3.33',
+        },
+      ],
+      discount: '13.33',
+      staff: [
+        {
+          staffId: 's1',
+          bookingsCount: 0,
+          revenue: '0.00',
+          productsRevenue: '30.00',
+        },
+      ],
     });
   });
 
@@ -150,6 +313,9 @@ describe('Pricing cabinet controllers', () => {
 
   it('maps the explanation with signed adjustments and HH:mm intervals', async () => {
     explain.explain.mockResolvedValue({
+      kind: 'SERVICE',
+      lastPurchaseUnitCost: null,
+      belowCost: false,
       staffId: 'a',
       staffName: 'Anna',
       levelName: 'Top',
@@ -202,8 +368,11 @@ describe('Pricing cabinet controllers', () => {
         },
       ],
     });
-    const result = (await checks().explain('location-1', {} as never))
+    const result = (await checks().explain('location-1', {} as never, token))
       .responseValue;
+    expect(explain.explain).toHaveBeenCalledWith('location-1', {}, true);
+    expect(result?.kind).toBe('SERVICE');
+    expect(result?.lastPurchaseUnitCost).toBeNull();
     expect(result?.total).toBe('66.00');
     expect(result?.line.adjustments).toEqual([
       {

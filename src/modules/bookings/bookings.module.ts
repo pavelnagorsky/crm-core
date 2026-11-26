@@ -28,7 +28,6 @@ import { BookingAccessService } from './services/booking-access.service.js';
 import { BookingCronService } from './services/booking-cron.service.js';
 import { BookingEventsService } from './services/booking-events.service.js';
 import { BookingReservationService } from './services/booking-reservation.service.js';
-import { BookingPricingContextService } from './services/booking-pricing-context.service.js';
 import { BookingRepricingService } from './services/write/booking-repricing.service.js';
 import { BookingSchedulingService } from './services/booking-scheduling.service.js';
 import { BookingSelectionService } from './services/booking-selection.service.js';
@@ -82,7 +81,6 @@ import { JwtBookingClientStrategy } from './strategies/jwt-booking-client.strate
     BookingClientService,
     BookingAccessService,
     BookingReservationService,
-    BookingPricingContextService,
     BookingRepricingService,
     BookingSelectionService,
     BookingSchedulingService,

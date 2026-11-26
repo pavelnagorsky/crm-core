@@ -1,9 +1,9 @@
-import { ServicePriceChangeSkip, ServicePriceChangeTarget } from '@prisma/client';
+import { PriceChangeSkip, PriceChangeTarget } from '@prisma/client';
 
 /** One stored row of a change as the history shows it, minor units. */
 export interface PriceChangeItemRow {
   itemId: string;
-  targetType: ServicePriceChangeTarget;
+  targetType: PriceChangeTarget;
   levelId: string | null;
   levelName: string | null;
   staffId: string | null;
@@ -12,7 +12,7 @@ export interface PriceChangeItemRow {
   after: number | null;
   /** Stored price now; only in a rollback answer. */
   current?: number | null;
-  applySkip: ServicePriceChangeSkip | null;
-  rollbackSkip: ServicePriceChangeSkip | null;
+  applySkip: PriceChangeSkip | null;
+  rollbackSkip: PriceChangeSkip | null;
   rolledBack: boolean;
 }

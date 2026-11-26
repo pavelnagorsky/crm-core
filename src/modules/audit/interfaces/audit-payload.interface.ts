@@ -34,6 +34,7 @@ import { ServiceCreatedPayload } from './service-created-payload.interface.js';
 import { ServiceDeletedPayload } from './service-deleted-payload.interface.js';
 import { ServiceUpdatedPayload } from './service-updated-payload.interface.js';
 import { ServicePriceChangeAuditPayload } from './service-price-change-audit-payload.interface.js';
+import { ProductPriceChangeAuditPayload } from './product-price-change-audit-payload.interface.js';
 import { ServicePricesUpdatedPayload } from './service-prices-updated-payload.interface.js';
 import { StaffBlockCreatedPayload } from './staff-block-created-payload.interface.js';
 import { StaffCompensationUpdatedPayload } from './staff-compensation-updated-payload.interface.js';
@@ -83,6 +84,7 @@ export type AuditPayload =
   | PriceRuleUpdatedPayload
   | PriceRuleStatePayload
   | ServicePriceChangeAuditPayload
+  | ProductPriceChangeAuditPayload
   | BrandUpdatedPayload
   | BrandCreatedPayload
   | BrandDeletedPayload

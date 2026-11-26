@@ -46,7 +46,8 @@ export function toPricingRuleEntry(rule: PriceRuleRecord): PricingRuleEntry {
       end: interval.endMinute,
     })),
     dates: rule.dates.map((item) => TimeUtils.dateOnlyStr(item.date)),
-    appliesToAll: rule.appliesToAll,
+    appliesToAllServices: rule.appliesToAllServices,
+    appliesToAllProducts: rule.appliesToAllProducts,
     targets: rule.targets.map((target) => ({
       type: target.targetType as PrismaPriceRuleTargetType as string as PriceRuleTargetType,
       id: target.targetId,

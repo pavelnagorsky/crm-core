@@ -152,7 +152,8 @@ describe('ClientsSheetService', () => {
         birthDate: '1990-02-01',
         gender: 'FEMALE',
         notes: 'постоянный',
-        discountPercent: '7.50',
+        servicesDiscountPercent: '7.50',
+        productsDiscountPercent: null,
       },
       {
         firstName: 'Вера',
@@ -162,7 +163,8 @@ describe('ClientsSheetService', () => {
         birthDate: '1991-03-04',
         gender: 'MALE',
         notes: null,
-        discountPercent: null,
+        servicesDiscountPercent: null,
+        productsDiscountPercent: null,
       },
       {
         firstName: 'Глеб',
@@ -172,8 +174,41 @@ describe('ClientsSheetService', () => {
         birthDate: null,
         gender: null,
         notes: null,
-        discountPercent: null,
+        servicesDiscountPercent: null,
+        productsDiscountPercent: null,
       },
     ]);
+  });
+
+  it('reads services and products discount columns by their headers', async () => {
+    const buffer = await workbook(
+      [
+        ['Анна', 'Иванова', '+375291112233', '10', '5,5%'],
+        ['Борис', 'Петров', '+375293334455', '', '0'],
+      ],
+      ['Имя', 'Фамилия', 'Телефон', 'Скидка на услуги, %', 'Скидка на товары, %'],
+    );
+    const result = await service.read(upload(buffer));
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.invalidCount).toBe(1);
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0]).toMatchObject({
+      servicesDiscountPercent: '10.00',
+      productsDiscountPercent: '5.50',
+    });
+
+    const synonyms = await service.read(
+      upload(
+        await workbook(
+          [['Анна', 'Иванова', '+375291112233', '7', '3']],
+          ['Имя', 'Фамилия', 'Телефон', 'Скидка', 'products discount'],
+        ),
+      ),
+    );
+    expect(synonyms.ok && synonyms.rows[0]).toMatchObject({
+      servicesDiscountPercent: '7.00',
+      productsDiscountPercent: '3.00',
+    });
   });
 });

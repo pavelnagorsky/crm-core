@@ -222,11 +222,14 @@ describe('Pricing controllers', () => {
       duplicate: vi.fn(),
     };
     const bookings = { getPriceRuleStats: vi.fn() };
+    const productStats = { ruleStats: vi.fn() };
     const rulesController = new PriceRulesController(
       rules as never,
       {} as never,
       {} as never,
       bookings as never,
+      productStats as never,
+      {} as never,
     );
     const view = {
       rule: priceRuleRecord({
@@ -236,7 +239,7 @@ describe('Pricing controllers', () => {
         weekdaysMask: 0b0110000,
         intervals: [[1020, 1260]],
         visitFrom: '2026-12-01',
-        appliesToAll: false,
+        appliesToAllServices: false,
         targets: [[PriceRuleTargetType.SERVICE, 'cut']],
       }),
       targets: [
@@ -259,12 +262,13 @@ describe('Pricing controllers', () => {
       valueType: PriceValueType.PERCENT,
       value: '20.00',
       weekdays: [5, 6],
-      appliesToAll: true,
+      appliesToAllServices: true,
     };
 
-    beforeEach(() =>
-      bookings.getPriceRuleStats.mockResolvedValue(new Map()),
-    );
+    beforeEach(() => {
+      bookings.getPriceRuleStats.mockResolvedValue(new Map());
+      productStats.ruleStats.mockResolvedValue(new Map());
+    });
 
     it('maps a rule to the contract shape', async () => {
       rules.get.mockResolvedValue(view);
@@ -301,7 +305,8 @@ describe('Pricing controllers', () => {
         weekdays: [5, 6],
         intervals: [{ start: '17:00', end: '21:00' }],
         dates: [],
-        appliesToAll: false,
+        appliesToAllServices: false,
+        appliesToAllProducts: false,
         targets: [{ type: 'SERVICE', id: 'cut', name: 'Cut', excluded: false }],
         serviceCount: 3,
         status: 'SCHEDULED',
@@ -310,6 +315,7 @@ describe('Pricing controllers', () => {
           amount: '21.00',
           bookingsCount: 2,
           revenue: null,
+          salesCount: null,
           newClients: null,
         },
         scenario: null,
@@ -338,6 +344,13 @@ describe('Pricing controllers', () => {
       expect(bookings.getPriceRuleStats).toHaveBeenCalledWith(
         'location-1',
         ['rule-1'],
+        expect.any(Date),
+      );
+      // A surcharge has no product lines.
+      expect(productStats.ruleStats).toHaveBeenCalledWith(
+        'location-1',
+        [],
+        expect.any(Date),
       );
     });
 
@@ -348,8 +361,65 @@ describe('Pricing controllers', () => {
         amount: '0.00',
         bookingsCount: 0,
         revenue: null,
+        salesCount: null,
         newClients: null,
       });
+    });
+
+    it('adds the product lines of a promotion (net of returns) and its uses of visits and sales', async () => {
+      const promotion = {
+        ...view,
+        rule: {
+          ...view.rule,
+          kind: 'PROMOTION' as const,
+          appliesToAllProducts: true,
+        },
+      };
+      rules.get.mockResolvedValue(promotion);
+      bookings.getPriceRuleStats.mockResolvedValue(
+        new Map([
+          [
+            'rule-1',
+            {
+              ruleId: 'rule-1',
+              amount: d('10'),
+              bookingsCount: 2,
+              revenue: d('90'),
+              newClients: 1,
+              usageCount: 2,
+            },
+          ],
+        ]),
+      );
+      productStats.ruleStats.mockResolvedValue(
+        new Map([
+          [
+            'rule-1',
+            {
+              discount: d('3.33'),
+              revenue: d('29.97'),
+              salesCount: 1,
+              usageCount: 3,
+            },
+          ],
+        ]),
+      );
+      const result = (await rulesController.get('location-1', 'rule-1'))
+        .responseValue;
+      expect(productStats.ruleStats).toHaveBeenCalledWith(
+        'location-1',
+        ['rule-1'],
+        expect.any(Date),
+      );
+      expect(result?.appliesToAllProducts).toBe(true);
+      expect(result?.stats30d).toEqual({
+        amount: '13.33',
+        bookingsCount: 2,
+        revenue: '119.97',
+        salesCount: 1,
+        newClients: 1,
+      });
+      expect(result?.usageCount).toBe(3);
     });
 
     it('lists with one stats read for all rules, live rules by default', async () => {
@@ -367,6 +437,7 @@ describe('Pricing controllers', () => {
       expect(bookings.getPriceRuleStats).toHaveBeenCalledWith(
         'location-1',
         ['rule-1', 'rule-2'],
+        expect.any(Date),
       );
     });
 

@@ -14,6 +14,8 @@ import { OrderStateRules } from '../rules/order-state.rules.js';
 import { orderItemSnapshot } from '../utils/order-item-snapshot.js';
 import { OrderAuditService } from './order-audit.service.js';
 import { OrderDraftService } from './order-draft.service.js';
+import { OrderProductPricingService } from './order-product-pricing.service.js';
+import { draftAdditionChanges } from '../utils/draft-addition-changes.js';
 import { PaymentsFacade } from '../../payments/payments.facade.js';
 import { OrderPersistenceService } from './order-persistence.service.js';
 @Injectable()
@@ -25,6 +27,7 @@ export class OrderDraftMutationService {
     private readonly stateAssertions: OrderStateRules,
     private readonly audits: OrderAuditService,
     private readonly payments: PaymentsFacade,
+    private readonly productPricing: OrderProductPricingService,
   ) {}
   async update(
     locationId: string,
@@ -41,6 +44,11 @@ export class OrderDraftMutationService {
       );
       this.stateAssertions.assertActive(locked.status);
       this.stateAssertions.assertVersion(locked.version, dto.version);
+      if (locked.bookingId && dto.promoCode !== undefined)
+        throw new AppException(
+          ErrorCode.ORDER_PROMO_CODE_VIA_BOOKING,
+          HttpStatus.CONFLICT,
+        );
       this.assertEditableUpdateItems(locked, dto.items);
       this.stateAssertions.assertVersionClaimed(
         await this.persistence.incrementVersionIfCurrent(
@@ -57,11 +65,6 @@ export class OrderDraftMutationService {
         tx,
         { allowEmptyItems: true },
         canOverridePrice,
-      );
-      const itemChanges = this.buildUpdateItemChanges(
-        locked,
-        dto.items,
-        draft.items,
       );
       await tx.order.update({
         where: { id: orderId },
@@ -100,15 +103,36 @@ export class OrderDraftMutationService {
           } as Prisma.OrderItemUncheckedCreateInput,
         });
       }
+      await this.productPricing.repriceDrafts(
+        tx,
+        locationId,
+        orderId,
+        this.drafts.requestChoices(dto.items),
+      );
       const order = await this.persistence.refreshTotals(
         tx,
         locationId,
         orderId,
         { incrementVersion: false },
       );
-      return { order, brandId: draft.location.brandId, itemChanges };
+      const itemChanges = this.buildUpdateItemChanges(locked, dto.items, order);
+      return {
+        order,
+        brandId: draft.location.brandId,
+        itemChanges,
+        promoCode:
+          locked.promoCode === order.promoCode
+            ? undefined
+            : { before: locked.promoCode, after: order.promoCode },
+      };
     });
-    this.recordUpdated(result.brandId, result.order, actor, result.itemChanges);
+    this.recordUpdated(
+      result.brandId,
+      result.order,
+      actor,
+      result.itemChanges,
+      result.promoCode,
+    );
     return result.order;
   }
 
@@ -150,6 +174,12 @@ export class OrderDraftMutationService {
           })),
         });
       }
+      await this.productPricing.repriceDrafts(
+        tx,
+        locationId,
+        orderId,
+        this.drafts.requestChoices(dto.items),
+      );
       const updated = await this.persistence.refreshTotals(
         tx,
         locationId,
@@ -157,15 +187,7 @@ export class OrderDraftMutationService {
       );
       return {
         order: updated,
-        itemChanges: {
-          added: resolved.created.map((item) => orderItemSnapshot(item)),
-          removed: [],
-          changed: resolved.updated.map((item) => ({
-            orderItemId: item.id,
-            before: orderItemSnapshot(item.before),
-            after: orderItemSnapshot(item.after),
-          })),
-        },
+        itemChanges: draftAdditionChanges(resolved, updated),
       };
     });
     this.recordUpdated(
@@ -182,6 +204,7 @@ export class OrderDraftMutationService {
     order: OrderWithItems,
     actor: AuditActor,
     itemChanges: Record<string, unknown>,
+    promoCode?: { before: string | null; after: string | null },
   ): void {
     this.audits.record(
       brandId,
@@ -194,6 +217,7 @@ export class OrderDraftMutationService {
         totalAmount: order.totalAmount.toFixed(2),
         currency: order.currency,
         itemChanges,
+        ...(promoCode && { promoCode }),
       },
     );
   }
@@ -303,24 +327,29 @@ export class OrderDraftMutationService {
       ...standaloneClient,
       occurredAt: draft.occurredAt,
       note: draft.note,
+      promoCode: locked.bookingId ? null : draft.promoCode,
     };
   }
 
+  /** Changes of the draft lines; priced is the order after the write and its pricing. */
   private buildUpdateItemChanges(
     order: OrderWithItems,
     items: UpdateOrderDto['items'],
-    resolvedItems: Prisma.OrderItemUncheckedCreateWithoutOrderInput[],
+    priced: OrderWithItems,
   ) {
     const editableById = new Map(
       this.editableDraftItems(order).map((item) => [item.id, item]),
+    );
+    const pricedByProduct = new Map(
+      this.editableDraftItems(priced).map((item) => [item.catalogItemId, item]),
     );
     const incomingIds = new Set(
       items.flatMap((item) => (item.id ? [item.id] : [])),
     );
     const added = [];
     const changed = [];
-    for (const [index, item] of items.entries()) {
-      const after = orderItemSnapshot(resolvedItems[index]);
+    for (const item of items) {
+      const after = orderItemSnapshot(pricedByProduct.get(item.productId)!);
       if (!item.id) {
         added.push(after);
         continue;

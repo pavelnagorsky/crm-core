@@ -74,9 +74,16 @@ export class ClientResponseDto {
   @ApiPercent({
     nullable: true,
     example: '10.00',
-    description: 'Personal discount, percent; null = none.',
+    description: 'Personal discount on services, percent; null = none.',
   })
-  discountPercent: string | null;
+  servicesDiscountPercent: string | null;
+
+  @ApiPercent({
+    nullable: true,
+    example: '10.00',
+    description: 'Personal discount on products, percent; null = none.',
+  })
+  productsDiscountPercent: string | null;
 
   @ApiProperty({ type: () => ClientDiscountStatsDto })
   discountStats: ClientDiscountStatsDto;
@@ -108,10 +115,14 @@ export class ClientResponseDto {
     dto.acquisitionSourceDetail = client.acquisitionSourceDetail;
     dto.acquiredAt = client.acquiredAt;
     dto.acquisitionBookingId = client.acquisitionBookingId;
-    dto.discountPercent =
-      client.discountPercent === null
+    dto.servicesDiscountPercent =
+      client.servicesDiscountPercent === null
         ? null
-        : MoneyUtils.format(client.discountPercent);
+        : MoneyUtils.format(client.servicesDiscountPercent);
+    dto.productsDiscountPercent =
+      client.productsDiscountPercent === null
+        ? null
+        : MoneyUtils.format(client.productsDiscountPercent);
     dto.discountStats = ClientDiscountStatsDto.fromStats(discountStats);
     dto.createdAt = client.createdAt;
     dto.updatedAt = client.updatedAt;

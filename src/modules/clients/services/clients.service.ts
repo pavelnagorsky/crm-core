@@ -55,7 +55,8 @@ export class ClientsService {
           brandId,
           ...this.buildClientFields(dto),
           ...this.acquisitionSourceWrite(null, dto),
-          discountPercent: dto.discountPercent ?? null,
+          servicesDiscountPercent: dto.servicesDiscountPercent ?? null,
+          productsDiscountPercent: dto.productsDiscountPercent ?? null,
         },
       });
     } catch (e: any) {
@@ -85,9 +86,12 @@ export class ClientsService {
         data: {
           ...this.buildClientFields(dto),
           ...this.acquisitionSourceWrite(old, dto),
-          // Omitted keeps the personal discount, null clears it.
-          ...(dto.discountPercent !== undefined && {
-            discountPercent: dto.discountPercent,
+          // Omitted keeps a personal discount, null clears it.
+          ...(dto.servicesDiscountPercent !== undefined && {
+            servicesDiscountPercent: dto.servicesDiscountPercent,
+          }),
+          ...(dto.productsDiscountPercent !== undefined && {
+            productsDiscountPercent: dto.productsDiscountPercent,
           }),
         },
       });
@@ -463,7 +467,8 @@ export class ClientsService {
             : null,
           gender: row.gender,
           notes: row.notes,
-          discountPercent: row.discountPercent,
+          servicesDiscountPercent: row.servicesDiscountPercent,
+          productsDiscountPercent: row.productsDiscountPercent,
           // Imported clients came before Klendo: their first booking here is not an acquisition.
           importedAt: occurredAt,
         })),

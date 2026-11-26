@@ -1,7 +1,12 @@
+import { BadRequestException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { PriceRuleTargetType } from '../engine/enums/price-rule-target-type.enum.js';
+import { ProductUnit } from '../engine/enums/product-unit.enum.js';
 import { PromotionChannel } from '../engine/enums/promotion-channel.enum.js';
 import { PromotionClientFilter } from '../engine/enums/promotion-client-filter.enum.js';
 import { PricingRuleEntry } from '../engine/interfaces/pricing-rule-entry.interface.js';
 import {
+  pricingProduct,
   pricingSnapshot,
   priceLevel,
   pricingStaff,
@@ -11,16 +16,23 @@ import {
   weekdays,
 } from '../engine/testing/pricing-snapshot.factory.js';
 import { PriceExplainClientType } from '../enums/price-explain-client-type.enum.js';
+import { PriceExplainProductContext } from '../enums/price-explain-product-context.enum.js';
 import { PricingFacade } from '../pricing.facade.js';
 import { PriceExplainService } from './price-explain.service.js';
 
 describe('PriceExplainService', () => {
   const snapshots = { load: vi.fn() };
   const bookings = { previewStaffing: vi.fn(), localPricingContext: vi.fn() };
+  const pricingContext = { build: vi.fn() };
+  const locations = { getBookingSettings: vi.fn() };
+  const inventory = { lastPurchaseUnitCosts: vi.fn() };
   const service = new PriceExplainService(
     snapshots as never,
     new PricingFacade(snapshots as never),
     bookings as never,
+    pricingContext as never,
+    locations as never,
+    inventory as never,
   );
   // Friday 4 December 2026, 18:00.
   const base = { staffId: null, date: '2026-12-04', time: '18:00' };
@@ -48,6 +60,10 @@ describe('PriceExplainService', () => {
           ...promotions,
         ],
         roundingStep: 1,
+        products: [
+          pricingProduct('shampoo', 2000, { categoryId: 'care' }),
+          pricingProduct('oil', 1500, { unit: ProductUnit.MILLILITER }),
+        ],
       });
 
   beforeEach(() => {
@@ -298,6 +314,178 @@ describe('PriceExplainService', () => {
         reason: null,
         minVisitTotal: null,
       });
+    });
+  });
+
+  describe('products (docs/pricing-stage7-api.md, «Проверка цены»)', () => {
+    const careTen = promotionRule('care', {
+      name: 'Care',
+      value: 1000,
+      appliesToAllServices: false,
+      targets: [
+        {
+          type: PriceRuleTargetType.PRODUCT_CATEGORY,
+          id: 'care',
+          excluded: false,
+        },
+      ],
+    });
+    const leadTime = promotionRule(
+      'lead',
+      { name: 'Lead', value: 3000, appliesToAllProducts: true },
+      { minLeadMinutes: 60 },
+    );
+    const services = promotionRule('services', { name: 'Services', value: 5000 });
+    const saleContext = quoteContext({ channel: PromotionChannel.ADMIN });
+
+    beforeEach(() => {
+      snapshots.load.mockResolvedValue(salon([careTen, leadTime, services]));
+      locations.getBookingSettings.mockResolvedValue({
+        brandId: 'brand',
+        timezone: 'UTC',
+      });
+      pricingContext.build.mockResolvedValue(saleContext);
+      inventory.lastPurchaseUnitCosts.mockResolvedValue(
+        new Map([['pl-shampoo', new Prisma.Decimal('19')]]),
+      );
+    });
+
+    it('a sale: ADMIN, no visit, the seller; the line for the quantity', async () => {
+      const result = await service.explain(
+        'location',
+        {
+          ...base,
+          staffId: 'anna',
+          productId: 'shampoo',
+          quantity: '2.000',
+          clientId: 'client-1',
+          promoCode: 'AUTUMN',
+          channel: PromotionChannel.ONLINE,
+        },
+        true,
+      );
+      expect(pricingContext.build).toHaveBeenCalledWith({
+        locationId: 'location',
+        brandId: 'brand',
+        timezone: 'UTC',
+        clientId: 'client-1',
+        promoCode: 'AUTUMN',
+        channel: PromotionChannel.ADMIN,
+        visitStartAt: null,
+        sale: true,
+        now: new Date('2026-12-04T18:00:00.000Z'),
+      });
+      expect(bookings.previewStaffing).not.toHaveBeenCalled();
+      expect(result).toMatchObject({
+        kind: 'PRODUCT',
+        staffId: 'anna',
+        staffName: 'Anna',
+        levelName: null,
+        candidates: [],
+        total: 3600,
+      });
+      // 2 x 20.00 = 40.00, -10% = 36.00.
+      expect(result.line).toMatchObject({
+        basePrice: 2000,
+        staffPrice: 2000,
+        listPrice: 4000,
+        chargedPrice: 3600,
+        total: 3600,
+        discount: { kind: 'PROMOTION', ruleId: 'care', amount: -400 },
+      });
+      // Only promotions: surcharges never reach products.
+      expect(
+        result.notApplied.map((item) => [item.ruleId, item.kind, item.reason]),
+      ).toEqual([
+        ['lead', 'PROMOTION', 'NO_VISIT'],
+        ['services', 'PROMOTION', 'NOT_TARGETED'],
+      ]);
+      // 36.00 < 2 x 19.00.
+      expect(result.lastPurchaseUnitCost?.toFixed(2)).toBe('19.00');
+      expect(result.belowCost).toBe(true);
+    });
+
+    it('a product of a booking: the visit start, channel and booking moment', async () => {
+      await service.explain('location', {
+        ...base,
+        productId: 'shampoo',
+        productContext: PriceExplainProductContext.BOOKING,
+        channel: PromotionChannel.ONLINE,
+        bookedAt: '2026-12-01T10:00:00',
+      });
+      expect(pricingContext.build).toHaveBeenCalledWith(
+        expect.objectContaining({
+          channel: PromotionChannel.ONLINE,
+          visitStartAt: new Date('2026-12-04T18:00:00.000Z'),
+          now: new Date('2026-12-01T10:00:00.000Z'),
+        }),
+      );
+      expect(pricingContext.build.mock.calls[0][0].sale).toBeUndefined();
+    });
+
+    it('quantity 1 by default; the cost number only with Read(INVENTORY)', async () => {
+      const result = await service.explain('location', {
+        ...base,
+        productId: 'shampoo',
+      });
+      expect(result.line.listPrice).toBe(2000);
+      expect(result.lastPurchaseUnitCost).toBeNull();
+      // 18.00 < 19.00 even without the number.
+      expect(result.belowCost).toBe(true);
+    });
+
+    it('imagines a known client by clientType: the product client discount stays empty', async () => {
+      const result = await service.explain('location', {
+        ...base,
+        productId: 'shampoo',
+        clientType: PriceExplainClientType.REGULAR,
+      });
+      expect(result.line.discount?.ruleId).toBe('care');
+    });
+
+    it('rejects a product the location does not sell, a fractional piece, two targets', async () => {
+      await expect(
+        service.explain('location', { ...base, productId: 'nope' }),
+      ).rejects.toMatchObject({ errorCode: 'ORDER_PRODUCT_NOT_SELLABLE' });
+      await expect(
+        service.explain('location', {
+          ...base,
+          productId: 'shampoo',
+          quantity: '1.500',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        service.explain('location', {
+          ...base,
+          productId: 'shampoo',
+          quantity: '0.000',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        service.explain('location', {
+          ...base,
+          productId: 'shampoo',
+          serviceId: 'cut',
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+      await expect(
+        service.explain('location', {
+          ...base,
+          productId: 'shampoo',
+          staffId: 'ghost',
+        }),
+      ).rejects.toMatchObject({ errorCode: 'BOOKING_STAFF_NOT_FOUND' });
+    });
+
+    it('a weighed product takes a fractional quantity', async () => {
+      const result = await service.explain('location', {
+        ...base,
+        productId: 'oil',
+        quantity: '0.500',
+      });
+      // 0.5 x 15.00 = 7.50; oil has no category: no discount.
+      expect(result.line.listPrice).toBe(750);
+      expect(result.line.discount).toBeNull();
     });
   });
 });

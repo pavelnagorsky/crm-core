@@ -19,6 +19,7 @@ import {
   fixedBundle,
   priceLevel,
   pricingSnapshot,
+  pricingProduct,
   pricingStaff,
   promotionRule,
   quoteContext,
@@ -46,7 +47,8 @@ const knownClient = (overrides: Partial<QuoteClient> = {}): QuoteClient => ({
   known: true,
   isNew: false,
   birthday: null,
-  discountBp: null,
+  servicesDiscountBp: null,
+  productsDiscountBp: null,
   ...overrides,
 });
 
@@ -196,7 +198,7 @@ describe('PriceBook: promotions and the client discount (docs/pricing-stage4-api
 
     it('no visit time: promotions do not apply, the client discount does', () => {
       const quoted = line([promotionRule('promo')], 'cut', {
-        client: knownClient({ discountBp: 500 }),
+        client: knownClient({ servicesDiscountBp: 500 }),
       }, { visit: null });
       expect(quoted.discount).toMatchObject({
         kind: PriceAdjustmentKind.CLIENT_DISCOUNT,
@@ -219,7 +221,7 @@ describe('PriceBook: promotions and the client discount (docs/pricing-stage4-api
       ['disabled', { enabled: false }, null],
       [
         'targets another service',
-        { appliesToAll: false, targets: [{ type: PriceRuleTargetType.SERVICE, id: 'wash', excluded: false }] },
+        { appliesToAllServices: false, targets: [{ type: PriceRuleTargetType.SERVICE, id: 'wash', excluded: false }] },
         null,
       ],
     ] as const)('%s', (_name, overrides, reason) => {
@@ -233,7 +235,7 @@ describe('PriceBook: promotions and the client discount (docs/pricing-stage4-api
     it('disabled and untargeted promotions are not in the menu', () => {
       const off = promotionRule('off', { enabled: false });
       const other = promotionRule('other', {
-        appliesToAll: false,
+        appliesToAllServices: false,
         targets: [{ type: PriceRuleTargetType.SERVICE, id: 'wash', excluded: false }],
       });
       expect(line([off, other], 'cut')).toMatchObject({ eligible: [], ineligible: [] });
@@ -393,12 +395,12 @@ describe('PriceBook: promotions and the client discount (docs/pricing-stage4-api
       [
         'equal money: the client discount beats a promotion',
         [ten],
-        { client: knownClient({ discountBp: 1000 }) },
+        { client: knownClient({ servicesDiscountBp: 1000 }) },
         null,
       ],
-      ['a bigger client discount', [ten], { client: knownClient({ discountBp: 2000 }) }, null],
-      ['a smaller client discount loses', [fifteen], { client: knownClient({ discountBp: 500 }) }, 'fifteen'],
-      ['an unknown client has no discount', [ten], { client: { ...knownClient({ discountBp: 5000 }), known: false } }, 'ten'],
+      ['a bigger client discount', [ten], { client: knownClient({ servicesDiscountBp: 2000 }) }, null],
+      ['a smaller client discount loses', [fifteen], { client: knownClient({ servicesDiscountBp: 500 }) }, 'fifteen'],
+      ['an unknown client has no discount', [ten], { client: { ...knownClient({ servicesDiscountBp: 5000 }), known: false } }, 'ten'],
     ] as const)('%s', (_name, rules, context, winner) => {
       const quoted = line([...rules], 'cut', context as Partial<QuoteContext>);
       expect(quoted.discount?.ruleId).toBe(winner);
@@ -417,7 +419,7 @@ describe('PriceBook: promotions and the client discount (docs/pricing-stage4-api
 
     it('eligible lists every applicable discount, best first, with prices', () => {
       const quoted = line([fiveByn, ten, fifteen], 'cut', {
-        client: knownClient({ discountBp: 1000 }),
+        client: knownClient({ servicesDiscountBp: 1000 }),
       });
       expect(quoted.eligible.map((item) => [item.ruleId, item.amount, item.chargedPrice])).toEqual([
         ['fifteen', 900, 5100],
@@ -429,7 +431,7 @@ describe('PriceBook: promotions and the client discount (docs/pricing-stage4-api
 
     it('the choice is per line', () => {
       const rule = promotionRule('cut-only', {
-        appliesToAll: false,
+        appliesToAllServices: false,
         targets: [{ type: PriceRuleTargetType.SERVICE, id: 'cut', excluded: false }],
       });
       const quoted = quote([rule, fiveByn], ['cut', 'wash']);
@@ -455,7 +457,7 @@ describe('PriceBook: promotions and the client discount (docs/pricing-stage4-api
       ['stored NONE stays', { mode: DiscountChoiceMode.NONE, fallbackToAuto: true }, undefined, 0],
     ] as const)('%s', (_name, choice, ruleId, discount) => {
       const quoted = line([ten, fifteen, adminOnly], 'cut', {
-        client: knownClient({ discountBp: 500 }),
+        client: knownClient({ servicesDiscountBp: 500 }),
         choice: { 0: choice },
       });
       expect(quoted.discount?.ruleId).toBe(ruleId);
@@ -499,11 +501,11 @@ describe('PriceBook: promotions and the client discount (docs/pricing-stage4-api
 
     it('FIXED bundle: matched only by BUNDLE or all, not by its services', () => {
       const byService = promotionRule('by-service', {
-        appliesToAll: false,
+        appliesToAllServices: false,
         targets: [{ type: PriceRuleTargetType.SERVICE, id: 'cut', excluded: false }],
       });
       const byBundle = promotionRule('by-bundle', {
-        appliesToAll: false,
+        appliesToAllServices: false,
         targets: [{ type: PriceRuleTargetType.BUNDLE, id: 'fixed-bundle', excluded: false }],
       });
       const quoted = quote([byService, byBundle], ['cut', 'color'], {}, { bundleId: 'fixed-bundle' });
@@ -535,7 +537,7 @@ describe('PriceBook: promotions and the client discount (docs/pricing-stage4-api
       [
         'code of a promotion for other services',
         [promotionRule('coded', {
-          appliesToAll: false,
+          appliesToAllServices: false,
           targets: [{ type: PriceRuleTargetType.SERVICE, id: 'wash', excluded: false }],
         }, { promoCode: 'AUTUMN' })],
         'AUTUMN',
@@ -597,7 +599,7 @@ describe('PriceBook: promotions and the client discount (docs/pricing-stage4-api
 
     it('APPLIED when the code reaches at least one line', () => {
       const coded = promotionRule('coded', {
-        appliesToAll: false,
+        appliesToAllServices: false,
         targets: [{ type: PriceRuleTargetType.SERVICE, id: 'wash', excluded: false }],
       }, { promoCode: 'AUTUMN' });
       expect(quote([coded], ['cut', 'wash'], { promoCode: 'AUTUMN' }).promoCode?.status).toBe(APPLIED);
@@ -702,9 +704,83 @@ describe('PriceBook: promotions and the client discount (docs/pricing-stage4-api
         bundleId: null,
         lines: [quoteLine('cut'), quoteLine('color')],
         visit: visitAt(MONDAY, '10:30'),
-        context: quoteContext({ client: knownClient({ discountBp: 1500 }) }),
+        context: quoteContext({ client: knownClient({ servicesDiscountBp: 1500 }) }),
       };
       expect(book(rules).quote(request)).toEqual(book([...rules].reverse()).quote(request));
+    });
+  });
+});
+
+describe('PriceBook: explain of a product line (docs/pricing-stage7-api.md)', () => {
+  const { PRODUCT } = PriceRuleTargetType;
+  const productBook = (rules: PricingRuleEntry[]) =>
+    new PriceBook(
+      pricingSnapshot({
+        products: [pricingProduct('shampoo', 3000), pricingProduct('mask', 2000)],
+        rules,
+      }),
+      PRICING_TODAY,
+    );
+  const reasons = (rules: PricingRuleEntry[]) =>
+    Object.fromEntries(
+      productBook(rules)
+        .explainProduct(
+          {
+            productLocationId: 'pl-shampoo',
+            quantityMilli: 1000,
+            customUnitPrice: null,
+            sellerStaffId: null,
+          },
+          noon,
+          quoteContext({ channel: PromotionChannel.ADMIN }),
+          0,
+        )
+        .notApplied.map((item) => [item.ruleId, item.reason]),
+    );
+  const forProduct = (productId: string, excluded = false) => ({
+    appliesToAllServices: false,
+    targets: [{ type: PRODUCT, id: productId, excluded }],
+  });
+
+  it('a target mismatch goes before the schedule', () => {
+    expect(
+      reasons([
+        // Services only, 10:00-11:00: does not relate to the product at any time.
+        promotionRule('services', { intervals: [{ start: 600, end: 660 }] }),
+        promotionRule('other-product', {
+          ...forProduct('mask'),
+          intervals: [{ start: 600, end: 660 }],
+        }),
+        promotionRule('excluded', {
+          appliesToAllServices: false,
+          appliesToAllProducts: true,
+          targets: [{ type: PRODUCT, id: 'shampoo', excluded: true }],
+        }),
+        promotionRule('morning', {
+          ...forProduct('shampoo'),
+          intervals: [{ start: 600, end: 660 }],
+        }),
+        promotionRule('off', { ...forProduct('mask'), enabled: false }),
+      ]),
+    ).toEqual({
+      services: R.NOT_TARGETED,
+      'other-product': R.NOT_TARGETED,
+      excluded: R.EXCLUDED,
+      morning: R.OUT_OF_INTERVAL,
+      off: R.DISABLED,
+    });
+  });
+
+  it('a promotion for the product that does not apply gives its own condition', () => {
+    expect(
+      reasons([
+        promotionRule('weaker', { ...forProduct('shampoo'), value: 500 }),
+        promotionRule('coded', forProduct('shampoo'), { promoCode: 'AUTUMN' }),
+        promotionRule('best', forProduct('shampoo')),
+      ]),
+    ).toEqual({
+      weaker: R.LESS_BENEFICIAL,
+      coded: R.PROMO_CODE_REQUIRED,
     });
   });
 });

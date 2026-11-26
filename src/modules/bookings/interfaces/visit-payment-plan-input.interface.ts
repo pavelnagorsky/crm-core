@@ -5,4 +5,6 @@ export interface VisitPaymentPlanInput {
   payment?: PaymentInputDto | null;
   confirmProductItemIds?: string[] | null;
   confirmAllDraftProducts?: boolean;
+  /** Σ lineTotal of the confirmed lines the caller saw; required when products are confirmed. */
+  expectedProductTotal?: string | null;
 }

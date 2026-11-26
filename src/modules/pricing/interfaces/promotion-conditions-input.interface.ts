@@ -1,4 +1,5 @@
 import {
+  PriceRuleTargetType,
   PriceValueType,
   PromotionChannel,
   PromotionClientFilter,
@@ -11,9 +12,17 @@ export interface PromotionConditionsInput {
   value: string;
   /** ISO code of the location currency: "BYN". */
   currency: string;
-  appliesToAll: boolean;
-  /** Names of the targets (or exclusions); a target that is gone has no name. */
-  targets: { name: string | null; excluded: boolean }[];
+  appliesToAllServices: boolean;
+  appliesToAllProducts: boolean;
+  /**
+   * Names of the targets (or exclusions) in rule order; a target that is gone has no name.
+   * The type tells service-kind targets from products.
+   */
+  targets: {
+    type: PriceRuleTargetType;
+    name: string | null;
+    excluded: boolean;
+  }[];
   /** Bit (isoWeekday - 1); 0 = every day. */
   weekdaysMask: number;
   intervals: { startMinute: number; endMinute: number }[];

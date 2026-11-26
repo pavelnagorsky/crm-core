@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma, ServicePriceChangeStatus } from '@prisma/client';
+import { PriceChangeStatus, Prisma } from '@prisma/client';
 import { DatabaseService } from '../../../database/database.service.js';
 import { MoneyUtils } from '../../../shared/money/money.utils.js';
-import { ServicePriceChangeTarget } from '../engine/enums/service-price-change-target.enum.js';
+import { PriceChangeTarget } from '../engine/enums/price-change-target.enum.js';
 import { PricingPriceChangeEntry } from '../engine/interfaces/pricing-price-change-entry.interface.js';
 
 /** Reads the scheduled price changes for the price engine snapshot (a table pricing owns). */
@@ -11,7 +11,7 @@ export class ScheduledPriceChangeReadService {
   constructor(private readonly db: DatabaseService) {}
 
   /**
-   * SCHEDULED changes by effective date, then creation. A row whose target is gone
+   * SCHEDULED changes of both catalogs by effective date, then creation. A row whose target is gone
    * (a null reference) or a level that became the default is left out: it can no longer
    * change a price.
    */
@@ -19,8 +19,8 @@ export class ScheduledPriceChangeReadService {
     locationId: string,
     db: Prisma.TransactionClient = this.db,
   ): Promise<PricingPriceChangeEntry[]> {
-    const changes = await db.servicePriceChange.findMany({
-      where: { locationId, status: ServicePriceChangeStatus.SCHEDULED },
+    const changes = await db.priceChange.findMany({
+      where: { locationId, status: PriceChangeStatus.SCHEDULED },
       include: { items: { include: { priceLevel: { select: { isDefault: true } } } } },
       orderBy: [{ effectiveDate: 'asc' }, { createdAt: 'asc' }, { id: 'asc' }],
     });
@@ -30,11 +30,12 @@ export class ScheduledPriceChangeReadService {
       items: change.items
         .filter((item) => this.hasTarget(item) && !item.priceLevel?.isDefault)
         .map((item) => ({
-          target: item.targetType as ServicePriceChangeTarget,
+          target: item.targetType as PriceChangeTarget,
           serviceId: item.serviceId,
           levelId: item.priceLevelId,
           staffId: item.staffId,
           bundleId: item.bundleId,
+          productLocationId: item.productLocationId,
           price:
             item.afterPrice === null
               ? null
@@ -49,14 +50,17 @@ export class ScheduledPriceChangeReadService {
     priceLevelId: string | null;
     staffId: string | null;
     bundleId: string | null;
+    productLocationId: string | null;
   }): boolean {
     switch (item.targetType) {
-      case ServicePriceChangeTarget.BASE:
+      case PriceChangeTarget.BASE:
         return item.serviceId !== null;
-      case ServicePriceChangeTarget.LEVEL:
+      case PriceChangeTarget.LEVEL:
         return item.serviceId !== null && item.priceLevelId !== null;
-      case ServicePriceChangeTarget.STAFF:
+      case PriceChangeTarget.STAFF:
         return item.serviceId !== null && item.staffId !== null;
+      case PriceChangeTarget.PRODUCT:
+        return item.productLocationId !== null;
       default:
         return item.bundleId !== null;
     }

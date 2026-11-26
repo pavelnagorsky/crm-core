@@ -39,7 +39,7 @@ import { BookingStaffingPreviewService } from './services/booking-staffing-previ
 import { StaffingPreview } from './interfaces/staffing-preview.interface.js';
 import { StaffingPreviewRequest } from './interfaces/staffing-preview-request.interface.js';
 import { LocalPricingContextRequest } from './interfaces/local-pricing-context-request.interface.js';
-import { BookingPricingContextService } from './services/booking-pricing-context.service.js';
+import { PricingContextService } from '../pricing/services/pricing-context.service.js';
 import { QuoteContext } from '../pricing/engine/interfaces/quote-context.interface.js';
 import { TimeUtils } from '../../shared/time/time.utils.js';
 @Injectable()
@@ -55,11 +55,14 @@ export class BookingsFacade {
     private readonly priceRuleStats: BookingPriceRuleStatsService,
     private readonly promotionReports: BookingPromotionReportService,
     private readonly staffingPreview: BookingStaffingPreviewService,
-    private readonly pricingContext: BookingPricingContextService,
+    private readonly pricingContext: PricingContextService,
   ) {}
 
-  async getBookingSetup(locationId: string): Promise<BookingSetup> {
-    return this.setup.getBookingSetup(locationId);
+  async getBookingSetup(
+    locationId: string,
+    options?: { listPrices?: boolean },
+  ): Promise<BookingSetup> {
+    return this.setup.getBookingSetup(locationId, options);
   }
 
   getClientBookingSummary(

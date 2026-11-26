@@ -1,4 +1,4 @@
-import { ServicePriceChangeTarget } from '@prisma/client';
+import { PriceChangeTarget } from '@prisma/client';
 import { PriceChangeUpcomingSource } from '../interfaces/price-change-upcoming-source.interface.js';
 import { ServicePriceUpcomingView } from '../interfaces/service-price-upcoming-view.interface.js';
 
@@ -41,10 +41,10 @@ export function buildUpcoming(
         effectiveDate: change.effectiveDate,
         price: item.afterPrice,
       };
-      if (item.targetType === ServicePriceChangeTarget.BASE && item.serviceId) {
+      if (item.targetType === PriceChangeTarget.BASE && item.serviceId) {
         if (!services.has(item.serviceId)) services.set(item.serviceId, entry);
       } else if (
-        item.targetType === ServicePriceChangeTarget.BUNDLE &&
+        item.targetType === PriceChangeTarget.BUNDLE &&
         item.bundleId &&
         !bundles.has(item.bundleId)
       )

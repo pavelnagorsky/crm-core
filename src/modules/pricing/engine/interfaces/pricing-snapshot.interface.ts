@@ -1,5 +1,6 @@
 import { PricingBundleEntry } from './pricing-bundle-entry.interface.js';
 import { PricingLevelEntry } from './pricing-level-entry.interface.js';
+import { PricingProductEntry } from './pricing-product-entry.interface.js';
 import { PricingPriceChangeEntry } from './pricing-price-change-entry.interface.js';
 import { PricingRuleEntry } from './pricing-rule-entry.interface.js';
 import { PricingServiceEntry } from './pricing-service-entry.interface.js';
@@ -17,6 +18,8 @@ export interface PricingSnapshot {
   roundingStep: number;
   /** IANA timezone of the location. */
   timezone: string;
-  /** Scheduled (not yet applied) price changes by effective date, then creation. */
+  /** Products the location sells: retail price set and the product is for sale. */
+  products: PricingProductEntry[];
+  /** Scheduled (not yet applied) price changes of both catalogs by effective date, then creation. */
   priceChanges: PricingPriceChangeEntry[];
 }

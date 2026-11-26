@@ -24,7 +24,8 @@ interface PriceRuleRecordOptions {
   yearly?: boolean;
   holidayExclusive?: boolean;
   weekdaysMask?: number;
-  appliesToAll?: boolean;
+  appliesToAllServices?: boolean;
+  appliesToAllProducts?: boolean;
   intervals?: [number, number][];
   dates?: string[];
   targets?: [PriceRuleTargetType, string, boolean?][];
@@ -78,7 +79,8 @@ export function priceRuleRecord(
     yearly: options.yearly ?? false,
     holidayExclusive: options.holidayExclusive ?? false,
     weekdaysMask: options.weekdaysMask ?? 0,
-    appliesToAll: options.appliesToAll ?? true,
+    appliesToAllServices: options.appliesToAllServices ?? true,
+    appliesToAllProducts: options.appliesToAllProducts ?? false,
     scenario: null,
     publicName: promotion ? (options.name ?? 'Evening') : null,
     publicDescription: null,

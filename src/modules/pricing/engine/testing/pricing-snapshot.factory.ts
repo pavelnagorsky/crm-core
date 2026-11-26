@@ -1,4 +1,6 @@
 import { BundlePricingMode } from '../enums/bundle-pricing-mode.enum.js';
+import { ProductUnit } from '../enums/product-unit.enum.js';
+import { PricingProductEntry } from '../interfaces/pricing-product-entry.interface.js';
 import { PriceRuleKind } from '../enums/price-rule-kind.enum.js';
 import { PriceScheduleType } from '../enums/price-schedule-type.enum.js';
 import { PriceValueType } from '../enums/price-value-type.enum.js';
@@ -46,6 +48,23 @@ export function pricingSnapshot(
     roundingStep: options.roundingStep ?? 100,
     timezone: options.timezone ?? 'UTC',
     priceChanges: options.priceChanges ?? [],
+    products: options.products ?? [],
+  };
+}
+
+/** A product the location sells: row id `pl-<productId>`, PIECE, no category by default. */
+export function pricingProduct(
+  productId: string,
+  retailPrice: number,
+  overrides: Partial<PricingProductEntry> = {},
+): PricingProductEntry {
+  return {
+    productLocationId: `pl-${productId}`,
+    productId,
+    categoryId: null,
+    unit: ProductUnit.PIECE,
+    retailPrice,
+    ...overrides,
   };
 }
 
@@ -117,7 +136,8 @@ export function surchargeRule(
     weekdaysMask: 0,
     intervals: [],
     dates: [],
-    appliesToAll: true,
+    appliesToAllServices: true,
+    appliesToAllProducts: false,
     targets: [],
     promotion: null,
     createdAt: '2026-01-01T00:00:00.000Z',
@@ -168,7 +188,13 @@ export function quoteContext(overrides: Partial<QuoteContext> = {}): QuoteContex
     nowMs: Date.UTC(2026, 10, 23, 9, 0),
     today: '2026-11-23',
     visitStartMs: null,
-    client: { known: false, isNew: false, birthday: null, discountBp: null },
+    client: {
+      known: false,
+      isNew: false,
+      birthday: null,
+      servicesDiscountBp: null,
+      productsDiscountBp: null,
+    },
     promoCode: null,
     usage: {},
     ...overrides,

@@ -7,6 +7,7 @@ import { LocationModule } from '../location/location.module.js';
 import { PaymentsAggregatesModule } from '../payments/aggregates/payments-aggregates.module.js';
 import { PaymentsModule } from '../payments/payments.module.js';
 import { PayrollModule } from '../payroll/payroll.module.js';
+import { PricingModule } from '../pricing/pricing.module.js';
 import { ProductsModule } from '../products/products.module.js';
 import { StaffModule } from '../staff/staff.module.js';
 import { OrdersAggregatesService } from './aggregates/services/orders-aggregates.service.js';
@@ -26,6 +27,8 @@ import { OrderPaymentTrackingService } from './services/order-payment-tracking.s
 import { OrderPaymentService } from './services/order-payment.service.js';
 import { OrderPersistenceService } from './services/order-persistence.service.js';
 import { OrderProductTransitionService } from './services/order-product-transition.service.js';
+import { OrderProductPricingService } from './services/order-product-pricing.service.js';
+import { OrderPricingPreviewService } from './services/order-pricing-preview.service.js';
 import { OrderReturnService } from './services/order-return.service.js';
 
 @Module({
@@ -40,6 +43,7 @@ import { OrderReturnService } from './services/order-return.service.js';
     ClientsModule,
     PaymentsModule,
     PaymentsAggregatesModule,
+    PricingModule,
   ],
   controllers: [OrdersController],
   providers: [
@@ -50,6 +54,8 @@ import { OrderReturnService } from './services/order-return.service.js';
     OrderDraftMutationService,
     OrderCreationService,
     OrderPricingCalculator,
+    OrderProductPricingService,
+    OrderPricingPreviewService,
     OrderPersistenceService,
     OrderDraftService,
     OrderBookingSyncService,

@@ -1,9 +1,15 @@
 import { Injectable } from '@nestjs/common';
-import { BookingItemPriceAdjustment, Prisma } from '@prisma/client';
+import {
+  BookingChannel,
+  BookingItemPriceAdjustment,
+  Prisma,
+} from '@prisma/client';
 import { DatabaseService } from '../../../../database/database.service.js';
 import { visitServicesDue } from '../../rules/visit-payment-due.rules.js';
 import { BookingVisit } from '../interfaces/booking-visit.interface.js';
 import { VisitPaymentFacts } from '../interfaces/visit-payment-facts.interface.js';
+import { VisitPricingFacts } from '../interfaces/visit-pricing-facts.interface.js';
+import { PromotionChannel } from '../../../pricing/engine/enums/promotion-channel.enum.js';
 
 @Injectable()
 export class BookingVisitsService {
@@ -78,6 +84,46 @@ export class BookingVisitsService {
       select: { id: true, startAt: true },
     });
     return new Map(bookings.map((booking) => [booking.id, booking.startAt]));
+  }
+
+  /**
+   * Context of the product lines of a visit order: start, booking moment, channel, client,
+   * promo code and the list total of the services. Deleted bookings are included (their
+   * order keeps its lines). Null when the booking is gone.
+   */
+  async pricingFacts(
+    client: Prisma.TransactionClient,
+    locationId: string,
+    bookingId: string,
+  ): Promise<VisitPricingFacts | null> {
+    const booking = await client.booking.findFirst({
+      where: { id: bookingId, locationId },
+      select: {
+        id: true,
+        startAt: true,
+        createdAt: true,
+        channel: true,
+        clientId: true,
+        promoCode: true,
+        items: { select: { listPrice: true } },
+      },
+    });
+    if (!booking) return null;
+    return {
+      bookingId: booking.id,
+      startAt: booking.startAt,
+      createdAt: booking.createdAt,
+      channel:
+        booking.channel === BookingChannel.MANUAL
+          ? PromotionChannel.ADMIN
+          : PromotionChannel.ONLINE,
+      clientId: booking.clientId,
+      promoCode: booking.promoCode,
+      servicesListTotal: booking.items.reduce(
+        (sum, item) => sum.plus(item.listPrice),
+        new Prisma.Decimal(0),
+      ),
+    };
   }
 
   /** Visits of the location's bookings by id; deleted bookings are absent. */

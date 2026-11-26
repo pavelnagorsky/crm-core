@@ -9,6 +9,8 @@ import {
   PriceRuleKind,
   Prisma,
 } from '@prisma/client';
+import { PromotionChannel } from '../pricing/engine/enums/promotion-channel.enum.js';
+import { PromoCodeStatus } from '../pricing/engine/enums/promo-code-status.enum.js';
 import { ReadConsistency } from '../../shared/cache/enums/read-consistency.enum.js';
 import { AppException } from '../../shared/exceptions/app.exception.js';
 import { AUDIT_EVENT } from '../audit/constants/audit.constants.js';
@@ -33,7 +35,7 @@ import { BookingEventsService } from './services/booking-events.service.js';
 import { BookingReservationService } from './services/booking-reservation.service.js';
 import { BookingSchedulingService } from './services/booking-scheduling.service.js';
 import { BookingStaffLoadService } from './services/booking-staff-load.service.js';
-import { bookingPricingContextStub } from './testing/factories/booking-pricing-context.stub.js';
+import { pricingContextStub } from '../pricing/testing/pricing-context.stub.js';
 import { BookingSelectionService } from './services/booking-selection.service.js';
 import { BookingSlotLockService } from './services/booking-slot-lock.service.js';
 
@@ -67,7 +69,7 @@ function channelDeps(): [never] {
 
 function commercialDeps(): [never, OrderPricingCalculator, never] {
   return [
-    { syncCompletedBooking: vi.fn(), priceProductItems: vi.fn() } as never,
+    { syncCompletedBooking: vi.fn() } as never,
     new OrderPricingCalculator(),
     {
       recordForCompletedBooking: vi.fn(),
@@ -209,29 +211,50 @@ function pricingSetup(priceRules: PriceRuleRecord[] = []) {
   const catalog = catalogMock(db);
   const orders = {
     syncCompletedBooking: vi.fn(),
-    priceProductItems: vi.fn().mockResolvedValue([
-      {
-        type: OrderItemType.PRODUCT,
-        catalogItemId: 'product-1',
-        title: 'Shampoo',
-        sku: 'SKU-1',
-        unit: null,
-        quantity: new Prisma.Decimal(2),
-        listUnitPrice: new Prisma.Decimal(20),
-        listLineTotal: new Prisma.Decimal(40),
-        customUnitPrice: new Prisma.Decimal(15),
-        unitPrice: new Prisma.Decimal(15),
-        lineSubtotal: new Prisma.Decimal(30),
-        discountTotal: new Prisma.Decimal(0),
-        lineTotal: new Prisma.Decimal(30),
-      },
-    ]),
+    priceVisitProducts: vi.fn().mockResolvedValue({
+      lines: [
+        {
+            orderItemId: null,
+            productId: 'product-1',
+            productLocationId: 'pl-1',
+            title: 'Shampoo',
+            sku: 'SKU-1',
+            unit: 'MILLILITER',
+            quantity: new Prisma.Decimal(2),
+            sellerStaffId: null,
+            price: {
+              productLocationId: 'pl-1',
+              productId: 'product-1',
+              baseUnitPrice: new Prisma.Decimal(20),
+              listUnitPrice: new Prisma.Decimal(20),
+              listLineTotal: new Prisma.Decimal(40),
+              customUnitPrice: new Prisma.Decimal(15),
+              unitPrice: new Prisma.Decimal(15),
+              lineSubtotal: new Prisma.Decimal(30),
+              discountTotal: new Prisma.Decimal(0),
+              lineTotal: new Prisma.Decimal(30),
+              adjustments: [],
+              discount: null,
+              eligible: [],
+              ineligible: [],
+            },
+            promotion: null,
+            lastPurchaseUnitCost: null,
+            belowCost: false,
+          },
+      ],
+      quote: { promoCode: null },
+    }),
   };
   const service = createBookingService(
     db as never,
+    { filterAvailableStaff: vi.fn().mockResolvedValue([]) } as never,
     {} as never,
-    {} as never,
-    {} as never,
+    // Nobody performs the service: a line without a staff member keeps the base price.
+    {
+      resolveStaffForService: vi.fn().mockResolvedValue([]),
+      namesByIds: vi.fn().mockResolvedValue(new Map()),
+    } as never,
     { emit: vi.fn() } as never,
     { generateClientToken: vi.fn(), managementUrl: vi.fn() } as never,
     ...channelDeps(),
@@ -420,13 +443,37 @@ describe('BookingCreateFacade pricing', () => {
     expect(result.productTotal.toFixed(2)).toBe('30.00');
     expect(result.totalAmount.toFixed(2)).toBe('70.00');
     expect(result.items).toHaveLength(2);
-    expect(orders.priceProductItems).toHaveBeenCalledWith('business-1', [
-      {
+    expect(result.items[1]).toMatchObject({
+      type: OrderItemType.PRODUCT,
+      catalogItemId: 'product-1',
+      // Online: no discount layer, pick or purchase price.
+      adjustments: [],
+      promotion: null,
+      lastPurchaseUnitCost: null,
+      belowCost: false,
+    });
+    // Products are priced in the context of the booking being made, as its order will be.
+    const [locationId, , visit, products, consistency, access] =
+      orders.priceVisitProducts.mock.calls[0];
+    expect(locationId).toBe('business-1');
+    expect(visit).toMatchObject({
+      bookingId: null,
+      startAt: null,
+      channel: PromotionChannel.ONLINE,
+      clientId: null,
+      promoCode: null,
+    });
+    // The service list price, not its custom price.
+    expect(visit.servicesListTotal.toFixed(2)).toBe('50.00');
+    expect(products).toEqual([
+      expect.objectContaining({
         productId: 'product-1',
         quantity: '2.000',
         customUnitPrice: '15.00',
-      },
+      }),
     ]);
+    expect(consistency).toBe(ReadConsistency.CACHED);
+    expect(access).toEqual({ canReadPurchaseCost: false });
     expect(db.$transaction).not.toHaveBeenCalled();
   });
 
@@ -533,12 +580,11 @@ describe('BookingCreateFacade pricing', () => {
         startAt,
       });
       const dto = BookingPricingResponseDto.fromResult(result);
-      // The product line of the fixture adds 40.00 list / 30.00 charged.
       expect(dto).toMatchObject({
         serviceTotal: '45.00',
-        listTotalAmount: '85.00',
+        listTotalAmount: '45.00',
         discountTotal: '0.00',
-        totalAmount: '75.00',
+        totalAmount: '45.00',
       });
       expect(dto.items[0]).toMatchObject({
         listUnitPrice: '45.00',
@@ -1165,6 +1211,10 @@ function customTimeSetup(
       auditPayload: {},
     }),
     publishDraftProductsAdded: vi.fn(),
+    priceVisitProducts: vi.fn().mockResolvedValue({
+      lines: [],
+      quote: { lines: [], promoCode: null },
+    }),
   };
   const earnings = {
     recordForCompletedBooking: vi.fn().mockResolvedValue([]),
@@ -1458,13 +1508,86 @@ describe('BookingCreateFacade custom time', () => {
     };
     const booking = await tx.booking.create.mock.results[0].value;
     expect(created.data.internalNotes).toBe('Prepare retail products');
+    // Without sale.price.override the products keep the permission checks of a draft write.
     expect(orders.addDraftProductsToBookingOrder).toHaveBeenCalledWith(
       booking,
       products,
       actor,
       tx,
+      false,
+    );
+  });
+
+  it('passes sale.price.override to the draft products of a manual booking', async () => {
+    const { service, tx, orders } = customTimeSetup();
+    const actor = { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER };
+    const products = [{ productId: 'product-1', quantity: '1.000' }];
+    await service.createManualBooking(
+      'business-1',
+      { ...dto, products },
+      actor,
+      undefined,
       true,
     );
+    expect(orders.addDraftProductsToBookingOrder).toHaveBeenCalledWith(
+      expect.anything(),
+      products,
+      actor,
+      tx,
+      true,
+    );
+  });
+
+  it('keeps a promo code that applies only to the products of a manual booking', async () => {
+    const { service, tx, orders } = customTimeSetup();
+    orders.priceVisitProducts.mockResolvedValueOnce({
+      lines: [],
+      quote: {
+        lines: [],
+        promoCode: {
+          code: 'GOODS',
+          status: PromoCodeStatus.APPLIED,
+          ruleId: 'goods',
+          reason: null,
+        },
+      },
+    } as never);
+    const actor = { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER };
+    const products = [{ productId: 'product-1', quantity: '1.000' }];
+    await service.createManualBooking(
+      'business-1',
+      { ...dto, promoCode: 'GOODS', products },
+      actor,
+    );
+    const [, , visit, , consistency] = orders.priceVisitProducts.mock.calls[0];
+    expect(visit).toMatchObject({
+      bookingId: null,
+      channel: PromotionChannel.ADMIN,
+      promoCode: 'GOODS',
+    });
+    expect(consistency).toBe(ReadConsistency.FRESH);
+    const created = tx.booking.create.mock.calls[0][0] as unknown as {
+      data: { promoCode: string | null };
+    };
+    expect(created.data.promoCode).toBe('GOODS');
+  });
+
+  it('drops a promo code that applies to neither services nor products', async () => {
+    const { service, tx } = customTimeSetup();
+    const actor = { id: 'user-1', name: 'Olga', role: AuditActorRole.OWNER };
+    await service.createManualBooking(
+      'business-1',
+      {
+        ...dto,
+        promoCode: 'GOODS',
+        products: [{ productId: 'product-1', quantity: '1.000' }],
+      },
+      actor,
+    );
+    const created = tx.booking.create.mock.calls[0][0] as unknown as {
+      data: { promoCode: string | null };
+    };
+    expect(created.data.promoCode).toBeNull();
   });
 
   it('lets a master complete their elapsed custom-time visit like a status change', async () => {
@@ -2512,6 +2635,7 @@ function createBookingService(
       { listForSnapshot: vi.fn().mockResolvedValue(priceRules) } as never,
       { listForSnapshot: vi.fn().mockResolvedValue([]) } as never,
       pricingStaff,
+      { listPriced: vi.fn().mockResolvedValue([]) } as never,
       bookingLocation,
       {
         getOrLoad: (_cache: unknown, _key: unknown, load: () => unknown) =>
@@ -2525,6 +2649,13 @@ function createBookingService(
       (clients as { recordAcquisition?: unknown }).recordAcquisition ??
       vi.fn().mockResolvedValue(true),
   }) as typeof clients;
+  const scheduling = new BookingSchedulingService(
+    db,
+    staff,
+    calendar,
+    pricing,
+    new BookingStaffLoadService(db),
+  );
   return new BookingCreateFacade(
     bookingClients,
     limiter,
@@ -2534,16 +2665,12 @@ function createBookingService(
       services,
       orders,
       pricing,
-      bookingPricingContextStub(),
+      pricingContextStub(),
       editedBookings as never,
+      scheduling,
+      staff as never,
     ),
-    new BookingSchedulingService(
-      db,
-      staff,
-      calendar,
-      pricing,
-      new BookingStaffLoadService(db),
-    ),
+    scheduling,
     new BookingEventsService(emitter, clientTokens, location, {
       notify: vi.fn(),
     } as never),
@@ -2560,6 +2687,6 @@ function createBookingService(
     billing as never,
     { plan: vi.fn().mockResolvedValue(null), publish: vi.fn() } as never,
     orders,
-    bookingPricingContextStub(),
+    pricingContextStub(),
   );
 }

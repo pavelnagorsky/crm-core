@@ -1,5 +1,6 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
 import {
+  Location,
   OrderItemType,
   Prisma,
   BookingExecutionMode as PrismaBookingExecutionMode,
@@ -11,13 +12,14 @@ import { priceLine, sumPrices } from '../../../shared/money/line-pricing.js';
 import { TimeUtils } from '../../../shared/time/time.utils.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { LocationService } from '../../location/services/location.service.js';
-import { OrderPricingLine } from '../../orders/interfaces/order-pricing-line.interface.js';
+import { ProductPricingLineView } from '../../orders/interfaces/product-pricing-line-view.interface.js';
 import { OrdersFacade } from '../../orders/orders.facade.js';
 import { PromotionChannel } from '../../pricing/engine/enums/promotion-channel.enum.js';
+import { mergePromoCodeResults } from '../../pricing/engine/promo-code-merge.js';
 import { LineDiscountChoice } from '../../pricing/engine/interfaces/line-discount-choice.interface.js';
 import { PromoCodeResult } from '../../pricing/engine/interfaces/promo-code-result.interface.js';
 import { QuoteContext } from '../../pricing/engine/interfaces/quote-context.interface.js';
-import { VisitTime } from '../../pricing/engine/interfaces/visit-time.interface.js';
+import { PriceBook } from '../../pricing/engine/price-book.js';
 import { PricingFacade } from '../../pricing/pricing.facade.js';
 import { ServiceCatalogFacade } from '../../services/catalog/service-catalog.facade.js';
 import { BookingPricingRequestDto } from '../dto/booking-pricing-request.dto.js';
@@ -29,8 +31,12 @@ import { BookingSelectionRequest } from '../interfaces/booking-selection-request
 import { ResolvedBookingSelection } from '../interfaces/resolved-booking-selection.interface.js';
 import { repeatedDiscountChoice } from '../rules/booking-discount-choice.rules.js';
 import { visitTimeAt } from '../rules/booking-visit-time.rules.js';
-import { BookingPricingContextService } from './booking-pricing-context.service.js';
+import { PricingContextService } from '../../pricing/services/pricing-context.service.js';
+import { StaffService } from '../../staff/services/staff.service.js';
+import { BookingLineStaffSource } from '../enums/booking-line-staff-source.enum.js';
+import { BookingTeamRequest } from '../interfaces/booking-team-request.interface.js';
 import { BookingReadService } from './read/booking-read.service.js';
+import { BookingSchedulingService } from './booking-scheduling.service.js';
 
 @Injectable()
 export class BookingSelectionService {
@@ -39,8 +45,10 @@ export class BookingSelectionService {
     private readonly serviceCatalog: ServiceCatalogFacade,
     private readonly orders: OrdersFacade,
     private readonly pricing: PricingFacade,
-    private readonly pricingContext: BookingPricingContextService,
+    private readonly pricingContext: PricingContextService,
     private readonly bookings: BookingReadService,
+    private readonly scheduling: BookingSchedulingService,
+    private readonly staff: StaffService,
   ) {}
 
   /**
@@ -89,18 +97,25 @@ export class BookingSelectionService {
     const priced = selection
       ? await this.priceServiceLines(
           locationId,
+          location,
           selection,
           this.manualItems(dto),
           dto,
-          startAt ? visitTimeAt(startAt, location.timezone) : null,
+          startAt,
           context,
           access,
         )
-      : { lines: [], promoCode: null };
+      : { lines: [], promoCode: null, listTotal: new Prisma.Decimal(0) };
     const serviceLines = priced.lines;
-    const productLines: BookingPricingLine[] = (
-      await this.orders.priceProductItems(locationId, dto.products ?? [])
-    ).map((line) => ({ ...line, discount: null, eligible: [], ineligible: [] }));
+    const products = await this.priceProductLines(
+      locationId,
+      location,
+      dto,
+      startAt,
+      priced.listTotal,
+      access,
+    );
+    const productLines = products.lines;
     const serviceTotals = sumPrices(serviceLines);
     const productTotals = sumPrices(productLines);
     const totals = sumPrices([...serviceLines, ...productLines]);
@@ -113,7 +128,8 @@ export class BookingSelectionService {
       productTotal: productTotals.totalAmount,
       ...totals,
       items: [...serviceLines, ...productLines],
-      promoCode: priced.promoCode,
+      // A code that applies only to products counts too (docs/pricing-stage7-api.md).
+      promoCode: mergePromoCodeResults(priced.promoCode, products.promoCode),
       cabinet: access.cabinet,
     };
   }
@@ -186,18 +202,126 @@ export class BookingSelectionService {
 
   /**
    * Preview: prices come through the cache, nothing is stored. Each line is priced with the
-   * staff member the request names for it (with none chosen, at the base price) and the
-   * surcharges of the visit start.
+   * staff member the request names for it, else the one booking creation would assign
+   * (previewTeam), and the surcharges of the visit start.
    */
   private async priceServiceLines(
     locationId: string,
+    location: Location,
     selection: ResolvedBookingSelection,
     manualItems: ManualBookingItemDto[],
     dto: BookingPricingRequestDto,
-    visit: VisitTime | null,
+    startAt: Date | null,
     context: QuoteContext | null,
     access: BookingPricingAccess,
-  ): Promise<{ lines: BookingPricingLine[]; promoCode: PromoCodeResult | null }> {
+  ): Promise<{
+    lines: BookingPricingLine[];
+    promoCode: PromoCodeResult | null;
+    /** Σ listPrice of the services: the visit total product promotions compare with. */
+    listTotal: Prisma.Decimal;
+  }> {
+    // One snapshot ranks the staff and quotes the lines, as on creation.
+    const book = await this.pricing.priceBook(
+      locationId,
+      ReadConsistency.CACHED,
+    );
+    const team = await this.previewTeam(
+      book,
+      locationId,
+      location,
+      selection,
+      manualItems,
+      dto,
+      startAt,
+      context,
+      access,
+    );
+    const staffNames = await this.staff.namesByIds(
+      [...new Set(team.staffIds)].filter((id): id is string => id !== null),
+    );
+    const visit = startAt ? visitTimeAt(startAt, location.timezone) : null;
+    const { lines, promoCode } = this.pricing.quoteWithBook(book, {
+      bundleId: selection.bundleId,
+      lines: selection.services.map((service, index) => {
+        const customPrice = manualItems[index]?.customPrice;
+        return {
+          serviceId: service.id,
+          staffId: team.staffIds[index],
+          customPrice:
+            customPrice == null ? null : new Prisma.Decimal(customPrice),
+        };
+      }),
+      visit,
+      context,
+    });
+    const items = selection.services.map(
+      (service, index): BookingPricingLine => {
+        const quantity = new Prisma.Decimal(1);
+        const price = lines[index];
+        const staffId = team.staffIds[index];
+        // Online, a promotion not shown as one is the price itself.
+        const hidden =
+          !access.cabinet &&
+          price.discount !== null &&
+          price.discount.publicTitle === null;
+        return {
+          type: OrderItemType.SERVICE,
+          catalogItemId: service.id,
+          title: service.title,
+          sku: null,
+          unit: null,
+          quantity,
+          ...(hidden
+            ? priceLine(quantity, price.chargedPrice, price.customPrice)
+            : priceLine(
+                quantity,
+                price.listPrice,
+                price.customPrice,
+                price.discountTotal,
+              )),
+          discount: hidden ? null : price.discount,
+          eligible: access.cabinet ? price.eligible : [],
+          ineligible: access.cabinet ? price.ineligible : [],
+          staffId,
+          staffName: staffId ? (staffNames.get(staffId) ?? null) : null,
+          staffSource: staffId ? team.source[index] : null,
+        };
+      },
+    );
+    return {
+      lines: items,
+      promoCode,
+      listTotal: lines.reduce(
+        (sum, line) => sum.plus(line.listPrice),
+        new Prisma.Decimal(0),
+      ),
+    };
+  }
+
+  /**
+   * Staff of each service line for the preview: the one the request names, else the one
+   * booking creation assigns with the same request (BookingSchedulingService.assignTeam:
+   * the same candidates, availability, ranking and preferred staff), so the preview shows
+   * the price the booking gets. Nobody free at the start: the rule ignoring availability
+   * (ESTIMATED), creation then refuses that start. Without a start: the rule among all
+   * qualified staff (ESTIMATED). No complete team at all, or a named staff member who does
+   * not perform the service: lines without a staff member keep the base price, and creation
+   * refuses the request.
+   */
+  private async previewTeam(
+    book: PriceBook,
+    locationId: string,
+    location: Location,
+    selection: ResolvedBookingSelection,
+    manualItems: ManualBookingItemDto[],
+    dto: BookingPricingRequestDto,
+    startAt: Date | null,
+    context: QuoteContext | null,
+    access: BookingPricingAccess,
+  ): Promise<{
+    staffIds: (string | null)[];
+    source: BookingLineStaffSource[];
+  }> {
     const requested = normalizeStaffAssignments(
       selection.services.map((service) => service.id),
       selection.executionMode,
@@ -205,54 +329,156 @@ export class BookingSelectionService {
       dto.staffAssignments,
       manualItems,
     );
-    const { lines, promoCode } = await this.pricing.quoteServices(
-      locationId,
-      {
-        bundleId: selection.bundleId,
-        lines: selection.services.map((service, index) => {
-          const customPrice = manualItems[index]?.customPrice;
-          return {
-            serviceId: service.id,
-            staffId:
-              manualItems[index]?.staffId ?? requested.get(service.id) ?? null,
-            customPrice:
-              customPrice == null ? null : new Prisma.Decimal(customPrice),
-          };
-        }),
-        visit,
-        context,
-      },
-      ReadConsistency.CACHED,
+    const named = selection.services.map(
+      (service, index) =>
+        manualItems[index]?.staffId ?? requested.get(service.id) ?? null,
     );
-    const items = selection.services.map((service, index): BookingPricingLine => {
-      const quantity = new Prisma.Decimal(1);
-      const price = lines[index];
-      // Online, a promotion not shown as one is the price itself.
-      const hidden =
-        !access.cabinet &&
-        price.discount !== null &&
-        price.discount.publicTitle === null;
+    const sourced = (other: BookingLineStaffSource) =>
+      named.map((id) => (id ? BookingLineStaffSource.REQUESTED : other));
+    if (named.every((id) => id !== null))
       return {
-        type: OrderItemType.SERVICE,
-        catalogItemId: service.id,
-        title: service.title,
-        sku: null,
-        unit: null,
-        quantity,
-        ...(hidden
-          ? priceLine(quantity, price.chargedPrice, price.customPrice)
-          : priceLine(
-              quantity,
-              price.listPrice,
-              price.customPrice,
-              price.discountTotal,
-            )),
-        discount: hidden ? null : price.discount,
-        eligible: access.cabinet ? price.eligible : [],
-        ineligible: access.cabinet ? price.ineligible : [],
+        staffIds: named,
+        source: sourced(BookingLineStaffSource.REQUESTED),
       };
-    });
-    return { lines: items, promoCode };
+    const isCustomTime = access.cabinet && dto.isCustomTime === true;
+    const request: BookingTeamRequest = {
+      locationId,
+      bundleId: selection.bundleId,
+      services: selection.services,
+      prices: ReadConsistency.CACHED,
+      startAt,
+      executionMode: selection.executionMode,
+      requestedStaffId: dto.staffId,
+      staffAssignments: dto.staffAssignments,
+      timezone: location.timezone,
+      manualItems,
+      customEndAt:
+        isCustomTime && dto.endAt
+          ? TimeUtils.localToUtc(dto.endAt, location.timezone)
+          : null,
+      allowConflicts: isCustomTime,
+      preferredStaffId: access.ownStaffId,
+      staffRule: location.anyStaffRule,
+      pricingContext: context,
+      book,
+    };
+    const assigned = await this.assignTeam(request);
+    if (assigned && startAt)
+      return {
+        staffIds: assigned,
+        source: sourced(BookingLineStaffSource.ASSIGNED),
+      };
+    const estimated =
+      assigned ??
+      (startAt && !isCustomTime
+        ? await this.assignTeam({ ...request, allowConflicts: true })
+        : null);
+    return {
+      staffIds: estimated ?? named,
+      source: sourced(BookingLineStaffSource.ESTIMATED),
+    };
+  }
+
+  /** The team, or null when creation would refuse the request for its staff or interval. */
+  private async assignTeam(
+    request: BookingTeamRequest,
+  ): Promise<string[] | null> {
+    try {
+      return await this.scheduling.assignTeam(request);
+    } catch (error) {
+      if (
+        error instanceof AppException &&
+        (error.errorCode === ErrorCode.BOOKING_STAFF_NOT_FOUND.code ||
+          error.errorCode === ErrorCode.BOOKING_INVALID_INTERVAL.code)
+      )
+        return null;
+      throw error;
+    }
+  }
+
+  /**
+   * Products of the booking window priced in the context of the booking, as the visit order
+   * prices them after creation (docs/pricing-stage7-api.md, «Предпросмотр окна записи»): the
+   * visit start, the channel by access, the client, the promo code and the picks (cabinet);
+   * with bookingId, the confirmed products of its order count in the visit total and its own
+   * promotion use is not counted. Discount layer, pick and purchase price are cabinet only.
+   */
+  private async priceProductLines(
+    locationId: string,
+    location: { brandId: string; timezone: string },
+    dto: BookingPricingRequestDto,
+    startAt: Date | null,
+    servicesListTotal: Prisma.Decimal,
+    access: BookingPricingAccess,
+  ): Promise<{
+    lines: BookingPricingLine[];
+    promoCode: PromoCodeResult | null;
+  }> {
+    const products = dto.products ?? [];
+    if (products.length === 0) return { lines: [], promoCode: null };
+    const bookingId = access.cabinet ? (dto.bookingId ?? null) : null;
+    // The booking period counts from the day the edited booking was made.
+    const bookedAt = bookingId
+      ? (await this.bookings.findByIdInLocation(locationId, bookingId))
+          .createdAt
+      : new Date();
+    const { lines, quote } = await this.orders.priceVisitProducts(
+      locationId,
+      { brandId: location.brandId, timezone: location.timezone },
+      {
+        bookingId,
+        startAt,
+        bookedAt,
+        channel: access.cabinet
+          ? PromotionChannel.ADMIN
+          : PromotionChannel.ONLINE,
+        clientId: access.cabinet ? (dto.clientId ?? null) : null,
+        phone: dto.clientPhone ?? null,
+        promoCode: dto.promoCode ?? null,
+        servicesListTotal,
+      },
+      products.map((product) =>
+        access.cabinet ? product : { ...product, promotion: undefined },
+      ),
+      ReadConsistency.CACHED,
+      {
+        canReadPurchaseCost:
+          access.cabinet && access.canReadPurchaseCost === true,
+      },
+    );
+    return {
+      lines: lines.map((line) => this.productLine(line, access.cabinet)),
+      promoCode: quote.promoCode,
+    };
+  }
+
+  private productLine(
+    line: ProductPricingLineView,
+    cabinet: boolean,
+  ): BookingPricingLine {
+    const { price } = line;
+    return {
+      type: OrderItemType.PRODUCT,
+      catalogItemId: line.productId,
+      title: line.title,
+      sku: line.sku,
+      unit: line.unit,
+      quantity: line.quantity,
+      listUnitPrice: price.listUnitPrice,
+      listLineTotal: price.listLineTotal,
+      customUnitPrice: price.customUnitPrice,
+      unitPrice: price.unitPrice,
+      lineSubtotal: price.lineSubtotal,
+      discountTotal: price.discountTotal,
+      lineTotal: price.lineTotal,
+      discount: price.discount,
+      eligible: cabinet ? price.eligible : [],
+      ineligible: cabinet ? price.ineligible : [],
+      adjustments: cabinet ? price.adjustments : [],
+      promotion: cabinet ? line.promotion : null,
+      lastPurchaseUnitCost: cabinet ? line.lastPurchaseUnitCost : null,
+      belowCost: cabinet && line.belowCost,
+    };
   }
 
   /**

@@ -12,7 +12,9 @@ import {
   MaxLength,
   ValidateNested,
 } from 'class-validator';
+import { IsOptionalPrice } from '../../../shared/decorators/is-price.decorator.js';
 import { TrimString } from '../../../shared/transforms/trim-string.transform.js';
+import { OrderPromoCodeField } from '../decorators/order-promo-code-field.decorator.js';
 import { PaymentDetailsDto } from '../../payments/dto/payment-details.dto.js';
 import { OrderProductItemDto } from './order-product-item.dto.js';
 
@@ -66,6 +68,16 @@ export class CreateOrderDto {
   @TrimString()
   @MaxLength(100)
   idempotencyKey?: string | null;
+
+  @OrderPromoCodeField(
+    'Promo code of the sale, stored as entered even when it does not apply now (the draft is priced again on every write). The result is promoCode of POST orders/pricing.',
+  )
+  promoCode?: string | null;
+
+  @IsOptionalPrice(
+    'Required with confirmImmediately (400 VALIDATION_ERROR), ignored otherwise: totalAmount of POST orders/pricing the user saw. A different total at confirmation is 409 PRICE_CHANGED { expectedTotal, total, products, promoCode }; nothing is stored. Part of the sale request hash.',
+  )
+  expectedTotal?: string | null;
 
   @ApiProperty({ type: () => OrderProductItemDto, isArray: true })
   @IsArray()

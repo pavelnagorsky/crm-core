@@ -22,7 +22,7 @@ const promotion = (
   clientFilter: PromotionClientFilter.ANY,
   requiresCode: false,
   conditions: [],
-  appliesToAll: true,
+  appliesToAllServices: true,
   targets: [],
   ...overrides,
 });
@@ -100,7 +100,7 @@ describe('bookingSetupPromotionLabels (docs/pricing-stage4-api.md)', () => {
   it('targets: service, category, exclusions', () => {
     const result = labels([
       promotion('hair', {
-        appliesToAll: false,
+        appliesToAllServices: false,
         targets: [{ type: SERVICE_CATEGORY, id: 'hair', excluded: false }],
       }),
       promotion('not-color', {
@@ -117,11 +117,11 @@ describe('bookingSetupPromotionLabels (docs/pricing-stage4-api.md)', () => {
 
   it('a FIXED bundle is reached only as a bundle, a SUM bundle also by its services', () => {
     const byService = promotion('cut-only', {
-      appliesToAll: false,
+      appliesToAllServices: false,
       targets: [{ type: SERVICE, id: 'cut', excluded: false }],
     });
     const byBundle = promotion('fixed-only', {
-      appliesToAll: false,
+      appliesToAllServices: false,
       targets: [{ type: BUNDLE, id: 'fixed', excluded: false }],
     });
     const result = labels([byService, byBundle]);

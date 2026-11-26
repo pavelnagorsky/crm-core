@@ -19,12 +19,14 @@ import { ProductsService } from '../../products/services/products.service.js';
 import { StaffService } from '../../staff/services/staff.service.js';
 import { orderInclude } from '../constants/order-include.constant.js';
 import { ConfirmOrderItemsDto } from '../dto/confirm-order-items.dto.js';
+import { ConfirmationPricing } from '../interfaces/confirmation-pricing.interface.js';
 import { OrderTransition } from '../interfaces/order-transition.interface.js';
 import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
 import { NESTED_PAYMENT_KEY_PREFIX } from '../../payments/constants/payment.constants.js';
 import { paymentIntent } from '../../payments/rules/payment-request-hash.js';
 import { OrderPaymentService } from './order-payment.service.js';
 import { OrderPersistenceService } from './order-persistence.service.js';
+import { OrderProductPricingService } from './order-product-pricing.service.js';
 
 const CONFIRM_PRODUCT_ITEMS_OPERATION = 'CONFIRM_PRODUCT_ITEMS';
 
@@ -38,6 +40,7 @@ export class OrderProductTransitionService {
     private readonly earnings: StaffEarningsService,
     private readonly persistence: OrderPersistenceService,
     private readonly orderPayments: OrderPaymentService,
+    private readonly productPricing: OrderProductPricingService,
   ) {}
 
   async confirmItems(
@@ -68,6 +71,9 @@ export class OrderProductTransitionService {
 
     try {
       return await this.persistence.inTransaction(async (tx) => {
+        // Lock order: the limited promotions, then the order (a booking edit takes them
+        // before the booking and its order).
+        await this.productPricing.lockLimits(tx, locationId);
         await this.persistence.lockOrder(tx, orderId);
         const locked = await this.persistence.findInTransaction(
           tx,
@@ -82,6 +88,7 @@ export class OrderProductTransitionService {
           orderId,
           dto.itemIds,
           tx,
+          { expectedTotal: new Prisma.Decimal(dto.expectedTotal) },
           now,
           { order: locked },
         );
@@ -175,19 +182,35 @@ export class OrderProductTransitionService {
     orderId: string,
     orderItemIds: string[],
     tx: Prisma.TransactionClient,
+    pricing: ConfirmationPricing,
     occurredAt = new Date(),
     options: { allowAlreadyConfirmed?: boolean; order?: OrderWithItems } = {},
   ): Promise<OrderTransition> {
-    const order =
+    const draft =
       options.order ??
       (await this.persistence.findInTransaction(tx, locationId, orderId));
-    this.assertActive(order.status);
-    const pending = this.pendingProductItems(
-      order,
+    this.assertActive(draft.status);
+    const pendingIds = this.pendingProductItems(
+      draft,
       orderItemIds,
       options.allowAlreadyConfirmed,
+    ).map((item) => item.id);
+    if (pendingIds.length === 0) return { order: draft, changed: false };
+    // The price is fixed now: fresh prices under the locks of the limited promotions.
+    const repricedItemIds = await this.productPricing.priceForConfirmation(
+      tx,
+      locationId,
+      orderId,
+      pendingIds,
+      pricing.expectedTotal,
+      pricing,
     );
-    if (pending.length === 0) return { order, changed: false };
+    const order = await this.persistence.findInTransaction(
+      tx,
+      locationId,
+      orderId,
+    );
+    const pending = this.pendingProductItems(order, pendingIds);
     const saleLines = await this.resolveSaleLines(locationId, pending, tx);
     const costs = await this.inventory.postSale(
       locationId,
@@ -221,13 +244,16 @@ export class OrderProductTransitionService {
         occurredAt,
       },
     });
-    await tx.order.update({
-      where: { id: orderId },
-      data: { version: { increment: 1 } },
-    });
+    // The confirmed lines carry fresh prices: the order totals follow them.
+    const confirmed = await this.persistence.refreshTotals(
+      tx,
+      locationId,
+      orderId,
+    );
     return {
-      order: await this.persistence.findInTransaction(tx, locationId, orderId),
+      order: confirmed,
       changed: true,
+      repricedItemIds,
     };
   }
 
@@ -371,6 +397,7 @@ export class OrderProductTransitionService {
           locationId,
           orderId,
           itemIds: [...dto.itemIds].sort(),
+          expectedTotal: new Prisma.Decimal(dto.expectedTotal).toFixed(2),
           // Only when present, so confirmations without a payment keep their earlier hash.
           ...(dto.payment ? { payment: paymentIntent(dto.payment) } : {}),
         }),

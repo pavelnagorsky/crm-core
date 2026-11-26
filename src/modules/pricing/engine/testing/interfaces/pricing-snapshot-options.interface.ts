@@ -1,6 +1,7 @@
 import { PricingBundleEntry } from '../../interfaces/pricing-bundle-entry.interface.js';
 import { PricingLevelEntry } from '../../interfaces/pricing-level-entry.interface.js';
 import { PricingPriceChangeEntry } from '../../interfaces/pricing-price-change-entry.interface.js';
+import { PricingProductEntry } from '../../interfaces/pricing-product-entry.interface.js';
 import { PricingRuleEntry } from '../../interfaces/pricing-rule-entry.interface.js';
 import { PricingStaffEntry } from '../../interfaces/pricing-staff-entry.interface.js';
 
@@ -21,4 +22,6 @@ export interface PricingSnapshotOptions {
   timezone?: string;
   /** Scheduled price changes; none when omitted. */
   priceChanges?: PricingPriceChangeEntry[];
+  /** Products the location sells; none when omitted. */
+  products?: PricingProductEntry[];
 }

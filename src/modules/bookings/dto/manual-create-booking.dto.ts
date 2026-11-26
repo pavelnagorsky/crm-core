@@ -20,6 +20,7 @@ import type { SettableBookingStatus } from '../constants/settable-booking-status
 import { BookingExecutionMode } from '../enums/booking-execution-mode.enum.js';
 import { ManualBookingItemDto } from './manual-booking-item.dto.js';
 import { IsLocalDateTime } from '../../../shared/time/decorators/is-local-date-time.validator.js';
+import { IsOptionalPrice } from '../../../shared/decorators/is-price.decorator.js';
 import { ManualBookingProductDto } from './manual-booking-product.dto.js';
 import { MANUAL_TRAFFIC_SOURCES } from '../../../shared/traffic/constants/manual-traffic-sources.constants.js';
 import { TRAFFIC_DETAIL_MAX_LENGTH } from '../../../shared/traffic/constants/traffic-limits.constants.js';
@@ -187,6 +188,30 @@ export class ManualCreateBookingDto extends CreateBookingDto {
   @IsOptional()
   @IsBoolean()
   confirmProducts?: boolean;
+
+  @ApiProperty({
+    type: String,
+    format: 'uuid',
+    isArray: true,
+    required: false,
+    description:
+      'Per item in the services order: the staff member the booking dialog showed (items[].staffId of POST pricing). Used only for items without a chosen staff member: the member is taken first when still free. When the rule gives another staff member, nothing is created: 409 PRICE_CHANGED if the total differs from expectedTotal, else 409 BOOKING_STAFF_CHANGED with the same payload { expectedTotal, total, items, promoCode }.',
+  })
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(MULTI_SERVICE_MAX_ITEMS)
+  @IsUUID(undefined, { each: true })
+  preferredStaffIds?: string[];
+
+  @IsOptionalPrice(
+    'The services total the administrator saw (serviceTotal of POST pricing for the same request). The services are priced again with fresh data and the assigned staff; a different total (sum of customPrice ?? chargedPrice) is 409 PRICE_CHANGED { expectedTotal, total, items, promoCode } and nothing is created. Omitted: not checked.',
+  )
+  expectedTotal?: string | null;
+
+  @IsOptionalPrice(
+    'Required with confirmProducts and products (400 VALIDATION_ERROR): productTotal of POST pricing the administrator saw. The products are priced again with fresh data at confirmation; a different total is 409 PRICE_CHANGED { expectedTotal, total, products, promoCode } and nothing is created.',
+  )
+  expectedProductTotal?: string | null;
 
   @ApiProperty({
     type: () => PaymentInputDto,

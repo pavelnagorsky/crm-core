@@ -97,10 +97,10 @@ export class ServicePriceImportController {
   @ApiOkResponse({ type: ApiResponse(ServicePriceImportPreviewDto) })
   @ApiBadRequestResponse({
     description:
-      'SERVICE_PRICE_IMPORT_FILE_INVALID { reason, sheet?, columns? }, SERVICE_PRICE_CHANGE_DATE_INVALID, SERVICE_PRICE_CHANGE_TOO_LARGE',
+      'PRICE_IMPORT_FILE_INVALID { reason, sheet?, columns? }, PRICE_CHANGE_DATE_INVALID, PRICE_CHANGE_TOO_LARGE',
   })
   @ApiPayloadTooLargeResponse({
-    description: 'SERVICE_PRICE_IMPORT_FILE_TOO_LARGE',
+    description: 'PRICE_IMPORT_FILE_TOO_LARGE',
   })
   @Permissions(Write(Claim.PRICING))
   @ServicePriceImportFile()
@@ -128,7 +128,7 @@ export class ServicePriceImportController {
   @ApiOkResponse({ type: ApiResponse(ServicePriceImportResultDto) })
   @ApiBadRequestResponse({
     description:
-      'SERVICE_PRICE_IMPORT_FILE_INVALID, SERVICE_PRICE_IMPORT_INVALID { errorCount, errors }, SERVICE_PRICE_CHANGE_DATE_INVALID, SERVICE_PRICE_CHANGE_TOO_LARGE',
+      'PRICE_IMPORT_FILE_INVALID, PRICE_IMPORT_INVALID { errorCount, errors }, PRICE_CHANGE_DATE_INVALID, PRICE_CHANGE_TOO_LARGE',
   })
   @ApiForbiddenResponse({
     description:
@@ -136,10 +136,10 @@ export class ServicePriceImportController {
   })
   @ApiConflictResponse({
     description:
-      'SERVICE_PRICE_CHANGE_DATE_CONFLICT, SERVICE_PRICE_CHANGE_LIMIT',
+      'PRICE_CHANGE_DATE_CONFLICT, PRICE_CHANGE_LIMIT',
   })
   @ApiPayloadTooLargeResponse({
-    description: 'SERVICE_PRICE_IMPORT_FILE_TOO_LARGE',
+    description: 'PRICE_IMPORT_FILE_TOO_LARGE',
   })
   @Permissions(Write(Claim.PRICING))
   @ServicePriceImportFile()

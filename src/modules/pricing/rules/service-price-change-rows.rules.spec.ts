@@ -1,7 +1,7 @@
 import { ServiceStatus } from '@prisma/client';
 import { PriceTimeline } from '../engine/price-timeline.js';
-import { ServicePriceChangeTarget } from '../engine/enums/service-price-change-target.enum.js';
-import { ServicePriceChangeMode } from '../enums/service-price-change-mode.enum.js';
+import { PriceChangeTarget } from '../engine/enums/price-change-target.enum.js';
+import { PriceChangeMode } from '../enums/price-change-mode.enum.js';
 import { PriceChangeFacts } from '../interfaces/price-change-facts.interface.js';
 import { PriceChangeSpec } from '../interfaces/price-change-spec.interface.js';
 import {
@@ -16,7 +16,7 @@ const spec = (over: Partial<PriceChangeSpec> = {}): PriceChangeSpec => ({
   serviceIds: [],
   categoryIds: [],
   bundleIds: [],
-  mode: ServicePriceChangeMode.PERCENT,
+  mode: PriceChangeMode.PERCENT,
   value: 1000,
   step: 1,
   include: { levelPrices: true, staffPrices: true, fixedBundles: true },
@@ -71,33 +71,33 @@ const build = (s: PriceChangeSpec, timeline = new PriceTimeline([]), date = '202
   buildPriceChangeGroups(facts(), s, date, timeline);
 
 describe('priceChangeAfter', () => {
-  const base = ServicePriceChangeTarget.BASE as never;
+  const base = PriceChangeTarget.BASE as never;
   it('adjusts by percent and amount and rounds to the step', () => {
     expect(
-      priceChangeAfter(base, 4990, { mode: ServicePriceChangeMode.PERCENT, value: 1500, step: 500 }),
+      priceChangeAfter(base, 4990, { mode: PriceChangeMode.PERCENT, value: 1500, step: 500 }),
     ).toEqual({ after: 5500, invalid: false });
     expect(
-      priceChangeAfter(base, 5000, { mode: ServicePriceChangeMode.AMOUNT, value: -500, step: 1 }),
+      priceChangeAfter(base, 5000, { mode: PriceChangeMode.AMOUNT, value: -500, step: 1 }),
     ).toEqual({ after: 4500, invalid: false });
   });
 
   it('keeps a free service free under a percent', () => {
     expect(
-      priceChangeAfter(base, 0, { mode: ServicePriceChangeMode.PERCENT, value: 1000, step: 1 }),
+      priceChangeAfter(base, 0, { mode: PriceChangeMode.PERCENT, value: 1000, step: 1 }),
     ).toEqual({ after: 0, invalid: false });
   });
 
   it('marks zero from a positive price, and a price past the maximum, as invalid', () => {
     expect(
-      priceChangeAfter(base, 1000, { mode: ServicePriceChangeMode.AMOUNT, value: -2000, step: 1 }).invalid,
+      priceChangeAfter(base, 1000, { mode: PriceChangeMode.AMOUNT, value: -2000, step: 1 }).invalid,
     ).toBe(true);
     expect(
-      priceChangeAfter(base, 9_999_999_000, { mode: ServicePriceChangeMode.PERCENT, value: 5000, step: 1 }).invalid,
+      priceChangeAfter(base, 9_999_999_000, { mode: PriceChangeMode.PERCENT, value: 5000, step: 1 }).invalid,
     ).toBe(true);
   });
 
   it('SET gives base and bundle the value and leaves level and personal rows alone', () => {
-    const set = { mode: ServicePriceChangeMode.SET, value: 8000, step: 1 };
+    const set = { mode: PriceChangeMode.SET, value: 8000, step: 1 };
     expect(priceChangeAfter(base, 5000, set).after).toBe(8000);
     expect(priceChangeAfter('LEVEL' as never, 5000, set).after).toBe(5000);
     expect(
@@ -191,11 +191,12 @@ describe('buildPriceChangeGroups', () => {
         effectiveDate: '2027-01-01',
         items: [
           {
-            target: ServicePriceChangeTarget.BASE,
+            target: PriceChangeTarget.BASE,
             serviceId: 's1',
             levelId: null,
             staffId: null,
             bundleId: null,
+            productLocationId: null,
             price: 5500,
           },
         ],
@@ -214,19 +215,21 @@ describe('buildPriceChangeGroups', () => {
         effectiveDate: '2027-01-01',
         items: [
           {
-            target: ServicePriceChangeTarget.STAFF,
+            target: PriceChangeTarget.STAFF,
             serviceId: 's1',
             levelId: null,
             staffId: 'st1',
             bundleId: null,
+            productLocationId: null,
             price: 4000,
           },
           {
-            target: ServicePriceChangeTarget.LEVEL,
+            target: PriceChangeTarget.LEVEL,
             serviceId: 's1',
             levelId: 'l1',
             staffId: null,
             bundleId: null,
+            productLocationId: null,
             price: null,
           },
         ],
@@ -237,7 +240,7 @@ describe('buildPriceChangeGroups', () => {
   });
 
   it('checks only valid rows that change the price', () => {
-    const rows = build(spec({ mode: ServicePriceChangeMode.AMOUNT, value: -5000 }))[0].rows;
+    const rows = build(spec({ mode: PriceChangeMode.AMOUNT, value: -5000 }))[0].rows;
     expect(rows[0]).toMatchObject({ after: 0, invalid: true, checked: false });
     expect(rows[1]).toMatchObject({ after: 2000, invalid: false, checked: true });
   });

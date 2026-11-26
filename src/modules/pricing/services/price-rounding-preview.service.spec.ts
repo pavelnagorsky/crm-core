@@ -91,7 +91,7 @@ describe('PriceRoundingPreviewService', () => {
           surchargeRule('off', { enabled: false, value: 5000 }),
           surchargeRule('only-color', {
             value: 2000,
-            appliesToAll: false,
+            appliesToAllServices: false,
             targets: [{ type: 'SERVICE' as never, id: 'color', excluded: false }],
           }),
         ],

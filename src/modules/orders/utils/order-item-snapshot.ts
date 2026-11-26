@@ -1,4 +1,4 @@
-import { Prisma } from '@prisma/client';
+import { PriceAdjustmentKind, Prisma } from '@prisma/client';
 import { OrderWithItems } from '../interfaces/order-with-items.interface.js';
 
 export function orderItemSnapshot(
@@ -12,6 +12,15 @@ export function orderItemSnapshot(
     quantity: decimalValue(item.quantity, 3),
     unitPrice: decimalValue(item.unitPrice, 2),
     customUnitPrice: decimalValue(item.customUnitPrice, 2),
+    discountTotal: decimalValue(item.discountTotal ?? 0, 2),
+    discountTitle:
+      'priceAdjustments' in item && Array.isArray(item.priceAdjustments)
+        ? (item.priceAdjustments.find(
+            (layer) =>
+              layer.kind === PriceAdjustmentKind.PROMOTION ||
+              layer.kind === PriceAdjustmentKind.CLIENT_DISCOUNT,
+          )?.title ?? null)
+        : null,
     lineTotal: decimalValue(item.lineTotal, 2),
     sellerStaffId: item.sellerStaffId ?? null,
     sellerName: item.sellerName ?? null,

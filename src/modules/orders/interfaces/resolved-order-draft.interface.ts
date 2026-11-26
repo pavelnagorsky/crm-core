@@ -9,6 +9,8 @@ export interface ResolvedOrderDraft {
   clientPhone: string | null;
   occurredAt: Date;
   note: string | null;
+  /** Promo code of a sale as entered, upper case. */
+  promoCode: string | null;
   items: Prisma.OrderItemCreateWithoutOrderInput[];
   totals: PriceTotals;
 }

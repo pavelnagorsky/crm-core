@@ -1,4 +1,4 @@
-import { ServicePriceChangeTarget } from './enums/service-price-change-target.enum.js';
+import { PriceChangeTarget } from './enums/price-change-target.enum.js';
 import { PricingPriceChangeEntry } from './interfaces/pricing-price-change-entry.interface.js';
 import { PriceBook } from './price-book.js';
 import {
@@ -11,9 +11,9 @@ import {
   sumBundle,
 } from './testing/pricing-snapshot.factory.js';
 
-const T = ServicePriceChangeTarget;
+const T = PriceChangeTarget;
 const item = (
-  target: ServicePriceChangeTarget,
+  target: PriceChangeTarget,
   price: number | null,
   refs: {
     serviceId?: string;
@@ -28,6 +28,7 @@ const item = (
   levelId: refs.levelId ?? null,
   staffId: refs.staffId ?? null,
   bundleId: refs.bundleId ?? null,
+  productLocationId: null,
 });
 const change = (
   id: string,

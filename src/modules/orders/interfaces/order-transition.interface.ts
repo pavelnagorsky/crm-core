@@ -6,4 +6,6 @@ export interface OrderTransition {
   changed: boolean;
   /** Payment recorded in the same operation, for the audit after commit. */
   payment?: PaymentChange | null;
+  /** Confirmed lines whose total at confirmation differs from the draft. */
+  repricedItemIds?: string[];
 }

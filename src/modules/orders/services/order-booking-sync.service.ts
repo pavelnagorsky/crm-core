@@ -27,9 +27,11 @@ import {
   orderLineAdjustments,
   sameAdjustments,
 } from '../rules/order-price-adjustment.rules.js';
+import { draftAdditionChanges } from '../utils/draft-addition-changes.js';
 import { orderItemSnapshot } from '../utils/order-item-snapshot.js';
 import { OrderDraftService } from './order-draft.service.js';
 import { OrderPersistenceService } from './order-persistence.service.js';
+import { OrderProductPricingService } from './order-product-pricing.service.js';
 import { ACTIVE_LOCATION_WHERE } from '../../../shared/database/active-business.where.js';
 
 @Injectable()
@@ -41,6 +43,7 @@ export class OrderBookingSyncService {
     private readonly persistence: OrderPersistenceService,
     private readonly eventEmitter: EventEmitter2,
     private readonly visits: BookingVisitsService,
+    private readonly productPricing: OrderProductPricingService,
   ) {}
 
   async removeDraftProductsForBooking(
@@ -265,6 +268,13 @@ export class OrderBookingSyncService {
         })),
       });
     }
+    // Products of a visit are priced in the context of the booking.
+    await this.productPricing.repriceDrafts(
+      tx,
+      booking.locationId,
+      locked.id,
+      this.drafts.requestChoices(items),
+    );
     const updated = await this.persistence.refreshTotals(
       tx,
       booking.locationId,
@@ -276,17 +286,49 @@ export class OrderBookingSyncService {
       auditPayload: {
         totalAmount: updated.totalAmount.toFixed(2),
         currency: updated.currency,
-        itemChanges: {
-          added: resolved.created.map((item) => orderItemSnapshot(item)),
-          removed: [],
-          changed: resolved.updated.map((item) => ({
-            orderItemId: item.id,
-            before: orderItemSnapshot(item.before),
-            after: orderItemSnapshot(item.after),
-          })),
-        },
+        itemChanges: draftAdditionChanges(resolved, updated),
       },
     };
+  }
+
+  /**
+   * Prices the draft products of the visit order again after a booking write that may change
+   * their context: start, client, promo code, services. Nothing to do without drafts.
+   */
+  async repriceBookingDrafts(
+    booking: Pick<BookingWithItems, 'id' | 'locationId'>,
+    tx: Prisma.TransactionClient,
+  ): Promise<void> {
+    const order = await tx.order.findUnique({
+      where: { bookingId: booking.id },
+      select: {
+        id: true,
+        locationId: true,
+        status: true,
+        items: {
+          where: {
+            type: OrderItemType.PRODUCT,
+            status: OrderItemStatus.DRAFT,
+          },
+          select: { id: true },
+        },
+      },
+    });
+    if (
+      !order ||
+      order.locationId !== booking.locationId ||
+      order.status !== OrderStatus.ACTIVE ||
+      order.items.length === 0
+    )
+      return;
+    await this.persistence.lockOrder(tx, order.id);
+    const repriced = await this.productPricing.repriceDrafts(
+      tx,
+      booking.locationId,
+      order.id,
+    );
+    if (repriced.repricedIds.length > 0)
+      await this.persistence.refreshTotals(tx, booking.locationId, order.id);
   }
 
   /** ORDER_UPDATED of draft products added to a visit order. Call after commit. */

@@ -14,6 +14,7 @@ import { TimeUtils } from '../../../shared/time/time.utils.js';
 import { PriceRuleStats } from '../interfaces/price-rule-stats.interface.js';
 import { PriceRuleStatus } from '../enums/price-rule-status.enum.js';
 import { PriceRuleView } from '../interfaces/price-rule-view.interface.js';
+import { PromotionSalesStats } from '../interfaces/promotion-sales-stats.interface.js';
 import { maskToWeekdays } from '../rules/price-rule-input.rules.js';
 import {
   buildPromotionConditions,
@@ -82,8 +83,18 @@ export class PriceRuleResponseDto {
   @ApiProperty({ type: String, isArray: true, example: ['2026-12-31'] })
   dates: string[];
 
-  @ApiProperty({ type: Boolean })
-  appliesToAll: boolean;
+  @ApiProperty({
+    type: Boolean,
+    description: 'Every service and bundle except the excluded service-kind targets.',
+  })
+  appliesToAllServices: boolean;
+
+  @ApiProperty({
+    type: Boolean,
+    description:
+      'Promotions: every product except the excluded product targets; always false for a surcharge.',
+  })
+  appliesToAllProducts: boolean;
 
   @ApiProperty({ type: () => PriceRuleTargetResponseDto, isArray: true })
   targets: PriceRuleTargetResponseDto[];
@@ -182,7 +193,8 @@ export class PriceRuleResponseDto {
 
   @ApiProperty({
     type: Number,
-    description: 'Live bookings with the promotion, all time ("34 of 100"); 0 for surcharges.',
+    description:
+      'Uses of the promotion, all time ("34 of 100"): live bookings and separate sales with it, each once; 0 for surcharges.',
   })
   usageCount: number;
 
@@ -199,9 +211,14 @@ export class PriceRuleResponseDto {
   @ApiProperty({ type: Date })
   updatedAt: Date;
 
+  /**
+   * `stats`: what the rule did to visits (bookings module); `sales`: a promotion's product
+   * lines of the same 30 days and its uses of all time, visits and sales (pricing reads them).
+   */
   static fromView(
     view: PriceRuleView,
     stats: PriceRuleStats | undefined,
+    sales?: PromotionSalesStats,
   ): PriceRuleResponseDto {
     const { rule } = view;
     const dto = new PriceRuleResponseDto();
@@ -223,12 +240,13 @@ export class PriceRuleResponseDto {
       PriceRuleIntervalResponseDto.fromMinutes,
     );
     dto.dates = rule.dates.map((item) => TimeUtils.dateOnlyStr(item.date));
-    dto.appliesToAll = rule.appliesToAll;
+    dto.appliesToAllServices = rule.appliesToAllServices;
+    dto.appliesToAllProducts = rule.appliesToAllProducts;
     dto.targets = view.targets.map(PriceRuleTargetResponseDto.fromView);
     dto.serviceCount = view.serviceCount;
     dto.status = view.status;
     dto.nextDate = view.nextDate;
-    dto.stats30d = PriceRuleStatsResponseDto.fromStats(rule.kind, stats);
+    dto.stats30d = PriceRuleStatsResponseDto.fromStats(rule.kind, stats, sales);
     dto.scenario = rule.scenario;
     dto.publicName = rule.publicName;
     dto.publicDescription = rule.publicDescription;
@@ -248,7 +266,9 @@ export class PriceRuleResponseDto {
     dto.minVisitTotal =
       rule.minVisitTotal === null ? null : MoneyUtils.format(rule.minVisitTotal);
     const promotion = rule.kind === PriceRuleKind.PROMOTION;
-    dto.usageCount = promotion ? (stats?.usageCount ?? 0) : 0;
+    dto.usageCount = promotion
+      ? (sales?.usageCount ?? stats?.usageCount ?? 0)
+      : 0;
     dto.conditions = promotion
       ? buildPromotionConditions(
           promotionConditionsInput(rule, {

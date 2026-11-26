@@ -13,6 +13,7 @@ export const orderInclude = {
           return: true,
         },
       },
+      priceAdjustments: { orderBy: { sortOrder: 'asc' } },
     },
     orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
   },

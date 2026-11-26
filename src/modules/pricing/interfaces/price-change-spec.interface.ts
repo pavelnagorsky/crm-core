@@ -1,4 +1,4 @@
-import { ServicePriceChangeMode } from '../enums/service-price-change-mode.enum.js';
+import { PriceChangeMode } from '../enums/price-change-mode.enum.js';
 import { PriceChangeInclude } from './price-change-include.interface.js';
 
 /** A parsed price change rule. Money is in minor units, a percent in basis points. */
@@ -7,7 +7,7 @@ export interface PriceChangeSpec {
   serviceIds: string[];
   categoryIds: string[];
   bundleIds: string[];
-  mode: ServicePriceChangeMode;
+  mode: PriceChangeMode;
   /** PERCENT: signed basis points; AMOUNT: signed minor units; SET: new price, null: none. */
   value: number | null;
   /** Rounding step in minor units; 1 = none. */

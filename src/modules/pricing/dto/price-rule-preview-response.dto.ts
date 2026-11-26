@@ -6,6 +6,7 @@ import { PriceRulePreviewExampleDto } from './price-rule-preview-example.dto.js'
 import { PriceRulePreviewReplacedDto } from './price-rule-preview-replaced.dto.js';
 import { PromotionMatchesDto } from './promotion-matches.dto.js';
 import { PromotionOverlapDto } from './promotion-overlap.dto.js';
+import { PromotionProductExampleDto } from './promotion-product-example.dto.js';
 
 export class PriceRulePreviewResponseDto {
   @ApiProperty({ enum: PriceRuleStatus, enumName: 'PriceRuleStatus' })
@@ -56,10 +57,37 @@ export class PriceRulePreviewResponseDto {
   totalServiceCount: number;
 
   @ApiProperty({
+    type: Number,
+    description: 'Promotion: products of the location it reaches; 0 for a surcharge.',
+  })
+  productCount: number;
+
+  @ApiProperty({
+    type: Number,
+    description: 'Products the location sells (retail price set, for sale).',
+  })
+  totalProductCount: number;
+
+  @ApiProperty({
+    type: () => PromotionProductExampleDto,
+    isArray: true,
+    description:
+      'Promotion: up to 5 reached products for one unit at nextDate, below the purchase cost first, then by name; empty without nextDate.',
+  })
+  productExamples: PromotionProductExampleDto[];
+
+  @ApiProperty({
+    type: Number,
+    description:
+      'Promotion: reached products whose price after the discount is below the last purchase cost.',
+  })
+  belowCostCount: number;
+
+  @ApiProperty({
     type: () => PromotionOverlapDto,
     isArray: true,
     description:
-      'Promotion: enabled promotions that meet it on a service, channel, staff member and time.',
+      'Promotion: enabled promotions that meet it on a service or product, channel, staff member and time.',
   })
   overlaps: PromotionOverlapDto[];
 
@@ -84,6 +112,12 @@ export class PriceRulePreviewResponseDto {
     dto.conditions = preview.conditions;
     dto.serviceCount = preview.serviceCount;
     dto.totalServiceCount = preview.totalServiceCount;
+    dto.productCount = preview.productCount;
+    dto.totalProductCount = preview.totalProductCount;
+    dto.productExamples = preview.productExamples.map(
+      PromotionProductExampleDto.fromExample,
+    );
+    dto.belowCostCount = preview.belowCostCount;
     dto.overlaps = preview.overlaps.map(PromotionOverlapDto.fromOverlap);
     dto.matches30d =
       preview.matches30d === null

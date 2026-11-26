@@ -825,9 +825,11 @@ export class BookingsAggregatesService {
   }
 
   /**
-   * Personal discount use by client (docs/pricing-stage4-api.md): live (not deleted, not
-   * cancelled) bookings with a CLIENT_DISCOUNT layer, all time, in active locations. A
-   * client without such bookings is missing from the map.
+   * Personal discount use by client (docs/pricing-stage7-api.md): live (not deleted, not
+   * cancelled) bookings with a CLIENT_DISCOUNT on a service item or on a confirmed product
+   * line of their order (a visit is counted once), and standalone sales with such a line;
+   * all time, in active locations, returns not deducted. A client without any is missing
+   * from the map.
    */
   async clientDiscountStats(
     clientIds: readonly string[],
@@ -845,31 +847,72 @@ export class BookingsAggregatesService {
   private async clientDiscountStatsChunk(
     clientIds: readonly string[],
   ): Promise<Map<string, ClientDiscountStats>> {
-    const rows = await this.db.$queryRaw<
+    const bookingRows = await this.db.$queryRaw<
       Array<{ clientId: string; bookingsCount: bigint; amount: string }>
     >(Prisma.sql`
-      SELECT b."clientId" AS "clientId",
-             COUNT(DISTINCT b."id") AS "bookingsCount",
-             COALESCE(-SUM(a."amount"), 0)::text AS "amount"
-      FROM "Booking" b
-      JOIN "BookingItem" i ON i."bookingId" = b."id"
-      JOIN "BookingItemPriceAdjustment" a ON a."bookingItemId" = i."id"
-      WHERE b."clientId" IN (${Prisma.join([...clientIds])})
-        AND b."deletedAt" IS NULL
-        AND b."status"::text <> ${BookingStatus.CANCELLED}
-        AND a."kind"::text = 'CLIENT_DISCOUNT'
-        AND ${activeLocationSql(Prisma.sql`b."locationId"`)}
-      GROUP BY b."clientId"
+      SELECT x."clientId" AS "clientId",
+             COUNT(DISTINCT x."bookingId") AS "bookingsCount",
+             COALESCE(-SUM(x."amount"), 0)::text AS "amount"
+      FROM (
+        SELECT b."clientId" AS "clientId", b."id" AS "bookingId", a."amount" AS "amount"
+        FROM "Booking" b
+        JOIN "BookingItem" i ON i."bookingId" = b."id"
+        JOIN "BookingItemPriceAdjustment" a ON a."bookingItemId" = i."id"
+        WHERE b."clientId" IN (${Prisma.join([...clientIds])})
+          AND b."deletedAt" IS NULL
+          AND b."status"::text <> ${BookingStatus.CANCELLED}
+          AND a."kind"::text = 'CLIENT_DISCOUNT'
+          AND ${activeLocationSql(Prisma.sql`b."locationId"`)}
+        UNION ALL
+        SELECT b."clientId", b."id", a."amount"
+        FROM "Booking" b
+        JOIN "Order" o ON o."bookingId" = b."id" AND o."status"::text = 'ACTIVE'
+        JOIN "OrderItem" i ON i."orderId" = o."id" AND i."status"::text = 'CONFIRMED'
+          -- Service lines of a completed visit copy the booking layers counted above.
+          AND i."type"::text = 'PRODUCT'
+        JOIN "OrderItemPriceAdjustment" a ON a."orderItemId" = i."id"
+        WHERE b."clientId" IN (${Prisma.join([...clientIds])})
+          AND b."deletedAt" IS NULL
+          AND b."status"::text <> ${BookingStatus.CANCELLED}
+          AND a."kind"::text = 'CLIENT_DISCOUNT'
+          AND ${activeLocationSql(Prisma.sql`b."locationId"`)}
+      ) x
+      GROUP BY x."clientId"
     `);
-    return new Map(
-      rows.map((row) => [
-        row.clientId,
-        {
-          bookingsCount: Number(row.bookingsCount),
-          amount: new Prisma.Decimal(row.amount),
-        },
-      ]),
-    );
+    // Standalone sales only: product lines of a visit order are counted with its booking above.
+    const orderRows = await this.db.$queryRaw<
+      Array<{ clientId: string; salesCount: bigint; amount: string }>
+    >(Prisma.sql`
+      SELECT o."clientId" AS "clientId",
+             COUNT(DISTINCT o."id") AS "salesCount",
+             COALESCE(-SUM(a."amount"), 0)::text AS "amount"
+      FROM "Order" o
+      JOIN "OrderItem" i ON i."orderId" = o."id"
+      JOIN "OrderItemPriceAdjustment" a ON a."orderItemId" = i."id"
+      WHERE o."clientId" IN (${Prisma.join([...clientIds])})
+        AND o."bookingId" IS NULL
+        AND o."status"::text = 'ACTIVE'
+        AND i."status"::text = 'CONFIRMED'
+        AND a."kind"::text = 'CLIENT_DISCOUNT'
+        AND ${activeLocationSql(Prisma.sql`o."locationId"`)}
+      GROUP BY o."clientId"
+    `);
+    const result = new Map<string, ClientDiscountStats>();
+    for (const row of bookingRows)
+      result.set(row.clientId, {
+        bookingsCount: Number(row.bookingsCount),
+        salesCount: 0,
+        amount: new Prisma.Decimal(row.amount),
+      });
+    for (const row of orderRows) {
+      const current = result.get(row.clientId);
+      result.set(row.clientId, {
+        bookingsCount: current?.bookingsCount ?? 0,
+        salesCount: Number(row.salesCount),
+        amount: (current?.amount ?? new Prisma.Decimal(0)).plus(row.amount),
+      });
+    }
+    return result;
   }
 
   private activeLocationScope(locationIds: string[]): Prisma.Sql {

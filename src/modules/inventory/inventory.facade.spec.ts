@@ -17,6 +17,7 @@ import { InventoryBalanceLockService } from './services/inventory-balance-lock.s
 import { InventoryDocumentDraftService } from './services/inventory-document-draft.service.js';
 import { InventoryDocumentMovementService } from './services/inventory-document-movement.service.js';
 import { InventoryDocumentService } from './services/inventory-document.service.js';
+import { InventoryPurchaseCostService } from './services/inventory-purchase-cost.service.js';
 import { InventoryReadService } from './services/inventory-read.service.js';
 import { InventorySaleReversalService } from './services/inventory-sale-reversal.service.js';
 import { InventorySalesService } from './services/inventory-sales.service.js';
@@ -967,5 +968,6 @@ function createInventoryService(
     ),
     new InventoryReadService(db, products, new InventoryStockReadService(db)),
     new InventorySalesService(compute, balanceLocks, saleReversals),
+    new InventoryPurchaseCostService(db),
   );
 }

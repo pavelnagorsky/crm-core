@@ -11,6 +11,7 @@ import {
   MaxLength,
   ValidateNested,
 } from 'class-validator';
+import { IsPrice } from '../../../shared/decorators/is-price.decorator.js';
 import { TrimString } from '../../../shared/transforms/trim-string.transform.js';
 import { PaymentDetailsDto } from '../../payments/dto/payment-details.dto.js';
 
@@ -21,6 +22,13 @@ export class ConfirmOrderItemsDto {
   @ArrayUnique()
   @IsUUID(undefined, { each: true })
   itemIds: string[];
+
+  /**
+   * Σ lineTotal of the confirmed lines the user saw (order or POST orders/pricing). The lines
+   * are priced again with fresh data; a different total is 409 PRICE_CHANGED. Part of the hash.
+   */
+  @IsPrice()
+  expectedTotal: string;
 
   @ApiProperty({
     type: String,

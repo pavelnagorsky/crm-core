@@ -21,6 +21,8 @@ import { PromoCodeStatus } from '../pricing/engine/enums/promo-code-status.enum.
 import { PromotionChannel } from '../pricing/engine/enums/promotion-channel.enum.js';
 import { LineDiscountChoice } from '../pricing/engine/interfaces/line-discount-choice.interface.js';
 import { PromoCodeResult } from '../pricing/engine/interfaces/promo-code-result.interface.js';
+import { mergePromoCodeResults } from '../pricing/engine/promo-code-merge.js';
+import { ServicePriceAdjustment } from '../pricing/interfaces/service-price-adjustment.interface.js';
 import { BookingPricingRequestDto } from './dto/booking-pricing-request.dto.js';
 import { CreateBookingDto } from './dto/create-booking.dto.js';
 import { ManualBookingItemDto } from './dto/manual-booking-item.dto.js';
@@ -51,7 +53,7 @@ import {
   NO_CLIENT_NOTICE,
 } from './rules/booking-client-notice.rules.js';
 import { BookingEventsService } from './services/booking-events.service.js';
-import { BookingPricingContextService } from './services/booking-pricing-context.service.js';
+import { PricingContextService } from '../pricing/services/pricing-context.service.js';
 import { BookingReservationService } from './services/booking-reservation.service.js';
 import { BookingSchedulingService } from './services/booking-scheduling.service.js';
 import { BookingSelectionService } from './services/booking-selection.service.js';
@@ -75,7 +77,7 @@ export class BookingCreateFacade {
     private readonly billing: BillingFacade,
     private readonly bookingPayment: BookingPaymentService,
     private readonly orders: OrdersFacade,
-    private readonly pricingContext: BookingPricingContextService,
+    private readonly pricingContext: PricingContextService,
   ) {}
 
   async createPublicBooking(
@@ -110,7 +112,15 @@ export class BookingCreateFacade {
       : {
           // One transaction, so the limited promotions stay locked until the booking is stored.
           ...(await this.reservations.createInTransaction(locationId, (tx) =>
-            this.create(locationId, attribution, traffic, null, dto, undefined, tx),
+            this.create(
+              locationId,
+              attribution,
+              traffic,
+              null,
+              dto,
+              undefined,
+              tx,
+            ),
           )),
           created: true,
         };
@@ -141,6 +151,7 @@ export class BookingCreateFacade {
     dto: ManualCreateBookingDto,
     actor: AuditActor,
     ownStaffId?: string,
+    canOverridePrice = false,
   ): Promise<BookingWithItems> {
     if (dto.anonymous === true && dto.clientId)
       throw new AppException(
@@ -154,6 +165,7 @@ export class BookingCreateFacade {
         payment: dto.payment,
         confirmAllDraftProducts:
           dto.confirmProducts === true && (dto.products?.length ?? 0) > 0,
+        expectedProductTotal: dto.expectedProductTotal,
       },
       false,
     );
@@ -172,6 +184,7 @@ export class BookingCreateFacade {
         undefined,
         undefined,
         paymentPlan,
+        canOverridePrice,
       );
     this.logger.log(
       `booking created (manual): id=${booking.id} locationId=${locationId} channel=${booking.channel} items=${booking.items.length} bundleId=${booking.bundleId ?? '-'} actor=${actor.name}`,
@@ -201,6 +214,7 @@ export class BookingCreateFacade {
     tx?: Prisma.TransactionClient,
     request?: BookingCreationRequest,
     paymentPlan: VisitPaymentPlan | null = null,
+    canOverridePrice = false,
   ): Promise<BookingCreationResult> {
     const location = await this.locationService.findById(locationId);
     if (!location)
@@ -280,17 +294,27 @@ export class BookingCreateFacade {
       allowConflicts: isCustomTime,
       // A master booking for themselves takes the services they can do; colleagues the rest.
       preferredStaffId: ownStaffId,
-      // The staff member the guest saw with the slot; online requests only.
-      preferredStaffIds: internal
-        ? undefined
-        : (dto as PublicCreateBookingDto).preferredStaffIds,
+      // The staff member the guest saw with the slot, or the booking dialog showed.
+      preferredStaffIds: (
+        dto as PublicCreateBookingDto | ManualCreateBookingDto
+      ).preferredStaffIds,
       // Read from the fresh location, so a rule change is applied to the very next booking.
       staffRule: location.anyStaffRule,
       pricingContext,
     });
     const items = scheduled.items;
-    // The guest agreed to a total; a price edited meanwhile must be confirmed again.
-    if (!internal) this.assertExpectedTotal(dto, items, scheduled.promoCode);
+    // The guest (or the administrator, who sends the total of the dialog) agreed to a total;
+    // a price edited meanwhile or another staff member must be confirmed again.
+    if (!internal || ('expectedTotal' in dto && dto.expectedTotal != null))
+      this.assertExpectedTotal(dto, items, scheduled.promoCode);
+    // The booking dialog saves the staff it showed: another one is confirmed again too.
+    if (internal)
+      this.assertPreferredStaff(
+        (dto as ManualCreateBookingDto).preferredStaffIds,
+        items,
+        dto,
+        scheduled.promoCode,
+      );
     if (ownStaffId && !items.some((item) => item.staffId === ownStaffId))
       throw new AppException(
         ErrorCode.BOOKING_OWN_STAFF_REQUIRED,
@@ -347,6 +371,37 @@ export class BookingCreateFacade {
         )
       : NO_CLIENT_NOTICE;
 
+    const products = this.manualProducts(dto, attribution.channel);
+    // Products are priced in the context of the new booking before it is written: a promo
+    // code that applies only to them is kept with the booking (docs/pricing-stage7-api.md).
+    const productQuote =
+      products.length > 0
+        ? (
+            await this.orders.priceVisitProducts(
+              locationId,
+              { brandId: location.brandId, timezone: location.timezone },
+              {
+                bookingId: null,
+                startAt: envelopeStart,
+                bookedAt: new Date(),
+                channel: PromotionChannel.ADMIN,
+                clientId: client.id,
+                promoCode: dto.promoCode ?? null,
+                servicesListTotal: items.reduce(
+                  (sum, item) => sum.plus(item.listPrice),
+                  new Prisma.Decimal(0),
+                ),
+              },
+              products,
+              ReadConsistency.FRESH,
+              { canReadPurchaseCost: false },
+            )
+          ).quote
+        : null;
+    const promoCode = mergePromoCodeResults(
+      scheduled.promoCode,
+      productQuote?.promoCode ?? null,
+    );
     const { booking, productsAdded, payment } = await this.reservations.reserve(
       {
         locationId,
@@ -366,28 +421,27 @@ export class BookingCreateFacade {
         clientNotice,
         notes: dto.notes ?? null,
         internalNotes: this.manualInternalNotes(dto, attribution.channel),
-        products: this.manualProducts(dto, attribution.channel),
+        products,
+        canOverridePrice,
         actor,
         request,
         paymentPlan,
         promoCode:
-          scheduled.promoCode?.status === PromoCodeStatus.APPLIED
-            ? scheduled.promoCode.code
-            : null,
+          promoCode?.status === PromoCodeStatus.APPLIED ? promoCode.code : null,
         limitGuard: internal
           ? (guardTx) =>
               this.pricingContext.assertLimitsHeld(
                 guardTx,
                 locationId,
-                items.flatMap((item) =>
-                  item.priceAdjustments
-                    .filter(
-                      (adjustment) =>
-                        (adjustment.kind as string) ===
-                        PriceAdjustmentKind.PROMOTION,
-                    )
-                    .map((adjustment) => adjustment.ruleId),
-                ),
+                // Services and products together (docs/pricing-stage7-api.md).
+                [
+                  ...items.flatMap((item) =>
+                    this.promotionRuleIds(item.priceAdjustments),
+                  ),
+                  ...(productQuote?.lines ?? []).flatMap((line) =>
+                    this.promotionRuleIds(line.adjustments),
+                  ),
+                ],
                 client.id,
                 envelopeStart,
               )
@@ -415,8 +469,9 @@ export class BookingCreateFacade {
   }
 
   /**
-   * An online guest books at the total they saw. If the recalculated total differs, the
-   * transaction rolls back and the client retries with the new total (409 PRICE_CHANGED).
+   * An online guest (or the booking dialog, with expectedTotal) books at the total they saw.
+   * If the recalculated total differs, nothing is created and the client retries with the
+   * new total (409 PRICE_CHANGED).
    */
   private assertExpectedTotal(
     dto: CreateBookingDto,
@@ -427,13 +482,58 @@ export class BookingCreateFacade {
       'expectedTotal' in dto && typeof dto.expectedTotal === 'string'
         ? dto.expectedTotal
         : null;
+    const recount = this.recount(expected, items, promoCode);
+    if (expected !== null && new Prisma.Decimal(recount.total).equals(expected))
+      return;
+    throw new AppException(
+      ErrorCode.PRICE_CHANGED,
+      HttpStatus.CONFLICT,
+      recount,
+    );
+  }
+
+  /**
+   * The booking dialog sends the staff it showed (preferredStaffIds). One of them was taken
+   * meanwhile and the rule gave another at the same total: 409 BOOKING_STAFF_CHANGED with the
+   * recounted team, nothing is created; the dialog shows the new staff and saves again. A
+   * different total is PRICE_CHANGED first.
+   */
+  private assertPreferredStaff(
+    preferredStaffIds: string[] | undefined,
+    items: ResolvedBookingItem[],
+    dto: CreateBookingDto,
+    promoCode: PromoCodeResult | null,
+  ): void {
+    if (!preferredStaffIds?.length) return;
+    const changed = items.some(
+      (item, index) =>
+        preferredStaffIds[index] !== undefined &&
+        preferredStaffIds[index] !== item.staffId,
+    );
+    if (!changed) return;
+    const expected =
+      'expectedTotal' in dto && typeof dto.expectedTotal === 'string'
+        ? dto.expectedTotal
+        : null;
+    throw new AppException(
+      ErrorCode.BOOKING_STAFF_CHANGED,
+      HttpStatus.CONFLICT,
+      this.recount(expected, items, promoCode),
+    );
+  }
+
+  /** Payload of PRICE_CHANGED and BOOKING_STAFF_CHANGED: the recounted services. */
+  private recount(
+    expectedTotal: string | null,
+    items: ResolvedBookingItem[],
+    promoCode: PromoCodeResult | null,
+  ) {
     const total = items.reduce(
       (sum, item) => sum.plus(item.customPrice ?? item.chargedPrice),
       new Prisma.Decimal(0),
     );
-    if (expected !== null && total.equals(expected)) return;
-    throw new AppException(ErrorCode.PRICE_CHANGED, HttpStatus.CONFLICT, {
-      expectedTotal: expected,
+    return {
+      expectedTotal,
       total: MoneyUtils.format(total),
       items: items.map((item) => ({
         serviceId: item.serviceId,
@@ -443,7 +543,18 @@ export class BookingCreateFacade {
         price: MoneyUtils.format(item.customPrice ?? item.chargedPrice),
       })),
       promoCode,
-    });
+    };
+  }
+
+  private promotionRuleIds(
+    adjustments: readonly Pick<ServicePriceAdjustment, 'kind' | 'ruleId'>[],
+  ): (string | null)[] {
+    return adjustments
+      .filter(
+        (adjustment) =>
+          (adjustment.kind as string) === PriceAdjustmentKind.PROMOTION,
+      )
+      .map((adjustment) => adjustment.ruleId);
   }
 
   /** Discounts picked per line in the booking dialog; a missing one is AUTO. */

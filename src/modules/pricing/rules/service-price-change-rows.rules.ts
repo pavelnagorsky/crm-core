@@ -1,4 +1,4 @@
-import { ServicePriceChangeTarget } from '@prisma/client';
+import { PriceChangeTarget } from '@prisma/client';
 import { PRICE_MAX_MINOR } from '../constants/price-level-fill.constants.js';
 import {
   baseKey,
@@ -8,7 +8,7 @@ import {
   staffKey,
 } from '../engine/price-timeline.js';
 import { ServicePriceChangeGroupKind } from '../enums/service-price-change-group-kind.enum.js';
-import { ServicePriceChangeMode } from '../enums/service-price-change-mode.enum.js';
+import { PriceChangeMode } from '../enums/price-change-mode.enum.js';
 import { PriceChangeCounts } from '../interfaces/price-change-counts.interface.js';
 import { PriceChangeFacts } from '../interfaces/price-change-facts.interface.js';
 import { PriceChangeGroup } from '../interfaces/price-change-group.interface.js';
@@ -48,28 +48,29 @@ export function selectPriceChangeScope(
 }
 
 /**
- * The new price of one row. PERCENT and AMOUNT adjust every row; SET gives a base or bundle
- * price the value and leaves level and personal prices to be edited by hand. Invalid: past
+ * The new price of one row. PERCENT and AMOUNT adjust every row; SET gives a base, bundle or
+ * product price the value and leaves level and personal prices to be edited by hand. Invalid: past
  * the column maximum, or zero when the price was above zero.
  */
 export function priceChangeAfter(
-  target: ServicePriceChangeTarget,
+  target: PriceChangeTarget,
   before: number,
   spec: Pick<PriceChangeSpec, 'mode' | 'value' | 'step'>,
 ): { after: number; invalid: boolean } {
   let after = before;
   let overflow = false;
-  if (spec.mode === ServicePriceChangeMode.SET) {
+  if (spec.mode === PriceChangeMode.SET) {
     if (
       spec.value !== null &&
-      (target === ServicePriceChangeTarget.BASE ||
-        target === ServicePriceChangeTarget.BUNDLE)
+      (target === PriceChangeTarget.BASE ||
+        target === PriceChangeTarget.BUNDLE ||
+        target === PriceChangeTarget.PRODUCT)
     )
       after = spec.value;
   } else if (spec.value !== null) {
     ({ price: after, overflow } = adjustedPrice(
       before,
-      spec.mode === ServicePriceChangeMode.PERCENT
+      spec.mode === PriceChangeMode.PERCENT
         ? { percentBp: spec.value }
         : { amount: spec.value },
       spec.step,
@@ -139,7 +140,7 @@ export function buildPriceChangeGroups(
         makeRow(
           {
             key: baseKey(service.id),
-            targetType: ServicePriceChangeTarget.BASE,
+            targetType: PriceChangeTarget.BASE,
             ...NO_LEVEL,
             ...NO_STAFF,
           },
@@ -160,7 +161,7 @@ export function buildPriceChangeGroups(
           makeRow(
             {
               key,
-              targetType: ServicePriceChangeTarget.LEVEL,
+              targetType: PriceChangeTarget.LEVEL,
               levelId: level.id,
               levelName: level.name,
               ...NO_STAFF,
@@ -183,7 +184,7 @@ export function buildPriceChangeGroups(
           makeRow(
             {
               key,
-              targetType: ServicePriceChangeTarget.STAFF,
+              targetType: PriceChangeTarget.STAFF,
               ...NO_LEVEL,
               staffId: member.staffId,
               staffName: member.name,
@@ -224,7 +225,7 @@ export function buildPriceChangeGroups(
           makeRow(
             {
               key,
-              targetType: ServicePriceChangeTarget.BUNDLE,
+              targetType: PriceChangeTarget.BUNDLE,
               ...NO_LEVEL,
               ...NO_STAFF,
             },

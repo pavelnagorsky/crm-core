@@ -167,7 +167,26 @@ function normalizeValue(
   return positiveMoney(raw, max, 'value');
 }
 
-function normalizeTargets(input: PriceRuleInputDto): PriceRuleTargetRef[] {
+const PRODUCT_TARGET_TYPES: ReadonlySet<PriceRuleTargetType> = new Set([
+  PriceRuleTargetType.PRODUCT,
+  PriceRuleTargetType.PRODUCT_CATEGORY,
+]);
+
+/** A product or a product category target (the rest are service-kind targets). */
+export function isProductTarget(type: PriceRuleTargetType): boolean {
+  return PRODUCT_TARGET_TYPES.has(type);
+}
+
+/**
+ * Targets by kind (docs/pricing-stage7-api.md): with "all services" the service-kind targets
+ * are only exclusions, otherwise only inclusions; the same for products with "all products".
+ * Something must be included: an "all" flag or an included target. A surcharge never has
+ * product targets or "all products".
+ */
+function normalizeTargets(
+  input: PriceRuleInputDto,
+  kind: PriceRuleKind,
+): PriceRuleTargetRef[] {
   const targets = (input.targets ?? []).map((target) => ({
     type: target.type as PriceRuleTargetType,
     id: target.id,
@@ -176,15 +195,25 @@ function normalizeTargets(input: PriceRuleInputDto): PriceRuleTargetRef[] {
   if (targets.length > PRICE_RULE_MAX_TARGETS) invalid('targets');
   const keys = new Set(targets.map((target) => `${target.type}:${target.id}`));
   if (keys.size !== targets.length) invalid('targets');
-  if (input.appliesToAll) {
-    // Applies to all: the list holds only exclusions.
-    if (targets.some((target) => !target.excluded)) invalid('targets');
-  } else if (
-    targets.length === 0 ||
-    targets.some((target) => target.excluded)
-  ) {
+  const allProducts = input.appliesToAllProducts === true;
+  if (
+    kind !== PriceRuleKind.PROMOTION &&
+    (allProducts || targets.some((target) => isProductTarget(target.type)))
+  )
     invalid('targets');
+  for (const target of targets) {
+    const all = isProductTarget(target.type)
+      ? allProducts
+      : input.appliesToAllServices;
+    // Applies to all of a kind: that kind lists only exclusions; otherwise only inclusions.
+    if (target.excluded !== all) invalid('targets');
   }
+  if (
+    !input.appliesToAllServices &&
+    !allProducts &&
+    !targets.some((target) => !target.excluded)
+  )
+    invalid('targets');
   return targets;
 }
 
@@ -344,7 +373,7 @@ export function normalizePriceRuleInput(
   const hasDates = (input.dates ?? []).length > 0;
   const weekdaysMask = normalizeWeekdays(input.weekdays);
   const intervals = normalizeIntervals(input.intervals);
-  const targets = normalizeTargets(input);
+  const targets = normalizeTargets(input, kind);
 
   let visitFrom: string | null = null;
   let visitTo: string | null = null;
@@ -397,7 +426,8 @@ export function normalizePriceRuleInput(
     weekdaysMask,
     intervals,
     dates: input.scheduleType === PriceScheduleType.HOLIDAYS ? dates : [],
-    appliesToAll: input.appliesToAll,
+    appliesToAllServices: input.appliesToAllServices,
+    appliesToAllProducts: isPromotion && input.appliesToAllProducts === true,
     targets,
     promotion: isPromotion ? normalizePromotion(input) : null,
   };

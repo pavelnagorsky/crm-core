@@ -1,6 +1,12 @@
 import { ApiProperty } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
-import { IsOptional, IsUUID, ValidateNested } from 'class-validator';
+import {
+  IsDefined,
+  IsObject,
+  IsOptional,
+  IsUUID,
+  ValidateNested,
+} from 'class-validator';
 import { PriceRuleInputDto } from './price-rule-input.dto.js';
 
 export class PriceRulePreviewRequestDto {
@@ -8,6 +14,8 @@ export class PriceRulePreviewRequestDto {
     type: () => PriceRuleInputDto,
     description: 'The rule as the form holds it; validated like a save.',
   })
+  @IsDefined()
+  @IsObject()
   @ValidateNested()
   @Type(() => PriceRuleInputDto)
   rule: PriceRuleInputDto;

@@ -46,6 +46,20 @@ export class BookingSetupBundleDto {
   })
   priceTo: string;
 
+  @ApiPrice({
+    nullable: true,
+    description:
+      'Cabinet setup only (GET /locations/{locationId}/booking-setup), null in the public one: price-list price on the location today, no surcharges, no promotions. FIXED bundle: the package price. SUM bundle (parallel or sequential): the sum of the lowest price-list prices of its services among the staff who perform them',
+  })
+  listPriceFrom: string | null;
+
+  @ApiPrice({
+    nullable: true,
+    description:
+      'Cabinet setup only, null in the public one. FIXED bundle: the package price. SUM bundle: the sum of the highest price-list prices of its services among the staff who perform them',
+  })
+  listPriceTo: string | null;
+
   @ApiProperty({ type: Number })
   durationMinutes: number;
 
@@ -81,6 +95,12 @@ export class BookingSetupBundleDto {
     );
     dto.priceFrom = MoneyUtils.format(range.priceFrom);
     dto.priceTo = MoneyUtils.format(range.priceTo);
+    dto.listPriceFrom = range.listPriceFrom
+      ? MoneyUtils.format(range.listPriceFrom)
+      : null;
+    dto.listPriceTo = range.listPriceTo
+      ? MoneyUtils.format(range.listPriceTo)
+      : null;
     dto.promotion = BookingPromotionLabelDto.fromLabel(range.promotion);
     dto.durationMinutes = BundleMetrics.durationMinutes(bundle);
     dto.executionMode = bundle.executionMode as BookingExecutionMode;

@@ -21,7 +21,10 @@ export interface NormalizedPriceRule {
   weekdaysMask: number;
   intervals: PriceRuleIntervalMinutes[];
   dates: string[];
-  appliesToAll: boolean;
+  /** Every service and bundle except the excluded service-kind targets. */
+  appliesToAllServices: boolean;
+  /** Every product except the excluded product-kind targets; promotions only. */
+  appliesToAllProducts: boolean;
   targets: PriceRuleTargetRef[];
   /** Set for PROMOTION, null for SURCHARGE. */
   promotion: NormalizedPromotion | null;

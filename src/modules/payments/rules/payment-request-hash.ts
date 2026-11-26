@@ -20,17 +20,24 @@ export function paymentIntent(details: PaymentIntentInput | null | undefined) {
   };
 }
 
-/** Hash of a payment of a booking or an order, with the product items it confirms. */
+/**
+ * Hash of a payment of a booking or an order, with the product items it confirms and the
+ * product total the caller saw for them.
+ */
 export function paymentRequestHash(
   target: { bookingId: string } | { orderId: string },
   details: PaymentIntentInput,
   confirmProductItemIds: readonly string[] = [],
+  expectedProductTotal: string | null = null,
 ): string {
   return sha256({
     type: 'PAYMENT',
     target,
     payment: paymentIntent(details),
     confirmProductItemIds: [...confirmProductItemIds].sort(),
+    ...(expectedProductTotal !== null && {
+      expectedProductTotal: MoneyUtils.format(expectedProductTotal),
+    }),
   });
 }
 

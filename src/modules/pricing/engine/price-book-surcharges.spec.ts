@@ -236,9 +236,9 @@ describe('PriceBook: surcharges (docs/pricing-stage3-api.md)', () => {
       ['all but this service', [[SERVICE, 'cut', true]], true, 6000],
       ['all but this category', [[SERVICE_CATEGORY, 'hair', true]], true, 6000],
       ['all but another service', [[SERVICE, 'color', true]], true, 6600],
-    ] as const)('targets: %s', (_name, targets, appliesToAll, listPrice) => {
+    ] as const)('targets: %s', (_name, targets, appliesToAllServices, listPrice) => {
       const rule = surchargeRule('r', {
-        appliesToAll,
+        appliesToAllServices,
         targets: targets.map(([type, id, excluded]) => ({ type, id, excluded })),
       });
       expect(line([rule], 'cut').listPrice).toBe(listPrice);
@@ -252,7 +252,7 @@ describe('PriceBook: surcharges (docs/pricing-stage3-api.md)', () => {
       ['not exclusive holiday adds to the others', [plus10, holidayExtra], NEW_YEAR_EVE, 7100],
       [
         'exclusive holiday for another service does not cancel',
-        [plus10, { ...holiday, appliesToAll: false, targets: [{ type: SERVICE, id: 'color', excluded: false }] }],
+        [plus10, { ...holiday, appliesToAllServices: false, targets: [{ type: SERVICE, id: 'color', excluded: false }] }],
         NEW_YEAR_EVE,
         6600,
       ],
@@ -281,7 +281,7 @@ describe('PriceBook: surcharges (docs/pricing-stage3-api.md)', () => {
 
     it('SUM bundle line matches by its bundle target', () => {
       const rule = surchargeRule('r', {
-        appliesToAll: false,
+        appliesToAllServices: false,
         targets: [{ type: BUNDLE, id: 'sum-bundle', excluded: false }],
       });
       const quote = book([rule]).quote({
@@ -298,7 +298,7 @@ describe('PriceBook: surcharges (docs/pricing-stage3-api.md)', () => {
         'bundle target',
         surchargeRule('r', {
           value: 1500,
-          appliesToAll: false,
+          appliesToAllServices: false,
           targets: [{ type: BUNDLE, id: 'fixed-bundle', excluded: false }],
         }),
         13800,
@@ -306,7 +306,7 @@ describe('PriceBook: surcharges (docs/pricing-stage3-api.md)', () => {
       [
         'service target does not reach a FIXED bundle',
         surchargeRule('r', {
-          appliesToAll: false,
+          appliesToAllServices: false,
           targets: [{ type: SERVICE, id: 'cut', excluded: false }],
         }),
         12000,
@@ -314,7 +314,7 @@ describe('PriceBook: surcharges (docs/pricing-stage3-api.md)', () => {
       [
         'category target does not reach a FIXED bundle',
         surchargeRule('r', {
-          appliesToAll: false,
+          appliesToAllServices: false,
           targets: [{ type: SERVICE_CATEGORY, id: 'hair', excluded: false }],
         }),
         12000,
@@ -390,7 +390,7 @@ describe('PriceBook: surcharges (docs/pricing-stage3-api.md)', () => {
         dates: [NEW_YEAR_EVE],
       }),
       surchargeRule('not-targeted', {
-        appliesToAll: false,
+        appliesToAllServices: false,
         targets: [{ type: SERVICE, id: 'color', excluded: false }],
       }),
       surchargeRule('excluded', {
@@ -430,7 +430,7 @@ describe('PriceBook: surcharges (docs/pricing-stage3-api.md)', () => {
 
     it('a service target does not reach a FIXED bundle', () => {
       const rule = surchargeRule('r', {
-        appliesToAll: false,
+        appliesToAllServices: false,
         targets: [{ type: SERVICE, id: 'cut', excluded: false }],
       });
       const { notApplied } = book([rule]).explain({

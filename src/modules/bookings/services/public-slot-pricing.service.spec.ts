@@ -17,7 +17,7 @@ import { PriceScheduleType } from '../../pricing/engine/enums/price-schedule-typ
 import { PromotionChannel } from '../../pricing/engine/enums/promotion-channel.enum.js';
 import { PricingRuleEntry } from '../../pricing/engine/interfaces/pricing-rule-entry.interface.js';
 import { PublicSlotPricingService } from './public-slot-pricing.service.js';
-import { bookingPricingContextStub } from '../testing/factories/booking-pricing-context.stub.js';
+import { pricingContextStub } from '../../pricing/testing/pricing-context.stub.js';
 import { bookingItemPrices } from '../testing/factories/booking-item-prices.factory.js';
 import { booking } from '../testing/factories/booking.factory.js';
 
@@ -74,7 +74,7 @@ function setup(options: Options = {}) {
       anyStaffRule: options.rule ?? AnyStaffRule.CHEAPER_AND_FREER,
     })),
   };
-  const context = bookingPricingContextStub();
+  const context = pricingContextStub();
   const staffLoad = {
     dayLoads: vi.fn(
       async () =>
@@ -531,7 +531,7 @@ describe('PublicSlotPricingService.getRescheduleSlots', () => {
         timezone: 'UTC',
       })),
     };
-    const context = bookingPricingContextStub();
+    const context = pricingContextStub();
     const service = new PublicSlotPricingService(
       calendar as never,
       pricing,

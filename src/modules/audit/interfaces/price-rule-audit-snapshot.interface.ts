@@ -13,7 +13,9 @@ export interface PriceRuleAuditSnapshot {
   weekdays: string;
   intervals: string;
   dates: string;
-  appliesToAll: boolean;
+  appliesToAllServices: boolean;
+  appliesToAllProducts: boolean;
+  /** Services, categories, bundles, products and product categories; exclusions with "-". */
   targets: string;
   scenario: string | null;
   publicName: string | null;

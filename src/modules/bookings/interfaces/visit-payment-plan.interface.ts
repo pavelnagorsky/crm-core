@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { PaymentInputDto } from '../../payments/dto/payment-input.dto.js';
 import { PaymentRequest } from '../../payments/interfaces/payment-request.interface.js';
 
@@ -15,6 +16,8 @@ export interface VisitPaymentPlan {
   confirmProductItemIds: string[];
   /** Confirm every draft product line (manual creation with confirmProducts). */
   confirmAllDraftProducts: boolean;
+  /** Σ lineTotal of the confirmed lines the caller saw (409 PRICE_CHANGED otherwise). */
+  expectedProductTotal: Prisma.Decimal | null;
   /** Whether an active payment may be replaced (order:write). */
   canReplace: boolean;
   timezone: string;

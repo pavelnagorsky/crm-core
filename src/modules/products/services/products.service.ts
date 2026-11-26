@@ -31,6 +31,7 @@ import { AuditLogEvent } from '../../audit/interfaces/audit-log-event.interface.
 import { LocationService } from '../../location/services/location.service.js';
 import { BRAND_PRODUCT_CATALOG_CACHE } from '../cache/brand-product-catalog.cache.js';
 import { LOCATION_PRODUCT_OFFERS_CACHE } from '../cache/location-product-offers.cache.js';
+import { PRODUCT_CATALOG_ITEM_REMOVED_EVENT } from '../constants/product-catalog-events.constants.js';
 import {
   PUBLIC_PRODUCT_CATEGORY_SELECT,
   PUBLIC_PRODUCT_OFFER_SELECT,
@@ -44,11 +45,15 @@ import { ProductStatusCountsRequestDto } from '../dto/product-status-counts-requ
 import { UpdateProductCategoryDto } from '../dto/update-product-category.dto.js';
 import { UpdateProductDto } from '../dto/update-product.dto.js';
 import { UpsertProductLocationDto } from '../dto/upsert-product-location.dto.js';
+import { ProductCatalogItemKind } from '../enums/product-catalog-item-kind.enum.js';
 import { ProductLocationSearchOrderBy } from '../enums/product-location-search-order-by.enum.js';
 import { ProductPurpose } from '../enums/product-purpose.enum.js';
 import { ProductSearchOrderBy } from '../enums/product-search-order-by.enum.js';
 import { BrandProductCatalog } from '../interfaces/brand-product-catalog.interface.js';
+import { LocationProductRef } from '../interfaces/location-product-ref.interface.js';
 import { LocationProductView } from '../interfaces/location-product-view.interface.js';
+import { PricedLocationProduct } from '../interfaces/priced-location-product.interface.js';
+import { ProductCatalogItemRemovedEvent } from '../interfaces/product-catalog-item-removed-event.interface.js';
 import { ProductPurposeFlags } from '../interfaces/product-purpose-flags.interface.js';
 import { ProductStatusCount } from '../interfaces/product-status-count.interface.js';
 import { ProductWithDetails } from '../interfaces/product-with-details.interface.js';
@@ -77,6 +82,36 @@ const locationProductInclude = {
 } satisfies Prisma.ProductLocationInclude;
 
 const PRODUCT_STATUSES = [ProductStatus.ACTIVE, ProductStatus.INACTIVE];
+
+const LOCATION_PRODUCT_REF_SELECT = {
+  id: true,
+  productId: true,
+  retailPrice: true,
+  product: {
+    select: {
+      name: true,
+      sku: true,
+      isForSale: true,
+      category: { select: { name: true } },
+    },
+  },
+} satisfies Prisma.ProductLocationSelect;
+
+function toLocationProductRef(
+  row: Prisma.ProductLocationGetPayload<{
+    select: typeof LOCATION_PRODUCT_REF_SELECT;
+  }>,
+): LocationProductRef {
+  return {
+    productLocationId: row.id,
+    productId: row.productId,
+    name: row.product.name,
+    sku: row.product.sku,
+    categoryName: row.product.category?.name ?? null,
+    retailPrice: row.retailPrice,
+    isForSale: row.product.isForSale,
+  };
+}
 
 @Injectable()
 export class ProductsService {
@@ -173,6 +208,7 @@ export class ProductsService {
     const category = await this.findCategory(brandId, categoryId);
     await this.db.productCategory.delete({ where: { id: categoryId } });
     await this.cache.invalidate(CacheDependency.brandProducts(brandId));
+    await this.emitRemoved(brandId, ProductCatalogItemKind.CATEGORY, categoryId);
     this.emit(
       brandId,
       null,
@@ -372,6 +408,7 @@ export class ProductsService {
       throw error;
     }
     await this.cache.invalidate(CacheDependency.brandProducts(brandId));
+    await this.emitRemoved(brandId, ProductCatalogItemKind.PRODUCT, productId);
     this.emit(
       brandId,
       null,
@@ -663,6 +700,185 @@ export class ProductsService {
     }) as Promise<LocationProductView[]>;
   }
 
+  /**
+   * Products the location sells, in any status: retail price set and the product is for
+   * sale. Ordered by category (sortOrder, uncategorized last), then name.
+   */
+  async listPriced(
+    locationId: string,
+    tx?: Prisma.TransactionClient,
+  ): Promise<PricedLocationProduct[]> {
+    const rows = await (tx ?? this.db).productLocation.findMany({
+      where: {
+        locationId,
+        retailPrice: { not: null },
+        product: { isForSale: true },
+      },
+      select: {
+        id: true,
+        productId: true,
+        retailPrice: true,
+        status: true,
+        product: {
+          select: {
+            name: true,
+            sku: true,
+            barcode: true,
+            unit: true,
+            categoryId: true,
+            category: { select: { name: true, sortOrder: true } },
+          },
+        },
+      },
+    });
+    return rows
+      .map((row) => ({
+        productLocationId: row.id,
+        productId: row.productId,
+        retailPrice: row.retailPrice as Prisma.Decimal,
+        status: row.status,
+        name: row.product.name,
+        sku: row.product.sku,
+        barcode: row.product.barcode,
+        unit: row.product.unit,
+        categoryId: row.product.categoryId,
+        categoryName: row.product.category?.name ?? null,
+        categorySortOrder: row.product.category?.sortOrder ?? null,
+      }))
+      .sort(
+        (a, b) =>
+          (a.categorySortOrder ?? Number.MAX_SAFE_INTEGER) -
+            (b.categorySortOrder ?? Number.MAX_SAFE_INTEGER) ||
+          (a.categoryName ?? '').localeCompare(b.categoryName ?? '', 'ru') ||
+          a.name.localeCompare(b.name, 'ru') ||
+          a.productId.localeCompare(b.productId),
+      );
+  }
+
+  /** Product rows of a location by product id (sold or not), for price change checks. */
+  async findLocationRefs(
+    locationId: string,
+    productIds: readonly string[],
+    tx?: Prisma.TransactionClient,
+  ): Promise<LocationProductRef[]> {
+    if (productIds.length === 0) return [];
+    const rows = await (tx ?? this.db).productLocation.findMany({
+      where: { locationId, productId: { in: [...productIds] } },
+      select: LOCATION_PRODUCT_REF_SELECT,
+    });
+    return rows.map(toLocationProductRef);
+  }
+
+  /** Product rows by row id (sold or not); deleted rows are missing. */
+  async findLocationRefsByIds(
+    productLocationIds: readonly string[],
+    tx?: Prisma.TransactionClient,
+  ): Promise<LocationProductRef[]> {
+    if (productLocationIds.length === 0) return [];
+    const rows = await (tx ?? this.db).productLocation.findMany({
+      where: { id: { in: [...productLocationIds] } },
+      select: LOCATION_PRODUCT_REF_SELECT,
+    });
+    return rows.map(toLocationProductRef);
+  }
+
+  /**
+   * Product rows by row id, locked (FOR UPDATE) in the transaction that writes their retail
+   * prices (product price changes). Deleted rows are missing.
+   */
+  async lockLocationRefs(
+    tx: Prisma.TransactionClient,
+    productLocationIds: readonly string[],
+  ): Promise<LocationProductRef[]> {
+    if (productLocationIds.length === 0) return [];
+    await tx.$queryRaw`
+      SELECT "id" FROM "ProductLocation"
+      WHERE "id" IN (${Prisma.join([...productLocationIds])})
+      ORDER BY "id"
+      FOR UPDATE`;
+    return this.findLocationRefsByIds(productLocationIds, tx);
+  }
+
+  /**
+   * Retail prices a product price change writes, in its transaction, as one statement (a
+   * change can hold thousands of rows). The caller locked the rows (lockLocationRefs) and
+   * invalidates locationProducts after the commit.
+   */
+  async setRetailPrices(
+    tx: Prisma.TransactionClient,
+    prices: readonly { productLocationId: string; retailPrice: Prisma.Decimal }[],
+  ): Promise<void> {
+    if (prices.length === 0) return;
+    const json = JSON.stringify(
+      prices.map((price) => ({
+        a: price.productLocationId,
+        p: price.retailPrice.toFixed(2),
+      })),
+    );
+    await tx.$executeRaw`UPDATE "ProductLocation" AS t SET "retailPrice" = v.p, "updatedAt" = now()
+      FROM jsonb_to_recordset(${json}::jsonb) AS v(a text, p numeric) WHERE t."id" = v.a`;
+  }
+
+  /**
+   * Brand products and product categories among these ids, for price rule targets: a
+   * product must be for sale and have a row in the location.
+   */
+  async findRuleTargets(
+    brandId: string,
+    locationId: string,
+    productIds: readonly string[],
+    categoryIds: readonly string[],
+  ): Promise<{
+    products: { id: string; name: string }[];
+    categories: { id: string; name: string }[];
+  }> {
+    const [products, categories] = await Promise.all([
+      productIds.length === 0
+        ? []
+        : this.db.product.findMany({
+            where: {
+              brandId,
+              id: { in: [...productIds] },
+              isForSale: true,
+              locations: { some: { locationId } },
+            },
+            select: { id: true, name: true },
+          }),
+      categoryIds.length === 0
+        ? []
+        : this.db.productCategory.findMany({
+            where: { brandId, id: { in: [...categoryIds] } },
+            select: { id: true, name: true },
+          }),
+    ]);
+    return { products, categories };
+  }
+
+  /** Current names of brand products and product categories (deleted ones are missing). */
+  async findNames(
+    productIds: readonly string[],
+    categoryIds: readonly string[],
+  ): Promise<{
+    products: { id: string; name: string }[];
+    categories: { id: string; name: string }[];
+  }> {
+    const [products, categories] = await Promise.all([
+      productIds.length === 0
+        ? []
+        : this.db.product.findMany({
+            where: { id: { in: [...productIds] } },
+            select: { id: true, name: true },
+          }),
+      categoryIds.length === 0
+        ? []
+        : this.db.productCategory.findMany({
+            where: { id: { in: [...categoryIds] } },
+            select: { id: true, name: true },
+          }),
+    ]);
+    return { products, categories };
+  }
+
   resolveForSale(
     locationId: string,
     productIds: string[],
@@ -914,5 +1130,15 @@ export class ProductsService {
       actor,
       payload,
     } satisfies AuditLogEvent);
+  }
+
+  /** Lets modules that keep ids of the deleted product or category without a foreign key clean up. */
+  private async emitRemoved(
+    brandId: string,
+    kind: ProductCatalogItemKind,
+    id: string,
+  ): Promise<void> {
+    const event: ProductCatalogItemRemovedEvent = { brandId, kind, id };
+    await this.eventEmitter.emitAsync(PRODUCT_CATALOG_ITEM_REMOVED_EVENT, event);
   }
 }

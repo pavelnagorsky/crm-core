@@ -1,4 +1,4 @@
-import { ServicePriceChangeTarget } from '@prisma/client';
+import { PriceChangeTarget } from '@prisma/client';
 import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import {
   baseKey,
@@ -10,7 +10,7 @@ import { ServicePriceChangeGroupKind } from '../enums/service-price-change-group
 import { ServicePriceImportItemType } from '../enums/service-price-import-item-type.enum.js';
 import { PriceChangeGroup } from '../interfaces/price-change-group.interface.js';
 import { PriceChangeRow } from '../interfaces/price-change-row.interface.js';
-import { ServicePriceChangeItemDraft } from '../interfaces/service-price-change-item-draft.interface.js';
+import { PriceChangeItemDraft } from '../interfaces/price-change-item-draft.interface.js';
 import { ServicePriceImportCatalog } from '../interfaces/service-price-import-catalog.interface.js';
 import { ServicePriceImportChange } from '../interfaces/service-price-import-change.interface.js';
 import { ServicePriceImportFacts } from '../interfaces/service-price-import-facts.interface.js';
@@ -96,7 +96,7 @@ export function buildImportChange(
   );
 
   const groups = new Map<string, PriceChangeGroup>();
-  const drafts: ServicePriceChangeItemDraft[] = [];
+  const drafts: PriceChangeItemDraft[] = [];
 
   const push = (
     id: string,
@@ -118,6 +118,7 @@ export function buildImportChange(
       priceLevelId: row.levelId,
       staffId: row.staffId,
       bundleId: isBundle ? id : null,
+      productLocationId: null,
       targetTitle: group.title,
       levelName: row.levelName,
       staffName: row.staffName,
@@ -147,7 +148,7 @@ export function buildImportChange(
     };
   };
 
-  const target = (type: ServicePriceChangeTarget) => ({
+  const target = (type: PriceChangeTarget) => ({
     targetType: type,
     levelId: null,
     levelName: null,
@@ -160,7 +161,7 @@ export function buildImportChange(
       const bundle = bundles.get(edit.id)!;
       if (edit.basePrice !== null)
         push(edit.id, ServicePriceChangeGroupKind.BUNDLE, {
-          ...target(ServicePriceChangeTarget.BUNDLE),
+          ...target(PriceChangeTarget.BUNDLE),
           key: bundleKey(edit.id),
           current: minor(bundle.fixedPrice?.toFixed(2) ?? null),
           after: minor(edit.basePrice),
@@ -170,7 +171,7 @@ export function buildImportChange(
     const service = services.get(edit.id)!;
     if (edit.basePrice !== null)
       push(edit.id, ServicePriceChangeGroupKind.SERVICE, {
-        ...target(ServicePriceChangeTarget.BASE),
+        ...target(PriceChangeTarget.BASE),
         key: baseKey(edit.id),
         current: minor(service.price.toFixed(2)),
         after: minor(edit.basePrice),
@@ -178,7 +179,7 @@ export function buildImportChange(
     for (const level of edit.levelPrices) {
       const stored = levelPrice.get(`${edit.id}:${level.levelId}`);
       push(edit.id, ServicePriceChangeGroupKind.SERVICE, {
-        ...target(ServicePriceChangeTarget.LEVEL),
+        ...target(PriceChangeTarget.LEVEL),
         levelId: level.levelId,
         levelName: levelName.get(level.levelId) ?? null,
         key: levelKey(edit.id, level.levelId),
@@ -190,7 +191,7 @@ export function buildImportChange(
   for (const edit of plan.staffEdits) {
     const assignment = staffPrice.get(`${edit.staffId}:${edit.serviceId}`)!;
     push(edit.serviceId, ServicePriceChangeGroupKind.SERVICE, {
-      ...target(ServicePriceChangeTarget.STAFF),
+      ...target(PriceChangeTarget.STAFF),
       staffId: edit.staffId,
       staffName: assignment.staffName,
       key: staffKey(edit.serviceId, edit.staffId),

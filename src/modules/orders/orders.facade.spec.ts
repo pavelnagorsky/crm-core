@@ -61,6 +61,7 @@ function order(
     discountTotal: new Prisma.Decimal(0),
     totalAmount: new Prisma.Decimal(15),
     note: null,
+    promoCode: null,
     createdById: 'owner-1',
     createdByName: 'Owner',
     voidedAt: null,
@@ -94,12 +95,41 @@ function order(
         sellerStaffId: null,
         sellerName: null,
         returnItems: [],
+        priceAdjustments: [],
+        discountChoice: null,
+        discountChoiceRuleId: null,
         confirmedAt: itemStatus === OrderItemStatus.CONFIRMED ? now : null,
         occurredAt: itemStatus === OrderItemStatus.CONFIRMED ? now : null,
         createdAt: now,
       },
     ],
   };
+}
+
+/** `tx.order.update` of `refreshTotals`: the stored order with the written totals. */
+function updatedWith(stored: OrderWithItems) {
+  return ({ data }: { data: Partial<OrderWithItems> }) => ({
+    ...stored,
+    ...data,
+    version: stored.version + 1,
+  });
+}
+
+function expectTotals(
+  result: OrderWithItems,
+  expected: {
+    listTotalAmount: string;
+    subtotalAmount: string;
+    discountTotal: string;
+    totalAmount: string;
+  },
+) {
+  expect({
+    listTotalAmount: result.listTotalAmount.toFixed(2),
+    subtotalAmount: result.subtotalAmount.toFixed(2),
+    discountTotal: result.discountTotal.toFixed(2),
+    totalAmount: result.totalAmount.toFixed(2),
+  }).toEqual(expected);
 }
 
 function setup() {
@@ -192,6 +222,18 @@ function setup() {
     locations as never,
     compute,
   );
+  // Pricing is stubbed: lines keep the stored price, the engine has its own specs.
+  const productPricing = {
+    repriceDrafts: vi.fn().mockResolvedValue({
+      order: null,
+      quote: null,
+      lines: [],
+      repricedIds: [],
+    }),
+    priceForConfirmation: vi.fn().mockResolvedValue([]),
+    lockLimits: vi.fn(),
+  };
+  const pricingPreview = { preview: vi.fn() };
   const bookingSync = new OrderBookingSyncService(
     locations as never,
     compute,
@@ -199,6 +241,7 @@ function setup() {
     persistence,
     events as never,
     new BookingVisitsService(db as never),
+    productPricing as never,
   );
   const stateAssertions = new OrderStateRules();
   const payments = {
@@ -229,12 +272,12 @@ function setup() {
     earnings as never,
     persistence,
     orderPayments,
+    productPricing as never,
   );
   const returns = new OrderReturnService(
     inventory as never,
     earnings as never,
     persistence,
-    compute,
     stateAssertions,
     locations as never,
     events as never,
@@ -249,6 +292,7 @@ function setup() {
     transitions,
     audits,
     orderPayments,
+    productPricing as never,
   );
   const mutations = new OrderDraftMutationService(
     locations as never,
@@ -257,6 +301,7 @@ function setup() {
     stateAssertions,
     audits,
     payments as never,
+    productPricing as never,
   );
   const service = new OrdersFacade(
     locations as never,
@@ -269,6 +314,8 @@ function setup() {
     mutations,
     audits,
     orderPayments,
+    pricingPreview as never,
+    {} as never,
   );
   return {
     service,
@@ -281,6 +328,7 @@ function setup() {
     events,
     locations,
     payments,
+    productPricing,
   };
 }
 
@@ -340,6 +388,7 @@ function confirmItemsHash(
         locationId,
         orderId,
         itemIds: [...itemIds].sort(),
+        expectedTotal: '15.00',
       }),
     )
     .digest('hex');
@@ -509,6 +558,9 @@ function attachStatefulBookingOrder(tx: ReturnType<typeof setup>['tx']) {
       sellerStaffId: data.sellerStaffId ?? null,
       sellerName: data.sellerName ?? null,
       returnItems: [],
+      priceAdjustments: [],
+      discountChoice: null,
+      discountChoiceRuleId: null,
       confirmedAt: data.confirmedAt ?? null,
       occurredAt: data.occurredAt ?? null,
       createdAt: new Date(`2026-10-01T10:00:0${state.sequence}.000Z`),
@@ -583,9 +635,11 @@ describe('OrdersFacade', () => {
   });
 
   it('keeps owner custom price separate from discounts', async () => {
-    const { service, db, products, inventory, earnings } = setup();
+    const { service, tx, products, inventory, earnings } = setup();
     products.resolveForSale.mockResolvedValue([product()]);
-    db.order.create.mockResolvedValue(order(OrderStatus.ACTIVE));
+    tx.order.create.mockResolvedValue({ id: 'order-1' });
+    tx.order.findFirst.mockResolvedValue(order(OrderStatus.ACTIVE));
+    tx.order.update.mockResolvedValue(order(OrderStatus.ACTIVE));
 
     await service.create(
       'location-1',
@@ -602,7 +656,7 @@ describe('OrdersFacade', () => {
       true,
     );
 
-    const data = db.order.create.mock.calls[0][0].data;
+    const data = tx.order.create.mock.calls[0][0].data;
     expect(data.items.create[0]).toEqual(
       expect.objectContaining({
         listUnitPrice: expect.objectContaining({}),
@@ -711,6 +765,8 @@ describe('OrdersFacade', () => {
         },
       ],
     };
+    // Confirmation priced item-1 again with a 10% promotion: the header still holds the
+    // draft totals (70.00), the lines are discounted.
     const confirmedOrder = {
       ...draftOrder,
       items: draftOrder.items.map((item) => ({
@@ -718,6 +774,13 @@ describe('OrdersFacade', () => {
         status: OrderItemStatus.CONFIRMED,
         confirmedAt: now,
         occurredAt: now,
+        ...(item.id === 'item-1'
+          ? {
+              unitPrice: new Prisma.Decimal(18),
+              discountTotal: new Prisma.Decimal(4),
+              lineTotal: new Prisma.Decimal(36),
+            }
+          : {}),
       })),
     };
     products.resolveForSale.mockResolvedValue([product(), secondProduct()]);
@@ -727,7 +790,9 @@ describe('OrdersFacade', () => {
     tx.order.findFirst
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce(draftOrder)
+      .mockResolvedValueOnce(draftOrder)
       .mockResolvedValueOnce(confirmedOrder);
+    tx.order.update.mockImplementation(updatedWith(confirmedOrder));
     tx.order.create.mockResolvedValue(draftOrder);
     inventory.postSale.mockResolvedValue([
       {
@@ -747,6 +812,7 @@ describe('OrdersFacade', () => {
       'location-1',
       {
         confirmImmediately: true,
+        expectedTotal: '15.00',
         idempotencyKey: 'sale-key-1',
         items: [
           {
@@ -816,6 +882,19 @@ describe('OrdersFacade', () => {
         occurredAt: now,
       },
     });
+    // The header follows the discounted lines, not the draft totals.
+    expectTotals(result, {
+      listTotalAmount: '70.00',
+      subtotalAmount: '70.00',
+      discountTotal: '4.00',
+      totalAmount: '66.00',
+    });
+    expect(tx.order.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'order-1' },
+        data: expect.objectContaining({ version: { increment: 1 } }),
+      }),
+    );
     expect(events.emit).toHaveBeenCalled();
   });
 
@@ -829,6 +908,7 @@ describe('OrdersFacade', () => {
         'location-1',
         {
           confirmImmediately: true,
+          expectedTotal: '15.00',
           idempotencyKey: 'sale-key-1',
           items: [{ productId: 'product-1', quantity: '0.500' }],
         },
@@ -855,6 +935,7 @@ describe('OrdersFacade', () => {
       ...order(OrderStatus.ACTIVE, OrderItemStatus.CONFIRMED),
       idempotencyKey: 'sale-key-1',
       creationRequestHash: saleRequestHash('location-1', {
+        expectedTotal: '15.00',
         items: [{ productId: 'product-1', quantity: '1.000' }],
       }),
     };
@@ -864,6 +945,7 @@ describe('OrdersFacade', () => {
       'location-1',
       {
         confirmImmediately: true,
+        expectedTotal: '15.00',
         idempotencyKey: 'sale-key-1',
         items: [{ productId: 'product-1', quantity: '1.000' }],
       },
@@ -892,6 +974,7 @@ describe('OrdersFacade', () => {
           'location-1',
           {
             confirmImmediately: true,
+            expectedTotal: '15.00',
             idempotencyKey: 'sale-key-1',
             items: [{ productId: 'product-1', quantity: '2.000' }],
           },
@@ -918,6 +1001,7 @@ describe('OrdersFacade', () => {
         'location-1',
         {
           confirmImmediately: true,
+          expectedTotal: '15.00',
           items: [{ productId: 'product-1', quantity: '1.000' }],
         },
         owner,
@@ -946,6 +1030,7 @@ describe('OrdersFacade', () => {
     products.resolveForSale.mockResolvedValue([product()]);
     tx.order.findFirst
       .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(draftOrder)
       .mockResolvedValueOnce(draftOrder);
     tx.order.create.mockResolvedValue(draftOrder);
     inventory.postSale.mockRejectedValue(new Error('insufficient stock'));
@@ -955,6 +1040,7 @@ describe('OrdersFacade', () => {
         'location-1',
         {
           confirmImmediately: true,
+          expectedTotal: '15.00',
           idempotencyKey: 'sale-key-1',
           items: [{ productId: 'product-1', quantity: '1.000' }],
         },
@@ -1472,45 +1558,6 @@ describe('OrdersFacade', () => {
     ]);
   });
 
-  it('prices product items for previews without writing an order', async () => {
-    const { service, db, products } = setup();
-    products.resolveForSale.mockResolvedValue([product()]);
-
-    const result = await service.priceProductItems('location-1', [
-      {
-        productId: 'product-1',
-        quantity: '2.000',
-        customUnitPrice: '12.00',
-      },
-    ]);
-
-    expect(result[0].type).toBe(OrderItemType.PRODUCT);
-    expect(result[0].catalogItemId).toBe('product-1');
-    expect(result[0].listLineTotal.toFixed(2)).toBe('40.00');
-    expect(result[0].lineTotal.toFixed(2)).toBe('24.00');
-    expect(db.order.create).not.toHaveBeenCalled();
-  });
-
-  it('rejects fractional piece quantities in product price previews', async () => {
-    const { service, db, products } = setup();
-    products.resolveForSale.mockResolvedValue([product()]);
-
-    const error = await service
-      .priceProductItems('location-1', [
-        { productId: 'product-1', quantity: '0.500' },
-      ])
-      .then(
-        () => null,
-        (caught: unknown) => caught,
-      );
-
-    expect(error).toBeInstanceOf(AppException);
-    expect((error as AppException).errorCode).toBe(
-      'ORDER_QUANTITY_MUST_BE_WHOLE',
-    );
-    expect(db.order.create).not.toHaveBeenCalled();
-  });
-
   it('rejects blank group confirmation idempotency keys', async () => {
     const { service, locations, db } = setup();
 
@@ -1518,7 +1565,7 @@ describe('OrdersFacade', () => {
       service.confirmItems(
         'location-1',
         'order-1',
-        { itemIds: ['item-1'], idempotencyKey: '' },
+        { itemIds: ['item-1'], expectedTotal: '15.00', idempotencyKey: '' },
         owner,
       ),
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -1528,8 +1575,16 @@ describe('OrdersFacade', () => {
   });
 
   it('confirms multiple draft product items atomically', async () => {
-    const { service, tx, products, staff, inventory, earnings, events } =
-      setup();
+    const {
+      service,
+      tx,
+      products,
+      staff,
+      inventory,
+      earnings,
+      events,
+      productPricing,
+    } = setup();
     const active = order(OrderStatus.ACTIVE);
     const draftOrder = {
       ...active,
@@ -1559,16 +1614,26 @@ describe('OrdersFacade', () => {
         },
       ],
     };
+    // Confirmation priced item-2 again with a 10% promotion.
     const confirmedOrder = {
       ...draftOrder,
       items: draftOrder.items.map((item) => ({
         ...item,
         status: OrderItemStatus.CONFIRMED,
+        ...(item.id === 'item-2'
+          ? {
+              unitPrice: new Prisma.Decimal(27),
+              discountTotal: new Prisma.Decimal(3),
+              lineTotal: new Prisma.Decimal(27),
+            }
+          : {}),
       })),
     };
     tx.order.findFirst
       .mockResolvedValueOnce(draftOrder)
+      .mockResolvedValueOnce(draftOrder)
       .mockResolvedValueOnce(confirmedOrder);
+    tx.order.update.mockImplementation(updatedWith(confirmedOrder));
     products.resolveForSale.mockResolvedValue([product(), secondProduct()]);
     staff.resolveForProductSale.mockResolvedValue([
       { id: 'staff-1', name: 'Seller' },
@@ -1590,7 +1655,7 @@ describe('OrdersFacade', () => {
     const result = await service.confirmItems(
       'location-1',
       'order-1',
-      { itemIds: ['item-1', 'item-2'], idempotencyKey: 'confirm-key-1' },
+      { itemIds: ['item-1', 'item-2'], expectedTotal: '42.00', idempotencyKey: 'confirm-key-1' },
       owner,
     );
 
@@ -1598,6 +1663,13 @@ describe('OrdersFacade', () => {
       OrderItemStatus.CONFIRMED,
       OrderItemStatus.CONFIRMED,
     ]);
+    // Custom price 15.00 on item-1, a 3.00 discount on item-2: the header follows the lines.
+    expectTotals(result, {
+      listTotalAmount: '50.00',
+      subtotalAmount: '45.00',
+      discountTotal: '3.00',
+      totalAmount: '42.00',
+    });
     expect(tx.orderOperation.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         locationId: 'location-1',
@@ -1637,6 +1709,15 @@ describe('OrdersFacade', () => {
       }),
     );
     expect(events.emit).toHaveBeenCalled();
+    // Lock order: the limited promotions before the order, as a booking edit takes them.
+    const orderLock = tx.$queryRaw.mock.calls.findIndex((call) =>
+      JSON.stringify(call).includes('FROM \\"Order\\"'),
+    );
+    expect(orderLock).toBeGreaterThanOrEqual(0);
+    expect(productPricing.lockLimits).toHaveBeenCalledWith(tx, 'location-1');
+    expect(productPricing.lockLimits.mock.invocationCallOrder[0]).toBeLessThan(
+      tx.$queryRaw.mock.invocationCallOrder[orderLock],
+    );
   });
 
   it('confirms only selected draft products and leaves the rest untouched', async () => {
@@ -1654,13 +1735,18 @@ describe('OrdersFacade', () => {
         },
       ],
     };
-    tx.order.findFirst.mockResolvedValueOnce(draftOrder).mockResolvedValueOnce({
+    const partlyConfirmed = {
       ...draftOrder,
       items: [
         { ...draftOrder.items[0], status: OrderItemStatus.CONFIRMED },
         draftOrder.items[1],
       ],
-    });
+    };
+    tx.order.findFirst
+      .mockResolvedValueOnce(draftOrder)
+      .mockResolvedValueOnce(draftOrder)
+      .mockResolvedValueOnce(partlyConfirmed);
+    tx.order.update.mockImplementation(updatedWith(partlyConfirmed));
     products.resolveForSale.mockResolvedValue([product()]);
     inventory.postSale.mockResolvedValue([
       {
@@ -1674,7 +1760,7 @@ describe('OrdersFacade', () => {
     await service.confirmItems(
       'location-1',
       'order-1',
-      { itemIds: ['item-1'], idempotencyKey: 'confirm-key-2' },
+      { itemIds: ['item-1'], expectedTotal: '15.00', idempotencyKey: 'confirm-key-2' },
       owner,
     );
 
@@ -1705,7 +1791,7 @@ describe('OrdersFacade', () => {
     const result = await service.confirmItems(
       'location-1',
       'order-1',
-      { itemIds: ['item-1'], idempotencyKey: 'confirm-key-3' },
+      { itemIds: ['item-1'], expectedTotal: '15.00', idempotencyKey: 'confirm-key-3' },
       owner,
     );
 
@@ -1730,7 +1816,7 @@ describe('OrdersFacade', () => {
       .confirmItems(
         'location-1',
         'order-1',
-        { itemIds: ['item-1'], idempotencyKey: 'confirm-key-4' },
+        { itemIds: ['item-1'], expectedTotal: '15.00', idempotencyKey: 'confirm-key-4' },
         owner,
       )
       .then(
@@ -1763,7 +1849,7 @@ describe('OrdersFacade', () => {
       .confirmItems(
         'location-1',
         'order-1',
-        { itemIds: ['service-item-1'], idempotencyKey: 'confirm-key-5' },
+        { itemIds: ['service-item-1'], expectedTotal: '15.00', idempotencyKey: 'confirm-key-5' },
         owner,
       )
       .then(
@@ -1799,7 +1885,7 @@ describe('OrdersFacade', () => {
       service.confirmItems(
         'location-1',
         'order-1',
-        { itemIds: ['item-1', 'item-2'], idempotencyKey: 'confirm-key-6' },
+        { itemIds: ['item-1', 'item-2'], expectedTotal: '15.00', idempotencyKey: 'confirm-key-6' },
         owner,
       ),
     ).rejects.toThrow('insufficient stock');
@@ -2695,6 +2781,9 @@ describe('OrdersFacade', () => {
           sellerStaffId: 'staff-1',
           sellerName: 'Seller',
           returnItems: [],
+          priceAdjustments: [],
+          discountChoice: null,
+          discountChoiceRuleId: null,
         },
       ],
     };

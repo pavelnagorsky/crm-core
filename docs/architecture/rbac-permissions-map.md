@@ -339,12 +339,14 @@
 | `POST /locations/:locationId/orders` | `create` | L: `order:write` | Произвольная цена: также sale.price.override:write. confirmImmediately: также order:write. Принимает существующий clientId; новый клиент создаётся отдельным API с G:client:write. |
 | `GET /locations/:locationId/orders` | `search` | L: `order:read` | — |
 | `GET /locations/:locationId/orders/status-counts` | `getStatusCounts` | L: `order:read` | — |
+| `POST /locations/:locationId/orders/pricing` | `pricing` | L: `order:read` | Предпросмотр цен товаров, ничего не пишет. Выбор скидки не AUTO и своя цена: также sale.price.override:write. Последняя закупочная цена числом - только с inventory:read. |
 | `GET /locations/:locationId/orders/:orderId` | `findById` | L: `order:read` | — |
 | `PUT /locations/:locationId/orders/:orderId` | `update` | L: `order:write` | Изменение/сброс произвольной цены: также sale.price.override:write. Клиента не создаёт. |
 | `PATCH /locations/:locationId/orders/:orderId/status` | `changeStatus` | L: `order.void:write` | Текущий DTO допускает только VOIDED. Новые статусы потребуют явной проверки действия. |
 | `POST /locations/:locationId/orders/:orderId/items` | `addItems` | L: `order:write` | Произвольная цена: также sale.price.override:write. Клиента не создаёт. |
 | `POST /locations/:locationId/orders/:orderId/items/confirm` | `confirmItems` | L: `order:write` | `payment` только для продажи. |
 | `POST /locations/:locationId/orders/:orderId/returns` | `createReturn` | L: `order.return:write` | `refund` (возврат денег вместе с товаром) не требует order:write. |
+| `POST /locations/:locationId/orders/:orderId/returns/preview` | `previewReturn` | L: `order.return:write` | Суммы возврата и деньги к возврату, ничего не пишет. |
 | `PUT /locations/:locationId/orders/:orderId/payment` | `recordPayment` | L: `order:write` | Только продажа; заказ визита оплачивается через запись. |
 | `POST /locations/:locationId/orders/:orderId/refunds` | `refund` | L: `order:write` | — |
 | `POST /locations/:locationId/orders/:orderId/payment-operations/:operationId/void` | `voidPaymentOperation` | L: `order:write` | — |

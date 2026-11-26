@@ -4,9 +4,11 @@ import { ReadConsistency } from '../../../shared/cache/enums/read-consistency.en
 import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { LocationService } from '../../location/services/location.service.js';
 import { ServiceCatalogFacade } from '../../services/catalog/service-catalog.facade.js';
+import { ProductsService } from '../../products/services/products.service.js';
 import { StaffService } from '../../staff/services/staff.service.js';
 import { PRICING_SNAPSHOT_CACHE } from '../cache/pricing-snapshot.cache.js';
 import { BundlePricingMode } from '../engine/enums/bundle-pricing-mode.enum.js';
+import { ProductUnit } from '../engine/enums/product-unit.enum.js';
 import { PricingSnapshot } from '../engine/interfaces/pricing-snapshot.interface.js';
 import { toPricingRuleEntry } from '../rules/price-rule-entry.rules.js';
 import { PriceLevelReadService } from './price-level-read.service.js';
@@ -25,6 +27,7 @@ export class PricingSnapshotService {
     private readonly rules: PriceRuleReadService,
     private readonly priceChanges: ScheduledPriceChangeReadService,
     private readonly staff: StaffService,
+    private readonly products: ProductsService,
     private readonly locations: LocationService,
     private readonly cache: AppCacheService,
   ) {}
@@ -57,6 +60,7 @@ export class PricingSnapshotService {
       staff,
       locale,
       priceChanges,
+      products,
     ] = await Promise.all([
       this.serviceCatalog.loadCatalogSnapshot(
         locationId,
@@ -69,6 +73,7 @@ export class PricingSnapshotService {
       this.staff.listPricingProfiles(locationId),
       this.locations.getLocale(locationId),
       this.priceChanges.listForSnapshot(locationId),
+      this.products.listPriced(locationId),
     ]);
     const levelPricesByService = new Map<string, Record<string, number>>();
     for (const row of levelPrices) {
@@ -107,6 +112,13 @@ export class PricingSnapshotService {
             MoneyUtils.toMinor(price),
           ]),
         ),
+      })),
+      products: products.map((product) => ({
+        productLocationId: product.productLocationId,
+        productId: product.productId,
+        categoryId: product.categoryId,
+        unit: product.unit as ProductUnit,
+        retailPrice: MoneyUtils.toMinor(product.retailPrice),
       })),
       rules: rules.map(toPricingRuleEntry),
       roundingStep: MoneyUtils.toMinor(roundingStep),

@@ -43,12 +43,20 @@ const HEADER_ALIASES: Record<ClientSheetColumn, readonly string[]> = {
   ],
   [ClientSheetColumn.GENDER]: ['пол', 'gender'],
   [ClientSheetColumn.NOTES]: ['заметки', 'notes', 'примечание', 'комментарий'],
-  [ClientSheetColumn.DISCOUNT_PERCENT]: [
+  [ClientSheetColumn.SERVICES_DISCOUNT_PERCENT]: [
+    'скидка на услуги, %',
+    'скидка на услуги',
     'скидка, %',
     'скидка',
     'discountpercent',
     'discount percent',
     'discount',
+    'services discount',
+  ],
+  [ClientSheetColumn.PRODUCTS_DISCOUNT_PERCENT]: [
+    'скидка на товары, %',
+    'скидка на товары',
+    'products discount',
   ],
 };
 
@@ -167,7 +175,10 @@ export class ClientsSheetService {
       birthDate: current.birthDate ?? next.birthDate,
       gender: current.gender ?? next.gender,
       notes: current.notes ?? next.notes,
-      discountPercent: current.discountPercent ?? next.discountPercent,
+      servicesDiscountPercent:
+        current.servicesDiscountPercent ?? next.servicesDiscountPercent,
+      productsDiscountPercent:
+        current.productsDiscountPercent ?? next.productsDiscountPercent,
     };
   }
 
@@ -192,10 +203,14 @@ export class ClientsSheetService {
     const notes = raw[ClientSheetColumn.NOTES] || null;
     if (notes && notes.length > NOTES_MAX) return null;
 
-    const discountPercent = this.parseDiscountPercent(
-      raw[ClientSheetColumn.DISCOUNT_PERCENT],
+    const servicesDiscountPercent = this.parseDiscountPercent(
+      raw[ClientSheetColumn.SERVICES_DISCOUNT_PERCENT],
     );
-    if (discountPercent === undefined) return null;
+    if (servicesDiscountPercent === undefined) return null;
+    const productsDiscountPercent = this.parseDiscountPercent(
+      raw[ClientSheetColumn.PRODUCTS_DISCOUNT_PERCENT],
+    );
+    if (productsDiscountPercent === undefined) return null;
 
     return {
       firstName,
@@ -205,7 +220,8 @@ export class ClientsSheetService {
       birthDate,
       gender,
       notes,
-      discountPercent,
+      servicesDiscountPercent,
+      productsDiscountPercent,
     };
   }
 

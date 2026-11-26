@@ -1,20 +1,30 @@
 import { HttpStatus, Injectable } from '@nestjs/common';
-import { PriceRuleKind, ServiceStatus } from '@prisma/client';
+import { PriceRuleKind, Prisma, ServiceStatus } from '@prisma/client';
 import { ReadConsistency } from '../../../shared/cache/enums/read-consistency.enum.js';
 import { AppException } from '../../../shared/exceptions/app.exception.js';
+import { MoneyUtils } from '../../../shared/money/money.utils.js';
 import { TimeUtils } from '../../../shared/time/time.utils.js';
 import { ErrorCode } from '../../../shared/validation/error-codes.enum.js';
 import { LocationService } from '../../location/services/location.service.js';
+import { ProductsService } from '../../products/services/products.service.js';
 import { ServiceCatalogFacade } from '../../services/catalog/service-catalog.facade.js';
 import { StaffService } from '../../staff/services/staff.service.js';
-import { PRICE_RULE_STATS_DAYS } from '../constants/price-rule.constants.js';
+import {
+  PRICE_RULE_STATS_DAYS,
+  PROMOTION_PRODUCT_EXAMPLE_LIMIT,
+} from '../constants/price-rule.constants.js';
 import { CalendarDayParser } from '../engine/compile/calendar-day.parser.js';
 import { CompiledRule } from '../engine/compile/compiled-rule.js';
+import {
+  productTargetContext,
+  serviceTargetContext,
+} from '../engine/compile/rule-target-contexts.js';
 import { RuleTargetContext } from '../engine/compile/interfaces/rule-target-context.interface.js';
 import { PriceAdjustmentKind } from '../engine/enums/price-adjustment-kind.enum.js';
 import { PriceRuleKind as EngineRuleKind } from '../engine/enums/price-rule-kind.enum.js';
 import { PromotionChannel } from '../engine/enums/promotion-channel.enum.js';
 import { PromotionClientFilter } from '../engine/enums/promotion-client-filter.enum.js';
+import { PricingProductEntry } from '../engine/interfaces/pricing-product-entry.interface.js';
 import { PricingRuleEntry } from '../engine/interfaces/pricing-rule-entry.interface.js';
 import { PricingServiceEntry } from '../engine/interfaces/pricing-service-entry.interface.js';
 import { PricingSnapshot } from '../engine/interfaces/pricing-snapshot.interface.js';
@@ -25,10 +35,11 @@ import { PriceRulePreview } from '../interfaces/price-rule-preview.interface.js'
 import { PriceRulePreviewExample } from '../interfaces/price-rule-preview-example.interface.js';
 import { PriceRulePreviewExampleRow } from '../interfaces/price-rule-preview-example-row.interface.js';
 import { PriceRulePreviewReplaced } from '../interfaces/price-rule-preview-replaced.interface.js';
+import { PriceRulePreviewSources } from '../interfaces/price-rule-preview-sources.interface.js';
 import { PriceRuleRecord } from '../interfaces/price-rule-record.interface.js';
-import { PromotionMatchItemsLoader } from '../interfaces/promotion-match-items-loader.interface.js';
 import { PromotionMatchTarget } from '../interfaces/promotion-match-target.interface.js';
 import { PromotionOverlapScope } from '../interfaces/promotion-overlap-scope.interface.js';
+import { PromotionProductExample } from '../interfaces/promotion-product-example.interface.js';
 import { withLevelScope } from '../rules/price-level-scope.rules.js';
 import { affectedServiceCount } from '../rules/price-rule-coverage.rules.js';
 import {
@@ -59,6 +70,8 @@ const EXAMPLE_LIMIT = 3;
 /** Start minute of the example for a rule without intervals: noon. */
 const WHOLE_DAY_EXAMPLE_MINUTE = 12 * 60;
 const MS_PER_DAY = 86_400_000;
+/** One unit of a product in thousandths: product examples are priced per 1 шт / 1 ед. */
+const ONE_UNIT_MILLI = 1000;
 
 /**
  * What a rule input would do, without saving it: validated like a save, put into the
@@ -74,17 +87,19 @@ export class PriceRulePreviewService {
     private readonly serviceCatalog: ServiceCatalogFacade,
     private readonly locations: LocationService,
     private readonly staff: StaffService,
+    private readonly products: ProductsService,
   ) {}
 
   /**
-   * `loadMatchItems` gives the past bookings for matches30d of a promotion; without it the
-   * promotion preview has none (null).
+   * `sources.loadMatchItems` gives the past bookings for matches30d of a promotion; without
+   * it the promotion preview has none (null). `loadSaleLines` adds the separate sales,
+   * `loadPurchaseCosts` the last purchase costs for "below cost".
    */
   async preview(
     locationId: string,
     dto: PriceRulePreviewRequestDto,
     now = new Date(),
-    loadMatchItems: PromotionMatchItemsLoader | null = null,
+    sources: PriceRulePreviewSources = {},
   ): Promise<PriceRulePreview> {
     const rule = normalizePriceRuleInput(dto.rule);
     await this.ruleCatalog.assertTargetsInLocation(locationId, rule.targets);
@@ -92,7 +107,10 @@ export class PriceRulePreviewService {
       ? await this.reads.findRule(locationId, dto.ruleId)
       : null;
     if (existing?.archivedAt)
-      throw new AppException(ErrorCode.PRICE_RULE_ARCHIVED, HttpStatus.CONFLICT);
+      throw new AppException(
+        ErrorCode.PRICE_RULE_ARCHIVED,
+        HttpStatus.CONFLICT,
+      );
     const draft = draftPriceRuleRecord(locationId, rule, {
       id: existing?.id ?? DRAFT_PRICE_RULE_ID,
       enabled: rule.enabled ?? existing?.enabled ?? true,
@@ -123,7 +141,7 @@ export class PriceRulePreviewService {
     );
     const serviceCount = affectedServiceCount(
       {
-        appliesToAll: draft.appliesToAll,
+        appliesToAllServices: draft.appliesToAllServices,
         targets: draft.targets.map((target) => ({
           type: target.targetType,
           id: target.targetId,
@@ -137,6 +155,7 @@ export class PriceRulePreviewService {
       nextDate,
       serviceCount,
       totalServiceCount: coverage.services.length,
+      totalProductCount: snapshot.products.length,
     };
 
     if (!promotion) {
@@ -163,6 +182,9 @@ export class PriceRulePreviewService {
             )
           : [],
         conditions: [],
+        productCount: 0,
+        productExamples: [],
+        belowCostCount: 0,
         overlaps: [],
         matches30d: null,
       };
@@ -197,43 +219,89 @@ export class PriceRulePreviewService {
         exampleEntry,
       ],
     };
-    const [targetNames, staffNames, items] = await Promise.all([
-      this.ruleCatalog.nameTargets(
-        locationId,
-        draft.targets.map((target) => ({
-          type: target.targetType,
-          id: target.targetId,
-          excluded: target.excluded,
-        })),
-      ),
-      this.staff.namesByIds(draft.staff.map((item) => item.staffId)),
-      loadMatchItems
-        ? loadMatchItems(
-            new Date(now.getTime() - PRICE_RULE_STATS_DAYS * MS_PER_DAY),
-            now,
-          )
-        : Promise.resolve(null),
-    ]);
+    const statsFrom = new Date(
+      now.getTime() - PRICE_RULE_STATS_DAYS * MS_PER_DAY,
+    );
+    const [targetNames, staffNames, items, saleLines, priced] =
+      await Promise.all([
+        this.ruleCatalog.nameTargets(
+          locationId,
+          draft.targets.map((target) => ({
+            type: target.targetType,
+            id: target.targetId,
+            excluded: target.excluded,
+          })),
+        ),
+        this.staff.namesByIds(draft.staff.map((item) => item.staffId)),
+        sources.loadMatchItems
+          ? sources.loadMatchItems(statsFrom, now)
+          : Promise.resolve(null),
+        sources.loadSaleLines
+          ? sources.loadSaleLines(statsFrom, now)
+          : Promise.resolve([]),
+        this.products.listPriced(locationId),
+      ]);
+    const productNames = new Map(
+      priced.map((product) => [product.productLocationId, product.name]),
+    );
+    const exampleRule = new CompiledRule(exampleEntry);
+    const reached = snapshot.products.filter(
+      (product) =>
+        exampleRule.targetReason(
+          productTargetContext(product.productId, product.categoryId),
+        ) === null,
+    );
+    const exampleContext: QuoteContext = {
+      channel: PromotionChannel.ONLINE,
+      nowMs: 0,
+      today: nextDate ?? today,
+      visitStartMs: null,
+      client: {
+        known: false,
+        isNew: false,
+        birthday: null,
+        servicesDiscountBp: null,
+        productsDiscountBp: null,
+      },
+      promoCode: null,
+      usage: {},
+    };
+    const productExamples =
+      nextDate === null || reached.length === 0
+        ? []
+        : await this.productExamples(
+            withDraft,
+            exampleEntry,
+            reached,
+            productNames,
+            nextDate,
+            exampleContext,
+            sources,
+          );
     const scopes: PromotionOverlapScope[] = [
       ...catalog.services
         .filter((service) => service.status === ServiceStatus.ACTIVE)
         .map((service) => ({
-          context: {
-            serviceId: service.id,
-            categoryId: service.categoryId,
-            bundleId: null,
-          },
+          context: serviceTargetContext(service.id, service.categoryId, null),
           title: service.title,
         })),
       ...catalog.bundles.map((bundle) => ({
-        context: { serviceId: null, categoryId: null, bundleId: bundle.id },
+        context: serviceTargetContext(null, null, bundle.id),
         title: bundle.title,
+      })),
+      ...snapshot.products.map((product) => ({
+        context: productTargetContext(product.productId, product.categoryId),
+        title: productNames.get(product.productLocationId) ?? product.productId,
       })),
     ];
     const targets = new Map<string, PromotionMatchTarget>(
       snapshot.services.map((service) => [
         service.id,
-        { serviceId: service.id, categoryId: service.categoryId, bundleId: null },
+        {
+          serviceId: service.id,
+          categoryId: service.categoryId,
+          bundleId: null,
+        },
       ]),
     );
     return {
@@ -241,22 +309,25 @@ export class PriceRulePreviewService {
       examples:
         nextDate === null
           ? []
-          : this.examples(withDraft, exampleEntry, titles, nextDate, {
-              channel: PromotionChannel.ONLINE,
-              nowMs: 0,
-              today: nextDate,
-              visitStartMs: null,
-              client: {
-                known: false,
-                isNew: false,
-                birthday: null,
-                discountBp: null,
-              },
-              promoCode: null,
-              usage: {},
-            }),
+          : this.examples(
+              withDraft,
+              exampleEntry,
+              titles,
+              nextDate,
+              exampleContext,
+            ),
       replaces: [],
       conflicts: [],
+      productCount: reached.length,
+      productExamples: [...productExamples]
+        .sort(
+          (a, b) =>
+            Number(b.belowCost) - Number(a.belowCost) ||
+            a.productName.localeCompare(b.productName, 'ru'),
+        )
+        .slice(0, PROMOTION_PRODUCT_EXAMPLE_LIMIT),
+      belowCostCount: productExamples.filter((example) => example.belowCost)
+        .length,
       conditions: buildPromotionConditions(
         promotionConditionsInput(draft, {
           targets: targetNames,
@@ -285,8 +356,63 @@ export class PriceRulePreviewService {
               targets,
               timezone,
               snapshot.roundingStep,
+              saleLines,
             ),
     };
+  }
+
+  /**
+   * Every reached product priced for one unit (1 шт / 1 ед.) at the example date, with the
+   * last purchase cost: belowCost when the price after the discount is below the cost of
+   * one unit. The cost number is returned only with canReadPurchaseCost.
+   */
+  private async productExamples(
+    snapshot: PricingSnapshot,
+    entry: PricingRuleEntry,
+    reached: readonly PricingProductEntry[],
+    names: ReadonlyMap<string, string>,
+    date: string,
+    context: QuoteContext,
+    sources: PriceRulePreviewSources,
+  ): Promise<PromotionProductExample[]> {
+    const minute = entry.intervals.length
+      ? Math.min(...entry.intervals.map((interval) => interval.start))
+      : WHOLE_DAY_EXAMPLE_MINUTE;
+    const book = new PriceBook(
+      snapshot,
+      TimeUtils.zonedDateStr(new Date(), snapshot.timezone),
+    );
+    const quote = book.quoteProducts({
+      lines: reached.map((product) => ({
+        productLocationId: product.productLocationId,
+        quantityMilli: ONE_UNIT_MILLI,
+        customUnitPrice: null,
+        sellerStaffId: null,
+      })),
+      time: { date, minute },
+      context,
+      otherListTotal: 0,
+    });
+    const costs = sources.loadPurchaseCosts
+      ? await sources.loadPurchaseCosts(
+          reached.map((product) => product.productLocationId),
+        )
+      : new Map<string, Prisma.Decimal>();
+    return quote.lines.map((line, index) => {
+      const product = reached[index];
+      const cost = costs.get(product.productLocationId) ?? null;
+      const after = MoneyUtils.fromMinor(line.lineTotal);
+      return {
+        productId: product.productId,
+        productName: names.get(product.productLocationId) ?? product.productId,
+        unit: product.unit,
+        before: MoneyUtils.fromMinor(line.listLineTotal),
+        after,
+        amount: MoneyUtils.fromMinor(line.discountTotal),
+        lastPurchaseUnitCost: sources.canReadPurchaseCost ? cost : null,
+        belowCost: cost !== null && after.lt(MoneyUtils.quantize(cost)),
+      };
+    });
   }
 
   /**
@@ -312,11 +438,9 @@ export class PriceRulePreviewService {
       .filter(
         (service) =>
           titles.has(service.id) &&
-          compiled.targetReason({
-            serviceId: service.id,
-            categoryId: service.categoryId,
-            bundleId: null,
-          }) === null,
+          compiled.targetReason(
+            serviceTargetContext(service.id, service.categoryId, null),
+          ) === null,
       )
       .sort(
         (a, b) =>
@@ -406,16 +530,12 @@ export class PriceRulePreviewService {
       CalendarDayParser.parse(TimeUtils.dateOnlyStr(item.date)),
     );
     const contexts: RuleTargetContext[] = [
-      ...snapshot.services.map((service) => ({
-        serviceId: service.id,
-        categoryId: service.categoryId,
-        bundleId: null,
-      })),
-      ...snapshot.bundles.map((bundle) => ({
-        serviceId: null,
-        categoryId: null,
-        bundleId: bundle.id,
-      })),
+      ...snapshot.services.map((service) =>
+        serviceTargetContext(service.id, service.categoryId, null),
+      ),
+      ...snapshot.bundles.map((bundle) =>
+        serviceTargetContext(null, null, bundle.id),
+      ),
     ];
     const draftRule = new CompiledRule(toPricingRuleEntry(draft));
     return others

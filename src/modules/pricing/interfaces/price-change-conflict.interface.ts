@@ -6,4 +6,5 @@ export interface PriceChangeConflict {
   effectiveDate: string;
   serviceIds: string[];
   bundleIds: string[];
+  productIds: string[];
 }

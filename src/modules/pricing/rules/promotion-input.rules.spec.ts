@@ -23,7 +23,7 @@ const promotion = (
   name: 'Утро',
   valueType: PriceValueType.PERCENT,
   value: '20.00',
-  appliesToAll: true,
+  appliesToAllServices: true,
   publicName: 'Счастливые часы',
   channels: [PromotionChannel.ONLINE],
   ...over,
@@ -107,7 +107,7 @@ describe('normalizePriceRuleInput: promotions (docs/pricing-stage4-api.md)', () 
       valueType: PriceValueType.PERCENT,
       value: '20.00',
       weekdays: [5],
-      appliesToAll: true,
+      appliesToAllServices: true,
     });
     expect(rule).toMatchObject({ kind: PriceRuleKind.SURCHARGE, promotion: null });
   });
@@ -153,7 +153,7 @@ describe('normalizePriceRuleInput: promotions (docs/pricing-stage4-api.md)', () 
         valueType: PriceValueType.PERCENT,
         value: '20.00',
         weekdays: [5],
-        appliesToAll: true,
+        appliesToAllServices: true,
         ...(over as Partial<PriceRuleInputDto>),
       }),
     ).toBe(field);
@@ -168,7 +168,7 @@ describe('normalizePriceRuleInput: promotions (docs/pricing-stage4-api.md)', () 
         valueType: PriceValueType.PERCENT,
         value: '150.00',
         weekdays: [5],
-        appliesToAll: true,
+        appliesToAllServices: true,
       }),
     ).toBeUndefined();
   });

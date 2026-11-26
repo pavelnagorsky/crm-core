@@ -1,4 +1,4 @@
-import { ServicePriceChangeSkip } from '@prisma/client';
+import { PriceChangeSkip } from '@prisma/client';
 import { PriceChangeRollbackDecision } from '../interfaces/price-change-rollback-decision.interface.js';
 import { PriceChangeTargetState } from '../interfaces/price-change-target-state.interface.js';
 
@@ -8,7 +8,7 @@ import { PriceChangeTargetState } from '../interfaces/price-change-target-state.
  */
 export function applyDecision(state: PriceChangeTargetState): {
   write: boolean;
-  skip: ServicePriceChangeSkip | null;
+  skip: PriceChangeSkip | null;
 } {
   return state.skip ? { write: false, skip: state.skip } : { write: true, skip: null };
 }
@@ -21,7 +21,7 @@ export function applyDecision(state: PriceChangeTargetState): {
  */
 export function rollbackDecision(
   item: {
-    applySkip: ServicePriceChangeSkip | null;
+    applySkip: PriceChangeSkip | null;
     beforePrice: number | null;
     afterPrice: number | null;
   },
@@ -31,5 +31,5 @@ export function rollbackDecision(
   if (state.skip !== null) return { kind: 'SKIP', skip: state.skip };
   if (state.current === item.afterPrice)
     return { kind: 'RESTORE', price: item.beforePrice };
-  return { kind: 'SKIP', skip: ServicePriceChangeSkip.CHANGED_AFTER };
+  return { kind: 'SKIP', skip: PriceChangeSkip.CHANGED_AFTER };
 }
