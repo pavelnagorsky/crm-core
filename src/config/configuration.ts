@@ -20,14 +20,12 @@ export default () => {
       credentialsFile:
         process.env['GOOGLE_APPLICATION_CREDENTIALS'] ??
         'secrets/google-credentials.json',
-      apiKey: process.env['GOOGLE_API_KEY'],
       bucketName: process.env['GOOGLE_BUCKET_NAME'],
       privateBucketName: process.env['GOOGLE_PRIVATE_BUCKET_NAME'],
       clientId: process.env['GOOGLE_CLOUD_CLIENT_ID'],
       clientSecret: process.env['GOOGLE_CLOUD_CLIENT_SECRET'],
     },
     yandexCloud: {
-      apiKey: process.env['YANDEX_API_KEY'],
       clientId: process.env['YANDEX_CLIENT_ID'],
       clientSecret: process.env['YANDEX_CLIENT_SECRET'],
     },

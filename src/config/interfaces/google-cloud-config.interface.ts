@@ -5,7 +5,6 @@ export interface IGoogleCloudConfig {
   projectId: string;
   /** Service account key file. Default secrets/google-credentials.json; Docker Compose sets /run/secrets/google-credentials.json. */
   credentialsFile: string;
-  apiKey: string;
   clientId: string;
   clientSecret: string;
 }
