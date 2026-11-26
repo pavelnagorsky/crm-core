@@ -37,7 +37,7 @@ const settings = {
     showStaff: false,
     showBranding: false,
   },
-  gtmId: 'GTM-TEST',
+  googleAnalyticsId: 'G-TEST1234',
   yandexMetrikaId: '123',
 };
 

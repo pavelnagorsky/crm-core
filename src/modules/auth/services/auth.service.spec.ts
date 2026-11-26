@@ -147,6 +147,22 @@ describe('AuthService refresh token storage', () => {
     );
   });
 
+  it('reports isNewUser only when the OAuth sign-in created the account', async () => {
+    const dto = { email: user.email!, providerType: 'GOOGLE' } as never;
+
+    await expect(service.handleOAuth(dto, 'browser')).resolves.toMatchObject({
+      isNewUser: false,
+    });
+    expect(users.create).not.toHaveBeenCalled();
+
+    users.findByEmail.mockResolvedValueOnce(null);
+    users.create.mockResolvedValueOnce(user);
+    await expect(service.handleOAuth(dto, 'browser')).resolves.toMatchObject({
+      isNewUser: true,
+    });
+    expect(users.create).toHaveBeenCalledOnce();
+  });
+
   it('embeds scoped permissions and memberships when issuing JWT', async () => {
     await service.handleOAuth(
       { email: user.email!, providerType: 'GOOGLE' } as never,

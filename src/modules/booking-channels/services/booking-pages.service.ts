@@ -346,7 +346,7 @@ export class BookingPagesService {
       html,
       metaTitle: dto.metaTitle,
       metaDescription: dto.metaDescription,
-      ...(dto.gtmId !== undefined ? { gtmId: dto.gtmId } : {}),
+      ...(dto.googleAnalyticsId !== undefined ? { googleAnalyticsId: dto.googleAnalyticsId } : {}),
       ...(dto.yandexMetrikaId !== undefined
         ? { yandexMetrikaId: dto.yandexMetrikaId }
         : {}),
@@ -364,7 +364,7 @@ export class BookingPagesService {
     const fields = [
       'title',
       'status',
-      'gtmId',
+      'googleAnalyticsId',
       'yandexMetrikaId',
       'palette',
       'customBackground',

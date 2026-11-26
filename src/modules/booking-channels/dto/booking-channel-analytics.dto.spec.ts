@@ -26,16 +26,16 @@ const transform = (value: unknown) =>
 describe('widget analytics validation', () => {
   it.each([
     [
-      { gtmId: ' GTM-ABC1234 ', yandexMetrikaId: ' 12345678 ' },
-      { gtmId: 'GTM-ABC1234', yandexMetrikaId: '12345678' },
+      { googleAnalyticsId: ' G-ABC123DEF4 ', yandexMetrikaId: ' 12345678 ' },
+      { googleAnalyticsId: 'G-ABC123DEF4', yandexMetrikaId: '12345678' },
     ],
     [
-      { gtmId: '', yandexMetrikaId: ' ' },
-      { gtmId: null, yandexMetrikaId: null },
+      { googleAnalyticsId: '', yandexMetrikaId: ' ' },
+      { googleAnalyticsId: null, yandexMetrikaId: null },
     ],
     [
-      { gtmId: null, yandexMetrikaId: null },
-      { gtmId: null, yandexMetrikaId: null },
+      { googleAnalyticsId: null, yandexMetrikaId: null },
+      { googleAnalyticsId: null, yandexMetrikaId: null },
     ],
     [{}, {}],
   ])('accepts and normalizes %j', async (input, expected) => {
@@ -45,12 +45,12 @@ describe('widget analytics validation', () => {
   });
 
   it.each([
-    { gtmId: 'G-ABC1234' },
-    { gtmId: 'gtm-abc' },
-    { gtmId: '<script></script>' },
-    { gtmId: `GTM-${'A'.repeat(29)}` },
-    { gtmId: 12 },
-    { gtmId: [] },
+    { googleAnalyticsId: 'GTM-ABC1234' },
+    { googleAnalyticsId: 'g-abc' },
+    { googleAnalyticsId: '<script></script>' },
+    { googleAnalyticsId: `G-${'A'.repeat(31)}` },
+    { googleAnalyticsId: 12 },
+    { googleAnalyticsId: [] },
     { yandexMetrikaId: 12345678 },
     { yandexMetrikaId: '0' },
     { yandexMetrikaId: '-1' },

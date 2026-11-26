@@ -78,6 +78,7 @@ describe('Yandex and VK sign-in (HTTP)', () => {
     auth.handleOAuth.mockReset().mockResolvedValue({
       accessToken: 'app-access-token',
       refreshToken: 'app-refresh-token',
+      isNewUser: true,
     });
     config.set('yandexCloud', {
       clientId: 'yandex-client',
@@ -155,7 +156,7 @@ describe('Yandex and VK sign-in (HTTP)', () => {
       );
       expect(response.body).toMatchObject({
         isSuccess: true,
-        responseValue: { accessToken: 'app-access-token' },
+        responseValue: { accessToken: 'app-access-token', isNewUser: true },
       });
       expect(response.body.responseValue).not.toHaveProperty('refreshToken');
       expect(response.headers['set-cookie']).toEqual([

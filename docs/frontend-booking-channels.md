@@ -95,13 +95,14 @@ Frontend вычисляет H1: `page.heading ?? (location.brandName?.trim() || 
 
 ```json
 {
-  "gtmId": "GTM-ABC1234",
+  "googleAnalyticsId": "G-ABC123DEF4",
   "yandexMetrikaId": "12345678"
 }
 ```
 
-- `gtmId`: строка `GTM-` и заглавные латинские буквы/цифры, максимум 32 символа.
-  Это ID контейнера Google Tag Manager. ID Google Analytics вида `G-…` не подходит.
+- `googleAnalyticsId`: строка `G-` и заглавные латинские буквы/цифры (4-30 символов после `G-`),
+  максимум 32 символа. Это ID потока данных Google Analytics 4. ID контейнера
+  Google Tag Manager вида `GTM-…` не подходит.
 - `yandexMetrikaId`: строка из 1-15 цифр, первая цифра не ноль.
   Передавать строкой, а не JSON-числом.
 - Пробелы по краям удаляются. `null`, пустая или пробельная строка отключают
@@ -109,32 +110,32 @@ Frontend вычисляет H1: `page.heading ?? (location.brandName?.trim() || 
 - Пропущенное поле при создании остаётся `null`; при обновлении сохраняет прежнее
   значение. Неверный формат или тип даёт `400`.
 
-Административные ответы возвращают `responseValue.gtmId` и
+Административные ответы возвращают `responseValue.googleAnalyticsId` и
 `responseValue.yandexMetrikaId`. Публичный GET `/public/booking-pages/{slug}`
 возвращает их в `responseValue.page`. Оба поля в ответах имеют тип `string | null`.
 Публичный GET `/public/booking-widgets/{widgetId}` возвращает их в
 `responseValue.widget`. Для страниц используется миграция
 `20261030120000_booking_page_analytics`, для виджетов -
-`20261030130000_booking_channel_stats`. На существующих каналах значения `null`.
+`20261030130000_booking_channel_stats`. Поле `googleAnalyticsId` добавляет миграция
+`20261130120000_booking_channel_google_analytics` (колонка `gtmId` удалена).
+На существующих каналах значения `null`.
 
 ### Подключение на frontend
 
 Backend хранит и проверяет ID; скрипты и отправку событий подключает frontend.
-В редакторе нужны поля «Google Tag Manager (GTM-ID)» и «Яндекс Метрика (ID счётчика)».
+В редакторе нужны поля «Google Analytics (ID G-…)» и «Яндекс Метрика (ID счётчика)».
 Загружать счётчики только на опубликованной публичной странице или виджете с заполненным ID,
 не в CRM и не в предпросмотре редактора. При повторном рендере не инициализировать
 счётчики повторно; при смене страницы не отправлять события в счётчик прежней страницы.
 
-Google: подключить контейнер по
-[официальной инструкции GTM](https://support.google.com/tagmanager/answer/14847097).
-Создать `window.dataLayer = window.dataLayer || []` до загрузки контейнера.
-Владелец контейнера должен настроить и опубликовать Google Analytics и триггеры;
-сохранение GTM-ID само по себе не настраивает Google Analytics.
+Google: загрузить `gtag.js` с ID потока данных по
+[официальной инструкции](https://developers.google.com/tag-platform/gtagjs/install),
+создать `window.dataLayer` и `gtag` до загрузки скрипта и вызвать
+`gtag('config', googleAnalyticsId)`. Контейнеры GTM не подключаются.
 
 Яндекс: загрузить `https://mc.yandex.ru/metrika/tag.js` и вызвать
 `ym(Number(yandexMetrikaId), 'init', options)` по
 [инструкции инициализации](https://yandex.ru/support/metrica/ru/code/counter-initialize.html).
-Если Метрика уже установлена через GTM, не подключать тот же счётчик второй раз.
 
 Предлагаемый контракт событий для реализации на frontend:
 
@@ -143,8 +144,8 @@ Google: подключить контейнер по
 | `booking_start`   | Первое взаимодействие клиента с формой записи     |
 | `booking_success` | Только после успешного ответа API создания записи |
 
-Для GTM использовать `window.dataLayer.push({ event: 'booking_success' })`
-([dataLayer](https://developers.google.com/tag-platform/tag-manager/datalayer));
+Для Google Analytics использовать `gtag('event', 'booking_success')`
+([events](https://developers.google.com/analytics/devguides/collection/ga4/events));
 для Метрики - `ym(Number(yandexMetrikaId), 'reachGoal', 'booking_success')`
 ([reachGoal](https://yandex.ru/support/metrica/ru/objects/reachgoal)).
 В Метрике создать цель с соответствующим именем. Не считать нажатие «Записаться»,
@@ -196,7 +197,7 @@ Google: подключить контейнер по
 рендере или обновлении данных. `VIEW` отправлять один раз при фактическом показе,
 после перезагрузки допустим новый просмотр. Если форма уже видна на десктопе,
 сам показ не увеличивает `formOpens`. Ошибка отправки не должна мешать записи.
-Сбор этих счётчиков не зависит от заполнения GTM-ID или ID Метрики.
+Сбор этих счётчиков не зависит от заполнения ID Google Analytics или ID Метрики.
 
 Принимаются только опубликованные каналы активных филиалов; иначе `404`.
 Для виджета проверяется `allowedDomains` по Origin/Referer, как в публичном GET;

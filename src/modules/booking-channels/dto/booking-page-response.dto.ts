@@ -51,8 +51,8 @@ export class BookingPageResponseDto {
   @ApiProperty({ type: String })
   metaDescription: string;
 
-  @ApiProperty({ type: String, nullable: true, example: 'GTM-ABC1234' })
-  gtmId: string | null;
+  @ApiProperty({ type: String, nullable: true, example: 'G-ABC123DEF4' })
+  googleAnalyticsId: string | null;
 
   @ApiProperty({ type: String, nullable: true, example: '12345678' })
   yandexMetrikaId: string | null;
@@ -87,7 +87,7 @@ export class BookingPageResponseDto {
     dto.html = page.html;
     dto.metaTitle = page.metaTitle;
     dto.metaDescription = page.metaDescription;
-    dto.gtmId = page.gtmId;
+    dto.googleAnalyticsId = page.googleAnalyticsId;
     dto.yandexMetrikaId = page.yandexMetrikaId;
     dto.cover = page.coverFile
       ? FileResponseDto.fromEntity(page.coverFile)

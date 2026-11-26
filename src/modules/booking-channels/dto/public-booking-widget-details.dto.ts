@@ -10,8 +10,8 @@ export class PublicBookingWidgetDetailsDto {
   @ApiProperty({ type: String })
   id: string;
 
-  @ApiProperty({ type: String, nullable: true, example: 'GTM-ABC1234' })
-  gtmId: string | null;
+  @ApiProperty({ type: String, nullable: true, example: 'G-ABC123DEF4' })
+  googleAnalyticsId: string | null;
 
   @ApiProperty({ type: String, nullable: true, example: '12345678' })
   yandexMetrikaId: string | null;
@@ -37,7 +37,7 @@ export class PublicBookingWidgetDetailsDto {
   static from(widget: BookingWidget): PublicBookingWidgetDetailsDto {
     const dto = new PublicBookingWidgetDetailsDto();
     dto.id = widget.id;
-    dto.gtmId = widget.gtmId;
+    dto.googleAnalyticsId = widget.googleAnalyticsId;
     dto.yandexMetrikaId = widget.yandexMetrikaId;
     dto.placement = widget.placement;
     dto.trigger = normalizeBookingWidgetTrigger(

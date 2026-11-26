@@ -21,6 +21,7 @@ import { OAuthData } from '../decorators/oauth-data.decorator.js';
 import { TokenPayload } from '../decorators/token-payload.decorator.js';
 import { UserAgent } from '../decorators/user-agent.decorator.js';
 import { AuthDto } from '../dto/auth.dto.js';
+import { OAuthAuthDto } from '../dto/oauth-auth.dto.js';
 import { GoogleOauthRequestDto } from '../dto/google-oauth-request.dto.js';
 import { LoginDto } from '../dto/login.dto.js';
 import { OAuthResponseDto } from '../dto/oauth-response.dto.js';
@@ -171,7 +172,7 @@ export class AuthController {
       'Use type=oauth with authCode, or type=one-tap with oneTapCode (Google ID token). Returns an access token and sets the refresh token cookie.',
   })
   @ApiBody({ type: GoogleOauthRequestDto })
-  @ApiCreatedResponse({ type: ApiResponse(AuthDto) })
+  @ApiCreatedResponse({ type: ApiResponse(OAuthAuthDto) })
   @ApiBadRequestResponse({ type: ValidationErrorResponseDto })
   @ApiUnauthorizedResponse({ type: UnauthorizedResponseDto })
   @UseGuards(GoogleOAuthGuard)
@@ -181,10 +182,12 @@ export class AuthController {
     @OAuthData() oauthData: OAuthResponseDto,
     @Res({ passthrough: true }) res: Response,
     @UserAgent() userAgent: string | null,
-  ): Promise<BaseResponseDto<AuthDto>> {
+  ): Promise<BaseResponseDto<OAuthAuthDto>> {
     const tokens = await this.authService.handleOAuth(oauthData, userAgent);
     res.cookie(CookiesEnum.REFRESH_TOKEN, tokens.refreshToken, cookieConfig);
-    return BaseResponseDto.success(new AuthDto(tokens.accessToken));
+    return BaseResponseDto.success(
+      new OAuthAuthDto(tokens.accessToken, tokens.isNewUser),
+    );
   }
 
   @ApiOperation({
@@ -193,7 +196,7 @@ export class AuthController {
       'Exchange authCode, state and deviceId from the VK ID SDK for an application session.',
   })
   @ApiBody({ type: VkOauthRequestDto })
-  @ApiCreatedResponse({ type: ApiResponse(AuthDto) })
+  @ApiCreatedResponse({ type: ApiResponse(OAuthAuthDto) })
   @ApiBadRequestResponse({ type: ValidationErrorResponseDto })
   @ApiUnauthorizedResponse({ type: UnauthorizedResponseDto })
   @UseGuards(VkOAuthGuard)
@@ -203,10 +206,12 @@ export class AuthController {
     @OAuthData() oauthData: OAuthResponseDto,
     @Res({ passthrough: true }) res: Response,
     @UserAgent() userAgent: string | null,
-  ): Promise<BaseResponseDto<AuthDto>> {
+  ): Promise<BaseResponseDto<OAuthAuthDto>> {
     const tokens = await this.authService.handleOAuth(oauthData, userAgent);
     res.cookie(CookiesEnum.REFRESH_TOKEN, tokens.refreshToken, cookieConfig);
-    return BaseResponseDto.success(new AuthDto(tokens.accessToken));
+    return BaseResponseDto.success(
+      new OAuthAuthDto(tokens.accessToken, tokens.isNewUser),
+    );
   }
 
   @ApiOperation({
@@ -215,7 +220,7 @@ export class AuthController {
       'Exchange the Yandex authorization code for an application session.',
   })
   @ApiBody({ type: YandexOauthRequestDto })
-  @ApiCreatedResponse({ type: ApiResponse(AuthDto) })
+  @ApiCreatedResponse({ type: ApiResponse(OAuthAuthDto) })
   @ApiBadRequestResponse({ type: ValidationErrorResponseDto })
   @ApiUnauthorizedResponse({ type: UnauthorizedResponseDto })
   @UseGuards(YandexOAuthGuard)
@@ -225,9 +230,11 @@ export class AuthController {
     @OAuthData() oauthData: OAuthResponseDto,
     @Res({ passthrough: true }) res: Response,
     @UserAgent() userAgent: string | null,
-  ): Promise<BaseResponseDto<AuthDto>> {
+  ): Promise<BaseResponseDto<OAuthAuthDto>> {
     const tokens = await this.authService.handleOAuth(oauthData, userAgent);
     res.cookie(CookiesEnum.REFRESH_TOKEN, tokens.refreshToken, cookieConfig);
-    return BaseResponseDto.success(new AuthDto(tokens.accessToken));
+    return BaseResponseDto.success(
+      new OAuthAuthDto(tokens.accessToken, tokens.isNewUser),
+    );
   }
 }

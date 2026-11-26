@@ -760,7 +760,7 @@
       "metaTitle": "Заголовок SEO",
       "metaDescription": "Описание SEO",
       "coverFileId": "Обложка",
-      "gtmId": "Google Tag Manager",
+      "googleAnalyticsId": "Google Analytics",
       "yandexMetrikaId": "Яндекс Метрика",
       "palette": "Палитра",
       "customBackground": "Цвет фона",

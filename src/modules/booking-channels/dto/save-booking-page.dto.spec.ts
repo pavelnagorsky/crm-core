@@ -102,14 +102,14 @@ describe('SaveBookingPageDto heading', () => {
 
 describe.each([
   {
-    field: 'gtmId',
-    valid: 'GTM-ABC1234',
+    field: 'googleAnalyticsId',
+    valid: 'G-ABC123DEF4',
     invalid: [
-      'G-ABC1234',
-      'gtm-abc1234',
-      'GTM-',
-      'GTM-A B',
-      `GTM-${'A'.repeat(29)}`,
+      'GTM-ABC1234',
+      'g-abc1234',
+      'G-ABC',
+      'G-A B',
+      `G-${'A'.repeat(31)}`,
       '<script>alert(1)</script>',
     ],
   },

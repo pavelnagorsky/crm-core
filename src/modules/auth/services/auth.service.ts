@@ -214,7 +214,7 @@ export class AuthService {
   async handleOAuth(
     dto: OAuthResponseDto,
     userAgent: string | null,
-  ): Promise<ITokens> {
+  ): Promise<ITokens & { isNewUser: boolean }> {
     if (typeof dto.email !== 'string' || !isEmail(dto.email)) {
       this.logger.warn(
         `oauth failed: provider=${dto.providerType} reason=EMAIL_MISSING_OR_INVALID`,
@@ -223,6 +223,7 @@ export class AuthService {
     }
 
     let user = await this.userService.findByEmail(dto.email);
+    const isNewUser = !user;
     if (!user) {
       user = await this.userService.create({
         email: dto.email,
@@ -236,7 +237,8 @@ export class AuthService {
         `oauth login: userId=${user.id} provider=${dto.providerType}`,
       );
     }
-    return this.issueTokens(user, userAgent);
+    const tokens = await this.issueTokens(user, userAgent);
+    return { ...tokens, isNewUser };
   }
 
   private async issueTokens(

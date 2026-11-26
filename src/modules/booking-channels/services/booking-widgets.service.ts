@@ -272,7 +272,7 @@ export class BookingWidgetsService {
       trigger: normalizeBookingWidgetTrigger(dto.placement, dto.trigger),
       buttonPosition: dto.buttonPosition,
       buttonAppearance: { ...dto.buttonAppearance },
-      ...(dto.gtmId !== undefined ? { gtmId: dto.gtmId } : {}),
+      ...(dto.googleAnalyticsId !== undefined ? { googleAnalyticsId: dto.googleAnalyticsId } : {}),
       ...(dto.yandexMetrikaId !== undefined
         ? { yandexMetrikaId: dto.yandexMetrikaId }
         : {}),
@@ -290,7 +290,7 @@ export class BookingWidgetsService {
     const fields = [
       'title',
       'status',
-      'gtmId',
+      'googleAnalyticsId',
       'yandexMetrikaId',
       'palette',
       'customBackground',

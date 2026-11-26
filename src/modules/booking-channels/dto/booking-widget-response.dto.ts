@@ -22,8 +22,8 @@ export class BookingWidgetResponseDto {
   @ApiProperty({ type: () => BookingChannelStatsDto })
   stats: BookingChannelStatsDto;
 
-  @ApiProperty({ type: String, nullable: true, example: 'GTM-ABC1234' })
-  gtmId: string | null;
+  @ApiProperty({ type: String, nullable: true, example: 'G-ABC123DEF4' })
+  googleAnalyticsId: string | null;
 
   @ApiProperty({ type: String, nullable: true, example: '12345678' })
   yandexMetrikaId: string | null;
@@ -77,7 +77,7 @@ export class BookingWidgetResponseDto {
     const dto = new BookingWidgetResponseDto();
     dto.id = widget.id;
     dto.stats = new BookingChannelStatsDto(stats);
-    dto.gtmId = widget.gtmId;
+    dto.googleAnalyticsId = widget.googleAnalyticsId;
     dto.yandexMetrikaId = widget.yandexMetrikaId;
     dto.locationId = widget.locationId;
     dto.title = widget.title;

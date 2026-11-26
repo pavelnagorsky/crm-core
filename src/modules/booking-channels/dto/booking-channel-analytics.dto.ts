@@ -8,17 +8,17 @@ export class BookingChannelAnalyticsDto {
     type: String,
     nullable: true,
     maxLength: 32,
-    example: 'GTM-ABC1234',
-    pattern: regularExpressions.googleTagManagerId.source,
+    example: 'G-ABC123DEF4',
+    pattern: regularExpressions.googleAnalyticsId.source,
     description:
-      'Google Tag Manager container ID. Omit to preserve on update; null or blank disables the integration.',
+      'Google Analytics 4 measurement ID. Omit to preserve on update; null or blank disables the integration.',
   })
   @TrimToNull()
   @IsOptional()
   @IsString()
   @MaxLength(32)
-  @Matches(regularExpressions.googleTagManagerId)
-  gtmId?: string | null;
+  @Matches(regularExpressions.googleAnalyticsId)
+  googleAnalyticsId?: string | null;
 
   @ApiPropertyOptional({
     type: String,

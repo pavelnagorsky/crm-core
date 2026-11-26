@@ -189,12 +189,12 @@ describe('Public booking channel events (HTTP)', () => {
       const schema = document.components?.schemas?.[name];
       expect(schema).toMatchObject({
         properties: {
-          gtmId: { type: 'string', nullable: true, maxLength: 32 },
+          googleAnalyticsId: { type: 'string', nullable: true, maxLength: 32 },
           yandexMetrikaId: { type: 'string', nullable: true, maxLength: 15 },
         },
       });
       const required = schema && 'required' in schema ? schema.required : [];
-      expect(required).not.toContain('gtmId');
+      expect(required).not.toContain('googleAnalyticsId');
       expect(required).not.toContain('yandexMetrikaId');
     }
   });

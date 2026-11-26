@@ -445,10 +445,10 @@ describe('booking channel contract', () => {
     '%s persists analytics settings and exposes them in admin and public responses',
     async (operation) => {
       for (const analytics of [
-        { gtmId: 'GTM-ABC1234', yandexMetrikaId: '12345678' },
-        { gtmId: 'GTM-ABC1234', yandexMetrikaId: null },
-        { gtmId: null, yandexMetrikaId: '12345678' },
-        { gtmId: null, yandexMetrikaId: null },
+        { googleAnalyticsId: 'G-ABC123DEF4', yandexMetrikaId: '12345678' },
+        { googleAnalyticsId: 'G-ABC123DEF4', yandexMetrikaId: null },
+        { googleAnalyticsId: null, yandexMetrikaId: '12345678' },
+        { googleAnalyticsId: null, yandexMetrikaId: null },
       ]) {
         const dto = plainToInstance(SaveBookingPageDto, {
           ...pageInput,
@@ -472,7 +472,7 @@ describe('booking channel contract', () => {
   );
 
   it('preserves omitted analytics settings on update and clears blank IDs', async () => {
-    const existing = { gtmId: 'GTM-ABC1234', yandexMetrikaId: '12345678' };
+    const existing = { googleAnalyticsId: 'G-ABC123DEF4', yandexMetrikaId: '12345678' };
     db.bookingPage.update.mockImplementationOnce(async ({ data }) => ({
       id: 'channel',
       ...existing,
@@ -486,7 +486,7 @@ describe('booking channel contract', () => {
     );
     expect(saved).toMatchObject(existing);
     const data = db.bookingPage.update.mock.calls[0][0].data;
-    expect(data).not.toHaveProperty('gtmId');
+    expect(data).not.toHaveProperty('googleAnalyticsId');
     expect(data).not.toHaveProperty('yandexMetrikaId');
 
     await pages.update(
@@ -494,14 +494,14 @@ describe('booking channel contract', () => {
       'channel',
       plainToInstance(SaveBookingPageDto, {
         ...pageInput,
-        gtmId: ' ',
+        googleAnalyticsId: ' ',
         yandexMetrikaId: '',
       }),
       actor,
     );
     expect(db.bookingPage.update).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ gtmId: null, yandexMetrikaId: null }),
+        data: expect.objectContaining({ googleAnalyticsId: null, yandexMetrikaId: null }),
       }),
     );
   });
@@ -510,8 +510,8 @@ describe('booking channel contract', () => {
     '%s persists widget analytics settings',
     async (operation) => {
       for (const analytics of [
-        { gtmId: 'GTM-ABC1234', yandexMetrikaId: '12345678' },
-        { gtmId: null, yandexMetrikaId: null },
+        { googleAnalyticsId: 'G-ABC123DEF4', yandexMetrikaId: '12345678' },
+        { googleAnalyticsId: null, yandexMetrikaId: null },
       ]) {
         const dto = plainToInstance(SaveBookingWidgetDto, {
           ...widgetInput,
@@ -546,21 +546,21 @@ describe('booking channel contract', () => {
       actor,
     );
     const data = db.bookingWidget.update.mock.calls[0][0].data;
-    expect(data).not.toHaveProperty('gtmId');
+    expect(data).not.toHaveProperty('googleAnalyticsId');
     expect(data).not.toHaveProperty('yandexMetrikaId');
     await widgets.update(
       'location',
       'channel',
       plainToInstance(SaveBookingWidgetDto, {
         ...widgetInput,
-        gtmId: ' ',
+        googleAnalyticsId: ' ',
         yandexMetrikaId: '',
       }),
       actor,
     );
     expect(db.bookingWidget.update).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        data: expect.objectContaining({ gtmId: null, yandexMetrikaId: null }),
+        data: expect.objectContaining({ googleAnalyticsId: null, yandexMetrikaId: null }),
       }),
     );
   });
