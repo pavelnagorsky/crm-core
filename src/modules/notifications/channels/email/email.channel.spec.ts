@@ -106,7 +106,7 @@ describe('Email branding', () => {
         name: 'Klendo',
         address: 'mail@klendo.example',
       });
-      expect(mail.subject).toMatch(/^Klendo — /);
+      expect(mail.subject).toMatch(/^Klendo - /);
       expect(mail.html).toContain('src="cid:klendo-logo"');
       expect(mail.html).not.toContain(
         'Онлайн-запись работает на <a href="https://klendo.by/"',
@@ -147,7 +147,7 @@ describe('Email branding', () => {
       name: 'Studio Brand',
       address: 'mail@klendo.example',
     });
-    expect(mail.subject).toMatch(/^Studio Brand — /);
+    expect(mail.subject).toMatch(/^Studio Brand - /);
     expect(mail.html).toContain('src="https://cdn.example.com/brand.png"');
     expect(mail.html).toContain(
       'Онлайн-запись работает на <a href="https://klendo.by/"',
@@ -195,7 +195,7 @@ describe('Email branding', () => {
 
     const mail = sendMail.mock.calls[0][0];
     expect(mail.from.name).toBe('Inviting Brand');
-    expect(mail.subject).toMatch(/^Inviting Brand — /);
+    expect(mail.subject).toMatch(/^Inviting Brand - /);
     expect(mail.html).toContain('>Inviting Brand</td>');
     expect(mail.html).toContain(
       'src="https://cdn.example.com/inviting-brand.png"',
@@ -228,7 +228,7 @@ describe('Email branding', () => {
       new ReviewRequestNotification(booking, 'https://example.com/manage'),
     );
     const mail = sendMail.mock.calls[0][0];
-    expect(mail.subject).toBe('Studio Brand — Оцените ваш визит');
+    expect(mail.subject).toBe('Studio Brand - Оцените ваш визит');
     expect(mail.html).toContain('href="https://example.com/manage"');
     expect(mail.html).toContain('Оставить отзыв');
     expect(mail.html).toContain('Haircut');

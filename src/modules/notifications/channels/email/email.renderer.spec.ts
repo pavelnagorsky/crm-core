@@ -38,13 +38,13 @@ describe('EmailRenderer', () => {
       variant: 'REQUESTED',
     });
     expect(email.subject).toBe(
-      'Салон — Новая заявка на сб, 14 ноября в 15:00 — подтвердите',
+      'Салон - Новая заявка на сб, 14 ноября в 15:00 - подтвердите',
     );
     expect(email.html).toContain('>Новая заявка на запись</h1>');
     expect(email.html).toContain('+375291112233');
     expect(email.html).toContain(`href="${visit.bookingUrl}"`);
     expect(email.html).toContain('Суббота, 14 ноября');
-    expect(email.html).toContain('15:00 — 16:00');
+    expect(email.html).toContain('15:00 - 16:00');
   });
 
   it('shows the old time of a move and the year of a visit next year', () => {
@@ -84,8 +84,8 @@ describe('EmailRenderer', () => {
     };
 
     it.each([
-      ['TOMORROW', 'Салон — Завтра в 15:00 — ваша запись', 'Ждём вас завтра!'],
-      ['TODAY', 'Салон — Сегодня в 15:00 — ваша запись', 'Ждём вас сегодня!'],
+      ['TOMORROW', 'Салон - Завтра в 15:00 - ваша запись', 'Ждём вас завтра!'],
+      ['TODAY', 'Салон - Сегодня в 15:00 - ваша запись', 'Ждём вас сегодня!'],
     ])(
       'reminds about a visit %s with a way to move or cancel it',
       (variant, subject, body) => {
@@ -113,7 +113,7 @@ describe('EmailRenderer', () => {
         cancellationReason: null,
       });
       expect(email.subject).toBe(
-        'Салон — Запись перенесена на сб, 14 ноября в 15:00',
+        'Салон - Запись перенесена на сб, 14 ноября в 15:00',
       );
       expect(email.html).toContain('>Запись перенесена</h1>');
       expect(email.html).toContain('<s>пятница, 13 ноября в 12:00</s>');
@@ -132,7 +132,7 @@ describe('EmailRenderer', () => {
         manageLink: null,
       });
       expect(email.subject).toBe(
-        'Салон — Запись отменена — сб, 14 ноября в 15:00',
+        'Салон - Запись отменена - сб, 14 ноября в 15:00',
       );
       expect(email.html).toContain('Мастер заболел');
       expect(email.html).toContain('+375291234567');
@@ -147,7 +147,7 @@ describe('EmailRenderer', () => {
         locationPhone: null,
       });
       expect(email.subject).toBe(
-        'Салон — Запись подтверждена — сб, 14 ноября в 15:00',
+        'Салон - Запись подтверждена - сб, 14 ноября в 15:00',
       );
       expect(email.html).not.toContain('Адрес');
       expect(email.html).not.toContain('>Телефон</td>');
@@ -171,7 +171,7 @@ describe('EmailRenderer', () => {
         lastDay: new Date('2026-12-13T12:00:00Z'),
       });
       expect(email.subject).toBe(
-        'Klendo — Пробный период Салон <Лето> закончится через 7 дн.',
+        'Klendo - Пробный период Салон <Лето> закончится через 7 дн.',
       );
       expect(email.html).toContain('Салон &lt;Лето&gt;');
       expect(email.html).not.toContain('Салон <Лето>');
@@ -223,7 +223,7 @@ describe('EmailRenderer', () => {
           instructions: 'Реквизиты:\nр/с 123',
         },
       );
-      expect(email.subject).toBe('Klendo — Заявка KL-000123 на оплату Klendo');
+      expect(email.subject).toBe('Klendo - Заявка KL-000123 на оплату Klendo');
       expect(email.html).toContain('свяжемся с вами');
       expect(email.html).toContain('590.00 BYN');
       expect(email.html).toContain('Год');
@@ -273,7 +273,7 @@ describe('EmailRenderer', () => {
         },
       );
       expect(email.subject).toBe(
-        'Klendo — Новая заявка KL-000123: Салон <Лето>',
+        'Klendo - Новая заявка KL-000123: Салон <Лето>',
       );
       expect(email.html).toContain('owner@example.test');
       expect(email.html).toContain('Позвоните после 18:00');

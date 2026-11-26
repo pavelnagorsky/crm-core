@@ -161,7 +161,7 @@ export class EmailRenderer implements OnModuleInit {
     };
     const texts = this.texts(template, data.variant);
     const title = texts.subject ? this.text(texts.subject, ctx) : template;
-    const subject = `${senderName} — ${title}`;
+    const subject = `${senderName} - ${title}`;
     const heading = texts.heading ? this.text(texts.heading, ctx) : title;
     const tone =
       EMAIL_CHIP_TONES[`${template}.${String(data.variant)}`] ??
