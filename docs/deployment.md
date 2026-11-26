@@ -63,8 +63,12 @@ IMAGE_TAG=<sha> bash scripts/deploy/deploy.sh
 - Каталог `/opt/klendo-core`: `.env` (пишет деплой из секрета `ENV_FILE`), `secrets/google-credentials.json`
   (читается UID 1000), остальное кладёт деплой.
 - Postgres 13 стоит на хосте (не в compose), база `booking-crm-stage`, роль `api`.
-- HTTPS: vhost `stage-api.klendo.by` в ISPmanager проксирует на `127.0.0.1:3000`
-  (Let's Encrypt через ISPmanager). Лимиты по IP - в `lb`, не в хостовом nginx.
+- HTTPS: сайт `stage-api.klendo.by` в ISPmanager (обработчик Node.js) проксирует на `127.0.0.1:10002`,
+  это `APP_PORT` из `.env` (порт назначил ISPmanager). Сертификат Let's Encrypt без `www`, продлевает ISPmanager.
+  Лимиты по IP - в `lb`, не в хостовом nginx.
+- ISPmanager запускает `server.js` сайта через pm2 пользователя `www-root`. В
+  `/var/www/www-root/data/www/stage-api.klendo.by/server.js` лежит пустышка, которая не слушает порт, и
+  приложение остановлено в pm2: иначе оно занимает порт раньше контейнера `lb`.
 - Пользователь деплоя должен состоять в группе `docker` и владеть `/opt/klendo-core`.
 
 ## GitHub Environment `stage`
